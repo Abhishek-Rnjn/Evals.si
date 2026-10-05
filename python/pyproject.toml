@@ -1,0 +1,43 @@
+# uv workspace for the Python half of Evals.si (SDK, packs, adapters, harness).
+[tool.uv.workspace]
+members = ["evalsi"]
+
+[tool.uv.sources]
+evalsi = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "evalsi[anthropic,jsonschema]",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PL", "PT"]
+ignore = [
+    "PLR0911", # too many return statements: small dispatch functions read better flat
+    "PLR0912", # too many branches
+    "PLR0913", # too many arguments: public APIs take keyword options
+    "PLR2004", # magic values in comparisons
+    "PLC0415", # lazy imports: optional dependencies are imported only when used
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["evalsi", "conftest"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["evalsi/src", "evalsi/tests"]
+
+[[tool.mypy.overrides]]
+module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["evalsi/tests"]

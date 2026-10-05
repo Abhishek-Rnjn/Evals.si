@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+
+message Score {
+  // Metric name within the evaluator. Single-metric evaluators use their own name.
+  string name = 1;
+  oneof value {
+    double number = 2;
+    bool passed = 3;
+    string label = 4;
+    google.protobuf.Value structured = 5;
+  }
+  string explanation = 6;
+  optional double confidence = 7;
+  // Cost of producing this score, for example judge tokens.
+  Usage cost = 8;
+  map<string, google.protobuf.Value> metadata = 9;
+}
+
+// How one evaluator fared on one record. Only OUTCOME_SCORED counts toward
+// metrics; skipped and errored tasks are reported separately so that
+// infrastructure failures are never mistaken for model failures.
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  OUTCOME_SCORED = 1;
+  // The record lacks something the evaluator requires (for example a reference).
+  OUTCOME_SKIPPED = 2;
+  // The evaluator or the infrastructure behind it failed.
+  OUTCOME_ERROR = 3;
+  OUTCOME_CANCELLED = 4;
+}
+
+message EvaluationResult {
+  string record_id = 1;
+  // Instance name: the evaluator's short name, or the alias it was given.
+  string evaluator = 2;
+  // Fully qualified reference, for example "builtin/exact-match@1.0.0".
+  string evaluator_ref = 3;
+  Outcome outcome = 4;
+  repeated Score scores = 5;
+  // Why the task was skipped or errored.
+  string reason = 6;
+  google.protobuf.Duration duration = 7;
+}
+
+enum MetricKind {
+  METRIC_KIND_UNSPECIFIED = 0;
+  METRIC_KIND_NUMBER = 1;
+  // Pass/fail values summarized as a proportion.
+  METRIC_KIND_PROPORTION = 2;
+  // Categorical values summarized as counts.
+  METRIC_KIND_LABEL = 3;
+}
+
+message MetricSummary {
+  // "<evaluator>" or "<evaluator>.<score name>".
+  string metric = 1;
+  string evaluator = 2;
+  MetricKind kind = 3;
+  // Number of scored values.
+  int64 n = 4;
+  optional double mean = 5;
+  optional double std = 6;
+  ConfidenceInterval ci = 7;
+  int64 skipped = 8;
+  int64 errors = 9;
+  map<string, int64> labels = 10;
+  // Number of clusters behind a clustered interval; unset when not clustered.
+  optional int64 clusters = 11;
+}
+
+message ConfidenceInterval {
+  double low = 1;
+  double high = 2;
+  // For example 0.95.
+  double level = 3;
+  // "wilson", "t", "clustered-t" or "bootstrap".
+  string method = 4;
+}

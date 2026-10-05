@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// Record is the unit every evaluator consumes, whichever way it arrived:
+// Score (the caller supplies it), Run (produced by executing a target) or
+// Watch (assembled from live traces).
+message Record {
+  string id = 1;
+  Content input = 2;
+  Content output = 3;
+  // Optional ground truth. A JSON list in Content.json means "any of these".
+  Content reference = 4;
+  // Supporting material such as retrieved documents.
+  repeated Content context = 5;
+  // Optional; agents and multi-step chains.
+  Trajectory trajectory = 6;
+  // Cost of producing the output (not of evaluating it).
+  Usage usage = 7;
+  // Free-form attributes used for slicing, clustering and filtering.
+  map<string, google.protobuf.Value> metadata = 8;
+  Provenance provenance = 9;
+}
+
+message Content {
+  oneof kind {
+    string text = 1;
+    Messages messages = 2;
+    google.protobuf.Value json = 3;
+    TabularRow row = 4;
+    Tensor tensor = 5;
+    MediaRef media = 6;
+  }
+}
+
+message Messages {
+  repeated Message messages = 1;
+}
+
+message Message {
+  // One of "system", "user", "assistant" or "tool".
+  string role = 1;
+  string content = 2;
+  repeated ToolCall tool_calls = 3;
+  // Set on role "tool": the call this message answers.
+  string tool_call_id = 4;
+  string name = 5;
+}
+
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  // Raw JSON arguments exactly as the model produced them. Kept as a string
+  // because malformed arguments are themselves something to evaluate.
+  string arguments = 3;
+}
+
+// A classic ML example: features plus the model's prediction.
+message TabularRow {
+  map<string, google.protobuf.Value> features = 1;
+  google.protobuf.Value prediction = 2;
+  map<string, double> probabilities = 3;
+}
+
+message Tensor {
+  repeated int64 shape = 1;
+  // For example "float32" or "int64".
+  string dtype = 2;
+  // Little-endian, row-major.
+  bytes data = 3;
+}
+
+message MediaRef {
+  string uri = 1;
+  // IANA media type, for example "image/png".
+  string media_type = 2;
+}
+
+// Trajectory is the canonical, convention-independent view of an execution,
+// normalized from OpenTelemetry spans.
+message Trajectory {
+  string trace_id = 1;
+  string session_id = 2;
+  repeated Step steps = 3;
+}
+
+message Step {
+  string span_id = 1;
+  string parent_span_id = 2;
+  StepType type = 3;
+  string name = 4;
+  Content input = 5;
+  Content output = 6;
+  google.protobuf.Timestamp start_time = 7;
+  google.protobuf.Timestamp end_time = 8;
+  Usage usage = 9;
+  // Empty when the step succeeded.
+  string error = 10;
+  // Raw span attributes, kept so nothing is lost in normalization.
+  map<string, google.protobuf.Value> attributes = 11;
+}
+
+enum StepType {
+  STEP_TYPE_UNSPECIFIED = 0;
+  STEP_TYPE_LLM = 1;
+  STEP_TYPE_TOOL = 2;
+  STEP_TYPE_RETRIEVAL = 3;
+  STEP_TYPE_AGENT = 4;
+  STEP_TYPE_HANDOFF = 5;
+  STEP_TYPE_USER = 6;
+  STEP_TYPE_GUARDRAIL = 7;
+  STEP_TYPE_EMBEDDING = 8;
+  // A span no mapper recognized. Its raw attributes are preserved.
+  STEP_TYPE_GENERIC = 9;
+}
+
+message Usage {
+  optional int64 input_tokens = 1;
+  optional int64 output_tokens = 2;
+  optional double cost_usd = 3;
+  google.protobuf.Duration latency = 4;
+}
+
+message Provenance {
+  oneof source {
+    RunProvenance run = 1;
+    TraceProvenance trace = 2;
+  }
+  // Isolation the record's execution actually ran under, when sandboxed.
+  IsolationReport isolation = 3;
+}
+
+message RunProvenance {
+  string run_id = 1;
+  string task_id = 2;
+  int32 trial = 3;
+}
+
+message TraceProvenance {
+  string trace_id = 1;
+  string policy_id = 2;
+}
+
+message IsolationReport {
+  // For example "firecracker", "bwrap", "landlock" or "pod".
+  string driver = 1;
+  IsolationLevel level = 2;
+  Enforcement enforcement = 3;
+}
+
+// Ordered from weakest to strongest.
+enum IsolationLevel {
+  ISOLATION_LEVEL_UNSPECIFIED = 0;
+  ISOLATION_LEVEL_NONE = 1;
+  // Same-world, kernel-enforced file and TCP rules (Landlock).
+  ISOLATION_LEVEL_CONFINED = 2;
+  // Separate namespaces, seccomp and resource limits (bubblewrap, hardened pod).
+  ISOLATION_LEVEL_NAMESPACED = 3;
+  // A user-space kernel (gVisor).
+  ISOLATION_LEVEL_KERNEL = 4;
+  // A separate guest kernel (Firecracker, Kata).
+  ISOLATION_LEVEL_VM = 5;
+}
+
+enum Enforcement {
+  ENFORCEMENT_UNSPECIFIED = 0;
+  // The backend governs every effect the policy promises.
+  ENFORCEMENT_FULL = 1;
+  // The backend governs only a subset, for example an older Landlock ABI.
+  ENFORCEMENT_PARTIAL = 2;
+}

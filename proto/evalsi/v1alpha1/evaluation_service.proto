@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/evaluator.proto";
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/score.proto";
+
+// EvaluationService is the "Score" door: the caller brings records and we
+// grade them. Run and Watch get their own services in later phases.
+service EvaluationService {
+  // Synchronous scoring for small batches.
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+  // Streaming scoring: send one EvaluateStreamRequest with config, then records.
+  // Results stream back as they finish, followed by the summaries.
+  rpc EvaluateStream(stream EvaluateStreamRequest) returns (stream EvaluateStreamResponse);
+}
+
+message EvaluateRequest {
+  string project = 1;
+  repeated Record records = 2;
+  repeated EvaluatorRef evaluators = 3;
+  // Name of a judge configured on the server; required by judge evaluators.
+  string judge = 4;
+  SummaryOptions summary = 5;
+}
+
+message EvaluateResponse {
+  repeated EvaluationResult results = 1;
+  repeated MetricSummary summaries = 2;
+}
+
+message SummaryOptions {
+  // Defaults to 0.95.
+  double confidence_level = 1;
+  // Metadata key whose values group correlated records, for clustered standard errors.
+  string cluster_by = 2;
+  CiMethod ci_method = 3;
+}
+
+enum CiMethod {
+  CI_METHOD_UNSPECIFIED = 0;
+  // Wilson for proportions, t (or clustered t) for numbers.
+  CI_METHOD_AUTO = 1;
+  CI_METHOD_BOOTSTRAP = 2;
+}
+
+message EvaluateStreamConfig {
+  string project = 1;
+  repeated EvaluatorRef evaluators = 2;
+  string judge = 3;
+  SummaryOptions summary = 4;
+}
+
+message EvaluateStreamRequest {
+  oneof message {
+    EvaluateStreamConfig config = 1;
+    Record record = 2;
+  }
+}
+
+message MetricSummaries {
+  repeated MetricSummary summaries = 1;
+}
+
+message EvaluateStreamResponse {
+  oneof message {
+    EvaluationResult result = 1;
+    MetricSummaries summaries = 2;
+  }
+}

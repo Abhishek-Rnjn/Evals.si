@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package evalsi.plugin.v1alpha1;
+
+import "evalsi/v1alpha1/evaluator.proto";
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/score.proto";
+import "google/protobuf/struct.proto";
+
+// EvaluatorPluginService is implemented by every out-of-process evaluator
+// plugin: a subprocess in its own virtualenv, a container, or a remote
+// service. The host does not care which. Plugins also implement the standard
+// gRPC health protocol (grpc.health.v1.Health).
+//
+// Judge access for plugins is served by the host, so judge calls stay cached,
+// rate-limited and costed centrally; that service arrives in Phase 1.
+service EvaluatorPluginService {
+  // Lists the evaluators this plugin hosts.
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+  // Bidirectional streaming: the host pipelines batches and the plugin may
+  // batch internally (GPU metrics, judges). Responses carry the batch_id of
+  // the request they answer and may arrive out of order.
+  rpc Evaluate(stream EvaluateRequest) returns (stream EvaluateResponse);
+  // Dataset-scope metrics: computed over all records at once.
+  rpc Reduce(ReduceRequest) returns (ReduceResponse);
+}
+
+message DescribeRequest {}
+
+message DescribeResponse {
+  repeated evalsi.v1alpha1.EvaluatorManifest evaluators = 1;
+}
+
+message EvaluateRequest {
+  string batch_id = 1;
+  // Manifest name, for example "acme/json-valid".
+  string evaluator = 2;
+  google.protobuf.Struct params = 3;
+  repeated evalsi.v1alpha1.Record records = 4;
+}
+
+message EvaluateResponse {
+  string batch_id = 1;
+  repeated evalsi.v1alpha1.EvaluationResult results = 2;
+}
+
+message ReduceRequest {
+  string evaluator = 1;
+  google.protobuf.Struct params = 2;
+  // v1alpha1 sends full records. A partial-state form may be added for very
+  // large datasets.
+  repeated evalsi.v1alpha1.Record records = 3;
+  // Per-record results from an earlier Evaluate phase, when there was one.
+  repeated evalsi.v1alpha1.EvaluationResult results = 4;
+}
+
+message ReduceResponse {
+  repeated evalsi.v1alpha1.Score scores = 1;
+}

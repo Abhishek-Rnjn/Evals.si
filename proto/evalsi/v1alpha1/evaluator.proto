@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "google/protobuf/struct.proto";
+
+// How a caller asks for an evaluator.
+message EvaluatorRef {
+  // "builtin/exact-match", "exact-match" or a pinned "builtin/exact-match@1.0.0".
+  string ref = 1;
+  google.protobuf.Struct params = 2;
+  // Optional alias, required when the same evaluator is used twice.
+  string name = 3;
+}
+
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  SCOPE_SPAN = 1;
+  SCOPE_RECORD = 2;
+  SCOPE_SESSION = 3;
+  // Needs all records at once, for example ROC-AUC or corpus BLEU.
+  SCOPE_DATASET = 4;
+  SCOPE_COMPARATIVE = 5;
+}
+
+// What a record must contain for the evaluator to run. Records that lack a
+// required field are reported as skipped, never scored as zero.
+message Requirements {
+  bool input = 1;
+  bool output = 2;
+  bool reference = 3;
+  bool context = 4;
+  bool trajectory = 5;
+  // Uses the configured judge model.
+  bool judge = 6;
+  // Minimum sandbox isolation the evaluator may run under.
+  IsolationLevel isolation = 7;
+}
+
+enum ScoreType {
+  SCORE_TYPE_UNSPECIFIED = 0;
+  SCORE_TYPE_NUMBER = 1;
+  SCORE_TYPE_PASSED = 2;
+  SCORE_TYPE_LABEL = 3;
+  SCORE_TYPE_STRUCTURED = 4;
+}
+
+message MetricSpec {
+  string name = 1;
+  ScoreType type = 2;
+  optional double min = 3;
+  optional double max = 4;
+  optional bool higher_is_better = 5;
+  string description = 6;
+}
+
+message Scheduling {
+  // Worker pool: "cpu", "judge", "gpu", "sandbox" or "harness".
+  string pool = 1;
+  bool batchable = 2;
+  int32 max_batch = 3;
+}
+
+message EvaluatorManifest {
+  // Namespaced name, for example "builtin/exact-match".
+  string name = 1;
+  // Semantic version.
+  string version = 2;
+  string description = 3;
+  string pack = 4;
+  Scope scope = 5;
+  // For example "text", "messages", "image".
+  repeated string modalities = 6;
+  Requirements requires = 7;
+  repeated MetricSpec outputs = 8;
+  // JSON Schema for the evaluator's params.
+  google.protobuf.Struct params_schema = 9;
+  Scheduling scheduling = 10;
+}
