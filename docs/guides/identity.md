@@ -182,7 +182,7 @@ rbac:
 |---|---|
 | `viewer` | catalog, runs, policies and traces: read |
 | `runner` | viewer, plus evaluations and runs (create, cancel, resume) |
-| `editor` | runner, plus writing policies |
+| `editor` | runner, plus writing policies and promoting run results into datasets (`datasets.write`) |
 | `admin` | editor, plus the project's keys, roles, bindings and audit log |
 | `ingest` | `traces.write` only |
 | `owner` | everything, everywhere |
@@ -215,6 +215,10 @@ authorization:
   rules:
     - deny: 'request.action == "runs.create" && resource.target.connector == "anthropic" && !("llm-spenders" in principal.groups)'
     - require: '!resource.runs_code || "sandbox-users" in principal.groups'
+    # Agent runs describe the agent: resource.agent.kind (builtin, a2a, mcp,
+    # responses, http, cli), .harness (builtin, external), .image, .network
+    # and .min_isolation.
+    - deny: 'request.action == "runs.create" && resource.agent.network == "allow"'
 ```
 
 **Decision order:**

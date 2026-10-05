@@ -9,13 +9,21 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 - **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
 - **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
 
-> **Status:** Phases 0, 1 and 2 are done. The standalone server covers three doors:
+> **Status:** Phases 0 to 3 are done. The standalone server covers three doors:
 >
 > - **Score:** grade outputs you already have.
-> - **Run:** durable, resumable runs with trials, gates and budgets.
+> - **Run:** durable, resumable runs with trials, gates and budgets. That includes agent runs, which put the built-in agent or your own agent to work on sandboxed tasks.
 > - **Watch:** online evaluation of OpenTelemetry traces.
 >
-> Around them are evaluator packs, framework adapters, a fail-closed sandbox for code evaluators, MLflow and OTel sinks, and identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log. Next comes Phase 3, the agent harness and Firecracker. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
+> Around them are:
+>
+> - evaluator packs and framework adapters;
+> - benchmark adapters for SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL;
+> - a fail-closed sandbox ladder (Firecracker, bubblewrap, Landlock);
+> - MLflow and OTel sinks;
+> - identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log.
+>
+> Next comes Phase 4, Kubernetes. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
 
 ## Quickstart
 
@@ -138,6 +146,24 @@ uv run evalsi compare --server http://localhost:8080 <baseline-run> <candidate-r
 - **Budgets.** They cap target and judge tokens.
 - **Durable server runs.** Runs on a server are stored and can be watched, cancelled and resumed. A run interrupted by a restart resumes without redoing finished work.
 
+### Agent runs: put an agent to work on sandboxed tasks
+
+An agent run gives each task its own environment: an OCI image, files, setup, and a sandbox policy. The agent works in it, a checker grades the end state, and evaluators score the trajectory and the agent's diff. The agent is either the built-in tool-calling agent on any model, or your own over A2A, MCP, an OpenAI Responses-compatible API or HTTP, or as a CLI run inside the sandbox.
+
+```bash
+uv run evalsi run -f ../examples/agents/fix-calc.yaml --judge-provider anthropic --judge-model claude-opus-5-5
+uv run evalsi run -f ../examples/agents/swebench-verified.yaml --server http://localhost:8080
+uv run evalsi promote <run> --dataset regressions --when 'scores["task-success"] < 1' --server http://localhost:8080
+```
+
+- **The harness.** Sandbox and MCP tools, mocks and fault injection, budgets, a simulated user, and record and replay with branching.
+- **Grading.** `task-success` with pass@k and pass^k; `code-quality`, a judge review of the agent's diff; `policy-violations`, from sandbox denials and refused egress.
+- **Benchmarks.** `swebench://`, `taubench://`, `harbor://`, `terminal-bench://` and `bfcl://` datasets, each graded by the benchmark's own code.
+- **Sandbox ladder.** Firecracker microVMs where `/dev/kvm` exists, otherwise bubblewrap or Landlock, with the same scoring on every rung.
+- **From production to regression tests.** Failed results and production traces become datasets, and shadow replay compares a candidate against recorded behavior.
+
+See the [agent runs guide](docs/guides/agent-runs.md).
+
 ### Watch: evaluate live agent traces
 
 Point any OpenTelemetry-instrumented app or agent (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or agentgateway, at the server's OTLP endpoint. Then apply a policy:
@@ -166,10 +192,10 @@ A policy has these parts:
 | `text` | BLEU, corpus BLEU, ROUGE-1/2/L, chrF, token F1 |
 | `rag` | faithfulness, answer relevance, context precision and recall, citation accuracy |
 | `safety` | PII, secret and canary leaks; refusal; harmlessness |
-| `agent` | tool-call accuracy, trajectory match, tool errors, loop detection, step budget, goal completion |
+| `agent` | tool-call accuracy, trajectory match, tool errors, loop detection, step budget, goal completion; for agent runs, task success (pass@k, pass^k), code quality, policy violations, efficiency |
 | `code` | unit tests run in the sandbox, Python syntax |
 
-**Framework adapters.** DeepEval, RAGAS, Inspect AI and lm-evaluation-harness live in [`python/adapters`](python/adapters/README.md). Each has its own pinned environment, and their judge calls go through your configured judge.
+**Framework adapters.** DeepEval, RAGAS, Inspect AI and lm-evaluation-harness live in [`python/adapters`](python/adapters/README.md), as do the SWE-bench, τ-bench and BFCL benchmark adapters. Each has its own pinned environment, and judge calls go through your configured judge.
 
 **Sandbox for code evaluators.** Code evaluators run untrusted code under the strongest rung that works on the host:
 
@@ -262,7 +288,9 @@ Delete `python/.evalsi-auth-demo` to start over. To use the same config without 
 | `gen/go/` | Generated Go code (do not edit; run `make proto`) |
 | `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, authentication (`auth`) and authorization (`authz`), worker supervision, runs, OTLP ingest and online policies, sandbox, sinks, statistics |
 | `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker and built-in packs |
-| `python/adapters/` | Framework adapters (DeepEval, RAGAS, Inspect AI, lm-eval), each in its own environment |
+| `python/evalsi-harness/` | The agent harness: tool loop, agent connectors, environments and checkers, Harbor and Terminal-Bench importers |
+| `python/adapters/` | Framework and benchmark adapters (DeepEval, RAGAS, Inspect AI, lm-eval, SWE-bench, τ-bench, BFCL), each in its own environment |
+| `cmd/evalsi-guest/` | The init and agent inside Firecracker microVMs |
 | `tests/e2e/` | evalsid against a real Python worker (`make e2e`) |
 | `examples/` | Runnable examples |
 | `docs/` | Design plan, decision records and guides |
@@ -275,7 +303,7 @@ You need Go (1.26+), [buf](https://buf.build/docs/installation) and [uv](https:/
 make tools   # protobuf plugins, at the versions CI uses
 make proto   # lint, format and regenerate code after editing proto/
 make check   # everything CI runs: gofmt, go vet/test, buf lint/format, ruff, mypy, pytest
-make e2e     # evalsid against a real Python worker
+make e2e     # evalsid against a real Python worker; EVALSI_E2E_IMAGES=1 adds tests that pull images
 make adapters-check   # each framework adapter's contract tests, in its own environment
 ```
 

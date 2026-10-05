@@ -1,0 +1,41 @@
+# Benchmark datasets as agent runs. Each spec below is a separate file in
+# practice; they are shown together here. Grading is always the benchmark's
+# own code or rule.
+
+# Terminal-Bench 2 / any Harbor dataset: a directory of task directories
+# under datasets_dir. The Dockerfile is translated (FROM, RUN, COPY, ...).
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: terminal-bench}
+spec:
+  target:
+    agent:
+      cli: {command: [sh, -c, "my-terminal-agent"], timeout: 15m}
+  dataset: {uri: "harbor://terminal-bench-2?tasks=hello-world,fix-git"}
+  evaluators: [{ref: task-success}, {ref: code-quality}]   # code-quality uses the judge
+---
+# tau2-bench: needs the taubench adapter and tau2's data (TAU2_DATA_DIR).
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: tau-airline}
+spec:
+  target: {connector: anthropic, model: claude-opus-5-5}
+  # The simulated user speaks through the judge (the server's default, or
+  # --judge-* when embedded).
+  dataset: {uri: "taubench://airline"}
+  harness:
+    external:
+      python: evalsi_taubench:TauBenchHarness
+      config: {maxSteps: 100}
+  evaluators: [{ref: task-success}]
+  trials: 4                                               # reports pass^4
+---
+# BFCL: needs the bfcl adapter.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: bfcl-simple}
+spec:
+  target: {connector: openai-compatible, base_url: "http://localhost:8000/v1", model: my-model}
+  dataset: {uri: "bfcl://simple_python"}
+  harness: {external: {python: evalsi_bfcl:BFCLHarness}}
+  evaluators: [{ref: task-success}]

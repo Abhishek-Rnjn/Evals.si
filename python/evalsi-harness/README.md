@@ -20,5 +20,7 @@ What it provides:
 - **Record and replay:** model calls and tool I/O are captured, replay can branch from step N, and sandbox commands are re-executed so the environment is rebuilt.
 - **Environment checkers:** exit code, JSON, JUnit or a Python function.
 - **OTel spans:** every step becomes a span.
+- **The agent's diff:** recorded for the `code-quality` evaluator when the workdir is a git repository.
+- **Benchmark importers:** `harbor://` (Terminal-Bench 2 and other Harbor datasets) and `terminal-bench://` (Terminal-Bench 1) task directories, with their Dockerfiles translated into environments.
 
 See [docs/guides/agent-runs.md](../../docs/guides/agent-runs.md).
