@@ -15,6 +15,7 @@ import (
 	"time"
 
 	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	logs "go.opentelemetry.io/proto/otlp/logs/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -286,5 +287,39 @@ func TestRealMLflow(t *testing.T) {
 		if err := sink.ExportRun(context.Background(), run); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestAuditExport(t *testing.T) {
+	got := make(chan *collogs.ExportLogsServiceRequest, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		req := &collogs.ExportLogsServiceRequest{}
+		_ = proto.Unmarshal(body, req)
+		got <- req
+	}))
+	defer srv.Close()
+	d, err := New([]Config{
+		{OTel: &OTelConfig{Endpoint: srv.URL, Audit: true}},
+		{OTel: &OTelConfig{Endpoint: srv.URL}}, // audit not enabled: nothing sent
+	}, srv.Client(), slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Start(1)
+	d.Audit(&evalsiv1alpha1.AuditEvent{
+		Time: timestamppb.Now(), Principal: "key:ci", Action: "runs.create", Project: "support",
+		Allowed: false, Reason: "no role or rule grants runs.create",
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	d.Close(ctx)
+	if len(got) != 1 {
+		t.Fatalf("%d exports, want 1", len(got))
+	}
+	rec := (<-got).GetResourceLogs()[0].GetScopeLogs()[0].GetLogRecords()[0]
+	if rec.GetEventName() != "evalsi.audit" || rec.GetSeverityNumber() != logs.SeverityNumber_SEVERITY_NUMBER_WARN ||
+		!strings.Contains(rec.String(), "key:ci") {
+		t.Errorf("audit event %v", rec)
 	}
 }

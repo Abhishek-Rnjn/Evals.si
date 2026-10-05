@@ -3,6 +3,10 @@
 It needs only ``httpx``: unary calls are JSON POSTs, and server-streaming
 calls (``WatchRun``) use Connect's enveloped JSON framing, which works over
 plain HTTP/1.1. gRPC clients can use the generated stubs instead.
+
+Credentials: pass ``api_key=`` or ``token=``, or let the client find one
+(``EVALSI_API_KEY``, ``EVALSI_TOKEN``, GitHub Actions OIDC, or the login
+cached by ``evalsi login``); see :mod:`evalsi.auth`.
 """
 
 from __future__ import annotations
@@ -19,7 +23,10 @@ END_STREAM = 0x02
 
 class ServerError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
-        super().__init__(f"{code}: {message}")
+        hint = ""
+        if code == "unauthenticated":
+            hint = " (sign in with `evalsi login`, or set EVALSI_API_KEY or EVALSI_TOKEN)"
+        super().__init__(f"{code}: {message}{hint}")
         self.code = code
         self.message = message
 
@@ -31,9 +38,14 @@ class Client:
         *,
         timeout: float = 60.0,
         transport: httpx.BaseTransport | None = None,
+        token: str | None = None,
+        api_key: str | None = None,
     ) -> None:
+        from evalsi.auth import ServerAuth
+
         self.base_url = base_url.rstrip("/")
-        self._http = httpx.Client(timeout=timeout, transport=transport)
+        self.auth = ServerAuth(self.base_url, token=token, api_key=api_key)
+        self._http = httpx.Client(timeout=timeout, transport=transport, auth=self.auth)
 
     def close(self) -> None:
         self._http.close()
@@ -90,9 +102,15 @@ class Client:
     # --- runs ---
 
     def create_run(
-        self, spec: dict[str, Any], *, name: str = "", project: str = ""
+        self,
+        spec: dict[str, Any],
+        *,
+        name: str = "",
+        project: str = "",
+        labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        return self._run("CreateRun", {"name": name, "project": project, "spec": spec})
+        body = {"name": name, "project": project, "spec": spec, "labels": labels or {}}
+        return self._run("CreateRun", body)
 
     def get_run(self, run_id: str) -> dict[str, Any]:
         return self._run("GetRun", {"id": run_id})
@@ -114,6 +132,14 @@ class Client:
         )
         comparisons: list[dict[str, Any]] = out.get("comparisons", [])
         return comparisons
+
+    # --- identity and access ---
+
+    def auth_call(self, method: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.call("AuthService", method, body or {})
+
+    def whoami(self) -> dict[str, Any]:
+        return self.auth_call("WhoAmI")
 
 
 def _error(body: dict[str, Any], status: int) -> ServerError:

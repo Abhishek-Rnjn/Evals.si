@@ -58,7 +58,7 @@ type KeyStore interface {
 // Error is an authentication failure; it becomes Unauthenticated (HTTP 401).
 type Error struct{ Msg string }
 
-func (e *Error) Error() string { return "unauthenticated: " + e.Msg }
+func (e *Error) Error() string { return e.Msg }
 
 func fail(format string, args ...any) Result {
 	return Result{Err: &Error{Msg: fmt.Sprintf(format, args...)}}

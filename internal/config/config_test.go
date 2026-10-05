@@ -1,10 +1,13 @@
 package config
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 )
 
 func write(t *testing.T, body string) string {
@@ -99,5 +102,21 @@ audit: {retention: 720h}`,
 		if _, err := Load(write(t, body)); err != nil {
 			t.Errorf("Load(%q): %v", body, err)
 		}
+	}
+}
+
+func TestExampleAuthConfigLoads(t *testing.T) {
+	cfg, err := Load("../../examples/auth/evalsi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.AuthEnabled() || len(cfg.Auth.JWT.Providers) != 2 || len(cfg.RBAC.Roles) != 2 {
+		t.Errorf("unexpected example auth config: %+v", cfg.Auth)
+	}
+	// Roles, conditions, bindings and rules compile.
+	if _, err := authz.NewEngine(context.Background(), authz.Options{
+		Enabled: true, RBAC: cfg.RBAC, Authorization: cfg.Authorization, ClaimRoles: []string{"editor", "trace-auditor"},
+	}); err != nil {
+		t.Error(err)
 	}
 }

@@ -1,6 +1,9 @@
 # evalsid configuration. Start with:
 #   evalsi serve --config examples/server/evalsi.yaml
 listen: 127.0.0.1:8080
+# Loopback without an auth section serves unauthenticated. Any other address
+# needs authentication: see examples/auth/evalsi.yaml and
+# docs/guides/identity.md (or `auth: {mode: none}` to opt out explicitly).
 data_dir: .evalsi            # SQLite database for runs, traces and policies
 
 # Run specs may name dataset files relative to this directory (they cannot

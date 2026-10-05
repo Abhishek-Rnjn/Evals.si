@@ -135,7 +135,11 @@ SPEC: dict[str, Any] = {
 def test_parse_spec_and_validation() -> None:
     run = parse_spec(SPEC)
     assert (run.name, run.project, run.spec.trials) == ("nightly", "qa", 3)
+    assert run.labels == {}
+    labeled = parse_spec({**SPEC, "metadata": {**SPEC["metadata"], "labels": {"app": "checkout"}}})
+    assert labeled.labels == {"app": "checkout"}
     bad = [
+        ({**SPEC, "metadata": {"labels": ["x"]}}, "metadata.labels"),
         ({**SPEC, "kind": "Other"}, "kind must be"),
         ({**SPEC, "spec": {**SPEC["spec"], "evaluators": []}}, "at least one evaluator"),
         ({**SPEC, "spec": {**SPEC["spec"], "bogus": 1}}, "invalid spec"),

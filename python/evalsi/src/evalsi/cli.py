@@ -36,7 +36,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         code: int = args.func(args)
         return code
-    except (EvaluatorConfigError, DatasetError, JudgeError, ValueError) as exc:
+    except (EvaluatorConfigError, DatasetError, JudgeError, ValueError, RuntimeError) as exc:
+        # RuntimeError covers ServerError and AuthError.
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
@@ -51,6 +52,9 @@ def _parser() -> argparse.ArgumentParser:
     _add_eval(sub)
     _add_run(sub)
     _add_policy(sub)
+    from evalsi.cli_auth import add_auth_commands
+
+    add_auth_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
     cat.add_argument("--format", choices=["table", "json"], default="table")
@@ -129,6 +133,7 @@ def _add_run(sub: Any) -> None:
     rn.add_argument("--format", choices=["table", "json"], default="table")
     rn.add_argument("--quiet", action="store_true", help="no progress output")
     rn.add_argument("--no-wait", action="store_true", help="server: print the run id and exit")
+    add_credential_args(rn)
     _add_judge_args(rn)
     rn.set_defaults(func=_cmd_run)
 
@@ -137,6 +142,7 @@ def _add_run(sub: Any) -> None:
     cmp.add_argument("candidate")
     cmp.add_argument("--server", required=True, help="evalsid URL")
     cmp.add_argument("--format", choices=["table", "json"], default="table")
+    add_credential_args(cmp)
     cmp.set_defaults(func=_cmd_compare)
 
 
@@ -153,7 +159,26 @@ def _add_policy(sub: Any) -> None:
     pd.add_argument("name")
     for p in (pa, pl, ps, pd):
         p.add_argument("--server", required=True, help="evalsid URL")
+        add_credential_args(p)
     pol.set_defaults(func=_cmd_policy)
+
+
+def add_credential_args(parser: argparse.ArgumentParser) -> None:
+    """--token and --api-key for commands that talk to a server."""
+    creds = parser.add_argument_group(
+        "credentials (default: EVALSI_API_KEY, EVALSI_TOKEN, GitHub Actions OIDC, evalsi login)"
+    )
+    creds.add_argument("--token", help="a bearer token (JWT) for the server")
+    creds.add_argument("--api-key", help="an evalsid API key (evk_...)")
+
+
+def server_client(args: argparse.Namespace) -> Any:
+    """A client for args.server with the command's credentials."""
+    from evalsi.client import Client
+
+    return Client(
+        args.server, token=getattr(args, "token", None), api_key=getattr(args, "api_key", None)
+    )
 
 
 def _add_judge_args(parser: argparse.ArgumentParser) -> None:
@@ -445,15 +470,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
-    from evalsi.client import Client, ServerError
+    from evalsi.client import ServerError
     from evalsi.results import EvalResult, MetricSummary
     from evalsi.runspec import spec_to_dict
     from evalsi.stats import Interval
 
-    with Client(args.server) as client:
+    with server_client(args) as client:
         try:
             run = client.create_run(
-                spec_to_dict(run_file.spec), name=run_file.name, project=run_file.project
+                spec_to_dict(run_file.spec),
+                name=run_file.name,
+                project=run_file.project,
+                labels=run_file.labels,
             )
             if args.no_wait:
                 print(run["id"])
@@ -538,6 +566,7 @@ def load_policy(path: str) -> dict[str, Any]:
         **document["spec"],
         "name": metadata.get("name", ""),
         "project": metadata.get("project", ""),
+        "labels": metadata.get("labels") or {},
     }
     try:
         message = json_format.ParseDict(body, monitor_service_pb2.OnlineEvalPolicy())
@@ -548,9 +577,9 @@ def load_policy(path: str) -> dict[str, Any]:
 
 
 def _cmd_policy(args: argparse.Namespace) -> int:
-    from evalsi.client import Client, ServerError
+    from evalsi.client import ServerError
 
-    with Client(args.server) as client:
+    with server_client(args) as client:
         try:
             if args.action == "apply":
                 policy = load_policy(args.file)
@@ -580,9 +609,7 @@ def _fmt3(value: float | None) -> str:
 
 
 def _cmd_compare(args: argparse.Namespace) -> int:
-    from evalsi.client import Client
-
-    with Client(args.server) as client:
+    with server_client(args) as client:
         comparisons = client.compare_runs(args.baseline, args.candidate)
     if args.format == "json":
         print(json.dumps(comparisons, indent=2))

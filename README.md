@@ -9,13 +9,13 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 - **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
 - **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
 
-> **Status:** Phases 0 and 1 are done. The standalone server covers three doors:
+> **Status:** Phases 0, 1 and 2 are done. The standalone server covers three doors:
 >
 > - **Score:** grade outputs you already have.
 > - **Run:** durable, resumable runs with trials, gates and budgets.
 > - **Watch:** online evaluation of OpenTelemetry traces.
 >
-> Around them are evaluator packs, framework adapters, a fail-closed sandbox for code evaluators, and MLflow and OTel sinks. Next comes Phase 2: identity and access (OIDC/JWT and API keys, project-scoped RBAC, and agentgateway-style CEL rules). Phase 3, the agent harness and Firecracker, follows. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
+> Around them are evaluator packs, framework adapters, a fail-closed sandbox for code evaluators, MLflow and OTel sinks, and identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log. Next comes Phase 3, the agent harness and Firecracker. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
 
 ## Quickstart
 
@@ -100,6 +100,7 @@ The same services answer plain REST under `/v1alpha1`, for example:
 - `POST /v1alpha1/runs`, `GET /v1alpha1/runs/{id}`, `POST /v1alpha1/runs/{id}:cancel`
 - `GET /v1alpha1/runs/{id}/results`
 - `POST /v1alpha1/policies`, `GET /v1alpha1/traces/{trace_id}`
+- `GET /v1alpha1/whoami`, `POST /v1alpha1/apikeys`, `GET /v1alpha1/audit`
 
 The full list is in `internal/server/rest.go`.
 
@@ -169,18 +170,43 @@ evalsid sandbox probe
 
 See the `sinks` section of [`examples/server/evalsi.yaml`](examples/server/evalsi.yaml).
 
+### Identity and access
+
+A server on a non-loopback address must authenticate. It accepts:
+
+- **API keys** (`evalsid auth new-key`);
+- **tokens from your OIDC provider:** Keycloak, Entra ID, Okta, Auth0, Google and others;
+- **GitHub Actions OIDC tokens**, with no stored secret;
+- **client certificates.**
+
+Access is granted per project:
+
+- **Built-in roles:** viewer, runner, editor, admin, ingest and owner.
+- **Custom roles** built from the permission list, optionally limited by CEL conditions such as allowed models or labels.
+- **Global rules** in agentgateway's `allow`, `deny` and `require` form.
+
+```bash
+evalsi login --server https://evals.example.com      # device code; --browser for PKCE
+evalsi whoami --server https://evals.example.com
+evalsi auth keys create ci --role support=runner --ttl 90d --server https://evals.example.com
+evalsi auth audit --denied --server https://evals.example.com
+evalsid auth check --config evalsi.yaml --api-key "$KEY" --action runs.create --project support
+```
+
+Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN`; GitHub Actions jobs set `EVALSI_OIDC_AUDIENCE`. See the [setup guide](docs/guides/identity.md) and [`examples/auth/evalsi.yaml`](examples/auth/evalsi.yaml).
+
 ## Repository layout
 
 | Path | What |
 |------|------|
 | `proto/` | Protobuf API, the single source of truth (`evalsi.v1alpha1`, `evalsi.plugin.v1alpha1`) |
 | `gen/go/` | Generated Go code (do not edit; run `make proto`) |
-| `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, worker supervision, runs, OTLP ingest and online policies, sandbox, sinks, statistics |
+| `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, authentication (`auth`) and authorization (`authz`), worker supervision, runs, OTLP ingest and online policies, sandbox, sinks, statistics |
 | `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker and built-in packs |
 | `python/adapters/` | Framework adapters (DeepEval, RAGAS, Inspect AI, lm-eval), each in its own environment |
 | `tests/e2e/` | evalsid against a real Python worker (`make e2e`) |
 | `examples/` | Runnable examples |
-| `docs/` | Design plan and decision records |
+| `docs/` | Design plan, decision records and guides |
 
 ## Development
 

@@ -1,0 +1,74 @@
+# evalsid with identity and access. See docs/guides/identity.md.
+#   evalsi serve --config examples/auth/evalsi.yaml
+listen: 0.0.0.0:8080
+data_dir: .evalsi
+
+worker:
+  command: ["python", "-m", "evalsi"]
+
+auth:
+  jwt:
+    mode: strict
+    providers:
+      # Your identity provider: users and services.
+      - name: corp
+        issuer: https://sso.example.com/realms/eng
+        audiences: [evalsi-cli, evals.si]
+        jwks: {discovery: true}
+        claims: {groups: groups, email: email, name: preferred_username}
+        # Application roles in the token become Evals.si roles.
+        role_claims:
+          claim: app_roles
+          map:
+            checkout-lead: {checkout: [editor]}
+            auditor: {"*": [trace-auditor]}
+      # GitHub Actions jobs, with no stored secret.
+      - name: github
+        issuer: https://token.actions.githubusercontent.com
+        audiences: [https://evals.example.com]
+        jwks: {discovery: true}
+  api_keys:
+    keys:
+      # Create with `evalsid auth new-key`; only the hash goes here.
+      - name: otel-collector
+        key: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        roles: {support: [ingest]}
+        labels: {source: agentgateway}
+  tls: {cert_file: /etc/evalsi/tls.crt, key_file: /etc/evalsi/tls.key}
+  # Advertised to `evalsi login` at /.well-known/evalsi-auth.
+  cli_login: {issuer: https://sso.example.com/realms/eng, client_id: evalsi-cli}
+
+rbac:
+  owners: [group:corp/platform-admins]
+  roles:
+    - name: prompt-engineer
+      inherits: [viewer]
+      permissions: [evaluations.run, runs.create, runs.cancel]
+      condition: 'resource.target.model in ["qwen3", "claude-opus-5-5"]'
+    - name: trace-auditor
+      permissions: [traces.read, audit.read]
+  projects:
+    support:
+      admin: [group:corp/support-leads]
+      editor: [group:corp/support-eng]
+      runner: ['cel:jwt.repository == "acme/support-agent" && jwt.ref == "refs/heads/main"']
+      prompt-engineer: [group:corp/support-ml]
+      viewer: ["email:everyone@example.com"]
+    checkout: {}
+
+authorization:
+  rules:
+    # Only members of llm-spenders may run targets against paid APIs.
+    - deny: 'request.action == "runs.create" && resource.target.connector == "anthropic" && !("llm-spenders" in principal.groups)'
+    # Code-executing evaluators are limited to one team.
+    - require: '!resource.runs_code || "sandbox-users" in principal.groups'
+  # ext_authz: {authzen: {url: https://pdp.example.com/access/v1/evaluation}, timeout: 200ms, cache_ttl: 30s}
+
+audit: {retention: 2160h}
+
+# /metrics without authentication, on loopback only.
+metrics: {listen: 127.0.0.1:9464}
+
+sinks:
+  # Audit events (and online scores) to your OpenTelemetry collector.
+  - otel: {endpoint: http://otel-collector:4318, audit: true}

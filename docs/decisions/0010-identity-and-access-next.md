@@ -1,6 +1,6 @@
 # 0010. Identity and access come next, modeled on agentgateway
 
-- **Status:** Accepted, 2026-10-05 (design plan D15)
+- **Status:** Accepted, 2026-10-05 (design plan D15). Implemented in Phase 2 (DESIGN §23).
 
 ## Context
 

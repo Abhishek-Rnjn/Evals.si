@@ -1,0 +1,21 @@
+# Gate a pull request on an Evals.si run, authenticated with the job's own
+# GitHub OIDC token: no stored secret. The server trusts
+# https://token.actions.githubusercontent.com and binds the repository, for
+# example: runner: ['cel:jwt.repository == "acme/support-agent"'].
+name: evals
+on: [pull_request]
+
+permissions:
+  id-token: write   # lets the job mint its OIDC token
+  contents: read
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install evalsi
+      # Exit code 3 when a gate fails, which fails the job.
+      - run: evalsi run -f evals/run.yaml --server https://evals.example.com
+        env:
+          EVALSI_OIDC_AUDIENCE: https://evals.example.com

@@ -43,6 +43,8 @@ class RunFile:
     spec: run_pb2.RunSpec
     # Directory the spec came from; dataset paths are relative to it.
     base_dir: Path = field(default_factory=Path.cwd)
+    # Labels for access rules on a server (metadata.labels).
+    labels: dict[str, str] = field(default_factory=dict)
 
 
 def parse_spec(document: Mapping[str, Any], base_dir: Path | None = None) -> RunFile:
@@ -59,7 +61,11 @@ def parse_spec(document: Mapping[str, Any], base_dir: Path | None = None) -> Run
     except json_format.ParseError as exc:
         raise SpecError(f"invalid spec: {exc}") from exc
     validate(spec)
+    labels = metadata.get("labels") or {}
+    if not isinstance(labels, Mapping):
+        raise SpecError("metadata.labels must be a mapping")
     return RunFile(
+        labels={str(k): str(v) for k, v in labels.items()},
         name=str(metadata.get("name", "")),
         project=str(metadata.get("project", "")),
         spec=spec,
