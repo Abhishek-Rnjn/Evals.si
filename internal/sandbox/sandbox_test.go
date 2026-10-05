@@ -15,7 +15,10 @@ import (
 // The test binary doubles as the launcher, as evalsid does in production.
 func TestMain(m *testing.M) {
 	if os.Getenv(specEnv) != "" && len(os.Args) > 1 && os.Args[1] == "sandbox-exec" {
-		os.Exit(Exec(os.Stderr))
+		os.Exit(Launch(os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "sandbox-forward" {
+		os.Exit(Forward(os.Args[2:], os.Stderr))
 	}
 	os.Exit(m.Run())
 }
@@ -195,15 +198,15 @@ func TestFailsClosed(t *testing.T) {
 	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "probe failed") {
 		t.Fatalf("a broken runner must fail closed: %v", err)
 	}
-	if _, err := New(Config{Ladder: []string{"firecracker"}}); err == nil {
-		t.Fatal("unbuilt rungs must be rejected")
+	if _, err := New(Config{Ladder: []string{"kata"}}); err == nil {
+		t.Fatal("Kubernetes-only rungs must be rejected")
 	}
 }
 
 func TestWorkspacePathsStayInside(t *testing.T) {
-	s, _ := New(Config{Ladder: []string{"landlock"}, MinIsolation: "none"})
 	for _, name := range []string{"../x", "/etc/x", "a/../../x"} {
-		if _, err := s.workspace(&Request{Files: map[string]string{name: "x"}}); err == nil {
+		sp := &Spec{Files: map[string][]byte{name: []byte("x")}}
+		if err := sp.Validate(); err == nil {
 			t.Errorf("%q accepted", name)
 		}
 	}
@@ -221,8 +224,8 @@ func TestClassify(t *testing.T) {
 		{"bwrap", "Traceback...\nAssertionError\n", 1, OutcomeExit},
 	}
 	for _, c := range cases {
-		res := &Result{Outcome: OutcomeExit, ExitCode: c.code, Stderr: c.stderr}
-		classify(c.driver, res)
+		res := &ExecResult{Outcome: OutcomeExit, ExitCode: c.code}
+		classify(c.driver, res, c.stderr)
 		if res.Outcome != c.want {
 			t.Errorf("%q: got %s, want %s", c.stderr, res.Outcome, c.want)
 		}

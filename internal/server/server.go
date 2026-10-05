@@ -36,6 +36,8 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxsvc"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
@@ -48,6 +50,26 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 	if err != nil {
 		return err
 	}
+	// Agent harnesses in the worker create persistent sandboxes through
+	// SandboxService on a private socket; it is never on the API port.
+	sb, err := sandbox.New(cfg.Sandbox)
+	if err != nil {
+		return err
+	}
+	sandboxes := sandbox.NewManager(sb)
+	defer sandboxes.Close()
+	sockDir, err := os.MkdirTemp("", "evalsid-sandbox-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(sockDir)
+	socket := filepath.Join(sockDir, "sandbox.sock")
+	stopSandbox, err := sandboxsvc.Serve(ctx, sandboxes, socket)
+	if err != nil {
+		return fmt.Errorf("sandbox service: %w", err)
+	}
+	defer stopSandbox()
+	workerEnv = append(workerEnv, "EVALSI_SANDBOX_ADDR=unix://"+socket)
 	worker, err := pluginhost.Start(ctx, pluginhost.Options{
 		Env:          workerEnv,
 		Command:      cfg.Worker.Command,

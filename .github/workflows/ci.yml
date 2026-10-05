@@ -117,7 +117,13 @@ jobs:
       - name: Generated Python code is current
         run: |
           scripts/gen-python-proto.sh
-          git diff --exit-code -- python/evalsi/src/evalsi/v1alpha1 python/evalsi/src/evalsi/plugin
+          git diff --exit-code -- python/evalsi/src/evalsi/v1alpha1 python/evalsi/src/evalsi/plugin \
+            python/evalsi/src/evalsi/sandbox/v1alpha1 python/evalsi/src/evalsi/harness/v1alpha1
+      - name: Python tests against a real sandbox
+        # A static evalsid, as released: it is also the in-sandbox egress forwarder.
+        run: |
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
+          cd python && EVALSI_TEST_EVALSID="$RUNNER_TEMP/evalsid" uv run --no-sync pytest -q
       - name: End-to-end tests
         run: go test -count=1 -v ./tests/e2e/
         env:

@@ -642,18 +642,24 @@ class IsolationReport(_message.Message):
     DRIVER_FIELD_NUMBER: _builtins.int
     LEVEL_FIELD_NUMBER: _builtins.int
     ENFORCEMENT_FIELD_NUMBER: _builtins.int
+    NOTES_FIELD_NUMBER: _builtins.int
     driver: _builtins.str
     """For example "firecracker", "bwrap", "landlock" or "pod"."""
     level: Global___IsolationLevel.ValueType
     enforcement: Global___Enforcement.ValueType
+    @_builtins.property
+    def notes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """What the rung did and did not govern, for example "network: allowlist via egress proxy"."""
+
     def __init__(
         self,
         *,
         driver: _builtins.str = ...,
         level: Global___IsolationLevel.ValueType = ...,
         enforcement: Global___Enforcement.ValueType = ...,
+        notes: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["driver", b"driver", "enforcement", b"enforcement", "level", b"level"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["driver", b"driver", "enforcement", b"enforcement", "level", b"level", "notes", b"notes"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___IsolationReport: _TypeAlias = IsolationReport  # noqa: Y015

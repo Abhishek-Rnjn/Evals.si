@@ -16,10 +16,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Exec is `evalsid sandbox-exec`: it applies resource limits, Landlock and
+// Launch is `evalsid sandbox-exec`: it applies resource limits, Landlock and
 // seccomp to itself, then replaces itself with the target. It only returns
 // on failure, with the launcher's exit code.
-func Exec(stderr io.Writer) int {
+func Launch(stderr io.Writer) int {
 	fail := func(format string, args ...any) int {
 		fmt.Fprintf(stderr, launcherPrefix+format+"\n", args...)
 		return exitLauncherFailure
@@ -162,7 +162,10 @@ func applyLandlock(r *landlockRules) error {
 	}
 	cfg := landlock.V7.BestEffort()
 	if r.DenyTCP {
-		// Every network right is handled and none is granted.
+		// Every network right is handled; only the listed connect ports are granted.
+		for _, port := range r.ConnectPorts {
+			rules = append(rules, landlock.ConnectTCP(port))
+		}
 		return cfg.Restrict(rules...)
 	}
 	if err := cfg.RestrictPaths(rules...); err != nil {

@@ -150,6 +150,8 @@ message IsolationReport {
   string driver = 1;
   IsolationLevel level = 2;
   Enforcement enforcement = 3;
+  // What the rung did and did not govern, for example "network: allowlist via egress proxy".
+  repeated string notes = 4;
 }
 
 // Ordered from weakest to strongest.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -41,6 +42,9 @@ type landlockRules struct {
 	WriteDirs  []string `json:"write_dirs,omitempty"`
 	WriteFiles []string `json:"write_files,omitempty"`
 	DenyTCP    bool     `json:"deny_tcp,omitempty"`
+	// With DenyTCP, TCP connections to these ports are still allowed (the
+	// egress proxy on loopback).
+	ConnectPorts []uint16 `json:"connect_ports,omitempty"`
 }
 
 const (
@@ -51,7 +55,7 @@ const (
 	launcherPrefix      = "evalsi-sandbox: "
 )
 
-func limits(req *Request, spec *launchSpec) {
+func limits(req *Resources, spec *launchSpec) {
 	mem := req.MemoryMB
 	if mem <= 0 {
 		mem = defaultMemoryMB
@@ -73,27 +77,21 @@ func limits(req *Request, spec *launchSpec) {
 }
 
 // launch runs the launcher with spec and waits, enforcing the wall-clock
-// timeout on the whole process group and capping captured output.
-func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, req *Request) *Result {
-	timeout := defaultTimeout
-	if req.TimeoutS > 0 {
-		timeout = time.Duration(req.TimeoutS * float64(time.Second))
+// timeout on the whole process group.
+func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, stdin []byte, timeout time.Duration, stdout, stderr io.Writer) *ExecResult {
+	if timeout <= 0 {
+		timeout = defaultTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	raw, err := json.Marshal(spec)
 	if err != nil {
-		return &Result{Outcome: OutcomeRunnerFailure, Error: err.Error()}
+		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: err.Error()}
 	}
-	limit := req.OutputLimit
-	if limit <= 0 {
-		limit = defaultOutputLimit
-	}
-	stdout, stderr := &capped{limit: limit}, &capped{limit: limit}
 	cmd := exec.CommandContext(ctx, s.cfg.Launcher, "sandbox-exec")
 	cmd.Env = []string{specEnv + "=" + string(raw)}
-	cmd.Stdin = strings.NewReader(req.Stdin)
+	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
@@ -104,11 +102,12 @@ func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, req *Request) *R
 
 	start := time.Now()
 	err = cmd.Run()
-	res := &Result{
-		Stdout:     stdout.String(),
-		Stderr:     stderr.String(),
-		Truncated:  stdout.truncated || stderr.truncated,
-		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+	res := &ExecResult{Duration: time.Since(start)}
+	if cmd.ProcessState != nil {
+		if ru, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage); ok {
+			res.CPU = time.Duration(ru.Utime.Nano() + ru.Stime.Nano())
+			res.MaxRSS = ru.Maxrss * 1024
+		}
 	}
 	var exit *exec.ExitError
 	switch {
@@ -129,25 +128,37 @@ func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, req *Request) *R
 	return res
 }
 
-// capped keeps the first limit bytes and notes whether more arrived.
+// capped passes the first limit bytes on to w (when set) and notes whether
+// more arrived. With keep, it also keeps them, for classification.
 type capped struct {
-	buf       bytes.Buffer
+	w         io.Writer
 	limit     int
+	n         int
+	keep      bool
+	buf       bytes.Buffer
 	truncated bool
 }
 
 func (c *capped) Write(p []byte) (int, error) {
-	room := c.limit - c.buf.Len()
+	room := c.limit - c.n
 	if room <= 0 {
 		c.truncated = c.truncated || len(p) > 0
 		return len(p), nil
 	}
-	if len(p) > room {
-		c.buf.Write(p[:room])
-		c.truncated = true
-		return len(p), nil
+	chunk := p
+	if len(chunk) > room {
+		chunk, c.truncated = chunk[:room], true
 	}
-	return c.buf.Write(p)
+	c.n += len(chunk)
+	if c.keep {
+		c.buf.Write(chunk)
+	}
+	if c.w != nil {
+		if _, err := c.w.Write(chunk); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
 }
 
 func (c *capped) String() string { return c.buf.String() }
@@ -160,15 +171,16 @@ var denialSignatures = []string{
 	"Operation not permitted",
 	"Network is unreachable",
 	"Temporary failure in name resolution",
+	"evalsi egress denied",
 }
 
 // classify separates runner failures (infrastructure) from the command's
 // own outcomes, and recognizes policy denials.
-func classify(driver string, res *Result) {
+func classify(driver string, res *ExecResult, stderr string) {
 	if res.Outcome != OutcomeExit {
 		return
 	}
-	first := firstLine(res.Stderr)
+	first := firstLine(stderr)
 	switch {
 	case res.ExitCode == exitLauncherFailure && strings.HasPrefix(first, launcherPrefix):
 		res.Outcome, res.Error = OutcomeRunnerFailure, strings.TrimPrefix(first, launcherPrefix)
@@ -185,7 +197,7 @@ func classify(driver string, res *Result) {
 		return
 	}
 	for _, sig := range denialSignatures {
-		if strings.Contains(res.Stderr, sig) {
+		if strings.Contains(stderr, sig) {
 			res.Denials = append(res.Denials, sig)
 		}
 	}

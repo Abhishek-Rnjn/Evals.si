@@ -1293,9 +1293,11 @@ func (x *TraceProvenance) GetPolicyId() string {
 type IsolationReport struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// For example "firecracker", "bwrap", "landlock" or "pod".
-	Driver        string         `protobuf:"bytes,1,opt,name=driver,proto3" json:"driver,omitempty"`
-	Level         IsolationLevel `protobuf:"varint,2,opt,name=level,proto3,enum=evalsi.v1alpha1.IsolationLevel" json:"level,omitempty"`
-	Enforcement   Enforcement    `protobuf:"varint,3,opt,name=enforcement,proto3,enum=evalsi.v1alpha1.Enforcement" json:"enforcement,omitempty"`
+	Driver      string         `protobuf:"bytes,1,opt,name=driver,proto3" json:"driver,omitempty"`
+	Level       IsolationLevel `protobuf:"varint,2,opt,name=level,proto3,enum=evalsi.v1alpha1.IsolationLevel" json:"level,omitempty"`
+	Enforcement Enforcement    `protobuf:"varint,3,opt,name=enforcement,proto3,enum=evalsi.v1alpha1.Enforcement" json:"enforcement,omitempty"`
+	// What the rung did and did not govern, for example "network: allowlist via egress proxy".
+	Notes         []string `protobuf:"bytes,4,rep,name=notes,proto3" json:"notes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1349,6 +1351,13 @@ func (x *IsolationReport) GetEnforcement() Enforcement {
 		return x.Enforcement
 	}
 	return Enforcement_ENFORCEMENT_UNSPECIFIED
+}
+
+func (x *IsolationReport) GetNotes() []string {
+	if x != nil {
+		return x.Notes
+	}
+	return nil
 }
 
 var File_evalsi_v1alpha1_record_proto protoreflect.FileDescriptor
@@ -1461,11 +1470,12 @@ const file_evalsi_v1alpha1_record_proto_rawDesc = "" +
 	"\x05trial\x18\x03 \x01(\x05R\x05trial\"I\n" +
 	"\x0fTraceProvenance\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1b\n" +
-	"\tpolicy_id\x18\x02 \x01(\tR\bpolicyId\"\xa0\x01\n" +
+	"\tpolicy_id\x18\x02 \x01(\tR\bpolicyId\"\xb6\x01\n" +
 	"\x0fIsolationReport\x12\x16\n" +
 	"\x06driver\x18\x01 \x01(\tR\x06driver\x125\n" +
 	"\x05level\x18\x02 \x01(\x0e2\x1f.evalsi.v1alpha1.IsolationLevelR\x05level\x12>\n" +
-	"\venforcement\x18\x03 \x01(\x0e2\x1c.evalsi.v1alpha1.EnforcementR\venforcement*\xee\x01\n" +
+	"\venforcement\x18\x03 \x01(\x0e2\x1c.evalsi.v1alpha1.EnforcementR\venforcement\x12\x14\n" +
+	"\x05notes\x18\x04 \x03(\tR\x05notes*\xee\x01\n" +
 	"\bStepType\x12\x19\n" +
 	"\x15STEP_TYPE_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rSTEP_TYPE_LLM\x10\x01\x12\x12\n" +

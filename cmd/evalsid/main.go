@@ -27,6 +27,7 @@ commands:
   serve            run the server (evalsid serve -h for flags)
   sandbox probe    report which sandbox rungs work on this host
   sandbox run      run a JSON request from stdin in the sandbox, print the JSON result
+  sandbox serve    serve SandboxService on a Unix socket (--listen unix:///path)
   auth check       explain an authorization decision for a token or API key
   auth new-key     generate an API key and the hash to put in config
   auth hash-key    hash an API key read from stdin
@@ -55,7 +56,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return authMain(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "sandbox-exec":
 		// Internal: the launcher that confines itself, then executes the command.
-		return sandbox.Exec(stderr)
+		return sandbox.Launch(stderr)
+	case "sandbox-forward":
+		// Internal: relays a sandbox's loopback proxy port to the egress proxy.
+		return sandbox.Forward(args[1:], stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, usage)
 		return 0

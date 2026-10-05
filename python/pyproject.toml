@@ -22,7 +22,12 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["evalsi/src/evalsi/v1alpha1", "evalsi/src/evalsi/plugin"]
+extend-exclude = [
+    "evalsi/src/evalsi/v1alpha1",
+    "evalsi/src/evalsi/plugin",
+    "evalsi/src/evalsi/sandbox/v1alpha1",
+    "evalsi/src/evalsi/harness/v1alpha1",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PL", "PT"]
@@ -48,7 +53,12 @@ ignore_missing_imports = true
 
 # Generated code is typed through its .pyi stubs; do not check the .py bodies.
 [[tool.mypy.overrides]]
-module = ["evalsi.v1alpha1.*", "evalsi.plugin.v1alpha1.*"]
+module = [
+    "evalsi.v1alpha1.*",
+    "evalsi.plugin.v1alpha1.*",
+    "evalsi.sandbox.v1alpha1.*",
+    "evalsi.harness.v1alpha1.*",
+]
 ignore_errors = true
 
 [tool.pytest.ini_options]
