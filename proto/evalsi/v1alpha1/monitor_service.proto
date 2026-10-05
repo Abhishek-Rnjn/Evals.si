@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/evaluator.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// MonitorService is the "Watch" door: policies that evaluate live traces.
+service MonitorService {
+  // Creates or replaces a policy by name.
+  rpc ApplyPolicy(ApplyPolicyRequest) returns (ApplyPolicyResponse);
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+  rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
+  rpc GetPolicyStats(GetPolicyStatsRequest) returns (GetPolicyStatsResponse);
+}
+
+// OnlineEvalPolicy selects traces, samples them, and evaluates them in stages.
+//
+// Expressions are CEL. Every expression sees the trace as:
+//   service (string), name (root span name), duration_ms (double),
+//   error (bool), steps (int), tools (list of tool names),
+//   models (list of model names), attributes (root span attributes),
+//   resource (resource attributes).
+// Stage conditions and promotion also see scores: map of metric -> number
+// (pass/fail metrics are 1 or 0) from earlier stages.
+message OnlineEvalPolicy {
+  string name = 1;
+  string project = 2;
+  bool disabled = 3;
+  // Which traces this policy considers; empty means all.
+  string selector = 4;
+  Sampling sampling = 5;
+  // Evaluated in order; a stage runs only when its condition holds.
+  repeated CascadeStage stages = 6;
+  // Judge for judge evaluators; the server's default when empty.
+  string judge = 7;
+  // Window for the aggregates that alerts check. Defaults to 5 minutes.
+  google.protobuf.Duration window = 8;
+  repeated Alert alerts = 9;
+  Promotion promote = 10;
+}
+
+message Sampling {
+  // Fraction of matching traces to evaluate, 0 to 1. Defaults to 1.
+  // Sampling is deterministic per trace id.
+  optional double rate = 1;
+  // Traces matching any of these expressions are always evaluated.
+  repeated string always = 2;
+}
+
+message CascadeStage {
+  repeated EvaluatorRef evaluators = 1;
+  // Runs the stage only when true; empty means always.
+  string when = 2;
+}
+
+message Alert {
+  // A metric from the policy's evaluators, for example "llm-judge".
+  string metric = 1;
+  // Fires when the window mean goes below or above these bounds.
+  optional double below = 2;
+  optional double above = 3;
+  // Values needed in the window before the alert may fire. Defaults to 10.
+  int64 min_samples = 4;
+  // Receives a JSON POST when the alert fires and when it resolves.
+  string webhook = 5;
+}
+
+message Promotion {
+  // Promote the trace when true, for example "scores['llm-judge'] < 0.5".
+  string when = 1;
+  // Dataset name; records are appended to <datasets_dir>/promoted/<name>.jsonl.
+  string dataset = 2;
+}
+
+message ApplyPolicyRequest {
+  OnlineEvalPolicy policy = 1;
+}
+
+message ApplyPolicyResponse {
+  OnlineEvalPolicy policy = 1;
+}
+
+message ListPoliciesRequest {
+  string project = 1;
+}
+
+message ListPoliciesResponse {
+  repeated OnlineEvalPolicy policies = 1;
+}
+
+message DeletePolicyRequest {
+  string name = 1;
+}
+
+message DeletePolicyResponse {}
+
+message GetPolicyStatsRequest {
+  string name = 1;
+}
+
+message MetricWindow {
+  string metric = 1;
+  int64 n = 2;
+  optional double mean = 3;
+}
+
+message AlertState {
+  Alert alert = 1;
+  bool firing = 2;
+  google.protobuf.Timestamp since = 3;
+}
+
+message PolicyStats {
+  string policy = 1;
+  // Counters since the server started.
+  int64 traces_seen = 2;
+  int64 traces_matched = 3;
+  int64 traces_sampled = 4;
+  int64 traces_evaluated = 5;
+  int64 traces_promoted = 6;
+  int64 evaluation_errors = 7;
+  repeated MetricWindow metrics = 8;
+  repeated AlertState alerts = 9;
+}
+
+message GetPolicyStatsResponse {
+  PolicyStats stats = 1;
+}

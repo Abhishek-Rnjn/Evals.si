@@ -48,6 +48,36 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"evalsi {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    _add_eval(sub)
+    _add_run(sub)
+    _add_policy(sub)
+    cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
+    cat.add_argument("--pack", help="only this pack")
+    cat.add_argument("--format", choices=["table", "json"], default="table")
+    cat.set_defaults(func=_cmd_catalog)
+
+    wk = sub.add_parser(
+        "worker", help="serve evaluators to evalsid over gRPC (needs evalsi[server])"
+    )
+    wk.add_argument("--listen", required=True, help="unix:///path/to.sock or host:port")
+    wk.add_argument("--judges", help="JSON file mapping judge names to judge configs")
+    wk.add_argument("--no-cache", action="store_true", help="do not reuse judge responses")
+    wk.set_defaults(func=_cmd_worker)
+
+    srv = sub.add_parser(
+        "serve",
+        help="run the Evals.si server (starts the evalsid binary)",
+        add_help=False,
+    )
+    srv.add_argument("args", nargs=argparse.REMAINDER, help="arguments passed to evalsid serve")
+    srv.set_defaults(func=_cmd_serve)
+
+    ver = sub.add_parser("version", help="print the version")
+    ver.set_defaults(func=_cmd_version)
+    return parser
+
+
+def _add_eval(sub: Any) -> None:
     ev = sub.add_parser("eval", help="score records you already have")
     ev.add_argument("--data", required=True, help="JSONL/JSON file or hf://repo?config=..&split=..")
     ev.add_argument(
@@ -87,6 +117,8 @@ def _parser() -> argparse.ArgumentParser:
     out.add_argument("--quiet", action="store_true", help="no progress output")
     ev.set_defaults(func=_cmd_eval)
 
+
+def _add_run(sub: Any) -> None:
     rn = sub.add_parser("run", help="execute a run spec (run.yaml), embedded or on a server")
     rn.add_argument("-f", "--file", required=True, help="the run spec")
     rn.add_argument(
@@ -107,30 +139,21 @@ def _parser() -> argparse.ArgumentParser:
     cmp.add_argument("--format", choices=["table", "json"], default="table")
     cmp.set_defaults(func=_cmd_compare)
 
-    cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
-    cat.add_argument("--pack", help="only this pack")
-    cat.add_argument("--format", choices=["table", "json"], default="table")
-    cat.set_defaults(func=_cmd_catalog)
 
-    wk = sub.add_parser(
-        "worker", help="serve evaluators to evalsid over gRPC (needs evalsi[server])"
-    )
-    wk.add_argument("--listen", required=True, help="unix:///path/to.sock or host:port")
-    wk.add_argument("--judges", help="JSON file mapping judge names to judge configs")
-    wk.add_argument("--no-cache", action="store_true", help="do not reuse judge responses")
-    wk.set_defaults(func=_cmd_worker)
-
-    srv = sub.add_parser(
-        "serve",
-        help="run the Evals.si server (starts the evalsid binary)",
-        add_help=False,
-    )
-    srv.add_argument("args", nargs=argparse.REMAINDER, help="arguments passed to evalsid serve")
-    srv.set_defaults(func=_cmd_serve)
-
-    ver = sub.add_parser("version", help="print the version")
-    ver.set_defaults(func=_cmd_version)
-    return parser
+def _add_policy(sub: Any) -> None:
+    pol = sub.add_parser("policy", help="manage online evaluation policies on a server")
+    pol_sub = pol.add_subparsers(dest="action", required=True)
+    pa = pol_sub.add_parser("apply", help="create or replace a policy from a YAML file")
+    pa.add_argument("-f", "--file", required=True)
+    pl = pol_sub.add_parser("list", help="list policies")
+    pl.add_argument("--project", default="")
+    ps = pol_sub.add_parser("stats", help="counters, window means and alerts of a policy")
+    ps.add_argument("name")
+    pd = pol_sub.add_parser("delete", help="delete a policy")
+    pd.add_argument("name")
+    for p in (pa, pl, ps, pd):
+        p.add_argument("--server", required=True, help="evalsid URL")
+    pol.set_defaults(func=_cmd_policy)
 
 
 def _add_judge_args(parser: argparse.ArgumentParser) -> None:
@@ -495,6 +518,61 @@ def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
     if status == "RUN_STATUS_FAILED":
         return EXIT_GATES_FAILED
     return 1
+
+
+def load_policy(path: str) -> dict[str, Any]:
+    """Read a policy file into the OnlineEvalPolicy JSON form, validated by the proto."""
+    import yaml
+    from google.protobuf import json_format
+
+    from evalsi.v1alpha1 import monitor_service_pb2
+
+    with open(path, encoding="utf-8") as handle:
+        document = yaml.safe_load(handle)
+    if not isinstance(document, dict) or not isinstance(document.get("spec"), dict):
+        raise ValueError(f"{path}: expected a mapping with a 'spec'")
+    if document.get("kind", "OnlineEvalPolicy") != "OnlineEvalPolicy":
+        raise ValueError(f"{path}: kind must be OnlineEvalPolicy")
+    metadata = document.get("metadata") or {}
+    body = {
+        **document["spec"],
+        "name": metadata.get("name", ""),
+        "project": metadata.get("project", ""),
+    }
+    try:
+        message = json_format.ParseDict(body, monitor_service_pb2.OnlineEvalPolicy())
+    except json_format.ParseError as exc:
+        raise ValueError(f"{path}: invalid policy: {exc}") from exc
+    out: dict[str, Any] = json_format.MessageToDict(message)
+    return out
+
+
+def _cmd_policy(args: argparse.Namespace) -> int:
+    from evalsi.client import Client, ServerError
+
+    with Client(args.server) as client:
+        try:
+            if args.action == "apply":
+                policy = load_policy(args.file)
+                client.call("MonitorService", "ApplyPolicy", {"policy": policy})
+                print(f"applied policy {policy['name']}")
+            elif args.action == "list":
+                out = client.call("MonitorService", "ListPolicies", {"project": args.project})
+                for p in out.get("policies", []):
+                    state = " (disabled)" if p.get("disabled") else ""
+                    print(f"{p['name']}{state}  {p.get('selector', '')}")
+            elif args.action == "stats":
+                stats = client.call("MonitorService", "GetPolicyStats", {"name": args.name})[
+                    "stats"
+                ]
+                print(json.dumps(stats, indent=2))
+            else:
+                client.call("MonitorService", "DeletePolicy", {"name": args.name})
+                print(f"deleted policy {args.name}")
+        except ServerError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+    return 0
 
 
 def _fmt3(value: float | None) -> str:

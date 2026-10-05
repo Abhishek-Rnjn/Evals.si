@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -53,6 +54,25 @@ type Runs struct {
 	MaxConcurrent int `json:"max_concurrent"`
 }
 
+// OTLP configures trace ingestion. OTLP is always served on the main port
+// (gRPC TraceService/Export and HTTP /v1/traces); these add the standard ports.
+type OTLP struct {
+	// For example 127.0.0.1:4317. Empty: not opened.
+	GRPCListen string `json:"grpc_listen"`
+	// For example 127.0.0.1:4318. Empty: not opened.
+	HTTPListen string `json:"http_listen"`
+	// Wait for late spans after a trace's root span ends.
+	Grace string `json:"grace"`
+	// Traces buffered while waiting for spans.
+	MaxTraces int `json:"max_traces"`
+}
+
+// Traces configures stored traces.
+type Traces struct {
+	// How long traces and their results are kept, for example 168h.
+	Retention string `json:"retention"`
+}
+
 // Config is the whole evalsid configuration.
 type Config struct {
 	Listen string `json:"listen"`
@@ -60,12 +80,17 @@ type Config struct {
 	DataDir string `json:"data_dir"`
 	// Root for dataset paths in run specs. Empty means runs must send records
 	// inline or use a dataset URI.
-	DatasetsDir  string           `json:"datasets_dir"`
-	Runs         Runs             `json:"runs"`
-	Worker       Worker           `json:"worker"`
-	Judges       map[string]Judge `json:"judges"`
-	DefaultJudge string           `json:"default_judge"`
-	Evaluate     Evaluate         `json:"evaluate"`
+	DatasetsDir string `json:"datasets_dir"`
+	Runs        Runs   `json:"runs"`
+	OTLP        OTLP   `json:"otlp"`
+	Traces      Traces `json:"traces"`
+	// Online evaluation policies applied at startup, in the OnlineEvalPolicy
+	// JSON form. They replace stored policies of the same name.
+	Policies     []json.RawMessage `json:"policies"`
+	Worker       Worker            `json:"worker"`
+	Judges       map[string]Judge  `json:"judges"`
+	DefaultJudge string            `json:"default_judge"`
+	Evaluate     Evaluate          `json:"evaluate"`
 }
 
 // Default returns the configuration used when no file is given.
@@ -80,6 +105,8 @@ func Default() Config {
 		Judges:   map[string]Judge{},
 		Evaluate: Evaluate{BatchSize: 32, Parallelism: 8, MaxRecords: 10000},
 		Runs:     Runs{MaxConcurrent: 4},
+		OTLP:     OTLP{Grace: "2s", MaxTraces: 10000},
+		Traces:   Traces{Retention: "168h"},
 	}
 }
 
@@ -96,6 +123,12 @@ func Load(path string) (Config, error) {
 		}
 	}
 	return cfg, cfg.Validate()
+}
+
+// Duration parses a validated duration field.
+func Duration(s string) time.Duration {
+	d, _ := time.ParseDuration(s)
+	return d
 }
 
 // StartTimeout parses Worker.StartTimeout.
@@ -132,6 +165,11 @@ func (c Config) Validate() error {
 	if c.DefaultJudge != "" {
 		if _, ok := c.Judges[c.DefaultJudge]; !ok {
 			errs = append(errs, fmt.Errorf("default_judge %q is not among judges", c.DefaultJudge))
+		}
+	}
+	for name, d := range map[string]string{"otlp.grace": c.OTLP.Grace, "traces.retention": c.Traces.Retention} {
+		if _, err := time.ParseDuration(d); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 		}
 	}
 	if c.DataDir == "" {

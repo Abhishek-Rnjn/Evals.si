@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/score.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// TraceService reads the traces evalsid has ingested over OTLP, with the
+// results online policies produced for them.
+service TraceService {
+  rpc ListTraces(ListTracesRequest) returns (ListTracesResponse);
+  rpc GetTrace(GetTraceRequest) returns (GetTraceResponse);
+}
+
+message TraceSummary {
+  string trace_id = 1;
+  string service = 2;
+  // Root span name.
+  string name = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Duration duration = 5;
+  bool error = 6;
+  int32 steps = 7;
+  // Number of evaluation results stored for the trace.
+  int32 results = 8;
+}
+
+message ListTracesRequest {
+  // Only traces from this service, when set.
+  string service = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListTracesResponse {
+  // Newest first.
+  repeated TraceSummary traces = 1;
+  string next_page_token = 2;
+}
+
+message GetTraceRequest {
+  // Hex trace id.
+  string trace_id = 1;
+}
+
+message PolicyResults {
+  string policy = 1;
+  repeated EvaluationResult results = 2;
+}
+
+message GetTraceResponse {
+  // The trace as the record evaluators saw: input, output, trajectory, usage.
+  Record record = 1;
+  repeated PolicyResults policies = 2;
+}

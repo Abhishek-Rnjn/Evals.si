@@ -131,3 +131,16 @@ def test_serve_without_evalsid(
     monkeypatch.setenv("PATH", "")
     assert main(["serve"]) == 1
     assert "evalsid is not installed" in capsys.readouterr().err
+
+
+def test_load_policy(tmp_path: Path) -> None:
+    from evalsi.cli import load_policy
+
+    example = Path(__file__).resolve().parents[3] / "examples" / "watch" / "support-policy.yaml"
+    policy = load_policy(str(example))
+    assert policy["name"] == "support-agent"
+    assert policy["sampling"]["always"] == ["error", "duration_ms > 20000"]
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("kind: OnlineEvalPolicy\nspec: {selectr: x}\n")
+    with pytest.raises(ValueError, match="invalid policy"):
+        load_policy(str(bad))

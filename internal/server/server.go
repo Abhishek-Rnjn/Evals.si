@@ -13,18 +13,24 @@ import (
 	"net/http"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"connectrpc.com/grpchealth"
 	"connectrpc.com/grpcreflect"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evals.si/internal/watch"
 )
 
 // Run serves until ctx is cancelled, then shuts down gracefully.
@@ -71,17 +77,66 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 	// Runs stop before the worker does (deferred calls run in reverse order).
 	defer runManager.Shutdown()
 
+	watcher, err := watch.New(ctx, st, svc, watch.Options{DatasetsDir: cfg.DatasetsDir, BatchSize: cfg.Evaluate.BatchSize, Logger: log})
+	if err != nil {
+		return err
+	}
+	for i, raw := range cfg.Policies {
+		p := &evalsiv1alpha1.OnlineEvalPolicy{}
+		if err := protojson.Unmarshal(raw, p); err != nil {
+			return fmt.Errorf("policies[%d]: %w", i, err)
+		}
+		if err := watcher.Apply(ctx, p); err != nil {
+			return fmt.Errorf("policies[%d] (%s): %w", i, p.GetName(), err)
+		}
+	}
+	assembler := ingest.NewAssembler(ingest.AssemblerOptions{
+		Grace: config.Duration(cfg.OTLP.Grace), MaxTraces: cfg.OTLP.MaxTraces,
+	}, watcher.Ingest)
+	bg, stopBG := context.WithCancel(context.Background())
+	stopAssembler := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() { defer wg.Done(); assembler.Run(stopAssembler, 250*time.Millisecond) }()
+	go func() { defer wg.Done(); watcher.Run(bg) }()
+	go func() { defer wg.Done(); retain(bg, st, config.Duration(cfg.Traces.Retention), log) }()
+	defer func() {
+		close(stopAssembler) // flushes buffered traces into the engine
+		stopBG()
+		wg.Wait()
+	}()
+	receiver := ingest.NewReceiver(assembler)
+
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return err
 	}
+	handler := Handler(svc, runManager, watcher, st, receiver, assembler, worker)
 	srv := &http.Server{
-		Handler:           Handler(svc, runManager, worker),
+		Handler:           handler,
 		Protocols:         protocols(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	errc := make(chan error, 1)
+	errc := make(chan error, 4)
 	go func() { errc <- srv.Serve(ln) }()
+	// The standard OTLP ports serve only OTLP.
+	otlpMux := http.NewServeMux()
+	receiver.Register(otlpMux)
+	var extra []*http.Server
+	for _, addr := range []string{cfg.OTLP.GRPCListen, cfg.OTLP.HTTPListen} {
+		if addr == "" {
+			continue
+		}
+		l, err := net.Listen("tcp", addr)
+		if err != nil {
+			_ = srv.Close()
+			return fmt.Errorf("otlp listener: %w", err)
+		}
+		s := &http.Server{Handler: otlpMux, Protocols: protocols(), ReadHeaderTimeout: 10 * time.Second}
+		extra = append(extra, s)
+		go func() { errc <- s.Serve(l) }()
+		log.Info("otlp listening", "addr", l.Addr().String())
+	}
 	log.Info("evalsid listening", "addr", ln.Addr().String(), "evaluators", len(manifests), "judges", judges)
 	if ready != nil {
 		ready <- ln.Addr().String()
@@ -95,10 +150,34 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 	log.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	for _, s := range extra {
+		_ = s.Shutdown(shutdownCtx)
+	}
 	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
+}
+
+// retain deletes traces older than the retention period, hourly.
+func retain(ctx context.Context, st *store.Store, retention time.Duration, log *slog.Logger) {
+	if retention <= 0 {
+		return
+	}
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		if n, err := st.DeleteTracesBefore(ctx, time.Now().Add(-retention)); err != nil {
+			log.Error("trace retention", "err", err)
+		} else if n > 0 {
+			log.Info("trace retention", "deleted", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 func protocols() *http.Protocols {
@@ -109,15 +188,23 @@ func protocols() *http.Protocols {
 }
 
 // Handler routes every service. Exposed for tests.
-func Handler(svc *evaluation.Service, runManager *runs.Manager, worker pluginhost.Worker) http.Handler {
+func Handler(svc *evaluation.Service, runManager *runs.Manager, watcher *watch.Engine, st *store.Store,
+	receiver *ingest.Receiver, assembler *ingest.Assembler, worker pluginhost.Worker,
+) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(evalsiv1alpha1connect.NewEvaluationServiceHandler(svc))
 	mux.Handle(evalsiv1alpha1connect.NewCatalogServiceHandler(svc))
 	mux.Handle(evalsiv1alpha1connect.NewRunServiceHandler(runManager))
+	mux.Handle(evalsiv1alpha1connect.NewMonitorServiceHandler(watcher))
+	mux.Handle(evalsiv1alpha1connect.NewTraceServiceHandler(watch.Traces{Store: st}))
+	receiver.Register(mux)
+	mux.Handle("GET /metrics", watch.MetricsHandler(watcher, assembler))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
 		evalsiv1alpha1connect.RunServiceName,
+		evalsiv1alpha1connect.MonitorServiceName,
+		evalsiv1alpha1connect.TraceServiceName,
 	}
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))
 	reflector := grpcreflect.NewStaticReflector(services...)

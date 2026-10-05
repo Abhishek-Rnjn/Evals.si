@@ -49,6 +49,22 @@ CREATE TABLE IF NOT EXISTS run_results (
   evaluator TEXT NOT NULL, result BLOB NOT NULL,
   PRIMARY KEY (run_id, record_idx, trial, eval_idx)
 );
+CREATE TABLE IF NOT EXISTS traces (
+  trace_id TEXT PRIMARY KEY,
+  service TEXT NOT NULL,
+  start_ns INTEGER NOT NULL,
+  summary BLOB NOT NULL,
+  record BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS traces_by_service ON traces (service, start_ns DESC);
+CREATE INDEX IF NOT EXISTS traces_by_start ON traces (start_ns DESC);
+CREATE TABLE IF NOT EXISTS trace_results (
+  trace_id TEXT NOT NULL, policy TEXT NOT NULL, evaluator TEXT NOT NULL, result BLOB NOT NULL,
+  PRIMARY KEY (trace_id, policy, evaluator)
+);
+CREATE TABLE IF NOT EXISTS policies (
+  name TEXT PRIMARY KEY, project TEXT NOT NULL, policy BLOB NOT NULL
+);
 `
 
 // Store is safe for concurrent use.

@@ -1,0 +1,35 @@
+# An online evaluation policy. Apply it to a running server:
+#   evalsi policy apply -f examples/watch/support-policy.yaml --server http://localhost:8080
+# Then point any OpenTelemetry-instrumented agent (or agentgateway) at the
+# server's OTLP endpoint (main port, or 4317/4318 when enabled in evalsi.yaml).
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: support-agent
+  project: support
+spec:
+  # CEL over the trace: service, name, duration_ms, error, steps, tools,
+  # models, attributes, resource.
+  selector: service == "support-agent"
+  sampling:
+    rate: 0.1                                   # 10% of matching traces...
+    always: ["error", "duration_ms > 20000"]    # ...plus every failure or slow turn
+  stages:
+    # Cheap checks on every sampled trace.
+    - evaluators:
+        - {ref: builtin/latency}
+        - {ref: builtin/json-valid, name: valid-json}
+    # The judge only when the cheap checks pass (scores: metric -> number).
+    - when: 'scores["valid-json"] == 1.0'
+      evaluators:
+        - ref: builtin/llm-judge
+          params: {rubric: helpfulness}
+  window: 300s
+  alerts:
+    - metric: llm-judge
+      below: 0.7
+      min_samples: 20
+      webhook: https://hooks.example.com/evalsi
+  promote:
+    when: 'scores["llm-judge"] < 0.5'
+    dataset: support-regressions                # <datasets_dir>/promoted/support-regressions.jsonl

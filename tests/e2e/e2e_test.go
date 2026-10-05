@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -101,6 +102,7 @@ func start(t *testing.T) env {
 	}
 	cfg.DefaultJudge = "local"
 	cfg.Evaluate.BatchSize = 2
+	cfg.OTLP.Grace = "100ms"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ready := make(chan string, 1)
@@ -371,4 +373,110 @@ spec:
 			t.Errorf("output:\n%s", out)
 		}
 	})
+}
+
+func TestWatch(t *testing.T) {
+	e := start(t)
+	ctx := context.Background()
+	monitor := evalsiv1alpha1connect.NewMonitorServiceClient(h2cClient(), e.base, connect.WithGRPC())
+	params, _ := structpb.NewStruct(map[string]any{"substring": "ships"})
+	policy := &evalsiv1alpha1.OnlineEvalPolicy{
+		Name:     "support",
+		Selector: `service == "support-agent"`,
+		Stages: []*evalsiv1alpha1.CascadeStage{
+			{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "contains", Params: params}}},
+			{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "llm-judge", Params: mustStruct(map[string]any{"rubric": "helpfulness"})}}, When: `scores["contains"] == 0.0`},
+		},
+	}
+	if _, err := monitor.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy})); err != nil {
+		t.Fatal(err)
+	}
+	// Two agent turns over OTLP/HTTP JSON, as an OTel SDK would send them.
+	for i, answer := range []string{"It ships tomorrow.", "I am not sure."} {
+		msgs := func(role, text string) string {
+			raw, _ := json.Marshal([]any{map[string]any{"role": role, "parts": []any{map[string]any{"type": "text", "content": text}}}})
+			return string(raw)
+		}
+		attr := func(k, v string) map[string]any {
+			return map[string]any{"key": k, "value": map[string]any{"stringValue": v}}
+		}
+		payload, _ := json.Marshal(map[string]any{"resourceSpans": []any{map[string]any{
+			"resource": map[string]any{"attributes": []any{attr("service.name", "support-agent")}},
+			"scopeSpans": []any{map[string]any{"spans": []any{map[string]any{
+				"traceId": fmt.Sprintf("%032x", i+1), "spanId": fmt.Sprintf("%016x", i+1), "name": "invoke_agent",
+				"startTimeUnixNano": "1000", "endTimeUnixNano": "2000",
+				"attributes": []any{
+					attr("gen_ai.operation.name", "invoke_agent"),
+					attr("gen_ai.input.messages", msgs("user", "Where is my order?")),
+					attr("gen_ai.output.messages", msgs("assistant", answer)),
+				},
+			}}}},
+		}}})
+		body := string(payload)
+		resp, err := http.Post(e.base+"/v1/traces", "application/json", bytes.NewBufferString(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("OTLP status %d", resp.StatusCode)
+		}
+	}
+	var stats *evalsiv1alpha1.PolicyStats
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := monitor.GetPolicyStats(ctx, connect.NewRequest(&evalsiv1alpha1.GetPolicyStatsRequest{Name: "support"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stats = resp.Msg.GetStats(); stats.GetTracesEvaluated() == 2 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if stats.GetTracesEvaluated() != 2 {
+		t.Fatalf("stats = %v", stats)
+	}
+	means := map[string]float64{}
+	for _, m := range stats.GetMetrics() {
+		means[m.GetMetric()] = m.GetMean()
+	}
+	if means["contains"] != 0.5 || means["llm-judge"] != 0.75 {
+		t.Errorf("window means = %v (the judge should only see the unhelpful answer)", means)
+	}
+	traces := evalsiv1alpha1connect.NewTraceServiceClient(h2cClient(), e.base, connect.WithGRPC())
+	got, err := traces.GetTrace(ctx, connect.NewRequest(&evalsiv1alpha1.GetTraceRequest{TraceId: fmt.Sprintf("%032x", 2)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(got.Msg.GetPolicies()[0].GetResults()); n != 2 {
+		t.Errorf("trace 2 has %d results, want contains + llm-judge", n)
+	}
+	// The documented example policy applies cleanly through the Python CLI.
+	args := append(append([]string{}, e.workerCmd[1:]...), "policy", "apply", "-f", "../../examples/watch/support-policy.yaml", "--server", e.base)
+	if out, err := exec.Command(e.workerCmd[0], args...).CombinedOutput(); err != nil {
+		t.Fatalf("policy apply: %v\n%s", err, out)
+	}
+	listed, err := monitor.ListPolicies(ctx, connect.NewRequest(&evalsiv1alpha1.ListPoliciesRequest{Project: "support"}))
+	if err != nil || len(listed.Msg.GetPolicies()) != 1 || listed.Msg.GetPolicies()[0].GetName() != "support-agent" {
+		t.Fatalf("ListPolicies = %v, %v", listed, err)
+	}
+
+	resp, err := http.Get(e.base + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(metrics), `evalsi_policy_traces_total{policy="support",stage="evaluated"} 2`) {
+		t.Errorf("metrics:\n%s", metrics)
+	}
+}
+
+func mustStruct(m map[string]any) *structpb.Struct {
+	s, err := structpb.NewStruct(m)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
