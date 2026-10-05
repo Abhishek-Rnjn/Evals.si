@@ -1,6 +1,6 @@
 # Evals.si: Architecture & Implementation Plan
 
-> **Status:** Draft for discussion · v0.2 · 2026-10-05 (D1, D2, D3, D5 and D6 decided; see §22)
+> **Status:** Draft for discussion · v0.3 · 2026-10-05. D1–D3, D5, D6, D10, D13 and D14 are decided (§22, [decision records](decisions/README.md)). Phase 0 is implemented (§23).
 >
 > **Scope:** System design for a pluggable, scalable, single-entrypoint evaluation platform for classic ML models, LLMs and agents. It runs standalone and on Kubernetes, speaks gRPC and HTTP, and can later be used as a local MCP server.
 >
@@ -134,57 +134,60 @@ Evaluators declare the scope they work at. Getting this right early prevents a r
 | `dataset` | All records, computed map → reduce | ROC-AUC, macro-F1, corpus BLEU, calibration (ECE), drift (PSI), pass@k |
 | `comparative` | Two or more runs | Pairwise preference, paired significance, regressions |
 
-### Canonical records (proto sketch)
+### Canonical records
+
+The authoritative definitions live in [`proto/evalsi/v1alpha1`](../proto/evalsi/v1alpha1): `record.proto` (records, content, trajectories, usage, provenance and isolation reports), `score.proto` (scores, outcomes, results and summaries), `evaluator.proto` (references, manifests, requirements) and `evaluation_service.proto`. An abridged view:
 
 ```protobuf
-syntax = "proto3";
-package evalsi.v1;
-
-import "google/protobuf/struct.proto";
+package evalsi.v1alpha1;
 
 // The unit every evaluator consumes, whichever way it arrived (Score / Run / Watch).
 message Record {
   string id = 1;
   Content input = 2;
   Content output = 3;
-  Content reference = 4;               // optional ground truth
+  Content reference = 4;               // optional ground truth; a JSON list means "any of these"
   repeated Content context = 5;        // e.g. retrieved documents
   Trajectory trajectory = 6;           // optional; agents and multi-step chains
   Usage usage = 7;                     // tokens, cost, latency of producing the output
   map<string, google.protobuf.Value> metadata = 8;  // slices, tags, labels
-  Provenance provenance = 9;           // run_id/trial or trace_id/policy_id
+  Provenance provenance = 9;           // run or trace origin, plus the sandbox isolation report
 }
 
 message Content {
   oneof kind {
     string text = 1;
     Messages messages = 2;             // chat format, including tool calls
-    google.protobuf.Struct json = 3;
+    google.protobuf.Value json = 3;
     TabularRow row = 4;                // classic ML: features, prediction, probabilities
     Tensor tensor = 5;
     MediaRef media = 6;                // image, audio or video by URI
   }
 }
 
-message Trajectory {
-  string trace_id = 1;
-  string session_id = 2;
-  repeated Step steps = 3;             // normalized spans: llm, tool, retrieval, agent, handoff, user, guardrail
+message Score {
+  string name = 1;                     // metric name inside the evaluator
+  oneof value {
+    double number = 2;
+    bool passed = 3;
+    string label = 4;
+    google.protobuf.Value structured = 5;
+  }
+  string explanation = 6;
+  optional double confidence = 7;
+  Usage cost = 8;                      // e.g. judge tokens
+  map<string, google.protobuf.Value> metadata = 9;
 }
 
-message Score {
-  string evaluator = 1;                // "ragas/faithfulness@0.3.1"
-  string name = 2;                     // metric name inside the evaluator
-  oneof value {
-    double number = 3;
-    bool passed = 4;
-    string label = 5;
-    google.protobuf.Struct structured = 6;
-  }
-  string explanation = 7;
-  double confidence = 8;
-  Usage cost = 9;                      // e.g. judge tokens
-  map<string, google.protobuf.Value> metadata = 10;
+// One evaluator on one record. Only OUTCOME_SCORED counts toward metrics.
+message EvaluationResult {
+  string record_id = 1;
+  string evaluator = 2;                // instance name or alias
+  string evaluator_ref = 3;            // "builtin/exact-match@1.0.0"
+  Outcome outcome = 4;                 // SCORED | SKIPPED | ERROR | CANCELLED
+  repeated Score scores = 5;
+  string reason = 6;
+  google.protobuf.Duration duration = 7;
 }
 ```
 
@@ -273,7 +276,7 @@ flowchart LR
 
 ### One schema, every protocol
 
-- Protobuf in `proto/evalsi/v1`, managed with `buf` (lint and breaking-change checks in CI).
+- Protobuf in `proto/evalsi/v1alpha1`, managed with `buf`. CI runs lint and format checks and verifies the generated code is current. Breaking-change checks start once `v1` exists.
 - **ConnectRPC** serves **gRPC, gRPC-Web and Connect (HTTP/1.1 + JSON)** from one handler. **Vanguard** adds REST-style routes from `google.api.http` annotations (`POST /v1/evaluate`, `GET /v1/runs/{id}`).
 - An OpenAPI document is generated for HTTP-only consumers. Python and Go clients are generated, then wrapped by hand-written ergonomic SDKs.
 - OTLP endpoints use their standard ports and protocol: gRPC on 4317 and HTTP on 4318.
@@ -326,9 +329,9 @@ import evalsi
 
 # Embedded: no server, runs in-process. Good for notebooks and CI.
 res = evalsi.evaluate(data="qa.jsonl", evaluators=["builtin/exact-match", "ragas/faithfulness"])
-print(res.summary())  # mean, 95% CI and n for each metric
+print(res.table())  # n, mean and 95% CI for each metric
 
-# Against a server: the same spec, executed at scale
+# Against a server (Phase 1): the same spec, executed at scale
 client = evalsi.Client("grpc://evalsi.internal:8080")
 run = client.runs.create("run.yaml")
 for event in run.watch():
@@ -369,15 +372,15 @@ Because the API is generated from protobuf, `evalsi mcp` can expose MCP tools wi
 All of them speak the same protocol, so the host does not care which runtime a plugin uses:
 
 ```protobuf
-package evalsi.plugin.v1;
+package evalsi.plugin.v1alpha1;
 
-service EvaluatorPlugin {
-  rpc Describe(DescribeRequest) returns (EvaluatorManifest);
+// Plugins also implement the standard gRPC health protocol (grpc.health.v1.Health).
+service EvaluatorPluginService {
+  rpc Describe(DescribeRequest) returns (DescribeResponse);   // the evaluators this plugin hosts
   // Bidirectional streaming: the host pipelines batches and the plugin batches internally (GPU, judges).
-  rpc Evaluate(stream EvaluateBatch) returns (stream EvaluateResult);
-  // Dataset-scope metrics: combine per-record partial states.
+  rpc Evaluate(stream EvaluateRequest) returns (stream EvaluateResponse);
+  // Dataset-scope metrics, computed over all records at once.
   rpc Reduce(ReduceRequest) returns (ReduceResponse);
-  rpc Health(HealthRequest) returns (HealthResponse);
 }
 ```
 
@@ -442,7 +445,7 @@ def json_valid(record: Record) -> Score:
 
 ## 9. Built-in evaluator catalog (opt-in packs)
 
-Every pack ships in the default distribution and images. A project enables packs in its config, for example `evaluators.packs: [core, judge, rag, agent]`. Only `core` is on by default. Enabling a pack makes its evaluators resolvable. Packs with heavy dependencies (BERTScore, local classifiers) are pulled lazily as separate plugin images.
+Every pack ships in the default distribution and images. Naming an evaluator explicitly (in `evaluate()`, a run spec or on the command line) is itself the opt-in. A project additionally enables packs in its config, for example `evaluators.packs: [core, judge, rag, agent]`, which decides what online policies may run and what the project's catalog shows. Only `core` is on by default. A platform admin can restrict a project to an allowlist of packs (Phase 1, with the server). Packs with heavy dependencies (BERTScore, local classifiers) are pulled lazily as separate plugin images.
 
 | Pack | Contents | Default |
 |------|----------|---------|
@@ -834,7 +837,7 @@ This tier runs evaluators, adapters and the built-in harness in-process with an 
 ### Tier 1: Standalone (`evalsi serve`)
 
 ```bash
-evalsi serve --config evalsi.yaml
+evalsi serve --config evalsi.yaml          # starts the Go daemon, evalsid
 #  :8080  API (gRPC + gRPC-Web + HTTP/JSON)
 #  :4317  OTLP gRPC     :4318  OTLP HTTP
 #  embedded NATS, SQLite + DuckDB, local object dir
@@ -930,9 +933,10 @@ evalsi serve | evalsi mcp                                          # server and 
 
 ```text
 Evals.si/
-├── proto/evalsi/                  # source of truth: v1 API, plugin/v1, harness/v1 (buf)
+├── proto/evalsi/                  # source of truth: v1alpha1 API, plugin/v1alpha1, later harness (buf)
+├── gen/go/                        # generated Go code (committed; CI checks it is current)
 ├── cmd/
-│   ├── evalsi/                    # single binary: serve, run, eval, watch, mcp, ...
+│   ├── evalsid/                   # Go daemon: API, scheduler, ingest; started by `evalsi serve`
 │   └── evalsi-sandboxd/           # sandbox node daemon
 ├── internal/                      # Go core
 │   ├── api/                       # Connect handlers, auth, validation
@@ -948,8 +952,8 @@ Evals.si/
 ├── operator/                      # CRD types, controllers, webhooks
 ├── collector/                     # evalsi-collector OCB manifest and processors
 ├── python/                        # uv workspace
-│   ├── evalsi/                    # SDK, embedded runner, worker runtime, evaluator API
-│   ├── evalsi-packs/              # built-in packs: core, ml-classic, text, judge, rag, safety, agent, code, rl
+│   ├── evalsi/                    # SDK, CLI, embedded runner, worker runtime, evaluator API, light packs (core, judge)
+│   ├── evalsi-packs-*/            # heavier packs as separate distributions: text, rag, safety, agent, code, rl, ml-classic
 │   ├── evalsi-harness/            # light built-in agent harness
 │   └── adapters/                  # lm-eval, inspect, ragas, deepeval, helm, swebench, taubench, trl, verl, ...
 ├── deploy/
@@ -958,7 +962,7 @@ Evals.si/
 │   └── images/
 ├── examples/                      # end-to-end examples per persona (§3)
 ├── tests/e2e/                     # kind-based Kubernetes e2e, standalone e2e, sandbox e2e (KVM)
-└── docs/
+└── docs/                          # this plan and the decision records (docs/decisions)
 ```
 
 ## 22. Decisions
@@ -972,6 +976,11 @@ Evals.si/
 | D3 | **No web UI for now** | Reports, Grafana dashboards, the CLI, and write-back to MLflow, Langfuse or Phoenix (§19). A minimal UI is reconsidered in Phase 5. |
 | D5 | **Self-hosted in the client's environment now**; a hosted multi-tenant service later, when there is compute for it | §16 "Runs in the client's environment"; `project_id` and a reserved `tenant_id` on every stored key from day one |
 | D6 | Sandbox ladder: **Firecracker when available, otherwise static bubblewrap or Landlock (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod**, always failing closed | §13 |
+| D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
+| D13 | Sandbox rungs are tested in CI (bubblewrap, Landlock, and the pod rung on kind); the Firecracker rung is validated on the project owner's Kubernetes cluster | [0007](decisions/0007-testing-sandbox-rungs.md). Still to confirm: whether those nodes expose `/dev/kvm`. |
+| D14 | Agent platform builders run Evals.si **as a service** beside their platform | [0008](decisions/0008-platform-builders-use-a-service.md): API stability, pluggable auth and project-scoped authorization matter early. |
+
+Each decision has a record in [`docs/decisions`](decisions/README.md).
 
 ### Still open
 
@@ -983,11 +992,8 @@ These defaults go ahead unless you say otherwise.
 | D7 | **Inline (blocking) guardrail evals** | Out of scope for v1; design the policy engine so a synchronous path can be added | Different latency SLOs and failure semantics |
 | D8 | **Workflow engine** | Our own idempotent task model; revisit Temporal if runs need complex branching | Operational weight |
 | D9 | **Human evaluation and annotation queues** | Phase 5. The data model supports human scores from day one. | Scope |
-| D10 | **Naming and namespaces** | PyPI package `evalsi`, CLI `evalsi`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`. Availability needs checking. | Hard to change later |
 | D11 | **Default judge and CI cost policy** | No default paid judge; the client configures one. CI uses recorded cassettes. | Surprise bills, flaky tests |
 | D12 | **License and contributions** | Apache-2.0 (already present), DCO sign-off, adapters pin upstream versions, third-party notices for bubblewrap (LGPL) and any code derived from deepseek-harness (MIT) | Ecosystem trust, compliance in client environments |
-| D13 | **CI for the sandbox rungs** | Standard runners for bubblewrap and Landlock; KVM-capable runners (self-hosted, or cloud instances with nested virtualization) for Firecracker; a kind cluster for the pod rung | The Firecracker rung cannot be tested without `/dev/kvm` |
-| D14 | **How agent platform builders consume Evals.si** | It runs beside their platform as a service and integrates through the API, OTLP, CRDs and their own OIDC. Embedding as a library inside their control plane, and white-labeling, come later. | It shapes auth, packaging and API stability guarantees |
 
 ## 23. Roadmap
 
@@ -995,14 +1001,27 @@ The order follows D1. Each phase produces something usable, and Phases 2 and 3 c
 
 | Phase | Deliverables | Exit criteria |
 |-------|--------------|---------------|
-| **0. Foundations** | Short decision records for D1–D6; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
+| **0. Foundations** ✅ | Decision records; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
 | **1. Standalone MVP: LLM apps and agent traces** | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; `OnlineEvalPolicy` with cascades; packs `judge`, `rag`, `safety`, `text`, plus the trace-based half of `agent` (tool-call accuracy, trajectory match, loops, efficiency, session goal completion); adapters for Inspect AI, RAGAS, DeepEval and lm-eval-harness; MLflow and OTel sinks; the sandbox ladder with the **bubblewrap and Landlock** rungs for code evaluators | One `run.yaml` runs embedded and on the server; an agent behind standalone agentgateway (or instrumented with OTel) gets online trajectory scores; a RAG app is gated in CI |
 | **2. Agent runs** | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **3. Kubernetes** | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; OIDC and RBAC; HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
 | **4. Fine-tuning and RL** | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
 | **5. MCP, classic ML and ecosystem** | `evalsi mcp` (stdio and streamable HTTP); `ml-classic` and `ml-monitoring` packs (pulled earlier if a client needs them); plugin index; Wasm evaluators; human annotation queues; inline guardrail mode; a minimal web UI if one is still wanted | A coding agent evaluates its own changes locally over MCP |
 
-**Next:** Phase 0. That means short decision records for D1–D6, a first draft of `proto/evalsi/v1` and `plugin/v1`, the repository scaffold (§21) with CI, and the Phase 0 vertical slice.
+**Phase 0 status (2026-10-05):** implemented.
+
+- `proto/evalsi/v1alpha1` and `plugin/v1alpha1`, with generated Go code.
+- The `evalsid` skeleton.
+- The Python `evalsi` SDK and CLI, with:
+  - the embedded runner;
+  - the `core` pack (11 evaluators) and the `judge` pack (`llm-judge`, with OpenAI-compatible and Anthropic judges and a response cache);
+  - JSONL, JSON and `hf://` datasets;
+  - Wilson, t, clustered-t and bootstrap intervals.
+- Decision records and CI.
+
+The exit criterion runs end to end, verified against a local OpenAI-compatible judge server.
+
+**Next:** Phase 1, the standalone server.
 
 ## 24. Risks and mitigations
 
