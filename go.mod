@@ -12,6 +12,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/google/go-containerregistry v0.22.1
 	github.com/landlock-lsm/go-landlock v0.10.1
+	github.com/mdlayher/vsock v1.3.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	golang.org/x/net v0.59.0
 	golang.org/x/sync v0.23.0
@@ -36,6 +37,7 @@ require (
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/mdlayher/socket v0.6.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect

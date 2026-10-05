@@ -225,4 +225,5 @@ func (m *Manager) Close() {
 	for _, s := range snaps {
 		_ = removeAll(s.dir)
 	}
+	m.sb.Close()
 }

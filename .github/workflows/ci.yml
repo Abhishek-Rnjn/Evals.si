@@ -54,7 +54,8 @@ jobs:
         env:
           # Both sandbox rungs must work here; skipping them would hide regressions.
           EVALSI_REQUIRE_SANDBOX: "1"
-      - run: go build ./cmd/evalsid
+      - name: Static binaries
+        run: make build
 
   python:
     runs-on: ubuntu-latest

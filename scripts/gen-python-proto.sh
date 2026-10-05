@@ -8,12 +8,13 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 out="$root/python/evalsi/src"
 # Directories that hold generated code only. evalsi/sandbox and evalsi/harness
 # are hand-written packages; only their v1alpha1 subpackages are generated.
-generated=$(cd "$root/proto" && find evalsi -name '*.proto' -exec dirname {} \; | sort -u)
+# The guest agent's protocol is internal to evalsid and has no Python side.
+generated=$(cd "$root/proto" && find evalsi -name '*.proto' -not -path 'evalsi/guest/*' -exec dirname {} \; | sort -u)
 for dir in $generated; do
   rm -rf "${out:?}/$dir"
 done
 cd "$root/python"
-protos=$(cd "$root/proto" && find evalsi -name '*.proto' | sort)
+protos=$(cd "$root/proto" && find evalsi -name '*.proto' -not -path 'evalsi/guest/*' | sort)
 # shellcheck disable=SC2086
 uv run --no-sync python -m grpc_tools.protoc -I "$root/proto" \
   --python_out="$out" --mypy_out="$out" --grpc_python_out="$out" --mypy_grpc_out="$out" $protos

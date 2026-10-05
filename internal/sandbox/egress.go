@@ -81,9 +81,13 @@ func allowed(rules []allowRule, host string, port int) bool {
 // on the host, never inside the sandbox. Every attempt is logged; the log is
 // evidence for safety evaluators (exfiltration attempts, policy violations).
 type egressProxy struct {
-	rules     []allowRule
-	ln        net.Listener
-	network   string
+	rules []allowRule
+	// Any host (network: allow on rungs without a network device).
+	anyHost bool
+	ln      net.Listener
+	network string
+	// The socket's real path (it may be listened on through /proc/self/fd).
+	path      string
 	dialer    net.Dialer
 	proxyFunc func(*url.URL) (*url.URL, error)
 
@@ -98,7 +102,17 @@ func newEgressProxy(network, addr string, allow []string) (*egressProxy, error) 
 	if err != nil {
 		return nil, err
 	}
-	ln, err := net.Listen(network, addr)
+	p := &egressProxy{}
+	listen := addr
+	if network == "unix" {
+		short, release, err := shortSocket(addr)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+		listen = short
+	}
+	ln, err := net.Listen(network, listen)
 	if err != nil {
 		return nil, fmt.Errorf("egress proxy: %w", err)
 	}
@@ -108,17 +122,22 @@ func newEgressProxy(network, addr string, allow []string) (*egressProxy, error) 
 			ln.Close()
 			return nil, err
 		}
+		p.path = addr
 	}
-	p := &egressProxy{
-		rules: rules, ln: ln, network: network, conns: map[net.Conn]bool{}, dialer: net.Dialer{Timeout: 15 * time.Second},
-		proxyFunc: httpproxy.FromEnvironment().ProxyFunc(),
-	}
+	p.rules, p.ln, p.network, p.conns = rules, ln, network, map[net.Conn]bool{}
+	p.dialer = net.Dialer{Timeout: 15 * time.Second}
+	p.proxyFunc = httpproxy.FromEnvironment().ProxyFunc()
 	go p.serve()
 	return p, nil
 }
 
 // Addr is the socket path (unix) or host:port (tcp).
-func (p *egressProxy) Addr() string { return p.ln.Addr().String() }
+func (p *egressProxy) Addr() string {
+	if p.path != "" {
+		return p.path
+	}
+	return p.ln.Addr().String()
+}
 
 // Port is the TCP port of a tcp proxy.
 func (p *egressProxy) Port() uint16 {
@@ -229,7 +248,7 @@ func (p *egressProxy) connect(c net.Conn, br *bufio.Reader, req *http.Request) {
 		return
 	}
 	ev := EgressEvent{Time: time.Now().UTC(), Host: host, Port: port}
-	if !allowed(p.rules, host, port) {
+	if !p.anyHost && !allowed(p.rules, host, port) {
 		p.log(ev)
 		deny(c, http.StatusForbidden, fmt.Sprintf("%s:%d is not on the allowlist", host, port))
 		return
@@ -265,7 +284,7 @@ func (p *egressProxy) forward(c net.Conn, req *http.Request) bool {
 		return false
 	}
 	ev := EgressEvent{Time: time.Now().UTC(), Host: host, Port: port}
-	if !allowed(p.rules, host, port) {
+	if !p.anyHost && !allowed(p.rules, host, port) {
 		p.log(ev)
 		deny(c, http.StatusForbidden, fmt.Sprintf("%s:%d is not on the allowlist", host, port))
 		return false

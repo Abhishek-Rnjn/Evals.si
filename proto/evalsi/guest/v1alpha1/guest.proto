@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package evalsi.guest.v1alpha1;
+
+import "google/protobuf/duration.proto";
+
+// GuestAgentService is served by evalsi-guest, a small static binary that is
+// init (PID 1) inside each Firecracker microVM. The host reaches it over
+// vsock; the guest has no SSH and, unless its policy allows egress, no
+// network device at all (design §13). It is internal to evalsid.
+service GuestAgentService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  // Streams output as it is produced, then one result.
+  rpc Exec(ExecRequest) returns (stream ExecResponse);
+  rpc WriteFiles(WriteFilesRequest) returns (WriteFilesResponse);
+  rpc ReadFiles(ReadFilesRequest) returns (ReadFilesResponse);
+  // After a snapshot restore: new entropy and the host's clock, so clones
+  // never share RNG state or run with the snapshot's time.
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+  // Starts the loopback forwarder that relays the guest's proxy traffic to
+  // the host's egress proxy over vsock.
+  rpc StartEgress(StartEgressRequest) returns (StartEgressResponse);
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string version = 1;
+}
+
+message Limits {
+  int32 memory_mb = 1;
+  int32 max_procs = 2;
+  int32 max_file_mb = 3;
+  int32 cpu_seconds = 4;
+}
+
+message ExecRequest {
+  repeated string command = 1;
+  bytes stdin = 2;
+  // The command's whole environment.
+  repeated string env = 3;
+  // Absolute, inside the guest.
+  string cwd = 4;
+  google.protobuf.Duration timeout = 5;
+  int32 output_limit_bytes = 6;
+  Limits limits = 7;
+}
+
+message ExecResult {
+  int32 exit_code = 1;
+  bool timed_out = 2;
+  bool truncated = 3;
+  google.protobuf.Duration duration = 4;
+  google.protobuf.Duration cpu_time = 5;
+  int64 max_rss_bytes = 6;
+  // The command could not be started (not found, not executable).
+  string error = 7;
+}
+
+message ExecResponse {
+  oneof event {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    ExecResult result = 3;
+  }
+}
+
+message File {
+  // Absolute, inside the guest.
+  string path = 1;
+  bytes content = 2;
+  uint32 mode = 3;
+}
+
+message WriteFilesRequest {
+  repeated File files = 1;
+  // Directories to create (with parents), absolute inside the guest.
+  repeated string dirs = 2;
+}
+
+message WriteFilesResponse {}
+
+message ReadFilesRequest {
+  repeated string paths = 1;
+  int64 max_bytes = 2;
+}
+
+message ReadFilesResponse {
+  repeated File files = 1;
+  repeated string missing = 2;
+  bool truncated = 3;
+}
+
+message RefreshRequest {
+  bytes entropy = 1;
+  int64 unix_nanos = 2;
+}
+
+message RefreshResponse {}
+
+message StartEgressRequest {
+  // Inside the guest, for example 127.0.0.1:3128 (port 0: any free port).
+  string listen = 1;
+  // The host's vsock port the egress proxy listens on.
+  uint32 vsock_port = 2;
+}
+
+message StartEgressResponse {
+  // The address the forwarder listens on.
+  string listen = 1;
+}

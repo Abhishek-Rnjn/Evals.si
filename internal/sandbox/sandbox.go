@@ -278,6 +278,15 @@ func New(cfg Config) (*Sandbox, error) {
 	return s, nil
 }
 
+// Close releases what the rungs hold between sandboxes (warm VMs).
+func (s *Sandbox) Close() {
+	for _, d := range s.drivers {
+		if c, ok := d.(interface{ shutdown() }); ok {
+			c.shutdown()
+		}
+	}
+}
+
 // RungStatus is one line of Probe's report.
 type RungStatus struct {
 	Driver    string `json:"driver"`
