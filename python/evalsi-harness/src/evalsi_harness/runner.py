@@ -76,6 +76,7 @@ async def run_task(task: Task, harness: Harness, *, on_event: OnEvent | None = N
     final: FinalEvent | None = None
     check: TaskCheck | None = None
     isolation: dict[str, Any] = {}
+    artifacts: dict[str, Any] = {}
     try:
         async for event in harness.run(handle):
             events.append(event)
@@ -88,6 +89,9 @@ async def run_task(task: Task, harness: Harness, *, on_event: OnEvent | None = N
         isolation_of = getattr(harness, "isolation", None)
         if callable(isolation_of):
             isolation = isolation_of(handle)
+        artifacts_of = getattr(harness, "artifacts", None)
+        if callable(artifacts_of):
+            artifacts = artifacts_of(handle)
     except TaskError as exc:
         return TaskOutcome(None, error=str(exc), events=events)
     finally:
@@ -120,6 +124,7 @@ async def run_task(task: Task, harness: Harness, *, on_event: OnEvent | None = N
         metadata["agent"]["error"] = final.error
     if isolation:
         metadata["isolation"] = isolation
+    metadata.update(artifacts)
     policy = [e for e in events if isinstance(e, PolicyEvent)]
     if policy:
         metadata["policy_events"] = [

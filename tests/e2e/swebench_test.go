@@ -64,6 +64,10 @@ func TestSWEbenchWithACLIAgent(t *testing.T) {
 		if check.GetPassed() != want || check.GetTests()["test_sub (tests.test_calc.CalcTest.test_sub)"] != "passed" {
 			t.Errorf("%s: %v", rec.GetId(), check)
 		}
+		// The agent's change is on the record, for code review evaluators.
+		if diff := rec.GetMetadata()["diff"].GetStringValue(); want != strings.Contains(diff, "+    return a + b") {
+			t.Errorf("%s diff: %q", rec.GetId(), diff)
+		}
 	}
 	// The gold patches resolve every instance: the setup grades correctly.
 	oracle := runAgent("git apply .evalsi-gold.patch && rm .evalsi-gold.patch", "swebench://swebench-mini.jsonl?oracle=true")

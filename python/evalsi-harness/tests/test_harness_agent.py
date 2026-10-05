@@ -384,3 +384,46 @@ def test_a_task_without_a_target_model_is_an_error(sandboxes: LocalSandboxClient
     out = run(spec_of({"harness": {"builtin": {}}}), record(), sandboxes)
     assert out.record is None
     assert "target model" in out.error
+
+
+def test_the_record_carries_the_agents_diff(model: Model, sandboxes: LocalSandboxClient) -> None:
+    server = model(
+        calls_then(
+            [
+                {
+                    "tool_calls": [
+                        (
+                            "bash",
+                            {"command": "sed -i s/-/+/ calc.py && echo new > notes.txt"},
+                        )
+                    ]
+                },
+                {"text": "Fixed."},
+            ]
+        )
+    )
+    setup = "git init -q && git add -A && git -c user.email=t@e -c user.name=t commit -qm base"
+    spec = spec_of(
+        {
+            "target": target(server),
+            "environment": {
+                "files": {"calc.py": "def add(a, b):\n    return a - b\n"},
+                "setup": [setup],
+                "checker": {
+                    "command": ["sh", "-c", "grep -q 'a + b' calc.py"],
+                    "files": {".evalsi-check.sh": "true\n"},
+                },
+            },
+        }
+    )
+    rec = run(spec, record("Fix add in calc.py."), sandboxes).record
+    assert rec is not None
+    diff = rec.metadata["diff"]
+    assert "-    return a - b\n+    return a + b" in diff
+    assert "+++ b/notes.txt" in diff
+    assert ".evalsi-" not in diff
+    # Not a git repository: no diff.
+    plain = spec_of({"target": target(server), "environment": {}})
+    rec = run(plain, record("Anything."), sandboxes).record
+    assert rec is not None
+    assert "diff" not in rec.metadata

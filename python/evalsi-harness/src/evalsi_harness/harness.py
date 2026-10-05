@@ -96,6 +96,37 @@ class LiveTask:
     isolation: dict[str, Any] = field(default_factory=dict)
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     cassette: Cassette | None = None
+    # What the agent changed in the workdir (a git diff), for code review
+    # evaluators; captured before the checker runs.
+    diff: str | None = None
+
+
+# The workdir's changes against HEAD, untracked files included, leaving out
+# the files Evals.si itself places (.evalsi-*). Exit 3: not a git repository.
+DIFF_SCRIPT = r"""git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 3
+x=':(exclude).evalsi-*'
+git -c core.quotepath=off diff --no-color --no-ext-diff HEAD -- . "$x" 2>/dev/null ||
+  git -c core.quotepath=off diff --no-color --no-ext-diff -- . "$x"
+git ls-files --others --exclude-standard -- . "$x" | while IFS= read -r f; do
+  git diff --no-color --no-ext-diff --no-index /dev/null "$f"
+done
+exit 0"""
+DIFF_LIMIT = 256 * 1024
+
+
+async def capture_diff(env: TaskEnvironment) -> str | None:
+    """What the agent changed, as a git diff, or None when the workdir is not
+    a git repository (or git is missing)."""
+    try:
+        result = await env.sandbox.exec(["sh", "-c", DIFF_SCRIPT], timeout_s=60, env=env.config.env)
+    except SandboxError:
+        return None
+    if result.exit_code != 0:
+        return None
+    diff = result.stdout
+    if len(diff) > DIFF_LIMIT:
+        diff = diff[:DIFF_LIMIT] + f"\n[diff truncated at {DIFF_LIMIT} bytes]\n"
+    return diff
 
 
 def _agent_kind(task: Task) -> str:
@@ -395,6 +426,8 @@ class BuiltinHarness:
     async def check(self, handle: str) -> TaskCheck | None:
         live = self._get(handle)
         env_config = live.task.environment
+        if live.env is not None:
+            live.diff = await capture_diff(live.env)
         if live.env is None or env_config is None or env_config.checker is None:
             return None
         parser = env_config.checker.parser
@@ -404,6 +437,11 @@ class BuiltinHarness:
 
     def isolation(self, handle: str) -> dict[str, Any]:
         return self._get(handle).isolation
+
+    def artifacts(self, handle: str) -> dict[str, Any]:
+        """Extra record metadata: the agent's diff, when the workdir is a git repository."""
+        diff = self._get(handle).diff
+        return {"diff": diff} if diff is not None else {}
 
     async def teardown(self, handle: str) -> None:
         live = self._live.pop(handle, None)
