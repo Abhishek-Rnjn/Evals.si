@@ -10,6 +10,6 @@
 
 ## Consequences
 
-- Phase 2's `vm` rung is a `pod` driver with a Kata `runtimeClassName`, reported as level `vm`. This is simpler to operate, but sandboxes start in seconds rather than milliseconds, so it suits agent environments more than RL reward hot paths.
+- Phase 3's `vm` rung is a `pod` driver with a Kata `runtimeClassName`, reported as level `vm`. This is simpler to operate, but sandboxes start in seconds rather than milliseconds, so it suits agent environments more than RL reward hot paths.
 - Validating the Kata rung needs a manual or scheduled workflow against that cluster, with credentials stored as repository secrets.
 - The direct Firecracker driver (`sandboxd`) moves after the Kata path. It is needed for millisecond-scale warm pools.

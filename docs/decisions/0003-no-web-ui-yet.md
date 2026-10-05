@@ -19,4 +19,4 @@ A UI can consume half of a small team. The users we target already have trace an
 
 - Every result must be machine-readable: JSON output, a stable result schema and OTel export.
 - Write-back sinks are core features, not extras.
-- A minimal UI is reconsidered in Phase 5.
+- A minimal UI is reconsidered in Phase 6.

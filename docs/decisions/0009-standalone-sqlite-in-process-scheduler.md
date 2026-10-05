@@ -27,7 +27,7 @@ the first or the third yet:
 - **Scheduling is in-process.** Runs take slots up to `runs.max_concurrent`.
   The online policy engine batches traces through a bounded queue, counting
   and dropping traces when it overflows.
-- **NATS JetStream arrives with the Kubernetes form factor** (Phase 3), where
+- **NATS JetStream arrives with the Kubernetes form factor** (Phase 4), where
   several `evalsid` replicas and autoscaled worker pools need a shared queue.
   Postgres and ClickHouse replace SQLite there, behind the same store
   interface.
@@ -39,5 +39,5 @@ the first or the third yet:
 - Standalone is one process plus its Python worker, with one file to back up.
 - A single `evalsid` is the scaling limit of standalone. Moving beyond it is
   the Kubernetes form factor's job, not a reason to add a broker here.
-- The store package is the seam for Phase 3. Its tests must keep running
+- The store package is the seam for Phase 4. Its tests must keep running
   against every backend.

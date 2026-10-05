@@ -15,7 +15,7 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 > - **Run:** durable, resumable runs with trials, gates and budgets.
 > - **Watch:** online evaluation of OpenTelemetry traces.
 >
-> Around them are evaluator packs, framework adapters, a fail-closed sandbox for code evaluators, and MLflow and OTel sinks. Next comes Phase 2: the agent harness and Firecracker. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
+> Around them are evaluator packs, framework adapters, a fail-closed sandbox for code evaluators, and MLflow and OTel sinks. Next comes Phase 2: identity and access (OIDC/JWT and API keys, project-scoped RBAC, and agentgateway-style CEL rules). Phase 3, the agent harness and Firecracker, follows. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
 
 ## Quickstart
 
