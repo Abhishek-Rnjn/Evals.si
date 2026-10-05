@@ -306,7 +306,7 @@ service CatalogService  { /* list and describe evaluators, suites, adapters, jud
 service DatasetService  { /* create, version, append, import from HF/MLflow, promote traces into a dataset */ }
 service TraceService    { /* query interactions, sessions and spans with their scores */ }
 service RewardService   { /* hot path for RL: batched streaming scoring (§12) */ }
-service AuthService     { /* who-am-i, API keys, role bindings, audit log (§17, Phase 2) */ }
+service AuthService     { /* who-am-i, API keys, custom roles, role bindings, audit log (§17, Phase 2) */ }
 ```
 
 ### What "single door" looks like
@@ -915,7 +915,7 @@ Platform builders run Evals.si as a shared service ([decision 0008](decisions/00
   - On a non-loopback address, `evalsid` refuses to start without an `auth` section. Running unauthenticated takes an explicit `auth: {mode: none}`, which logs a warning on every start.
   - With auth enabled, the default decision is deny.
 - **One enforcement point.** A single authenticator and authorizer covers every surface: gRPC, gRPC-Web, Connect, the REST routes, OTLP ingest, `/metrics` and reflection. A new RPC cannot ship without an entry in the action table; a test walks the service descriptors to enforce this.
-- **Least surprise for policy authors.** RBAC covers the common cases. CEL rules cover the rest, such as restricting which models a group may spend on, or keeping code execution to one team.
+- **Roles shaped by the application.** Built-in roles cover the common cases. Clients define custom roles from the permission list, with optional CEL conditions, and can map roles straight from their identity provider's claims. Global CEL rules are only for install-wide restrictions.
 
 ### Authentication
 
@@ -962,38 +962,84 @@ Role bindings name principals as follows:
 
 ### Authorization: RBAC plus CEL rules
 
-**RBAC.** Roles are granted per project. `*` grants a role in every project.
+**Roles: built-in and custom.** Access is described in roles that fit each client's application, not in a fixed rule set.
 
-| Role | Grants |
+- **Permissions** are the actions in the action table below (`runs.create`, `traces.read`, `policies.write` and so on). That list is a stable, versioned public contract. Wildcards such as `runs.*` and `*` are allowed.
+- **A role** is a name, a list of permissions, and optionally:
+  - `inherits`: other roles it extends;
+  - `condition`: a CEL expression over the request and resource attributes that must hold for the role to grant anything.
+- **Bindings** grant a role to principals in a project. `*` grants it in every project.
+
+Evals.si ships these built-in roles. Clients can extend them, or ignore them and define their own:
+
+| Built-in role | Permissions |
 |---|---|
-| `viewer` | Read the catalog, runs, results, comparisons, policies, policy stats and traces |
-| `runner` | `viewer`, plus `Evaluate`, and create, cancel and resume runs. This spends judge and target budget and may execute code. |
-| `editor` | `runner`, plus apply and delete online policies, which includes dataset promotion |
-| `admin` | `editor`, plus manage the project's API keys and role bindings, and read the audit log |
-| `ingest` | Write traces to the project (OTLP) and nothing else. Meant for collectors and agentgateway. |
-| `owner` (install-wide) | Everything, including install settings and every project |
+| `viewer` | `catalog.read`, `runs.read`, `policies.read`, `traces.read` |
+| `runner` | `viewer`, plus `evaluations.run`, `runs.create`, `runs.cancel` and `runs.resume`. This spends judge and target budget and may execute code. |
+| `editor` | `runner`, plus `policies.write`, which includes dataset promotion |
+| `admin` | `editor`, plus `access.manage` (the project's API keys, custom roles and bindings) and `audit.read` |
+| `ingest` | `traces.write` and nothing else. Meant for collectors and agentgateway. |
+| `owner` (install-wide) | Everything, including install settings, every project and `metrics.read`. It cannot be redefined. |
 
-**Action table.** Every RPC maps to one action and a set of resource attributes:
+**Custom roles.** A client describes access in its own terms:
+
+```yaml
+rbac:
+  roles:
+    - name: prompt-engineer
+      inherits: [viewer]
+      permissions: [evaluations.run, runs.create, runs.cancel]
+      # Only these models, and only runs labeled for their app.
+      condition: 'resource.target.model in ["qwen3", "claude-opus-5-5"] && resource.labels.app == "checkout"'
+    - name: trace-auditor
+      permissions: [traces.read, audit.read]
+    - name: ci-gate
+      permissions: [runs.create, runs.read]
+      condition: '!resource.runs_code'
+```
+
+Custom roles can follow the client's application in three ways:
+
+- **Roles from the token.** If the identity provider already puts application roles in the token, a provider's `role_claims` maps the claim values to Evals.si roles, per project or install-wide (for example `app_roles: checkout-lead` becomes `editor` in `checkout`). The application keeps owning role assignment, and Evals.si needs no separate bindings.
+- **Labels on resources.** Runs, policies, traces and API keys carry labels such as `app: checkout`, `env: prod` or `team: payments`.
+  - Traces get them from OTLP resource attributes `evalsi.label.<key>`, or from the ingest credential's labels.
+  - Role conditions and rules read them as `resource.labels`, giving scoping finer than projects, in the application's own terms.
+  - Callers can only attach labels that their own roles' conditions allow, so labels cannot be used to escape a condition.
+- **Conditions.** A role can be limited to certain models, judges, evaluators, datasets, labels or code execution. Conditions are written in CEL, the language agentgateway's rules use.
+
+Roles are defined in `evalsi.yaml`, or created through `AuthService` and stored in the database. `evalsi auth roles create|list|update|delete` manages them. A role is either install-wide (only an owner can create one) or belongs to one project.
+
+**Guardrails on roles:**
+
+- Unknown permission names, inheritance cycles and conditions that do not compile are rejected when the config or the API call is processed. A typo never silently grants nothing, or too much.
+- **No privilege escalation.**
+  - A principal with `access.manage` in a project can only create, change or bind roles whose permissions it holds itself there, with conditions at least as strict.
+  - Install-wide permissions (install settings, other projects, `metrics.read`) are reserved for `owner` and cannot appear in a project role.
+- Global `deny` and `require` rules apply on top of every role, so no custom role can get around them.
+- Changing a role takes effect on the next request. Every change is written to the audit log, with the old and new definitions.
+- `evalsid auth check` names the role, binding and condition behind each decision.
+
+**Action table.** Every RPC maps to one action, which is also the permission roles grant, and a set of resource attributes. Every action also gets `resource.labels`.
 
 | RPC or endpoint | Action | Lowest role | Resource attributes for CEL |
 |---|---|---|---|
 | `EvaluationService.Evaluate`, `EvaluateStream` | `evaluations.run` | runner | project, evaluators, judge, whether any evaluator runs code |
 | `CatalogService.ListEvaluators` | `catalog.read` | viewer | none |
 | `RunService.CreateRun` | `runs.create` | runner | project, target (connector, model), judge, evaluators, dataset (path or URI), trials, budget |
-| `GetRun`, `ListRuns`, `WatchRun`, `ListRunResults`, `CompareRuns` | `runs.read` | viewer | project, run (id, name, `created_by`) |
+| `GetRun`, `ListRuns`, `WatchRun`, `ListRunResults`, `CompareRuns` | `runs.read` | viewer | project, run (id, name, `created_by`, labels) |
 | `CancelRun`, `ResumeRun` | `runs.cancel`, `runs.resume` | runner | project, run |
 | `MonitorService.ApplyPolicy`, `DeletePolicy` | `policies.write` | editor | project, policy (name, selector, evaluators, promotion) |
 | `ListPolicies`, `GetPolicyStats` | `policies.read` | viewer | project |
 | `TraceService.ListTraces`, `GetTrace` | `traces.read` | viewer | project, service |
 | OTLP export (gRPC, HTTP) | `traces.write` | ingest | project, service |
 | `AuthService.WhoAmI` | `self.read` | any authenticated principal | none |
-| `AuthService` API keys and bindings | `access.manage` | admin | project |
+| `AuthService` API keys, custom roles and bindings | `access.manage` | admin | project, the role or key being changed, and its permissions |
 | `AuthService.ListAuditEvents` | `audit.read` | admin | project |
 | `/metrics` | `metrics.read` | owner, or unauthenticated on a separate loopback listener | none |
 | `/healthz`, gRPC health | none | unauthenticated, reports liveness only | none |
 | gRPC reflection | `catalog.read` | viewer | none |
 
-**CEL rules.** These use agentgateway's semantics and the same CEL engine our online policies use. The variables are:
+**Global CEL rules.** These are optional. Roles describe access; global rules add a few install-wide restrictions that hold whatever role a principal has. They use agentgateway's semantics and the same CEL engine our online policies use. The variables are:
 
 - `jwt`, `apiKey` (with the key redacted) and `principal`;
 - `request`: the method, the action and the protocol, plus the headers without credentials;
@@ -1017,7 +1063,7 @@ authorization:
 
 1. Any `deny` rule that matches denies the request.
 2. Any `require` rule that does not hold denies it.
-3. An RBAC grant allows it.
+3. A bound role allows it: either a role whose permissions include the action and whose condition holds, or a role mapped from the token's `role_claims`.
 4. Any matching `allow` rule allows it.
 5. Otherwise the request is denied.
 
@@ -1041,6 +1087,7 @@ As in agentgateway, a rule that fails to evaluate counts as not matched. A `deny
   - get calls check the project of the resource;
   - online policies only see traces of their own project.
 - **OTLP ingest assigns the project from the credential.** An ingest key or token is bound to one project. A resource attribute `evalsi.project` is honored only when the principal may write to that project. This stops trace injection into other teams' policies.
+- **Resources carry labels** (runs, policies, traces and API keys), for role conditions and rules to scope by application, environment or team.
 - **Runs record who started them.** `Run.created_by` (provider and subject) is stored and shown, and the run manifest records the principal, never the token.
 - **Quotas and budgets** per project and per principal follow the same scoping (§14).
 
@@ -1084,6 +1131,12 @@ auth:
         jwks: {discovery: true}         # or url:, file:, inline:
         claims: {groups: groups, email: email, name: preferred_username}
         required_claims: [exp, sub]
+        # Application roles in the token become Evals.si roles.
+        role_claims:
+          claim: app_roles
+          map:
+            checkout-lead: {checkout: [editor]}
+            auditor: {"*": [trace-auditor]}
       - name: github
         issuer: https://token.actions.githubusercontent.com
         audiences: [https://evals.example.com]
@@ -1094,16 +1147,25 @@ auth:
       - name: otel-collector
         key: sha256:3f1c9e...           # only the hash; the plaintext is never in config
         roles: {support: [ingest]}
+        labels: {source: agentgateway}
   tls: {cert_file: /etc/evalsi/tls.crt, key_file: /etc/evalsi/tls.key}
   # Advertised to `evalsi login`.
   cli_login: {issuer: https://sso.example.com/realms/eng, client_id: evalsi-cli}
 rbac:
   owners: [group:corp/platform-admins]
+  roles:                                # custom roles, as above
+    - name: prompt-engineer
+      inherits: [viewer]
+      permissions: [evaluations.run, runs.create, runs.cancel]
+      condition: 'resource.target.model in ["qwen3", "claude-opus-5-5"]'
+    - name: trace-auditor
+      permissions: [traces.read, audit.read]
   projects:
     support:
       admin: [group:corp/support-leads]
       editor: [group:corp/support-eng]
       runner: ['cel:jwt.repository == "acme/support-agent"']
+      prompt-engineer: [group:corp/support-ml]
       viewer: [group:corp/everyone]
 authorization:
   rules: []                             # allow / deny / require, as above
@@ -1221,7 +1283,7 @@ Evals.si/
 | D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
 | D13 | Sandbox rungs are tested in CI (bubblewrap, Landlock, and the pod rung on kind). On the project owner's cluster, the `vm` level comes from **Kata Containers** for now; direct Firecracker (`sandboxd`, warm snapshot pools) follows later | [0007](decisions/0007-testing-sandbox-rungs.md) |
 | D14 | Agent platform builders run Evals.si **as a service** beside their platform | [0008](decisions/0008-platform-builders-use-a-service.md): API stability, pluggable auth and project-scoped authorization matter early. |
-| D15 | **Identity and access come next (Phase 2)**, modeled on agentgateway: OIDC/JWT and hashed API keys with `strict`, `optional` and `permissive` modes; project-scoped RBAC; CEL `allow`, `deny` and `require` rules; external authorization; secure by default | [0010](decisions/0010-identity-and-access-next.md), §17. Later phases move up by one. |
+| D15 | **Identity and access come next (Phase 2)**, modeled on agentgateway: OIDC/JWT and hashed API keys with `strict`, `optional` and `permissive` modes; project-scoped RBAC with built-in and custom roles (permissions, CEL conditions, mapping from token claims); CEL `allow`, `deny` and `require` rules; external authorization; secure by default | [0010](decisions/0010-identity-and-access-next.md), §17. Later phases move up by one. |
 
 Each decision has a record in [`docs/decisions`](decisions/README.md).
 
@@ -1248,7 +1310,7 @@ On 2026-10-05, identity and access was inserted as Phase 2 ([decision 0010](deci
 |-------|--------------|---------------|
 | **0. Foundations** ✅ | Decision records; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
 | **1. Standalone MVP: LLM apps and agent traces** ✅ | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; `OnlineEvalPolicy` with cascades; packs `judge`, `rag`, `safety`, `text`, plus the trace-based half of `agent` (tool-call accuracy, trajectory match, loops, efficiency, session goal completion); adapters for Inspect AI, RAGAS, DeepEval and lm-eval-harness; MLflow and OTel sinks; the sandbox ladder with the **bubblewrap and Landlock** rungs for code evaluators | One `run.yaml` runs embedded and on the server; an agent behind standalone agentgateway (or instrumented with OTel) gets online trajectory scores; a RAG app is gated in CI |
-| **2. Identity and access** | OIDC/JWT authentication (multiple providers, JWKS from a URL, a file, inline JSON or discovery; `strict`, `optional` and `permissive` modes) and hashed API keys; TLS on the API listener; a refusal to start on a non-loopback address without auth; project-scoped RBAC (viewer, runner, editor, admin, ingest, owner); agentgateway-style CEL rules (`allow`, `deny`, `require`); project scoping in every store query and in OTLP ingest; `created_by` on runs; an audit log and `evalsid auth check`; `AuthService` (who-am-i, API keys, bindings, audit); `evalsi login` (device code and PKCE), `whoami` and `auth keys`; GitHub Actions OIDC for CI; optional external authorization (AuthZEN, Envoy `ext_authz`) | With any OIDC issuer configured, every surface (gRPC, Connect, REST, OTLP, metrics) rejects unauthenticated calls; a viewer cannot start runs or read another project's traces; a GitHub Actions job runs a gated evaluation with its own OIDC token and no stored secret; every denied call appears in the audit log with the deciding rule; the action table covers every RPC, enforced by a test |
+| **2. Identity and access** | OIDC/JWT authentication (multiple providers, JWKS from a URL, a file, inline JSON or discovery; `strict`, `optional` and `permissive` modes) and hashed API keys; TLS on the API listener; a refusal to start on a non-loopback address without auth; project-scoped RBAC with built-in roles (viewer, runner, editor, admin, ingest, owner), custom roles built from the permission list with optional CEL conditions, roles mapped from token claims, and labels on resources; agentgateway-style CEL rules (`allow`, `deny`, `require`); project scoping in every store query and in OTLP ingest; `created_by` on runs; an audit log and `evalsid auth check`; `AuthService` (who-am-i, API keys, bindings, audit); `evalsi login` (device code and PKCE), `whoami` and `auth keys`; GitHub Actions OIDC for CI; optional external authorization (AuthZEN, Envoy `ext_authz`) | With any OIDC issuer configured, every surface (gRPC, Connect, REST, OTLP, metrics) rejects unauthenticated calls; a viewer cannot start runs or read another project's traces; a custom role with a model condition can start runs only on its allowed models; a project admin cannot grant a permission it lacks; a GitHub Actions job runs a gated evaluation with its own OIDC token and no stored secret; every denied call appears in the audit log with the deciding rule; the action table covers every RPC, enforced by a test |
 | **3. Agent runs** | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **4. Kubernetes** | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; Kubernetes identity (service-account tokens as an OIDC provider, mTLS between components, an admission webhook that records who created each CR); HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
 | **5. Fine-tuning and RL** | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
@@ -1327,14 +1389,18 @@ All three are covered by `tests/e2e`.
    - `AuthService.WhoAmI`;
    - `--token` and `--api-key` in the CLI and the Python client.
 2. **RBAC and projects.**
-   - first-class projects and project-scoped role bindings;
-   - the action table, with a test that fails for any RPC missing from it;
+   - first-class projects;
+   - the permission registry (the action table), with a test that fails for any RPC missing from it;
+   - built-in roles, custom roles (permissions, inheritance, CEL conditions) defined in config, and project-scoped bindings;
+   - `role_claims` mapping from token claims;
+   - labels on runs, policies, traces and API keys;
    - project filtering in every store query;
    - OTLP project assignment by credential;
    - `Run.created_by`, and a project on `EvaluateRequest` and on traces.
 3. **CEL rules and audit.**
    - `allow`, `deny` and `require` rules with agentgateway's precedence, and resource attributes for every action;
-   - `evalsid auth check`;
+   - `evalsid auth check`, naming the role, binding or rule behind each decision;
+   - custom roles managed through `AuthService` and `evalsi auth roles`, with the privilege-escalation checks;
    - the audit log, `ListAuditEvents`, and audit export through the OTel sink.
 4. **Developer and CI flows.**
    - `evalsi login` (device code, and PKCE with a loopback redirect), `logout` and `whoami`;
@@ -1343,7 +1409,7 @@ All three are covered by `tests/e2e`.
    - GitHub Actions OIDC, and guides for Keycloak, Entra ID, Okta, Auth0 and Google, and for running behind agentgateway.
 5. **External authorization (optional).** An AuthZEN evaluation client and Envoy `ext_authz`, with decision caching and fail-closed timeouts.
 
-Tests use keys generated in-process and a JWKS and discovery server running in the test. The e2e suite adds an issuer stand-in, so CI needs no live identity provider. A permission-matrix test runs every role against every RPC.
+Tests use keys generated in-process and a JWKS and discovery server running in the test. The e2e suite adds an issuer stand-in, so CI needs no live identity provider. A permission-matrix test runs every built-in role, and a set of custom roles with conditions, against every RPC.
 
 ## 24. Risks and mitigations
 
