@@ -1,0 +1,36 @@
+[project]
+name = "evalsi-adapter-lm-eval"
+version = "0.1.0"
+description = "lm-evaluation-harness tasks run through Evals.si targets; its sample logs as datasets."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "evalsi",
+    # Pinned: the adapter is contract-tested against this exact version.
+    "lm-eval==0.4.13",
+]
+
+# lm-eval://path/to/samples_<task>_<date>.jsonl loads logged samples as records.
+[project.entry-points."evalsi.importers"]
+lm-eval = "evalsi_lmeval:read_samples"
+
+[dependency-groups]
+dev = ["mypy>=1.13", "pytest>=8.3"]
+
+[tool.uv.sources]
+evalsi = { path = "../../evalsi", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalsi_lmeval"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["lm_eval.*"]
+ignore_missing_imports = true

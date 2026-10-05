@@ -87,3 +87,30 @@ def test_records_hash_is_stable_and_content_sensitive() -> None:
     b = load_records([{"output": "x"}])
     c = load_records([{"output": "y"}])
     assert records_hash(a) == records_hash(b) != records_hash(c)
+
+
+def test_importer_uris(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from evalsi import datasets
+    from evalsi.run import _resolve_uri
+
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fake(path: str, **options: str) -> list[dict[str, str]]:
+        calls.append((path, options))
+        return [{"id": "a", "output": "x"}]
+
+    monkeypatch.setattr(datasets, "find_importer", lambda scheme: fake)
+    records = load_records("fake://logs/run.eval?scores=false&limit=3")
+    assert [r.id for r in records] == ["a"]
+    assert calls == [("logs/run.eval", {"scores": "false", "limit": "3"})]
+
+    assert _resolve_uri("fake://run.eval?x=1", tmp_path) == f"fake://{tmp_path}/run.eval?x=1"
+    assert _resolve_uri("fake:///abs/run.eval", tmp_path) == "fake:///abs/run.eval"
+    assert _resolve_uri("hf://org/ds?split=test", tmp_path) == "hf://org/ds?split=test"
+    with pytest.raises(DatasetError, match="needs a scheme"):
+        _resolve_uri("/etc/passwd", tmp_path)
+
+
+def test_unknown_importer_names_installed_ones() -> None:
+    with pytest.raises(DatasetError, match=r"no importer for nope://"):
+        load_records("nope://x")

@@ -20,7 +20,7 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -224,10 +224,15 @@ class AnthropicTarget:
         await self._client.close()
 
 
-Target = OpenAICompatibleTarget | AnthropicTarget
+class Target(Protocol):
+    """What runs a record against the system under test; connectors and test fakes alike."""
+
+    async def generate(self, record: Record) -> Generation: ...
+
+    async def aclose(self) -> None: ...
 
 
-def create_target(config: TargetConfig) -> Target:
+def create_target(config: TargetConfig) -> OpenAICompatibleTarget | AnthropicTarget:
     if config.connector == "anthropic":
         return AnthropicTarget(config)
     return OpenAICompatibleTarget(config)

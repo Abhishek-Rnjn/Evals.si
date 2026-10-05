@@ -192,6 +192,29 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 	return full, nil
 }
 
+// resolveURI passes hf:// through and confines importer URIs
+// (scheme://path?options, for example inspect://logs/run.eval), which name
+// local files, to DatasetsDir like plain paths.
+func (m *Manager) resolveURI(uri string) (string, error) {
+	scheme, rest, ok := strings.Cut(uri, "://")
+	if !ok || scheme == "" {
+		return "", invalid("dataset uri %q needs a scheme such as hf:// or inspect://; use path for files", uri)
+	}
+	if scheme == "hf" {
+		return uri, nil
+	}
+	path, query, hasQuery := strings.Cut(rest, "?")
+	full, err := m.resolvePath(path)
+	if err != nil {
+		return "", err
+	}
+	out := scheme + "://" + full
+	if hasQuery {
+		out += "?" + query
+	}
+	return out, nil
+}
+
 func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSource) ([]*evalsiv1alpha1.Record, error) {
 	var records []*evalsiv1alpha1.Record
 	switch s := src.GetSource().(type) {
@@ -202,12 +225,19 @@ func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSo
 		}
 	default:
 		req := proto.Clone(src).(*evalsiv1alpha1.DatasetSource)
-		if p, ok := s.(*evalsiv1alpha1.DatasetSource_Path); ok {
-			full, err := m.resolvePath(p.Path)
+		switch s := s.(type) {
+		case *evalsiv1alpha1.DatasetSource_Path:
+			full, err := m.resolvePath(s.Path)
 			if err != nil {
 				return nil, err
 			}
 			req.Source = &evalsiv1alpha1.DatasetSource_Path{Path: full}
+		case *evalsiv1alpha1.DatasetSource_Uri:
+			uri, err := m.resolveURI(s.Uri)
+			if err != nil {
+				return nil, err
+			}
+			req.Source = &evalsiv1alpha1.DatasetSource_Uri{Uri: uri}
 		}
 		var err error
 		records, err = m.worker.LoadDataset(ctx, &pluginv1alpha1.LoadDatasetRequest{Source: req})

@@ -1,0 +1,32 @@
+[project]
+name = "evalsi-adapter-inspect"
+version = "0.1.0"
+description = "Inspect AI logs as Evals.si datasets, and Evals.si evaluators as Inspect scorers."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "evalsi",
+    # Pinned: the adapter is contract-tested against this exact version.
+    "inspect-ai==0.3.276",
+]
+
+# inspect://path/to/log.eval loads an Inspect log as records.
+[project.entry-points."evalsi.importers"]
+inspect = "evalsi_inspect:read_log"
+
+[dependency-groups]
+dev = ["mypy>=1.13", "pytest>=8.3"]
+
+[tool.uv.sources]
+evalsi = { path = "../../evalsi", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalsi_inspect"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]

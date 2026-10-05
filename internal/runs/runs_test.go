@@ -74,7 +74,9 @@ func (f *fakeWorker) Generate(_ context.Context, req *pluginv1alpha1.GenerateReq
 
 func (f *fakeWorker) LoadDataset(_ context.Context, req *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error) {
 	path := req.GetSource().GetPath()
-	if !filepath.IsAbs(path) {
+	if uri := req.GetSource().GetUri(); uri != "" {
+		path = uri
+	} else if !filepath.IsAbs(path) {
 		return nil, errors.New("path must be absolute")
 	}
 	return []*evalsiv1alpha1.Record{{Input: text("easy"), Reference: text("right"), Metadata: map[string]*structpb.Value{"path": structpb.NewStringValue(path)}}}, nil
@@ -421,6 +423,42 @@ func TestDatasetPaths(t *testing.T) {
 		}))
 		if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), want) {
 			t.Errorf("path %q: err = %v", p, err)
+		}
+	}
+}
+
+func TestDatasetURIs(t *testing.T) {
+	h := newHarness(t)
+	datasets := mustEval(t, filepath.Join(h.dir, "datasets"))
+	for _, p := range []string{filepath.Join(datasets, "run.eval"), filepath.Join(h.dir, "secret.eval")} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	uri := func(u string) *evalsiv1alpha1.DatasetSource {
+		return &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Uri{Uri: u}}
+	}
+	for in, want := range map[string]string{
+		"inspect://run.eval?scores=false": "inspect://" + filepath.Join(datasets, "run.eval") + "?scores=false",
+		"hf://openai/gsm8k?split=test":    "hf://openai/gsm8k?split=test",
+	} {
+		run := h.create(t, &evalsiv1alpha1.RunSpec{Dataset: uri(in), Evaluators: refs("test/count")})
+		records, _ := h.st.Records(context.Background(), run.GetId())
+		if got := records[0].GetMetadata()["path"].GetStringValue(); got != want {
+			t.Errorf("uri %q reached the worker as %q, want %q", in, got, want)
+		}
+	}
+	for u, want := range map[string]string{
+		"inspect://../secret.eval": "outside",
+		"inspect:///etc/passwd":    "relative",
+		"/etc/passwd":              "scheme",
+		"://run.eval":              "scheme",
+	} {
+		_, err := h.m.CreateRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{
+			Spec: &evalsiv1alpha1.RunSpec{Dataset: uri(u), Evaluators: refs("test/count")},
+		}))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), want) {
+			t.Errorf("uri %q: err = %v", u, err)
 		}
 	}
 }

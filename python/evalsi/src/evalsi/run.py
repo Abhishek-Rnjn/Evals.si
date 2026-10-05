@@ -16,7 +16,7 @@ from typing import Any
 
 from evalsi._version import __version__
 from evalsi.convert import from_struct, record_from_proto
-from evalsi.datasets import load_records, records_hash
+from evalsi.datasets import DatasetError, load_records, records_hash, split_uri
 from evalsi.evaluator import BoundEvaluator, EvalContext, EvaluatorConfigError
 from evalsi.judges import JudgeClient, JudgeConfig, create_judge
 from evalsi.judges.cache import JudgeCache
@@ -73,8 +73,20 @@ def load_dataset(source: run_pb2.DatasetSource, base_dir: Path) -> list[Record]:
             path if path.is_absolute() else base_dir / path, mapping=mapping, limit=limit
         )
     if kind == "uri":
-        return load_records(source.uri, mapping=mapping, limit=limit)
+        return load_records(_resolve_uri(source.uri, base_dir), mapping=mapping, limit=limit)
     raise EvaluatorConfigError("dataset needs one of inline, path or uri")
+
+
+def _resolve_uri(uri: str, base_dir: Path) -> str:
+    """Importer URIs name local files, which resolve against ``base_dir`` like paths do."""
+    if "://" not in uri:
+        raise DatasetError(
+            f"dataset uri {uri!r} needs a scheme such as hf:// or inspect://; use path for files"
+        )
+    scheme, path, _ = split_uri(uri)
+    if scheme == "hf" or Path(path).is_absolute():
+        return uri
+    return uri.replace(f"{scheme}://{path}", f"{scheme}://{base_dir / path}", 1)
 
 
 def _evaluator_entries(spec: run_pb2.RunSpec) -> list[dict[str, Any]]:

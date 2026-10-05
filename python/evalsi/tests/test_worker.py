@@ -289,3 +289,17 @@ def test_load_dataset_rejects_relative_paths(tmp_path: Path) -> None:
     with pytest.raises(grpc.aio.AioRpcError) as info:
         with_worker(EvaluatorPlugin(default_registry()), call, tmp_path)
     assert "absolute" in (info.value.details() or "")
+
+
+@pytest.mark.parametrize("uri", ["/etc/passwd", "d.jsonl", "inspect://logs/run.eval"])
+def test_load_dataset_rejects_unresolved_uris(tmp_path: Path, uri: str) -> None:
+    from evalsi.v1alpha1 import run_pb2
+
+    async def call(stub: Any) -> None:
+        source = run_pb2.DatasetSource(uri=uri)
+        async for _ in stub.LoadDataset(pb.LoadDatasetRequest(source=source)):
+            pass
+
+    with pytest.raises(grpc.aio.AioRpcError) as info:
+        with_worker(EvaluatorPlugin(default_registry()), call, tmp_path)
+    assert "dataset uri must be" in (info.value.details() or "")

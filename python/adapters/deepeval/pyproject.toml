@@ -1,0 +1,39 @@
+[project]
+name = "evalsi-adapter-deepeval"
+version = "0.1.0"
+description = "DeepEval metrics as Evals.si evaluators, judged by the run's judge."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "evalsi",
+    # Pinned: the adapter is contract-tested against this exact version.
+    "deepeval==4.2.8",
+]
+
+[project.entry-points."evalsi.packs"]
+deepeval = "evalsi_deepeval:PACK"
+
+[dependency-groups]
+dev = ["mypy>=1.13", "pytest>=8.3"]
+
+[tool.uv.sources]
+evalsi = { path = "../../evalsi", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalsi_deepeval"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["deepeval.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# DeepEval's own pytest plugin reports to Confident AI; contract tests stay offline.
+addopts = "-p no:deepeval"

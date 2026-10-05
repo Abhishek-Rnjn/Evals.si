@@ -35,7 +35,7 @@ from evalsi.convert import (
     score_to_proto,
     usage_to_proto,
 )
-from evalsi.datasets import DatasetError
+from evalsi.datasets import DatasetError, split_uri
 from evalsi.evaluator import BoundEvaluator, EvalContext, EvaluatorConfigError, Scope
 from evalsi.judges import JudgeClient, JudgeConfig, JudgeFatalError, create_judge
 from evalsi.judges.cache import JudgeCache
@@ -141,6 +141,15 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
         source = request.source
         if source.WhichOneof("source") == "path" and not Path(source.path).is_absolute():
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "dataset path must be absolute")
+        if source.WhichOneof("source") == "uri":
+            # The server resolves importer paths inside its datasets_dir first;
+            # anything else would let a spec read arbitrary files.
+            scheme, path, _ = split_uri(source.uri)
+            if "://" not in source.uri or (scheme != "hf" and not Path(path).is_absolute()):
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    "dataset uri must be hf:// or an importer uri with an absolute path",
+                )
         try:
             records = await asyncio.to_thread(load_dataset, source, Path("/"))
         except (DatasetError, EvaluatorConfigError) as exc:

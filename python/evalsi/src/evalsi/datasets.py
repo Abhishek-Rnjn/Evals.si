@@ -1,4 +1,4 @@
-"""Loading records from JSONL, JSON and the Hugging Face Hub.
+"""Loading records from JSONL, JSON, the Hugging Face Hub and importers.
 
 A row's fields map onto a record by name (``id``, ``input``, ``output``,
 ``reference``, ``context``, ``usage``, ``metadata``). ``mapping`` renames
@@ -8,13 +8,20 @@ them, using dotted paths for nested fields::
 
 Fields that are not consumed land in ``metadata``, so they can be used for
 slicing and clustered standard errors.
+
+Other formats come from importers: ``<scheme>://<path>?<options>`` hands the
+path to the importer registered under that scheme in the ``evalsi.importers``
+entry-point group, for example ``inspect://logs/run.eval`` from the Inspect AI
+adapter. An importer is a callable ``(path, **options)`` returning records or
+rows. ``hf://`` is the only scheme that is not a local file.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -43,13 +50,15 @@ def load_records(
     mapping: Mapping[str, str] | None = None,
     limit: int | None = None,
 ) -> list[Record]:
-    """Load records from a path, an ``hf://`` reference, or an iterable of rows."""
+    """Load records from a path, an ``hf://`` or importer URI, or an iterable of rows."""
     unknown = set(mapping or {}) - set(RECORD_FIELDS)
     if unknown:
         raise DatasetError(f"mapping has unknown record fields {sorted(unknown)}")
     rows: Iterable[Mapping[str, Any] | Record]
     if isinstance(source, str) and source.startswith("hf://"):
         rows = _hf_rows(source)
+    elif isinstance(source, str) and "://" in source:
+        rows = _imported_rows(source)
     elif isinstance(source, str | Path):
         rows = _file_rows(Path(source))
     else:
@@ -164,6 +173,35 @@ def _hf_rows(ref: str) -> Iterator[Mapping[str, Any]]:
     dataset = datasets.load_dataset(repo, query.get("config"), split=query.get("split", "test"))
     for row in dataset:
         yield dict(row)
+
+
+Importer = Callable[..., Iterable[Mapping[str, Any] | Record]]
+
+
+def find_importer(scheme: str) -> Importer:
+    """The importer registered for ``scheme`` in the ``evalsi.importers`` entry points."""
+    for ep in entry_points(group="evalsi.importers", name=scheme):
+        importer: Importer = ep.load()
+        return importer
+    known = ", ".join(sorted({ep.name for ep in entry_points(group="evalsi.importers")}))
+    raise DatasetError(
+        f"no importer for {scheme}:// (installed: {known or 'none'}); importers ship "
+        "with adapters, for example evalsi-adapter-inspect"
+    )
+
+
+def split_uri(uri: str) -> tuple[str, str, dict[str, str]]:
+    """``scheme://path?k=v`` as (scheme, path, options)."""
+    scheme, _, rest = uri.partition("://")
+    path, _, query = rest.partition("?")
+    return scheme, path, {k: v[-1] for k, v in parse_qs(query).items()}
+
+
+def _imported_rows(uri: str) -> Iterable[Mapping[str, Any] | Record]:
+    scheme, path, options = split_uri(uri)
+    if not path:
+        raise DatasetError(f"{uri}: no path after {scheme}://")
+    return find_importer(scheme)(path, **options)
 
 
 def records_hash(records: Iterable[Record]) -> str:
