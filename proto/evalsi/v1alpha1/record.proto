@@ -24,6 +24,19 @@ message Record {
   // Free-form attributes used for slicing, clustering and filtering.
   map<string, google.protobuf.Value> metadata = 8;
   Provenance provenance = 9;
+  // Agent runs: the environment checker's verdict on the task's end state.
+  TaskCheck check = 10;
+}
+
+// TaskCheck is how the environment checker graded a task.
+message TaskCheck {
+  bool passed = 1;
+  optional double score = 2;
+  string details = 3;
+  // Per-test outcomes, for example {"tests/test_x.py::test_a": "passed"}.
+  map<string, string> tests = 4;
+  // Set when the checker itself could not run; the task is then not scored.
+  string error = 5;
 }
 
 message Content {
@@ -150,6 +163,8 @@ message IsolationReport {
   string driver = 1;
   IsolationLevel level = 2;
   Enforcement enforcement = 3;
+  // What the rung did and did not govern, for example "network: allowlist via egress proxy".
+  repeated string notes = 4;
 }
 
 // Ordered from weakest to strongest.

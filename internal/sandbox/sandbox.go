@@ -2,8 +2,11 @@
 // available on the host, and fails closed when nothing meets the minimum a
 // request asks for (design §13, decision 0005).
 //
-// Phase 1 ships the process-confinement rungs:
+// The rungs, strongest first:
 //
+//   - firecracker (level vm): a microVM per sandbox with its own guest
+//     kernel, an image root, a guest agent on vsock, deny-by-default egress
+//     and snapshots. It needs /dev/kvm.
 //   - bwrap (level namespaced): bubblewrap with separate user, mount, PID,
 //     network, IPC and UTS namespaces, a minimal read-only root, a cleared
 //     environment and a seccomp filter.
@@ -14,13 +17,19 @@
 // The design follows the deepseek-harness process sandbox (MIT): fail closed,
 // policy per call, enforcement reported as full or partial, functional probes
 // of each runner, and separate dialects for denials and runner failures.
-// Firecracker, Kata and hardened pods are later rungs on the same interface.
+// Kata and hardened pods are Kubernetes rungs on the same interface (Phase 4).
+//
+// A Session is a sandbox that persists across commands: its workspace (and,
+// with an image, its writable root) survives until it is closed, so an agent
+// can work in it step by step. Every Exec is confined afresh.
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -70,8 +79,9 @@ const (
 	ModeWorkspaceWrite Mode = "workspace-write"
 )
 
-// Request is one sandboxed execution. Files are written into a fresh
-// workspace, which is the working directory and is deleted afterwards.
+// Request is one sandboxed execution, the JSON of `evalsid sandbox run`.
+// Files are written into a fresh workspace, which is the working directory
+// and is deleted afterwards. It is a one-shot Session.
 type Request struct {
 	Command []string          `json:"command"`
 	Files   map[string]string `json:"files,omitempty"`
@@ -79,15 +89,17 @@ type Request struct {
 	// Environment for the command; nothing is inherited.
 	Env  map[string]string `json:"env,omitempty"`
 	Mode Mode              `json:"mode,omitempty"`
-	// "deny" (default) or "allow".
-	Network      string  `json:"network,omitempty"`
-	TimeoutS     float64 `json:"timeout_s,omitempty"`
-	MemoryMB     int     `json:"memory_mb,omitempty"`
-	CPUSeconds   int     `json:"cpu_s,omitempty"`
-	MaxProcs     int     `json:"max_procs,omitempty"`
-	MaxFileMB    int     `json:"max_file_mb,omitempty"`
-	OutputLimit  int     `json:"output_limit_bytes,omitempty"`
-	MinIsolation string  `json:"min_isolation,omitempty"`
+	// "deny" (default), "allowlist" (with AllowHosts) or "allow".
+	Network      string   `json:"network,omitempty"`
+	AllowHosts   []string `json:"allow_hosts,omitempty"`
+	Image        string   `json:"image,omitempty"`
+	TimeoutS     float64  `json:"timeout_s,omitempty"`
+	MemoryMB     int      `json:"memory_mb,omitempty"`
+	CPUSeconds   int      `json:"cpu_s,omitempty"`
+	MaxProcs     int      `json:"max_procs,omitempty"`
+	MaxFileMB    int      `json:"max_file_mb,omitempty"`
+	OutputLimit  int      `json:"output_limit_bytes,omitempty"`
+	MinIsolation string   `json:"min_isolation,omitempty"`
 }
 
 // Isolation is what actually confined a command; it is recorded with every result.
@@ -118,9 +130,12 @@ type Result struct {
 	Truncated  bool      `json:"truncated,omitempty"`
 	DurationMS float64   `json:"duration_ms"`
 	Isolation  Isolation `json:"isolation"`
-	// Policy denials recognized in stderr (for example "Read-only file system").
+	// Policy denials recognized in stderr (for example "Read-only file system")
+	// or in the egress log (for example "egress denied: example.com:443").
 	Denials []string `json:"denials,omitempty"`
 	Error   string   `json:"error,omitempty"`
+	// Connections attempted through the egress proxy (network: allowlist).
+	Egress []EgressEvent `json:"egress,omitempty"`
 }
 
 // ErrUnavailable means no rung on this host meets the requested minimum.
@@ -128,21 +143,29 @@ var ErrUnavailable = errors.New("sandbox unavailable")
 
 // Config is the sandbox section of evalsi.yaml.
 type Config struct {
-	// Rungs to try, strongest first. Default: bwrap, landlock.
+	// Rungs to try, strongest first. Default: firecracker, bwrap, landlock.
 	Ladder []string `json:"ladder,omitempty"`
 	// The weakest isolation any request may get, whatever it asks for.
 	MinIsolation string `json:"min_isolation,omitempty"`
 	// bubblewrap binary; default: bwrap on PATH.
 	BwrapPath string `json:"bwrap_path,omitempty"`
-	// An unpacked root filesystem (for example an OCI image) used as / by bwrap
-	// instead of the host's system directories.
+	// An unpacked root filesystem used as / by bwrap when a request names no
+	// image, instead of the host's system directories.
 	Rootfs string `json:"rootfs,omitempty"`
 	// Extra host paths made readable inside sandboxes (interpreters, toolchains).
 	ReadOnlyPaths []string `json:"read_only_paths,omitempty"`
-	// Where workspaces are created; default: the system temp directory.
+	// Where sandboxes and snapshots live; default: the system temp directory.
 	WorkDir string `json:"work_dir,omitempty"`
+	// Unpacked image roots, cached by digest; default: the user cache directory.
+	CacheDir string `json:"cache_dir,omitempty"`
 	// The evalsid binary that re-executes itself as the launcher; default: this executable.
 	Launcher string `json:"launcher,omitempty"`
+	// Sandboxes alive at once; default 64.
+	MaxSandboxes int `json:"max_sandboxes,omitempty"`
+	// Destroy sandboxes idle this long; default 30 minutes.
+	IdleTimeoutS float64 `json:"idle_timeout_s,omitempty"`
+	// The microVM rung (design §13).
+	Firecracker *FirecrackerConfig `json:"firecracker,omitempty"`
 }
 
 // Defaults for requests that leave limits unset.
@@ -162,8 +185,26 @@ type driver interface {
 	level() Level
 	// available reports why the driver cannot run here, cheaply (no probe).
 	available() error
-	// command builds the launcher spec for req in workspace ws.
-	spec(req *Request, ws string) (*launchSpec, Isolation, error)
+	// supports reports why this rung cannot give a spec what it asks for.
+	supports(sp *Spec) error
+	// open starts a sandbox in dir (which exists and is private). With from,
+	// the sandbox's state is restored from a snapshot directory instead of
+	// being built from the spec's image and files.
+	open(ctx context.Context, sp *Spec, dir, from string) (backend, error)
+}
+
+// backend is one live sandbox of some rung.
+type backend interface {
+	isolation() Isolation
+	// imageDigest is the digest of the image root, if any.
+	imageDigest() string
+	exec(ctx context.Context, e *Exec, stdout, stderr io.Writer) *ExecResult
+	writeFiles(files []File) error
+	readFiles(paths []string, maxBytes int64) (files []File, missing []string, truncated bool, err error)
+	// snapshot saves the sandbox's state into dir, for open(..., from=dir).
+	snapshot(ctx context.Context, dir string) error
+	egress() []EgressEvent
+	close() error
 }
 
 // Sandbox picks a rung per request and runs commands under it.
@@ -171,20 +212,28 @@ type Sandbox struct {
 	cfg     Config
 	drivers []driver
 	min     Level
+	images  *imageStore
 
 	mu     sync.Mutex
 	probes map[string]error
 }
 
+var rungNames = []string{"firecracker", "bwrap", "landlock"}
+
 // Validate checks rung names and the minimum level.
 func (c Config) Validate() error {
 	for _, name := range c.Ladder {
 		switch name {
-		case "bwrap", "landlock":
-		case "firecracker", "kata", "pod":
-			return fmt.Errorf("sandbox rung %q is not available in this version (Phase 1 ships bwrap and landlock)", name)
+		case "firecracker", "bwrap", "landlock":
+		case "kata", "gvisor", "pod":
+			return fmt.Errorf("sandbox rung %q is not available in standalone mode (it arrives with Kubernetes in Phase 4)", name)
 		default:
-			return fmt.Errorf("unknown sandbox rung %q", name)
+			return fmt.Errorf("unknown sandbox rung %q (use %s)", name, strings.Join(rungNames, ", "))
+		}
+	}
+	if c.Firecracker != nil {
+		if err := c.Firecracker.validate(); err != nil {
+			return err
 		}
 	}
 	_, err := ParseLevel(c.MinIsolation)
@@ -198,7 +247,7 @@ func New(cfg Config) (*Sandbox, error) {
 		return nil, err
 	}
 	if len(cfg.Ladder) == 0 {
-		cfg.Ladder = []string{"bwrap", "landlock"}
+		cfg.Ladder = rungNames
 	}
 	min, _ := ParseLevel(cfg.MinIsolation)
 	if cfg.Launcher == "" {
@@ -208,16 +257,34 @@ func New(cfg Config) (*Sandbox, error) {
 		}
 		cfg.Launcher = exe
 	}
-	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}}
+	if cfg.CacheDir == "" {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			base = os.TempDir()
+		}
+		cfg.CacheDir = filepath.Join(base, "evalsi", "sandbox")
+	}
+	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}, images: newImageStore(filepath.Join(cfg.CacheDir, "images"))}
 	for _, name := range cfg.Ladder {
 		switch name {
+		case "firecracker":
+			s.drivers = append(s.drivers, newFirecracker(s))
 		case "bwrap":
-			s.drivers = append(s.drivers, &bwrapDriver{cfg: &s.cfg})
+			s.drivers = append(s.drivers, &processRung{sb: s, kind: &bwrapDriver{cfg: &s.cfg}})
 		case "landlock":
-			s.drivers = append(s.drivers, &landlockDriver{cfg: &s.cfg})
+			s.drivers = append(s.drivers, &processRung{sb: s, kind: &landlockDriver{cfg: &s.cfg}})
 		}
 	}
 	return s, nil
+}
+
+// Close releases what the rungs hold between sandboxes (warm VMs).
+func (s *Sandbox) Close() {
+	for _, d := range s.drivers {
+		if c, ok := d.(interface{ shutdown() }); ok {
+			c.shutdown()
+		}
+	}
 }
 
 // RungStatus is one line of Probe's report.
@@ -252,26 +319,38 @@ func (s *Sandbox) probe(ctx context.Context, d driver) error {
 	}
 	err := d.available()
 	if err == nil {
-		var res *Result
-		res, err = s.runWith(ctx, d, &Request{Command: []string{"true"}, TimeoutS: 10})
-		switch {
-		case err != nil:
-		case res.Outcome != OutcomeExit || res.ExitCode != 0:
-			err = fmt.Errorf("probe failed (%s, exit %d): %s", res.Outcome, res.ExitCode, firstLine(res.Stderr+res.Error))
-		}
+		err = s.probeRun(ctx, d)
 	}
 	s.probes[d.name()] = err
 	return err
 }
 
-// Run executes req under the strongest working rung that meets both the
-// request's and the server's minimum. It never runs a command unconfined:
-// with no qualifying rung it returns ErrUnavailable.
-func (s *Sandbox) Run(ctx context.Context, req *Request) (*Result, error) {
-	if len(req.Command) == 0 {
-		return nil, errors.New("sandbox request needs a command")
+func (s *Sandbox) probeRun(ctx context.Context, d driver) error {
+	sp := &Spec{}
+	sp.defaults()
+	dir, err := os.MkdirTemp(s.cfg.WorkDir, "evalsi-probe-")
+	if err != nil {
+		return err
 	}
-	want, err := ParseLevel(req.MinIsolation)
+	defer os.RemoveAll(dir)
+	b, err := d.open(ctx, sp, dir, "")
+	if err != nil {
+		return err
+	}
+	defer b.close()
+	var stderr bytes.Buffer
+	res := b.exec(ctx, &Exec{Command: []string{"true"}, Timeout: 30 * time.Second}, io.Discard, &stderr)
+	if res.Outcome != OutcomeExit || res.ExitCode != 0 {
+		return fmt.Errorf("probe failed (%s, exit %d): %s", res.Outcome, res.ExitCode, firstLine(stderr.String()+res.Error))
+	}
+	return nil
+}
+
+// pick returns the strongest working rung that meets both the spec's and the
+// server's minimum and can serve the spec. It never falls back to running
+// unconfined: with no qualifying rung it returns ErrUnavailable.
+func (s *Sandbox) pick(ctx context.Context, sp *Spec) (driver, error) {
+	want, err := ParseLevel(sp.MinIsolation)
 	if err != nil {
 		return nil, err
 	}
@@ -282,11 +361,15 @@ func (s *Sandbox) Run(ctx context.Context, req *Request) (*Result, error) {
 			reasons = append(reasons, fmt.Sprintf("%s: level %s is below %s", d.name(), d.level(), want))
 			continue
 		}
+		if err := d.supports(sp); err != nil {
+			reasons = append(reasons, fmt.Sprintf("%s: %v", d.name(), err))
+			continue
+		}
 		if err := s.probe(ctx, d); err != nil {
 			reasons = append(reasons, fmt.Sprintf("%s: %v", d.name(), err))
 			continue
 		}
-		return s.runWith(ctx, d, req)
+		return d, nil
 	}
 	if len(reasons) == 0 {
 		reasons = append(reasons, "no rungs configured")
@@ -294,53 +377,50 @@ func (s *Sandbox) Run(ctx context.Context, req *Request) (*Result, error) {
 	return nil, fmt.Errorf("%w: nothing meets %s isolation (%s)", ErrUnavailable, want, strings.Join(reasons, "; "))
 }
 
-func (s *Sandbox) runWith(ctx context.Context, d driver, req *Request) (*Result, error) {
-	ws, err := s.workspace(req)
+// Run executes a one-shot request: a sandbox made for it and destroyed after.
+func (s *Sandbox) Run(ctx context.Context, req *Request) (*Result, error) {
+	if len(req.Command) == 0 {
+		return nil, errors.New("sandbox request needs a command")
+	}
+	sp := req.spec()
+	if err := sp.Validate(); err != nil {
+		return nil, err
+	}
+	sess, err := s.Open(ctx, sp)
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(ws)
-	spec, iso, err := d.spec(req, ws)
-	if err != nil {
-		return nil, err
+	defer sess.Close()
+	limit := req.OutputLimit
+	if limit <= 0 {
+		limit = defaultOutputLimit
 	}
-	res := s.launch(ctx, spec, req)
-	res.Isolation = iso
-	classify(d.name(), res)
-	return res, nil
+	var stdout, stderr bytes.Buffer
+	ex := &Exec{Command: req.Command, Stdin: []byte(req.Stdin), OutputLimit: limit}
+	if req.TimeoutS > 0 {
+		ex.Timeout = time.Duration(req.TimeoutS * float64(time.Second))
+	}
+	er := sess.Exec(ctx, ex, &stdout, &stderr)
+	return &Result{
+		Outcome: er.Outcome, ExitCode: er.ExitCode, Stdout: stdout.String(), Stderr: stderr.String(),
+		Truncated: er.Truncated, DurationMS: float64(er.Duration.Microseconds()) / 1000,
+		Isolation: sess.Isolation(), Denials: er.Denials, Error: er.Error, Egress: sess.Egress(),
+	}, nil
 }
 
-// workspace creates a private directory holding the request's files.
-func (s *Sandbox) workspace(req *Request) (string, error) {
-	ws, err := os.MkdirTemp(s.cfg.WorkDir, "evalsi-sandbox-")
-	if err != nil {
-		return "", fmt.Errorf("creating workspace: %w", err)
+func (req *Request) spec() *Spec {
+	files := make(map[string][]byte, len(req.Files))
+	for k, v := range req.Files {
+		files[k] = []byte(v)
 	}
-	// The sandboxed user may be mapped to another uid; the directory itself is private by its parent.
-	if err := os.Chmod(ws, 0o777); err != nil {
-		return "", err
+	sp := &Spec{
+		Image: req.Image, MinIsolation: req.MinIsolation, Mode: req.Mode,
+		Network:   Network{Mode: req.Network, Allow: req.AllowHosts},
+		Resources: Resources{MemoryMB: req.MemoryMB, MaxProcs: req.MaxProcs, MaxFileMB: req.MaxFileMB, CPUSeconds: req.CPUSeconds},
+		Env:       req.Env, Files: files,
 	}
-	for name, content := range req.Files {
-		clean := filepath.Clean(name)
-		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
-			os.RemoveAll(ws)
-			return "", fmt.Errorf("file %q must be a relative path inside the workspace", name)
-		}
-		path := filepath.Join(ws, clean)
-		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
-			os.RemoveAll(ws)
-			return "", err
-		}
-		if err := os.WriteFile(path, []byte(content), 0o666); err != nil {
-			os.RemoveAll(ws)
-			return "", err
-		}
-	}
-	if err := os.MkdirAll(filepath.Join(ws, ".tmp"), 0o777); err != nil {
-		os.RemoveAll(ws)
-		return "", err
-	}
-	return ws, nil
+	sp.defaults()
+	return sp
 }
 
 func firstLine(s string) string {
@@ -349,23 +429,4 @@ func firstLine(s string) string {
 		s = s[:i]
 	}
 	return s
-}
-
-// env is the command's whole environment: fixed basics plus the request's.
-func env(req *Request, home string) []string {
-	vars := map[string]string{
-		"PATH":   sandboxPath,
-		"HOME":   home,
-		"TMPDIR": filepath.Join(home, ".tmp"),
-		"LANG":   "C.UTF-8",
-	}
-	for k, v := range req.Env {
-		vars[k] = v
-	}
-	out := make([]string, 0, len(vars))
-	for k, v := range vars {
-		out = append(out, k+"="+v)
-	}
-	slices.Sort(out)
-	return out
 }

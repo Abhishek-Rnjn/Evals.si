@@ -1,0 +1,40 @@
+[project]
+name = "evalsi-adapter-taubench"
+version = "0.1.0"
+description = "tau2-bench domains as Evals.si agent tasks: tools, a simulated user and database-state grading."
+license = "Apache-2.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "evalsi",
+    "evalsi-harness",
+    # Pinned: the adapter is contract-tested against v0.2.0.
+    "tau2 @ git+https://github.com/sierra-research/tau2-bench@f8de30c298689cbe0117d76a378e7315a17e5bd8",
+]
+
+[project.entry-points."evalsi.importers"]
+taubench = "evalsi_taubench:load"
+
+[dependency-groups]
+dev = ["mypy>=1.13", "pytest>=8.3"]
+
+[tool.uv.sources]
+evalsi = { path = "../../evalsi", editable = true }
+evalsi-harness = { path = "../../evalsi-harness", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalsi_taubench"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["tau2.*", "google.protobuf.*"]
+ignore_missing_imports = true

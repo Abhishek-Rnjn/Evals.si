@@ -76,6 +76,16 @@ class RunServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsResponse.FromString,
                 _registered_method=True)
+        self.PromoteResults = channel.unary_unary(
+                '/evalsi.v1alpha1.RunService/PromoteResults',
+                request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.PromoteResultsRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.PromoteResultsResponse.FromString,
+                _registered_method=True)
+        self.CreateShadowReplay = channel.unary_unary(
+                '/evalsi.v1alpha1.RunService/CreateShadowReplay',
+                request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayResponse.FromString,
+                _registered_method=True)
 
 
 class RunServiceServicer:
@@ -134,6 +144,23 @@ class RunServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PromoteResults(self, request, context):
+        """Appends a run's records that match a condition (failures, typically) to
+        a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateShadowReplay(self, request, context):
+        """Shadow replay: re-runs recorded inputs (production traces, a promoted
+        dataset, an earlier run) against a candidate and scores the recorded
+        outputs the same way, as two runs to compare with CompareRuns.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RunServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -176,6 +203,16 @@ def add_RunServiceServicer_to_server(servicer, server):
                     servicer.CompareRuns,
                     request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsResponse.SerializeToString,
+            ),
+            'PromoteResults': grpc.unary_unary_rpc_method_handler(
+                    servicer.PromoteResults,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.PromoteResultsRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.PromoteResultsResponse.SerializeToString,
+            ),
+            'CreateShadowReplay': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateShadowReplay,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -396,6 +433,60 @@ class RunService:
             '/evalsi.v1alpha1.RunService/CompareRuns',
             evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PromoteResults(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.RunService/PromoteResults',
+            evalsi_dot_v1alpha1_dot_run__service__pb2.PromoteResultsRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_run__service__pb2.PromoteResultsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateShadowReplay(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.RunService/CreateShadowReplay',
+            evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayResponse.FromString,
             options,
             channel_credentials,
             insecure,

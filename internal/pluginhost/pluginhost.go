@@ -25,6 +25,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1/pluginv1alpha1connect"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
@@ -37,6 +38,8 @@ type Worker interface {
 	Reduce(ctx context.Context, req *pluginv1alpha1.ReduceRequest) (*pluginv1alpha1.ReduceResponse, error)
 	Generate(ctx context.Context, req *pluginv1alpha1.GenerateRequest) (*pluginv1alpha1.GenerateResponse, error)
 	LoadDataset(ctx context.Context, req *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error)
+	// RunTask runs one agent task; onEvent (may be nil) sees its trajectory as it happens.
+	RunTask(ctx context.Context, req *pluginv1alpha1.RunTaskRequest, onEvent func(*harnessv1alpha1.TrajectoryEvent)) (*pluginv1alpha1.TaskResult, error)
 }
 
 // Options configures a supervised worker process.
@@ -295,6 +298,33 @@ func (p *Process) Generate(ctx context.Context, req *pluginv1alpha1.GenerateRequ
 		return nil, err
 	}
 	return resp.Msg, nil
+}
+
+// RunTask runs one agent task through the worker's harness.
+func (p *Process) RunTask(ctx context.Context, req *pluginv1alpha1.RunTaskRequest, onEvent func(*harnessv1alpha1.TrajectoryEvent)) (*pluginv1alpha1.TaskResult, error) {
+	stream, err := p.client.RunTask(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+	var result *pluginv1alpha1.TaskResult
+	for stream.Receive() {
+		switch ev := stream.Msg().GetEvent().(type) {
+		case *pluginv1alpha1.RunTaskResponse_Trajectory:
+			if onEvent != nil {
+				onEvent(ev.Trajectory)
+			}
+		case *pluginv1alpha1.RunTaskResponse_Result:
+			result = ev.Result
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, errors.New("the worker ended the task without a result")
+	}
+	return result, nil
 }
 
 // LoadDataset loads every record of a dataset through the worker.

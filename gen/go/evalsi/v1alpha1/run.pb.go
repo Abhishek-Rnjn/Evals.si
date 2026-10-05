@@ -9,6 +9,7 @@ package evalsiv1alpha1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -155,8 +156,13 @@ type RunSpec struct {
 	Trials  int32           `protobuf:"varint,5,opt,name=trials,proto3" json:"trials,omitempty"`
 	Summary *SummaryOptions `protobuf:"bytes,6,opt,name=summary,proto3" json:"summary,omitempty"`
 	// All gates must pass for the run to succeed.
-	Gates         []*Gate `protobuf:"bytes,7,rep,name=gates,proto3" json:"gates,omitempty"`
-	Budget        *Budget `protobuf:"bytes,8,opt,name=budget,proto3" json:"budget,omitempty"`
+	Gates  []*Gate `protobuf:"bytes,7,rep,name=gates,proto3" json:"gates,omitempty"`
+	Budget *Budget `protobuf:"bytes,8,opt,name=budget,proto3" json:"budget,omitempty"`
+	// Drives an agent through each record as a task (an agent run). Without
+	// one, a target with an agent uses the built-in harness with defaults.
+	Harness *Harness `protobuf:"bytes,9,opt,name=harness,proto3" json:"harness,omitempty"`
+	// Where agent tasks run; records may override it in metadata["environment"].
+	Environment   *Environment `protobuf:"bytes,10,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -247,9 +253,24 @@ func (x *RunSpec) GetBudget() *Budget {
 	return nil
 }
 
+func (x *RunSpec) GetHarness() *Harness {
+	if x != nil {
+		return x.Harness
+	}
+	return nil
+}
+
+func (x *RunSpec) GetEnvironment() *Environment {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
+}
+
 type Target struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "openai-compatible" or "anthropic".
+	// "openai-compatible" or "anthropic". For an agent run without an agent
+	// below, the model the built-in reference agent uses.
 	Connector string `protobuf:"bytes,1,opt,name=connector,proto3" json:"connector,omitempty"`
 	Model     string `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
 	// Required for openai-compatible, for example http://localhost:8000/v1.
@@ -260,7 +281,9 @@ type Target struct {
 	MaxTokens    int32    `protobuf:"varint,6,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"`
 	Temperature  *float64 `protobuf:"fixed64,7,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
 	// Anthropic only: output_config.effort.
-	Effort        string `protobuf:"bytes,8,opt,name=effort,proto3" json:"effort,omitempty"`
+	Effort string `protobuf:"bytes,8,opt,name=effort,proto3" json:"effort,omitempty"`
+	// A bring-your-own agent instead of a model.
+	Agent         *AgentTarget `protobuf:"bytes,9,opt,name=agent,proto3" json:"agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -351,6 +374,13 @@ func (x *Target) GetEffort() string {
 	return ""
 }
 
+func (x *Target) GetAgent() *AgentTarget {
+	if x != nil {
+		return x.Agent
+	}
+	return nil
+}
+
 type DatasetSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Source:
@@ -358,6 +388,8 @@ type DatasetSource struct {
 	//	*DatasetSource_Inline
 	//	*DatasetSource_Path
 	//	*DatasetSource_Uri
+	//	*DatasetSource_Traces
+	//	*DatasetSource_Run
 	Source isDatasetSource_Source `protobuf_oneof:"source"`
 	// Record field -> source column, for example input -> question.
 	Mapping map[string]string `protobuf:"bytes,4,rep,name=mapping,proto3" json:"mapping,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -431,6 +463,24 @@ func (x *DatasetSource) GetUri() string {
 	return ""
 }
 
+func (x *DatasetSource) GetTraces() *TraceQuery {
+	if x != nil {
+		if x, ok := x.Source.(*DatasetSource_Traces); ok {
+			return x.Traces
+		}
+	}
+	return nil
+}
+
+func (x *DatasetSource) GetRun() *RunOutputs {
+	if x != nil {
+		if x, ok := x.Source.(*DatasetSource_Run); ok {
+			return x.Run
+		}
+	}
+	return nil
+}
+
 func (x *DatasetSource) GetMapping() map[string]string {
 	if x != nil {
 		return x.Mapping
@@ -464,11 +514,167 @@ type DatasetSource_Uri struct {
 	Uri string `protobuf:"bytes,3,opt,name=uri,proto3,oneof"`
 }
 
+type DatasetSource_Traces struct {
+	// Server only: stored production traces of the run's project, as
+	// records with their recorded output and trajectory (shadow replay).
+	Traces *TraceQuery `protobuf:"bytes,6,opt,name=traces,proto3,oneof"`
+}
+
+type DatasetSource_Run struct {
+	// Server only: the records an earlier run produced, with outputs,
+	// trajectories and checks, to re-score with other evaluators without
+	// running the target or agent again.
+	Run *RunOutputs `protobuf:"bytes,7,opt,name=run,proto3,oneof"`
+}
+
 func (*DatasetSource_Inline) isDatasetSource_Source() {}
 
 func (*DatasetSource_Path) isDatasetSource_Source() {}
 
 func (*DatasetSource_Uri) isDatasetSource_Source() {}
+
+func (*DatasetSource_Traces) isDatasetSource_Source() {}
+
+func (*DatasetSource_Run) isDatasetSource_Source() {}
+
+// TraceQuery selects stored traces. Records keep the trace's input, output
+// and trajectory; the trace id is the record id.
+type TraceQuery struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only traces from this service.
+	Service string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	// Only traces this online policy evaluated.
+	Policy string `protobuf:"bytes,2,opt,name=policy,proto3" json:"policy,omitempty"`
+	// A CEL condition, as in a policy selector: service, name, duration_ms,
+	// error, steps, tools, models, labels, and scores (the policy's online
+	// scores by metric, when policy is set).
+	Filter string `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
+	// Only traces that started within this long before the run was created.
+	Lookback      *durationpb.Duration `protobuf:"bytes,4,opt,name=lookback,proto3" json:"lookback,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TraceQuery) Reset() {
+	*x = TraceQuery{}
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TraceQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TraceQuery) ProtoMessage() {}
+
+func (x *TraceQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TraceQuery.ProtoReflect.Descriptor instead.
+func (*TraceQuery) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TraceQuery) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *TraceQuery) GetPolicy() string {
+	if x != nil {
+		return x.Policy
+	}
+	return ""
+}
+
+func (x *TraceQuery) GetFilter() string {
+	if x != nil {
+		return x.Filter
+	}
+	return ""
+}
+
+func (x *TraceQuery) GetLookback() *durationpb.Duration {
+	if x != nil {
+		return x.Lookback
+	}
+	return nil
+}
+
+// RunOutputs names an earlier run's outputs.
+type RunOutputs struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// Which trial; default 0.
+	Trial int32 `protobuf:"varint,2,opt,name=trial,proto3" json:"trial,omitempty"`
+	// Every trial, as records "<id>#<trial>".
+	AllTrials     bool `protobuf:"varint,3,opt,name=all_trials,json=allTrials,proto3" json:"all_trials,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunOutputs) Reset() {
+	*x = RunOutputs{}
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunOutputs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunOutputs) ProtoMessage() {}
+
+func (x *RunOutputs) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunOutputs.ProtoReflect.Descriptor instead.
+func (*RunOutputs) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RunOutputs) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *RunOutputs) GetTrial() int32 {
+	if x != nil {
+		return x.Trial
+	}
+	return 0
+}
+
+func (x *RunOutputs) GetAllTrials() bool {
+	if x != nil {
+		return x.AllTrials
+	}
+	return false
+}
 
 type InlineRecords struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -479,7 +685,7 @@ type InlineRecords struct {
 
 func (x *InlineRecords) Reset() {
 	*x = InlineRecords{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[3]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -491,7 +697,7 @@ func (x *InlineRecords) String() string {
 func (*InlineRecords) ProtoMessage() {}
 
 func (x *InlineRecords) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[3]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -504,7 +710,7 @@ func (x *InlineRecords) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InlineRecords.ProtoReflect.Descriptor instead.
 func (*InlineRecords) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{3}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *InlineRecords) GetRecords() []*Record {
@@ -529,7 +735,7 @@ type Gate struct {
 
 func (x *Gate) Reset() {
 	*x = Gate{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -541,7 +747,7 @@ func (x *Gate) String() string {
 func (*Gate) ProtoMessage() {}
 
 func (x *Gate) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -554,7 +760,7 @@ func (x *Gate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Gate.ProtoReflect.Descriptor instead.
 func (*Gate) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{4}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Gate) GetMetric() string {
@@ -597,7 +803,7 @@ type GateResult struct {
 
 func (x *GateResult) Reset() {
 	*x = GateResult{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -609,7 +815,7 @@ func (x *GateResult) String() string {
 func (*GateResult) ProtoMessage() {}
 
 func (x *GateResult) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -622,7 +828,7 @@ func (x *GateResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GateResult.ProtoReflect.Descriptor instead.
 func (*GateResult) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{5}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GateResult) GetGate() *Gate {
@@ -664,7 +870,7 @@ type Budget struct {
 
 func (x *Budget) Reset() {
 	*x = Budget{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -676,7 +882,7 @@ func (x *Budget) String() string {
 func (*Budget) ProtoMessage() {}
 
 func (x *Budget) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -689,7 +895,7 @@ func (x *Budget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Budget.ProtoReflect.Descriptor instead.
 func (*Budget) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{6}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Budget) GetMaxTargetTokens() int64 {
@@ -717,7 +923,7 @@ type Progress struct {
 
 func (x *Progress) Reset() {
 	*x = Progress{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -729,7 +935,7 @@ func (x *Progress) String() string {
 func (*Progress) ProtoMessage() {}
 
 func (x *Progress) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -742,7 +948,7 @@ func (x *Progress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Progress.ProtoReflect.Descriptor instead.
 func (*Progress) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{7}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Progress) GetTotal() int64 {
@@ -789,7 +995,7 @@ type Run struct {
 
 func (x *Run) Reset() {
 	*x = Run{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -801,7 +1007,7 @@ func (x *Run) String() string {
 func (*Run) ProtoMessage() {}
 
 func (x *Run) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -814,7 +1020,7 @@ func (x *Run) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Run.ProtoReflect.Descriptor instead.
 func (*Run) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{8}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Run) GetId() string {
@@ -947,7 +1153,7 @@ var File_evalsi_v1alpha1_run_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\n" +
-	"\x19evalsi/v1alpha1/run.proto\x12\x0fevalsi.v1alpha1\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfa\x02\n" +
+	"\x19evalsi/v1alpha1/run.proto\x12\x0fevalsi.v1alpha1\x1a\x1bevalsi/v1alpha1/agent.proto\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xee\x03\n" +
 	"\aRunSpec\x12/\n" +
 	"\x06target\x18\x01 \x01(\v2\x17.evalsi.v1alpha1.TargetR\x06target\x128\n" +
 	"\adataset\x18\x02 \x01(\v2\x1e.evalsi.v1alpha1.DatasetSourceR\adataset\x12=\n" +
@@ -958,7 +1164,10 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x06trials\x18\x05 \x01(\x05R\x06trials\x129\n" +
 	"\asummary\x18\x06 \x01(\v2\x1f.evalsi.v1alpha1.SummaryOptionsR\asummary\x12+\n" +
 	"\x05gates\x18\a \x03(\v2\x15.evalsi.v1alpha1.GateR\x05gates\x12/\n" +
-	"\x06budget\x18\b \x01(\v2\x17.evalsi.v1alpha1.BudgetR\x06budget\"\x8a\x02\n" +
+	"\x06budget\x18\b \x01(\v2\x17.evalsi.v1alpha1.BudgetR\x06budget\x122\n" +
+	"\aharness\x18\t \x01(\v2\x18.evalsi.v1alpha1.HarnessR\aharness\x12>\n" +
+	"\venvironment\x18\n" +
+	" \x01(\v2\x1c.evalsi.v1alpha1.EnvironmentR\venvironment\"\xbe\x02\n" +
 	"\x06Target\x12\x1c\n" +
 	"\tconnector\x18\x01 \x01(\tR\tconnector\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x19\n" +
@@ -968,18 +1177,33 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\n" +
 	"max_tokens\x18\x06 \x01(\x05R\tmaxTokens\x12%\n" +
 	"\vtemperature\x18\a \x01(\x01H\x00R\vtemperature\x88\x01\x01\x12\x16\n" +
-	"\x06effort\x18\b \x01(\tR\x06effortB\x0e\n" +
-	"\f_temperature\"\x96\x02\n" +
+	"\x06effort\x18\b \x01(\tR\x06effort\x122\n" +
+	"\x05agent\x18\t \x01(\v2\x1c.evalsi.v1alpha1.AgentTargetR\x05agentB\x0e\n" +
+	"\f_temperature\"\xfe\x02\n" +
 	"\rDatasetSource\x128\n" +
 	"\x06inline\x18\x01 \x01(\v2\x1e.evalsi.v1alpha1.InlineRecordsH\x00R\x06inline\x12\x14\n" +
 	"\x04path\x18\x02 \x01(\tH\x00R\x04path\x12\x12\n" +
-	"\x03uri\x18\x03 \x01(\tH\x00R\x03uri\x12E\n" +
+	"\x03uri\x18\x03 \x01(\tH\x00R\x03uri\x125\n" +
+	"\x06traces\x18\x06 \x01(\v2\x1b.evalsi.v1alpha1.TraceQueryH\x00R\x06traces\x12/\n" +
+	"\x03run\x18\a \x01(\v2\x1b.evalsi.v1alpha1.RunOutputsH\x00R\x03run\x12E\n" +
 	"\amapping\x18\x04 \x03(\v2+.evalsi.v1alpha1.DatasetSource.MappingEntryR\amapping\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x1a:\n" +
 	"\fMappingEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"B\n" +
+	"\x06source\"\x8d\x01\n" +
+	"\n" +
+	"TraceQuery\x12\x18\n" +
+	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
+	"\x06policy\x18\x02 \x01(\tR\x06policy\x12\x16\n" +
+	"\x06filter\x18\x03 \x01(\tR\x06filter\x125\n" +
+	"\blookback\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\blookback\"X\n" +
+	"\n" +
+	"RunOutputs\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x14\n" +
+	"\x05trial\x18\x02 \x01(\x05R\x05trial\x12\x1d\n" +
+	"\n" +
+	"all_trials\x18\x03 \x01(\bR\tallTrials\"B\n" +
 	"\rInlineRecords\x121\n" +
 	"\arecords\x18\x01 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\"\x8b\x01\n" +
 	"\x04Gate\x12\x16\n" +
@@ -1058,56 +1282,68 @@ func file_evalsi_v1alpha1_run_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_v1alpha1_run_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_evalsi_v1alpha1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_evalsi_v1alpha1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_evalsi_v1alpha1_run_proto_goTypes = []any{
 	(GateStat)(0),                 // 0: evalsi.v1alpha1.GateStat
 	(RunStatus)(0),                // 1: evalsi.v1alpha1.RunStatus
 	(*RunSpec)(nil),               // 2: evalsi.v1alpha1.RunSpec
 	(*Target)(nil),                // 3: evalsi.v1alpha1.Target
 	(*DatasetSource)(nil),         // 4: evalsi.v1alpha1.DatasetSource
-	(*InlineRecords)(nil),         // 5: evalsi.v1alpha1.InlineRecords
-	(*Gate)(nil),                  // 6: evalsi.v1alpha1.Gate
-	(*GateResult)(nil),            // 7: evalsi.v1alpha1.GateResult
-	(*Budget)(nil),                // 8: evalsi.v1alpha1.Budget
-	(*Progress)(nil),              // 9: evalsi.v1alpha1.Progress
-	(*Run)(nil),                   // 10: evalsi.v1alpha1.Run
-	nil,                           // 11: evalsi.v1alpha1.DatasetSource.MappingEntry
-	nil,                           // 12: evalsi.v1alpha1.Run.LabelsEntry
-	(*EvaluatorRef)(nil),          // 13: evalsi.v1alpha1.EvaluatorRef
-	(*SummaryOptions)(nil),        // 14: evalsi.v1alpha1.SummaryOptions
-	(*Record)(nil),                // 15: evalsi.v1alpha1.Record
-	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
-	(*MetricSummary)(nil),         // 17: evalsi.v1alpha1.MetricSummary
-	(*Usage)(nil),                 // 18: evalsi.v1alpha1.Usage
+	(*TraceQuery)(nil),            // 5: evalsi.v1alpha1.TraceQuery
+	(*RunOutputs)(nil),            // 6: evalsi.v1alpha1.RunOutputs
+	(*InlineRecords)(nil),         // 7: evalsi.v1alpha1.InlineRecords
+	(*Gate)(nil),                  // 8: evalsi.v1alpha1.Gate
+	(*GateResult)(nil),            // 9: evalsi.v1alpha1.GateResult
+	(*Budget)(nil),                // 10: evalsi.v1alpha1.Budget
+	(*Progress)(nil),              // 11: evalsi.v1alpha1.Progress
+	(*Run)(nil),                   // 12: evalsi.v1alpha1.Run
+	nil,                           // 13: evalsi.v1alpha1.DatasetSource.MappingEntry
+	nil,                           // 14: evalsi.v1alpha1.Run.LabelsEntry
+	(*EvaluatorRef)(nil),          // 15: evalsi.v1alpha1.EvaluatorRef
+	(*SummaryOptions)(nil),        // 16: evalsi.v1alpha1.SummaryOptions
+	(*Harness)(nil),               // 17: evalsi.v1alpha1.Harness
+	(*Environment)(nil),           // 18: evalsi.v1alpha1.Environment
+	(*AgentTarget)(nil),           // 19: evalsi.v1alpha1.AgentTarget
+	(*durationpb.Duration)(nil),   // 20: google.protobuf.Duration
+	(*Record)(nil),                // 21: evalsi.v1alpha1.Record
+	(*timestamppb.Timestamp)(nil), // 22: google.protobuf.Timestamp
+	(*MetricSummary)(nil),         // 23: evalsi.v1alpha1.MetricSummary
+	(*Usage)(nil),                 // 24: evalsi.v1alpha1.Usage
 }
 var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	3,  // 0: evalsi.v1alpha1.RunSpec.target:type_name -> evalsi.v1alpha1.Target
 	4,  // 1: evalsi.v1alpha1.RunSpec.dataset:type_name -> evalsi.v1alpha1.DatasetSource
-	13, // 2: evalsi.v1alpha1.RunSpec.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
-	14, // 3: evalsi.v1alpha1.RunSpec.summary:type_name -> evalsi.v1alpha1.SummaryOptions
-	6,  // 4: evalsi.v1alpha1.RunSpec.gates:type_name -> evalsi.v1alpha1.Gate
-	8,  // 5: evalsi.v1alpha1.RunSpec.budget:type_name -> evalsi.v1alpha1.Budget
-	5,  // 6: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
-	11, // 7: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
-	15, // 8: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
-	0,  // 9: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
-	6,  // 10: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
-	2,  // 11: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
-	1,  // 12: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
-	16, // 13: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
-	16, // 14: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
-	16, // 15: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
-	9,  // 16: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
-	17, // 17: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
-	7,  // 18: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
-	18, // 19: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
-	18, // 20: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
-	12, // 21: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	15, // 2: evalsi.v1alpha1.RunSpec.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
+	16, // 3: evalsi.v1alpha1.RunSpec.summary:type_name -> evalsi.v1alpha1.SummaryOptions
+	8,  // 4: evalsi.v1alpha1.RunSpec.gates:type_name -> evalsi.v1alpha1.Gate
+	10, // 5: evalsi.v1alpha1.RunSpec.budget:type_name -> evalsi.v1alpha1.Budget
+	17, // 6: evalsi.v1alpha1.RunSpec.harness:type_name -> evalsi.v1alpha1.Harness
+	18, // 7: evalsi.v1alpha1.RunSpec.environment:type_name -> evalsi.v1alpha1.Environment
+	19, // 8: evalsi.v1alpha1.Target.agent:type_name -> evalsi.v1alpha1.AgentTarget
+	7,  // 9: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
+	5,  // 10: evalsi.v1alpha1.DatasetSource.traces:type_name -> evalsi.v1alpha1.TraceQuery
+	6,  // 11: evalsi.v1alpha1.DatasetSource.run:type_name -> evalsi.v1alpha1.RunOutputs
+	13, // 12: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
+	20, // 13: evalsi.v1alpha1.TraceQuery.lookback:type_name -> google.protobuf.Duration
+	21, // 14: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
+	0,  // 15: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
+	8,  // 16: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
+	2,  // 17: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
+	1,  // 18: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
+	22, // 19: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
+	22, // 20: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
+	22, // 21: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
+	11, // 22: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
+	23, // 23: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
+	9,  // 24: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
+	24, // 25: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
+	24, // 26: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
+	14, // 27: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
+	28, // [28:28] is the sub-list for method output_type
+	28, // [28:28] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_proto_init() }
@@ -1115,6 +1351,7 @@ func file_evalsi_v1alpha1_run_proto_init() {
 	if File_evalsi_v1alpha1_run_proto != nil {
 		return
 	}
+	file_evalsi_v1alpha1_agent_proto_init()
 	file_evalsi_v1alpha1_evaluation_service_proto_init()
 	file_evalsi_v1alpha1_evaluator_proto_init()
 	file_evalsi_v1alpha1_record_proto_init()
@@ -1124,16 +1361,18 @@ func file_evalsi_v1alpha1_run_proto_init() {
 		(*DatasetSource_Inline)(nil),
 		(*DatasetSource_Path)(nil),
 		(*DatasetSource_Uri)(nil),
+		(*DatasetSource_Traces)(nil),
+		(*DatasetSource_Run)(nil),
 	}
-	file_evalsi_v1alpha1_run_proto_msgTypes[4].OneofWrappers = []any{}
-	file_evalsi_v1alpha1_run_proto_msgTypes[5].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_run_proto_msgTypes[6].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_run_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_run_proto_rawDesc), len(file_evalsi_v1alpha1_run_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

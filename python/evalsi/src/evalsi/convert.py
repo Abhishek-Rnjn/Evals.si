@@ -22,6 +22,7 @@ from evalsi.types import (
     Record,
     Score,
     Step,
+    TaskCheck,
     ToolCall,
     Trajectory,
     Usage,
@@ -201,7 +202,49 @@ def record_to_proto(record: Record) -> record_pb2.Record:
         msg.metadata[key].CopyFrom(to_value(value))
     if record.trajectory is not None:
         msg.trajectory.CopyFrom(trajectory_to_proto(record.trajectory))
+    if record.check is not None:
+        msg.check.CopyFrom(check_to_proto(record.check))
     return msg
+
+
+_LEVELS = {
+    "none": record_pb2.ISOLATION_LEVEL_NONE,
+    "confined": record_pb2.ISOLATION_LEVEL_CONFINED,
+    "namespaced": record_pb2.ISOLATION_LEVEL_NAMESPACED,
+    "kernel": record_pb2.ISOLATION_LEVEL_KERNEL,
+    "vm": record_pb2.ISOLATION_LEVEL_VM,
+}
+
+
+def isolation_to_proto(isolation: Mapping[str, Any]) -> record_pb2.IsolationReport:
+    """``{"driver", "level", "enforcement", "notes"}`` as an IsolationReport."""
+    return record_pb2.IsolationReport(
+        driver=str(isolation.get("driver", "")),
+        level=_LEVELS.get(str(isolation.get("level", "")), record_pb2.ISOLATION_LEVEL_UNSPECIFIED),
+        enforcement=record_pb2.ENFORCEMENT_PARTIAL
+        if isolation.get("enforcement") == "partial"
+        else record_pb2.ENFORCEMENT_FULL,
+        notes=[str(n) for n in isolation.get("notes") or []],
+    )
+
+
+def check_to_proto(check: TaskCheck) -> record_pb2.TaskCheck:
+    msg = record_pb2.TaskCheck(
+        passed=check.passed, details=check.details, tests=check.tests, error=check.error
+    )
+    if check.score is not None:
+        msg.score = check.score
+    return msg
+
+
+def check_from_proto(msg: record_pb2.TaskCheck) -> TaskCheck:
+    return TaskCheck(
+        passed=msg.passed,
+        score=msg.score if msg.HasField("score") else None,
+        details=msg.details,
+        tests=dict(msg.tests),
+        error=msg.error,
+    )
 
 
 def record_from_proto(msg: record_pb2.Record) -> Record:
@@ -214,6 +257,7 @@ def record_from_proto(msg: record_pb2.Record) -> Record:
         usage=usage_from_proto(msg.usage) if msg.HasField("usage") else None,
         metadata={k: from_value(v) for k, v in msg.metadata.items()},
         trajectory=trajectory_from_proto(msg.trajectory) if msg.HasField("trajectory") else None,
+        check=check_from_proto(msg.check) if msg.HasField("check") else None,
     )
 
 

@@ -22,6 +22,7 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from evalsi.harness.v1alpha1 import harness_pb2 as evalsi_dot_harness_dot_v1alpha1_dot_harness__pb2
 from evalsi.v1alpha1 import evaluator_pb2 as evalsi_dot_v1alpha1_dot_evaluator__pb2
 from evalsi.v1alpha1 import record_pb2 as evalsi_dot_v1alpha1_dot_record__pb2
 from evalsi.v1alpha1 import run_pb2 as evalsi_dot_v1alpha1_dot_run__pb2
@@ -29,35 +30,41 @@ from evalsi.v1alpha1 import score_pb2 as evalsi_dot_v1alpha1_dot_score__pb2
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-evalsi/plugin/v1alpha1/evaluator_plugin.proto\x12\x16\x65valsi.plugin.v1alpha1\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x19\x65valsi/v1alpha1/run.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x11\n\x0f\x44\x65scribeRequest\"J\n\x10\x44\x65scribeResponse\x12\x36\n\nevaluators\x18\x01 \x03(\x0b\x32\".evalsi.v1alpha1.EvaluatorManifest\"\x98\x01\n\x0f\x45valuateRequest\x12\x10\n\x08\x62\x61tch_id\x18\x01 \x01(\t\x12\x11\n\tevaluator\x18\x02 \x01(\t\x12\'\n\x06params\x18\x03 \x01(\x0b\x32\x17.google.protobuf.Struct\x12(\n\x07records\x18\x04 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\r\n\x05judge\x18\x05 \x01(\t\"X\n\x10\x45valuateResponse\x12\x10\n\x08\x62\x61tch_id\x18\x01 \x01(\t\x12\x32\n\x07results\x18\x02 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\"\xb8\x01\n\rReduceRequest\x12\x11\n\tevaluator\x18\x01 \x01(\t\x12\'\n\x06params\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\x12(\n\x07records\x18\x03 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x32\n\x07results\x18\x04 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\x12\r\n\x05judge\x18\x05 \x01(\t\"8\n\x0eReduceResponse\x12&\n\x06scores\x18\x01 \x03(\x0b\x32\x16.evalsi.v1alpha1.Score\"d\n\x0fGenerateRequest\x12\'\n\x06target\x18\x01 \x01(\x0b\x32\x17.evalsi.v1alpha1.Target\x12(\n\x07records\x18\x02 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\"\x83\x01\n\x0eGenerateResult\x12\x11\n\trecord_id\x18\x01 \x01(\t\x12(\n\x06output\x18\x02 \x01(\x0b\x32\x18.evalsi.v1alpha1.Content\x12%\n\x05usage\x18\x03 \x01(\x0b\x32\x16.evalsi.v1alpha1.Usage\x12\r\n\x05\x65rror\x18\x04 \x01(\t\"K\n\x10GenerateResponse\x12\x37\n\x07results\x18\x01 \x03(\x0b\x32&.evalsi.plugin.v1alpha1.GenerateResult\"D\n\x12LoadDatasetRequest\x12.\n\x06source\x18\x01 \x01(\x0b\x32\x1e.evalsi.v1alpha1.DatasetSource\"?\n\x13LoadDatasetResponse\x12(\n\x07records\x18\x01 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record2\xfc\x03\n\x16\x45valuatorPluginService\x12]\n\x08\x44\x65scribe\x12\'.evalsi.plugin.v1alpha1.DescribeRequest\x1a(.evalsi.plugin.v1alpha1.DescribeResponse\x12\x61\n\x08\x45valuate\x12\'.evalsi.plugin.v1alpha1.EvaluateRequest\x1a(.evalsi.plugin.v1alpha1.EvaluateResponse(\x01\x30\x01\x12W\n\x06Reduce\x12%.evalsi.plugin.v1alpha1.ReduceRequest\x1a&.evalsi.plugin.v1alpha1.ReduceResponse\x12]\n\x08Generate\x12\'.evalsi.plugin.v1alpha1.GenerateRequest\x1a(.evalsi.plugin.v1alpha1.GenerateResponse\x12h\n\x0bLoadDataset\x12*.evalsi.plugin.v1alpha1.LoadDatasetRequest\x1a+.evalsi.plugin.v1alpha1.LoadDatasetResponse0\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n-evalsi/plugin/v1alpha1/evaluator_plugin.proto\x12\x16\x65valsi.plugin.v1alpha1\x1a%evalsi/harness/v1alpha1/harness.proto\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x19\x65valsi/v1alpha1/run.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x11\n\x0f\x44\x65scribeRequest\"J\n\x10\x44\x65scribeResponse\x12\x36\n\nevaluators\x18\x01 \x03(\x0b\x32\".evalsi.v1alpha1.EvaluatorManifest\"\x98\x01\n\x0f\x45valuateRequest\x12\x10\n\x08\x62\x61tch_id\x18\x01 \x01(\t\x12\x11\n\tevaluator\x18\x02 \x01(\t\x12\'\n\x06params\x18\x03 \x01(\x0b\x32\x17.google.protobuf.Struct\x12(\n\x07records\x18\x04 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\r\n\x05judge\x18\x05 \x01(\t\"X\n\x10\x45valuateResponse\x12\x10\n\x08\x62\x61tch_id\x18\x01 \x01(\t\x12\x32\n\x07results\x18\x02 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\"\xb8\x01\n\rReduceRequest\x12\x11\n\tevaluator\x18\x01 \x01(\t\x12\'\n\x06params\x18\x02 \x01(\x0b\x32\x17.google.protobuf.Struct\x12(\n\x07records\x18\x03 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x32\n\x07results\x18\x04 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\x12\r\n\x05judge\x18\x05 \x01(\t\"8\n\x0eReduceResponse\x12&\n\x06scores\x18\x01 \x03(\x0b\x32\x16.evalsi.v1alpha1.Score\"d\n\x0fGenerateRequest\x12\'\n\x06target\x18\x01 \x01(\x0b\x32\x17.evalsi.v1alpha1.Target\x12(\n\x07records\x18\x02 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\"\x83\x01\n\x0eGenerateResult\x12\x11\n\trecord_id\x18\x01 \x01(\t\x12(\n\x06output\x18\x02 \x01(\x0b\x32\x18.evalsi.v1alpha1.Content\x12%\n\x05usage\x18\x03 \x01(\x0b\x32\x16.evalsi.v1alpha1.Usage\x12\r\n\x05\x65rror\x18\x04 \x01(\t\"K\n\x10GenerateResponse\x12\x37\n\x07results\x18\x01 \x03(\x0b\x32&.evalsi.plugin.v1alpha1.GenerateResult\"D\n\x12LoadDatasetRequest\x12.\n\x06source\x18\x01 \x01(\x0b\x32\x1e.evalsi.v1alpha1.DatasetSource\"?\n\x13LoadDatasetResponse\x12(\n\x07records\x18\x01 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\"\x80\x01\n\x0eRunTaskRequest\x12&\n\x04spec\x18\x01 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12\'\n\x06record\x18\x02 \x01(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\r\n\x05trial\x18\x03 \x01(\x05\x12\x0e\n\x06run_id\x18\x04 \x01(\t\"D\n\nTaskResult\x12\'\n\x06record\x18\x01 \x01(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\r\n\x05\x65rror\x18\x02 \x01(\t\"\x90\x01\n\x0fRunTaskResponse\x12>\n\ntrajectory\x18\x01 \x01(\x0b\x32(.evalsi.harness.v1alpha1.TrajectoryEventH\x00\x12\x34\n\x06result\x18\x02 \x01(\x0b\x32\".evalsi.plugin.v1alpha1.TaskResultH\x00\x42\x07\n\x05\x65vent2\xda\x04\n\x16\x45valuatorPluginService\x12]\n\x08\x44\x65scribe\x12\'.evalsi.plugin.v1alpha1.DescribeRequest\x1a(.evalsi.plugin.v1alpha1.DescribeResponse\x12\x61\n\x08\x45valuate\x12\'.evalsi.plugin.v1alpha1.EvaluateRequest\x1a(.evalsi.plugin.v1alpha1.EvaluateResponse(\x01\x30\x01\x12W\n\x06Reduce\x12%.evalsi.plugin.v1alpha1.ReduceRequest\x1a&.evalsi.plugin.v1alpha1.ReduceResponse\x12]\n\x08Generate\x12\'.evalsi.plugin.v1alpha1.GenerateRequest\x1a(.evalsi.plugin.v1alpha1.GenerateResponse\x12h\n\x0bLoadDataset\x12*.evalsi.plugin.v1alpha1.LoadDatasetRequest\x1a+.evalsi.plugin.v1alpha1.LoadDatasetResponse0\x01\x12\\\n\x07RunTask\x12&.evalsi.plugin.v1alpha1.RunTaskRequest\x1a\'.evalsi.plugin.v1alpha1.RunTaskResponse0\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'evalsi.plugin.v1alpha1.evaluator_plugin_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_DESCRIBEREQUEST']._serialized_start=222
-  _globals['_DESCRIBEREQUEST']._serialized_end=239
-  _globals['_DESCRIBERESPONSE']._serialized_start=241
-  _globals['_DESCRIBERESPONSE']._serialized_end=315
-  _globals['_EVALUATEREQUEST']._serialized_start=318
-  _globals['_EVALUATEREQUEST']._serialized_end=470
-  _globals['_EVALUATERESPONSE']._serialized_start=472
-  _globals['_EVALUATERESPONSE']._serialized_end=560
-  _globals['_REDUCEREQUEST']._serialized_start=563
-  _globals['_REDUCEREQUEST']._serialized_end=747
-  _globals['_REDUCERESPONSE']._serialized_start=749
-  _globals['_REDUCERESPONSE']._serialized_end=805
-  _globals['_GENERATEREQUEST']._serialized_start=807
-  _globals['_GENERATEREQUEST']._serialized_end=907
-  _globals['_GENERATERESULT']._serialized_start=910
-  _globals['_GENERATERESULT']._serialized_end=1041
-  _globals['_GENERATERESPONSE']._serialized_start=1043
-  _globals['_GENERATERESPONSE']._serialized_end=1118
-  _globals['_LOADDATASETREQUEST']._serialized_start=1120
-  _globals['_LOADDATASETREQUEST']._serialized_end=1188
-  _globals['_LOADDATASETRESPONSE']._serialized_start=1190
-  _globals['_LOADDATASETRESPONSE']._serialized_end=1253
-  _globals['_EVALUATORPLUGINSERVICE']._serialized_start=1256
-  _globals['_EVALUATORPLUGINSERVICE']._serialized_end=1764
+  _globals['_DESCRIBEREQUEST']._serialized_start=261
+  _globals['_DESCRIBEREQUEST']._serialized_end=278
+  _globals['_DESCRIBERESPONSE']._serialized_start=280
+  _globals['_DESCRIBERESPONSE']._serialized_end=354
+  _globals['_EVALUATEREQUEST']._serialized_start=357
+  _globals['_EVALUATEREQUEST']._serialized_end=509
+  _globals['_EVALUATERESPONSE']._serialized_start=511
+  _globals['_EVALUATERESPONSE']._serialized_end=599
+  _globals['_REDUCEREQUEST']._serialized_start=602
+  _globals['_REDUCEREQUEST']._serialized_end=786
+  _globals['_REDUCERESPONSE']._serialized_start=788
+  _globals['_REDUCERESPONSE']._serialized_end=844
+  _globals['_GENERATEREQUEST']._serialized_start=846
+  _globals['_GENERATEREQUEST']._serialized_end=946
+  _globals['_GENERATERESULT']._serialized_start=949
+  _globals['_GENERATERESULT']._serialized_end=1080
+  _globals['_GENERATERESPONSE']._serialized_start=1082
+  _globals['_GENERATERESPONSE']._serialized_end=1157
+  _globals['_LOADDATASETREQUEST']._serialized_start=1159
+  _globals['_LOADDATASETREQUEST']._serialized_end=1227
+  _globals['_LOADDATASETRESPONSE']._serialized_start=1229
+  _globals['_LOADDATASETRESPONSE']._serialized_end=1292
+  _globals['_RUNTASKREQUEST']._serialized_start=1295
+  _globals['_RUNTASKREQUEST']._serialized_end=1423
+  _globals['_TASKRESULT']._serialized_start=1425
+  _globals['_TASKRESULT']._serialized_end=1493
+  _globals['_RUNTASKRESPONSE']._serialized_start=1496
+  _globals['_RUNTASKRESPONSE']._serialized_end=1640
+  _globals['_EVALUATORPLUGINSERVICE']._serialized_start=1643
+  _globals['_EVALUATORPLUGINSERVICE']._serialized_end=2245
 # @@protoc_insertion_point(module_scope)

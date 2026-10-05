@@ -41,12 +41,14 @@ import (
 )
 
 // The server runs in this test binary, so the worker's EVALSID points here:
-// answer `sandbox run` and `sandbox-exec` the way evalsid does.
+// answer `sandbox run|serve`, `sandbox-exec` and `sandbox-forward` the way evalsid does.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "sandbox-exec":
-			os.Exit(sandbox.Exec(os.Stderr))
+			os.Exit(sandbox.Launch(os.Stderr))
+		case "sandbox-forward":
+			os.Exit(sandbox.Forward(os.Args[2:], os.Stderr))
 		case "sandbox":
 			os.Exit(sandboxcli.Main(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 		}

@@ -1,0 +1,37 @@
+[project]
+name = "evalsi-adapter-swebench"
+version = "0.1.0"
+description = "SWE-bench as Evals.si agent tasks: an importer and the official grading."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "evalsi",
+    "evalsi-harness",
+    # Pinned: the adapter is contract-tested against this exact version.
+    "swebench==5.0.2",
+]
+
+[project.entry-points."evalsi.importers"]
+swebench = "evalsi_swebench:load"
+
+[dependency-groups]
+dev = ["mypy>=1.13", "pytest>=8.3"]
+
+[tool.uv.sources]
+evalsi = { path = "../../evalsi", editable = true }
+evalsi-harness = { path = "../../evalsi-harness", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalsi_swebench"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["swebench.*", "datasets.*"]
+ignore_missing_imports = true

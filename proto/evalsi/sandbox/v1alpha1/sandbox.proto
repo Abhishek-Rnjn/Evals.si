@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+package evalsi.sandbox.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// SandboxService runs untrusted commands in persistent sandboxes (design §13).
+// A sandbox keeps its workspace (and, with an image, its writable root) across
+// Exec calls until it is destroyed, so an agent can work in it step by step.
+// Every Exec is confined afresh under the rung the sandbox was created with.
+//
+// evalsid serves it to its workers on a Unix socket (EVALSI_SANDBOX_ADDR), and
+// `evalsid sandbox serve` serves it for embedded runs. It fails closed: when
+// no rung meets the requested isolation, Create fails with FAILED_PRECONDITION
+// and the message starts with SANDBOX_UNAVAILABLE.
+service SandboxService {
+  // Which rungs work on this host.
+  rpc Probe(ProbeRequest) returns (ProbeResponse);
+  rpc Create(CreateRequest) returns (CreateResponse);
+  // Streams output as it is produced, then one result.
+  rpc Exec(ExecRequest) returns (stream ExecResponse);
+  rpc WriteFiles(WriteFilesRequest) returns (WriteFilesResponse);
+  rpc ReadFiles(ReadFilesRequest) returns (ReadFilesResponse);
+  // Captures the sandbox's state; Restore makes new sandboxes from it.
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
+  rpc Restore(RestoreRequest) returns (RestoreResponse);
+  // Resource use and the egress log, which safety evaluators use as evidence.
+  rpc Stats(StatsRequest) returns (StatsResponse);
+  rpc Destroy(DestroyRequest) returns (DestroyResponse);
+  rpc DeleteSnapshot(DeleteSnapshotRequest) returns (DeleteSnapshotResponse);
+}
+
+message ProbeRequest {}
+
+message RungStatus {
+  string driver = 1;
+  evalsi.v1alpha1.IsolationLevel level = 2;
+  bool available = 3;
+  string reason = 4;
+}
+
+message ProbeResponse {
+  repeated RungStatus rungs = 1;
+}
+
+enum NetworkMode {
+  NETWORK_MODE_UNSPECIFIED = 0;
+  // Loopback only. The default.
+  NETWORK_MODE_DENY = 1;
+  // Only the listed hosts, through the logging egress proxy.
+  NETWORK_MODE_ALLOWLIST = 2;
+  // Unrestricted. Trusted setup steps only; it is logged as a note.
+  NETWORK_MODE_ALLOW = 3;
+}
+
+message NetworkPolicy {
+  NetworkMode mode = 1;
+  // For allowlist: "host", "host:port" or "*.suffix" (any subdomain).
+  repeated string allow = 2;
+}
+
+message Resources {
+  int32 memory_mb = 1;
+  int32 max_procs = 2;
+  int32 max_file_mb = 3;
+  // CPU seconds per Exec; 0 means no limit beyond the wall-clock timeout.
+  int32 cpu_seconds = 4;
+}
+
+message SandboxSpec {
+  // An OCI image reference (registry, "oci-layout:<dir>[@ref]",
+  // "docker-archive:<file>" or "dir:<unpacked root>"). It becomes the root
+  // filesystem, cached by digest. Empty: the host's system directories, read-only.
+  string image = 1;
+  // none, confined, namespaced, kernel or vm. Default: confined.
+  string min_isolation = 2;
+  // "workspace-write" (default) or "read-only".
+  string mode = 3;
+  NetworkPolicy network = 4;
+  Resources resources = 5;
+  // Environment for every Exec; nothing is inherited from the host.
+  map<string, string> env = 6;
+  // Written into the workspace at creation.
+  map<string, bytes> files = 7;
+  // The working directory and the writable area, inside the sandbox.
+  // Default: /workspace.
+  string workdir = 8;
+  // Destroyed after this long without an Exec. Default: 30 minutes.
+  google.protobuf.Duration idle_timeout = 9;
+  // Bind the image root read-only instead of giving the sandbox a private
+  // writable copy. Faster to create; only the workdir is writable.
+  bool read_only_root = 10;
+}
+
+message CreateRequest {
+  SandboxSpec spec = 1;
+}
+
+message CreateResponse {
+  string sandbox_id = 1;
+  evalsi.v1alpha1.IsolationReport isolation = 2;
+  // The digest of the image root, when there is one.
+  string image_digest = 3;
+}
+
+message ExecRequest {
+  string sandbox_id = 1;
+  repeated string command = 2;
+  bytes stdin = 3;
+  // Added to the sandbox's environment for this call.
+  map<string, string> env = 4;
+  // Default: 30 seconds.
+  google.protobuf.Duration timeout = 5;
+  // Per stream; default 1 MiB. Output past it is dropped and reported.
+  int32 output_limit_bytes = 6;
+  // Relative to the workdir; default: the workdir.
+  string cwd = 7;
+}
+
+enum Outcome {
+  OUTCOME_UNSPECIFIED = 0;
+  // The command ran and exited; see exit_code.
+  OUTCOME_EXIT = 1;
+  // The policy refused something the command tried.
+  OUTCOME_DENIED = 2;
+  OUTCOME_TIMEOUT = 3;
+  // The sandbox itself broke. An infrastructure error, never scored.
+  OUTCOME_RUNNER_FAILURE = 4;
+}
+
+message ExecResult {
+  Outcome outcome = 1;
+  int32 exit_code = 2;
+  google.protobuf.Duration duration = 3;
+  bool truncated = 4;
+  // Policy denials recognized in the output, for example "Read-only file system".
+  repeated string denials = 5;
+  string error = 6;
+}
+
+message ExecResponse {
+  oneof event {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    ExecResult result = 3;
+  }
+}
+
+message File {
+  // Relative to the workdir, or absolute inside the sandbox's writable root.
+  string path = 1;
+  bytes content = 2;
+  // Unix permission bits; default 0644.
+  uint32 mode = 3;
+}
+
+message WriteFilesRequest {
+  string sandbox_id = 1;
+  repeated File files = 2;
+}
+
+message WriteFilesResponse {}
+
+message ReadFilesRequest {
+  string sandbox_id = 1;
+  // Files, or directories (read recursively).
+  repeated string paths = 2;
+  // Stop after this many bytes in total; default 16 MiB.
+  int64 max_bytes = 3;
+}
+
+message ReadFilesResponse {
+  repeated File files = 1;
+  // Paths that do not exist.
+  repeated string missing = 2;
+  bool truncated = 3;
+}
+
+message SnapshotRequest {
+  string sandbox_id = 1;
+}
+
+message SnapshotResponse {
+  string snapshot_id = 1;
+}
+
+message RestoreRequest {
+  string snapshot_id = 1;
+  // A different network policy for the restored sandbox, for example none
+  // after a setup step that downloaded packages.
+  NetworkPolicy network = 2;
+}
+
+message RestoreResponse {
+  string sandbox_id = 1;
+  evalsi.v1alpha1.IsolationReport isolation = 2;
+}
+
+message StatsRequest {
+  string sandbox_id = 1;
+}
+
+message EgressEvent {
+  google.protobuf.Timestamp time = 1;
+  string host = 2;
+  int32 port = 3;
+  bool allowed = 4;
+  int64 bytes_sent = 5;
+  int64 bytes_received = 6;
+}
+
+message StatsResponse {
+  int64 execs = 1;
+  google.protobuf.Duration cpu_time = 2;
+  int64 max_rss_bytes = 3;
+  repeated EgressEvent egress = 4;
+}
+
+message DestroyRequest {
+  string sandbox_id = 1;
+}
+
+message DestroyResponse {}
+
+message DeleteSnapshotRequest {
+  string snapshot_id = 1;
+}
+
+message DeleteSnapshotResponse {}

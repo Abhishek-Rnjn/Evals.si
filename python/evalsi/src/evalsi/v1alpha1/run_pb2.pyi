@@ -4,11 +4,13 @@ isort:skip_file
 """
 
 from collections import abc as _abc
+from evalsi.v1alpha1 import agent_pb2 as _agent_pb2
 from evalsi.v1alpha1 import evaluation_service_pb2 as _evaluation_service_pb2
 from evalsi.v1alpha1 import evaluator_pb2 as _evaluator_pb2
 from evalsi.v1alpha1 import record_pb2 as _record_pb2
 from evalsi.v1alpha1 import score_pb2 as _score_pb2
 from google.protobuf import descriptor as _descriptor
+from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import message as _message
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
@@ -94,6 +96,8 @@ class RunSpec(_message.Message):
     SUMMARY_FIELD_NUMBER: _builtins.int
     GATES_FIELD_NUMBER: _builtins.int
     BUDGET_FIELD_NUMBER: _builtins.int
+    HARNESS_FIELD_NUMBER: _builtins.int
+    ENVIRONMENT_FIELD_NUMBER: _builtins.int
     judge: _builtins.str
     """Judge name for judge evaluators; the server's default when empty."""
     trials: _builtins.int
@@ -116,6 +120,16 @@ class RunSpec(_message.Message):
 
     @_builtins.property
     def budget(self) -> Global___Budget: ...
+    @_builtins.property
+    def harness(self) -> _agent_pb2.Harness:
+        """Drives an agent through each record as a task (an agent run). Without
+        one, a target with an agent uses the built-in harness with defaults.
+        """
+
+    @_builtins.property
+    def environment(self) -> _agent_pb2.Environment:
+        """Where agent tasks run; records may override it in metadata["environment"]."""
+
     def __init__(
         self,
         *,
@@ -127,10 +141,12 @@ class RunSpec(_message.Message):
         summary: _evaluation_service_pb2.SummaryOptions | None = ...,
         gates: _abc.Iterable[Global___Gate] | None = ...,
         budget: Global___Budget | None = ...,
+        harness: _agent_pb2.Harness | None = ...,
+        environment: _agent_pb2.Environment | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "summary", b"summary", "target", b"target"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "harness", b"harness", "summary", b"summary", "target", b"target"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "evaluators", b"evaluators", "gates", b"gates", "judge", b"judge", "summary", b"summary", "target", b"target", "trials", b"trials"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "evaluators", b"evaluators", "gates", b"gates", "harness", b"harness", "judge", b"judge", "summary", b"summary", "target", b"target", "trials", b"trials"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RunSpec: _TypeAlias = RunSpec  # noqa: Y015
@@ -147,8 +163,11 @@ class Target(_message.Message):
     MAX_TOKENS_FIELD_NUMBER: _builtins.int
     TEMPERATURE_FIELD_NUMBER: _builtins.int
     EFFORT_FIELD_NUMBER: _builtins.int
+    AGENT_FIELD_NUMBER: _builtins.int
     connector: _builtins.str
-    """"openai-compatible" or "anthropic"."""
+    """"openai-compatible" or "anthropic". For an agent run without an agent
+    below, the model the built-in reference agent uses.
+    """
     model: _builtins.str
     base_url: _builtins.str
     """Required for openai-compatible, for example http://localhost:8000/v1."""
@@ -159,6 +178,10 @@ class Target(_message.Message):
     temperature: _builtins.float
     effort: _builtins.str
     """Anthropic only: output_config.effort."""
+    @_builtins.property
+    def agent(self) -> _agent_pb2.AgentTarget:
+        """A bring-your-own agent instead of a model."""
+
     def __init__(
         self,
         *,
@@ -170,10 +193,11 @@ class Target(_message.Message):
         max_tokens: _builtins.int = ...,
         temperature: _builtins.float | None = ...,
         effort: _builtins.str = ...,
+        agent: _agent_pb2.AgentTarget | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "temperature", b"temperature"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "temperature", b"temperature"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "api_key_env", b"api_key_env", "base_url", b"base_url", "connector", b"connector", "effort", b"effort", "max_tokens", b"max_tokens", "model", b"model", "system_prompt", b"system_prompt", "temperature", b"temperature"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "api_key_env", b"api_key_env", "base_url", b"base_url", "connector", b"connector", "effort", b"effort", "max_tokens", b"max_tokens", "model", b"model", "system_prompt", b"system_prompt", "temperature", b"temperature"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__temperature: _TypeAlias = _typing.Literal["temperature"]  # noqa: Y015
     _WhichOneofArgType__temperature: _TypeAlias = _typing.Literal["_temperature", b"_temperature"]  # noqa: Y015
@@ -205,6 +229,8 @@ class DatasetSource(_message.Message):
     INLINE_FIELD_NUMBER: _builtins.int
     PATH_FIELD_NUMBER: _builtins.int
     URI_FIELD_NUMBER: _builtins.int
+    TRACES_FIELD_NUMBER: _builtins.int
+    RUN_FIELD_NUMBER: _builtins.int
     MAPPING_FIELD_NUMBER: _builtins.int
     LIMIT_FIELD_NUMBER: _builtins.int
     path: _builtins.str
@@ -218,6 +244,19 @@ class DatasetSource(_message.Message):
     @_builtins.property
     def inline(self) -> Global___InlineRecords: ...
     @_builtins.property
+    def traces(self) -> Global___TraceQuery:
+        """Server only: stored production traces of the run's project, as
+        records with their recorded output and trajectory (shadow replay).
+        """
+
+    @_builtins.property
+    def run(self) -> Global___RunOutputs:
+        """Server only: the records an earlier run produced, with outputs,
+        trajectories and checks, to re-score with other evaluators without
+        running the target or agent again.
+        """
+
+    @_builtins.property
     def mapping(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
         """Record field -> source column, for example input -> question."""
 
@@ -227,18 +266,86 @@ class DatasetSource(_message.Message):
         inline: Global___InlineRecords | None = ...,
         path: _builtins.str = ...,
         uri: _builtins.str = ...,
+        traces: Global___TraceQuery | None = ...,
+        run: Global___RunOutputs | None = ...,
         mapping: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         limit: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["inline", b"inline", "path", b"path", "source", b"source", "uri", b"uri"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["inline", b"inline", "path", b"path", "run", b"run", "source", b"source", "traces", b"traces", "uri", b"uri"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["inline", b"inline", "limit", b"limit", "mapping", b"mapping", "path", b"path", "source", b"source", "uri", b"uri"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["inline", b"inline", "limit", b"limit", "mapping", b"mapping", "path", b"path", "run", b"run", "source", b"source", "traces", b"traces", "uri", b"uri"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_source: _TypeAlias = _typing.Literal["inline", "path", "uri"]  # noqa: Y015
+    _WhichOneofReturnType_source: _TypeAlias = _typing.Literal["inline", "path", "uri", "traces", "run"]  # noqa: Y015
     _WhichOneofArgType_source: _TypeAlias = _typing.Literal["source", b"source"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType_source) -> _WhichOneofReturnType_source | None: ...
 
 Global___DatasetSource: _TypeAlias = DatasetSource  # noqa: Y015
+
+@_typing.final
+class TraceQuery(_message.Message):
+    """TraceQuery selects stored traces. Records keep the trace's input, output
+    and trajectory; the trace id is the record id.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SERVICE_FIELD_NUMBER: _builtins.int
+    POLICY_FIELD_NUMBER: _builtins.int
+    FILTER_FIELD_NUMBER: _builtins.int
+    LOOKBACK_FIELD_NUMBER: _builtins.int
+    service: _builtins.str
+    """Only traces from this service."""
+    policy: _builtins.str
+    """Only traces this online policy evaluated."""
+    filter: _builtins.str
+    """A CEL condition, as in a policy selector: service, name, duration_ms,
+    error, steps, tools, models, labels, and scores (the policy's online
+    scores by metric, when policy is set).
+    """
+    @_builtins.property
+    def lookback(self) -> _duration_pb2.Duration:
+        """Only traces that started within this long before the run was created."""
+
+    def __init__(
+        self,
+        *,
+        service: _builtins.str = ...,
+        policy: _builtins.str = ...,
+        filter: _builtins.str = ...,
+        lookback: _duration_pb2.Duration | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["lookback", b"lookback"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["filter", b"filter", "lookback", b"lookback", "policy", b"policy", "service", b"service"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___TraceQuery: _TypeAlias = TraceQuery  # noqa: Y015
+
+@_typing.final
+class RunOutputs(_message.Message):
+    """RunOutputs names an earlier run's outputs."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RUN_ID_FIELD_NUMBER: _builtins.int
+    TRIAL_FIELD_NUMBER: _builtins.int
+    ALL_TRIALS_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
+    trial: _builtins.int
+    """Which trial; default 0."""
+    all_trials: _builtins.bool
+    """Every trial, as records "<id>#<trial>"."""
+    def __init__(
+        self,
+        *,
+        run_id: _builtins.str = ...,
+        trial: _builtins.int = ...,
+        all_trials: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["all_trials", b"all_trials", "run_id", b"run_id", "trial", b"trial"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___RunOutputs: _TypeAlias = RunOutputs  # noqa: Y015
 
 @_typing.final
 class InlineRecords(_message.Message):

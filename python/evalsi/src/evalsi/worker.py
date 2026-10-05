@@ -28,6 +28,7 @@ from evalsi.convert import (
     coerce_params,
     content_to_proto,
     from_struct,
+    isolation_to_proto,
     manifest_to_proto,
     record_from_proto,
     record_to_proto,
@@ -68,6 +69,11 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
         self.concurrency = concurrency
         self._judges: dict[str, JudgeClient] = {}
         self._targets: dict[TargetConfig, Target] = {}
+        # Agent-run harnesses by run, so a run's tasks share environment setups.
+        self._harnesses: dict[str, Any] = {}
+        self._sandboxes: Any = None
+        self._sandbox_lock = asyncio.Lock()
+        self._closing: set[asyncio.Future[None]] = set()
 
     async def Describe(self, request: pb.DescribeRequest, context: Context) -> pb.DescribeResponse:
         return pb.DescribeResponse(
@@ -159,6 +165,84 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
                 records=[record_to_proto(r) for r in records[start : start + 500]]
             )
 
+    async def RunTask(
+        self, request: pb.RunTaskRequest, context: Context
+    ) -> AsyncIterator[pb.RunTaskResponse]:
+        """One agent task through the spec's harness (evalsi-harness)."""
+        try:
+            from evalsi_harness import Task, TaskError, run_task
+            from evalsi_harness.service import event_to_proto
+        except ImportError:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                "agent runs need the harness on the worker: pip install evalsi-harness",
+            )
+            raise  # unreachable: abort raises
+        try:
+            harness = self._harness(request.run_id, request.spec)
+            task = Task.build(
+                request.spec,
+                record_from_proto(request.record),
+                trial=request.trial,
+                run_id=request.run_id,
+            )
+        except (TaskError, ValueError) as exc:
+            yield pb.RunTaskResponse(result=pb.TaskResult(error=str(exc)))
+            return
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        runner = asyncio.create_task(run_task(task, harness, on_event=queue.put_nowait))
+        runner.add_done_callback(lambda _: queue.put_nowait(None))
+        while (event := await queue.get()) is not None:
+            yield pb.RunTaskResponse(trajectory=event_to_proto(event))
+        outcome = await runner
+        if outcome.record is None:
+            yield pb.RunTaskResponse(result=pb.TaskResult(error=outcome.error))
+            return
+        record = record_to_proto(outcome.record)
+        isolation = outcome.record.metadata.get("isolation")
+        if isinstance(isolation, dict):
+            record.provenance.isolation.CopyFrom(isolation_to_proto(isolation))
+        yield pb.RunTaskResponse(result=pb.TaskResult(record=record))
+
+    def _harness(self, run_id: str, spec: Any) -> Any:
+        from evalsi_harness import HarnessContext, load_harness
+        from evalsi_harness.trust import Trust
+
+        harness = self._harnesses.get(run_id)
+        if harness is not None:
+            return harness
+        while len(self._harnesses) >= 8:
+            # Oldest first; its snapshots go with it.
+            oldest = next(iter(self._harnesses))
+            closing = asyncio.ensure_future(self._harnesses.pop(oldest).aclose())
+            self._closing.add(closing)
+            closing.add_done_callback(self._closing.discard)
+
+        def judge(name: str) -> JudgeClient:
+            name = name or spec.judge
+            if name not in self.judge_configs:
+                known = ", ".join(sorted(self.judge_configs)) or "none"
+                raise ValueError(
+                    f"unknown judge {name!r} for the user simulator; configured: {known}"
+                )
+            if name not in self._judges:
+                self._judges[name] = create_judge(self.judge_configs[name], cache=self.cache)
+            return self._judges[name]
+
+        ctx = HarnessContext(
+            sandboxes=self._sandbox_client, judge=judge, base_dir=Path("/"), trust=Trust.from_env()
+        )
+        harness = self._harnesses[run_id or "_"] = load_harness(spec, ctx)
+        return harness
+
+    async def _sandbox_client(self) -> Any:
+        async with self._sandbox_lock:
+            if self._sandboxes is None:
+                from evalsi.sandbox.client import connect
+
+                self._sandboxes = await connect()
+            return self._sandboxes
+
     async def _bind(self, name: str, params: Any, context: Context) -> BoundEvaluator:
         try:
             definition = self.registry.resolve(name)
@@ -185,6 +269,10 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
         return EvalContext(judge=self._judges[judge])
 
     async def aclose(self) -> None:
+        for harness in self._harnesses.values():
+            await harness.aclose()
+        if self._sandboxes is not None:
+            await self._sandboxes.aclose()
         for target in self._targets.values():
             await target.aclose()
         for client in self._judges.values():
@@ -224,6 +312,8 @@ async def serve(
     for name in ("", SERVICE_NAME):
         await health_servicer.set(name, health_pb2.HealthCheckResponse.SERVING)
     logger.info("evalsi worker listening on %s", listen)
+    # One line per model request would drown the worker's own log.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     if ready is not None:
         ready.set()
     try:

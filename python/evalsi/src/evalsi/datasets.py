@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from evalsi.types import Content, Record, Trajectory, Usage
+from evalsi.types import Content, Record, TaskCheck, Trajectory, Usage
 
 RECORD_FIELDS = (
     "id",
@@ -37,6 +37,7 @@ RECORD_FIELDS = (
     "usage",
     "metadata",
     "trajectory",
+    "check",
 )
 
 
@@ -99,6 +100,7 @@ def record_from_row(row: Mapping[str, Any], index: int, mapping: Mapping[str, st
     raw_metadata = take("metadata")
     metadata: dict[str, Any] = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
     raw_trajectory = take("trajectory")
+    raw_check = take("check")
     take("provenance")  # where a promoted trace came from; not needed for evaluation
     raw_id = take("id")
     record = Record(
@@ -112,6 +114,7 @@ def record_from_row(row: Mapping[str, Any], index: int, mapping: Mapping[str, st
         trajectory=Trajectory.from_dict(raw_trajectory)
         if isinstance(raw_trajectory, Mapping)
         else None,
+        check=TaskCheck.from_dict(raw_check) if isinstance(raw_check, Mapping) else None,
     )
     for key, value in row.items():
         if key not in consumed:

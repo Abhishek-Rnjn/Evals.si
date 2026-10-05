@@ -1,0 +1,28 @@
+[project]
+name = "evalsi-harness"
+dynamic = ["version"]
+description = "The light built-in agent harness for Evals.si: tool loop, MCP tools, sandboxes, user simulator, record and replay."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "evalsi[server]",
+    "httpx>=0.27",
+]
+
+[project.entry-points."evalsi.importers"]
+harbor = "evalsi_harness.benchmarks.harbor:load_harbor"
+terminal-bench = "evalsi_harness.benchmarks.harbor:load_terminal_bench"
+
+[project.urls]
+Repository = "https://github.com/abhishek-rnjn/evals.si"
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalsi_harness"]
+
+[tool.hatch.version]
+path = "src/evalsi_harness/_version.py"

@@ -50,6 +50,12 @@ const (
 	RunServiceListRunResultsProcedure = "/evalsi.v1alpha1.RunService/ListRunResults"
 	// RunServiceCompareRunsProcedure is the fully-qualified name of the RunService's CompareRuns RPC.
 	RunServiceCompareRunsProcedure = "/evalsi.v1alpha1.RunService/CompareRuns"
+	// RunServicePromoteResultsProcedure is the fully-qualified name of the RunService's PromoteResults
+	// RPC.
+	RunServicePromoteResultsProcedure = "/evalsi.v1alpha1.RunService/PromoteResults"
+	// RunServiceCreateShadowReplayProcedure is the fully-qualified name of the RunService's
+	// CreateShadowReplay RPC.
+	RunServiceCreateShadowReplayProcedure = "/evalsi.v1alpha1.RunService/CreateShadowReplay"
 )
 
 // RunServiceClient is a client for the evalsi.v1alpha1.RunService service.
@@ -65,6 +71,13 @@ type RunServiceClient interface {
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
+	// Appends a run's records that match a condition (failures, typically) to
+	// a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
+	PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error)
+	// Shadow replay: re-runs recorded inputs (production traces, a promoted
+	// dataset, an earlier run) against a candidate and scores the recorded
+	// outputs the same way, as two runs to compare with CompareRuns.
+	CreateShadowReplay(context.Context, *connect.Request[v1alpha1.CreateShadowReplayRequest]) (*connect.Response[v1alpha1.CreateShadowReplayResponse], error)
 }
 
 // NewRunServiceClient constructs a client for the evalsi.v1alpha1.RunService service. By default,
@@ -126,19 +139,33 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("CompareRuns")),
 			connect.WithClientOptions(opts...),
 		),
+		promoteResults: connect.NewClient[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse](
+			httpClient,
+			baseURL+RunServicePromoteResultsProcedure,
+			connect.WithSchema(runServiceMethods.ByName("PromoteResults")),
+			connect.WithClientOptions(opts...),
+		),
+		createShadowReplay: connect.NewClient[v1alpha1.CreateShadowReplayRequest, v1alpha1.CreateShadowReplayResponse](
+			httpClient,
+			baseURL+RunServiceCreateShadowReplayProcedure,
+			connect.WithSchema(runServiceMethods.ByName("CreateShadowReplay")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // runServiceClient implements RunServiceClient.
 type runServiceClient struct {
-	createRun      *connect.Client[v1alpha1.CreateRunRequest, v1alpha1.CreateRunResponse]
-	getRun         *connect.Client[v1alpha1.GetRunRequest, v1alpha1.GetRunResponse]
-	listRuns       *connect.Client[v1alpha1.ListRunsRequest, v1alpha1.ListRunsResponse]
-	watchRun       *connect.Client[v1alpha1.WatchRunRequest, v1alpha1.WatchRunResponse]
-	cancelRun      *connect.Client[v1alpha1.CancelRunRequest, v1alpha1.CancelRunResponse]
-	resumeRun      *connect.Client[v1alpha1.ResumeRunRequest, v1alpha1.ResumeRunResponse]
-	listRunResults *connect.Client[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse]
-	compareRuns    *connect.Client[v1alpha1.CompareRunsRequest, v1alpha1.CompareRunsResponse]
+	createRun          *connect.Client[v1alpha1.CreateRunRequest, v1alpha1.CreateRunResponse]
+	getRun             *connect.Client[v1alpha1.GetRunRequest, v1alpha1.GetRunResponse]
+	listRuns           *connect.Client[v1alpha1.ListRunsRequest, v1alpha1.ListRunsResponse]
+	watchRun           *connect.Client[v1alpha1.WatchRunRequest, v1alpha1.WatchRunResponse]
+	cancelRun          *connect.Client[v1alpha1.CancelRunRequest, v1alpha1.CancelRunResponse]
+	resumeRun          *connect.Client[v1alpha1.ResumeRunRequest, v1alpha1.ResumeRunResponse]
+	listRunResults     *connect.Client[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse]
+	compareRuns        *connect.Client[v1alpha1.CompareRunsRequest, v1alpha1.CompareRunsResponse]
+	promoteResults     *connect.Client[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse]
+	createShadowReplay *connect.Client[v1alpha1.CreateShadowReplayRequest, v1alpha1.CreateShadowReplayResponse]
 }
 
 // CreateRun calls evalsi.v1alpha1.RunService.CreateRun.
@@ -181,6 +208,16 @@ func (c *runServiceClient) CompareRuns(ctx context.Context, req *connect.Request
 	return c.compareRuns.CallUnary(ctx, req)
 }
 
+// PromoteResults calls evalsi.v1alpha1.RunService.PromoteResults.
+func (c *runServiceClient) PromoteResults(ctx context.Context, req *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error) {
+	return c.promoteResults.CallUnary(ctx, req)
+}
+
+// CreateShadowReplay calls evalsi.v1alpha1.RunService.CreateShadowReplay.
+func (c *runServiceClient) CreateShadowReplay(ctx context.Context, req *connect.Request[v1alpha1.CreateShadowReplayRequest]) (*connect.Response[v1alpha1.CreateShadowReplayResponse], error) {
+	return c.createShadowReplay.CallUnary(ctx, req)
+}
+
 // RunServiceHandler is an implementation of the evalsi.v1alpha1.RunService service.
 type RunServiceHandler interface {
 	CreateRun(context.Context, *connect.Request[v1alpha1.CreateRunRequest]) (*connect.Response[v1alpha1.CreateRunResponse], error)
@@ -194,6 +231,13 @@ type RunServiceHandler interface {
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
+	// Appends a run's records that match a condition (failures, typically) to
+	// a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
+	PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error)
+	// Shadow replay: re-runs recorded inputs (production traces, a promoted
+	// dataset, an earlier run) against a candidate and scores the recorded
+	// outputs the same way, as two runs to compare with CompareRuns.
+	CreateShadowReplay(context.Context, *connect.Request[v1alpha1.CreateShadowReplayRequest]) (*connect.Response[v1alpha1.CreateShadowReplayResponse], error)
 }
 
 // NewRunServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -251,6 +295,18 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("CompareRuns")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServicePromoteResultsHandler := connect.NewUnaryHandler(
+		RunServicePromoteResultsProcedure,
+		svc.PromoteResults,
+		connect.WithSchema(runServiceMethods.ByName("PromoteResults")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runServiceCreateShadowReplayHandler := connect.NewUnaryHandler(
+		RunServiceCreateShadowReplayProcedure,
+		svc.CreateShadowReplay,
+		connect.WithSchema(runServiceMethods.ByName("CreateShadowReplay")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/evalsi.v1alpha1.RunService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RunServiceCreateRunProcedure:
@@ -269,6 +325,10 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceListRunResultsHandler.ServeHTTP(w, r)
 		case RunServiceCompareRunsProcedure:
 			runServiceCompareRunsHandler.ServeHTTP(w, r)
+		case RunServicePromoteResultsProcedure:
+			runServicePromoteResultsHandler.ServeHTTP(w, r)
+		case RunServiceCreateShadowReplayProcedure:
+			runServiceCreateShadowReplayHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -308,4 +368,12 @@ func (UnimplementedRunServiceHandler) ListRunResults(context.Context, *connect.R
 
 func (UnimplementedRunServiceHandler) CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.CompareRuns is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.PromoteResults is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) CreateShadowReplay(context.Context, *connect.Request[v1alpha1.CreateShadowReplayRequest]) (*connect.Response[v1alpha1.CreateShadowReplayResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.CreateShadowReplay is not implemented"))
 }

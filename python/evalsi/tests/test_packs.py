@@ -310,6 +310,63 @@ def test_goal_completion_sees_the_trajectory() -> None:
     assert "It ships tomorrow" in prompt.split("<response>")[1]
 
 
+DIFF = """diff --git a/calc.py b/calc.py
+--- a/calc.py
++++ b/calc.py
+@@ -1,2 +1,2 @@
+ def add(a, b):
+-    return a - b
++    return a + b
+"""
+
+
+def review(**scores: int) -> dict[str, Any]:
+    return {
+        dim: {"reasoning": f"{dim} note", "score": scores.get(dim.replace("-", "_"), 5)}
+        for dim in agent.QUALITY_DIMENSIONS
+    }
+
+
+def test_code_quality_reviews_the_diff() -> None:
+    from evalsi.types import TaskCheck
+
+    ctx, judge = judged(review(scope=3, cleanliness=4))
+    record = Record(
+        id="1",
+        input=Content(text="Fix add."),
+        metadata={"diff": DIFF},
+        check=TaskCheck(passed=True, tests={"test_add": "passed"}),
+    )
+    scores = run(agent.code_quality, record, ctx)
+    assert scores["scope"].number == 0.5
+    assert scores["cleanliness"].number == 0.75
+    assert scores["correctness"].number == 1.0
+    assert scores["code-quality"].number == pytest.approx((4 + 0.5 + 0.75) / 6)
+    assert "weakest: scope (3/5)" in scores["code-quality"].explanation
+    assert not scores["mergeable"].passed
+    assert "scope 3/5" in scores["mergeable"].explanation
+    prompt = judge.prompts[0]
+    assert "+    return a + b" in prompt.split("<diff>")[1]
+    assert "passed: test_add" in prompt.split("<tests>")[1]
+    # Weights and the merge bar are parameters.
+    weighted = run(agent.code_quality, record, ctx, weights={"scope": 0}, merge_bar=3)
+    assert weighted["code-quality"].number == pytest.approx(4.75 / 5)
+    assert weighted["mergeable"].passed
+
+
+def test_code_quality_needs_a_diff_and_a_valid_review() -> None:
+    ctx, _ = judged(review())
+    with pytest.raises(SkipRecord, match="no diff"):
+        run(agent.code_quality, Record(id="1"), ctx)
+    with pytest.raises(SkipRecord, match="changed no files"):
+        run(agent.code_quality, Record(id="1", metadata={"diff": " \n"}), ctx)
+    with pytest.raises(ValueError, match="unknown code-quality dimensions"):
+        run(agent.code_quality, Record(id="1", metadata={"diff": DIFF}), ctx, weights={"x": 1})
+    bad, _ = judged({**review(), "tests": {"reasoning": "", "score": 9}})
+    with pytest.raises(JudgeError, match="invalid tests score"):
+        run(agent.code_quality, Record(id="1", metadata={"diff": DIFF}), bad)
+
+
 def test_promoted_trace_rows_load_with_trajectories() -> None:
     # The shape evalsid writes when it promotes a trace (protojson, proto names).
     row = {

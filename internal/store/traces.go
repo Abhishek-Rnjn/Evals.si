@@ -208,3 +208,82 @@ func (s *Store) Policies(ctx context.Context) ([]*evalsiv1alpha1.OnlineEvalPolic
 	}
 	return out, rows.Err()
 }
+
+// TraceQuery selects stored traces of one project, newest first.
+type TraceQuery struct {
+	Project string
+	Service string
+	// Only traces the policy evaluated.
+	Policy string
+	// Only traces that started at or after this time; zero means any.
+	Since time.Time
+	Limit int
+}
+
+// StoredTrace is a trace with its record and, when a policy was named, that
+// policy's results.
+type StoredTrace struct {
+	Summary *evalsiv1alpha1.TraceSummary
+	Record  *evalsiv1alpha1.Record
+	Results []*evalsiv1alpha1.EvaluationResult
+}
+
+// QueryTraces returns the traces a query selects.
+func (s *Store) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrace, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = -1
+	}
+	var since int64
+	if !q.Since.IsZero() {
+		since = q.Since.UnixNano()
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.trace_id, t.summary, t.record FROM traces t
+		WHERE t.project = ? AND (? = '' OR t.service = ?) AND t.start_ns >= ?
+		  AND (? = '' OR EXISTS (SELECT 1 FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id AND r.policy = ?))
+		ORDER BY t.start_ns DESC, t.trace_id LIMIT ?`,
+		q.Project, q.Service, q.Service, since, q.Policy, q.Policy, limit)
+	if err != nil {
+		return nil, err
+	}
+	var out []StoredTrace
+	for rows.Next() {
+		var id string
+		var sumBlob, recBlob []byte
+		if err := rows.Scan(&id, &sumBlob, &recBlob); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		st := StoredTrace{Summary: &evalsiv1alpha1.TraceSummary{}, Record: &evalsiv1alpha1.Record{}}
+		if err := proto.Unmarshal(sumBlob, st.Summary); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if err := proto.Unmarshal(recBlob, st.Record); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		st.Summary.Project = q.Project
+		out = append(out, st)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if q.Policy == "" {
+		return out, nil
+	}
+	for i := range out {
+		groups, err := s.TraceResults(ctx, q.Project, out[i].Summary.GetTraceId())
+		if err != nil {
+			return nil, err
+		}
+		for _, g := range groups {
+			if g.GetPolicy() == q.Policy {
+				out[i].Results = g.GetResults()
+			}
+		}
+	}
+	return out, nil
+}

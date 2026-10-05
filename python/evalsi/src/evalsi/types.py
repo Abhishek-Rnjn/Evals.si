@@ -295,6 +295,39 @@ class Trajectory:
 
 
 @dataclass
+class TaskCheck:
+    """How an agent run's environment checker graded the task's end state."""
+
+    passed: bool
+    score: float | None = None
+    details: str = ""
+    # Per-test outcomes, for example {"tests/test_x.py::test_a": "passed"}.
+    tests: dict[str, str] = field(default_factory=dict)
+    # Set when the checker itself could not run; the task is then not scored.
+    error: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> TaskCheck:
+        score = data.get("score")
+        return cls(
+            passed=bool(data.get("passed")),
+            score=None if score is None else float(score),
+            details=str(data.get("details", "")),
+            tests={str(k): str(v) for k, v in (data.get("tests") or {}).items()},
+            error=str(data.get("error", "")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"passed": self.passed}
+        if self.score is not None:
+            out["score"] = self.score
+        for key in ("details", "tests", "error"):
+            if getattr(self, key):
+                out[key] = getattr(self, key)
+        return out
+
+
+@dataclass
 class Record:
     """The unit every evaluator consumes."""
 
@@ -306,11 +339,15 @@ class Record:
     usage: Usage | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     trajectory: Trajectory | None = None
+    # Agent runs: the environment checker's verdict.
+    check: TaskCheck | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"id": self.id}
         if self.trajectory is not None:
             out["trajectory"] = self.trajectory.to_dict()
+        if self.check is not None:
+            out["check"] = self.check.to_dict()
         for name in ("input", "output", "reference"):
             value: Content | None = getattr(self, name)
             if value is not None:

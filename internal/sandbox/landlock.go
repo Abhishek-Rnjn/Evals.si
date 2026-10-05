@@ -34,16 +34,28 @@ func (d *landlockDriver) available() error {
 	return err
 }
 
-func (d *landlockDriver) spec(req *Request, ws string) (*launchSpec, Isolation, error) {
-	abi, err := abiVersion()
-	if err != nil {
-		return nil, Isolation{}, err
+func (d *landlockDriver) proxyNetwork() string { return "tcp" }
+
+func (d *landlockDriver) supports(sp *Spec) error {
+	if sp.Image != "" {
+		return errors.New("landlock shares the host's filesystem and cannot use an image root")
 	}
+	if sp.Network.Mode == NetworkAllowlist {
+		if abi, err := abiVersion(); err == nil && abi < 4 {
+			return fmt.Errorf("an allowlist needs Landlock TCP rules (ABI 4, Linux 6.7); this kernel has ABI %d", abi)
+		}
+	}
+	return nil
+}
+
+func (d *landlockDriver) isolation(b *hostBackend) Isolation {
+	abi, _ := abiVersion()
 	iso := Isolation{
 		Driver: d.name(), Level: d.level().String(), Enforcement: "full",
 		Notes: []string{
 			fmt.Sprintf("landlock ABI %d", abi),
 			"shares the host's PID and mount namespaces",
+			"workdir: " + b.work + " (paths cannot be remapped; see EVALSI_WORKDIR)",
 			"limits: rlimits (memory, file size), no cgroup or process cap",
 		},
 	}
@@ -52,30 +64,53 @@ func (d *landlockDriver) spec(req *Request, ws string) (*launchSpec, Isolation, 
 		iso.Enforcement = "partial"
 		iso.Notes = append(iso.Notes, "file truncation is not restricted (ABI < 3)")
 	}
+	switch b.sp.Network.Mode {
+	case NetworkAllow:
+		iso.Notes = append(iso.Notes, "network: allowed")
+	case NetworkAllowlist:
+		// Landlock rules name ports, not hosts: the proxy's port on any host is reachable.
+		iso.Enforcement = "partial"
+		iso.Notes = append(iso.Notes, "network: allowlist through the egress proxy; TCP connect is limited to the proxy's port, not its host")
+	}
+	return iso
+}
+
+func (d *landlockDriver) launch(b *hostBackend, e *Exec) (*launchSpec, error) {
+	sp := b.sp
 	rules := &landlockRules{
 		ReadDirs:   append(append([]string{}, systemDirs...), "/proc"),
 		ReadFiles:  append(append([]string{}, systemFiles...), "/dev/urandom", "/dev/random", "/dev/zero"),
 		WriteFiles: []string{"/dev/null"},
+		WriteDirs:  []string{b.tmp},
 	}
 	rules.ReadDirs = append(rules.ReadDirs, absPaths(d.cfg.ReadOnlyPaths)...)
-	if req.Mode == ModeReadOnly {
-		rules.ReadDirs = append(rules.ReadDirs, ws)
-		rules.WriteDirs = []string{filepath.Join(ws, ".tmp")}
+	if sp.Mode == ModeReadOnly {
+		rules.ReadDirs = append(rules.ReadDirs, b.work)
 	} else {
-		rules.WriteDirs = []string{ws}
+		rules.WriteDirs = append(rules.WriteDirs, b.work)
 	}
-	deny := req.Network != "allow"
-	rules.DenyTCP = deny
-	if !deny {
-		iso.Notes = append(iso.Notes, "network: allowed")
+	denyInet := true
+	switch sp.Network.Mode {
+	case NetworkAllow:
+		denyInet = false
+	case NetworkAllowlist:
+		denyInet = false
+		rules.DenyTCP = true
+		rules.ConnectPorts = []uint16{b.proxy.Port()}
+	default:
+		rules.DenyTCP = true
+	}
+	dir := b.work
+	if e.Cwd != "" {
+		dir = filepath.Join(b.work, filepath.FromSlash(e.Cwd))
 	}
 	spec := &launchSpec{
-		Argv: req.Command, Env: env(req, ws), Dir: ws, LookPath: true,
-		Landlock: rules, Seccomp: "apply", DenyInet: deny,
+		Argv: e.Command, Env: b.env(e, b.work, b.tmp), Dir: dir, LookPath: true,
+		Landlock: rules, Seccomp: "apply", DenyInet: denyInet,
 	}
-	limits(req, spec)
+	limits(&sp.Resources, spec)
 	// RLIMIT_NPROC counts every process of the (shared) uid here, so it would
 	// fail unrelated forks; only bwrap's user namespace gives a private count.
 	spec.MaxProcs = 0
-	return spec, iso, nil
+	return spec, nil
 }

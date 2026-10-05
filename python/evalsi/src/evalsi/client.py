@@ -133,6 +133,28 @@ class Client:
         comparisons: list[dict[str, Any]] = out.get("comparisons", [])
         return comparisons
 
+    def promote_results(
+        self, run_id: str, dataset: str, when: str, *, include_outputs: bool = False
+    ) -> dict[str, Any]:
+        body = {
+            "runId": run_id,
+            "dataset": dataset,
+            "when": when,
+            "includeOutputs": include_outputs,
+        }
+        return self.call("RunService", "PromoteResults", body)
+
+    def create_shadow_replay(
+        self,
+        spec: dict[str, Any],
+        *,
+        name: str = "",
+        project: str = "",
+        labels: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        body = {"name": name, "project": project, "candidate": spec, "labels": labels or {}}
+        return self.call("RunService", "CreateShadowReplay", body)
+
     # --- identity and access ---
 
     def auth_call(self, method: str, body: dict[str, Any] | None = None) -> dict[str, Any]:

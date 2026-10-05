@@ -1,0 +1,51 @@
+# An agent run with the built-in harness: a model works in a sandboxed git
+# checkout with bash/read_file/write_file, and a hidden checker grades the end
+# state. The same file runs embedded or on a server:
+#   evalsi run -f examples/agents/fix-calc.yaml \
+#     --judge-provider anthropic --judge-model claude-opus-5-5      # needs evalsid on PATH
+#   evalsi run -f examples/agents/fix-calc.yaml --server http://localhost:8080
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: fix-calc
+  project: quickstart
+spec:
+  target:
+    connector: anthropic
+    model: claude-opus-5-5
+  dataset:
+    path: fix-calc.jsonl
+  harness:
+    builtin:
+      max_steps: 20
+      budget: {usd: 0.50, wall_clock: 5m}
+      pricing: {input_per_mtok: 5, output_per_mtok: 25}
+  environment:
+    files:
+      calc.py: |
+        def add(a, b):
+            return a - b
+
+
+        def mul(a, b):
+            return a + b
+    setup:
+      - git init -q && git add -A && git -c user.email=e@x -c user.name=e commit -qm base
+    sandbox: {min_isolation: namespaced, network: deny}
+    checker:
+      # Written after the agent finishes, so the agent never sees it.
+      files:
+        test_hidden.py: |
+          from calc import add, mul
+          assert add(2, 3) == 5 and mul(2, 3) == 6
+      command: [python3, test_hidden.py]
+  evaluators:
+    - ref: task-success          # the checker's verdict; with trials, pass@k and pass^k
+    - ref: code-quality          # a judge reviews the agent's diff
+    - ref: policy-violations     # sandbox denials, refused egress, escalation requests
+    - ref: agent-efficiency
+  # code-quality needs a judge: --judge-* options (or EVALSI_JUDGE_*) when
+  # embedded; on a server its default judge, or one named with `judge:`.
+  trials: 3
+  gates:
+    - {metric: task-success.pass^3, min: 0.5}

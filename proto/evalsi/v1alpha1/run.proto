@@ -2,10 +2,12 @@ syntax = "proto3";
 
 package evalsi.v1alpha1;
 
+import "evalsi/v1alpha1/agent.proto";
 import "evalsi/v1alpha1/evaluation_service.proto";
 import "evalsi/v1alpha1/evaluator.proto";
 import "evalsi/v1alpha1/record.proto";
 import "evalsi/v1alpha1/score.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 // RunSpec is the "Run" door: execute a target over a dataset, then grade it.
@@ -24,10 +26,16 @@ message RunSpec {
   // All gates must pass for the run to succeed.
   repeated Gate gates = 7;
   Budget budget = 8;
+  // Drives an agent through each record as a task (an agent run). Without
+  // one, a target with an agent uses the built-in harness with defaults.
+  Harness harness = 9;
+  // Where agent tasks run; records may override it in metadata["environment"].
+  Environment environment = 10;
 }
 
 message Target {
-  // "openai-compatible" or "anthropic".
+  // "openai-compatible" or "anthropic". For an agent run without an agent
+  // below, the model the built-in reference agent uses.
   string connector = 1;
   string model = 2;
   // Required for openai-compatible, for example http://localhost:8000/v1.
@@ -39,6 +47,8 @@ message Target {
   optional double temperature = 7;
   // Anthropic only: output_config.effort.
   string effort = 8;
+  // A bring-your-own agent instead of a model.
+  AgentTarget agent = 9;
 }
 
 message DatasetSource {
@@ -49,11 +59,42 @@ message DatasetSource {
     string path = 2;
     // For example hf://openai/gsm8k?config=main&split=test.
     string uri = 3;
+    // Server only: stored production traces of the run's project, as
+    // records with their recorded output and trajectory (shadow replay).
+    TraceQuery traces = 6;
+    // Server only: the records an earlier run produced, with outputs,
+    // trajectories and checks, to re-score with other evaluators without
+    // running the target or agent again.
+    RunOutputs run = 7;
   }
   // Record field -> source column, for example input -> question.
   map<string, string> mapping = 4;
   // Use only the first N records; 0 means all.
   int32 limit = 5;
+}
+
+// TraceQuery selects stored traces. Records keep the trace's input, output
+// and trajectory; the trace id is the record id.
+message TraceQuery {
+  // Only traces from this service.
+  string service = 1;
+  // Only traces this online policy evaluated.
+  string policy = 2;
+  // A CEL condition, as in a policy selector: service, name, duration_ms,
+  // error, steps, tools, models, labels, and scores (the policy's online
+  // scores by metric, when policy is set).
+  string filter = 3;
+  // Only traces that started within this long before the run was created.
+  google.protobuf.Duration lookback = 4;
+}
+
+// RunOutputs names an earlier run's outputs.
+message RunOutputs {
+  string run_id = 1;
+  // Which trial; default 0.
+  int32 trial = 2;
+  // Every trial, as records "<id>#<trial>".
+  bool all_trials = 3;
 }
 
 message InlineRecords {

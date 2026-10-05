@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
@@ -48,6 +50,10 @@ func (f *fakeWorker) Reduce(context.Context, *pluginv1alpha1.ReduceRequest) (*pl
 func (f *fakeWorker) Generate(context.Context, *pluginv1alpha1.GenerateRequest) (*pluginv1alpha1.GenerateResponse, error) {
 	return nil, fmt.Errorf("unused")
 }
+func (f *fakeWorker) RunTask(context.Context, *pluginv1alpha1.RunTaskRequest, func(*harnessv1alpha1.TrajectoryEvent)) (*pluginv1alpha1.TaskResult, error) {
+	return nil, errors.New("no agent runs here")
+}
+
 func (f *fakeWorker) LoadDataset(context.Context, *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error) {
 	return nil, fmt.Errorf("unused")
 }
@@ -253,7 +259,7 @@ func TestPolicyPipeline(t *testing.T) {
 	}
 
 	// Promoted traces form a dataset the Python loader understands.
-	raw, err := os.ReadFile(filepath.Join(h.dir, "promoted", "support-regressions.jsonl"))
+	raw, err := os.ReadFile(filepath.Join(h.dir, "promoted", "default", "support-regressions.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}

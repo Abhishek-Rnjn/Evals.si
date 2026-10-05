@@ -30,15 +30,56 @@ func EvaluateResource(refs []*evalsiv1alpha1.EvaluatorRef, judge string, records
 	}
 }
 
-// SpecResource describes a run spec and its labels.
+// AgentRun reports whether a spec drives an agent through tasks.
+func AgentRun(spec *evalsiv1alpha1.RunSpec) bool {
+	return spec.GetHarness() != nil || spec.GetTarget().GetAgent() != nil
+}
+
+// agentResource describes an agent run: which agent, which harness and the
+// environment's sandbox, for rules such as resource.agent.network == "deny".
+func agentResource(spec *evalsiv1alpha1.RunSpec) map[string]any {
+	if !AgentRun(spec) {
+		return map[string]any{"kind": "", "harness": "", "image": "", "network": "", "min_isolation": ""}
+	}
+	kind := "builtin"
+	switch a := spec.GetTarget().GetAgent(); {
+	case a.GetA2A() != nil:
+		kind = "a2a"
+	case a.GetMcp() != nil:
+		kind = "mcp"
+	case a.GetResponses() != nil:
+		kind = "responses"
+	case a.GetHttp() != nil:
+		kind = "http"
+	case a.GetCli() != nil:
+		kind = "cli"
+	}
+	harness := "builtin"
+	if spec.GetHarness().GetExternal() != nil {
+		harness = "external"
+	}
+	env := spec.GetEnvironment()
+	network := env.GetSandbox().GetNetwork()
+	if network == "" {
+		network = "deny"
+	}
+	return map[string]any{
+		"kind": kind, "harness": harness, "image": env.GetImage(), "network": network,
+		"min_isolation": env.GetSandbox().GetMinIsolation(),
+	}
+}
+
+// SpecResource describes a run spec and its labels. Agent runs always run
+// code (the agent's commands, in the sandbox).
 func SpecResource(spec *evalsiv1alpha1.RunSpec, labels map[string]string, runsCode RunsCode) map[string]any {
 	t := spec.GetTarget()
 	ds := spec.GetDataset()
 	return map[string]any{
 		"target":     map[string]any{"connector": t.GetConnector(), "model": t.GetModel(), "base_url": t.GetBaseUrl()},
+		"agent":      agentResource(spec),
 		"judge":      spec.GetJudge(),
 		"evaluators": evaluatorRefs(spec.GetEvaluators()),
-		"runs_code":  runsCode != nil && runsCode(spec.GetEvaluators()),
+		"runs_code":  AgentRun(spec) || runsCode != nil && runsCode(spec.GetEvaluators()),
 		"dataset":    map[string]any{"path": ds.GetPath(), "uri": ds.GetUri(), "inline": ds.GetInline() != nil},
 		"trials":     int64(spec.GetTrials()),
 		"budget": map[string]any{

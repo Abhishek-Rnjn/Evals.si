@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
@@ -32,6 +34,9 @@ type target struct {
 	resource map[string]any
 	// For the audit log, for example "run/3f2a".
 	name string
+	// A different action than the rule's, for a resource the call only
+	// reads (the traces or the earlier run a new run's dataset comes from).
+	action string
 }
 
 // accessRule says how one RPC is authorized.
@@ -91,11 +96,25 @@ func (g *gate) accessRules() map[string]accessRule {
 
 		evalsiv1alpha1connect.RunServiceCreateRunProcedure: {action: "runs.create", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.CreateRunRequest)
-			project, err := g.project(m.GetProject())
+			return g.newRunTargets(ctx, m.GetProject(), m.GetSpec(), m.GetLabels(), "run/new")
+		}},
+		evalsiv1alpha1connect.RunServiceCreateShadowReplayProcedure: {action: "runs.create", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.CreateShadowReplayRequest)
+			return g.newRunTargets(ctx, m.GetProject(), m.GetCandidate(), m.GetLabels(), "shadow/new")
+		}},
+		evalsiv1alpha1connect.RunServicePromoteResultsProcedure: {action: "datasets.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.PromoteResultsRequest)
+			ts, err := g.runTargets(ctx, m.GetRunId())
 			if err != nil {
 				return nil, err
 			}
-			return []target{{project: project, resource: authz.SpecResource(m.GetSpec(), m.GetLabels(), g.runsCode), name: "run/new"}}, nil
+			for _, t := range ts {
+				ts = append(ts, target{project: t.project, resource: t.resource, name: t.name, action: "runs.read"})
+				if t.resource != nil {
+					t.resource["dataset"] = map[string]any{"name": m.GetDataset()}
+				}
+			}
+			return ts, nil
 		}},
 		evalsiv1alpha1connect.RunServiceGetRunProcedure: {action: "runs.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.runTargets(ctx, msg.(*evalsiv1alpha1.GetRunRequest).GetId())
@@ -190,6 +209,19 @@ func (g *gate) evaluateTarget(project string, refs []*evalsiv1alpha1.EvaluatorRe
 		return nil, err
 	}
 	return []target{{project: project, resource: authz.EvaluateResource(refs, judge, records, g.runsCode), name: "evaluation"}}, nil
+}
+
+// newRunTargets is a new run in a project plus what its dataset reads.
+func (g *gate) newRunTargets(ctx context.Context, project string, spec *evalsiv1alpha1.RunSpec, labels map[string]string, name string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	extra, err := g.datasetTargets(ctx, project, spec.GetDataset())
+	if err != nil {
+		return nil, err
+	}
+	return append([]target{{project: project, resource: authz.SpecResource(spec, labels, g.runsCode), name: name}}, extra...), nil
 }
 
 // runTargets loads runs. An unknown run becomes a target in no project,
@@ -389,11 +421,41 @@ func (g *gate) check(ctx context.Context, chk *authz.Checker, procedure string, 
 		}
 	}
 	for _, t := range targets {
-		if d := g.decide(ctx, chk, rule.action, t, perm.Audited && !rule.serviceAudits); !d.Allowed {
-			return permissionDenied(rule.action, t)
+		action, audited := rule.action, perm.Audited && !rule.serviceAudits
+		if t.action != "" {
+			p, _ := authz.Lookup(t.action)
+			action, audited = t.action, p.Audited
+		}
+		if d := g.decide(ctx, chk, action, t, audited); !d.Allowed {
+			return permissionDenied(action, t)
 		}
 	}
 	return nil
+}
+
+// datasetTargets are what a run's dataset reads beyond the run itself: the
+// project's traces, an earlier run, or a dataset promoted from another project.
+func (g *gate) datasetTargets(ctx context.Context, project string, src *evalsiv1alpha1.DatasetSource) ([]target, error) {
+	switch s := src.GetSource().(type) {
+	case *evalsiv1alpha1.DatasetSource_Traces:
+		return []target{{project: project, name: "traces/" + project, action: "traces.read",
+			resource: map[string]any{"traces": map[string]any{"service": s.Traces.GetService(), "policy": s.Traces.GetPolicy()}}}}, nil
+	case *evalsiv1alpha1.DatasetSource_Run:
+		ts, err := g.runTargets(ctx, s.Run.GetRunId())
+		for i := range ts {
+			ts[i].action = "runs.read"
+		}
+		return ts, err
+	}
+	path := src.GetPath()
+	if uri := src.GetUri(); uri != "" {
+		_, rest, _ := strings.Cut(uri, "://")
+		path, _, _ = strings.Cut(rest, "?")
+	}
+	if from := datasets.ProjectOf(path); from != "" && from != project {
+		return []target{{project: from, name: "dataset/" + path, action: "runs.read", resource: map[string]any{"dataset": map[string]any{"path": path}}}}, nil
+	}
+	return nil, nil
 }
 
 func projectNames(e *authz.Engine) []string {

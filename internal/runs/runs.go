@@ -44,7 +44,10 @@ type Options struct {
 	// Runs executing at once; others wait in PENDING.
 	MaxConcurrent int
 	Evaluate      config.Evaluate
-	Logger        *slog.Logger
+	Agents        config.Agents
+	// Online scores of a policy's stored results, for trace datasets.
+	TraceScores func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64
+	Logger      *slog.Logger
 	// Called with a copy of each run that reaches a final status (for sinks); must not block.
 	OnFinished func(*evalsiv1alpha1.Run)
 }
@@ -155,7 +158,11 @@ func (m *Manager) validate(spec *evalsiv1alpha1.RunSpec) ([]evaluation.Instance,
 	if spec.GetTrials() < 0 {
 		return nil, invalid("spec.trials cannot be negative")
 	}
-	if t := spec.GetTarget(); t != nil {
+	if authz.AgentRun(spec) {
+		if err := m.validateAgent(spec); err != nil {
+			return nil, err
+		}
+	} else if t := spec.GetTarget(); t != nil {
 		switch {
 		case t.GetConnector() != "openai-compatible" && t.GetConnector() != "anthropic":
 			return nil, invalid("spec.target.connector must be openai-compatible or anthropic")
@@ -220,11 +227,23 @@ func (m *Manager) resolveURI(uri string) (string, error) {
 	return out, nil
 }
 
-func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSource) ([]*evalsiv1alpha1.Record, error) {
+func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSource, project string) ([]*evalsiv1alpha1.Record, error) {
 	var records []*evalsiv1alpha1.Record
+	var err error
 	switch s := src.GetSource().(type) {
 	case *evalsiv1alpha1.DatasetSource_Inline:
 		records = s.Inline.GetRecords()
+		if n := int(src.GetLimit()); n > 0 && n < len(records) {
+			records = records[:n]
+		}
+	case *evalsiv1alpha1.DatasetSource_Traces:
+		if records, err = m.traceRecords(ctx, s.Traces, project, int(src.GetLimit())); err != nil {
+			return nil, err
+		}
+	case *evalsiv1alpha1.DatasetSource_Run:
+		if records, err = m.runRecords(ctx, s.Run); err != nil {
+			return nil, err
+		}
 		if n := int(src.GetLimit()); n > 0 && n < len(records) {
 			records = records[:n]
 		}
@@ -244,7 +263,6 @@ func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSo
 			}
 			req.Source = &evalsiv1alpha1.DatasetSource_Uri{Uri: uri}
 		}
-		var err error
 		records, err = m.worker.LoadDataset(ctx, &pluginv1alpha1.LoadDatasetRequest{Source: req})
 		if err != nil {
 			code := connect.CodeOf(err)
@@ -287,10 +305,16 @@ func totalTasks(spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, recor
 			perTrial += records
 		}
 	}
-	if spec.GetTarget() != nil {
+	if generates(spec) {
 		perTrial += records
 	}
 	return int64(perTrial * trialsOf(spec))
+}
+
+// generates reports whether the run produces outputs: a target answers the
+// records, or an agent works through them as tasks.
+func generates(spec *evalsiv1alpha1.RunSpec) bool {
+	return spec.GetTarget() != nil || authz.AgentRun(spec)
 }
 
 // DefaultProject holds runs that name no project.
@@ -303,24 +327,30 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 	if err != nil {
 		return nil, err
 	}
-	records, err := m.loadDataset(ctx, spec.GetDataset())
+	project := projectOr(req.Msg.GetProject())
+	records, err := m.loadDataset(ctx, spec.GetDataset(), project)
 	if err != nil {
 		return nil, err
 	}
+	run, err := m.createRun(ctx, req.Msg.GetName(), project, req.Msg.GetLabels(), spec, insts, records)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{Run: run}), nil
+}
+
+// createRun stores a validated run over a dataset snapshot and starts it.
+func (m *Manager) createRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record) (*evalsiv1alpha1.Run, error) {
 	stored := proto.Clone(spec).(*evalsiv1alpha1.RunSpec)
 	if stored.GetDataset().GetInline() != nil {
 		// The records live in the snapshot; keep the stored spec small.
 		stored.Dataset.Source = &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{}}
 	}
-	project := req.Msg.GetProject()
-	if project == "" {
-		project = DefaultProject
-	}
 	run := &evalsiv1alpha1.Run{
 		Id:            newID(),
-		Name:          req.Msg.GetName(),
+		Name:          name,
 		Project:       project,
-		Labels:        req.Msg.GetLabels(),
+		Labels:        labels,
 		CreatedBy:     auth.PrincipalFrom(ctx).ID(),
 		Spec:          stored,
 		Status:        evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING,
@@ -333,7 +363,7 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 		return nil, err
 	}
 	m.start(run)
-	return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{Run: run}), nil
+	return run, nil
 }
 
 func (m *Manager) start(run *evalsiv1alpha1.Run) {
@@ -484,7 +514,7 @@ func (m *Manager) prepare(ctx context.Context, run *evalsiv1alpha1.Run, a *activ
 	ex := &execution{m: m, a: a, run: run, spec: run.GetSpec(), insts: insts, records: records, outputs: outputs, keys: keys}
 	// Recount progress and spend from what is already stored (resume).
 	done := int64(len(keys))
-	if run.GetSpec().GetTarget() != nil {
+	if generates(run.GetSpec()) {
 		done += int64(len(outputs))
 	}
 	run.Progress = &evalsiv1alpha1.Progress{Total: totalTasks(run.GetSpec(), insts, len(records)), Done: done}
@@ -553,6 +583,9 @@ func (ex *execution) runTrials(ctx context.Context) error {
 
 // generate asks the target to answer every record that has no output for this trial yet.
 func (ex *execution) generate(ctx context.Context, trial int) error {
+	if authz.AgentRun(ex.spec) {
+		return ex.runTasks(ctx, trial)
+	}
 	target := ex.spec.GetTarget()
 	if target == nil {
 		return nil
@@ -627,7 +660,7 @@ func (ex *execution) evaluate(ctx context.Context, trial int) error {
 	var failed []store.Result
 	recordFor := map[int]*evalsiv1alpha1.Record{}
 	for i, rec := range ex.records {
-		if ex.spec.GetTarget() == nil {
+		if !generates(ex.spec) {
 			recordFor[i] = rec
 			graded = append(graded, i)
 			continue
@@ -974,4 +1007,58 @@ func (m *Manager) ListRunResults(ctx context.Context, req *connect.Request[evals
 		}
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// runTasks drives the agent through every record that has no output for this
+// trial yet, as tasks in the worker's harness. Each finished task is stored
+// at once, so a resumed run only repeats the tasks that were in flight.
+func (ex *execution) runTasks(ctx context.Context, trial int) error {
+	spec, err := ex.m.workerSpec(ex.spec)
+	if err != nil {
+		return err
+	}
+	var missing []int
+	for i := range ex.records {
+		if _, ok := ex.outputs[[2]int{i, trial}]; !ok {
+			missing = append(missing, i)
+		}
+	}
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(ex.m.opts.Evaluate.Parallelism)
+	for _, i := range missing {
+		g.Go(func() error {
+			res, err := ex.m.worker.RunTask(gctx, &pluginv1alpha1.RunTaskRequest{
+				Spec: spec, Record: ex.records[i], Trial: int32(trial), RunId: ex.run.GetId(),
+			}, nil)
+			if err != nil {
+				return fmt.Errorf("agent task %s: %w", ex.records[i].GetId(), err)
+			}
+			out := store.Output{RecordIdx: i, Trial: trial, Error: res.GetError()}
+			if rec := res.GetRecord(); rec != nil && res.GetError() == "" {
+				iso := rec.GetProvenance().GetIsolation()
+				rec.Provenance = &evalsiv1alpha1.Provenance{
+					Source: &evalsiv1alpha1.Provenance_Run{Run: &evalsiv1alpha1.RunProvenance{
+						RunId: ex.run.GetId(), TaskId: rec.GetId(), Trial: int32(trial),
+					}},
+					Isolation: iso,
+				}
+				out.Record = rec
+			} else if out.Error == "" {
+				out.Error = "the worker returned no record"
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if err := ex.m.store.PutOutputs(gctx, ex.run.GetId(), []store.Output{out}); err != nil {
+				return err
+			}
+			ex.outputs[[2]int{i, trial}] = out
+			addUsage(ex.run.TargetUsage, out.Record.GetUsage())
+			if err := ex.progress(gctx, 1); err != nil {
+				return err
+			}
+			return ex.checkBudget()
+		})
+	}
+	return g.Wait()
 }

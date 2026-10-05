@@ -17,6 +17,7 @@ A spec file looks like a Kubernetes object; ``spec`` is the
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +25,7 @@ from typing import Any
 
 import yaml
 from google.protobuf import json_format
+from google.protobuf.descriptor import Descriptor
 
 from evalsi.results import MetricSummary
 from evalsi.v1alpha1 import run_pb2
@@ -47,6 +49,43 @@ class RunFile:
     labels: dict[str, str] = field(default_factory=dict)
 
 
+_DURATION = re.compile(r"^(\d+(?:\.\d+)?)(ms|s|m|h)$")
+
+
+def _duration(value: Any) -> Any:
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return f"{value}s"
+    if isinstance(value, str) and (m := _DURATION.match(value.strip())):
+        scale = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}[m.group(2)]
+        return f"{float(m.group(1)) * scale:g}s"
+    return value
+
+
+def normalize_durations(value: Any, descriptor: Descriptor) -> Any:
+    """Specs may write durations as 250ms, 30s, 10m or 1.5h (or a number of
+    seconds); protobuf JSON only takes seconds, so they are converted here."""
+    if not isinstance(value, Mapping):
+        return value
+    out: dict[str, Any] = {}
+    fields = {f.name: f for f in descriptor.fields}
+    fields.update({f.json_name: f for f in descriptor.fields})
+    for key, item in value.items():
+        field_desc = fields.get(key)
+        if field_desc is None or field_desc.message_type is None:
+            out[key] = item
+            continue
+        sub = field_desc.message_type
+        if sub.full_name == "google.protobuf.Duration":
+            out[key] = _duration(item)
+        elif field_desc.is_repeated and isinstance(item, list):
+            out[key] = [normalize_durations(i, sub) for i in item]
+        elif sub.GetOptions().map_entry:
+            out[key] = item
+        else:
+            out[key] = normalize_durations(item, sub)
+    return out
+
+
 def parse_spec(document: Mapping[str, Any], base_dir: Path | None = None) -> RunFile:
     if document.get("apiVersion") not in (None, API_VERSION):
         raise SpecError(f"apiVersion must be {API_VERSION}, not {document.get('apiVersion')!r}")
@@ -57,7 +96,9 @@ def parse_spec(document: Mapping[str, Any], base_dir: Path | None = None) -> Run
     if not isinstance(body, Mapping):
         raise SpecError("the document needs a 'spec' mapping")
     try:
-        spec = json_format.ParseDict(dict(body), run_pb2.RunSpec())
+        spec = json_format.ParseDict(
+            normalize_durations(body, run_pb2.RunSpec.DESCRIPTOR), run_pb2.RunSpec()
+        )
     except json_format.ParseError as exc:
         raise SpecError(f"invalid spec: {exc}") from exc
     validate(spec)
@@ -88,11 +129,14 @@ def validate(spec: run_pb2.RunSpec) -> None:
     if not spec.evaluators:
         raise SpecError("spec.evaluators must list at least one evaluator")
     if spec.dataset.WhichOneof("source") is None:
-        raise SpecError("spec.dataset needs one of inline, path or uri")
+        raise SpecError("spec.dataset needs one of inline, path, uri, traces or run")
     if spec.trials < 0:
         raise SpecError("spec.trials cannot be negative")
-    if spec.trials > 1 and not spec.HasField("target"):
+    agent_run = spec.HasField("harness") or spec.target.HasField("agent")
+    if spec.trials > 1 and not spec.HasField("target") and not agent_run:
         raise SpecError("spec.trials above 1 needs a target; without one every trial is identical")
+    if spec.HasField("target") and not agent_run and not spec.target.model:
+        raise SpecError("spec.target needs a model (or an agent)")
     for gate in spec.gates:
         if not gate.metric:
             raise SpecError("every gate needs a metric")

@@ -431,3 +431,130 @@ class CompareRunsResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CompareRunsResponse: _TypeAlias = CompareRunsResponse  # noqa: Y015
+
+@_typing.final
+class PromoteResultsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RUN_ID_FIELD_NUMBER: _builtins.int
+    DATASET_FIELD_NUMBER: _builtins.int
+    WHEN_FIELD_NUMBER: _builtins.int
+    INCLUDE_OUTPUTS_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
+    dataset: _builtins.str
+    """Lowercase letters, digits, '.', '_' or '-'."""
+    when: _builtins.str
+    """A CEL condition per record and trial over scores (metric -> value;
+    pass/fail as 1 or 0), errored (an evaluation errored), trial, and
+    record.id and record.metadata. For example: scores["task-success"] < 1.
+    """
+    include_outputs: _builtins.bool
+    """Also keep the run's output, trajectory and check (for re-scoring and
+    shadow baselines); without it, only what the target or agent needs.
+    """
+    def __init__(
+        self,
+        *,
+        run_id: _builtins.str = ...,
+        dataset: _builtins.str = ...,
+        when: _builtins.str = ...,
+        include_outputs: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["dataset", b"dataset", "include_outputs", b"include_outputs", "run_id", b"run_id", "when", b"when"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___PromoteResultsRequest: _TypeAlias = PromoteResultsRequest  # noqa: Y015
+
+@_typing.final
+class PromoteResultsResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROMOTED_FIELD_NUMBER: _builtins.int
+    PATH_FIELD_NUMBER: _builtins.int
+    promoted: _builtins.int
+    path: _builtins.str
+    """Relative to datasets_dir, usable as a dataset path in run specs."""
+    def __init__(
+        self,
+        *,
+        promoted: _builtins.int = ...,
+        path: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["path", b"path", "promoted", b"promoted"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___PromoteResultsResponse: _TypeAlias = PromoteResultsResponse  # noqa: Y015
+
+@_typing.final
+class CreateShadowReplayRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class LabelsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    NAME_FIELD_NUMBER: _builtins.int
+    PROJECT_FIELD_NUMBER: _builtins.int
+    CANDIDATE_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    project: _builtins.str
+    @_builtins.property
+    def candidate(self) -> _run_pb2.RunSpec:
+        """The candidate: a target or agent, its dataset (records with recorded
+        outputs) and evaluators. The baseline run scores the recorded outputs
+        with the same evaluators; gates apply to the candidate.
+        """
+
+    @_builtins.property
+    def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        project: _builtins.str = ...,
+        candidate: _run_pb2.RunSpec | None = ...,
+        labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["candidate", b"candidate"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["candidate", b"candidate", "labels", b"labels", "name", b"name", "project", b"project"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___CreateShadowReplayRequest: _TypeAlias = CreateShadowReplayRequest  # noqa: Y015
+
+@_typing.final
+class CreateShadowReplayResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    BASELINE_FIELD_NUMBER: _builtins.int
+    CANDIDATE_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def baseline(self) -> _run_pb2.Run: ...
+    @_builtins.property
+    def candidate(self) -> _run_pb2.Run: ...
+    def __init__(
+        self,
+        *,
+        baseline: _run_pb2.Run | None = ...,
+        candidate: _run_pb2.Run | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["baseline", b"baseline", "candidate", b"candidate"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["baseline", b"baseline", "candidate", b"candidate"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___CreateShadowReplayResponse: _TypeAlias = CreateShadowReplayResponse  # noqa: Y015

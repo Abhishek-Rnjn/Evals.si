@@ -1,0 +1,37 @@
+# The Phase 3 exit criterion: SWE-bench Verified instances with a
+# bring-your-own CLI agent, in the strongest sandbox rung on the host
+# (Firecracker with KVM, otherwise bubblewrap); grading is the swebench
+# package's own, so it is identical on every rung.
+#
+# The worker needs the SWE-bench adapter (python/adapters/swebench). Put
+# Verified's test.parquet under the server's datasets_dir, for example
+# datasets_dir/swebench-verified/test.parquet, then:
+#   evalsi run -f examples/agents/swebench-verified.yaml --server http://localhost:8080
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: swebench-verified-subset
+spec:
+  target:
+    agent:
+      cli:
+        # Your agent, run inside the instance's image in /testbed. It gets the
+        # issue on stdin; EVALSI_WORKDIR names the working directory.
+        command: [sh, -c, "my-coding-agent --non-interactive"]
+        install: ["pip install my-coding-agent"]
+        env_from: {MY_AGENT_API_KEY: MY_AGENT_API_KEY}
+        allow_hosts: [api.example.com]
+        timeout: 30m
+  environment:
+    # Merged under each instance's environment: `install` runs during setup
+    # (once, then snapshotted), which needs the network; the agent itself only
+    # reaches allow_hosts.
+    setup_network: allow
+  dataset:
+    uri: "swebench://swebench-verified?split=test&instances=django__django-11099,astropy__astropy-12907,sympy__sympy-20590"
+  evaluators:
+    - ref: task-success          # resolved per the official FAIL_TO_PASS / PASS_TO_PASS rule
+    - ref: policy-violations
+  trials: 1
+  gates:
+    - {metric: task-success, min: 0.3}

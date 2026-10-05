@@ -14,9 +14,11 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
@@ -31,6 +33,7 @@ import (
 // released or cancelled; test/count counts records.
 type fakeWorker struct {
 	generateCalls atomic.Int64
+	taskCalls     atomic.Int64
 	evaluateCalls atomic.Int64
 	judgeTokens   int64
 	mu            sync.Mutex
@@ -72,6 +75,24 @@ func (f *fakeWorker) Generate(_ context.Context, req *pluginv1alpha1.GenerateReq
 	return resp, nil
 }
 
+// RunTask: "pass" tasks pass the checker, "fail" ones do not, "flaky" ones
+// pass on even trials, and "crash" ones cannot run (an infrastructure error).
+func (f *fakeWorker) RunTask(_ context.Context, req *pluginv1alpha1.RunTaskRequest, _ func(*harnessv1alpha1.TrajectoryEvent)) (*pluginv1alpha1.TaskResult, error) {
+	f.taskCalls.Add(1)
+	rec := proto.Clone(req.GetRecord()).(*evalsiv1alpha1.Record)
+	in := rec.GetInput().GetText()
+	if in == "crash" {
+		return &pluginv1alpha1.TaskResult{Error: "environment setup failed"}, nil
+	}
+	passed := in == "pass" || in == "flaky" && req.GetTrial()%2 == 0
+	rec.Output = text("done")
+	rec.Usage = &evalsiv1alpha1.Usage{InputTokens: proto.Int64(100), OutputTokens: proto.Int64(10)}
+	rec.Check = &evalsiv1alpha1.TaskCheck{Passed: passed}
+	rec.Trajectory = &evalsiv1alpha1.Trajectory{Steps: []*evalsiv1alpha1.Step{{Type: evalsiv1alpha1.StepType_STEP_TYPE_TOOL, Name: "bash"}}}
+	rec.Provenance = &evalsiv1alpha1.Provenance{Isolation: &evalsiv1alpha1.IsolationReport{Driver: "bwrap", Level: evalsiv1alpha1.IsolationLevel_ISOLATION_LEVEL_NAMESPACED}}
+	return &pluginv1alpha1.TaskResult{Record: rec}, nil
+}
+
 func (f *fakeWorker) LoadDataset(_ context.Context, req *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error) {
 	path := req.GetSource().GetPath()
 	if uri := req.GetSource().GetUri(); uri != "" {
@@ -95,7 +116,9 @@ func (f *fakeWorker) Evaluate(ctx context.Context, req *pluginv1alpha1.EvaluateR
 	for _, r := range req.GetRecords() {
 		res := &evalsiv1alpha1.EvaluationResult{RecordId: r.GetId(), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}
 		score := &evalsiv1alpha1.Score{Name: catalog.ShortName(req.GetEvaluator())}
-		if req.GetEvaluator() == "builtin/exact-match" {
+		if req.GetEvaluator() == "builtin/task-success" {
+			score.Value = &evalsiv1alpha1.Score_Passed{Passed: r.GetCheck().GetPassed()}
+		} else if req.GetEvaluator() == "builtin/exact-match" {
 			score.Value = &evalsiv1alpha1.Score_Passed{Passed: r.GetOutput().GetText() == r.GetReference().GetText()}
 			score.Cost = &evalsiv1alpha1.Usage{InputTokens: proto.Int64(f.judgeTokens)}
 		} else {
@@ -122,6 +145,9 @@ func manifests() []*evalsiv1alpha1.EvaluatorManifest {
 	return []*evalsiv1alpha1.EvaluatorManifest{
 		{Name: "builtin/exact-match", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
 			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "exact-match", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}},
+			ParamsSchema: emptySchema()},
+		{Name: "builtin/task-success", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
+			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "task-success", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}},
 			ParamsSchema: emptySchema()},
 		{Name: "test/slow", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
 			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "slow", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}},
@@ -516,5 +542,266 @@ func TestListAndCompare(t *testing.T) {
 	}
 	if _, err := h.m.CompareRuns(context.Background(), connect.NewRequest(&evalsiv1alpha1.CompareRunsRequest{BaselineRunId: "x", CandidateRunId: cand.GetId()})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("unknown run: %v", err)
+	}
+}
+
+func agentSpec(inputs ...string) *evalsiv1alpha1.RunSpec {
+	return &evalsiv1alpha1.RunSpec{
+		Target:      target(),
+		Harness:     &evalsiv1alpha1.Harness{Kind: &evalsiv1alpha1.Harness_Builtin{Builtin: &evalsiv1alpha1.BuiltinHarness{MaxSteps: 10}}},
+		Environment: &evalsiv1alpha1.Environment{Image: "python:3.12-slim"},
+		Dataset:     inline(inputs...),
+		Evaluators:  refs("task-success"),
+		Trials:      2,
+		Gates:       []*evalsiv1alpha1.Gate{{Metric: "task-success.pass^2", Min: proto.Float64(0.3)}},
+	}
+}
+
+func TestAgentRunsDriveTasksThroughTheWorker(t *testing.T) {
+	h := newHarness(t)
+	run := h.wait(t, h.create(t, agentSpec("pass", "fail", "flaky", "crash")).GetId())
+	if run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED {
+		t.Fatalf("status %v: %s", run.GetStatus(), run.GetError())
+	}
+	if h.worker.taskCalls.Load() != 8 || h.worker.generateCalls.Load() != 0 {
+		t.Errorf("tasks %d, generate %d", h.worker.taskCalls.Load(), h.worker.generateCalls.Load())
+	}
+	// pass and flaky trial 0 of 3 scorable tasks per trial; crash is an error, not a failure.
+	if s := summary(run, "task-success"); s.GetMean() != 0.5 || s.GetN() != 6 {
+		t.Errorf("task-success %v", s)
+	}
+	if s := summary(run, "task-success.pass^2"); s.GetMean() < 0.33 || s.GetMean() > 0.34 {
+		t.Errorf("pass^2 %v", s)
+	}
+	if run.GetTargetUsage().GetInputTokens() != 600 {
+		t.Errorf("usage %v", run.GetTargetUsage())
+	}
+	outputs, err := h.st.Outputs(context.Background(), run.GetId())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range outputs {
+		if o.Record == nil {
+			if o.Error != "environment setup failed" {
+				t.Errorf("crash output: %+v", o)
+			}
+			continue
+		}
+		p := o.Record.GetProvenance()
+		if p.GetRun().GetRunId() != run.GetId() || p.GetIsolation().GetDriver() != "bwrap" || o.Record.GetCheck() == nil {
+			t.Errorf("stored record lost its provenance or check: %v", o.Record)
+		}
+	}
+	results, err := h.st.Results(context.Background(), run.GetId(), "", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errored := 0
+	for _, r := range results {
+		if r.Result.GetOutcome() == evalsiv1alpha1.Outcome_OUTCOME_ERROR {
+			errored++
+		}
+	}
+	if errored != 2 {
+		t.Errorf("errored results = %d, want the crash task twice", errored)
+	}
+	// Resuming re-runs nothing that finished.
+	if _, err := h.m.ResumeRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.ResumeRunRequest{Id: run.GetId()})); err == nil {
+		h.wait(t, run.GetId())
+		if h.worker.taskCalls.Load() != 8 {
+			t.Errorf("resume re-ran tasks: %d", h.worker.taskCalls.Load())
+		}
+	}
+}
+
+func TestAgentRunValidation(t *testing.T) {
+	h := newHarness(t)
+	h.m.opts.Agents = config.Agents{TrustedCommands: [][]string{{"npx", "mcp-crm"}}, TrustedPython: []string{"acme.check:parse"}}
+	cases := map[string]func(*evalsiv1alpha1.RunSpec){
+		"builtin needs a model": func(s *evalsiv1alpha1.RunSpec) { s.Target = nil },
+		"cli needs a command": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{}}}
+		},
+		"untrusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"rm", "-rf", "/"}}}}
+		},
+		"untrusted python harness": func(s *evalsiv1alpha1.RunSpec) {
+			s.Harness = &evalsiv1alpha1.Harness{Kind: &evalsiv1alpha1.Harness_External{External: &evalsiv1alpha1.ExternalHarness{Kind: &evalsiv1alpha1.ExternalHarness_Python{Python: "os:system"}}}}
+		},
+		"untrusted checker parser": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"pytest"}, Parser: "os:system"}
+		},
+		"recording outside datasets_dir": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "../out"}
+		},
+		"bad network": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Sandbox = &evalsiv1alpha1.SandboxPolicy{Network: "allowlist"}
+		},
+	}
+	for name, mutate := range cases {
+		spec := agentSpec("pass")
+		mutate(spec)
+		_, err := h.m.CreateRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Spec: spec}))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	ok := map[string]func(*evalsiv1alpha1.RunSpec){
+		"trusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "crm", Command: []string{"npx", "mcp-crm"}}}}
+		},
+		"adapter parser": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"pytest"}, Parser: "evalsi_swebench:parse"}
+		},
+		"trusted parser": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"pytest"}, Parser: "acme.check:parse"}
+		},
+		"a2a agent": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_A2A{A2A: &evalsiv1alpha1.A2AAgent{Url: "http://agent"}}}}
+		},
+		"recording": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+	}
+	for name, mutate := range ok {
+		spec := agentSpec("pass")
+		mutate(spec)
+		if _, err := h.m.CreateRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Spec: spec})); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	spec, err := h.m.workerSpec(func() *evalsiv1alpha1.RunSpec {
+		s := agentSpec("pass")
+		s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "replay", Dir: "tapes"}
+		return s
+	}())
+	if err != nil || !filepath.IsAbs(spec.GetHarness().GetBuiltin().GetRecording().GetDir()) {
+		t.Errorf("worker spec recording dir: %v %v", spec, err)
+	}
+}
+
+func TestPromotionRescoringAndShadowReplay(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	run := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{
+		Target: target(), Dataset: inline("easy", "flaky", "broken"), Evaluators: refs("exact-match"), Trials: 2,
+	}).GetId())
+
+	// Promote the records that failed in some trial (flaky in trial 1); broken errored.
+	resp, err := h.m.PromoteResults(ctx, connect.NewRequest(&evalsiv1alpha1.PromoteResultsRequest{
+		RunId: run.GetId(), Dataset: "regressions", When: `scores["exact-match"] < 1.0 || errored`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.GetPromoted() != 2 || resp.Msg.GetPath() != "promoted/p/regressions.jsonl" {
+		t.Fatalf("promoted %v", resp.Msg)
+	}
+	raw, err := os.ReadFile(filepath.Join(h.dir, "datasets", "promoted", "p", "regressions.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], `"promoted_from"`) || strings.Contains(lines[0], `"output"`) {
+		t.Fatalf("promoted rows:\n%s", raw)
+	}
+	for _, bad := range []*evalsiv1alpha1.PromoteResultsRequest{
+		{RunId: run.GetId(), Dataset: "../x", When: "true"},
+		{RunId: run.GetId(), Dataset: "x"},
+		{RunId: run.GetId(), Dataset: "x", When: "scores"},
+	} {
+		if _, err := h.m.PromoteResults(ctx, connect.NewRequest(bad)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%v: %v", bad, err)
+		}
+	}
+
+	// Re-score the first run's outputs with another evaluator, without the target.
+	calls := h.worker.generateCalls.Load()
+	rescored := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{
+		Dataset:    &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Run{Run: &evalsiv1alpha1.RunOutputs{RunId: run.GetId(), AllTrials: true}}},
+		Evaluators: refs("exact-match"),
+	}).GetId())
+	if h.worker.generateCalls.Load() != calls || rescored.GetRecords() != 4 {
+		t.Fatalf("re-scoring ran the target or lost records: %d records", rescored.GetRecords())
+	}
+	if s := summary(rescored, "exact-match"); s.GetMean() != 0.75 {
+		t.Errorf("re-scored exact-match %v", s)
+	}
+
+	// Shadow replay: recorded production answers against the candidate.
+	recorded := &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{Records: []*evalsiv1alpha1.Record{
+		{Id: "a", Input: text("easy"), Output: text("wrong"), Reference: text("right")},
+		{Id: "b", Input: text("easy"), Output: text("right"), Reference: text("right")},
+	}}}}
+	shadow, err := h.m.CreateShadowReplay(ctx, connect.NewRequest(&evalsiv1alpha1.CreateShadowReplayRequest{
+		Name: "candidate-v2", Project: "p",
+		Candidate: &evalsiv1alpha1.RunSpec{Target: target(), Dataset: recorded, Evaluators: refs("exact-match"),
+			Gates: []*evalsiv1alpha1.Gate{{Metric: "exact-match", Min: proto.Float64(0.9)}}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := h.wait(t, shadow.Msg.GetBaseline().GetId())
+	cand := h.wait(t, shadow.Msg.GetCandidate().GetId())
+	if base.GetSpec().GetTarget() != nil || len(base.GetGates()) != 0 || base.GetName() != "candidate-v2-baseline" {
+		t.Errorf("baseline %v", base)
+	}
+	if summary(base, "exact-match").GetMean() != 0.5 || summary(cand, "exact-match").GetMean() != 1 {
+		t.Errorf("baseline %v candidate %v", summary(base, "exact-match"), summary(cand, "exact-match"))
+	}
+	cmp, err := h.m.CompareRuns(ctx, connect.NewRequest(&evalsiv1alpha1.CompareRunsRequest{BaselineRunId: base.GetId(), CandidateRunId: cand.GetId()}))
+	if err != nil || cmp.Msg.GetComparisons()[0].GetPairedN() != 2 || cmp.Msg.GetComparisons()[0].GetDiff() != 0.5 {
+		t.Fatalf("compare %v %v", cmp, err)
+	}
+	if _, err := h.m.CreateShadowReplay(ctx, connect.NewRequest(&evalsiv1alpha1.CreateShadowReplayRequest{
+		Candidate: &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy"), Evaluators: refs("exact-match")},
+	})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("a dataset without recorded outputs: %v", err)
+	}
+}
+
+func TestTraceDatasets(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	now := time.Now()
+	for i, svc := range []string{"support", "support", "billing"} {
+		id := fmt.Sprintf("trace-%d", i)
+		sum := &evalsiv1alpha1.TraceSummary{TraceId: id, Service: svc, Name: "turn", Project: "p", Error: i == 1,
+			StartTime: timestamppb.New(now.Add(-time.Duration(i) * time.Hour))}
+		rec := &evalsiv1alpha1.Record{Id: id, Input: text("easy"), Output: text("recorded"), Reference: text("right")}
+		if err := h.st.PutTrace(ctx, sum, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := &evalsiv1alpha1.TraceSummary{TraceId: "elsewhere", Service: "support", Project: "q", StartTime: timestamppb.Now()}
+	if err := h.st.PutTrace(ctx, other, &evalsiv1alpha1.Record{Id: "elsewhere", Input: text("easy")}); err != nil {
+		t.Fatal(err)
+	}
+	src := func(q *evalsiv1alpha1.TraceQuery) *evalsiv1alpha1.DatasetSource {
+		return &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Traces{Traces: q}}
+	}
+	cases := []struct {
+		q    *evalsiv1alpha1.TraceQuery
+		want int64
+	}{
+		{&evalsiv1alpha1.TraceQuery{}, 3},
+		{&evalsiv1alpha1.TraceQuery{Service: "support"}, 2},
+		{&evalsiv1alpha1.TraceQuery{Filter: `error`}, 1},
+		{&evalsiv1alpha1.TraceQuery{Lookback: durationpb.New(90 * time.Minute)}, 2},
+	}
+	for _, c := range cases {
+		run := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{Dataset: src(c.q), Evaluators: refs("exact-match")}).GetId())
+		if run.GetRecords() != c.want {
+			t.Errorf("%v: %d records, want %d", c.q, run.GetRecords(), c.want)
+		}
+	}
+	_, err := h.m.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "p", Spec: &evalsiv1alpha1.RunSpec{
+		Dataset: src(&evalsiv1alpha1.TraceQuery{Filter: "nope("}), Evaluators: refs("exact-match")}}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("bad filter: %v", err)
+	}
+	records, err := h.st.Records(ctx, h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{Dataset: src(&evalsiv1alpha1.TraceQuery{Service: "billing"}), Evaluators: refs("exact-match")}).GetId()).GetId())
+	if err != nil || records[0].GetProvenance().GetTrace().GetTraceId() != "trace-2" || records[0].GetMetadata()["trace"] == nil {
+		t.Errorf("trace provenance %v %v", records, err)
 	}
 }

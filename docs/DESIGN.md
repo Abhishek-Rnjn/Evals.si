@@ -716,11 +716,11 @@ Implementation notes:
 
 ### Firecracker driver design
 
-- **Root filesystems from OCI images.** OCI images are converted into ext4 root filesystems and cached by digest. Writable layers are copy-on-write (for example devmapper thin snapshots), so a pool of 100 VMs does not need 100 full disks.
+- **Root filesystems from OCI images.** OCI images are converted into ext4 root filesystems (`mkfs.ext4 -d`) and cached by digest. Each VM gets its own copy (reflinked where the filesystem supports it); devmapper thin snapshots remain an option for large pools.
 - **Guest agent.** A small static Go binary inside the VM speaks over **vsock** and handles exec, streaming stdio, file transfer and health. The guest has no SSH and no network unless the policy allows it.
-- **Jailer.** Every VMM process runs under the Firecracker jailer (chroot, cgroups, seccomp, dropped privileges).
-- **Networking.** Each VM gets a tap device with nftables rules and deny-by-default egress. Allowlisted egress goes through a host-side proxy that logs every connection, and those logs become evidence for safety evaluators.
-- **Snapshots and warm pools.** We boot once, run the environment setup (dependency installs, repo checkout) and snapshot. Clones are then restored on demand. After a restore we reseed guest entropy and resync the clock (for example via VMGenID) so clones do not share RNG state.
+- **Jailer.** The VMM can run under the Firecracker jailer (chroot, cgroups, seccomp, dropped privileges). It is optional, because it needs root, and it is recommended in production.
+- **Networking.** VMs have no network device ([decision 0011](decisions/0011-agent-environments-and-benchmarks.md)). When a policy allows egress, the guest reaches the host-side egress proxy over vsock. The proxy logs every connection, and those logs become evidence for safety evaluators. Without tap devices or nftables, the rung needs no root, and egress policy is one mechanism on every rung.
+- **Snapshots and warm pools.** We boot once, run the environment setup (dependency installs, repo checkout) and snapshot. Clones are then restored on demand. After a restore, the guest agent's `Refresh` reseeds guest entropy and sets the clock, so clones do not share RNG state.
 - **Hardware.** KVM requires bare-metal or nested-virtualization-capable instances. The `sandboxd` DaemonSet runs only on nodes labeled as KVM-capable.
 
 ### Hardened pod rung (Kubernetes)
@@ -1313,7 +1313,7 @@ On 2026-10-05, identity and access was inserted as Phase 2 ([decision 0010](deci
 | **0. Foundations** ✅ | Decision records; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
 | **1. Standalone MVP: LLM apps and agent traces** ✅ | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; `OnlineEvalPolicy` with cascades; packs `judge`, `rag`, `safety`, `text`, plus the trace-based half of `agent` (tool-call accuracy, trajectory match, loops, efficiency, session goal completion); adapters for Inspect AI, RAGAS, DeepEval and lm-eval-harness; MLflow and OTel sinks; the sandbox ladder with the **bubblewrap and Landlock** rungs for code evaluators | One `run.yaml` runs embedded and on the server; an agent behind standalone agentgateway (or instrumented with OTel) gets online trajectory scores; a RAG app is gated in CI |
 | **2. Identity and access** ✅ | OIDC/JWT authentication (multiple providers, JWKS from a URL, a file, inline JSON or discovery; `strict`, `optional` and `permissive` modes) and hashed API keys; TLS on the API listener; a refusal to start on a non-loopback address without auth; project-scoped RBAC with built-in roles (viewer, runner, editor, admin, ingest, owner), custom roles built from the permission list with optional CEL conditions, roles mapped from token claims, and labels on resources; agentgateway-style CEL rules (`allow`, `deny`, `require`); project scoping in every store query and in OTLP ingest; `created_by` on runs; an audit log and `evalsid auth check`; `AuthService` (who-am-i, API keys, bindings, audit); `evalsi login` (device code and PKCE), `whoami` and `auth keys`; GitHub Actions OIDC for CI; optional external authorization (AuthZEN, Envoy `ext_authz`) | With any OIDC issuer configured, every surface (gRPC, Connect, REST, OTLP, metrics) rejects unauthenticated calls; a viewer cannot start runs or read another project's traces; a custom role with a model condition can start runs only on its allowed models; a project admin cannot grant a permission it lacks; a GitHub Actions job runs a gated evaluation with its own OIDC token and no stored secret; every denied call appears in the audit log with the deciding rule; the action table covers every RPC, enforced by a test |
-| **3. Agent runs** | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
+| **3. Agent runs** ✅ | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **4. Kubernetes** | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; Kubernetes identity (service-account tokens as an OIDC provider, mTLS between components, an admission webhook that records who created each CR); HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
 | **5. Fine-tuning and RL** | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
 | **6. MCP, classic ML and ecosystem** | `evalsi mcp` (stdio, and streamable HTTP with the MCP authorization specification); `ml-classic` and `ml-monitoring` packs (pulled earlier if a client needs them); plugin index; Wasm evaluators; human annotation queues; inline guardrail mode; a minimal web UI if one is still wanted | A coding agent evaluates its own changes locally over MCP |
@@ -1452,6 +1452,72 @@ Deferred:
 - Kubernetes identity (service-account tokens, admission stamping) moves to Phase 4, as planned.
 - MCP authorization moves to Phase 6, as planned.
 - Per-project quotas follow the Kubernetes scheduler work.
+
+**Phase 3 status (2026-10-05):** implemented, in six slices. A guide is in [`docs/guides/agent-runs.md`](guides/agent-runs.md); the main design choices are in [decision 0011](decisions/0011-agent-environments-and-benchmarks.md).
+
+1. **Sandbox sessions** (`internal/sandbox`, `SandboxService`).
+   - Persistent sandboxes with exec, file transfer, snapshot and restore. Restore can widen the network, for granted escalations.
+   - OCI image roots, pulled and cached with go-containerregistry. Each sandbox gets a private writable copy, or a read-only bind.
+   - A logging egress proxy with allowlists (CONNECT and absolute HTTP). It chains to an upstream proxy, and an in-sandbox forwarder reaches it.
+   - A manager that caps sandboxes and reaps idle ones.
+   - Host file access through `os.Root`, so a symlink planted in a sandbox cannot redirect evalsid.
+2. **Harness protocol and `evalsi-harness`** (`proto/evalsi/harness/v1alpha1`, `python/evalsi-harness`).
+   - The built-in tool loop over OpenAI-compatible and Anthropic models.
+   - Sandbox tools and an escalation request; MCP tools over streamable HTTP and stdio; mocks and deterministic fault injection.
+   - Budgets for steps, tokens, spend and wall-clock time.
+   - An LLM user simulator.
+   - Record and replay, with branching.
+   - Environment checkers: exit code, JSON, JUnit or a Python function.
+   - Sandbox policy events in the trajectory, and OTel export.
+   - External harnesses over gRPC, as a command, or as a Python class.
+3. **Agent runs** (`RunSpec.harness` and `environment`, `Target.agent`, worker `RunTask`).
+   - A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agents.
+   - Per-record environments from datasets; `TaskCheck` on records.
+   - pass^k through trials.
+   - The agent pack's `task-success`, `policy-violations` and `agent-efficiency`.
+   - Infrastructure errors are reported, never scored.
+   - On servers, a trust policy for anything a spec would make the worker execute (`agents.trusted_commands`, `agents.trusted_python`).
+   - `resource.agent` in authorization rules.
+4. **Promotion and shadow replay.**
+   - Datasets from production traces (`DatasetSource.traces`) and from earlier runs' outputs (`DatasetSource.run`).
+   - `PromoteResults`, with a CEL condition per record and trial, into project-scoped `promoted/<project>/<name>.jsonl`. It needs the new `datasets.write` permission, which `editor` holds.
+   - `CreateShadowReplay`: a baseline run scores the recorded outputs, and the candidate runs with the same evaluators.
+   - `evalsi promote` and `evalsi shadow`.
+5. **The Firecracker rung** (`internal/sandbox/firecracker.go`, `cmd/evalsi-guest`).
+   - Images become ext4 root disks.
+   - `evalsi-guest` is the VM's init and agent over vsock (`GuestAgentService`).
+   - Egress goes over vsock to the host's egress proxy, with no network device.
+   - Snapshot and restore, then a refresh of entropy and the clock.
+   - A warm pool per image, and an optional jailer.
+   - `make build` produces static `evalsid` and `evalsi-guest`.
+6. **Benchmarks and code quality.**
+   - Adapters, each graded by the benchmark's own code:
+     - `swebench://` (`swebench==5.0.2`);
+     - `taubench://` with `TauBenchHarness` (tau2 v0.2.0);
+     - `bfcl://` with `BFCLHarness` (`bfcl-eval==2026.3.23`);
+     - `harbor://` and `terminal-bench://` in `evalsi-harness`, with Dockerfiles translated into environments. 219 of Terminal-Bench 1's 241 tasks import.
+   - Agent runs record the agent's git diff. `code-quality` has a judge review it on six dimensions.
+
+The exit criterion holds at fixture scale:
+
+- `tests/e2e/swebench_test.go` runs SWE-bench-format instances with a bring-your-own CLI agent through the server, in bubblewrap, graded by the `swebench` package. The stand-in agent resolves exactly the instance it fixes, and the gold patches resolve all of them.
+- `tests/e2e/harbor_test.go` runs Harbor and Terminal-Bench tasks on a pulled image.
+- The scoring path is the same on every rung: the same image, eval script and parser, with the checker run through the sandbox session interface.
+
+Limits of that verification:
+
+- **Firecracker** is tested with a stand-in `firecracker` that runs the real guest agent without isolation (`internal/sandbox/testdata/fakefc`), because the development and CI hosts have no KVM. It still has to be run on a KVM host.
+- **Real SWE-bench Verified images** (several GB each) have not been run in CI; the fixture uses the same instance format and grading code.
+
+Deviations from the plan:
+
+- Firecracker egress uses vsock and the host's egress proxy instead of a tap device with nftables.
+- The bubblewrap writable root is a copy of the image, not an overlay (bubblewrap 0.9 has no overlay support).
+- τ-bench's simulated user is Evals.si's (through the run's judge), not tau2's LiteLLM user.
+- Partial benchmark coverage: no BFCL multi-turn, memory or web-search categories; no tau2 telecom; no multi-service or multi-stage Terminal-Bench tasks.
+- FrontierCode is not imported yet: its task format is not public in a form we could verify. CursorBench's tasks are private. `harbor://` and `code-quality` cover the parts that are public: Harbor-format tasks and a maintainer-style review of the diff.
+
+The Phase 1 deferral of OCI image roots for the bubblewrap rung is resolved by slice 1.
 
 ## 24. Risks and mitigations
 

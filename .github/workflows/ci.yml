@@ -54,7 +54,8 @@ jobs:
         env:
           # Both sandbox rungs must work here; skipping them would hide regressions.
           EVALSI_REQUIRE_SANDBOX: "1"
-      - run: go build ./cmd/evalsid
+      - name: Static binaries
+        run: make build
 
   python:
     runs-on: ubuntu-latest
@@ -86,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        adapter: [deepeval, ragas, inspect, lm-eval]
+        adapter: [deepeval, ragas, inspect, lm-eval, swebench, bfcl]
     defaults:
       run:
         working-directory: python/adapters/${{ matrix.adapter }}
@@ -96,6 +97,30 @@ jobs:
       - run: uv sync --locked
       - run: uv run --no-sync mypy
       - run: uv run --no-sync pytest -q
+
+  taubench:
+    # tau2-bench needs Python 3.12 (its .python-version) and its data
+    # directory, which is not part of the package: fetched at the pinned commit.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python/adapters/taubench
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - name: tau2 data
+        run: |
+          git init -q "$RUNNER_TEMP/tau2"
+          cd "$RUNNER_TEMP/tau2"
+          git remote add origin https://github.com/sierra-research/tau2-bench
+          git sparse-checkout set data
+          git fetch -q --depth 1 origin f8de30c298689cbe0117d76a378e7315a17e5bd8
+          git checkout -q FETCH_HEAD
+      - run: uv run --no-sync mypy
+      - run: uv run --no-sync pytest -q
+        env:
+          TAU2_DATA_DIR: ${{ runner.temp }}/tau2/data
 
   e2e:
     # evalsid against a real Python worker, plus the Python codegen check.
@@ -117,8 +142,21 @@ jobs:
       - name: Generated Python code is current
         run: |
           scripts/gen-python-proto.sh
-          git diff --exit-code -- python/evalsi/src/evalsi/v1alpha1 python/evalsi/src/evalsi/plugin
+          git diff --exit-code -- python/evalsi/src/evalsi/v1alpha1 python/evalsi/src/evalsi/plugin \
+            python/evalsi/src/evalsi/sandbox/v1alpha1 python/evalsi/src/evalsi/harness/v1alpha1
+      - name: Python tests against a real sandbox
+        # A static evalsid, as released: it is also the in-sandbox egress forwarder.
+        run: |
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
+          cd python && EVALSI_TEST_EVALSID="$RUNNER_TEMP/evalsid" uv run --no-sync pytest -q
+      - run: uv sync --locked
+        working-directory: python/adapters/swebench
       - name: End-to-end tests
+        # Includes the Phase 3 exit criterion at fixture scale (a CLI agent on
+        # SWE-bench instances, graded by the swebench package) and Harbor and
+        # Terminal-Bench tasks on a pulled image.
         run: go test -count=1 -v ./tests/e2e/
         env:
           EVALSI_E2E_WORKER: ${{ github.workspace }}/python/.venv/bin/python -m evalsi
+          EVALSI_E2E_SWEBENCH_WORKER: ${{ github.workspace }}/python/adapters/swebench/.venv/bin/python -m evalsi
+          EVALSI_E2E_IMAGES: "1"

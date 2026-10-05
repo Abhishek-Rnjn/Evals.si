@@ -1,14 +1,15 @@
 # Common development tasks. Needs Go, buf and uv on PATH; `make tools` installs
 # the protobuf plugins at the versions CI uses.
 
-.PHONY: help tools proto check go-check py-sync py-check adapters-check e2e
+.PHONY: help tools proto build check go-check py-sync py-check adapters-check e2e
 
 help:
 	@echo "make tools     install protoc-gen-go and protoc-gen-connect-go"
 	@echo "make proto     lint, format and regenerate code from proto/"
+	@echo "make build     static bin/evalsid and bin/evalsi-guest (the microVM init)"
 	@echo "make check     run every check CI runs"
 	@echo "make adapters-check  test each framework adapter in its own environment"
-	@echo "make e2e       run evalsid against a real Python worker"
+	@echo "make e2e       run evalsid against a real Python worker (EVALSI_E2E_IMAGES=1 adds image pulls)"
 
 tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
@@ -19,6 +20,12 @@ proto: py-sync
 	buf format -w
 	buf generate
 	scripts/gen-python-proto.sh
+
+# Static binaries: evalsid doubles as the in-sandbox egress forwarder (in any
+# image root), and evalsi-guest is init inside Firecracker microVMs.
+build:
+	CGO_ENABLED=0 go build -o bin/evalsid ./cmd/evalsid
+	CGO_ENABLED=0 go build -o bin/evalsi-guest ./cmd/evalsi-guest
 
 go-check:
 	test -z "$$(gofmt -l .)"
@@ -31,7 +38,7 @@ py-sync:
 py-check: py-sync
 	cd python && uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q
 
-ADAPTERS := deepeval ragas inspect lm-eval
+ADAPTERS ?= deepeval ragas inspect lm-eval swebench bfcl taubench
 
 adapters-check:
 	for a in $(ADAPTERS); do \
@@ -43,4 +50,7 @@ check: go-check py-check
 	buf format --diff --exit-code
 
 e2e: py-sync
-	EVALSI_E2E_WORKER="$(CURDIR)/python/.venv/bin/python -m evalsi" go test -count=1 ./tests/e2e/
+	cd python/adapters/swebench && uv sync --locked
+	EVALSI_E2E_WORKER="$(CURDIR)/python/.venv/bin/python -m evalsi" \
+	EVALSI_E2E_SWEBENCH_WORKER="$(CURDIR)/python/adapters/swebench/.venv/bin/python -m evalsi" \
+	go test -count=1 ./tests/e2e/

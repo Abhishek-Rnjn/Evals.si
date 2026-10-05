@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package evalsi.harness.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/run.proto";
+import "google/protobuf/struct.proto";
+
+// HarnessService is the harness protocol (design §11). The built-in harness
+// (evalsi-harness) implements it, and so can a harness you bring: a Python
+// class, a container or any gRPC service. Evals.si orchestrates it: one
+// Setup per task and trial, then Run, Check and Teardown.
+service HarnessService {
+  // Task formats and environment needs.
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+  // Prepares the task's environment; it may lease an Evals.si sandbox.
+  rpc Setup(SetupRequest) returns (SetupResponse);
+  // Drives the agent, streaming steps; the last event is Final.
+  rpc Run(RunRequest) returns (stream RunResponse);
+  // Environment-side grading: tests, database state, files.
+  rpc Check(CheckRequest) returns (CheckResponse);
+  rpc Teardown(TeardownRequest) returns (TeardownResponse);
+}
+
+message DescribeRequest {}
+
+message DescribeResponse {
+  HarnessManifest manifest = 1;
+}
+
+message HarnessManifest {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  // Task formats it understands, for example "evalsi", "swebench", "terminal-bench".
+  repeated string task_formats = 4;
+  // It runs tasks in an Evals.si sandbox.
+  bool uses_sandbox = 5;
+  // For example "user-simulator", "record-replay", "mcp-tools".
+  repeated string capabilities = 6;
+}
+
+// A task: one record of the run, with the run's spec for context.
+message Task {
+  string id = 1;
+  evalsi.v1alpha1.Record record = 2;
+  // The run spec: target (the agent or model), harness config, environment.
+  evalsi.v1alpha1.RunSpec spec = 3;
+  string run_id = 4;
+  int32 trial = 5;
+  // Harness-specific configuration (ExternalHarness.config).
+  google.protobuf.Struct config = 6;
+}
+
+message SetupRequest {
+  Task task = 1;
+}
+
+message SetupResponse {
+  string handle_id = 1;
+  // The isolation the task's environment runs under, when sandboxed.
+  evalsi.v1alpha1.IsolationReport isolation = 2;
+}
+
+message RunRequest {
+  string handle_id = 1;
+}
+
+// PolicyEvent records the sandbox stepping in: a denial, an egress attempt
+// that was refused, or an agent asking for a wider policy and the decision.
+message PolicyEvent {
+  // "denial", "egress_denied", "escalation_request".
+  string kind = 1;
+  string detail = 2;
+  // For escalation requests: whether the harness policy granted it.
+  bool granted = 3;
+  // The step (span) it happened in.
+  string span_id = 4;
+}
+
+// Final ends a run.
+message Final {
+  evalsi.v1alpha1.Content output = 1;
+  evalsi.v1alpha1.Usage usage = 2;
+  // "completed", "max_steps", "budget", "timeout", "error" or "user_stopped".
+  string stop_reason = 3;
+  string error = 4;
+}
+
+message RunResponse {
+  TrajectoryEvent event = 1;
+}
+
+message TrajectoryEvent {
+  oneof event {
+    // A model call, a tool call, a user turn.
+    evalsi.v1alpha1.Step step = 1;
+    PolicyEvent policy = 2;
+    Final final = 3;
+  }
+}
+
+message CheckRequest {
+  string handle_id = 1;
+}
+
+message CheckResponse {
+  evalsi.v1alpha1.TaskCheck check = 1;
+}
+
+message TeardownRequest {
+  string handle_id = 1;
+}
+
+message TeardownResponse {}
