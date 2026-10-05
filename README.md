@@ -19,7 +19,10 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 
 ## Quickstart
 
+You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ for you). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, the sandbox for code evaluators needs bubblewrap (see [Development](#development)).
+
 ```bash
+git clone https://github.com/Abhishek-Rnjn/Evals.si && cd Evals.si
 cd python && uv sync --all-packages
 uv run evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match,latency
 ```
@@ -73,10 +76,14 @@ result.save("results.json")   # manifest, summaries and every per-record result
 `evalsid` serves the same evaluators over gRPC, gRPC-Web and HTTP/JSON on one port. It runs the Python evaluators in a supervised worker process.
 
 ```bash
-go build -o bin/evalsid ./cmd/evalsid
+go build -o bin/evalsid ./cmd/evalsid        # from the repository root
 cd python && uv sync --all-packages          # installs evalsi[server] into python/.venv
 EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/server/evalsi.yaml
 ```
+
+On `127.0.0.1` with no `auth` section, the server runs without authentication, as the log says. That is fine on a laptop. To try access control, see [Try access control locally](#try-access-control-locally).
+
+The example's default judge is Claude: export `ANTHROPIC_API_KEY` before starting the server for `llm-judge` to work. Without it, `exact-match` still scores and `llm-judge` reports an error, never a zero. To use a local OpenAI-compatible model instead, edit the `local` judge in the config.
 
 ```bash
 # HTTP/JSON
@@ -194,6 +201,46 @@ evalsid auth check --config evalsi.yaml --api-key "$KEY" --action runs.create --
 ```
 
 Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN`; GitHub Actions jobs set `EVALSI_OIDC_AUDIENCE`. See the [setup guide](docs/guides/identity.md) and [`examples/auth/evalsi.yaml`](examples/auth/evalsi.yaml).
+
+#### Try access control locally
+
+[`examples/auth/local.yaml`](examples/auth/local.yaml) needs no identity provider or TLS. It uses API keys only, listens on loopback only, and has one project (`demo`) and a custom role (`prompt-engineer`, limited to some models).
+
+1. Create your owner key, and put its hash in the config. The server refuses to start while the placeholder is there.
+
+   ```bash
+   go build -o bin/evalsid ./cmd/evalsid
+   bin/evalsid auth new-key
+   # key:  evk_...          <- keep this; it is shown once
+   # hash: sha256:...       <- paste over the placeholder in examples/auth/local.yaml
+   ```
+
+2. Start the server.
+
+   ```bash
+   cd python && uv sync --all-packages
+   EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/auth/local.yaml
+   ```
+
+3. In another terminal, from `python/`, use it.
+
+   ```bash
+   export EVALSI_SERVER=http://127.0.0.1:8080
+   uv run evalsi whoami                                   # unauthenticated: rejected
+   export EVALSI_API_KEY=evk_...                          # your owner key
+   uv run evalsi whoami                                   # key:me, owner
+
+   # Issue a key for someone else, scoped to one project and role.
+   uv run evalsi auth keys create alice --role demo=prompt-engineer
+   EVALSI_API_KEY=evk_<alice's key> uv run evalsi whoami                        # prompt-engineer in demo
+   EVALSI_API_KEY=evk_<alice's key> uv run evalsi auth projects create other    # permission_denied
+
+   uv run evalsi auth audit --denied                      # alice's denied call, and why
+   ../bin/evalsid auth check --config ../examples/auth/local.yaml --api-key evk_<alice's key> \
+     --action runs.create --project demo --resource '{"target":{"model":"gpt-5"}}'   # deny: model not allowed
+   ```
+
+Delete `python/.evalsi-auth-demo` to start over.
 
 ## Repository layout
 

@@ -120,3 +120,19 @@ func TestExampleAuthConfigLoads(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// The local example must not start until the user pastes their own hash.
+func TestLocalAuthExampleNeedsARealHash(t *testing.T) {
+	if _, err := Load("../../examples/auth/local.yaml"); err == nil || !strings.Contains(err.Error(), "64 hex digits") {
+		t.Errorf("Load = %v", err)
+	}
+	raw, _ := os.ReadFile("../../examples/auth/local.yaml")
+	fixed := strings.Replace(string(raw), "sha256:REPLACE_WITH_THE_HASH_FROM_evalsid_auth_new-key_0000000000000", "sha256:"+strings.Repeat("ab", 32), 1)
+	cfg, err := Load(write(t, fixed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authz.NewEngine(context.Background(), authz.Options{Enabled: true, RBAC: cfg.RBAC, Authorization: cfg.Authorization}); err != nil {
+		t.Error(err)
+	}
+}

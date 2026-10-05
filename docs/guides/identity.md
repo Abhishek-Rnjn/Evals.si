@@ -1,6 +1,6 @@
 # Identity and access: setup guide
 
-This guide sets up authentication and authorization on `evalsid`. The design and its reasoning are in [DESIGN §17](../DESIGN.md#17-security-identity-and-tenancy). A complete example config is in [`examples/auth/evalsi.yaml`](../../examples/auth/evalsi.yaml).
+This guide sets up authentication and authorization on `evalsid`. The design and its reasoning are in [DESIGN §17](../DESIGN.md#17-security-identity-and-tenancy). A complete example config is in [`examples/auth/evalsi.yaml`](../../examples/auth/evalsi.yaml). To try it on a laptop first, with API keys only, follow "Try access control locally" in the [README](../../README.md#try-access-control-locally).
 
 ## How it fits together
 
