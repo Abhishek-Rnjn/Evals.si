@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -220,11 +221,27 @@ func Handler(svc *evaluation.Service, runManager *runs.Manager, watcher *watch.E
 	receiver *ingest.Receiver, assembler *ingest.Assembler, worker pluginhost.Worker,
 ) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle(evalsiv1alpha1connect.NewEvaluationServiceHandler(svc))
-	mux.Handle(evalsiv1alpha1connect.NewCatalogServiceHandler(svc))
-	mux.Handle(evalsiv1alpha1connect.NewRunServiceHandler(runManager))
-	mux.Handle(evalsiv1alpha1connect.NewMonitorServiceHandler(watcher))
-	mux.Handle(evalsiv1alpha1connect.NewTraceServiceHandler(watch.Traces{Store: st}))
+	handlers := map[string]http.Handler{}
+	for _, h := range []func() (string, http.Handler){
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewEvaluationServiceHandler(svc) },
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewCatalogServiceHandler(svc) },
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRunServiceHandler(runManager) },
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewMonitorServiceHandler(watcher) },
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewTraceServiceHandler(watch.Traces{Store: st})
+		},
+	} {
+		path, handler := h()
+		mux.Handle(path, handler)
+		// Service paths are "/<package>.<Service>/"; Vanguard wants the bare name.
+		handlers[strings.Trim(path, "/")] = handler
+	}
+	rest, err := restHandler(handlers)
+	if err != nil {
+		// The routes are static; failing here is a programming error caught by tests.
+		panic(fmt.Sprintf("REST routes: %v", err))
+	}
+	mux.Handle("/v1alpha1/", rest)
 	receiver.Register(mux)
 	mux.Handle("GET /metrics", watch.MetricsHandler(watcher, assembler))
 	services := []string{

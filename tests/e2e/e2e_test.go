@@ -289,6 +289,49 @@ func TestEndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("rest", func(t *testing.T) {
+		// Plain HTTP and JSON, transcoded by Vanguard onto the same services.
+		resp, err := http.Get(base + "/v1alpha1/evaluators")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var catalog struct {
+			Evaluators []struct{ Name string } `json:"evaluators"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&catalog)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || len(catalog.Evaluators) == 0 {
+			t.Fatalf("GET /v1alpha1/evaluators: %d %v", resp.StatusCode, catalog)
+		}
+		body := `{"records": [{"id": "a", "output": {"text": "Paris"}, "reference": {"text": "Paris"}}],
+			"evaluators": [{"ref": "exact-match"}]}`
+		resp, err = http.Post(base+"/v1alpha1/evaluate", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out struct {
+			Results []struct {
+				Outcome string `json:"outcome"`
+				Scores  []struct {
+					Passed bool `json:"passed"`
+				} `json:"scores"`
+			} `json:"results"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || len(out.Results) != 1 || !out.Results[0].Scores[0].Passed {
+			t.Fatalf("POST /v1alpha1/evaluate: %d %+v", resp.StatusCode, out)
+		}
+		resp, err = http.Get(base + "/v1alpha1/runs/run-does-not-exist")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET unknown run: %d, want 404", resp.StatusCode)
+		}
+	})
+
 	t.Run("stream", func(t *testing.T) {
 		client := evalsiv1alpha1connect.NewEvaluationServiceClient(h2cClient(), base, connect.WithGRPC())
 		stream := client.EvaluateStream(ctx)
