@@ -14,7 +14,18 @@ from typing import Any
 from google.protobuf import duration_pb2, json_format, struct_pb2
 
 from evalsi.evaluator import EvaluatorSpec, Scope, ScoreType
-from evalsi.types import Content, EvaluationResult, Message, Outcome, Record, Score, ToolCall, Usage
+from evalsi.types import (
+    Content,
+    EvaluationResult,
+    Message,
+    Outcome,
+    Record,
+    Score,
+    Step,
+    ToolCall,
+    Trajectory,
+    Usage,
+)
 from evalsi.v1alpha1 import evaluator_pb2, record_pb2, score_pb2
 
 
@@ -114,6 +125,69 @@ def _duration(ms: float) -> duration_pb2.Duration:
     return d
 
 
+def _step_enum(kind: str) -> Any:
+    return record_pb2.StepType.Value(f"STEP_TYPE_{kind.upper()}")
+
+
+def step_to_proto(step: Step) -> record_pb2.Step:
+    msg = record_pb2.Step(
+        span_id=step.span_id,
+        parent_span_id=step.parent_span_id,
+        type=_step_enum(step.type),
+        name=step.name,
+        error=step.error,
+    )
+    if step.input is not None:
+        msg.input.CopyFrom(content_to_proto(step.input))
+    if step.output is not None:
+        msg.output.CopyFrom(content_to_proto(step.output))
+    usage = step.usage or (
+        Usage(latency_ms=step.duration_ms) if step.duration_ms is not None else None
+    )
+    if usage is not None:
+        msg.usage.CopyFrom(usage_to_proto(usage))
+    for key, value in step.attributes.items():
+        msg.attributes[key].CopyFrom(to_value(value))
+    return msg
+
+
+def step_from_proto(msg: record_pb2.Step) -> Step:
+    usage = usage_from_proto(msg.usage) if msg.HasField("usage") else None
+    duration = usage.latency_ms if usage is not None else None
+    if duration is None and msg.HasField("start_time") and msg.HasField("end_time"):
+        duration = (msg.end_time.ToNanoseconds() - msg.start_time.ToNanoseconds()) / 1e6
+    return Step(
+        type=record_pb2.StepType.Name(msg.type).removeprefix("STEP_TYPE_").lower()
+        if msg.type
+        else "generic",
+        name=msg.name,
+        input=content_from_proto(msg.input) if msg.HasField("input") else None,
+        output=content_from_proto(msg.output) if msg.HasField("output") else None,
+        span_id=msg.span_id,
+        parent_span_id=msg.parent_span_id,
+        error=msg.error,
+        duration_ms=duration,
+        usage=usage,
+        attributes={k: from_value(v) for k, v in msg.attributes.items()},
+    )
+
+
+def trajectory_to_proto(trajectory: Trajectory) -> record_pb2.Trajectory:
+    return record_pb2.Trajectory(
+        trace_id=trajectory.trace_id,
+        session_id=trajectory.session_id,
+        steps=[step_to_proto(s) for s in trajectory.steps],
+    )
+
+
+def trajectory_from_proto(msg: record_pb2.Trajectory) -> Trajectory:
+    return Trajectory(
+        trace_id=msg.trace_id,
+        session_id=msg.session_id,
+        steps=[step_from_proto(s) for s in msg.steps],
+    )
+
+
 def record_to_proto(record: Record) -> record_pb2.Record:
     msg = record_pb2.Record(id=record.id)
     for name in ("input", "output", "reference"):
@@ -125,6 +199,8 @@ def record_to_proto(record: Record) -> record_pb2.Record:
         msg.usage.CopyFrom(usage_to_proto(record.usage))
     for key, value in record.metadata.items():
         msg.metadata[key].CopyFrom(to_value(value))
+    if record.trajectory is not None:
+        msg.trajectory.CopyFrom(trajectory_to_proto(record.trajectory))
     return msg
 
 
@@ -137,6 +213,7 @@ def record_from_proto(msg: record_pb2.Record) -> Record:
         context=[content_from_proto(c) for c in msg.context],
         usage=usage_from_proto(msg.usage) if msg.HasField("usage") else None,
         metadata={k: from_value(v) for k, v in msg.metadata.items()},
+        trajectory=trajectory_from_proto(msg.trajectory) if msg.HasField("trajectory") else None,
     )
 
 
@@ -255,6 +332,7 @@ def manifest_to_proto(spec: EvaluatorSpec) -> evaluator_pb2.EvaluatorManifest:
             output=req.output,
             reference=req.reference,
             context=req.context,
+            trajectory=req.trajectory,
             judge=req.judge,
             isolation=record_pb2.ISOLATION_LEVEL_NONE,
         ),

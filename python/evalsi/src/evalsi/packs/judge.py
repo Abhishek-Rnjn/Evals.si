@@ -13,7 +13,7 @@ from evalsi.evaluator import (
     SkipRecord,
     evaluator,
 )
-from evalsi.judges import JudgeError
+from evalsi.judges import JudgeError, JudgeResponse
 from evalsi.registry import Pack
 from evalsi.types import Record, Score, Usage
 
@@ -87,31 +87,52 @@ def build_prompt(record: Record, rubric_text: str) -> str:
     outputs=[MetricSpec("llm-judge", ScoreType.NUMBER, min=0.0, max=1.0, higher_is_better=True)],
 )
 async def llm_judge(record: Record, *, rubric: str = "correctness", ctx: EvalContext) -> Score:
-    if ctx.judge is None:
-        raise JudgeError("llm-judge needs a judge; none is configured")
     if rubric in RUBRICS_NEEDING_CONTEXT and not record.context:
         raise SkipRecord(f"the {rubric} rubric needs context and the record has none")
-    rubric_text = RUBRICS.get(rubric, rubric)
-    response = await ctx.judge.complete_json(
-        system=SYSTEM_PROMPT, prompt=build_prompt(record, rubric_text), schema=SCHEMA
-    )
+    label = rubric if rubric in RUBRICS else "custom"
+    return await rubric_score(record, RUBRICS.get(rubric, rubric), ctx, label=label)
+
+
+def judge_cost(response: JudgeResponse) -> Usage | None:
+    """Tokens a judge call cost; None when it was served from the cache."""
+    if response.cached:
+        return None
+    return Usage(input_tokens=response.input_tokens, output_tokens=response.output_tokens)
+
+
+def judge_metadata(response: JudgeResponse, **extra: Any) -> dict[str, Any]:
+    return {
+        **extra,
+        "judge_model": response.model,
+        "prompt_version": PROMPT_VERSION,
+        "cached": response.cached,
+    }
+
+
+async def rubric_score(
+    record: Record,
+    rubric_text: str,
+    ctx: EvalContext,
+    *,
+    label: str,
+    extra_sections: str = "",
+) -> Score:
+    """Grade a record 1-5 against a rubric and normalize to 0-1. Shared by the
+    judge, rag, safety and agent packs."""
+    if ctx.judge is None:
+        raise JudgeError("this evaluator needs a judge; none is configured")
+    prompt = build_prompt(record, rubric_text)
+    if extra_sections:
+        prompt = prompt.replace("<response>", extra_sections + "\n\n<response>", 1)
+    response = await ctx.judge.complete_json(system=SYSTEM_PROMPT, prompt=prompt, schema=SCHEMA)
     raw = response.data.get("score")
     if isinstance(raw, bool) or not isinstance(raw, int | float) or not 1 <= raw <= 5:
         raise JudgeError(f"judge returned an invalid score: {raw!r}")
-    cost = None
-    if not response.cached:
-        cost = Usage(input_tokens=response.input_tokens, output_tokens=response.output_tokens)
     return Score(
         number=(float(raw) - 1.0) / 4.0,
         explanation=str(response.data.get("reasoning", "")),
-        cost=cost,
-        metadata={
-            "raw_score": raw,
-            "rubric": rubric if rubric in RUBRICS else "custom",
-            "judge_model": response.model,
-            "prompt_version": PROMPT_VERSION,
-            "cached": response.cached,
-        },
+        cost=judge_cost(response),
+        metadata=judge_metadata(response, raw_score=raw, rubric=label),
     )
 
 

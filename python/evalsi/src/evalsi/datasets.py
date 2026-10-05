@@ -19,9 +19,18 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from evalsi.types import Content, Record, Usage
+from evalsi.types import Content, Record, Trajectory, Usage
 
-RECORD_FIELDS = ("id", "input", "output", "reference", "context", "usage", "metadata")
+RECORD_FIELDS = (
+    "id",
+    "input",
+    "output",
+    "reference",
+    "context",
+    "usage",
+    "metadata",
+    "trajectory",
+)
 
 
 class DatasetError(ValueError):
@@ -80,6 +89,8 @@ def record_from_row(row: Mapping[str, Any], index: int, mapping: Mapping[str, st
     raw_usage = take("usage")
     raw_metadata = take("metadata")
     metadata: dict[str, Any] = dict(raw_metadata) if isinstance(raw_metadata, Mapping) else {}
+    raw_trajectory = take("trajectory")
+    take("provenance")  # where a promoted trace came from; not needed for evaluation
     raw_id = take("id")
     record = Record(
         id=str(raw_id) if raw_id is not None else str(index),
@@ -89,6 +100,9 @@ def record_from_row(row: Mapping[str, Any], index: int, mapping: Mapping[str, st
         context=context,
         usage=Usage.from_dict(raw_usage) if isinstance(raw_usage, Mapping) else None,
         metadata=metadata,
+        trajectory=Trajectory.from_dict(raw_trajectory)
+        if isinstance(raw_trajectory, Mapping)
+        else None,
     )
     for key, value in row.items():
         if key not in consumed:

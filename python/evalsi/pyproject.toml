@@ -32,6 +32,10 @@ evalsi = "evalsi.cli:main"
 [project.entry-points."evalsi.packs"]
 core = "evalsi.packs.core:PACK"
 judge = "evalsi.packs.judge:PACK"
+text = "evalsi.packs.text:PACK"
+rag = "evalsi.packs.rag:PACK"
+safety = "evalsi.packs.safety:PACK"
+agent = "evalsi.packs.agent:PACK"
 
 [project.urls]
 Repository = "https://github.com/abhishek-rnjn/evals.si"

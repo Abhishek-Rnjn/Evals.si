@@ -215,7 +215,8 @@ func eligible(req *evalsiv1alpha1.Requirements, r *evalsiv1alpha1.Record) bool {
 	return (!req.GetInput() || r.GetInput() != nil) &&
 		(!req.GetOutput() || r.GetOutput() != nil) &&
 		(!req.GetReference() || r.GetReference() != nil) &&
-		(!req.GetContext() || len(r.GetContext()) > 0)
+		(!req.GetContext() || len(r.GetContext()) > 0) &&
+		(!req.GetTrajectory() || r.GetTrajectory() != nil)
 }
 
 // RunDataset runs the dataset-scope instances once each over all eligible records.

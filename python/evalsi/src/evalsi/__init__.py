@@ -32,7 +32,10 @@ from evalsi.types import (
     Outcome,
     Record,
     Score,
+    Step,
     ToolCall,
+    ToolUse,
+    Trajectory,
     Usage,
 )
 
@@ -55,7 +58,10 @@ __all__ = [
     "Score",
     "ScoreType",
     "SkipRecord",
+    "Step",
     "ToolCall",
+    "ToolUse",
+    "Trajectory",
     "Usage",
     "__version__",
     "aevaluate",

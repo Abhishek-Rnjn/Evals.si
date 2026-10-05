@@ -48,10 +48,11 @@ class Requirements:
     reference: bool = False
     context: bool = False
     judge: bool = False
+    trajectory: bool = False
 
     def missing(self, record: Record) -> str | None:
         """The reason ``record`` cannot be evaluated, or ``None`` if it can."""
-        for name in ("input", "output", "reference"):
+        for name in ("input", "output", "reference", "trajectory"):
             if getattr(self, name) and getattr(record, name) is None:
                 return f"record has no {name}"
         if self.context and not record.context:
