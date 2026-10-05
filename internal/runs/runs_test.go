@@ -619,9 +619,8 @@ func TestAgentRunValidation(t *testing.T) {
 	h.m.opts.Agents = config.Agents{TrustedCommands: [][]string{{"npx", "mcp-crm"}}, TrustedPython: []string{"acme.check:parse"}}
 	cases := map[string]func(*evalsiv1alpha1.RunSpec){
 		"builtin needs a model": func(s *evalsiv1alpha1.RunSpec) { s.Target = nil },
-		"cli needs an environment": func(s *evalsiv1alpha1.RunSpec) {
-			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{Command: []string{"agent"}}}}
-			s.Environment = nil
+		"cli needs a command": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{}}}
 		},
 		"untrusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"rm", "-rf", "/"}}}}

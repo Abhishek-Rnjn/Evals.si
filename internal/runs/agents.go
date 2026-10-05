@@ -37,11 +37,10 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("spec.target.agent.http needs url and output_path")
 		}
 	case agent.GetCli() != nil:
+		// A CLI agent runs in the task's sandbox; the environment may come
+		// from the records (metadata.environment), so it is checked per task.
 		if len(agent.GetCli().GetCommand()) == 0 {
 			return invalid("spec.target.agent.cli.command is required")
-		}
-		if env == nil {
-			return invalid("a CLI agent runs in the task's sandbox; the spec needs an environment")
 		}
 	case agent != nil:
 		return invalid("spec.target.agent needs one of a2a, mcp, responses, http or cli")
