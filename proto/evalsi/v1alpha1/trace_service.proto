@@ -25,6 +25,10 @@ message TraceSummary {
   int32 steps = 7;
   // Number of evaluation results stored for the trace.
   int32 results = 8;
+  // The project the trace was ingested into, set from the ingest credential.
+  string project = 9;
+  // From resource attributes evalsi.label.<key> and the ingest credential's labels.
+  map<string, string> labels = 10;
 }
 
 message ListTracesRequest {
@@ -32,6 +36,8 @@ message ListTracesRequest {
   string service = 1;
   int32 page_size = 2;
   string page_token = 3;
+  // Only traces in this project, when set.
+  string project = 4;
 }
 
 message ListTracesResponse {
@@ -43,6 +49,8 @@ message ListTracesResponse {
 message GetTraceRequest {
   // Hex trace id.
   string trace_id = 1;
+  // Needed only when the same trace id exists in several projects you can read.
+  string project = 2;
 }
 
 message PolicyResults {

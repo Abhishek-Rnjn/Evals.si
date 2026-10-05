@@ -41,10 +41,16 @@ func (o *AssemblerOptions) defaults() {
 }
 
 type pending struct {
+	traceID   string
+	project   string
 	spans     []Span
 	first     time.Time
 	last      time.Time
 	rootEnded time.Time
+}
+
+func (p *pending) trace() Trace {
+	return Trace{TraceID: p.traceID, Project: p.project, Spans: p.spans}
 }
 
 // Assembler groups spans by trace id and emits each trace once it is complete:
@@ -72,7 +78,10 @@ func (a *Assembler) Add(spans []Span) {
 	var evicted []Trace
 	a.mu.Lock()
 	for _, s := range spans {
-		id := hex.EncodeToString(s.Span.GetTraceId())
+		// Traces are keyed by project too: spans sent to one project never
+		// join (or overwrite) another project's trace with the same id.
+		traceID := hex.EncodeToString(s.Span.GetTraceId())
+		id := s.Project + "/" + traceID
 		p := a.traces[id]
 		if p == nil {
 			if len(a.traces) >= a.opts.MaxTraces {
@@ -80,7 +89,7 @@ func (a *Assembler) Add(spans []Span) {
 					evicted = append(evicted, t)
 				}
 			}
-			p = &pending{first: now}
+			p = &pending{first: now, traceID: traceID, project: s.Project}
 			a.traces[id] = p
 		}
 		p.last = now
@@ -112,7 +121,7 @@ func (a *Assembler) evictOldestLocked() (Trace, bool) {
 	}
 	p := a.traces[oldestID]
 	delete(a.traces, oldestID)
-	return Trace{TraceID: oldestID, Spans: p.spans}, true
+	return p.trace(), true
 }
 
 // Flush emits every complete trace; force emits everything (shutdown).
@@ -126,7 +135,7 @@ func (a *Assembler) Flush(force bool) {
 			now.Sub(p.last) >= a.opts.Idle ||
 			now.Sub(p.first) >= a.opts.MaxAge
 		if done {
-			ready = append(ready, Trace{TraceID: id, Spans: p.spans})
+			ready = append(ready, p.trace())
 			delete(a.traces, id)
 		}
 	}

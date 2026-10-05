@@ -25,23 +25,46 @@ DESCRIPTOR: _descriptor.FileDescriptor
 class CreateRunRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class LabelsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     NAME_FIELD_NUMBER: _builtins.int
     PROJECT_FIELD_NUMBER: _builtins.int
     SPEC_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     project: _builtins.str
     @_builtins.property
     def spec(self) -> _run_pb2.RunSpec: ...
+    @_builtins.property
+    def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Labels for access rules. Callers can only set labels their roles allow."""
+
     def __init__(
         self,
         *,
         name: _builtins.str = ...,
         project: _builtins.str = ...,
         spec: _run_pb2.RunSpec | None = ...,
+        labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["spec", b"spec"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "project", b"project", "spec", b"spec"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["labels", b"labels", "name", b"name", "project", b"project", "spec", b"spec"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CreateRunRequest: _TypeAlias = CreateRunRequest  # noqa: Y015

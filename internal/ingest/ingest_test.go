@@ -246,7 +246,7 @@ func TestReceiverTransports(t *testing.T) {
 	c := &collected{}
 	a := NewAssembler(AssemblerOptions{}, c.emit)
 	mux := http.NewServeMux()
-	NewReceiver(a).Register(mux)
+	NewReceiver(a, nil).Register(mux)
 	srv := httptest.NewUnstartedServer(mux)
 	srv.EnableHTTP2 = true
 	srv.StartTLS()

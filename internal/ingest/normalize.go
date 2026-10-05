@@ -114,6 +114,11 @@ func (a Attrs) int(keys ...string) *int64 {
 type Span struct {
 	Span     *tracepb.Span
 	Resource Attrs
+	// The project the span was ingested into, assigned from the ingest
+	// credential; empty means the default project.
+	Project string
+	// Labels from resource attributes evalsi.label.<key> and the credential.
+	Labels map[string]string
 }
 
 func spanID(b []byte) string { return hex.EncodeToString(b) }
@@ -341,11 +346,14 @@ func ToStep(s Span) *evalsiv1alpha1.Step {
 // Trace is an assembled trace.
 type Trace struct {
 	TraceID string
+	Project string
 	Spans   []Span
 }
 
 // TraceInfo is what policy expressions see about a trace.
 type TraceInfo struct {
+	Project    string
+	Labels     map[string]string
 	Service    string
 	Name       string
 	DurationMS float64
@@ -374,6 +382,8 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 	rootAttrs := ToAttrs(root.Span.GetAttributes())
 	traj := &evalsiv1alpha1.Trajectory{TraceId: t.TraceID}
 	info := TraceInfo{
+		Project:    t.Project,
+		Labels:     root.Labels,
 		Service:    root.Resource.str("service.name"),
 		Name:       root.Span.GetName(),
 		Attributes: rootAttrs,

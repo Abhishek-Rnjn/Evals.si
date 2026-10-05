@@ -1,5 +1,5 @@
-// Command evalsid is the Evals.si daemon: API server, scheduler and (later)
-// OTLP ingest. Users normally start it through the Python CLI with `evalsi serve`.
+// Command evalsid is the Evals.si daemon: API server, scheduler and OTLP
+// ingest. Users normally start it through the Python CLI with `evalsi serve`.
 package main
 
 import (
@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/abhishek-rnjn/evals.si/internal/config"
@@ -26,6 +27,9 @@ commands:
   serve            run the server (evalsid serve -h for flags)
   sandbox probe    report which sandbox rungs work on this host
   sandbox run      run a JSON request from stdin in the sandbox, print the JSON result
+  auth check       explain an authorization decision for a token or API key
+  auth new-key     generate an API key and the hash to put in config
+  auth hash-key    hash an API key read from stdin
 `
 
 func main() {
@@ -47,6 +51,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return serve(ctx, args[1:], stderr)
 	case "sandbox":
 		return sandboxcli.Main(ctx, args[1:], os.Stdin, stdout, stderr)
+	case "auth":
+		return authMain(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "sandbox-exec":
 		// Internal: the launcher that confines itself, then executes the command.
 		return sandbox.Exec(stderr)
@@ -64,16 +70,24 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "path to evalsi.yaml (defaults apply when omitted)")
 	listen := fs.String("listen", "", "address to listen on, overriding the config (e.g. 127.0.0.1:8080)")
+	noAuth := fs.Bool("no-auth", envTrue(os.Getenv("EVALSID_NO_AUTH")),
+		"turn authentication and authorization off, for development (also EVALSID_NO_AUTH=1)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	cfg, err := config.Load(*configPath)
+	// Overrides are applied before validation, so --listen 0.0.0.0:8080 is
+	// held to the same rule as the file: no network address without auth.
+	cfg, err := config.LoadWith(*configPath, func(c *config.Config) {
+		if *listen != "" {
+			c.Listen = *listen
+		}
+		if *noAuth {
+			c.DisableAuth()
+		}
+	})
 	if err != nil {
 		fmt.Fprintf(stderr, "evalsid: %v\n", err)
 		return 1
-	}
-	if *listen != "" {
-		cfg.Listen = *listen
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	if err := server.Run(ctx, cfg, log, stderr, nil); err != nil {
@@ -81,4 +95,12 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func envTrue(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }

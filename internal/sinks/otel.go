@@ -31,6 +31,8 @@ type OTelConfig struct {
 	HeadersEnv map[string]string `json:"headers_env,omitempty"`
 	// service.name of the exported events; default "evalsi".
 	ServiceName string `json:"service_name,omitempty"`
+	// Also export the audit log, as evalsi.audit events.
+	Audit bool `json:"audit,omitempty"`
 }
 
 func (c *OTelConfig) validate() error {
@@ -157,6 +159,35 @@ func (o *otelSink) ExportRun(ctx context.Context, run *evalsiv1alpha1.Run) error
 		})
 	}
 	return o.send(ctx, records)
+}
+
+func (o *otelSink) exportsAudit() bool { return o.cfg.Audit }
+
+// ExportAudit sends one evalsi.audit event; denied calls are warnings.
+func (o *otelSink) ExportAudit(ctx context.Context, ev *evalsiv1alpha1.AuditEvent) error {
+	ts := uint64(ev.GetTime().AsTime().UnixNano())
+	sev := logs.SeverityNumber_SEVERITY_NUMBER_INFO
+	if !ev.GetAllowed() {
+		sev = logs.SeverityNumber_SEVERITY_NUMBER_WARN
+	}
+	attrs := []*common.KeyValue{
+		str("evalsi.audit.principal", ev.GetPrincipal()),
+		str("evalsi.audit.action", ev.GetAction()),
+		str("evalsi.project", ev.GetProject()),
+		str("evalsi.audit.resource", ev.GetResource()),
+		{Key: "evalsi.audit.allowed", Value: &common.AnyValue{Value: &common.AnyValue_BoolValue{BoolValue: ev.GetAllowed()}}},
+		str("evalsi.audit.reason", ev.GetReason()),
+		str("evalsi.audit.procedure", ev.GetProcedure()),
+		str("evalsi.audit.request_id", ev.GetRequestId()),
+		str("client.address", ev.GetSource()),
+	}
+	if ev.GetDetail() != "" {
+		attrs = append(attrs, str("evalsi.audit.detail", ev.GetDetail()))
+	}
+	return o.send(ctx, []*logs.LogRecord{{
+		TimeUnixNano: ts, ObservedTimeUnixNano: ts, EventName: "evalsi.audit",
+		SeverityNumber: sev, Attributes: attrs,
+	}})
 }
 
 func (o *otelSink) send(ctx context.Context, records []*logs.LogRecord) error {

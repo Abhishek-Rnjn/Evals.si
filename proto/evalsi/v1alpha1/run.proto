@@ -130,4 +130,8 @@ message Run {
   // Content hash of the dataset snapshot the run uses.
   string dataset_sha256 = 15;
   int64 records = 16;
+  // Labels for access rules, for example app, env or team.
+  map<string, string> labels = 17;
+  // The principal that created the run, for example "user:corp/1234" or "key:ci".
+  string created_by = 18;
 }

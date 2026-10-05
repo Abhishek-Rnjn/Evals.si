@@ -26,6 +26,23 @@ DESCRIPTOR: _descriptor.FileDescriptor
 class TraceSummary(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class LabelsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     TRACE_ID_FIELD_NUMBER: _builtins.int
     SERVICE_FIELD_NUMBER: _builtins.int
     NAME_FIELD_NUMBER: _builtins.int
@@ -34,6 +51,8 @@ class TraceSummary(_message.Message):
     ERROR_FIELD_NUMBER: _builtins.int
     STEPS_FIELD_NUMBER: _builtins.int
     RESULTS_FIELD_NUMBER: _builtins.int
+    PROJECT_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
     trace_id: _builtins.str
     service: _builtins.str
     name: _builtins.str
@@ -42,10 +61,16 @@ class TraceSummary(_message.Message):
     steps: _builtins.int
     results: _builtins.int
     """Number of evaluation results stored for the trace."""
+    project: _builtins.str
+    """The project the trace was ingested into, set from the ingest credential."""
     @_builtins.property
     def start_time(self) -> _timestamp_pb2.Timestamp: ...
     @_builtins.property
     def duration(self) -> _duration_pb2.Duration: ...
+    @_builtins.property
+    def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """From resource attributes evalsi.label.<key> and the ingest credential's labels."""
+
     def __init__(
         self,
         *,
@@ -57,10 +82,12 @@ class TraceSummary(_message.Message):
         error: _builtins.bool = ...,
         steps: _builtins.int = ...,
         results: _builtins.int = ...,
+        project: _builtins.str = ...,
+        labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["duration", b"duration", "start_time", b"start_time"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration", b"duration", "error", b"error", "name", b"name", "results", b"results", "service", b"service", "start_time", b"start_time", "steps", b"steps", "trace_id", b"trace_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration", b"duration", "error", b"error", "labels", b"labels", "name", b"name", "project", b"project", "results", b"results", "service", b"service", "start_time", b"start_time", "steps", b"steps", "trace_id", b"trace_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___TraceSummary: _TypeAlias = TraceSummary  # noqa: Y015
@@ -72,18 +99,22 @@ class ListTracesRequest(_message.Message):
     SERVICE_FIELD_NUMBER: _builtins.int
     PAGE_SIZE_FIELD_NUMBER: _builtins.int
     PAGE_TOKEN_FIELD_NUMBER: _builtins.int
+    PROJECT_FIELD_NUMBER: _builtins.int
     service: _builtins.str
     """Only traces from this service, when set."""
     page_size: _builtins.int
     page_token: _builtins.str
+    project: _builtins.str
+    """Only traces in this project, when set."""
     def __init__(
         self,
         *,
         service: _builtins.str = ...,
         page_size: _builtins.int = ...,
         page_token: _builtins.str = ...,
+        project: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["page_size", b"page_size", "page_token", b"page_token", "service", b"service"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["page_size", b"page_size", "page_token", b"page_token", "project", b"project", "service", b"service"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ListTracesRequest: _TypeAlias = ListTracesRequest  # noqa: Y015
@@ -115,14 +146,18 @@ class GetTraceRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     TRACE_ID_FIELD_NUMBER: _builtins.int
+    PROJECT_FIELD_NUMBER: _builtins.int
     trace_id: _builtins.str
     """Hex trace id."""
+    project: _builtins.str
+    """Needed only when the same trace id exists in several projects you can read."""
     def __init__(
         self,
         *,
         trace_id: _builtins.str = ...,
+        project: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["trace_id", b"trace_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["project", b"project", "trace_id", b"trace_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___GetTraceRequest: _TypeAlias = GetTraceRequest  # noqa: Y015

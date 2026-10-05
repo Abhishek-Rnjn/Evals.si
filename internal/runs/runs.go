@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,8 @@ import (
 
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
@@ -290,6 +293,9 @@ func totalTasks(spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, recor
 	return int64(perTrial * trialsOf(spec))
 }
 
+// DefaultProject holds runs that name no project.
+const DefaultProject = "default"
+
 // CreateRun validates, snapshots the dataset, stores the run and starts it.
 func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1alpha1.CreateRunRequest]) (*connect.Response[evalsiv1alpha1.CreateRunResponse], error) {
 	spec := req.Msg.GetSpec()
@@ -306,10 +312,16 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 		// The records live in the snapshot; keep the stored spec small.
 		stored.Dataset.Source = &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{}}
 	}
+	project := req.Msg.GetProject()
+	if project == "" {
+		project = DefaultProject
+	}
 	run := &evalsiv1alpha1.Run{
 		Id:            newID(),
 		Name:          req.Msg.GetName(),
-		Project:       req.Msg.GetProject(),
+		Project:       project,
+		Labels:        req.Msg.GetLabels(),
+		CreatedBy:     auth.PrincipalFrom(ctx).ID(),
 		Spec:          stored,
 		Status:        evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING,
 		CreatedAt:     timestamppb.Now(),
@@ -795,14 +807,28 @@ func (m *Manager) ListRuns(ctx context.Context, req *connect.Request[evalsiv1alp
 	if size <= 0 || size > 200 {
 		size = 50
 	}
-	runs, next, err := m.store.ListRuns(ctx, req.Msg.GetProject(), size, req.Msg.GetPageToken())
+	projects := authz.Projects(ctx, "runs.read")
+	if p := req.Msg.GetProject(); p != "" {
+		if projects != nil && !slices.Contains(projects, p) {
+			projects = []string{}
+		} else {
+			projects = []string{p}
+		}
+	}
+	runs, next, err := m.store.ListRuns(ctx, projects, size, req.Msg.GetPageToken())
 	if err != nil {
 		return nil, invalid("%v", err)
 	}
+	// Pages can come back short: runs the caller cannot read are dropped.
+	runsCode := authz.RunsCodeFrom(ctx)
+	visible := runs[:0]
 	for _, r := range runs {
-		r.Spec = nil
+		if authz.Can(ctx, "runs.read", r.GetProject(), authz.RunResource(r, runsCode)) {
+			r.Spec = nil
+			visible = append(visible, r)
+		}
 	}
-	return connect.NewResponse(&evalsiv1alpha1.ListRunsResponse{Runs: runs, NextPageToken: next}), nil
+	return connect.NewResponse(&evalsiv1alpha1.ListRunsResponse{Runs: visible, NextPageToken: next}), nil
 }
 
 // WatchRun streams the run's state, then events until it finishes.

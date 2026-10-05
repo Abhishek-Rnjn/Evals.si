@@ -47,9 +47,11 @@ type OnlineEvalPolicy struct {
 	// Judge for judge evaluators; the server's default when empty.
 	Judge string `protobuf:"bytes,7,opt,name=judge,proto3" json:"judge,omitempty"`
 	// Window for the aggregates that alerts check. Defaults to 5 minutes.
-	Window        *durationpb.Duration `protobuf:"bytes,8,opt,name=window,proto3" json:"window,omitempty"`
-	Alerts        []*Alert             `protobuf:"bytes,9,rep,name=alerts,proto3" json:"alerts,omitempty"`
-	Promote       *Promotion           `protobuf:"bytes,10,opt,name=promote,proto3" json:"promote,omitempty"`
+	Window  *durationpb.Duration `protobuf:"bytes,8,opt,name=window,proto3" json:"window,omitempty"`
+	Alerts  []*Alert             `protobuf:"bytes,9,rep,name=alerts,proto3" json:"alerts,omitempty"`
+	Promote *Promotion           `protobuf:"bytes,10,opt,name=promote,proto3" json:"promote,omitempty"`
+	// Labels for access rules.
+	Labels        map[string]string `protobuf:"bytes,11,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -150,6 +152,13 @@ func (x *OnlineEvalPolicy) GetAlerts() []*Alert {
 func (x *OnlineEvalPolicy) GetPromote() *Promotion {
 	if x != nil {
 		return x.Promote
+	}
+	return nil
+}
+
+func (x *OnlineEvalPolicy) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
 	}
 	return nil
 }
@@ -973,7 +982,7 @@ var File_evalsi_v1alpha1_monitor_service_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_monitor_service_proto_rawDesc = "" +
 	"\n" +
-	"%evalsi/v1alpha1/monitor_service.proto\x12\x0fevalsi.v1alpha1\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x95\x03\n" +
+	"%evalsi/v1alpha1/monitor_service.proto\x12\x0fevalsi.v1alpha1\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x97\x04\n" +
 	"\x10OnlineEvalPolicy\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12\x1a\n" +
@@ -985,7 +994,11 @@ const file_evalsi_v1alpha1_monitor_service_proto_rawDesc = "" +
 	"\x06window\x18\b \x01(\v2\x19.google.protobuf.DurationR\x06window\x12.\n" +
 	"\x06alerts\x18\t \x03(\v2\x16.evalsi.v1alpha1.AlertR\x06alerts\x124\n" +
 	"\apromote\x18\n" +
-	" \x01(\v2\x1a.evalsi.v1alpha1.PromotionR\apromote\"D\n" +
+	" \x01(\v2\x1a.evalsi.v1alpha1.PromotionR\apromote\x12E\n" +
+	"\x06labels\x18\v \x03(\v2-.evalsi.v1alpha1.OnlineEvalPolicy.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"D\n" +
 	"\bSampling\x12\x17\n" +
 	"\x04rate\x18\x01 \x01(\x01H\x00R\x04rate\x88\x01\x01\x12\x16\n" +
 	"\x06always\x18\x02 \x03(\tR\x06alwaysB\a\n" +
@@ -1062,7 +1075,7 @@ func file_evalsi_v1alpha1_monitor_service_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_monitor_service_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_monitor_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_evalsi_v1alpha1_monitor_service_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_evalsi_v1alpha1_monitor_service_proto_goTypes = []any{
 	(*OnlineEvalPolicy)(nil),       // 0: evalsi.v1alpha1.OnlineEvalPolicy
 	(*Sampling)(nil),               // 1: evalsi.v1alpha1.Sampling
@@ -1080,38 +1093,40 @@ var file_evalsi_v1alpha1_monitor_service_proto_goTypes = []any{
 	(*AlertState)(nil),             // 13: evalsi.v1alpha1.AlertState
 	(*PolicyStats)(nil),            // 14: evalsi.v1alpha1.PolicyStats
 	(*GetPolicyStatsResponse)(nil), // 15: evalsi.v1alpha1.GetPolicyStatsResponse
-	(*durationpb.Duration)(nil),    // 16: google.protobuf.Duration
-	(*EvaluatorRef)(nil),           // 17: evalsi.v1alpha1.EvaluatorRef
-	(*timestamppb.Timestamp)(nil),  // 18: google.protobuf.Timestamp
+	nil,                            // 16: evalsi.v1alpha1.OnlineEvalPolicy.LabelsEntry
+	(*durationpb.Duration)(nil),    // 17: google.protobuf.Duration
+	(*EvaluatorRef)(nil),           // 18: evalsi.v1alpha1.EvaluatorRef
+	(*timestamppb.Timestamp)(nil),  // 19: google.protobuf.Timestamp
 }
 var file_evalsi_v1alpha1_monitor_service_proto_depIdxs = []int32{
 	1,  // 0: evalsi.v1alpha1.OnlineEvalPolicy.sampling:type_name -> evalsi.v1alpha1.Sampling
 	2,  // 1: evalsi.v1alpha1.OnlineEvalPolicy.stages:type_name -> evalsi.v1alpha1.CascadeStage
-	16, // 2: evalsi.v1alpha1.OnlineEvalPolicy.window:type_name -> google.protobuf.Duration
+	17, // 2: evalsi.v1alpha1.OnlineEvalPolicy.window:type_name -> google.protobuf.Duration
 	3,  // 3: evalsi.v1alpha1.OnlineEvalPolicy.alerts:type_name -> evalsi.v1alpha1.Alert
 	4,  // 4: evalsi.v1alpha1.OnlineEvalPolicy.promote:type_name -> evalsi.v1alpha1.Promotion
-	17, // 5: evalsi.v1alpha1.CascadeStage.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
-	0,  // 6: evalsi.v1alpha1.ApplyPolicyRequest.policy:type_name -> evalsi.v1alpha1.OnlineEvalPolicy
-	0,  // 7: evalsi.v1alpha1.ApplyPolicyResponse.policy:type_name -> evalsi.v1alpha1.OnlineEvalPolicy
-	0,  // 8: evalsi.v1alpha1.ListPoliciesResponse.policies:type_name -> evalsi.v1alpha1.OnlineEvalPolicy
-	3,  // 9: evalsi.v1alpha1.AlertState.alert:type_name -> evalsi.v1alpha1.Alert
-	18, // 10: evalsi.v1alpha1.AlertState.since:type_name -> google.protobuf.Timestamp
-	12, // 11: evalsi.v1alpha1.PolicyStats.metrics:type_name -> evalsi.v1alpha1.MetricWindow
-	13, // 12: evalsi.v1alpha1.PolicyStats.alerts:type_name -> evalsi.v1alpha1.AlertState
-	14, // 13: evalsi.v1alpha1.GetPolicyStatsResponse.stats:type_name -> evalsi.v1alpha1.PolicyStats
-	5,  // 14: evalsi.v1alpha1.MonitorService.ApplyPolicy:input_type -> evalsi.v1alpha1.ApplyPolicyRequest
-	7,  // 15: evalsi.v1alpha1.MonitorService.ListPolicies:input_type -> evalsi.v1alpha1.ListPoliciesRequest
-	9,  // 16: evalsi.v1alpha1.MonitorService.DeletePolicy:input_type -> evalsi.v1alpha1.DeletePolicyRequest
-	11, // 17: evalsi.v1alpha1.MonitorService.GetPolicyStats:input_type -> evalsi.v1alpha1.GetPolicyStatsRequest
-	6,  // 18: evalsi.v1alpha1.MonitorService.ApplyPolicy:output_type -> evalsi.v1alpha1.ApplyPolicyResponse
-	8,  // 19: evalsi.v1alpha1.MonitorService.ListPolicies:output_type -> evalsi.v1alpha1.ListPoliciesResponse
-	10, // 20: evalsi.v1alpha1.MonitorService.DeletePolicy:output_type -> evalsi.v1alpha1.DeletePolicyResponse
-	15, // 21: evalsi.v1alpha1.MonitorService.GetPolicyStats:output_type -> evalsi.v1alpha1.GetPolicyStatsResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	16, // 5: evalsi.v1alpha1.OnlineEvalPolicy.labels:type_name -> evalsi.v1alpha1.OnlineEvalPolicy.LabelsEntry
+	18, // 6: evalsi.v1alpha1.CascadeStage.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
+	0,  // 7: evalsi.v1alpha1.ApplyPolicyRequest.policy:type_name -> evalsi.v1alpha1.OnlineEvalPolicy
+	0,  // 8: evalsi.v1alpha1.ApplyPolicyResponse.policy:type_name -> evalsi.v1alpha1.OnlineEvalPolicy
+	0,  // 9: evalsi.v1alpha1.ListPoliciesResponse.policies:type_name -> evalsi.v1alpha1.OnlineEvalPolicy
+	3,  // 10: evalsi.v1alpha1.AlertState.alert:type_name -> evalsi.v1alpha1.Alert
+	19, // 11: evalsi.v1alpha1.AlertState.since:type_name -> google.protobuf.Timestamp
+	12, // 12: evalsi.v1alpha1.PolicyStats.metrics:type_name -> evalsi.v1alpha1.MetricWindow
+	13, // 13: evalsi.v1alpha1.PolicyStats.alerts:type_name -> evalsi.v1alpha1.AlertState
+	14, // 14: evalsi.v1alpha1.GetPolicyStatsResponse.stats:type_name -> evalsi.v1alpha1.PolicyStats
+	5,  // 15: evalsi.v1alpha1.MonitorService.ApplyPolicy:input_type -> evalsi.v1alpha1.ApplyPolicyRequest
+	7,  // 16: evalsi.v1alpha1.MonitorService.ListPolicies:input_type -> evalsi.v1alpha1.ListPoliciesRequest
+	9,  // 17: evalsi.v1alpha1.MonitorService.DeletePolicy:input_type -> evalsi.v1alpha1.DeletePolicyRequest
+	11, // 18: evalsi.v1alpha1.MonitorService.GetPolicyStats:input_type -> evalsi.v1alpha1.GetPolicyStatsRequest
+	6,  // 19: evalsi.v1alpha1.MonitorService.ApplyPolicy:output_type -> evalsi.v1alpha1.ApplyPolicyResponse
+	8,  // 20: evalsi.v1alpha1.MonitorService.ListPolicies:output_type -> evalsi.v1alpha1.ListPoliciesResponse
+	10, // 21: evalsi.v1alpha1.MonitorService.DeletePolicy:output_type -> evalsi.v1alpha1.DeletePolicyResponse
+	15, // 22: evalsi.v1alpha1.MonitorService.GetPolicyStats:output_type -> evalsi.v1alpha1.GetPolicyStatsResponse
+	19, // [19:23] is the sub-list for method output_type
+	15, // [15:19] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_monitor_service_proto_init() }
@@ -1129,7 +1144,7 @@ func file_evalsi_v1alpha1_monitor_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_monitor_service_proto_rawDesc), len(file_evalsi_v1alpha1_monitor_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

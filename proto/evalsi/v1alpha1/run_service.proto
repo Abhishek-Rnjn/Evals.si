@@ -26,6 +26,8 @@ message CreateRunRequest {
   string name = 1;
   string project = 2;
   RunSpec spec = 3;
+  // Labels for access rules. Callers can only set labels their roles allow.
+  map<string, string> labels = 4;
 }
 
 message CreateRunResponse {

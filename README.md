@@ -9,17 +9,20 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 - **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
 - **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
 
-> **Status:** Phases 0 and 1 are done. The standalone server covers three doors:
+> **Status:** Phases 0, 1 and 2 are done. The standalone server covers three doors:
 >
 > - **Score:** grade outputs you already have.
 > - **Run:** durable, resumable runs with trials, gates and budgets.
 > - **Watch:** online evaluation of OpenTelemetry traces.
 >
-> Around them are evaluator packs, framework adapters, a fail-closed sandbox for code evaluators, and MLflow and OTel sinks. Next comes Phase 2: identity and access (OIDC/JWT and API keys, project-scoped RBAC, and agentgateway-style CEL rules). Phase 3, the agent harness and Firecracker, follows. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
+> Around them are evaluator packs, framework adapters, a fail-closed sandbox for code evaluators, MLflow and OTel sinks, and identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log. Next comes Phase 3, the agent harness and Firecracker. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
 
 ## Quickstart
 
+You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ for you). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, the sandbox for code evaluators needs bubblewrap (see [Development](#development)).
+
 ```bash
+git clone https://github.com/Abhishek-Rnjn/Evals.si && cd Evals.si
 cd python && uv sync --all-packages
 uv run evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match,latency
 ```
@@ -73,10 +76,26 @@ result.save("results.json")   # manifest, summaries and every per-record result
 `evalsid` serves the same evaluators over gRPC, gRPC-Web and HTTP/JSON on one port. It runs the Python evaluators in a supervised worker process.
 
 ```bash
-go build -o bin/evalsid ./cmd/evalsid
+go build -o bin/evalsid ./cmd/evalsid        # from the repository root
 cd python && uv sync --all-packages          # installs evalsi[server] into python/.venv
 EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/server/evalsi.yaml
 ```
+
+**Authentication is optional.**
+
+- **Loopback, no `auth` section.** On `127.0.0.1` with no `auth` section the server runs without authentication, as the log says. That is fine on a laptop.
+- **Any other address** needs authentication, unless you switch it off explicitly.
+- **To switch it off for development or testing,** even with an `auth` section in the config, use one of:
+  - `evalsi serve --no-auth`;
+  - `evalsid serve --no-auth`;
+  - `EVALSID_NO_AUTH=1` (convenient in containers);
+  - `auth: {mode: none}` in the file.
+
+  With any of these, every caller is treated as an owner and the server logs a warning at startup. The rest of your auth, roles and rules stay in the config, unenforced, so removing the switch restores them.
+
+To try access control, see [Try access control locally](#try-access-control-locally).
+
+The example's default judge is Claude: export `ANTHROPIC_API_KEY` before starting the server for `llm-judge` to work. Without it, `exact-match` still scores and `llm-judge` reports an error, never a zero. To use a local OpenAI-compatible model instead, edit the `local` judge in the config.
 
 ```bash
 # HTTP/JSON
@@ -100,6 +119,7 @@ The same services answer plain REST under `/v1alpha1`, for example:
 - `POST /v1alpha1/runs`, `GET /v1alpha1/runs/{id}`, `POST /v1alpha1/runs/{id}:cancel`
 - `GET /v1alpha1/runs/{id}/results`
 - `POST /v1alpha1/policies`, `GET /v1alpha1/traces/{trace_id}`
+- `GET /v1alpha1/whoami`, `POST /v1alpha1/apikeys`, `GET /v1alpha1/audit`
 
 The full list is in `internal/server/rest.go`.
 
@@ -169,18 +189,83 @@ evalsid sandbox probe
 
 See the `sinks` section of [`examples/server/evalsi.yaml`](examples/server/evalsi.yaml).
 
+### Identity and access
+
+A server on a non-loopback address must authenticate. It accepts:
+
+- **API keys** (`evalsid auth new-key`);
+- **tokens from your OIDC provider:** Keycloak, Entra ID, Okta, Auth0, Google and others;
+- **GitHub Actions OIDC tokens**, with no stored secret;
+- **client certificates.**
+
+Access is granted per project:
+
+- **Built-in roles:** viewer, runner, editor, admin, ingest and owner.
+- **Custom roles** built from the permission list, optionally limited by CEL conditions such as allowed models or labels.
+- **Global rules** in agentgateway's `allow`, `deny` and `require` form.
+
+```bash
+evalsi login --server https://evals.example.com      # device code; --browser for PKCE
+evalsi whoami --server https://evals.example.com
+evalsi auth keys create ci --role support=runner --ttl 90d --server https://evals.example.com
+evalsi auth audit --denied --server https://evals.example.com
+evalsid auth check --config evalsi.yaml --api-key "$KEY" --action runs.create --project support
+```
+
+Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN`; GitHub Actions jobs set `EVALSI_OIDC_AUDIENCE`. See the [setup guide](docs/guides/identity.md) and [`examples/auth/evalsi.yaml`](examples/auth/evalsi.yaml).
+
+#### Try access control locally
+
+[`examples/auth/local.yaml`](examples/auth/local.yaml) needs no identity provider or TLS. It uses API keys only, listens on loopback only, and has one project (`demo`) and a custom role (`prompt-engineer`, limited to some models).
+
+1. Create your owner key, and put its hash in the config. The server refuses to start while the placeholder is there.
+
+   ```bash
+   go build -o bin/evalsid ./cmd/evalsid
+   bin/evalsid auth new-key
+   # key:  evk_...          <- keep this; it is shown once
+   # hash: sha256:...       <- paste over the placeholder in examples/auth/local.yaml
+   ```
+
+2. Start the server.
+
+   ```bash
+   cd python && uv sync --all-packages
+   EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/auth/local.yaml
+   ```
+
+3. In another terminal, from `python/`, use it.
+
+   ```bash
+   export EVALSI_SERVER=http://127.0.0.1:8080
+   uv run evalsi whoami                                   # unauthenticated: rejected
+   export EVALSI_API_KEY=evk_...                          # your owner key
+   uv run evalsi whoami                                   # key:me, owner
+
+   # Issue a key for someone else, scoped to one project and role.
+   uv run evalsi auth keys create alice --role demo=prompt-engineer
+   EVALSI_API_KEY=evk_<alice's key> uv run evalsi whoami                        # prompt-engineer in demo
+   EVALSI_API_KEY=evk_<alice's key> uv run evalsi auth projects create other    # permission_denied
+
+   uv run evalsi auth audit --denied                      # alice's denied call, and why
+   ../bin/evalsid auth check --config ../examples/auth/local.yaml --api-key evk_<alice's key> \
+     --action runs.create --project demo --resource '{"target":{"model":"gpt-5"}}'   # deny: model not allowed
+   ```
+
+Delete `python/.evalsi-auth-demo` to start over. To use the same config without access control for a while, add `--no-auth` to the `serve` command.
+
 ## Repository layout
 
 | Path | What |
 |------|------|
 | `proto/` | Protobuf API, the single source of truth (`evalsi.v1alpha1`, `evalsi.plugin.v1alpha1`) |
 | `gen/go/` | Generated Go code (do not edit; run `make proto`) |
-| `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, worker supervision, runs, OTLP ingest and online policies, sandbox, sinks, statistics |
+| `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, authentication (`auth`) and authorization (`authz`), worker supervision, runs, OTLP ingest and online policies, sandbox, sinks, statistics |
 | `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker and built-in packs |
 | `python/adapters/` | Framework adapters (DeepEval, RAGAS, Inspect AI, lm-eval), each in its own environment |
 | `tests/e2e/` | evalsid against a real Python worker (`make e2e`) |
 | `examples/` | Runnable examples |
-| `docs/` | Design plan and decision records |
+| `docs/` | Design plan, decision records and guides |
 
 ## Development
 

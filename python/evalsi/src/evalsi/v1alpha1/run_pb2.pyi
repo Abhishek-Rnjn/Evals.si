@@ -373,6 +373,23 @@ Global___Progress: _TypeAlias = Progress  # noqa: Y015
 class Run(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class LabelsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     ID_FIELD_NUMBER: _builtins.int
     NAME_FIELD_NUMBER: _builtins.int
     PROJECT_FIELD_NUMBER: _builtins.int
@@ -389,6 +406,8 @@ class Run(_message.Message):
     JUDGE_USAGE_FIELD_NUMBER: _builtins.int
     DATASET_SHA256_FIELD_NUMBER: _builtins.int
     RECORDS_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
+    CREATED_BY_FIELD_NUMBER: _builtins.int
     id: _builtins.str
     name: _builtins.str
     project: _builtins.str
@@ -397,6 +416,8 @@ class Run(_message.Message):
     dataset_sha256: _builtins.str
     """Content hash of the dataset snapshot the run uses."""
     records: _builtins.int
+    created_by: _builtins.str
+    """The principal that created the run, for example "user:corp/1234" or "key:ci"."""
     @_builtins.property
     def spec(self) -> Global___RunSpec: ...
     @_builtins.property
@@ -417,6 +438,10 @@ class Run(_message.Message):
 
     @_builtins.property
     def judge_usage(self) -> _record_pb2.Usage: ...
+    @_builtins.property
+    def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Labels for access rules, for example app, env or team."""
+
     def __init__(
         self,
         *,
@@ -436,10 +461,12 @@ class Run(_message.Message):
         judge_usage: _record_pb2.Usage | None = ...,
         dataset_sha256: _builtins.str = ...,
         records: _builtins.int = ...,
+        labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        created_by: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["created_at", b"created_at", "finished_at", b"finished_at", "judge_usage", b"judge_usage", "progress", b"progress", "spec", b"spec", "started_at", b"started_at", "target_usage", b"target_usage"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["created_at", b"created_at", "dataset_sha256", b"dataset_sha256", "error", b"error", "finished_at", b"finished_at", "gates", b"gates", "id", b"id", "judge_usage", b"judge_usage", "name", b"name", "progress", b"progress", "project", b"project", "records", b"records", "spec", b"spec", "started_at", b"started_at", "status", b"status", "summaries", b"summaries", "target_usage", b"target_usage"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["created_at", b"created_at", "created_by", b"created_by", "dataset_sha256", b"dataset_sha256", "error", b"error", "finished_at", b"finished_at", "gates", b"gates", "id", b"id", "judge_usage", b"judge_usage", "labels", b"labels", "name", b"name", "progress", b"progress", "project", b"project", "records", b"records", "spec", b"spec", "started_at", b"started_at", "status", b"status", "summaries", b"summaries", "target_usage", b"target_usage"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Run: _TypeAlias = Run  # noqa: Y015

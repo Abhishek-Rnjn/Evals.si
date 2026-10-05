@@ -318,6 +318,10 @@ def params_schema(spec: EvaluatorSpec) -> dict[str, Any]:
     return schema
 
 
+def _isolation(sandbox: bool) -> record_pb2.IsolationLevel.ValueType:
+    return record_pb2.ISOLATION_LEVEL_CONFINED if sandbox else record_pb2.ISOLATION_LEVEL_NONE
+
+
 def manifest_to_proto(spec: EvaluatorSpec) -> evaluator_pb2.EvaluatorManifest:
     req = spec.requires
     msg = evaluator_pb2.EvaluatorManifest(
@@ -334,9 +338,11 @@ def manifest_to_proto(spec: EvaluatorSpec) -> evaluator_pb2.EvaluatorManifest:
             context=req.context,
             trajectory=req.trajectory,
             judge=req.judge,
-            isolation=record_pb2.ISOLATION_LEVEL_NONE,
+            isolation=_isolation(req.sandbox),
         ),
-        scheduling=evaluator_pb2.Scheduling(pool="judge" if req.judge else "cpu"),
+        scheduling=evaluator_pb2.Scheduling(
+            pool="sandbox" if req.sandbox else "judge" if req.judge else "cpu"
+        ),
     )
     for output in spec.outputs:
         out = evaluator_pb2.MetricSpec(

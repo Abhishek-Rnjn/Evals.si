@@ -17,3 +17,6 @@ build/
 .idea/
 .vscode/
 .DS_Store
+
+# Server data directories (examples use .evalsi and .evalsi-auth-demo)
+.evalsi*/

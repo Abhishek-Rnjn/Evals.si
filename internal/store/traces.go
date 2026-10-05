@@ -13,16 +13,24 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 )
 
-// PutTrace stores (or replaces, when late spans re-assemble it) a trace.
+// PutTrace stores (or replaces, when late spans re-assemble it) a trace in
+// its project (summary.Project).
 func (s *Store) PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO traces (trace_id, service, start_ns, summary, record) VALUES (?, ?, ?, ?, ?)`,
-		summary.GetTraceId(), summary.GetService(), summary.GetStartTime().AsTime().UnixNano(), marshal(summary), marshal(record))
+		`INSERT OR REPLACE INTO traces (project, trace_id, service, start_ns, summary, record) VALUES (?, ?, ?, ?, ?, ?)`,
+		summary.GetProject(), summary.GetTraceId(), summary.GetService(), summary.GetStartTime().AsTime().UnixNano(), marshal(summary), marshal(record))
 	return err
 }
 
+// TraceFilter selects traces.
+type TraceFilter struct {
+	// nil: every project.
+	Projects []string
+	Service  string
+}
+
 // ListTraces returns trace summaries newest first, with result counts.
-func (s *Store) ListTraces(ctx context.Context, service string, pageSize int, pageToken string) ([]*evalsiv1alpha1.TraceSummary, string, error) {
+func (s *Store) ListTraces(ctx context.Context, f TraceFilter, pageSize int, pageToken string) ([]*evalsiv1alpha1.TraceSummary, string, error) {
 	offset := 0
 	if pageToken != "" {
 		var err error
@@ -30,26 +38,30 @@ func (s *Store) ListTraces(ctx context.Context, service string, pageSize int, pa
 			return nil, "", fmt.Errorf("store: bad page token")
 		}
 	}
+	where, args := projectFilter("t.project", f.Projects)
+	args = append(args, f.Service, f.Service, pageSize+1, offset)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT t.summary, (SELECT COUNT(*) FROM trace_results r WHERE r.trace_id = t.trace_id)
-		FROM traces t WHERE (? = '' OR t.service = ?)
-		ORDER BY t.start_ns DESC, t.trace_id LIMIT ? OFFSET ?`, service, service, pageSize+1, offset)
+		SELECT t.project, t.summary,
+		       (SELECT COUNT(*) FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id)
+		FROM traces t WHERE `+where+` AND (? = '' OR t.service = ?)
+		ORDER BY t.start_ns DESC, t.trace_id LIMIT ? OFFSET ?`, args...)
 	if err != nil {
 		return nil, "", err
 	}
 	defer rows.Close()
 	var out []*evalsiv1alpha1.TraceSummary
 	for rows.Next() {
+		var project string
 		var blob []byte
 		var n int32
-		if err := rows.Scan(&blob, &n); err != nil {
+		if err := rows.Scan(&project, &blob, &n); err != nil {
 			return nil, "", err
 		}
 		sum := &evalsiv1alpha1.TraceSummary{}
 		if err := proto.Unmarshal(blob, sum); err != nil {
 			return nil, "", err
 		}
-		sum.Results = n
+		sum.Project, sum.Results = project, n
 		out = append(out, sum)
 	}
 	next := ""
@@ -59,22 +71,44 @@ func (s *Store) ListTraces(ctx context.Context, service string, pageSize int, pa
 	return out, next, rows.Err()
 }
 
-// GetTrace returns a stored trace's record.
-func (s *Store) GetTrace(ctx context.Context, traceID string) (*evalsiv1alpha1.Record, error) {
-	var blob []byte
-	err := s.db.QueryRowContext(ctx, `SELECT record FROM traces WHERE trace_id = ?`, traceID).Scan(&blob)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
+// TraceProjects lists the projects holding a trace with this id.
+func (s *Store) TraceProjects(ctx context.Context, traceID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT project FROM traces WHERE trace_id = ? ORDER BY project`, traceID)
 	if err != nil {
 		return nil, err
 	}
-	rec := &evalsiv1alpha1.Record{}
-	return rec, proto.Unmarshal(blob, rec)
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// GetTrace returns a stored trace's summary and record.
+func (s *Store) GetTrace(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error) {
+	var sumBlob, recBlob []byte
+	err := s.db.QueryRowContext(ctx, `SELECT summary, record FROM traces WHERE project = ? AND trace_id = ?`, project, traceID).Scan(&sumBlob, &recBlob)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	sum, rec := &evalsiv1alpha1.TraceSummary{}, &evalsiv1alpha1.Record{}
+	if err := proto.Unmarshal(sumBlob, sum); err != nil {
+		return nil, nil, err
+	}
+	sum.Project = project
+	return sum, rec, proto.Unmarshal(recBlob, rec)
 }
 
 // PutTraceResults stores a policy's results for a trace.
-func (s *Store) PutTraceResults(ctx context.Context, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
+func (s *Store) PutTraceResults(ctx context.Context, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -82,8 +116,8 @@ func (s *Store) PutTraceResults(ctx context.Context, traceID, policy string, res
 	defer func() { _ = tx.Rollback() }()
 	for _, r := range results {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO trace_results (trace_id, policy, evaluator, result) VALUES (?, ?, ?, ?)`,
-			traceID, policy, r.GetEvaluator(), marshal(r)); err != nil {
+			`INSERT OR REPLACE INTO trace_results (project, trace_id, policy, evaluator, result) VALUES (?, ?, ?, ?, ?)`,
+			project, traceID, policy, r.GetEvaluator(), marshal(r)); err != nil {
 			return err
 		}
 	}
@@ -91,8 +125,8 @@ func (s *Store) PutTraceResults(ctx context.Context, traceID, policy string, res
 }
 
 // TraceResults returns results for a trace grouped by policy, policies sorted.
-func (s *Store) TraceResults(ctx context.Context, traceID string) ([]*evalsiv1alpha1.PolicyResults, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT policy, result FROM trace_results WHERE trace_id = ? ORDER BY policy, rowid`, traceID)
+func (s *Store) TraceResults(ctx context.Context, project, traceID string) ([]*evalsiv1alpha1.PolicyResults, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT policy, result FROM trace_results WHERE project = ? AND trace_id = ? ORDER BY policy, rowid`, project, traceID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +157,7 @@ func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, err
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM trace_results WHERE trace_id IN (SELECT trace_id FROM traces WHERE start_ns < ?)`, t.UnixNano()); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM trace_results WHERE (project, trace_id) IN (SELECT project, trace_id FROM traces WHERE start_ns < ?)`, t.UnixNano()); err != nil {
 		return 0, err
 	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM traces WHERE start_ns < ?`, t.UnixNano())

@@ -54,7 +54,7 @@ def _tail(text: str, limit: int = 600) -> str:
         "exits 0. Tests come from the reference or metadata['test']; with "
         "metadata['entry_point'], check(<entry_point>) is called (HumanEval style)."
     ),
-    requires=Requirements(output=True),
+    requires=Requirements(output=True, sandbox=True),
     outputs=[MetricSpec("unit-tests", PASSED, higher_is_better=True)],
 )
 async def unit_tests(

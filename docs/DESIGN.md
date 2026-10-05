@@ -1,6 +1,6 @@
 # Evals.si: Architecture & Implementation Plan
 
-> **Status:** Draft for discussion · v0.4 · 2026-10-05. D1–D3, D5, D6, D10, D13 and D14 are decided (§22, [decision records](decisions/README.md)). Phase 0 is implemented; Phase 1 is in progress (§23).
+> **Status:** Draft for discussion · v0.4 · 2026-10-05. D1–D3, D5, D6, D10, D13 and D14 are decided (§22, [decision records](decisions/README.md)). Phases 0, 1 and 2 are implemented (§23).
 >
 > **Scope:** System design for a pluggable, scalable, single-entrypoint evaluation platform for classic ML models, LLMs and agents. It runs standalone and on Kubernetes, speaks gRPC and HTTP, and can later be used as a local MCP server.
 >
@@ -912,7 +912,7 @@ Platform builders run Evals.si as a shared service ([decision 0008](decisions/00
 
   Our config keeps evalsi.yaml's snake_case, but every concept and name maps one to one.
 - **Secure by default:**
-  - On a non-loopback address, `evalsid` refuses to start without an `auth` section. Running unauthenticated takes an explicit `auth: {mode: none}`, which logs a warning on every start.
+  - On a non-loopback address, `evalsid` refuses to start without an `auth` section. Running unauthenticated takes an explicit `auth: {mode: none}`, `evalsid serve --no-auth` or `EVALSID_NO_AUTH=1` (for development and tests; the rest of the auth config stays in place, unenforced). Each logs a warning on every start.
   - With auth enabled, the default decision is deny.
 - **One enforcement point.** A single authenticator and authorizer covers every surface: gRPC, gRPC-Web, Connect, the REST routes, OTLP ingest, `/metrics` and reflection. A new RPC cannot ship without an entry in the action table; a test walks the service descriptors to enforce this.
 - **Roles shaped by the application.** Built-in roles cover the common cases. Clients define custom roles from the permission list, with optional CEL conditions, and can map roles straight from their identity provider's claims. Global CEL rules are only for install-wide restrictions.
@@ -1032,7 +1032,8 @@ Roles are defined in `evalsi.yaml`, or created through `AuthService` and stored 
 | `ListPolicies`, `GetPolicyStats` | `policies.read` | viewer | project |
 | `TraceService.ListTraces`, `GetTrace` | `traces.read` | viewer | project, service |
 | OTLP export (gRPC, HTTP) | `traces.write` | ingest | project, service |
-| `AuthService.WhoAmI` | `self.read` | any authenticated principal | none |
+| `AuthService.WhoAmI`, `ListProjects`, `ListRoles`, `ListPermissions` | `self.read` | any authenticated principal (lists are filtered to what the caller can see) | none |
+| `AuthService.CreateProject` | `projects.manage` | owner | none |
 | `AuthService` API keys, custom roles and bindings | `access.manage` | admin | project, the role or key being changed, and its permissions |
 | `AuthService.ListAuditEvents` | `audit.read` | admin | project |
 | `/metrics` | `metrics.read` | owner, or unauthenticated on a separate loopback listener | none |
@@ -1085,7 +1086,8 @@ As in agentgateway, a rule that fails to evaluate counts as not matched. A `deny
 - **Every store query is project-filtered:**
   - list calls take the set of projects the principal can read;
   - get calls check the project of the resource;
-  - online policies only see traces of their own project.
+  - online policies only see traces of their own project;
+  - trace ids are unique within a project, so spans sent to one project never join, or overwrite, another project's trace with the same id.
 - **OTLP ingest assigns the project from the credential.** An ingest key or token is bound to one project. A resource attribute `evalsi.project` is honored only when the principal may write to that project. This stops trace injection into other teams' policies.
 - **Resources carry labels** (runs, policies, traces and API keys), for role conditions and rules to scope by application, environment or team.
 - **Runs record who started them.** `Run.created_by` (provider and subject) is stored and shown, and the run manifest records the principal, never the token.
@@ -1310,7 +1312,7 @@ On 2026-10-05, identity and access was inserted as Phase 2 ([decision 0010](deci
 |-------|--------------|---------------|
 | **0. Foundations** ✅ | Decision records; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
 | **1. Standalone MVP: LLM apps and agent traces** ✅ | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; `OnlineEvalPolicy` with cascades; packs `judge`, `rag`, `safety`, `text`, plus the trace-based half of `agent` (tool-call accuracy, trajectory match, loops, efficiency, session goal completion); adapters for Inspect AI, RAGAS, DeepEval and lm-eval-harness; MLflow and OTel sinks; the sandbox ladder with the **bubblewrap and Landlock** rungs for code evaluators | One `run.yaml` runs embedded and on the server; an agent behind standalone agentgateway (or instrumented with OTel) gets online trajectory scores; a RAG app is gated in CI |
-| **2. Identity and access** | OIDC/JWT authentication (multiple providers, JWKS from a URL, a file, inline JSON or discovery; `strict`, `optional` and `permissive` modes) and hashed API keys; TLS on the API listener; a refusal to start on a non-loopback address without auth; project-scoped RBAC with built-in roles (viewer, runner, editor, admin, ingest, owner), custom roles built from the permission list with optional CEL conditions, roles mapped from token claims, and labels on resources; agentgateway-style CEL rules (`allow`, `deny`, `require`); project scoping in every store query and in OTLP ingest; `created_by` on runs; an audit log and `evalsid auth check`; `AuthService` (who-am-i, API keys, bindings, audit); `evalsi login` (device code and PKCE), `whoami` and `auth keys`; GitHub Actions OIDC for CI; optional external authorization (AuthZEN, Envoy `ext_authz`) | With any OIDC issuer configured, every surface (gRPC, Connect, REST, OTLP, metrics) rejects unauthenticated calls; a viewer cannot start runs or read another project's traces; a custom role with a model condition can start runs only on its allowed models; a project admin cannot grant a permission it lacks; a GitHub Actions job runs a gated evaluation with its own OIDC token and no stored secret; every denied call appears in the audit log with the deciding rule; the action table covers every RPC, enforced by a test |
+| **2. Identity and access** ✅ | OIDC/JWT authentication (multiple providers, JWKS from a URL, a file, inline JSON or discovery; `strict`, `optional` and `permissive` modes) and hashed API keys; TLS on the API listener; a refusal to start on a non-loopback address without auth; project-scoped RBAC with built-in roles (viewer, runner, editor, admin, ingest, owner), custom roles built from the permission list with optional CEL conditions, roles mapped from token claims, and labels on resources; agentgateway-style CEL rules (`allow`, `deny`, `require`); project scoping in every store query and in OTLP ingest; `created_by` on runs; an audit log and `evalsid auth check`; `AuthService` (who-am-i, API keys, bindings, audit); `evalsi login` (device code and PKCE), `whoami` and `auth keys`; GitHub Actions OIDC for CI; optional external authorization (AuthZEN, Envoy `ext_authz`) | With any OIDC issuer configured, every surface (gRPC, Connect, REST, OTLP, metrics) rejects unauthenticated calls; a viewer cannot start runs or read another project's traces; a custom role with a model condition can start runs only on its allowed models; a project admin cannot grant a permission it lacks; a GitHub Actions job runs a gated evaluation with its own OIDC token and no stored secret; every denied call appears in the audit log with the deciding rule; the action table covers every RPC, enforced by a test |
 | **3. Agent runs** | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **4. Kubernetes** | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; Kubernetes identity (service-account tokens as an OIDC provider, mTLS between components, an admission webhook that records who created each CR); HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
 | **5. Fine-tuning and RL** | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
@@ -1410,6 +1412,46 @@ All three are covered by `tests/e2e`.
 5. **External authorization (optional).** An AuthZEN evaluation client and Envoy `ext_authz`, with decision caching and fail-closed timeouts.
 
 Tests use keys generated in-process and a JWKS and discovery server running in the test. The e2e suite adds an issuer stand-in, so CI needs no live identity provider. A permission-matrix test runs every built-in role, and a set of custom roles with conditions, against every RPC.
+
+**Phase 2 status (2026-10-05):** implemented, in the five planned slices. A setup guide is in [`docs/guides/identity.md`](guides/identity.md).
+
+1. **Authentication core** (`internal/auth`).
+   - JWT providers: JWKS from a URL, a file, inline JSON or OIDC discovery; rotation with refetch on an unknown `kid`, rate-limited; an algorithm allowlist; required claims; clock skew; claim mapping (dotted paths for nested claims).
+   - `strict`, `optional` and `permissive` modes, per method. The token location is configurable.
+   - API keys (`evk_` prefix, SHA-256 hashes) from config or the database; mTLS principals (SPIFFE ID or CN); trusted-proxy headers limited to CIDRs.
+   - TLS on every listener, with certificate reloading.
+   - The server refuses non-loopback addresses without an `auth` section, and bearer credentials over plaintext without `allow_plaintext`.
+2. **RBAC and projects** (`internal/authz`, `internal/server/access.go`).
+   - One gate: a Connect interceptor and an HTTP guard, driven by the action table. A test walks every RPC in the descriptors and fails on any without an entry.
+   - Built-in and custom roles (inheritance, CEL conditions), project-scoped bindings with `user:`, `email:`, `group:`, `key:` and `cel:` subjects, and `role_claims`.
+   - Labels on runs, policies, traces and API keys.
+   - Project filtering in every list query, with a per-item check. Traces are keyed by project and trace id; Phase 1 databases are migrated.
+   - OTLP project assignment by credential, `Run.created_by`, and `runs_code` from the evaluator manifests (a new `sandbox` requirement in the SDK).
+3. **CEL rules and audit.**
+   - `allow`, `deny` and `require` rules with agentgateway's precedence.
+   - Custom roles through `AuthService`, with escalation checks (a grant must be covered by a held grant whose conditions are a subset of the new one's).
+   - The audit log, with `ListAuditEvents`, retention and export as `evalsi.audit` OTel events.
+   - `evalsid auth check`, plus `auth new-key` and `auth hash-key`.
+4. **Developer and CI flows** (`evalsi.auth`, `evalsi.cli_auth`).
+   - `evalsi login` (device code, or `--browser` with PKCE and a loopback redirect), `logout` and `whoami`.
+   - The 0600 credential cache with refresh, `--token` and `--api-key` everywhere, and `EVALSI_TOKEN` and `EVALSI_API_KEY`.
+   - GitHub Actions OIDC through `EVALSI_OIDC_AUDIENCE`.
+   - `evalsi auth keys|roles|bindings|projects|audit`, and guides for Keycloak, Entra ID, Okta, Auth0, Google, GitHub Actions and agentgateway.
+5. **External authorization.**
+   - AuthZEN evaluation and Envoy `ext_authz` (gRPC through the Connect client, so OPA's Envoy plugin works), cached, and failing closed on timeouts and errors.
+   - Two modes: `require` (the default; local and external must both allow) and `decide` (the external decision is final after the local `deny` and `require` rules).
+
+The exit criteria hold:
+
+- unauthenticated calls are rejected on every surface;
+- the viewer, project and model-condition cases, the escalation check, GitHub Actions OIDC and audited denials are covered by `internal/server/access_test.go`;
+- `tests/e2e/auth_test.go` drives the CLI (device-code login, `whoami`, key issuance, GitHub Actions OIDC, the audit log) against a real server.
+
+Deferred:
+
+- Kubernetes identity (service-account tokens, admission stamping) moves to Phase 4, as planned.
+- MCP authorization moves to Phase 6, as planned.
+- Per-project quotas follow the Kubernetes scheduler work.
 
 ## 24. Risks and mitigations
 

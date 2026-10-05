@@ -132,7 +132,7 @@ func startServer(t *testing.T) string {
 	return start(t).base
 }
 
-func start(t *testing.T) env {
+func start(t *testing.T, mutate ...func(*config.Config)) env {
 	t.Helper()
 	worker := os.Getenv("EVALSI_E2E_WORKER")
 	if worker == "" {
@@ -154,6 +154,9 @@ func start(t *testing.T) env {
 	cfg.OTLP.Grace = "100ms"
 	collector, events := fakeCollector(t)
 	cfg.Sinks = []sinks.Config{{OTel: &sinks.OTelConfig{Endpoint: collector.URL}}}
+	for _, m := range mutate {
+		m(&cfg)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ready := make(chan string, 1)

@@ -36,6 +36,23 @@ class OnlineEvalPolicy(_message.Message):
 
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class LabelsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     NAME_FIELD_NUMBER: _builtins.int
     PROJECT_FIELD_NUMBER: _builtins.int
     DISABLED_FIELD_NUMBER: _builtins.int
@@ -46,6 +63,7 @@ class OnlineEvalPolicy(_message.Message):
     WINDOW_FIELD_NUMBER: _builtins.int
     ALERTS_FIELD_NUMBER: _builtins.int
     PROMOTE_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     project: _builtins.str
     disabled: _builtins.bool
@@ -67,6 +85,10 @@ class OnlineEvalPolicy(_message.Message):
     def alerts(self) -> _containers.RepeatedCompositeFieldContainer[Global___Alert]: ...
     @_builtins.property
     def promote(self) -> Global___Promotion: ...
+    @_builtins.property
+    def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Labels for access rules."""
+
     def __init__(
         self,
         *,
@@ -80,10 +102,11 @@ class OnlineEvalPolicy(_message.Message):
         window: _duration_pb2.Duration | None = ...,
         alerts: _abc.Iterable[Global___Alert] | None = ...,
         promote: Global___Promotion | None = ...,
+        labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["promote", b"promote", "sampling", b"sampling", "window", b"window"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["alerts", b"alerts", "disabled", b"disabled", "judge", b"judge", "name", b"name", "project", b"project", "promote", b"promote", "sampling", b"sampling", "selector", b"selector", "stages", b"stages", "window", b"window"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["alerts", b"alerts", "disabled", b"disabled", "judge", b"judge", "labels", b"labels", "name", b"name", "project", b"project", "promote", b"promote", "sampling", b"sampling", "selector", b"selector", "stages", b"stages", "window", b"window"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___OnlineEvalPolicy: _TypeAlias = OnlineEvalPolicy  # noqa: Y015

@@ -31,6 +31,21 @@ import (
 //	GET    /v1alpha1/policies/{name}/stats     MonitorService.GetPolicyStats
 //	GET    /v1alpha1/traces                    TraceService.ListTraces
 //	GET    /v1alpha1/traces/{trace_id}         TraceService.GetTrace
+//	GET    /v1alpha1/whoami                    AuthService.WhoAmI
+//	GET    /v1alpha1/projects                  AuthService.ListProjects
+//	POST   /v1alpha1/projects                  AuthService.CreateProject
+//	GET    /v1alpha1/apikeys                   AuthService.ListAPIKeys
+//	POST   /v1alpha1/apikeys                   AuthService.CreateAPIKey
+//	POST   /v1alpha1/apikeys/{name}:revoke     AuthService.RevokeAPIKey
+//	GET    /v1alpha1/roles                     AuthService.ListRoles
+//	POST   /v1alpha1/roles                     AuthService.CreateRole (body: the role)
+//	POST   /v1alpha1/roles:update              AuthService.UpdateRole (body: the role)
+//	DELETE /v1alpha1/roles/{name}              AuthService.DeleteRole (?project=)
+//	GET    /v1alpha1/permissions               AuthService.ListPermissions
+//	GET    /v1alpha1/bindings                  AuthService.ListBindings
+//	POST   /v1alpha1/bindings                  AuthService.CreateBinding (body: the binding)
+//	POST   /v1alpha1/bindings:delete           AuthService.DeleteBinding (body: the binding)
+//	GET    /v1alpha1/audit                     AuthService.ListAuditEvents
 func restRules() []*annotations.HttpRule {
 	rule := func(method, verb, path, body string) *annotations.HttpRule {
 		r := &annotations.HttpRule{Selector: "evalsi.v1alpha1." + method, Body: body}
@@ -61,6 +76,21 @@ func restRules() []*annotations.HttpRule {
 		rule("MonitorService.GetPolicyStats", http.MethodGet, v+"/policies/{name}/stats", ""),
 		rule("TraceService.ListTraces", http.MethodGet, v+"/traces", ""),
 		rule("TraceService.GetTrace", http.MethodGet, v+"/traces/{trace_id}", ""),
+		rule("AuthService.WhoAmI", http.MethodGet, v+"/whoami", ""),
+		rule("AuthService.ListProjects", http.MethodGet, v+"/projects", ""),
+		rule("AuthService.CreateProject", http.MethodPost, v+"/projects", "*"),
+		rule("AuthService.ListAPIKeys", http.MethodGet, v+"/apikeys", ""),
+		rule("AuthService.CreateAPIKey", http.MethodPost, v+"/apikeys", "*"),
+		rule("AuthService.RevokeAPIKey", http.MethodPost, v+"/apikeys/{name}:revoke", "*"),
+		rule("AuthService.ListRoles", http.MethodGet, v+"/roles", ""),
+		rule("AuthService.CreateRole", http.MethodPost, v+"/roles", "role"),
+		rule("AuthService.UpdateRole", http.MethodPost, v+"/roles:update", "role"),
+		rule("AuthService.DeleteRole", http.MethodDelete, v+"/roles/{name}", ""),
+		rule("AuthService.ListPermissions", http.MethodGet, v+"/permissions", ""),
+		rule("AuthService.ListBindings", http.MethodGet, v+"/bindings", ""),
+		rule("AuthService.CreateBinding", http.MethodPost, v+"/bindings", "binding"),
+		rule("AuthService.DeleteBinding", http.MethodPost, v+"/bindings:delete", "binding"),
+		rule("AuthService.ListAuditEvents", http.MethodGet, v+"/audit", ""),
 	}
 }
 
@@ -72,6 +102,7 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		evalsiv1alpha1connect.RunServiceName,
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
+		evalsiv1alpha1connect.AuthServiceName,
 	}
 	services := make([]*vanguard.Service, 0, len(names))
 	for _, name := range names {

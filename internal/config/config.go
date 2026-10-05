@@ -10,6 +10,8 @@ import (
 
 	"sigs.k8s.io/yaml"
 
+	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 )
@@ -98,7 +100,26 @@ type Config struct {
 	Sandbox sandbox.Config `json:"sandbox"`
 	// Where finished runs and online scores are exported (MLflow, OTel).
 	Sinks []sinks.Config `json:"sinks"`
+	// Authentication: JWT providers, API keys, TLS. Required on a
+	// non-loopback listen address; `auth: {mode: none}` opts out explicitly.
+	Auth *auth.Config `json:"auth,omitempty"`
+	// Projects, custom roles and role bindings.
+	RBAC authz.RBACConfig `json:"rbac"`
+	// Global CEL rules and external authorization.
+	Authorization authz.AuthorizationConfig `json:"authorization"`
+	Audit         authz.AuditConfig         `json:"audit"`
+	Metrics       Metrics                   `json:"metrics"`
 }
+
+// Metrics configures Prometheus metrics.
+type Metrics struct {
+	// A separate listener serving only /metrics without authentication, for
+	// example 127.0.0.1:9464. On the main port, /metrics needs metrics.read.
+	Listen string `json:"listen,omitempty"`
+}
+
+// AuthEnabled reports whether requests are authenticated and authorized.
+func (c Config) AuthEnabled() bool { return c.Auth.Enabled() }
 
 // Default returns the configuration used when no file is given.
 func Default() Config {
@@ -119,6 +140,12 @@ func Default() Config {
 
 // Load reads a YAML (or JSON) file over the defaults. An empty path returns the defaults.
 func Load(path string) (Config, error) {
+	return LoadWith(path)
+}
+
+// LoadWith reads a file like Load, then applies overrides (command-line
+// flags) before validating, so overrides get the same checks as the file.
+func LoadWith(path string, overrides ...func(*Config)) (Config, error) {
 	cfg := Default()
 	if path != "" {
 		raw, err := os.ReadFile(path)
@@ -129,7 +156,21 @@ func Load(path string) (Config, error) {
 			return cfg, fmt.Errorf("%s: %w", path, err)
 		}
 	}
+	for _, o := range overrides {
+		o(&cfg)
+	}
 	return cfg, cfg.Validate()
+}
+
+// DisableAuth turns authentication and authorization off for development
+// (`evalsid serve --no-auth`, or EVALSID_NO_AUTH=1). The rest of the auth,
+// rbac and authorization sections stay in the config, unenforced, so
+// removing the switch restores them.
+func (c *Config) DisableAuth() {
+	if c.Auth == nil {
+		c.Auth = &auth.Config{}
+	}
+	c.Auth.Mode = auth.ModeNone
 }
 
 // Duration parses a validated duration field.
@@ -198,8 +239,47 @@ func (c Config) Validate() error {
 	if err := c.Sandbox.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("sandbox: %w", err))
 	}
+	errs = append(errs, c.validateAccess()...)
 	if c.Evaluate.BatchSize < 1 || c.Evaluate.Parallelism < 1 || c.Evaluate.MaxRecords < 1 {
 		errs = append(errs, errors.New("evaluate.batch_size, parallelism and max_records must be positive"))
 	}
 	return errors.Join(errs...)
+}
+
+// validateAccess enforces secure defaults: a server reachable from other
+// machines must say how it authenticates, and bearer credentials must not
+// cross the network in plaintext unless TLS terminates in front of it.
+func (c Config) validateAccess() []error {
+	var errs []error
+	if err := c.Auth.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+	for _, err := range []error{c.RBAC.Validate(), c.Authorization.Validate(), c.Audit.Validate()} {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	addrs := []string{c.Listen, c.OTLP.GRPCListen, c.OTLP.HTTPListen}
+	for _, addr := range addrs {
+		if addr == "" || auth.IsLoopback(addr) {
+			continue
+		}
+		if c.Auth == nil {
+			errs = append(errs, fmt.Errorf("refusing to listen on %s without authentication: add an auth section, "+
+				"or set `auth: {mode: none}` to run unauthenticated on purpose", addr))
+			continue
+		}
+		if c.Auth.BearerMethods() && c.Auth.TLS == nil && !c.Auth.AllowPlaintext {
+			errs = append(errs, fmt.Errorf("refusing to accept bearer credentials in plaintext on %s: configure auth.tls, "+
+				"or set auth.allow_plaintext if TLS terminates in front of evalsid", addr))
+		}
+	}
+	if c.Metrics.Listen != "" && !auth.IsLoopback(c.Metrics.Listen) {
+		errs = append(errs, fmt.Errorf("metrics.listen %s serves without authentication and must be a loopback address", c.Metrics.Listen))
+	}
+	// With mode: none the sections are kept but switched off on purpose.
+	if c.Auth == nil && (len(c.RBAC.Roles) > 0 || len(c.RBAC.Projects) > 0 || len(c.RBAC.Owners) > 0 || len(c.Authorization.Rules) > 0) {
+		errs = append(errs, errors.New("rbac and authorization need an auth section; without one nothing would be enforced"))
+	}
+	return errs
 }

@@ -1,0 +1,35 @@
+# Try identity and access on your laptop: API keys only, loopback only, no
+# identity provider or TLS needed. Steps are in the README ("Try access
+# control locally"). For a real deployment start from examples/auth/evalsi.yaml.
+#
+#   bin/evalsid auth new-key      # paste the printed hash below
+#   evalsi serve --config ../examples/auth/local.yaml
+# Development without access control: add --no-auth to `serve`, or set EVALSID_NO_AUTH=1.
+listen: 127.0.0.1:8080
+data_dir: .evalsi-auth-demo
+
+worker:
+  command: ["python", "-m", "evalsi"]
+
+auth:
+  api_keys:
+    keys:
+      # Your owner key. Replace the hash with the one `evalsid auth new-key` prints.
+      - name: me
+        key: "sha256:REPLACE_WITH_THE_HASH_FROM_evalsid_auth_new-key_0000000000000"
+        roles: {"*": [owner]}
+
+rbac:
+  roles:
+    # Can score and start runs, but only on these models.
+    - name: prompt-engineer
+      inherits: [viewer]
+      permissions: [evaluations.run, runs.create]
+      condition: '!has(resource.target) || resource.target.model in ["qwen3", "llama3"]'
+  projects:
+    demo: {}
+
+authorization:
+  rules:
+    # Nobody runs code-executing evaluators in this demo.
+    - require: '!has(resource.runs_code) || !resource.runs_code'
