@@ -281,10 +281,19 @@ func TestAllowlistRules(t *testing.T) {
 		{Network: Network{Mode: "open"}},
 		{Workdir: "relative"}, {Workdir: "/proc/x"}, {Workdir: "/"},
 		{Env: map[string]string{"A=B": "c"}},
+		// Absolute files need an image with a writable root.
+		{Files: map[string][]byte{"/etc/x": nil}},
+		{Image: "alpine", ReadOnlyRoot: true, Files: map[string][]byte{"/etc/x": nil}},
+		{Image: "alpine", Files: map[string][]byte{"/": nil}},
+		{Files: map[string][]byte{"../x": nil}},
 	} {
 		if err := sp.Validate(); err == nil {
 			t.Errorf("%+v accepted", sp)
 		}
+	}
+	ok := &Spec{Image: "alpine", Files: map[string][]byte{"/etc/x": nil, "rel/y": nil}}
+	if err := ok.Validate(); err != nil {
+		t.Error(err)
 	}
 }
 

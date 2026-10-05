@@ -71,7 +71,6 @@ type Engine struct {
 	mu       sync.Mutex
 	policies map[string]*policyState
 
-
 	TracesIngested atomic.Int64
 	TracesDropped  atomic.Int64
 	StoreErrors    atomic.Int64

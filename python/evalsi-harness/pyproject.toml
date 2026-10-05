@@ -10,6 +10,10 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.entry-points."evalsi.importers"]
+harbor = "evalsi_harness.benchmarks.harbor:load_harbor"
+terminal-bench = "evalsi_harness.benchmarks.harbor:load_terminal_bench"
+
 [project.urls]
 Repository = "https://github.com/abhishek-rnjn/evals.si"
 

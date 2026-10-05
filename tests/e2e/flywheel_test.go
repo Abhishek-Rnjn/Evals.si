@@ -26,7 +26,9 @@ import (
 func TestFlywheel(t *testing.T) {
 	e := start(t)
 	ctx := context.Background()
-	attr := func(k, v string) map[string]any { return map[string]any{"key": k, "value": map[string]any{"stringValue": v}} }
+	attr := func(k, v string) map[string]any {
+		return map[string]any{"key": k, "value": map[string]any{"stringValue": v}}
+	}
 	msgs := func(role, text string) string {
 		raw, _ := json.Marshal([]any{map[string]any{"role": role, "parts": []any{map[string]any{"type": "text", "content": text}}}})
 		return string(raw)

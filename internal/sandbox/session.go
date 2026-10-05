@@ -48,7 +48,8 @@ type Spec struct {
 	Network      Network           `json:"network"`
 	Resources    Resources         `json:"resources"`
 	Env          map[string]string `json:"env,omitempty"`
-	// Written into the workdir at creation.
+	// Written at creation: relative paths into the workdir, absolute ones
+	// into the image root (only with an image and a writable root).
 	Files map[string][]byte `json:"files,omitempty"`
 	// The working directory inside the sandbox; default /workspace. The
 	// landlock rung cannot remap paths, so there it is a host directory and
@@ -104,7 +105,17 @@ func (sp *Spec) Validate() error {
 		}
 	}
 	for name := range sp.Files {
+		// Absolute paths land in the image root, which must be writable.
+		if path.IsAbs(name) && sp.Image != "" && !sp.ReadOnlyRoot {
+			if path.Clean(name) == "/" {
+				return fmt.Errorf("file %q names the root", name)
+			}
+			continue
+		}
 		if _, err := relPath(name); err != nil {
+			if path.IsAbs(name) {
+				return fmt.Errorf("file %q: absolute paths need an image with a writable root; use a path relative to the workdir", name)
+			}
 			return err
 		}
 	}

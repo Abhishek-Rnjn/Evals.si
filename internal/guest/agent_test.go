@@ -24,7 +24,7 @@ type fakeSystem struct {
 }
 
 func (f *fakeSystem) AddEntropy(b []byte) error { f.entropy = b; return nil }
-func (f *fakeSystem) SetTime(t time.Time) error  { f.clock = t; return nil }
+func (f *fakeSystem) SetTime(t time.Time) error { f.clock = t; return nil }
 
 func serve(t *testing.T, a *Agent) guestv1alpha1connect.GuestAgentServiceClient {
 	t.Helper()
