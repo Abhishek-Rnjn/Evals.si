@@ -1,10 +1,10 @@
 # Evals.si: Architecture & Implementation Plan
 
-> **Status:** Draft for discussion · v0.1 · 2026-10-05
+> **Status:** Draft for discussion · v0.2 · 2026-10-05 (D1, D2, D3, D5 and D6 decided; see §22)
 >
 > **Scope:** System design for a pluggable, scalable, single-entrypoint evaluation platform for classic ML models, LLMs and agents. It runs standalone and on Kubernetes, speaks gRPC and HTTP, and can later be used as a local MCP server.
 >
-> Section 22 lists the decisions we need to make before writing code. Everything else is a proposal to argue with.
+> Section 22 records the decisions made so far and the ones still open. Everything else is a proposal to argue with.
 
 ---
 
@@ -22,16 +22,16 @@
 10. [Trace collection and ingestion (OTLP)](#10-trace-collection-and-ingestion-otlp)
 11. [Agent evaluation: offline, online and harnesses](#11-agent-evaluation-offline-online-and-harnesses)
 12. [LLM fine-tuning and RL evaluation](#12-llm-fine-tuning-and-rl-evaluation)
-13. [Sandboxing (Firecracker and friends)](#13-sandboxing-firecracker-and-friends)
+13. [Sandboxing (Firecracker, bubblewrap, hardened pods)](#13-sandboxing-firecracker-bubblewrap-hardened-pods)
 14. [Execution engine and scalability](#14-execution-engine-and-scalability)
 15. [Storage](#15-storage)
 16. [Deployment form factors](#16-deployment-form-factors)
-17. [Security and multi-tenancy](#17-security-and-multi-tenancy)
+17. [Security and tenancy](#17-security-and-tenancy)
 18. [Reproducibility and versioning](#18-reproducibility-and-versioning)
 19. [Developer experience](#19-developer-experience)
 20. [Technology choices](#20-technology-choices)
 21. [Repository layout](#21-repository-layout)
-22. [Decisions to discuss](#22-decisions-to-discuss)
+22. [Decisions](#22-decisions)
 23. [Roadmap](#23-roadmap)
 24. [Risks and mitigations](#24-risks-and-mitigations)
 25. [Appendix: example specs](#25-appendix-example-specs)
@@ -45,7 +45,8 @@
 - **Adapt existing frameworks rather than rewriting them.** lm-evaluation-harness, Inspect AI, RAGAS, DeepEval, HELM, SWE-bench, τ-bench and others plug in as adapters. Each adapter runs in its own isolated environment, so their dependencies never conflict.
 - **A Go core with a Python runtime.** Go handles the API (gRPC and HTTP from one handler via ConnectRPC), scheduling, OTLP ingestion, sandbox management and the Kubernetes operator. Python handles evaluators, adapters, the harness and the SDK, because that is where the eval ecosystem lives.
 - **The same spec runs from laptop to cluster.** There are three tiers: an embedded library, a single binary (`evalsi serve`), and a Kubernetes operator with CRDs. The protobuf definitions are the single source of truth for the API, YAML specs, CRDs and (later) MCP tool schemas.
-- **Isolation is a dial.** The options are process, container, gVisor, a Firecracker microVM (with warm snapshot pools) or a remote sandbox (E2B and similar). Each evaluator or harness picks the level it needs.
+- **The strongest isolation available, failing closed.** Firecracker microVMs where KVM exists, otherwise bubblewrap or Landlock process confinement (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod. Each evaluator or harness sets the minimum level it accepts.
+- **Runs in the client's environment.** It is self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets. A hosted multi-tenant offering comes later.
 - **RL and fine-tuning reuse the evaluators.** Evaluators double as reward functions behind a high-throughput Reward Service. A checkpoint watcher turns every saved checkpoint into an eval run.
 
 ## 2. Goals and non-goals
@@ -62,27 +63,31 @@
 | G6 | **Traditional evals ship by default** and each project opts in to the ones it wants. |
 | G7 | **Trace collection** through a native OTLP endpoint, or through an existing OTLP pipeline or backend the user already runs (MLflow, Langfuse, Phoenix and so on). |
 | G8 | **Fine-tuning and RL evaluation**: reward/verifier services, checkpoint evaluation, and FT/RL-specific metrics. |
-| G9 | **Sandboxing** that scales from no isolation up to Firecracker microVMs. |
+| G9 | **Sandboxing** that always uses the strongest isolation available (Firecracker, then bubblewrap or Landlock, then a hardened pod) and fails closed. |
 | G10 | **Horizontal scalability**: millions of evaluation tasks per run, continuous online evaluation, and RL-grade reward throughput. |
+| G11 | **Runs inside the client's environment**: self-hosted, air-gappable, least-privilege install, no phone-home. |
 
 ### Non-goals (for now)
 
 - **Training models.** We evaluate and score. Trainers stay external (TRL, verl, OpenRLHF and others).
 - **Replacing observability backends.** We store what we need to evaluate, and we write scores back to the user's backend.
 - **A full model-serving platform.** We spin up ephemeral serving (vLLM/SGLang) only to evaluate checkpoints.
-- **A heavyweight web UI in v1.** CLI, reports, Grafana and write-back to existing UIs come first (see [§22](#22-decisions-to-discuss)).
+- **A heavyweight web UI in v1.** CLI, reports, Grafana and write-back to existing UIs come first (see [§22](#22-decisions)).
 - **Redistributing benchmark datasets.** We fetch them at runtime from their sources and respect their licenses.
+- **A hosted, multi-tenant service (for now).** Evals.si runs in the client's environment. The data model keeps room for multi-tenancy later (D5).
 
 ## 3. Personas and use cases
 
-| Persona | Typical job | Mode |
-|---------|-------------|------|
-| ML engineer (classic ML) | Validate a churn model before promotion, then monitor drift and fairness | Run, Watch |
-| LLM app developer | Gate a prompt change in CI on correctness, faithfulness and cost | Score, Run |
-| Agent developer | Measure the task success and reliability (pass^k) of a tool-using agent across 500 tasks in sandboxes, then monitor production | Run, Watch |
-| Platform team | Offer evaluation as a shared service on Kubernetes, next to the agent gateway | All |
-| Research / RL engineer | Use sandboxed code-execution rewards in GRPO and track capability and regressions across checkpoints | Reward, Run |
-| Coding agent (later) | Call `evaluate` through local MCP to check its own work | Score |
+**Primary users for v1 (D1):** agent builders, agent platform builders and LLM app developers. The other personas are supported by the same design but are not what the early phases optimize for.
+
+| Persona | Typical job | Mode | Priority |
+|---------|-------------|------|----------|
+| **Agent builder** | Measure the task success and reliability (pass^k) of a tool-using agent across 500 tasks in sandboxes, then monitor production | Run, Watch | **Primary** |
+| **Agent platform builder** | Make evaluation a built-in capability of their agent platform: online policies at the gateway across many agents, a project per team, and eval results feeding rollout gates and routing | All, API-first | **Primary** |
+| **LLM app developer** | Gate a prompt change in CI on correctness, faithfulness and cost | Score, Run | **Primary** |
+| Research / RL engineer | Use sandboxed code-execution rewards in GRPO and track capability and regressions across checkpoints | Reward, Run | Later (Phase 4) |
+| ML engineer (classic ML) | Validate a churn model before promotion, then monitor drift and fairness | Run, Watch | Later |
+| Coding agent | Call `evaluate` through local MCP to check its own work | Score | Later (Phase 5) |
 
 ## 4. Design tenets
 
@@ -95,6 +100,7 @@
 7. **Available by default, active by choice.** Every built-in evaluator pack ships in the distribution. Projects opt in.
 8. **Statistics are part of the product.** Every aggregate carries a confidence interval, sample count and variance across trials.
 9. **Reproducible by construction.** Every run records the exact versions, image digests, prompt hashes, seeds and dataset hashes it used.
+10. **Runs in the client's ecosystem.** Every dependency (models, storage, identity, secrets, observability) is bring-your-own, and nothing calls home.
 
 ## 5. Core concepts and data model
 
@@ -213,7 +219,7 @@ flowchart LR
     ING["OTLP ingest + normalizer"]
     Q["Queue - NATS JetStream"]
     W["Worker pools<br/>cpu / judge / gpu / sandbox / harness"]
-    SBX["Sandbox manager<br/>container / gVisor / Firecracker"]
+    SBX["Sandbox manager<br/>Firecracker / bwrap / Landlock / pod"]
     RWD["Reward service"]
   end
 
@@ -256,12 +262,12 @@ flowchart LR
 | **Queue** | NATS | Work and result streams. Embedded in standalone mode, a cluster on Kubernetes. | NATS cluster |
 | **Workers** | Python | Plugin host: load evaluators and adapters, call targets and judges, batch, emit results | Pools autoscaled on queue lag |
 | **Harness workers** | Python | Drive agents through tasks and lease sandboxes | Pool, autoscaled |
-| **Sandbox manager** (`sandboxd`) | Go | Pools of containers or microVMs, snapshots, leases, network policy | Per node (DaemonSet on KVM nodes) |
+| **Sandbox manager** (`sandboxd`) | Go | Picks the isolation rung, runs microVM pools and snapshots, bubblewrap and Landlock confinement, and sandbox pods; manages leases and network policy | Per node (DaemonSet on KVM nodes) and sandbox-pool pods |
 | **Reward service** | Go + Python | Low-latency batch scoring for RL. Caches results and fans out to verifiers. | Replicas plus sandbox pools |
 | **Result writer** | Go | Batched, idempotent writes of scores and records to the store; fan-out to sinks | Replicas |
 | **Operator** | Go | Reconciles CRDs into the same objects the API creates | Leader-elected |
 
-**Why split Go and Python?** Every eval framework worth adapting is Python. The parts that must be fast, long-lived and Kubernetes-native (ingest at tens of thousands of spans per second, a scheduler, VM lifecycle, an operator) benefit from Go's static binaries, concurrency, the OpenTelemetry Collector libraries (`pdata`), controller-runtime and the Firecracker Go SDK. The two halves talk only over protobuf (gRPC and NATS), so either half can be swapped. [§22](#22-decisions-to-discuss) lists the alternatives.
+**Why split Go and Python?** Every eval framework worth adapting is Python. The parts that must be fast, long-lived and Kubernetes-native (ingest at tens of thousands of spans per second, a scheduler, VM lifecycle, an operator) benefit from Go's static binaries, concurrency, the OpenTelemetry Collector libraries (`pdata`), controller-runtime and the Firecracker Go SDK. The two halves talk only over protobuf (gRPC and NATS), so either half can be swapped. [§22](#22-decisions) lists the alternatives.
 
 ## 7. The single-door API (gRPC + HTTP, later MCP)
 
@@ -347,7 +353,7 @@ Because the API is generated from protobuf, `evalsi mcp` can expose MCP tools wi
 | `trace-source` | Pull traces with a watermark, and write scores back | MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse |
 | `semconv-mapper` | Map vendor span attributes onto the canonical trajectory | OTel GenAI, OpenInference, OpenLLMetry, MLflow |
 | `sink` | Export records, scores and aggregates | MLflow, W&B, OTel, Prometheus, S3/Parquet, webhook |
-| `sandbox-driver` | Create, exec, copy, snapshot, restore, destroy (§13) | process/nsjail, Docker/containerd, gVisor, Firecracker, Kata, E2B |
+| `sandbox-driver` | Create, exec, copy, snapshot, restore, destroy (§13) | Firecracker, bubblewrap, Landlock, hardened pod; optional gVisor, Kata, Docker, E2B |
 | `notifier` | Deliver alerts | Slack, PagerDuty, webhook |
 
 ### Plugin runtimes: one protocol, four ways to run it
@@ -391,7 +397,7 @@ requires:
   reference: false
   trajectory: false
   judge: true            # uses the run's configured judge; never hard-codes a provider
-  isolation: none        # none | process | container | vm
+  isolation: none        # minimum level: none | confined | namespaced | kernel | vm
 outputs:
   - {name: faithfulness, type: number, range: [0, 1], higherIsBetter: true}
 runtime:
@@ -436,7 +442,7 @@ def json_valid(record: Record) -> Score:
 
 ## 9. Built-in evaluator catalog (opt-in packs)
 
-Every pack ships in the default distribution and images. A project enables packs in its config, for example `evaluators.packs: [core, ml-classic, rag]`. Only `core` is on by default. Enabling a pack makes its evaluators resolvable. Packs with heavy dependencies (BERTScore, local classifiers) are pulled lazily as separate plugin images.
+Every pack ships in the default distribution and images. A project enables packs in its config, for example `evaluators.packs: [core, judge, rag, agent]`. Only `core` is on by default. Enabling a pack makes its evaluators resolvable. Packs with heavy dependencies (BERTScore, local classifiers) are pulled lazily as separate plugin images.
 
 | Pack | Contents | Default |
 |------|----------|---------|
@@ -553,6 +559,7 @@ The built-in harness is open source, small and dependency-light. It provides:
 - **Tool virtualization**: mocked or recorded tools for hermetic offline runs, plus fault injection (timeouts, errors, malformed results) for robustness testing.
 - **Record and replay**: every model call and tool I/O is captured to a cassette. Replay lets you re-score with new evaluators without re-running the agent, debug runs deterministically, and branch from step *N* for counterfactual evaluation.
 - **OTel by default**: every step becomes a span tagged with `evalsi.run_id`, `evalsi.trial` and `evalsi.task_id`, so offline runs appear in the same trace views as production.
+- **Sandbox policy events**: sandbox denials and escalation requests (§13) are recorded as trajectory events. With no human in the loop, the harness policy decides whether an escalation is allowed (deny by default), and safety evaluators can score how often an agent tried to step outside its permissions.
 
 ### Offline run flow
 
@@ -607,7 +614,7 @@ flowchart LR
 - **Composite reward specs.** Rewards are weighted sums of components with gates (for example, the format check must pass before anything else counts). Every response returns a *per-component breakdown*, which is essential for spotting reward hacking.
 - **Verifier library.** Symbolic math equivalence (in the spirit of `math-verify`), sandboxed code execution against tests, schema and format checks, LLM-judge or generative reward models, and served reward models (batched on GPU workers).
 - **Drop-in for trainers.** `evalsi.rewards.load("reward.yaml")` returns a callable that matches TRL's `reward_funcs` signature and verl's `compute_score` signature, either in-process or as a thin client to the Reward Service.
-- **Throughput design.** Batching, content-hash caching of (prompt, completion, spec) results, pre-warmed microVM pools restored from snapshots, and back-pressure to the trainer. For a sense of scale, a GRPO step with 512 prompts and 8 samples each needs 4,096 sandboxed executions. With 256 concurrent warm microVMs and about 1 second per test run, that is roughly 16 seconds per step. The pool and snapshot design exists to keep that number low.
+- **Throughput design.** Batching, content-hash caching of (prompt, completion, spec) results, pre-warmed microVM pools restored from snapshots, and back-pressure to the trainer. For a sense of scale, a GRPO step with 512 prompts and 8 samples each needs 4,096 sandboxed executions. With 256 concurrent warm microVMs and about 1 second per test run, that is roughly 16 seconds per step. The pool and snapshot design exists to keep that number low. On hosts without KVM, the bubblewrap rung gives the same throughput with millisecond startup at the `namespaced` isolation level.
 - **Environments double as RL environments.** A harness environment (§11) can be exposed with a gym-style `reset` / `step` interface. We will evaluate compatibility with emerging environment specs (OpenEnv and verifiers-style environments) so one task definition serves both evaluation and training.
 
 ### Checkpoint evaluation loop
@@ -630,30 +637,78 @@ flowchart LR
 | Safety regression | Refusal correctness, jailbreak success rate, toxicity, against the base model |
 | Sampling behavior | pass@k curves, and sensitivity to temperature and seed |
 
-## 13. Sandboxing (Firecracker and friends)
+## 13. Sandboxing (Firecracker, bubblewrap, hardened pods)
 
 ### Interface
 
 ```text
-Create(spec) -> handle      Exec(handle, cmd, stdin, timeout) -> stream(stdout, stderr, exit)
+Create(spec) -> handle      Exec(handle, cmd, stdin, timeout) -> stream(stdout, stderr) + Outcome
 CopyIn / CopyOut            Snapshot(handle) -> snapshot_id      Restore(snapshot_id) -> handle
 Destroy(handle)             Stats(handle) -> cpu, mem, net, egress log
+
+Outcome = exit(code) | denied(effect) | runner_failure(signature) | timeout
+Isolation = {driver, level, enforcement: full | partial}   // reported on every Create and Exec
 ```
 
-The `spec` covers the image (an OCI reference), resources (CPU, memory, disk), wall-clock timeout, network mode (`deny` by default, `allowlist`, or egress through a proxy), mounts, environment, and the minimum isolation level.
+The `spec` covers the image (an OCI reference), the file-access mode, resources (CPU, memory, PIDs, disk), a wall-clock timeout, the network mode (`deny` by default, or `allowlist`), mounts, environment variables, and the minimum isolation level.
 
-### Isolation tiers
+Isolation levels are ordered `vm` > `kernel` > `namespaced` > `confined` > `none`:
 
-| Driver | Isolation | Startup | Requires | Use for |
-|--------|-----------|---------|----------|---------|
-| `process` (rlimits, plus nsjail or bubblewrap when available) | Weak to moderate | ~ms | Linux | Trusted deterministic evaluators |
-| `container` (Docker, containerd, Podman) | Kernel shared | ~0.5–2 s | A container runtime | Development, trusted harness environments |
-| `gvisor` (`runsc`) | Strong (user-space kernel) | ~1 s | runsc | Untrusted code where KVM is unavailable |
-| `firecracker` | **Strongest lightweight option (microVM)** | ~125 ms boot; faster from a warm snapshot | `/dev/kvm` | Untrusted code at scale, RL rewards, agent environments |
-| `kata` (with Firecracker or Cloud Hypervisor) | microVM per pod | Seconds | Kata RuntimeClass | Kubernetes-native VM isolation for long-lived environments |
-| `remote` (E2B, Modal, Daytona, …) | Provider-managed | Varies | API key | No KVM in-house, bursty demand |
+- `vm`: a separate guest kernel (Firecracker, Kata).
+- `kernel`: a user-space kernel (gVisor).
+- `namespaced`: separate mount, PID and network namespaces plus seccomp and resource limits (bubblewrap, a hardened pod).
+- `confined`: same-world, with kernel-enforced file and TCP rules (Landlock).
 
-A policy sets `minIsolation`. If the preferred driver is unavailable, the manager falls back *only* to drivers at or above that level. Otherwise the task fails with a clear error and never silently downgrades.
+### The isolation ladder (decided, D6)
+
+Evals.si always uses the **strongest rung available** where it runs, then checks it against the request's `minIsolation`. If no available rung satisfies it, the sandbox fails closed with `SANDBOX_UNAVAILABLE`. **It never silently runs unconfined.**
+
+| Form factor | Ladder, strongest first |
+|-------------|-------------------------|
+| Standalone (`evalsi serve`, embedded) | **Firecracker** (if `/dev/kvm` is usable) → **bubblewrap** (static binary we ship) → **Landlock** → fail closed |
+| Kubernetes | **Firecracker** via `sandboxd` on KVM nodes → **bubblewrap** inside sandbox-pool pods (if user namespaces are allowed there) → **hardened pod** per sandbox → fail closed |
+
+| Driver | Level | Startup | Requires | Notes |
+|--------|-------|---------|----------|-------|
+| `firecracker` | `vm` | ~125 ms boot; faster from a warm snapshot | `/dev/kvm` (bare metal or nested virtualization) | The default whenever KVM exists |
+| `bwrap` | `namespaced` | milliseconds | Unprivileged user namespaces | Statically linked binary in our release; profile below |
+| `landlock` | `confined` | milliseconds | Linux ≥ 5.13 with Landlock enabled; ABI ≥ 4 (Linux 6.7) to also restrict TCP | Weaker than bwrap: no separate mount or PID view. Reports `partial` enforcement on older ABIs. |
+| `pod` | `namespaced`; `kernel` with a gVisor RuntimeClass; `vm` with Kata | Seconds; less with warm pods | Kubernetes | Used when rungs 1 and 2 are unavailable in-cluster |
+
+Further drivers can be added to a ladder through `SandboxClass`: `gvisor`, `kata`, `docker`/`containerd` (a local development convenience) and `remote` (E2B, Modal, Daytona). None of them are in the default ladder.
+
+Because the bwrap and Landlock rungs start in milliseconds, hosts without KVM still get high-throughput sandboxed execution. That matters for RL rewards and code evaluators (§12).
+
+### What we adopt from the deepseek-harness process sandbox
+
+The [deepseek-harness sandbox](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/sandbox/sandbox/README.md) (MIT, TypeScript) confines subprocesses with bubblewrap, then Landlock on Linux. We port its **design** to Go in `internal/sandbox` and keep attribution for anything derived from its code:
+
+- **Fail closed.** `confine` either returns an enforcing command or errors with `SANDBOX_UNAVAILABLE`. Unconfined passthrough is impossible unless a spec explicitly asks for `none`.
+- **Policy rides the call.** The file-access mode (`read-only`, `workspace-write`, `full-access`) is set per call, not per provider, so two tasks on one worker can run under different policies.
+- **Enforcement is a reported fact.** Each execution reports `full` or `partial` enforcement, for example Landlock on an older kernel ABI. We record it in every record's provenance and in the run manifest, and gates can require `enforcement == full`.
+- **Functional probes.** Each candidate runner is probed once by running the real profile against `true`, and the verdict is cached for the process lifetime. An installed binary is not taken as proof that it works.
+- **Separate failure dialects.** Each runner's denial signatures and runner-failure signatures are classified separately. A broken sandbox is then never confused with a command the policy denied, which is essential for scoring (§14).
+- **Escalation vocabulary.** A denied call can request a strictly wider mode. Evals have no human in the loop, so the harness policy decides (deny by default), and every request becomes a trajectory event that safety evaluators can score (§11).
+
+### Where we harden it for untrusted eval workloads
+
+The deepseek-harness profile was built to confine a coding assistant on its user's own machine. It binds the host root read-only and governs file writes only (`--ro-bind / /`, private PID namespace, writable workspace). Running untrusted, model-generated code needs more:
+
+| Concern | deepseek-harness profile | Evals.si profile |
+|---------|--------------------------|------------------|
+| Root filesystem | Host `/`, read-only | An unpacked OCI image (cached by digest) as `/`, so host files are invisible. Host-root mode is only for trusted evaluators. |
+| Reads | Unconfined | Limited to the image root, the workspace and explicit mounts (Landlock read rules on rung 3) |
+| Environment and secrets | Inherited | `--clearenv` plus explicit variables; secret paths are never bound; sandbox hosts hold no provider keys (§17) |
+| Network | Not governed | `--unshare-net` by default (loopback only); Landlock ABI ≥ 4 denies TCP bind and connect; allowlisted egress only on the Firecracker and pod rungs, through a logging egress proxy |
+| Processes | Private PID namespace | `--unshare-all`, `--new-session` and `--die-with-parent` |
+| Syscalls | Not filtered | A seccomp-BPF filter loaded via `--seccomp` |
+| Resources | None | cgroup v2 limits (CPU, memory, PIDs) where delegated, rlimits otherwise, plus a wall-clock timeout and output size caps |
+
+Implementation notes:
+
+- **Static bubblewrap.** We build bubblewrap statically against musl in our release pipeline, so the rung does not depend on a distro package. bubblewrap is LGPL-2.0-or-later, so it ships as a separate executable with its license and a source reference.
+- **Landlock from Go.** The Landlock rung uses `go-landlock`. A Landlock ruleset applies to the calling process and is inherited across `execve`, so `evalsi` re-executes itself as a small launcher (`evalsi sandbox-exec`) that applies the ruleset and then executes the target command.
+- **User namespaces.** These can be disabled or restricted on some distributions (Ubuntu's AppArmor restriction, for example), and default container seccomp and AppArmor profiles usually block them inside pods. The functional probe detects this. On Kubernetes, sandbox-pool pods can use a `Localhost` seccomp profile that permits user-namespace creation. Otherwise the ladder falls through to the pod rung.
 
 ### Firecracker driver design
 
@@ -662,14 +717,40 @@ A policy sets `minIsolation`. If the preferred driver is unavailable, the manage
 - **Jailer.** Every VMM process runs under the Firecracker jailer (chroot, cgroups, seccomp, dropped privileges).
 - **Networking.** Each VM gets a tap device with nftables rules and deny-by-default egress. Allowlisted egress goes through a host-side proxy that logs every connection, and those logs become evidence for safety evaluators.
 - **Snapshots and warm pools.** We boot once, run the environment setup (dependency installs, repo checkout) and snapshot. Clones are then restored on demand. After a restore we reseed guest entropy and resync the clock (for example via VMGenID) so clones do not share RNG state.
-- **Hardware.** Firecracker needs KVM: bare-metal or nested-virtualization-capable instances. This is an infrastructure decision ([§22](#22-decisions-to-discuss)). CI needs KVM-capable runners to test this driver.
+- **Hardware.** KVM requires bare-metal or nested-virtualization-capable instances. The `sandboxd` DaemonSet runs only on nodes labeled as KVM-capable.
 
-### On Kubernetes
+### Hardened pod rung (Kubernetes)
 
-There are two complementary options:
+When neither Firecracker nor bubblewrap is available in the cluster, each sandbox is a dedicated pod in a sandbox namespace:
 
-1. **`sandboxd` DaemonSet** on KVM-labeled nodes. It manages Firecracker pools and snapshots directly and gives leases in milliseconds. This is the hot path for RL rewards and high-volume code evaluation.
-2. **`SandboxClass` mapped to a Kata RuntimeClass** (for example `kata-fc`). Each environment becomes a pod-level microVM. It is simpler to operate and suits long-running agent environments where seconds of startup do not matter.
+- **Pod Security `restricted`:** non-root, `allowPrivilegeEscalation: false`, all capabilities dropped, `seccompProfile: RuntimeDefault`, a read-only root filesystem and an `emptyDir` workspace with a `sizeLimit`.
+- **No credentials or host access:** `automountServiceAccountToken: false`, no host paths, no Secrets mounted, and `hostUsers: false` (pod user namespaces) where the cluster supports it.
+- **Network:** a default-deny `NetworkPolicy`. Allowlisted egress goes through the logging egress proxy.
+- **Limits:** CPU, memory and ephemeral-storage limits, plus `activeDeadlineSeconds`.
+- **Stronger runtimes when available:** `runtimeClassName` comes from the `SandboxClass` when the cluster offers gVisor or Kata, which raises the rung's level.
+- **Fast exec:** commands run through the same exec agent the Firecracker guest uses (gRPC instead of vsock), not `kubectl exec`.
+- **Warm pools:** warm pods hide scheduling latency. We will evaluate [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox) (a Sandbox CRD with warm pools) as the implementation of this rung before building our own.
+
+### Configuring the ladder
+
+```yaml
+apiVersion: evals.si/v1alpha1
+kind: SandboxClass                       # standalone: the same block under `sandbox:` in evalsi.yaml
+metadata: {name: default}
+spec:
+  ladder: [firecracker, bwrap, pod]      # tried in order; the first usable rung that meets minIsolation wins
+  minIsolation: namespaced
+  network: deny
+  defaults: {cpu: "1", memory: 2Gi, pids: 512, timeout: 10m}
+  firecracker:
+    warmPool: 64
+    nodeSelector: {evals.si/kvm: "true"}
+  bwrap:
+    seccompProfile: evalsi-userns        # Localhost profile that permits user namespaces in pool pods
+  pod:
+    runtimeClassName: gvisor             # optional; raises the pod rung to the "kernel" level
+    warmPool: 16
+```
 
 ## 14. Execution engine and scalability
 
@@ -681,6 +762,7 @@ Run ─► Shards (ranges of samples) ─► Tasks
 ```
 
 - **Idempotency.** Each task has a deterministic key `(run_id, sample_id, trial, stage, evaluator@version)`, and results are upserted. Retries, duplicate deliveries and `ResumeRun` therefore never double-count. After a crash, a resumed run skips completed tasks.
+- **Infrastructure failures are not model failures.** Every task ends as `scored`, `skipped(reason)`, `infra_error(kind)` or `cancelled`. Sandbox unavailability, sandbox runner failures, provider 5xx errors and crashes in our own machinery are `infra_error`: they are retried, reported separately and excluded from metrics instead of being counted as failures. A sandbox *denial* is different. It is the agent's own behavior, so it stays in the trajectory and counts.
 - **Pipelining.** Evaluation of sample *i* starts as soon as its generation finishes. There is no global barrier except for `dataset`-scope reducers.
 - **Routing.** Tasks go to NATS subjects per pool (`work.<pool>`). Workers use pull consumers, and KEDA autoscales each pool on consumer lag.
 
@@ -730,6 +812,21 @@ The storage layer sits behind repository interfaces, so a team can point us at t
 
 The model follows agentgateway: the same binary runs from a local config file or under a Kubernetes control plane, and the **operator renders the same config schema the standalone binary reads.**
 
+### Runs in the client's environment (decided, D5)
+
+For now, every form factor is installed and operated by the client, inside their own infrastructure. A hosted offering comes later, when we have the compute for it.
+
+- **Nothing calls home.** Product telemetry is off unless the operator turns it on.
+- **Bring your own everything:**
+  - models and judges, including private endpoints and AI gateways;
+  - storage (Postgres, ClickHouse, S3-compatible);
+  - identity (OIDC);
+  - secrets (Kubernetes Secrets, Vault, cloud secret managers);
+  - observability (their OTel Collector, Prometheus, Grafana).
+- **Air-gapped installs.** An offline bundle contains the images, Python wheels and plugin packs. A mirror tool copies benchmark datasets into the client's object store, respecting each dataset's license.
+- **Least-privilege install.** The main Helm install is namespace-scoped. Cluster-scoped pieces (CRDs, the optional `sandboxd` DaemonSet, its node labels) are separate charts, because on many clusters a platform team owns those.
+- **Single tenant per install, with projects inside it.** Every stored key still carries `project_id` and a reserved `tenant_id`, so a hosted multi-tenant offering can be added later without a data migration.
+
 ### Tier 0: Embedded library (`pip install evalsi`)
 
 This tier runs evaluators, adapters and the built-in harness in-process with an asyncio scheduler. There is no server or queue, and it stores to DuckDB or JSON files. It is meant for notebooks, unit tests and small CI jobs. It runs the same `EvalRun` YAML.
@@ -742,7 +839,7 @@ evalsi serve --config evalsi.yaml
 #  :4317  OTLP gRPC     :4318  OTLP HTTP
 #  embedded NATS, SQLite + DuckDB, local object dir
 #  supervises Python worker processes (uv-managed venvs per adapter)
-#  sandbox driver auto-detected: firecracker if /dev/kvm is usable, else gvisor, else docker, else process (with warning)
+#  sandbox ladder probed at startup: firecracker if /dev/kvm is usable, else static bwrap, else Landlock, else fail closed
 ```
 
 The tier ships as a single static Go binary plus a Python worker bundle, a multi-arch container image, and a `docker compose` profile that swaps in Postgres, ClickHouse and MinIO for heavier single-node use.
@@ -754,7 +851,9 @@ The tier ships as a single static Go binary plus a Python worker bundle, a multi
 | `evalsi-api`, `evalsi-ingest`, `evalsi-result-writer` | Deployments (HPA) |
 | `evalsi-scheduler`, `evalsi-policy-engine`, `evalsi-operator` | Deployments, leader-elected |
 | Worker pools (`cpu`, `judge`, `gpu`, `sandbox`, `harness`) | Deployments scaled by KEDA (NATS JetStream scaler) |
-| `evalsi-sandboxd` | DaemonSet on KVM nodes |
+| `evalsi-sandboxd` | DaemonSet on KVM-labeled nodes (Firecracker rung, optional) |
+| Sandbox pool | Deployment running bwrap-confined workloads (bubblewrap rung); holds no secrets |
+| Sandbox pods | One hardened pod per sandbox, created on demand or from a warm pool (pod rung) |
 | NATS, Postgres, ClickHouse, object storage | Subcharts or bring your own |
 | Heavy adapters (lm-eval with torch, GPU judges) | Separate Deployments speaking the plugin protocol |
 
@@ -765,7 +864,7 @@ The tier ships as a single static Go binary plus a Python worker bundle, a multi
 | `EvalRun` | One offline execution (target × suite × trials) |
 | `Evaluator` | Registers a plugin (image or package, pool, isolation, config) |
 | `OnlineEvalPolicy` | Selector, sampling, evaluators, alerts and promotion over live traces |
-| `SandboxClass` | Like StorageClass: isolation backend, defaults, warm-pool sizing |
+| `SandboxClass` | Like StorageClass: isolation ladder, minimum level, defaults, warm-pool sizing (§13) |
 | `EvalSchedule` | Cron-triggered runs (nightly regressions) |
 | `EvalSuite`, `Dataset`, `Judge`, `EvalTarget`, `Harness` | Reusable named building blocks |
 
@@ -778,15 +877,15 @@ The tier ships as a single static Go binary plus a Python worker bundle, a multi
 - **Same two form factors:** agentgateway standalone with `evalsi serve` on a developer box, or both on Kubernetes.
 - **Later:** feed scores back into the gateway (quality-aware routing, auto-disabling a misbehaving MCP tool) and an inline guardrail mode through the gateway's external-processing hooks. Both depend on which extension points agentgateway exposes, and that needs validating.
 
-## 17. Security and multi-tenancy
+## 17. Security and tenancy
 
 - **Authentication:** API keys and OIDC/JWT for users, mTLS between components on Kubernetes, and Kubernetes RBAC for CRDs.
 - **Authorization:** project-scoped roles (viewer, runner, editor, admin). Every resource belongs to a project, and storage queries are always project-filtered.
-- **Secrets:** provider keys are referenced by name (Kubernetes Secret, Vault, environment variable) and never embedded in specs or stored in results. They are injected only into the workers that need them and never into sandboxes unless a spec mounts them explicitly. Model calls can optionally route through an AI gateway for central key management.
+- **Secrets:** provider keys are referenced by name (Kubernetes Secret, Vault, environment variable) and never embedded in specs or stored in results. They are injected only into the workers that need them. Sandbox hosts (sandbox-pool pods, sandbox pods, `sandboxd` nodes) hold no provider keys at all, and a sandbox only sees a secret when its spec mounts one explicitly. Model calls can optionally route through an AI gateway for central key management.
 - **Untrusted plugins:** they run out-of-process at the plugin's declared or overridden isolation level. Images are pinned by digest, and signature verification (cosign) comes later.
-- **Sandboxes:** egress is denied by default, resources and output sizes are capped, environments are ephemeral, and egress is logged.
+- **Sandboxes:** the strongest available rung is used and the sandbox fails closed (§13). Egress is denied by default, resources and output sizes are capped, environments are ephemeral, and egress is logged.
 - **Data:** PII redaction at ingest, per-project retention TTLs, encryption at rest through the storage backends, and an audit log of who ran what against which data.
-- **Quotas:** per-project limits on concurrent tasks, sandbox minutes, judge tokens and storage.
+- **Tenancy:** one install per client, with projects inside it (D5). Per-project quotas cover concurrent tasks, sandbox minutes, judge tokens and storage.
 
 ## 18. Reproducibility and versioning
 
@@ -823,7 +922,7 @@ evalsi serve | evalsi mcp                                          # server and 
 | Expressions | **CEL** | Safe and fast, used by Kubernetes and agentgateway | JMESPath, custom DSL |
 | Python environments | **uv** | Fast, isolated per-adapter virtualenvs | conda |
 | Operator | **kubebuilder / controller-runtime** | Standard | — |
-| Sandboxes | **containerd, runsc, firecracker-go-sdk, Kata** | | — |
+| Sandboxes | **firecracker-go-sdk, static bubblewrap, go-landlock, hardened Kubernetes pods** | The strongest isolation available in each environment (D6); design adapted from deepseek-harness | gVisor, Kata, Docker and remote providers as optional drivers |
 | Packaging | goreleaser, multi-arch OCI images, Helm, PyPI | | — |
 | Orchestration of long runs | **Our own durable task model** on NATS + Postgres (§14) | Fewer moving parts; tasks are idempotent | Temporal (powerful, heavier to operate) |
 
@@ -843,7 +942,7 @@ Evals.si/
 │   ├── ingest/                    # OTLP receiver, semconv mappers, trace assembler, redaction
 │   ├── store/                     # sqlite, postgres, duckdb, clickhouse, object store
 │   ├── queue/                     # embedded and external NATS
-│   ├── sandbox/                   # drivers: process, container, gvisor, firecracker, kata, remote
+│   ├── sandbox/                   # ladder + probes; drivers: firecracker, bwrap, landlock, pod; optional gvisor, kata, docker, remote
 │   ├── reward/                    # reward service hot path
 │   └── pluginhost/                # out-of-process plugin lifecycle
 ├── operator/                      # CRD types, controllers, webhooks
@@ -862,39 +961,48 @@ Evals.si/
 └── docs/
 ```
 
-## 22. Decisions to discuss
+## 22. Decisions
 
-These are the decisions that most shape the code. Each has a recommendation that is open to challenge.
+### Decided (2026-10-05)
 
-| # | Question | Recommendation | Why it matters |
-|---|----------|----------------|----------------|
-| D1 | **Who is the first user (the wedge)?** | Teams building **agents and LLM apps**, with offline and online agent evaluation as the v1 headline. Classic ML comes along cheaply through packs; RL follows. | It sets what Phases 1–2 optimize for |
-| D2 | **Language split** | Go core + Python runtime | Python-only ships faster but tops out on ingest, the operator and VM management; Rust slows iteration |
-| D3 | **Build a web UI in v1?** | No. Use reports, Grafana and write-back to MLflow, Langfuse or Phoenix; add a minimal UI in Phase 5 | A UI can eat half the team |
-| D4 | **Own trace store, or bring-your-own only?** | Own lightweight store, plus write-back to the user's backend | Online policies and offline runs need fast local access to traces |
-| D5 | **Hosted, multi-tenant SaaS later?** | Design project scoping and quotas now; skip hard tenant isolation until there is a reason | It changes auth, storage partitioning and sandbox policy |
-| D6 | **Firecracker infrastructure** | Target bare-metal or nested-virtualization nodes first. Keep gVisor and remote providers as fallbacks. Get KVM-capable CI runners. | Without `/dev/kvm` the Firecracker driver cannot run or be tested |
+| # | Decision | What it changes in this design |
+|---|----------|--------------------------------|
+| D1 | The first users are **agent builders, agent platform builders and LLM app developers** | Agent evaluation leads the roadmap: online over traces first, then offline runs, with agentgateway integration early. Classic ML packs and RL move later (§3, §23). For platform builders, the API and policy-as-code are first-class: everything the CLI does is an API call. |
+| D2 | **Go core, Python runtime** | §6, §20 |
+| D3 | **No web UI for now** | Reports, Grafana dashboards, the CLI, and write-back to MLflow, Langfuse or Phoenix (§19). A minimal UI is reconsidered in Phase 5. |
+| D5 | **Self-hosted in the client's environment now**; a hosted multi-tenant service later, when there is compute for it | §16 "Runs in the client's environment"; `project_id` and a reserved `tenant_id` on every stored key from day one |
+| D6 | Sandbox ladder: **Firecracker when available, otherwise static bubblewrap or Landlock (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod**, always failing closed | §13 |
+
+### Still open
+
+These defaults go ahead unless you say otherwise.
+
+| # | Question | Default | Why it matters |
+|---|----------|---------|----------------|
+| D4 | **Own trace store, or bring-your-own only?** | Our own lightweight store plus write-back to the client's backend. Under D5 the store runs on the client's own Postgres, ClickHouse and S3. | Online policies and offline runs need fast local access to traces |
 | D7 | **Inline (blocking) guardrail evals** | Out of scope for v1; design the policy engine so a synchronous path can be added | Different latency SLOs and failure semantics |
 | D8 | **Workflow engine** | Our own idempotent task model; revisit Temporal if runs need complex branching | Operational weight |
 | D9 | **Human evaluation and annotation queues** | Phase 5. The data model supports human scores from day one. | Scope |
 | D10 | **Naming and namespaces** | PyPI package `evalsi`, CLI `evalsi`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`. Availability needs checking. | Hard to change later |
-| D11 | **Default judge and CI cost policy** | No default paid judge; the user configures one. CI uses recorded cassettes. | Surprise bills, flaky tests |
-| D12 | **License and contributions** | Apache-2.0 (already present), DCO sign-off, adapters pin upstream versions | Ecosystem trust |
+| D11 | **Default judge and CI cost policy** | No default paid judge; the client configures one. CI uses recorded cassettes. | Surprise bills, flaky tests |
+| D12 | **License and contributions** | Apache-2.0 (already present), DCO sign-off, adapters pin upstream versions, third-party notices for bubblewrap (LGPL) and any code derived from deepseek-harness (MIT) | Ecosystem trust, compliance in client environments |
+| D13 | **CI for the sandbox rungs** | Standard runners for bubblewrap and Landlock; KVM-capable runners (self-hosted, or cloud instances with nested virtualization) for Firecracker; a kind cluster for the pod rung | The Firecracker rung cannot be tested without `/dev/kvm` |
+| D14 | **How agent platform builders consume Evals.si** | It runs beside their platform as a service and integrates through the API, OTLP, CRDs and their own OIDC. Embedding as a library inside their control plane, and white-labeling, come later. | It shapes auth, packaging and API stability guarantees |
 
 ## 23. Roadmap
 
-The order is chosen so that each phase produces something usable. Phases 2 and 3 can run in parallel with two streams of work. Durations should be estimated after Phase 0, once team size is known.
+The order follows D1. Each phase produces something usable, and Phases 2 and 3 can run in parallel with two streams of work. Durations should be estimated after Phase 0, once team size is known.
 
 | Phase | Deliverables | Exit criteria |
 |-------|--------------|---------------|
-| **0. Foundations** | ADRs for §22; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
-| **1. Standalone MVP** | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; basic `OnlineEvalPolicy`; packs `ml-classic`, `text`, `judge`, `rag`; adapters for lm-eval-harness, Inspect AI, RAGAS and DeepEval; MLflow and OTel sinks; container sandbox | One `run.yaml` runs embedded and on the server; an OTel-instrumented sample app gets online scores; an MMLU subset runs through the lm-eval adapter |
-| **2. Agents** | Harness protocol plus `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; `agent` pack, pass^k, session scope; promotion to datasets and shadow replay; gVisor and Firecracker drivers with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent in Firecracker; agentgateway-proxied traffic is scored online |
-| **3. Kubernetes** | Operator and the first four CRDs, Helm chart, Postgres, ClickHouse and S3 backends, KEDA-scaled pools, `sandboxd` DaemonSet and Kata `SandboxClass`, OIDC and RBAC, HA ingest and scheduler, agentgateway integration guide | kind-based e2e in CI; `kubectl apply` gives parity with standalone; load test meets the §14 targets |
+| **0. Foundations** | Short decision records for D1–D6; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
+| **1. Standalone MVP: LLM apps and agent traces** | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; `OnlineEvalPolicy` with cascades; packs `judge`, `rag`, `safety`, `text`, plus the trace-based half of `agent` (tool-call accuracy, trajectory match, loops, efficiency, session goal completion); adapters for Inspect AI, RAGAS, DeepEval and lm-eval-harness; MLflow and OTel sinks; the sandbox ladder with the **bubblewrap and Landlock** rungs for code evaluators | One `run.yaml` runs embedded and on the server; an agent behind standalone agentgateway (or instrumented with OTel) gets online trajectory scores; a RAG app is gated in CI |
+| **2. Agent runs** | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
+| **3. Kubernetes** | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; OIDC and RBAC; HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
 | **4. Fine-tuning and RL** | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
-| **5. MCP and ecosystem** | `evalsi mcp` (stdio and streamable HTTP); minimal web UI; plugin index; Wasm evaluators; human annotation queues; inline guardrail mode | A coding agent evaluates its own changes locally over MCP |
+| **5. MCP, classic ML and ecosystem** | `evalsi mcp` (stdio and streamable HTTP); `ml-classic` and `ml-monitoring` packs (pulled earlier if a client needs them); plugin index; Wasm evaluators; human annotation queues; inline guardrail mode; a minimal web UI if one is still wanted | A coding agent evaluates its own changes locally over MCP |
 
-**Immediately after this doc is agreed:** write the ADRs for D1–D12, draft `proto/evalsi/v1` and `plugin/v1`, scaffold the repository (§21) with CI, and build the Phase 0 vertical slice.
+**Next:** Phase 0. That means short decision records for D1–D6, a first draft of `proto/evalsi/v1` and `plugin/v1`, the repository scaffold (§21) with CI, and the Phase 0 vertical slice.
 
 ## 24. Risks and mitigations
 
@@ -904,7 +1012,9 @@ The order is chosen so that each phase produces something usable. Phases 2 and 3
 | **Dependency conflicts** across adapted frameworks | Per-adapter virtualenvs or images behind the plugin protocol; pinned upstream versions; contract tests per adapter |
 | **Semantic-convention churn** (OTel GenAI is still evolving) | Versioned mapper plugins, raw attributes always preserved, golden-trace test fixtures |
 | **LLM-judge cost, variance and bias** | Content-hash cache, cascades, judge calibration against human labels, CIs on every aggregate, cassettes in CI |
-| **Firecracker operational complexity** | Tiered isolation with safe fallbacks, Kata as the simpler Kubernetes path, remote providers for bursts |
+| **Firecracker operational complexity** | It is only the top rung. bubblewrap, Landlock and hardened pods cover environments without KVM, and the ladder fails closed instead of degrading silently. |
+| **User namespaces unavailable** (distro restrictions, container seccomp), which breaks the bubblewrap rung | Functional probes; Landlock fallback on hosts; a `Localhost` seccomp profile for sandbox-pool pods; the pod rung on Kubernetes; a published support matrix |
+| **Weaker isolation than expected on the process rungs** | Image-root profile, cleared environment, network unshared, seccomp, no secrets on sandbox hosts; enforcement level recorded on every record, and gates can require a minimum |
 | **Benchmark contamination and leaderboard gaming** | Contamination checks, held-out and private splits, versioned datasets, reproducibility manifests |
 | **Throughput bottlenecks in the RL hot path** | A dedicated Reward Service, warm snapshot pools, batching, caching and back-pressure |
 | **Adapter maintenance burden** | Maturity tiers, upstream pinning, nightly compatibility jobs, a community plugin index |
@@ -941,7 +1051,7 @@ spec:
     - ref: builtin/cost
   judges:
     default: {connector: openai-compatible, model: my-judge-model, secretRef: judge-key}
-  sandbox: {class: firecracker, minIsolation: vm, network: deny}
+  sandbox: {class: default, minIsolation: namespaced, network: deny}   # Firecracker if available, else bwrap, else a hardened pod
   gates:
     - "metric('task-success').passHatK(3) >= 0.80"
     - "metric('cost').mean <= 0.25"
@@ -988,7 +1098,7 @@ spec:
     - ref: rl/code-exec-tests
       weight: 0.9
       params: {timeout: 10s}
-      sandbox: {class: firecracker, warmPool: 256, network: deny}
+      sandbox: {class: default, minIsolation: namespaced, warmPool: 256, network: deny}
   cache: {enabled: true}
   breakdown: true                                         # per-component rewards for logging
 ```
