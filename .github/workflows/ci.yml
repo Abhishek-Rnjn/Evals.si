@@ -68,3 +68,23 @@ jobs:
       - run: uv run --no-sync pytest -q
       - name: CLI smoke test
         run: uv run --no-sync evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match
+
+  e2e:
+    # evalsid against a real Python worker, plus the Python codegen check.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked --all-packages
+        working-directory: python
+      - name: Generated Python code is current
+        run: |
+          scripts/gen-python-proto.sh
+          git diff --exit-code -- python/evalsi/src/evalsi/v1alpha1 python/evalsi/src/evalsi/plugin
+      - name: End-to-end tests
+        run: go test -count=1 -v ./tests/e2e/
+        env:
+          EVALSI_E2E_WORKER: ${{ github.workspace }}/python/.venv/bin/python -m evalsi

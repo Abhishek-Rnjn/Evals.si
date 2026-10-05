@@ -1,0 +1,284 @@
+{
+ "t_quantile": [
+  {
+   "p": 0.975,
+   "df": 1,
+   "want": 12.706204736172367
+  },
+  {
+   "p": 0.975,
+   "df": 2,
+   "want": 4.302652729749752
+  },
+  {
+   "p": 0.975,
+   "df": 3,
+   "want": 3.1824463052844294
+  },
+  {
+   "p": 0.975,
+   "df": 7.5,
+   "want": 2.333039626865684
+  },
+  {
+   "p": 0.975,
+   "df": 30,
+   "want": 2.042272456300452
+  },
+  {
+   "p": 0.995,
+   "df": 4,
+   "want": 4.604094871350753
+  },
+  {
+   "p": 0.9,
+   "df": 12,
+   "want": 1.3562173340228583
+  }
+ ],
+ "intervals": [
+  {
+   "name": "wilson",
+   "values": [
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0
+   ],
+   "proportion": true,
+   "level": 0.95,
+   "want": {
+    "low": 0.3195113125495498,
+    "high": 0.8067396863412434,
+    "level": 0.95,
+    "method": "wilson"
+   }
+  },
+  {
+   "name": "wilson-all-pass",
+   "values": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "proportion": true,
+   "level": 0.9,
+   "want": {
+    "low": 0.648883499234899,
+    "high": 1.0,
+    "level": 0.9,
+    "method": "wilson"
+   }
+  },
+  {
+   "name": "t",
+   "values": [
+    0.12,
+    0.5,
+    0.33,
+    0.91,
+    0.47,
+    0.05,
+    0.66,
+    0.72,
+    0.28,
+    0.81
+   ],
+   "proportion": false,
+   "level": 0.95,
+   "want": {
+    "low": 0.2769785522550662,
+    "high": 0.6930214477449339,
+    "level": 0.95,
+    "method": "t"
+   }
+  },
+  {
+   "name": "t-single",
+   "values": [
+    0.4
+   ],
+   "proportion": false,
+   "level": 0.95,
+   "want": null
+  },
+  {
+   "name": "clustered-binary",
+   "values": [
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0
+   ],
+   "proportion": true,
+   "level": 0.95,
+   "clusters": [
+    "a",
+    "a",
+    "a",
+    "b",
+    "b",
+    "c",
+    "c",
+    "c",
+    "d",
+    "d",
+    "e",
+    "e"
+   ],
+   "want": {
+    "low": 0.19892290071499724,
+    "high": 0.9677437659516694,
+    "level": 0.95,
+    "method": "clustered-t"
+   }
+  },
+  {
+   "name": "clustered-numbers",
+   "values": [
+    0.12,
+    0.5,
+    0.33,
+    0.91,
+    0.47,
+    0.05,
+    0.66,
+    0.72,
+    0.28,
+    0.81
+   ],
+   "proportion": false,
+   "level": 0.99,
+   "clusters": [
+    "x",
+    "y",
+    "x",
+    "z",
+    "y",
+    "w",
+    "z",
+    "x",
+    "w",
+    "y"
+   ],
+   "want": {
+    "low": -0.17460048630875086,
+    "high": 1.1446004863087509,
+    "level": 0.99,
+    "method": "clustered-t"
+   }
+  },
+  {
+   "name": "clustered-one-cluster",
+   "values": [
+    0.12,
+    0.5,
+    0.33,
+    0.91,
+    0.47,
+    0.05,
+    0.66,
+    0.72,
+    0.28,
+    0.81
+   ],
+   "proportion": false,
+   "level": 0.95,
+   "clusters": [
+    "only",
+    "only",
+    "only",
+    "only",
+    "only",
+    "only",
+    "only",
+    "only",
+    "only",
+    "only"
+   ],
+   "want": null
+  },
+  {
+   "name": "bootstrap",
+   "values": [
+    0.12,
+    0.5,
+    0.33,
+    0.91,
+    0.47,
+    0.05,
+    0.66,
+    0.72,
+    0.28,
+    0.81
+   ],
+   "proportion": false,
+   "level": 0.95,
+   "method": "bootstrap",
+   "want": {
+    "low": 0.321,
+    "high": 0.656,
+    "level": 0.95,
+    "method": "bootstrap"
+   }
+  },
+  {
+   "name": "bootstrap-clustered",
+   "values": [
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0
+   ],
+   "proportion": true,
+   "level": 0.95,
+   "method": "bootstrap",
+   "clusters": [
+    "a",
+    "a",
+    "a",
+    "b",
+    "b",
+    "c",
+    "c",
+    "c",
+    "d",
+    "d",
+    "e",
+    "e"
+   ],
+   "want": {
+    "low": 0.2727272727272727,
+    "high": 0.8181818181818182,
+    "level": 0.95,
+    "method": "bootstrap"
+   }
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+# evalsid configuration. Start with:
+#   evalsi serve --config examples/server/evalsi.yaml
+listen: 127.0.0.1:8080
+
+worker:
+  # Runs the evalsi CLI; evalsid appends "worker --listen unix://...".
+  # Use the interpreter of the environment where evalsi[server] is installed.
+  command: ["python", "-m", "evalsi"]
+  start_timeout: 60s
+
+# Judges are referenced by name in requests. API keys are read by the worker
+# from the named environment variables; they are never stored here.
+judges:
+  claude:
+    provider: anthropic
+    model: claude-opus-5-5
+    effort: low
+  local:
+    provider: openai-compatible
+    model: my-judge
+    base_url: http://localhost:8000/v1
+default_judge: claude
+
+evaluate:
+  batch_size: 32      # records per worker call
+  parallelism: 8      # concurrent worker calls per request
+  max_records: 10000  # larger jobs use EvaluateStream

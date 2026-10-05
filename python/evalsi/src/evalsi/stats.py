@@ -6,16 +6,35 @@
   t interval on (clusters - 1) degrees of freedom, as recommended for evals
   where many questions share a source.
 - ``method="bootstrap"``: percentile bootstrap with a fixed seed.
+
+The Go server (``internal/stats``) implements the same algorithms, including
+the splitmix64 generator used by the bootstrap, so the embedded library and
+the server report identical intervals. ``testdata/stats_vectors.json`` checks it.
 """
 
 from __future__ import annotations
 
 import math
-import random
 from collections import defaultdict
 from collections.abc import Hashable, Sequence
 from dataclasses import dataclass
 from statistics import NormalDist, fmean, stdev
+
+
+class SplitMix64:
+    """A tiny, portable PRNG, so bootstrap results match across languages."""
+
+    MASK = (1 << 64) - 1
+
+    def __init__(self, seed: int) -> None:
+        self.state = seed & self.MASK
+
+    def next(self) -> int:
+        self.state = (self.state + 0x9E3779B97F4A7C15) & self.MASK
+        z = self.state
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & self.MASK
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & self.MASK
+        return z ^ (z >> 31)
 
 
 @dataclass(frozen=True)
@@ -144,7 +163,7 @@ def bootstrap_interval(
     """Percentile bootstrap of the mean; resamples whole clusters when given."""
     if len(values) < 2:
         return None
-    rng = random.Random(seed)
+    rng = SplitMix64(seed)
     groups: list[list[float]]
     if clusters is None:
         groups = [[v] for v in values]
@@ -157,7 +176,7 @@ def bootstrap_interval(
             return None
     means = []
     for _ in range(resamples):
-        sample = [rng.choice(groups) for _ in groups]
+        sample = [groups[rng.next() % len(groups)] for _ in groups]
         total = sum(sum(g) for g in sample)
         count = sum(len(g) for g in sample)
         means.append(total / count)

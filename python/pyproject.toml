@@ -7,7 +7,12 @@ evalsi = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "evalsi[anthropic,jsonschema]",
+    "evalsi[anthropic,jsonschema,server]",
+    "grpcio-tools==1.84.0",
+    "mypy-protobuf==5.0.0",
+    "types-grpcio",
+    "types-grpcio-health-checking",
+    "types-protobuf",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",
@@ -16,6 +21,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["evalsi/src/evalsi/v1alpha1", "evalsi/src/evalsi/plugin"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PL", "PT"]
@@ -38,6 +44,11 @@ files = ["evalsi/src", "evalsi/tests"]
 [[tool.mypy.overrides]]
 module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*"]
 ignore_missing_imports = true
+
+# Generated code is typed through its .pyi stubs; do not check the .py bodies.
+[[tool.mypy.overrides]]
+module = ["evalsi.v1alpha1.*", "evalsi.plugin.v1alpha1.*"]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["evalsi/tests"]

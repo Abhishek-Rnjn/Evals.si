@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -21,13 +22,14 @@ func TestRun(t *testing.T) {
 	}{
 		{name: "no args", args: nil, wantCode: 2, wantErr: "usage:"},
 		{name: "version", args: []string{"version"}, wantCode: 0, wantOut: "api evalsi.v1alpha1"},
-		{name: "serve not yet", args: []string{"serve"}, wantCode: 1, wantErr: "Phase 1"},
+		{name: "serve bad config", args: []string{"serve", "--config", "/nonexistent/evalsi.yaml"}, wantCode: 1, wantErr: "no such file"},
+		{name: "serve bad flag", args: []string{"serve", "--bogus"}, wantCode: 2, wantErr: "flag provided but not defined"},
 		{name: "unknown", args: []string{"bogus"}, wantCode: 2, wantErr: `unknown command "bogus"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			if got := run(tt.args, &stdout, &stderr); got != tt.wantCode {
+			if got := run(context.Background(), tt.args, &stdout, &stderr); got != tt.wantCode {
 				t.Fatalf("exit code = %d, want %d", got, tt.wantCode)
 			}
 			if !strings.Contains(stdout.String(), tt.wantOut) {

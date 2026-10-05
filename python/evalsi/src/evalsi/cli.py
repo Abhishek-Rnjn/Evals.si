@@ -7,6 +7,7 @@ when it will start the Go daemon (``evalsid``).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import inspect
 import json
 import os
@@ -26,6 +27,10 @@ _EMPTY = inspect.Parameter.empty
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "serve" and not {"-h", "--help"} & set(argv[1:2]):
+        # Everything after `serve` belongs to evalsid; argparse would try to parse its flags.
+        argv = ["serve", "--", *argv[1:]]
     parser = _parser()
     args = parser.parse_args(argv)
     try:
@@ -94,6 +99,22 @@ def _parser() -> argparse.ArgumentParser:
     cat.add_argument("--format", choices=["table", "json"], default="table")
     cat.set_defaults(func=_cmd_catalog)
 
+    wk = sub.add_parser(
+        "worker", help="serve evaluators to evalsid over gRPC (needs evalsi[server])"
+    )
+    wk.add_argument("--listen", required=True, help="unix:///path/to.sock or host:port")
+    wk.add_argument("--judges", help="JSON file mapping judge names to judge configs")
+    wk.add_argument("--no-cache", action="store_true", help="do not reuse judge responses")
+    wk.set_defaults(func=_cmd_worker)
+
+    srv = sub.add_parser(
+        "serve",
+        help="run the Evals.si server (starts the evalsid binary)",
+        add_help=False,
+    )
+    srv.add_argument("args", nargs=argparse.REMAINDER, help="arguments passed to evalsid serve")
+    srv.set_defaults(func=_cmd_serve)
+
     ver = sub.add_parser("version", help="print the version")
     ver.set_defaults(func=_cmd_version)
     return parser
@@ -101,6 +122,36 @@ def _parser() -> argparse.ArgumentParser:
 
 def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _cmd_worker(args: argparse.Namespace) -> int:
+    import asyncio
+    import logging
+
+    try:
+        from evalsi import worker
+    except ImportError as exc:
+        raise ValueError(f"the worker needs: pip install 'evalsi[server]' ({exc})") from exc
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    judges = worker.load_judges(args.judges)
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(worker.serve(args.listen, judges=judges, cache=not args.no_cache))
+    return 0
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    import shutil
+
+    binary = os.environ.get("EVALSID") or shutil.which("evalsid")
+    if not binary:
+        raise ValueError(
+            "evalsid is not installed. Build it with `go build ./cmd/evalsid` and put it on "
+            "PATH, or set EVALSID to its path."
+        )
+    passthrough = [a for a in args.args if a != "--"] if args.args[:1] == ["--"] else args.args
+    os.execv(binary, [binary, "serve", *passthrough])
+    return 0  # pragma: no cover - execv does not return
 
 
 def _cmd_version(_args: argparse.Namespace) -> int:

@@ -107,9 +107,12 @@ type EvaluateRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	BatchId string                 `protobuf:"bytes,1,opt,name=batch_id,json=batchId,proto3" json:"batch_id,omitempty"`
 	// Manifest name, for example "acme/json-valid".
-	Evaluator     string             `protobuf:"bytes,2,opt,name=evaluator,proto3" json:"evaluator,omitempty"`
-	Params        *structpb.Struct   `protobuf:"bytes,3,opt,name=params,proto3" json:"params,omitempty"`
-	Records       []*v1alpha1.Record `protobuf:"bytes,4,rep,name=records,proto3" json:"records,omitempty"`
+	Evaluator string             `protobuf:"bytes,2,opt,name=evaluator,proto3" json:"evaluator,omitempty"`
+	Params    *structpb.Struct   `protobuf:"bytes,3,opt,name=params,proto3" json:"params,omitempty"`
+	Records   []*v1alpha1.Record `protobuf:"bytes,4,rep,name=records,proto3" json:"records,omitempty"`
+	// Name of a judge configured on the worker, for evaluators that require one.
+	// v1alpha1 stand-in for the host-side judge service.
+	Judge         string `protobuf:"bytes,5,opt,name=judge,proto3" json:"judge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -170,6 +173,13 @@ func (x *EvaluateRequest) GetRecords() []*v1alpha1.Record {
 		return x.Records
 	}
 	return nil
+}
+
+func (x *EvaluateRequest) GetJudge() string {
+	if x != nil {
+		return x.Judge
+	}
+	return ""
 }
 
 type EvaluateResponse struct {
@@ -233,6 +243,7 @@ type ReduceRequest struct {
 	Records []*v1alpha1.Record `protobuf:"bytes,3,rep,name=records,proto3" json:"records,omitempty"`
 	// Per-record results from an earlier Evaluate phase, when there was one.
 	Results       []*v1alpha1.EvaluationResult `protobuf:"bytes,4,rep,name=results,proto3" json:"results,omitempty"`
+	Judge         string                       `protobuf:"bytes,5,opt,name=judge,proto3" json:"judge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -295,6 +306,13 @@ func (x *ReduceRequest) GetResults() []*v1alpha1.EvaluationResult {
 	return nil
 }
 
+func (x *ReduceRequest) GetJudge() string {
+	if x != nil {
+		return x.Judge
+	}
+	return ""
+}
+
 type ReduceResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Scores        []*v1alpha1.Score      `protobuf:"bytes,1,rep,name=scores,proto3" json:"scores,omitempty"`
@@ -348,20 +366,22 @@ const file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc = "" +
 	"\x10DescribeResponse\x12B\n" +
 	"\n" +
 	"evaluators\x18\x01 \x03(\v2\".evalsi.v1alpha1.EvaluatorManifestR\n" +
-	"evaluators\"\xae\x01\n" +
+	"evaluators\"\xc4\x01\n" +
 	"\x0fEvaluateRequest\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12\x1c\n" +
 	"\tevaluator\x18\x02 \x01(\tR\tevaluator\x12/\n" +
 	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\x121\n" +
-	"\arecords\x18\x04 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\"j\n" +
+	"\arecords\x18\x04 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\x12\x14\n" +
+	"\x05judge\x18\x05 \x01(\tR\x05judge\"j\n" +
 	"\x10EvaluateResponse\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12;\n" +
-	"\aresults\x18\x02 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"\xce\x01\n" +
+	"\aresults\x18\x02 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"\xe4\x01\n" +
 	"\rReduceRequest\x12\x1c\n" +
 	"\tevaluator\x18\x01 \x01(\tR\tevaluator\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x121\n" +
 	"\arecords\x18\x03 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\x12;\n" +
-	"\aresults\x18\x04 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"@\n" +
+	"\aresults\x18\x04 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\x12\x14\n" +
+	"\x05judge\x18\x05 \x01(\tR\x05judge\"@\n" +
 	"\x0eReduceResponse\x12.\n" +
 	"\x06scores\x18\x01 \x03(\v2\x16.evalsi.v1alpha1.ScoreR\x06scores2\xb3\x02\n" +
 	"\x16EvaluatorPluginService\x12]\n" +

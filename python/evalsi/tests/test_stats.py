@@ -71,3 +71,30 @@ def test_interval_dispatch() -> None:
     assert stats.interval([1.0, 2.0], proportion=False).method == "t"  # type: ignore[union-attr]
     with pytest.raises(ValueError, match="unknown CI method"):
         stats.interval([1.0], proportion=False, method="magic")
+
+
+def test_shared_vectors_match_python() -> None:
+    """The Go server checks the same file, so both implementations agree."""
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[3] / "testdata" / "stats_vectors.json"
+    vectors = json.loads(path.read_text())
+    for case in vectors["t_quantile"]:
+        assert stats.t_quantile(case["p"], case["df"]) == pytest.approx(case["want"], abs=1e-12)
+    for case in vectors["intervals"]:
+        got = stats.interval(
+            case["values"],
+            proportion=case["proportion"],
+            level=case["level"],
+            clusters=case.get("clusters"),
+            method=case.get("method", "auto"),
+        )
+        if case["want"] is None:
+            assert got is None, case["name"]
+            continue
+        assert got is not None, case["name"]
+        assert (got.low, got.high) == pytest.approx(
+            (case["want"]["low"], case["want"]["high"]), abs=1e-12
+        ), case["name"]
+        assert got.method == case["want"]["method"]

@@ -12,8 +12,9 @@ import "google/protobuf/struct.proto";
 // service. The host does not care which. Plugins also implement the standard
 // gRPC health protocol (grpc.health.v1.Health).
 //
-// Judge access for plugins is served by the host, so judge calls stay cached,
-// rate-limited and costed centrally; that service arrives in Phase 1.
+// Judge access: in v1alpha1 the worker is started with named judge configs and
+// requests name one. A host-side judge service, so judge calls are cached,
+// rate-limited and costed centrally across workers, replaces this later.
 service EvaluatorPluginService {
   // Lists the evaluators this plugin hosts.
   rpc Describe(DescribeRequest) returns (DescribeResponse);
@@ -37,6 +38,9 @@ message EvaluateRequest {
   string evaluator = 2;
   google.protobuf.Struct params = 3;
   repeated evalsi.v1alpha1.Record records = 4;
+  // Name of a judge configured on the worker, for evaluators that require one.
+  // v1alpha1 stand-in for the host-side judge service.
+  string judge = 5;
 }
 
 message EvaluateResponse {
@@ -52,6 +56,7 @@ message ReduceRequest {
   repeated evalsi.v1alpha1.Record records = 3;
   // Per-record results from an earlier Evaluate phase, when there was one.
   repeated evalsi.v1alpha1.EvaluationResult results = 4;
+  string judge = 5;
 }
 
 message ReduceResponse {

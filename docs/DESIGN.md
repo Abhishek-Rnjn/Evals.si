@@ -1,6 +1,6 @@
 # Evals.si: Architecture & Implementation Plan
 
-> **Status:** Draft for discussion · v0.3 · 2026-10-05. D1–D3, D5, D6, D10, D13 and D14 are decided (§22, [decision records](decisions/README.md)). Phase 0 is implemented (§23).
+> **Status:** Draft for discussion · v0.4 · 2026-10-05. D1–D3, D5, D6, D10, D13 and D14 are decided (§22, [decision records](decisions/README.md)). Phase 0 is implemented; Phase 1 is in progress (§23).
 >
 > **Scope:** System design for a pluggable, scalable, single-entrypoint evaluation platform for classic ML models, LLMs and agents. It runs standalone and on Kubernetes, speaks gRPC and HTTP, and can later be used as a local MCP server.
 >
@@ -977,7 +977,7 @@ Evals.si/
 | D5 | **Self-hosted in the client's environment now**; a hosted multi-tenant service later, when there is compute for it | §16 "Runs in the client's environment"; `project_id` and a reserved `tenant_id` on every stored key from day one |
 | D6 | Sandbox ladder: **Firecracker when available, otherwise static bubblewrap or Landlock (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod**, always failing closed | §13 |
 | D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
-| D13 | Sandbox rungs are tested in CI (bubblewrap, Landlock, and the pod rung on kind); the Firecracker rung is validated on the project owner's Kubernetes cluster | [0007](decisions/0007-testing-sandbox-rungs.md). Still to confirm: whether those nodes expose `/dev/kvm`. |
+| D13 | Sandbox rungs are tested in CI (bubblewrap, Landlock, and the pod rung on kind). On the project owner's cluster, the `vm` level comes from **Kata Containers** for now; direct Firecracker (`sandboxd`, warm snapshot pools) follows later | [0007](decisions/0007-testing-sandbox-rungs.md) |
 | D14 | Agent platform builders run Evals.si **as a service** beside their platform | [0008](decisions/0008-platform-builders-use-a-service.md): API stability, pluggable auth and project-scoped authorization matter early. |
 
 Each decision has a record in [`docs/decisions`](decisions/README.md).
@@ -1021,7 +1021,19 @@ The order follows D1. Each phase produces something usable, and Phases 2 and 3 c
 
 The exit criterion runs end to end, verified against a local OpenAI-compatible judge server.
 
-**Next:** Phase 1, the standalone server.
+**Phase 1 progress.** Phase 1 lands in slices:
+
+1. **Server spine (done).**
+   - `evalsid serve` serves `EvaluationService` (unary and streaming) and `CatalogService` on one port, for gRPC over HTTP/2 without TLS, gRPC-Web and Connect HTTP/JSON. It also serves gRPC health, reflection and `/healthz`.
+   - It supervises a Python worker (`evalsi worker`) over `EvaluatorPluginService` on a Unix socket, with crash restarts.
+   - Records are batched and sent in parallel, and results come back in a stable order.
+   - Summaries are computed in Go and match the Python library exactly, checked against `testdata/stats_vectors.json`.
+   - Named judges come from `evalsi.yaml`.
+   - An end-to-end test runs Go against the real Python worker.
+2. **Runs.** `RunService` with create, watch, cancel and resume; embedded NATS; SQLite and DuckDB; target connectors (OpenAI-compatible, Anthropic, vLLM); judge rate limits and budgets.
+3. **Watch.** OTLP ingest with GenAI and OpenInference mappers, the trace assembler, and `OnlineEvalPolicy` with cascades.
+4. **Packs and adapters.** `text`, `rag`, `safety`, and the trace-based half of `agent`; Inspect AI, RAGAS, DeepEval and lm-eval-harness adapters.
+5. **Sandbox and sinks.** The sandbox ladder's bubblewrap and Landlock rungs; MLflow and OTel sinks; REST-style routes via Vanguard.
 
 ## 24. Risks and mitigations
 

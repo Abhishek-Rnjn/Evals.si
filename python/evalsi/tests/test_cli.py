@@ -112,3 +112,22 @@ def test_catalog(capsys: pytest.CaptureFixture[str]) -> None:
 def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["version"]) == 0
     assert capsys.readouterr().out.startswith("evalsi ")
+
+
+def test_serve_passes_flags_through_to_evalsid(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, list[str]]] = []
+    monkeypatch.setenv("EVALSID", "/opt/evalsid")
+    monkeypatch.setattr("os.execv", lambda path, args: calls.append((path, args)))
+    assert main(["serve", "--config", "evalsi.yaml", "--listen", ":9000"]) == 0
+    assert calls == [
+        ("/opt/evalsid", ["/opt/evalsid", "serve", "--config", "evalsi.yaml", "--listen", ":9000"])
+    ]
+
+
+def test_serve_without_evalsid(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("EVALSID", raising=False)
+    monkeypatch.setenv("PATH", "")
+    assert main(["serve"]) == 1
+    assert "evalsid is not installed" in capsys.readouterr().err

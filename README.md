@@ -9,7 +9,7 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 - **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
 - **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
 
-> **Status:** Phase 0 (foundations) is in place: the API schema, the Python SDK and CLI with embedded evaluation, and the first evaluator packs. The server arrives in Phase 1. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
+> **Status:** Phase 0 is done: the API schema, the Python SDK and CLI with embedded evaluation, and the first evaluator packs. Phase 1 is in progress: the standalone server already serves the Score API over gRPC and HTTP. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
 
 ## Quickstart
 
@@ -62,23 +62,50 @@ result.save("results.json")   # manifest, summaries and every per-record result
 
 `evalsi catalog` lists every installed evaluator and its params.
 
+### As a server (gRPC and HTTP)
+
+`evalsid` serves the same evaluators over gRPC, gRPC-Web and HTTP/JSON on one port. It runs the Python evaluators in a supervised worker process.
+
+```bash
+go build -o bin/evalsid ./cmd/evalsid
+cd python && uv sync --all-packages          # installs evalsi[server] into python/.venv
+EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/server/evalsi.yaml
+```
+
+```bash
+# HTTP/JSON
+curl -s localhost:8080/evalsi.v1alpha1.EvaluationService/Evaluate -H 'content-type: application/json' -d '{
+  "records": [{"output": {"text": "Paris"}, "reference": {"text": "Paris"}},
+              {"output": {"text": "Lyon"},  "reference": {"text": "Paris"}}],
+  "evaluators": [{"ref": "exact-match"}, {"ref": "llm-judge", "params": {"rubric": "correctness"}}]
+}'
+
+# gRPC (reflection is on)
+grpcurl -plaintext localhost:8080 list
+grpcurl -plaintext localhost:8080 evalsi.v1alpha1.CatalogService/ListEvaluators
+```
+
+Large jobs use `EvaluationService/EvaluateStream`: send a config message, then records, and receive results as they finish, followed by the summaries. Intervals match the embedded library exactly, bootstrap included. `GET /healthz` reports whether the worker is up.
+
 ## Repository layout
 
 | Path | What |
 |------|------|
 | `proto/` | Protobuf API, the single source of truth (`evalsi.v1alpha1`, `evalsi.plugin.v1alpha1`) |
 | `gen/go/` | Generated Go code (do not edit; run `make proto`) |
-| `cmd/evalsid/` | The Go daemon (a skeleton until Phase 1) |
-| `python/evalsi/` | Python SDK, CLI, embedded runner and built-in packs |
+| `cmd/evalsid/`, `internal/` | The Go daemon: API, worker supervision, catalog, statistics |
+| `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker and built-in packs |
+| `tests/e2e/` | evalsid against a real Python worker (`make e2e`) |
 | `examples/` | Runnable examples |
 | `docs/` | Design plan and decision records |
 
 ## Development
 
-You need Go (1.25+), [buf](https://buf.build/docs/installation) and [uv](https://docs.astral.sh/uv/).
+You need Go (1.26+), [buf](https://buf.build/docs/installation) and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 make tools   # protobuf plugins, at the versions CI uses
 make proto   # lint, format and regenerate code after editing proto/
 make check   # everything CI runs: gofmt, go vet/test, buf lint/format, ruff, mypy, pytest
+make e2e     # evalsid against a real Python worker
 ```

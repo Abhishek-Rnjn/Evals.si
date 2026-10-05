@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/evaluator.proto";
+
+// CatalogService tells clients what a server can evaluate with.
+service CatalogService {
+  rpc ListEvaluators(ListEvaluatorsRequest) returns (ListEvaluatorsResponse);
+}
+
+message ListEvaluatorsRequest {}
+
+message ListEvaluatorsResponse {
+  repeated EvaluatorManifest evaluators = 1;
+  // Names of the judges configured on the server. Configs are not exposed.
+  repeated string judges = 2;
+  // Judge used when a request names none.
+  string default_judge = 3;
+}
