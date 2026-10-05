@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 )
 
 // Judge mirrors evalsi.judges.JudgeConfig in the Python SDK; it is handed to
@@ -95,6 +96,8 @@ type Config struct {
 	Evaluate     Evaluate          `json:"evaluate"`
 	// Isolation for code-executing evaluators (the code pack).
 	Sandbox sandbox.Config `json:"sandbox"`
+	// Where finished runs and online scores are exported (MLflow, OTel).
+	Sinks []sinks.Config `json:"sinks"`
 }
 
 // Default returns the configuration used when no file is given.
@@ -185,6 +188,11 @@ func (c Config) Validate() error {
 	if c.DatasetsDir != "" {
 		if info, err := os.Stat(c.DatasetsDir); err != nil || !info.IsDir() {
 			errs = append(errs, fmt.Errorf("datasets_dir %q is not a directory", c.DatasetsDir))
+		}
+	}
+	for i, sc := range c.Sinks {
+		if err := sc.Validate(); err != nil {
+			errs = append(errs, fmt.Errorf("sinks[%d]: %w", i, err))
 		}
 	}
 	if err := c.Sandbox.Validate(); err != nil {

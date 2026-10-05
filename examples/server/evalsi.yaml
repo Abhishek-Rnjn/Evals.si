@@ -61,3 +61,15 @@ sandbox:
   min_isolation: confined
   # Interpreters or toolchains outside /usr that sandboxed code may use.
   read_only_paths: []
+
+# Where finished runs and online scores are exported. Exports run in the
+# background with retries and never fail a run.
+sinks: []
+#  - mlflow:
+#      tracking_uri: http://mlflow:5000
+#      experiment: support-agent        # default: the run's project, else "evalsi"
+#      token_env: MLFLOW_TRACKING_TOKEN # optional bearer token
+#      trace_feedback: true             # online scores become assessments on MLflow traces
+#  - otel:
+#      endpoint: http://otel-collector:4318   # gen_ai.evaluation.result events on /v1/logs
+#      headers_env: {x-api-key: OTEL_API_KEY}

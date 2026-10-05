@@ -31,6 +31,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
+	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
 )
@@ -72,11 +73,23 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 		return err
 	}
 	defer st.Close()
+	exports, err := sinks.New(cfg.Sinks, nil, log)
+	if err != nil {
+		return err
+	}
+	exports.Start(2)
+	// Pending exports get a few seconds after runs and policies have stopped.
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		exports.Close(ctx)
+	}()
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
 		DatasetsDir:   cfg.DatasetsDir,
 		MaxConcurrent: cfg.Runs.MaxConcurrent,
 		Evaluate:      cfg.Evaluate,
 		Logger:        log,
+		OnFinished:    exports.Run,
 	})
 	if err != nil {
 		return err
@@ -84,7 +97,15 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 	// Runs stop before the worker does (deferred calls run in reverse order).
 	defer runManager.Shutdown()
 
-	watcher, err := watch.New(ctx, st, svc, watch.Options{DatasetsDir: cfg.DatasetsDir, BatchSize: cfg.Evaluate.BatchSize, Logger: log})
+	watcher, err := watch.New(ctx, st, svc, watch.Options{
+		DatasetsDir: cfg.DatasetsDir, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
+		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
+			exports.Trace(&sinks.Trace{
+				TraceID: rec.GetId(), RootSpanID: rootSpan(rec), Service: info.Service,
+				Policy: policy, Results: results, Time: time.Now(),
+			})
+		},
+	})
 	if err != nil {
 		return err
 	}
@@ -242,4 +263,14 @@ func sandboxEnv(cfg config.Config) ([]string, error) {
 		return nil, err
 	}
 	return []string{"EVALSID=" + exe, "EVALSI_SANDBOX=" + string(raw)}, nil
+}
+
+// rootSpan is the ID of the trace's root span, which exported scores attach to.
+func rootSpan(rec *evalsiv1alpha1.Record) string {
+	for _, s := range rec.GetTrajectory().GetSteps() {
+		if s.GetParentSpanId() == "" {
+			return s.GetSpanId()
+		}
+	}
+	return ""
 }

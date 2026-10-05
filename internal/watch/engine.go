@@ -40,6 +40,8 @@ type Options struct {
 	Logger    *slog.Logger
 	// Client for alert webhooks.
 	HTTPClient *http.Client
+	// Called with each evaluated trace's results (for sinks); must not block.
+	OnResults func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult)
 }
 
 type item struct {
@@ -295,6 +297,9 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 		if err := e.store.PutTraceResults(ctx, cand.record.GetId(), c.policy.GetName(), cand.results); err != nil {
 			e.StoreErrors.Add(1)
 			e.log.Error("storing trace results", "trace", cand.record.GetId(), "err", err)
+		}
+		if e.opts.OnResults != nil {
+			e.opts.OnResults(c.policy.GetName(), cand.record, cand.info, cand.results)
 		}
 		if c.promote != nil && eval(c.promote, activation(cand.info, cand.scores)) {
 			if err := e.promoteRecord(c.policy.GetPromote().GetDataset(), cand.record, cand.scores); err != nil {

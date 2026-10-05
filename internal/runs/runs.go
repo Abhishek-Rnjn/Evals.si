@@ -42,6 +42,8 @@ type Options struct {
 	MaxConcurrent int
 	Evaluate      config.Evaluate
 	Logger        *slog.Logger
+	// Called with a copy of each run that reaches a final status (for sinks); must not block.
+	OnFinished func(*evalsiv1alpha1.Run)
 }
 
 // Manager implements evalsiv1alpha1connect.RunServiceHandler.
@@ -391,6 +393,9 @@ func (m *Manager) execute(ctx context.Context, id string, a *activeRun) {
 			m.log.Error("saving run", "run", id, "err", err)
 		}
 		m.publishRun(a, run)
+		if m.opts.OnFinished != nil {
+			m.opts.OnFinished(proto.Clone(run).(*evalsiv1alpha1.Run))
+		}
 	}
 	if ctx.Err() != nil {
 		finish(m.stoppedStatus(a), m.stoppedMessage(a))

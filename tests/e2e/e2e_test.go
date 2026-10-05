@@ -22,10 +22,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -35,6 +37,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxcli"
 	"github.com/abhishek-rnjn/evals.si/internal/server"
+	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 )
 
 // The server runs in this test binary, so the worker's EVALSID points here:
@@ -93,6 +96,36 @@ type env struct {
 	model     string
 	datasets  string
 	workerCmd []string
+	// Event names the OTel sink delivered to the fake collector.
+	events func() []string
+}
+
+// fakeCollector receives the OTel sink's OTLP/HTTP log export.
+func fakeCollector(t *testing.T) (*httptest.Server, func() []string) {
+	var mu sync.Mutex
+	var names []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		req := &collogs.ExportLogsServiceRequest{}
+		if err := proto.Unmarshal(body, req); err != nil {
+			t.Errorf("collector: %v", err)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for _, rl := range req.GetResourceLogs() {
+			for _, sl := range rl.GetScopeLogs() {
+				for _, lr := range sl.GetLogRecords() {
+					names = append(names, lr.GetEventName())
+				}
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), names...)
+	}
 }
 
 func startServer(t *testing.T) string {
@@ -119,6 +152,8 @@ func start(t *testing.T) env {
 	cfg.DefaultJudge = "local"
 	cfg.Evaluate.BatchSize = 2
 	cfg.OTLP.Grace = "100ms"
+	collector, events := fakeCollector(t)
+	cfg.Sinks = []sinks.Config{{OTel: &sinks.OTelConfig{Endpoint: collector.URL}}}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ready := make(chan string, 1)
@@ -134,7 +169,7 @@ func start(t *testing.T) env {
 	})
 	select {
 	case addr := <-ready:
-		return env{base: "http://" + addr, model: model, datasets: datasets, workerCmd: strings.Fields(worker)}
+		return env{base: "http://" + addr, model: model, datasets: datasets, workerCmd: strings.Fields(worker), events: events}
 	case err := <-done:
 		t.Fatalf("server exited: %v", err)
 	case <-time.After(90 * time.Second):
@@ -389,6 +424,7 @@ spec:
 			t.Errorf("output:\n%s", out)
 		}
 	})
+	waitForEvent(t, e, "evalsi.run.metric")
 }
 
 func TestWatch(t *testing.T) {
@@ -487,6 +523,7 @@ func TestWatch(t *testing.T) {
 	if !strings.Contains(string(metrics), `evalsi_policy_traces_total{policy="support",stage="evaluated"} 2`) {
 		t.Errorf("metrics:\n%s", metrics)
 	}
+	waitForEvent(t, e, "gen_ai.evaluation.result")
 }
 
 func mustStruct(m map[string]any) *structpb.Struct {
@@ -548,4 +585,19 @@ func TestCodeSandbox(t *testing.T) {
 		os.Remove("/usr/evalsi-escape")
 		t.Fatal("generated code wrote to the host")
 	}
+}
+
+// waitForEvent waits until the OTel sink has delivered an event named name.
+func waitForEvent(t *testing.T, e env, name string) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, n := range e.events() {
+			if n == name {
+				return
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Errorf("the OTel sink never delivered %s (got %v)", name, e.events())
 }
