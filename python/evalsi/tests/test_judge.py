@@ -280,3 +280,36 @@ def test_anthropic_auth_errors_are_fatal_and_others_are_not() -> None:
     with pytest.raises(JudgeError, match="HTTP 500") as info:
         asyncio.run(judge.complete_json(**SCHEMA_ARGS))
     assert not isinstance(info.value, JudgeFatalError)
+
+
+def test_strict_json_schema_closes_objects_and_keeps_property_names() -> None:
+    from evalsi.judges.structured import strict_json_schema
+
+    schema = {
+        "title": "Verdicts",
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "title": "Title"},
+            "items": {"type": "array", "items": {"$ref": "#/$defs/V"}},
+        },
+        "required": ["items"],
+        "$defs": {
+            "V": {
+                "type": "object",
+                "properties": {"reason": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+                "default": None,
+            }
+        },
+    }
+    strict = strict_json_schema(schema)
+    assert "title" not in strict
+    assert strict["properties"]["title"] == {"type": "string"}
+    assert strict["required"] == ["title", "items"]
+    assert strict["additionalProperties"] is False
+    v = strict["$defs"]["V"]
+    assert v == {
+        "type": "object",
+        "properties": {"reason": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+        "additionalProperties": False,
+        "required": ["reason"],
+    }

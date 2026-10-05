@@ -107,9 +107,12 @@ type EvaluateRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	BatchId string                 `protobuf:"bytes,1,opt,name=batch_id,json=batchId,proto3" json:"batch_id,omitempty"`
 	// Manifest name, for example "acme/json-valid".
-	Evaluator     string             `protobuf:"bytes,2,opt,name=evaluator,proto3" json:"evaluator,omitempty"`
-	Params        *structpb.Struct   `protobuf:"bytes,3,opt,name=params,proto3" json:"params,omitempty"`
-	Records       []*v1alpha1.Record `protobuf:"bytes,4,rep,name=records,proto3" json:"records,omitempty"`
+	Evaluator string             `protobuf:"bytes,2,opt,name=evaluator,proto3" json:"evaluator,omitempty"`
+	Params    *structpb.Struct   `protobuf:"bytes,3,opt,name=params,proto3" json:"params,omitempty"`
+	Records   []*v1alpha1.Record `protobuf:"bytes,4,rep,name=records,proto3" json:"records,omitempty"`
+	// Name of a judge configured on the worker, for evaluators that require one.
+	// v1alpha1 stand-in for the host-side judge service.
+	Judge         string `protobuf:"bytes,5,opt,name=judge,proto3" json:"judge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -170,6 +173,13 @@ func (x *EvaluateRequest) GetRecords() []*v1alpha1.Record {
 		return x.Records
 	}
 	return nil
+}
+
+func (x *EvaluateRequest) GetJudge() string {
+	if x != nil {
+		return x.Judge
+	}
+	return ""
 }
 
 type EvaluateResponse struct {
@@ -233,6 +243,7 @@ type ReduceRequest struct {
 	Records []*v1alpha1.Record `protobuf:"bytes,3,rep,name=records,proto3" json:"records,omitempty"`
 	// Per-record results from an earlier Evaluate phase, when there was one.
 	Results       []*v1alpha1.EvaluationResult `protobuf:"bytes,4,rep,name=results,proto3" json:"results,omitempty"`
+	Judge         string                       `protobuf:"bytes,5,opt,name=judge,proto3" json:"judge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -295,6 +306,13 @@ func (x *ReduceRequest) GetResults() []*v1alpha1.EvaluationResult {
 	return nil
 }
 
+func (x *ReduceRequest) GetJudge() string {
+	if x != nil {
+		return x.Judge
+	}
+	return ""
+}
+
 type ReduceResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Scores        []*v1alpha1.Score      `protobuf:"bytes,1,rep,name=scores,proto3" json:"scores,omitempty"`
@@ -339,35 +357,308 @@ func (x *ReduceResponse) GetScores() []*v1alpha1.Score {
 	return nil
 }
 
+type GenerateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Target        *v1alpha1.Target       `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Records       []*v1alpha1.Record     `protobuf:"bytes,2,rep,name=records,proto3" json:"records,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateRequest) Reset() {
+	*x = GenerateRequest{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateRequest) ProtoMessage() {}
+
+func (x *GenerateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateRequest.ProtoReflect.Descriptor instead.
+func (*GenerateRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GenerateRequest) GetTarget() *v1alpha1.Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *GenerateRequest) GetRecords() []*v1alpha1.Record {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
+type GenerateResult struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	RecordId string                 `protobuf:"bytes,1,opt,name=record_id,json=recordId,proto3" json:"record_id,omitempty"`
+	Output   *v1alpha1.Content      `protobuf:"bytes,2,opt,name=output,proto3" json:"output,omitempty"`
+	Usage    *v1alpha1.Usage        `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	// Set when the target failed for this record; output is then empty.
+	Error         string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateResult) Reset() {
+	*x = GenerateResult{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateResult) ProtoMessage() {}
+
+func (x *GenerateResult) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateResult.ProtoReflect.Descriptor instead.
+func (*GenerateResult) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GenerateResult) GetRecordId() string {
+	if x != nil {
+		return x.RecordId
+	}
+	return ""
+}
+
+func (x *GenerateResult) GetOutput() *v1alpha1.Content {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+func (x *GenerateResult) GetUsage() *v1alpha1.Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+func (x *GenerateResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type GenerateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One per request record, in order.
+	Results       []*GenerateResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GenerateResponse) Reset() {
+	*x = GenerateResponse{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GenerateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GenerateResponse) ProtoMessage() {}
+
+func (x *GenerateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GenerateResponse.ProtoReflect.Descriptor instead.
+func (*GenerateResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GenerateResponse) GetResults() []*GenerateResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+type LoadDatasetRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// path must already be absolute; the host resolves and checks it.
+	Source        *v1alpha1.DatasetSource `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LoadDatasetRequest) Reset() {
+	*x = LoadDatasetRequest{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LoadDatasetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LoadDatasetRequest) ProtoMessage() {}
+
+func (x *LoadDatasetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LoadDatasetRequest.ProtoReflect.Descriptor instead.
+func (*LoadDatasetRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *LoadDatasetRequest) GetSource() *v1alpha1.DatasetSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+type LoadDatasetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Records       []*v1alpha1.Record     `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LoadDatasetResponse) Reset() {
+	*x = LoadDatasetResponse{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LoadDatasetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LoadDatasetResponse) ProtoMessage() {}
+
+func (x *LoadDatasetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LoadDatasetResponse.ProtoReflect.Descriptor instead.
+func (*LoadDatasetResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *LoadDatasetResponse) GetRecords() []*v1alpha1.Record {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
 var File_evalsi_plugin_v1alpha1_evaluator_plugin_proto protoreflect.FileDescriptor
 
 const file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc = "" +
 	"\n" +
-	"-evalsi/plugin/v1alpha1/evaluator_plugin.proto\x12\x16evalsi.plugin.v1alpha1\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x11\n" +
+	"-evalsi/plugin/v1alpha1/evaluator_plugin.proto\x12\x16evalsi.plugin.v1alpha1\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x19evalsi/v1alpha1/run.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x11\n" +
 	"\x0fDescribeRequest\"V\n" +
 	"\x10DescribeResponse\x12B\n" +
 	"\n" +
 	"evaluators\x18\x01 \x03(\v2\".evalsi.v1alpha1.EvaluatorManifestR\n" +
-	"evaluators\"\xae\x01\n" +
+	"evaluators\"\xc4\x01\n" +
 	"\x0fEvaluateRequest\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12\x1c\n" +
 	"\tevaluator\x18\x02 \x01(\tR\tevaluator\x12/\n" +
 	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\x121\n" +
-	"\arecords\x18\x04 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\"j\n" +
+	"\arecords\x18\x04 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\x12\x14\n" +
+	"\x05judge\x18\x05 \x01(\tR\x05judge\"j\n" +
 	"\x10EvaluateResponse\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12;\n" +
-	"\aresults\x18\x02 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"\xce\x01\n" +
+	"\aresults\x18\x02 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"\xe4\x01\n" +
 	"\rReduceRequest\x12\x1c\n" +
 	"\tevaluator\x18\x01 \x01(\tR\tevaluator\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x121\n" +
 	"\arecords\x18\x03 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\x12;\n" +
-	"\aresults\x18\x04 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"@\n" +
+	"\aresults\x18\x04 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\x12\x14\n" +
+	"\x05judge\x18\x05 \x01(\tR\x05judge\"@\n" +
 	"\x0eReduceResponse\x12.\n" +
-	"\x06scores\x18\x01 \x03(\v2\x16.evalsi.v1alpha1.ScoreR\x06scores2\xb3\x02\n" +
+	"\x06scores\x18\x01 \x03(\v2\x16.evalsi.v1alpha1.ScoreR\x06scores\"u\n" +
+	"\x0fGenerateRequest\x12/\n" +
+	"\x06target\x18\x01 \x01(\v2\x17.evalsi.v1alpha1.TargetR\x06target\x121\n" +
+	"\arecords\x18\x02 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\"\xa3\x01\n" +
+	"\x0eGenerateResult\x12\x1b\n" +
+	"\trecord_id\x18\x01 \x01(\tR\brecordId\x120\n" +
+	"\x06output\x18\x02 \x01(\v2\x18.evalsi.v1alpha1.ContentR\x06output\x12,\n" +
+	"\x05usage\x18\x03 \x01(\v2\x16.evalsi.v1alpha1.UsageR\x05usage\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"T\n" +
+	"\x10GenerateResponse\x12@\n" +
+	"\aresults\x18\x01 \x03(\v2&.evalsi.plugin.v1alpha1.GenerateResultR\aresults\"L\n" +
+	"\x12LoadDatasetRequest\x126\n" +
+	"\x06source\x18\x01 \x01(\v2\x1e.evalsi.v1alpha1.DatasetSourceR\x06source\"H\n" +
+	"\x13LoadDatasetResponse\x121\n" +
+	"\arecords\x18\x01 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords2\xfc\x03\n" +
 	"\x16EvaluatorPluginService\x12]\n" +
 	"\bDescribe\x12'.evalsi.plugin.v1alpha1.DescribeRequest\x1a(.evalsi.plugin.v1alpha1.DescribeResponse\x12a\n" +
 	"\bEvaluate\x12'.evalsi.plugin.v1alpha1.EvaluateRequest\x1a(.evalsi.plugin.v1alpha1.EvaluateResponse(\x010\x01\x12W\n" +
-	"\x06Reduce\x12%.evalsi.plugin.v1alpha1.ReduceRequest\x1a&.evalsi.plugin.v1alpha1.ReduceResponseB\xfc\x01\n" +
+	"\x06Reduce\x12%.evalsi.plugin.v1alpha1.ReduceRequest\x1a&.evalsi.plugin.v1alpha1.ReduceResponse\x12]\n" +
+	"\bGenerate\x12'.evalsi.plugin.v1alpha1.GenerateRequest\x1a(.evalsi.plugin.v1alpha1.GenerateResponse\x12h\n" +
+	"\vLoadDataset\x12*.evalsi.plugin.v1alpha1.LoadDatasetRequest\x1a+.evalsi.plugin.v1alpha1.LoadDatasetResponse0\x01B\xfc\x01\n" +
 	"\x1acom.evalsi.plugin.v1alpha1B\x14EvaluatorPluginProtoP\x01ZNgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1;pluginv1alpha1\xa2\x02\x03EPX\xaa\x02\x16Evalsi.Plugin.V1alpha1\xca\x02\x16Evalsi\\Plugin\\V1alpha1\xe2\x02\"Evalsi\\Plugin\\V1alpha1\\GPBMetadata\xea\x02\x18Evalsi::Plugin::V1alpha1b\x06proto3"
 
 var (
@@ -382,7 +673,7 @@ func file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP() []byte {
 	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescData
 }
 
-var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_goTypes = []any{
 	(*DescribeRequest)(nil),            // 0: evalsi.plugin.v1alpha1.DescribeRequest
 	(*DescribeResponse)(nil),           // 1: evalsi.plugin.v1alpha1.DescribeResponse
@@ -390,32 +681,52 @@ var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_goTypes = []any{
 	(*EvaluateResponse)(nil),           // 3: evalsi.plugin.v1alpha1.EvaluateResponse
 	(*ReduceRequest)(nil),              // 4: evalsi.plugin.v1alpha1.ReduceRequest
 	(*ReduceResponse)(nil),             // 5: evalsi.plugin.v1alpha1.ReduceResponse
-	(*v1alpha1.EvaluatorManifest)(nil), // 6: evalsi.v1alpha1.EvaluatorManifest
-	(*structpb.Struct)(nil),            // 7: google.protobuf.Struct
-	(*v1alpha1.Record)(nil),            // 8: evalsi.v1alpha1.Record
-	(*v1alpha1.EvaluationResult)(nil),  // 9: evalsi.v1alpha1.EvaluationResult
-	(*v1alpha1.Score)(nil),             // 10: evalsi.v1alpha1.Score
+	(*GenerateRequest)(nil),            // 6: evalsi.plugin.v1alpha1.GenerateRequest
+	(*GenerateResult)(nil),             // 7: evalsi.plugin.v1alpha1.GenerateResult
+	(*GenerateResponse)(nil),           // 8: evalsi.plugin.v1alpha1.GenerateResponse
+	(*LoadDatasetRequest)(nil),         // 9: evalsi.plugin.v1alpha1.LoadDatasetRequest
+	(*LoadDatasetResponse)(nil),        // 10: evalsi.plugin.v1alpha1.LoadDatasetResponse
+	(*v1alpha1.EvaluatorManifest)(nil), // 11: evalsi.v1alpha1.EvaluatorManifest
+	(*structpb.Struct)(nil),            // 12: google.protobuf.Struct
+	(*v1alpha1.Record)(nil),            // 13: evalsi.v1alpha1.Record
+	(*v1alpha1.EvaluationResult)(nil),  // 14: evalsi.v1alpha1.EvaluationResult
+	(*v1alpha1.Score)(nil),             // 15: evalsi.v1alpha1.Score
+	(*v1alpha1.Target)(nil),            // 16: evalsi.v1alpha1.Target
+	(*v1alpha1.Content)(nil),           // 17: evalsi.v1alpha1.Content
+	(*v1alpha1.Usage)(nil),             // 18: evalsi.v1alpha1.Usage
+	(*v1alpha1.DatasetSource)(nil),     // 19: evalsi.v1alpha1.DatasetSource
 }
 var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_depIdxs = []int32{
-	6,  // 0: evalsi.plugin.v1alpha1.DescribeResponse.evaluators:type_name -> evalsi.v1alpha1.EvaluatorManifest
-	7,  // 1: evalsi.plugin.v1alpha1.EvaluateRequest.params:type_name -> google.protobuf.Struct
-	8,  // 2: evalsi.plugin.v1alpha1.EvaluateRequest.records:type_name -> evalsi.v1alpha1.Record
-	9,  // 3: evalsi.plugin.v1alpha1.EvaluateResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	7,  // 4: evalsi.plugin.v1alpha1.ReduceRequest.params:type_name -> google.protobuf.Struct
-	8,  // 5: evalsi.plugin.v1alpha1.ReduceRequest.records:type_name -> evalsi.v1alpha1.Record
-	9,  // 6: evalsi.plugin.v1alpha1.ReduceRequest.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	10, // 7: evalsi.plugin.v1alpha1.ReduceResponse.scores:type_name -> evalsi.v1alpha1.Score
-	0,  // 8: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:input_type -> evalsi.plugin.v1alpha1.DescribeRequest
-	2,  // 9: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:input_type -> evalsi.plugin.v1alpha1.EvaluateRequest
-	4,  // 10: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:input_type -> evalsi.plugin.v1alpha1.ReduceRequest
-	1,  // 11: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:output_type -> evalsi.plugin.v1alpha1.DescribeResponse
-	3,  // 12: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:output_type -> evalsi.plugin.v1alpha1.EvaluateResponse
-	5,  // 13: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:output_type -> evalsi.plugin.v1alpha1.ReduceResponse
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	11, // 0: evalsi.plugin.v1alpha1.DescribeResponse.evaluators:type_name -> evalsi.v1alpha1.EvaluatorManifest
+	12, // 1: evalsi.plugin.v1alpha1.EvaluateRequest.params:type_name -> google.protobuf.Struct
+	13, // 2: evalsi.plugin.v1alpha1.EvaluateRequest.records:type_name -> evalsi.v1alpha1.Record
+	14, // 3: evalsi.plugin.v1alpha1.EvaluateResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	12, // 4: evalsi.plugin.v1alpha1.ReduceRequest.params:type_name -> google.protobuf.Struct
+	13, // 5: evalsi.plugin.v1alpha1.ReduceRequest.records:type_name -> evalsi.v1alpha1.Record
+	14, // 6: evalsi.plugin.v1alpha1.ReduceRequest.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	15, // 7: evalsi.plugin.v1alpha1.ReduceResponse.scores:type_name -> evalsi.v1alpha1.Score
+	16, // 8: evalsi.plugin.v1alpha1.GenerateRequest.target:type_name -> evalsi.v1alpha1.Target
+	13, // 9: evalsi.plugin.v1alpha1.GenerateRequest.records:type_name -> evalsi.v1alpha1.Record
+	17, // 10: evalsi.plugin.v1alpha1.GenerateResult.output:type_name -> evalsi.v1alpha1.Content
+	18, // 11: evalsi.plugin.v1alpha1.GenerateResult.usage:type_name -> evalsi.v1alpha1.Usage
+	7,  // 12: evalsi.plugin.v1alpha1.GenerateResponse.results:type_name -> evalsi.plugin.v1alpha1.GenerateResult
+	19, // 13: evalsi.plugin.v1alpha1.LoadDatasetRequest.source:type_name -> evalsi.v1alpha1.DatasetSource
+	13, // 14: evalsi.plugin.v1alpha1.LoadDatasetResponse.records:type_name -> evalsi.v1alpha1.Record
+	0,  // 15: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:input_type -> evalsi.plugin.v1alpha1.DescribeRequest
+	2,  // 16: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:input_type -> evalsi.plugin.v1alpha1.EvaluateRequest
+	4,  // 17: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:input_type -> evalsi.plugin.v1alpha1.ReduceRequest
+	6,  // 18: evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate:input_type -> evalsi.plugin.v1alpha1.GenerateRequest
+	9,  // 19: evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset:input_type -> evalsi.plugin.v1alpha1.LoadDatasetRequest
+	1,  // 20: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:output_type -> evalsi.plugin.v1alpha1.DescribeResponse
+	3,  // 21: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:output_type -> evalsi.plugin.v1alpha1.EvaluateResponse
+	5,  // 22: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:output_type -> evalsi.plugin.v1alpha1.ReduceResponse
+	8,  // 23: evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate:output_type -> evalsi.plugin.v1alpha1.GenerateResponse
+	10, // 24: evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset:output_type -> evalsi.plugin.v1alpha1.LoadDatasetResponse
+	20, // [20:25] is the sub-list for method output_type
+	15, // [15:20] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_init() }
@@ -429,7 +740,7 @@ func file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc), len(file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

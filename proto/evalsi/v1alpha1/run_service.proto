@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/run.proto";
+import "evalsi/v1alpha1/score.proto";
+
+// RunService manages offline runs: create, follow, cancel, resume, compare.
+// Runs are durable; every finished task is stored, so a resumed run skips it.
+service RunService {
+  rpc CreateRun(CreateRunRequest) returns (CreateRunResponse);
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  // Streams the run's state, then progress and results until it finishes.
+  rpc WatchRun(WatchRunRequest) returns (stream WatchRunResponse);
+  rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
+  // Continues an errored or cancelled run, skipping finished tasks.
+  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
+  rpc ListRunResults(ListRunResultsRequest) returns (ListRunResultsResponse);
+  // Paired comparison of two runs over the records they share.
+  rpc CompareRuns(CompareRunsRequest) returns (CompareRunsResponse);
+}
+
+message CreateRunRequest {
+  string name = 1;
+  string project = 2;
+  RunSpec spec = 3;
+}
+
+message CreateRunResponse {
+  Run run = 1;
+}
+
+message GetRunRequest {
+  string id = 1;
+}
+
+message GetRunResponse {
+  Run run = 1;
+}
+
+message ListRunsRequest {
+  string project = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListRunsResponse {
+  // Newest first. Specs are omitted; use GetRun for the full run.
+  repeated Run runs = 1;
+  string next_page_token = 2;
+}
+
+message WatchRunRequest {
+  string id = 1;
+  // Also stream every evaluation result as it is stored.
+  bool include_results = 2;
+}
+
+message WatchRunResponse {
+  oneof event {
+    // The run's state: sent first and whenever its status changes.
+    Run run = 1;
+    Progress progress = 2;
+    EvaluationResult result = 3;
+  }
+}
+
+message CancelRunRequest {
+  string id = 1;
+}
+
+message CancelRunResponse {
+  Run run = 1;
+}
+
+message ResumeRunRequest {
+  string id = 1;
+}
+
+message ResumeRunResponse {
+  Run run = 1;
+}
+
+message ListRunResultsRequest {
+  string run_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  // Only this evaluator instance, when set.
+  string evaluator = 4;
+}
+
+message ListRunResultsResponse {
+  repeated EvaluationResult results = 1;
+  // Records with the outputs the target produced, for the results on this page.
+  repeated Record records = 2;
+  string next_page_token = 3;
+}
+
+message CompareRunsRequest {
+  string baseline_run_id = 1;
+  string candidate_run_id = 2;
+  // Defaults to 0.95.
+  double confidence_level = 3;
+}
+
+message MetricComparison {
+  string metric = 1;
+  optional double baseline_mean = 2;
+  optional double candidate_mean = 3;
+  // Mean of per-record differences (candidate - baseline) over shared records.
+  optional double diff = 4;
+  ConfidenceInterval diff_ci = 5;
+  int64 paired_n = 6;
+  // The interval excludes zero.
+  bool significant = 7;
+}
+
+message CompareRunsResponse {
+  repeated MetricComparison comparisons = 1;
+}

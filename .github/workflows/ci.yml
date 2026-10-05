@@ -41,10 +41,19 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Sandbox prerequisites
+        # bubblewrap for the namespaced rung; Ubuntu 24.04 restricts unprivileged
+        # user namespaces through AppArmor unless this is relaxed.
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: gofmt
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - run: go vet ./...
       - run: go test -race ./...
+        env:
+          # Both sandbox rungs must work here; skipping them would hide regressions.
+          EVALSI_REQUIRE_SANDBOX: "1"
       - run: go build ./cmd/evalsid
 
   python:
@@ -68,3 +77,48 @@ jobs:
       - run: uv run --no-sync pytest -q
       - name: CLI smoke test
         run: uv run --no-sync evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match
+
+  adapters:
+    # Each framework adapter has its own pinned environment, so upstream
+    # dependency conflicts never reach the SDK or each other. Contract tests run
+    # the real upstream package with a scripted judge or target, offline.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [deepeval, ragas, inspect, lm-eval]
+    defaults:
+      run:
+        working-directory: python/adapters/${{ matrix.adapter }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv sync --locked
+      - run: uv run --no-sync mypy
+      - run: uv run --no-sync pytest -q
+
+  e2e:
+    # evalsid against a real Python worker, plus the Python codegen check.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      - name: Sandbox prerequisites
+        # bubblewrap for the namespaced rung; Ubuntu 24.04 restricts unprivileged
+        # user namespaces through AppArmor unless this is relaxed.
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: uv sync --locked --all-packages
+        working-directory: python
+      - name: Generated Python code is current
+        run: |
+          scripts/gen-python-proto.sh
+          git diff --exit-code -- python/evalsi/src/evalsi/v1alpha1 python/evalsi/src/evalsi/plugin
+      - name: End-to-end tests
+        run: go test -count=1 -v ./tests/e2e/
+        env:
+          EVALSI_E2E_WORKER: ${{ github.workspace }}/python/.venv/bin/python -m evalsi

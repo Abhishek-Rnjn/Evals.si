@@ -68,6 +68,8 @@ class Content:
             ((key, inner),) = value.items()
             if key == "text" and isinstance(inner, str):
                 return cls(text=inner)
+            if key == "messages" and isinstance(inner, Mapping) and "messages" in inner:
+                inner = inner["messages"]  # protojson form: {"messages": {"messages": [...]}}
             if key == "messages" and _looks_like_messages(inner):
                 return cls(messages=[_message_from_dict(m) for m in inner])
             if key == "json":
@@ -149,11 +151,15 @@ class Usage:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Usage:
+        latency = _opt_float(data.get("latency_ms"))
+        raw = data.get("latency")  # protojson Duration, e.g. "0.290s"
+        if latency is None and isinstance(raw, str) and raw.endswith("s"):
+            latency = float(raw[:-1]) * 1000
         return cls(
             input_tokens=_opt_int(data.get("input_tokens")),
             output_tokens=_opt_int(data.get("output_tokens")),
             cost_usd=_opt_float(data.get("cost_usd")),
-            latency_ms=_opt_float(data.get("latency_ms")),
+            latency_ms=latency,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -168,6 +174,126 @@ def _opt_float(value: Any) -> float | None:
     return None if value is None else float(value)
 
 
+STEP_TYPES = (
+    "llm",
+    "tool",
+    "retrieval",
+    "agent",
+    "handoff",
+    "user",
+    "guardrail",
+    "embedding",
+    "generic",
+)
+
+
+@dataclass
+class Step:
+    """One normalized span of an execution (see proto ``evalsi.v1alpha1.Step``)."""
+
+    type: str = "generic"
+    name: str = ""
+    input: Content | None = None
+    output: Content | None = None
+    span_id: str = ""
+    parent_span_id: str = ""
+    # Empty when the step succeeded.
+    error: str = ""
+    duration_ms: float | None = None
+    usage: Usage | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Step:
+        kind = str(data.get("type", "generic")).lower().removeprefix("step_type_")
+        usage = Usage.from_dict(data["usage"]) if isinstance(data.get("usage"), Mapping) else None
+        return cls(
+            type=kind if kind in STEP_TYPES else "generic",
+            name=str(data.get("name", "")),
+            input=None if data.get("input") is None else Content.from_value(data["input"]),
+            output=None if data.get("output") is None else Content.from_value(data["output"]),
+            span_id=str(data.get("span_id", "")),
+            parent_span_id=str(data.get("parent_span_id", "")),
+            error=str(data.get("error", "")),
+            duration_ms=usage.latency_ms
+            if usage is not None
+            else _opt_float(data.get("duration_ms")),
+            usage=usage,
+            attributes=dict(data.get("attributes") or {}),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"type": self.type, "name": self.name}
+        for key in ("input", "output"):
+            value: Content | None = getattr(self, key)
+            if value is not None:
+                out[key] = value.to_dict()
+        for key in ("span_id", "parent_span_id", "error"):
+            if getattr(self, key):
+                out[key] = getattr(self, key)
+        if self.duration_ms is not None:
+            out["duration_ms"] = self.duration_ms
+        if self.usage is not None:
+            out["usage"] = self.usage.to_dict()
+        return out
+
+
+@dataclass
+class ToolUse:
+    """A tool the agent called, as seen in its trajectory."""
+
+    name: str
+    arguments: str = ""
+    result: str = ""
+    error: str = ""
+
+
+@dataclass
+class Trajectory:
+    trace_id: str = ""
+    session_id: str = ""
+    steps: list[Step] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Trajectory:
+        return cls(
+            trace_id=str(data.get("trace_id", "")),
+            session_id=str(data.get("session_id", "")),
+            steps=[Step.from_dict(s) for s in data.get("steps") or []],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"steps": [s.to_dict() for s in self.steps]}
+        if self.trace_id:
+            out["trace_id"] = self.trace_id
+        if self.session_id:
+            out["session_id"] = self.session_id
+        return out
+
+    def tool_uses(self) -> list[ToolUse]:
+        """Tools called, in order. Tool steps win; when a trace has none, tool
+        calls requested in LLM outputs are used instead."""
+        tools = [
+            ToolUse(
+                name=s.name,
+                arguments=s.input.as_text() if s.input is not None else "",
+                result=s.output.as_text() if s.output is not None else "",
+                error=s.error,
+            )
+            for s in self.steps
+            if s.type == "tool"
+        ]
+        if tools:
+            return tools
+        for step in self.steps:
+            if step.type == "llm" and step.output is not None and step.output.messages:
+                for message in step.output.messages:
+                    tools += [
+                        ToolUse(name=c.name, arguments=c.arguments) for c in message.tool_calls
+                    ]
+        return tools
+
+
 @dataclass
 class Record:
     """The unit every evaluator consumes."""
@@ -179,9 +305,12 @@ class Record:
     context: list[Content] = field(default_factory=list)
     usage: Usage | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    trajectory: Trajectory | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"id": self.id}
+        if self.trajectory is not None:
+            out["trajectory"] = self.trajectory.to_dict()
         for name in ("input", "output", "reference"):
             value: Content | None = getattr(self, name)
             if value is not None:
@@ -268,6 +397,7 @@ class EvaluationResult:
     scores: list[Score] = field(default_factory=list)
     reason: str = ""
     duration_ms: float = 0.0
+    trial: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -281,4 +411,6 @@ class EvaluationResult:
             out["scores"] = [s.to_dict() for s in self.scores]
         if self.reason:
             out["reason"] = self.reason
+        if self.trial:
+            out["trial"] = self.trial
         return out

@@ -1,0 +1,75 @@
+# evalsid configuration. Start with:
+#   evalsi serve --config examples/server/evalsi.yaml
+listen: 127.0.0.1:8080
+data_dir: .evalsi            # SQLite database for runs, traces and policies
+
+# Run specs may name dataset files relative to this directory (they cannot
+# escape it). Leave unset to accept only inline records and hf:// datasets.
+# datasets_dir: ./datasets
+
+worker:
+  # Runs the evalsi CLI; evalsid appends "worker --listen unix://...".
+  # Use the interpreter of the environment where evalsi[server] is installed.
+  command: ["python", "-m", "evalsi"]
+  start_timeout: 60s
+
+# Judges are referenced by name in requests. API keys are read by the worker
+# from the named environment variables; they are never stored here.
+judges:
+  claude:
+    provider: anthropic
+    model: claude-opus-5-5
+    effort: low
+    requests_per_minute: 300
+  local:
+    provider: openai-compatible
+    model: my-judge
+    base_url: http://localhost:8000/v1
+default_judge: claude
+
+evaluate:
+  batch_size: 32      # records per worker call
+  parallelism: 8      # concurrent worker calls per request
+  max_records: 10000  # larger jobs use EvaluateStream
+
+runs:
+  max_concurrent: 4   # runs executing at once; others wait as PENDING
+
+# OTLP is always served on the main port (gRPC TraceService/Export and HTTP
+# POST /v1/traces). These also open the standard ports for SDK defaults.
+otlp:
+  grpc_listen: 127.0.0.1:4317
+  http_listen: 127.0.0.1:4318
+  grace: 2s           # wait for late spans after a trace's root span ends
+  max_traces: 10000
+
+traces:
+  retention: 168h
+
+# Online evaluation policies applied at startup (OnlineEvalPolicy JSON form).
+# Policies can also be managed at runtime with `evalsi policy apply`.
+policies:
+  - name: all-agents-latency
+    stages:
+      - evaluators: [{ref: builtin/latency}]
+
+# Isolation for code-executing evaluators (builtin/unit-tests). Rungs are tried
+# strongest first; nothing runs unconfined. `evalsid sandbox probe` shows which
+# rungs work on this host.
+sandbox:
+  ladder: [bwrap, landlock]
+  min_isolation: confined
+  # Interpreters or toolchains outside /usr that sandboxed code may use.
+  read_only_paths: []
+
+# Where finished runs and online scores are exported. Exports run in the
+# background with retries and never fail a run.
+sinks: []
+#  - mlflow:
+#      tracking_uri: http://mlflow:5000
+#      experiment: support-agent        # default: the run's project, else "evalsi"
+#      token_env: MLFLOW_TRACKING_TOKEN # optional bearer token
+#      trace_feedback: true             # online scores become assessments on MLflow traces
+#  - otel:
+#      endpoint: http://otel-collector:4318   # gen_ai.evaluation.result events on /v1/logs
+#      headers_env: {x-api-key: OTEL_API_KEY}

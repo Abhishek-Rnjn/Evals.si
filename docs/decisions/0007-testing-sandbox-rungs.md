@@ -6,9 +6,10 @@
 
 - **bubblewrap and Landlock** are tested in CI on standard GitHub-hosted Linux runners.
 - **The hardened-pod rung** is tested on a kind cluster in CI.
-- **The Firecracker rung** is validated on the project owner's Kubernetes cluster when that rung is built (Phase 2 and Phase 3).
+- **The VM rung runs through Kata Containers for now** (decided 2026-10-05). On the project owner's Kubernetes cluster, the `vm` isolation level is provided by a Kata `RuntimeClass` rather than by `sandboxd` driving Firecracker directly. Kata can itself use Firecracker or Cloud Hypervisor underneath. Direct Firecracker with warm snapshot pools stays in the design for clusters and hosts that expose `/dev/kvm` to us, and is built after the Kata path.
 
 ## Consequences
 
-- The Firecracker driver needs a way to run its integration tests against an external cluster: a manual or scheduled workflow, with credentials stored as repository secrets.
-- **Open question for Phase 2:** do that cluster's nodes expose `/dev/kvm`, either bare metal or with nested virtualization? If not, the Firecracker rung is exercised through Kata Containers instead.
+- Phase 2's `vm` rung is a `pod` driver with a Kata `runtimeClassName`, reported as level `vm`. This is simpler to operate, but sandboxes start in seconds rather than milliseconds, so it suits agent environments more than RL reward hot paths.
+- Validating the Kata rung needs a manual or scheduled workflow against that cluster, with credentials stored as repository secrets.
+- The direct Firecracker driver (`sandboxd`) moves after the Kata path. It is needed for millisecond-scale warm pools.

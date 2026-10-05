@@ -42,6 +42,12 @@ const (
 	// EvaluatorPluginServiceReduceProcedure is the fully-qualified name of the EvaluatorPluginService's
 	// Reduce RPC.
 	EvaluatorPluginServiceReduceProcedure = "/evalsi.plugin.v1alpha1.EvaluatorPluginService/Reduce"
+	// EvaluatorPluginServiceGenerateProcedure is the fully-qualified name of the
+	// EvaluatorPluginService's Generate RPC.
+	EvaluatorPluginServiceGenerateProcedure = "/evalsi.plugin.v1alpha1.EvaluatorPluginService/Generate"
+	// EvaluatorPluginServiceLoadDatasetProcedure is the fully-qualified name of the
+	// EvaluatorPluginService's LoadDataset RPC.
+	EvaluatorPluginServiceLoadDatasetProcedure = "/evalsi.plugin.v1alpha1.EvaluatorPluginService/LoadDataset"
 )
 
 // EvaluatorPluginServiceClient is a client for the evalsi.plugin.v1alpha1.EvaluatorPluginService
@@ -55,6 +61,10 @@ type EvaluatorPluginServiceClient interface {
 	Evaluate(context.Context) *connect.BidiStreamForClient[v1alpha1.EvaluateRequest, v1alpha1.EvaluateResponse]
 	// Dataset-scope metrics: computed over all records at once.
 	Reduce(context.Context, *connect.Request[v1alpha1.ReduceRequest]) (*connect.Response[v1alpha1.ReduceResponse], error)
+	// Runs the target (the system under test) on records to produce outputs.
+	Generate(context.Context, *connect.Request[v1alpha1.GenerateRequest]) (*connect.Response[v1alpha1.GenerateResponse], error)
+	// Loads a dataset (file or hf:// URI) and streams its records in chunks.
+	LoadDataset(context.Context, *connect.Request[v1alpha1.LoadDatasetRequest]) (*connect.ServerStreamForClient[v1alpha1.LoadDatasetResponse], error)
 }
 
 // NewEvaluatorPluginServiceClient constructs a client for the
@@ -87,14 +97,28 @@ func NewEvaluatorPluginServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(evaluatorPluginServiceMethods.ByName("Reduce")),
 			connect.WithClientOptions(opts...),
 		),
+		generate: connect.NewClient[v1alpha1.GenerateRequest, v1alpha1.GenerateResponse](
+			httpClient,
+			baseURL+EvaluatorPluginServiceGenerateProcedure,
+			connect.WithSchema(evaluatorPluginServiceMethods.ByName("Generate")),
+			connect.WithClientOptions(opts...),
+		),
+		loadDataset: connect.NewClient[v1alpha1.LoadDatasetRequest, v1alpha1.LoadDatasetResponse](
+			httpClient,
+			baseURL+EvaluatorPluginServiceLoadDatasetProcedure,
+			connect.WithSchema(evaluatorPluginServiceMethods.ByName("LoadDataset")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // evaluatorPluginServiceClient implements EvaluatorPluginServiceClient.
 type evaluatorPluginServiceClient struct {
-	describe *connect.Client[v1alpha1.DescribeRequest, v1alpha1.DescribeResponse]
-	evaluate *connect.Client[v1alpha1.EvaluateRequest, v1alpha1.EvaluateResponse]
-	reduce   *connect.Client[v1alpha1.ReduceRequest, v1alpha1.ReduceResponse]
+	describe    *connect.Client[v1alpha1.DescribeRequest, v1alpha1.DescribeResponse]
+	evaluate    *connect.Client[v1alpha1.EvaluateRequest, v1alpha1.EvaluateResponse]
+	reduce      *connect.Client[v1alpha1.ReduceRequest, v1alpha1.ReduceResponse]
+	generate    *connect.Client[v1alpha1.GenerateRequest, v1alpha1.GenerateResponse]
+	loadDataset *connect.Client[v1alpha1.LoadDatasetRequest, v1alpha1.LoadDatasetResponse]
 }
 
 // Describe calls evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe.
@@ -112,6 +136,16 @@ func (c *evaluatorPluginServiceClient) Reduce(ctx context.Context, req *connect.
 	return c.reduce.CallUnary(ctx, req)
 }
 
+// Generate calls evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate.
+func (c *evaluatorPluginServiceClient) Generate(ctx context.Context, req *connect.Request[v1alpha1.GenerateRequest]) (*connect.Response[v1alpha1.GenerateResponse], error) {
+	return c.generate.CallUnary(ctx, req)
+}
+
+// LoadDataset calls evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset.
+func (c *evaluatorPluginServiceClient) LoadDataset(ctx context.Context, req *connect.Request[v1alpha1.LoadDatasetRequest]) (*connect.ServerStreamForClient[v1alpha1.LoadDatasetResponse], error) {
+	return c.loadDataset.CallServerStream(ctx, req)
+}
+
 // EvaluatorPluginServiceHandler is an implementation of the
 // evalsi.plugin.v1alpha1.EvaluatorPluginService service.
 type EvaluatorPluginServiceHandler interface {
@@ -123,6 +157,10 @@ type EvaluatorPluginServiceHandler interface {
 	Evaluate(context.Context, *connect.BidiStream[v1alpha1.EvaluateRequest, v1alpha1.EvaluateResponse]) error
 	// Dataset-scope metrics: computed over all records at once.
 	Reduce(context.Context, *connect.Request[v1alpha1.ReduceRequest]) (*connect.Response[v1alpha1.ReduceResponse], error)
+	// Runs the target (the system under test) on records to produce outputs.
+	Generate(context.Context, *connect.Request[v1alpha1.GenerateRequest]) (*connect.Response[v1alpha1.GenerateResponse], error)
+	// Loads a dataset (file or hf:// URI) and streams its records in chunks.
+	LoadDataset(context.Context, *connect.Request[v1alpha1.LoadDatasetRequest], *connect.ServerStream[v1alpha1.LoadDatasetResponse]) error
 }
 
 // NewEvaluatorPluginServiceHandler builds an HTTP handler from the service implementation. It
@@ -150,6 +188,18 @@ func NewEvaluatorPluginServiceHandler(svc EvaluatorPluginServiceHandler, opts ..
 		connect.WithSchema(evaluatorPluginServiceMethods.ByName("Reduce")),
 		connect.WithHandlerOptions(opts...),
 	)
+	evaluatorPluginServiceGenerateHandler := connect.NewUnaryHandler(
+		EvaluatorPluginServiceGenerateProcedure,
+		svc.Generate,
+		connect.WithSchema(evaluatorPluginServiceMethods.ByName("Generate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	evaluatorPluginServiceLoadDatasetHandler := connect.NewServerStreamHandler(
+		EvaluatorPluginServiceLoadDatasetProcedure,
+		svc.LoadDataset,
+		connect.WithSchema(evaluatorPluginServiceMethods.ByName("LoadDataset")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/evalsi.plugin.v1alpha1.EvaluatorPluginService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EvaluatorPluginServiceDescribeProcedure:
@@ -158,6 +208,10 @@ func NewEvaluatorPluginServiceHandler(svc EvaluatorPluginServiceHandler, opts ..
 			evaluatorPluginServiceEvaluateHandler.ServeHTTP(w, r)
 		case EvaluatorPluginServiceReduceProcedure:
 			evaluatorPluginServiceReduceHandler.ServeHTTP(w, r)
+		case EvaluatorPluginServiceGenerateProcedure:
+			evaluatorPluginServiceGenerateHandler.ServeHTTP(w, r)
+		case EvaluatorPluginServiceLoadDatasetProcedure:
+			evaluatorPluginServiceLoadDatasetHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -177,4 +231,12 @@ func (UnimplementedEvaluatorPluginServiceHandler) Evaluate(context.Context, *con
 
 func (UnimplementedEvaluatorPluginServiceHandler) Reduce(context.Context, *connect.Request[v1alpha1.ReduceRequest]) (*connect.Response[v1alpha1.ReduceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce is not implemented"))
+}
+
+func (UnimplementedEvaluatorPluginServiceHandler) Generate(context.Context, *connect.Request[v1alpha1.GenerateRequest]) (*connect.Response[v1alpha1.GenerateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate is not implemented"))
+}
+
+func (UnimplementedEvaluatorPluginServiceHandler) LoadDataset(context.Context, *connect.Request[v1alpha1.LoadDatasetRequest], *connect.ServerStream[v1alpha1.LoadDatasetResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset is not implemented"))
 }

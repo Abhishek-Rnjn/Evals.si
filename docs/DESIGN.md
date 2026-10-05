@@ -1,6 +1,6 @@
 # Evals.si: Architecture & Implementation Plan
 
-> **Status:** Draft for discussion · v0.3 · 2026-10-05. D1–D3, D5, D6, D10, D13 and D14 are decided (§22, [decision records](decisions/README.md)). Phase 0 is implemented (§23).
+> **Status:** Draft for discussion · v0.4 · 2026-10-05. D1–D3, D5, D6, D10, D13 and D14 are decided (§22, [decision records](decisions/README.md)). Phase 0 is implemented; Phase 1 is in progress (§23).
 >
 > **Scope:** System design for a pluggable, scalable, single-entrypoint evaluation platform for classic ML models, LLMs and agents. It runs standalone and on Kubernetes, speaks gRPC and HTTP, and can later be used as a local MCP server.
 >
@@ -977,7 +977,7 @@ Evals.si/
 | D5 | **Self-hosted in the client's environment now**; a hosted multi-tenant service later, when there is compute for it | §16 "Runs in the client's environment"; `project_id` and a reserved `tenant_id` on every stored key from day one |
 | D6 | Sandbox ladder: **Firecracker when available, otherwise static bubblewrap or Landlock (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod**, always failing closed | §13 |
 | D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
-| D13 | Sandbox rungs are tested in CI (bubblewrap, Landlock, and the pod rung on kind); the Firecracker rung is validated on the project owner's Kubernetes cluster | [0007](decisions/0007-testing-sandbox-rungs.md). Still to confirm: whether those nodes expose `/dev/kvm`. |
+| D13 | Sandbox rungs are tested in CI (bubblewrap, Landlock, and the pod rung on kind). On the project owner's cluster, the `vm` level comes from **Kata Containers** for now; direct Firecracker (`sandboxd`, warm snapshot pools) follows later | [0007](decisions/0007-testing-sandbox-rungs.md) |
 | D14 | Agent platform builders run Evals.si **as a service** beside their platform | [0008](decisions/0008-platform-builders-use-a-service.md): API stability, pluggable auth and project-scoped authorization matter early. |
 
 Each decision has a record in [`docs/decisions`](decisions/README.md).
@@ -1002,7 +1002,7 @@ The order follows D1. Each phase produces something usable, and Phases 2 and 3 c
 | Phase | Deliverables | Exit criteria |
 |-------|--------------|---------------|
 | **0. Foundations** ✅ | Decision records; `proto` v1alpha1 (records, Evaluate, plugin protocol); repo scaffold (Go module, uv workspace, buf, CI, lint); Python SDK with embedded `evaluate()`; the `core` pack plus about 10 evaluators; JSONL and Hugging Face datasets | `pip install evalsi && evalsi eval --data qa.jsonl --evaluators exact-match,llm-judge` works, with confidence intervals |
-| **1. Standalone MVP: LLM apps and agent traces** | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; `OnlineEvalPolicy` with cascades; packs `judge`, `rag`, `safety`, `text`, plus the trace-based half of `agent` (tool-call accuracy, trajectory match, loops, efficiency, session goal completion); adapters for Inspect AI, RAGAS, DeepEval and lm-eval-harness; MLflow and OTel sinks; the sandbox ladder with the **bubblewrap and Landlock** rungs for code evaluators | One `run.yaml` runs embedded and on the server; an agent behind standalone agentgateway (or instrumented with OTel) gets online trajectory scores; a RAG app is gated in CI |
+| **1. Standalone MVP: LLM apps and agent traces** ✅ | `evalsi serve` (Connect API over gRPC and HTTP, embedded NATS, SQLite and DuckDB, Python worker supervisor); run lifecycle (create, watch, cancel, resume); OpenAI-compatible, Anthropic and vLLM connectors; judge cache and rate limits; OTLP ingest with GenAI and OpenInference mappers; trace assembler; `OnlineEvalPolicy` with cascades; packs `judge`, `rag`, `safety`, `text`, plus the trace-based half of `agent` (tool-call accuracy, trajectory match, loops, efficiency, session goal completion); adapters for Inspect AI, RAGAS, DeepEval and lm-eval-harness; MLflow and OTel sinks; the sandbox ladder with the **bubblewrap and Landlock** rungs for code evaluators | One `run.yaml` runs embedded and on the server; an agent behind standalone agentgateway (or instrumented with OTel) gets online trajectory scores; a RAG app is gated in CI |
 | **2. Agent runs** | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **3. Kubernetes** | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; OIDC and RBAC; HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
 | **4. Fine-tuning and RL** | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
@@ -1021,7 +1021,56 @@ The order follows D1. Each phase produces something usable, and Phases 2 and 3 c
 
 The exit criterion runs end to end, verified against a local OpenAI-compatible judge server.
 
-**Next:** Phase 1, the standalone server.
+**Phase 1 status (2026-10-05):** implemented, in five slices.
+
+1. **Server spine.**
+   - `evalsid serve` serves every service on one port: gRPC over HTTP/2 without TLS, gRPC-Web and Connect HTTP/JSON. It also serves gRPC health, reflection and `/healthz`.
+   - It supervises the Python worker (`evalsi worker`, `EvaluatorPluginService` on a Unix socket) and restarts it after crashes.
+   - Summaries computed in Go match the Python library exactly; `testdata/stats_vectors.json` checks this.
+2. **Runs.**
+   - `RunService`: create, get, list, watch, cancel, resume, results and compare (a paired t-test).
+   - One `EvalRun` YAML runs embedded or on the server; the CLI exits non-zero when a gate fails.
+   - Targets: OpenAI-compatible (which covers vLLM, SGLang and Ollama) and Anthropic.
+   - Trials with pass@k and pass^k; structured gates; token budgets.
+   - Judge rate limits and the content-hash cache.
+   - Dataset paths and importer URIs are confined to `datasets_dir`.
+   - State lives in SQLite with an in-process scheduler; NATS and DuckDB are deferred ([decision 0009](decisions/0009-standalone-sqlite-in-process-scheduler.md)).
+3. **Watch.**
+   - OTLP ingest over gRPC and HTTP (protobuf and JSON) on the main port and optionally on 4317 and 4318.
+   - Mappers for OTel GenAI, OpenInference, OpenLLMetry and MLflow.
+   - The trace assembler.
+   - `OnlineEvalPolicy`: CEL selectors, deterministic sampling, cascades, windowed alerts with webhooks, and promotion to datasets.
+   - `TraceService`, plus Prometheus `/metrics`.
+4. **Packs and adapters.**
+   - Packs: `text`, `rag`, `safety` and the trace-based `agent` pack.
+   - Adapters in `python/adapters/`, each with its own pinned environment and offline contract tests:
+     - DeepEval (12 metrics) and RAGAS (15 metrics), with their model calls answered by the run's judge;
+     - Inspect AI: log import, and Evals.si evaluators as Inspect scorers;
+     - lm-eval-harness: an `LM` that generates through our connectors, and a sample-log importer.
+   - Importers plug in as `scheme://path` datasets.
+5. **Sandbox, sinks and REST.**
+   - `internal/sandbox` has the bubblewrap (`namespaced`) and Landlock (`confined`) rungs:
+     - a seccomp filter, a cleared environment and rlimits;
+     - functional probes, and failure closed when no rung qualifies;
+     - `evalsid sandbox probe|run`.
+   - The `code` pack runs unit tests through the sandbox.
+   - MLflow and OTel sinks, including assessment write-back onto MLflow traces and `gen_ai.evaluation.result` events.
+   - REST-style `/v1alpha1/...` routes through Vanguard.
+
+**Deferred from the Phase 1 plan, and why:**
+
+- **Embedded NATS and DuckDB** (decision 0009).
+- **OCI image roots for the bubblewrap rung.** Phase 1 binds the host's system directories read-only, or a configured `rootfs`. Image unpacking arrives with the harness environments in Phase 2.
+- **cgroup limits.** Phase 1 uses rlimits. On the Landlock rung the process cap is not enforced, because the uid is shared; isolation reports note both.
+- **A statically built bubblewrap in the release.** It waits for the release pipeline; until then the rung uses `bwrap` from the host.
+
+The exit criteria hold:
+
+- one `run.yaml` runs embedded and on the server;
+- OTel-instrumented agents get online trajectory scores;
+- CI gates on run results through the CLI's exit code.
+
+All three are covered by `tests/e2e`.
 
 ## 24. Risks and mitigations
 
