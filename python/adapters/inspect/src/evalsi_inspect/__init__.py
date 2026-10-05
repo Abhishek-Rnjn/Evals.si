@@ -9,7 +9,7 @@
   that runs an Evals.si evaluator, so Inspect tasks gain our packs and judges.
 
 Running Inspect tasks under Evals.si sandboxes arrives with the harness in
-Phase 2.
+Phase 3.
 """
 
 from __future__ import annotations

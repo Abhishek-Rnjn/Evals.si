@@ -15,6 +15,6 @@ For now, Evals.si is installed and operated by clients inside their own infrastr
   - identity (OIDC);
   - secrets;
   - observability.
-- **Air-gapped installs are supported.** An offline bundle and a dataset mirror tool ship in Phase 3.
+- **Air-gapped installs are supported.** An offline bundle and a dataset mirror tool ship in Phase 4.
 - **Least-privilege install.** The main Helm chart is namespace-scoped, and cluster-scoped pieces live in a separate chart.
 - **Single tenant per install, with projects inside it.** Every stored key carries `project_id` and a reserved `tenant_id`, so a hosted multi-tenant service can be added without a data migration.

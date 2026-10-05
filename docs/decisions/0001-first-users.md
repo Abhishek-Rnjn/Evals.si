@@ -12,7 +12,7 @@ Online and offline agent evaluation is the least served of these needs and the o
 
 ## Consequences
 
-- The roadmap leads with agents: online scoring of agent traces in Phase 1, offline agent runs with harnesses and sandboxes in Phase 2.
+- The roadmap leads with agents: online scoring of agent traces in Phase 1, offline agent runs with harnesses and sandboxes in Phase 3.
 - agentgateway integration comes early, in Phase 1 for standalone.
 - The API and policy-as-code are first-class for platform builders: everything the CLI does is an API call.
-- Classic ML packs (`ml-classic`, `ml-monitoring`) move to Phase 5 unless a client needs them sooner. RL stays in Phase 4.
+- Classic ML packs (`ml-classic`, `ml-monitoring`) move to Phase 6 unless a client needs them sooner. RL stays in Phase 5.

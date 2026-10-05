@@ -13,5 +13,6 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0007](0007-testing-sandbox-rungs.md) | Testing the sandbox rungs | Accepted |
 | [0008](0008-platform-builders-use-a-service.md) | Agent platform builders consume Evals.si as a service | Accepted |
 | [0009](0009-standalone-sqlite-in-process-scheduler.md) | Standalone: SQLite and an in-process scheduler; NATS with Kubernetes, DuckDB later | Accepted |
+| [0010](0010-identity-and-access-next.md) | Identity and access (OIDC/JWT, API keys, RBAC, CEL rules) come next, modeled on agentgateway | Accepted |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.
