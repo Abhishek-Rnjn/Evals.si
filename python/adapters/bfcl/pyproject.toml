@@ -1,0 +1,39 @@
+[project]
+name = "evalsi-adapter-bfcl"
+version = "0.1.0"
+description = "Berkeley Function Calling Leaderboard (BFCL) single-turn categories as Evals.si tasks, graded by BFCL's AST checker."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "evalsi",
+    "evalsi-harness",
+    # Pinned: the adapter is contract-tested against this exact version.
+    "bfcl-eval==2026.3.23",
+    # bfcl-eval imports every provider SDK it supports; one needs this.
+    "soundfile>=0.12",
+]
+
+[project.entry-points."evalsi.importers"]
+bfcl = "evalsi_bfcl:load"
+
+[dependency-groups]
+dev = ["mypy>=1.13", "pytest>=8.3"]
+
+[tool.uv.sources]
+evalsi = { path = "../../evalsi", editable = true }
+evalsi-harness = { path = "../../evalsi-harness", editable = true }
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evalsi_bfcl"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["bfcl_eval.*", "google.protobuf.*"]
+ignore_missing_imports = true
