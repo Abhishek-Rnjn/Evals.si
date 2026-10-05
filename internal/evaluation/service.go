@@ -38,6 +38,23 @@ func New(worker pluginhost.Worker, cat *catalog.Catalog, judges []string, defaul
 	return &Service{worker: worker, catalog: cat, judges: judges, defaultJudge: defaultJudge, opts: opts}
 }
 
+// RunsCode reports whether any referenced evaluator executes code, which
+// access rules see as resource.runs_code. Unknown references count as not
+// running code; binding rejects them anyway.
+func (s *Service) RunsCode(refs []*evalsiv1alpha1.EvaluatorRef) bool {
+	for _, r := range refs {
+		m, err := s.catalog.Resolve(r.GetRef())
+		if err != nil {
+			continue
+		}
+		if m.GetRequires().GetIsolation() > evalsiv1alpha1.IsolationLevel_ISOLATION_LEVEL_NONE ||
+			m.GetScheduling().GetPool() == "sandbox" {
+			return true
+		}
+	}
+	return false
+}
+
 // Instance is one evaluator as used in a request: resolved, aliased, with params.
 type Instance struct {
 	Name     string

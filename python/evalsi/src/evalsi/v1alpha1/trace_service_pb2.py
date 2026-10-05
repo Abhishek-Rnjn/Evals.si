@@ -28,25 +28,29 @@ from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#evalsi/v1alpha1/trace_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x01\n\x0cTraceSummary\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12.\n\nstart_time\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12+\n\x08\x64uration\x18\x05 \x01(\x0b\x32\x19.google.protobuf.Duration\x12\r\n\x05\x65rror\x18\x06 \x01(\x08\x12\r\n\x05steps\x18\x07 \x01(\x05\x12\x0f\n\x07results\x18\x08 \x01(\x05\"K\n\x11ListTracesRequest\x12\x0f\n\x07service\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"\\\n\x12ListTracesResponse\x12-\n\x06traces\x18\x01 \x03(\x0b\x32\x1d.evalsi.v1alpha1.TraceSummary\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"#\n\x0fGetTraceRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\"S\n\rPolicyResults\x12\x0e\n\x06policy\x18\x01 \x01(\t\x12\x32\n\x07results\x18\x02 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\"m\n\x10GetTraceResponse\x12\'\n\x06record\x18\x01 \x01(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x30\n\x08policies\x18\x02 \x03(\x0b\x32\x1e.evalsi.v1alpha1.PolicyResults2\xb6\x01\n\x0cTraceService\x12U\n\nListTraces\x12\".evalsi.v1alpha1.ListTracesRequest\x1a#.evalsi.v1alpha1.ListTracesResponse\x12O\n\x08GetTrace\x12 .evalsi.v1alpha1.GetTraceRequest\x1a!.evalsi.v1alpha1.GetTraceResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n#evalsi/v1alpha1/trace_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x02\n\x0cTraceSummary\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07service\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12.\n\nstart_time\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12+\n\x08\x64uration\x18\x05 \x01(\x0b\x32\x19.google.protobuf.Duration\x12\r\n\x05\x65rror\x18\x06 \x01(\x08\x12\r\n\x05steps\x18\x07 \x01(\x05\x12\x0f\n\x07results\x18\x08 \x01(\x05\x12\x0f\n\x07project\x18\t \x01(\t\x12\x39\n\x06labels\x18\n \x03(\x0b\x32).evalsi.v1alpha1.TraceSummary.LabelsEntry\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\\\n\x11ListTracesRequest\x12\x0f\n\x07service\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\x12\x0f\n\x07project\x18\x04 \x01(\t\"\\\n\x12ListTracesResponse\x12-\n\x06traces\x18\x01 \x03(\x0b\x32\x1d.evalsi.v1alpha1.TraceSummary\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"4\n\x0fGetTraceRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\"S\n\rPolicyResults\x12\x0e\n\x06policy\x18\x01 \x01(\t\x12\x32\n\x07results\x18\x02 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\"m\n\x10GetTraceResponse\x12\'\n\x06record\x18\x01 \x01(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x30\n\x08policies\x18\x02 \x03(\x0b\x32\x1e.evalsi.v1alpha1.PolicyResults2\xb6\x01\n\x0cTraceService\x12U\n\nListTraces\x12\".evalsi.v1alpha1.ListTracesRequest\x1a#.evalsi.v1alpha1.ListTracesResponse\x12O\n\x08GetTrace\x12 .evalsi.v1alpha1.GetTraceRequest\x1a!.evalsi.v1alpha1.GetTraceResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'evalsi.v1alpha1.trace_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_TRACESUMMARY_LABELSENTRY']._loaded_options = None
+  _globals['_TRACESUMMARY_LABELSENTRY']._serialized_options = b'8\001'
   _globals['_TRACESUMMARY']._serialized_start=181
-  _globals['_TRACESUMMARY']._serialized_end=384
-  _globals['_LISTTRACESREQUEST']._serialized_start=386
-  _globals['_LISTTRACESREQUEST']._serialized_end=461
-  _globals['_LISTTRACESRESPONSE']._serialized_start=463
-  _globals['_LISTTRACESRESPONSE']._serialized_end=555
-  _globals['_GETTRACEREQUEST']._serialized_start=557
-  _globals['_GETTRACEREQUEST']._serialized_end=592
-  _globals['_POLICYRESULTS']._serialized_start=594
-  _globals['_POLICYRESULTS']._serialized_end=677
-  _globals['_GETTRACERESPONSE']._serialized_start=679
-  _globals['_GETTRACERESPONSE']._serialized_end=788
-  _globals['_TRACESERVICE']._serialized_start=791
-  _globals['_TRACESERVICE']._serialized_end=973
+  _globals['_TRACESUMMARY']._serialized_end=507
+  _globals['_TRACESUMMARY_LABELSENTRY']._serialized_start=462
+  _globals['_TRACESUMMARY_LABELSENTRY']._serialized_end=507
+  _globals['_LISTTRACESREQUEST']._serialized_start=509
+  _globals['_LISTTRACESREQUEST']._serialized_end=601
+  _globals['_LISTTRACESRESPONSE']._serialized_start=603
+  _globals['_LISTTRACESRESPONSE']._serialized_end=695
+  _globals['_GETTRACEREQUEST']._serialized_start=697
+  _globals['_GETTRACEREQUEST']._serialized_end=749
+  _globals['_POLICYRESULTS']._serialized_start=751
+  _globals['_POLICYRESULTS']._serialized_end=834
+  _globals['_GETTRACERESPONSE']._serialized_start=836
+  _globals['_GETTRACERESPONSE']._serialized_end=945
+  _globals['_TRACESERVICE']._serialized_start=948
+  _globals['_TRACESERVICE']._serialized_end=1130
 # @@protoc_insertion_point(module_scope)

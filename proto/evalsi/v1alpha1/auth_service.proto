@@ -1,0 +1,289 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// AuthService reports who the caller is and manages projects, API keys,
+// custom roles, role bindings and the audit log. Identities come from the
+// client's own identity provider (OIDC/JWT) or from API keys; evalsid keeps
+// no users or passwords.
+service AuthService {
+  // The caller's principal and what it can do in each project.
+  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+
+  // Projects the caller can see. Creating one needs the owner role.
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse);
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse);
+
+  // API keys. The plaintext key is returned once, by CreateAPIKey; only its
+  // SHA-256 hash is stored.
+  rpc CreateAPIKey(CreateAPIKeyRequest) returns (CreateAPIKeyResponse);
+  rpc ListAPIKeys(ListAPIKeysRequest) returns (ListAPIKeysResponse);
+  rpc RevokeAPIKey(RevokeAPIKeyRequest) returns (RevokeAPIKeyResponse);
+
+  // Custom roles, built from the permission list.
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
+  rpc CreateRole(CreateRoleRequest) returns (CreateRoleResponse);
+  rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse);
+  rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse);
+  // The permissions roles can grant.
+  rpc ListPermissions(ListPermissionsRequest) returns (ListPermissionsResponse);
+
+  // Role bindings: which principals hold which roles in a project.
+  rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse);
+  rpc CreateBinding(CreateBindingRequest) returns (CreateBindingResponse);
+  rpc DeleteBinding(DeleteBindingRequest) returns (DeleteBindingResponse);
+
+  // Mutating and denied calls, newest first.
+  rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
+}
+
+// Principal is an authenticated caller.
+message Principal {
+  // "user", "service", "apikey" or "anonymous".
+  string kind = 1;
+  // The identity provider (a JWT provider name, "apikey", "mtls" or "proxy").
+  string provider = 2;
+  string subject = 3;
+  string name = 4;
+  string email = 5;
+  repeated string groups = 6;
+  // How the caller authenticated: "jwt", "apikey", "mtls", "proxy" or "none".
+  string method = 7;
+  // The binding form, for example "user:corp/1234" or "key:ci".
+  string id = 8;
+  // Labels of an API key.
+  map<string, string> labels = 9;
+}
+
+// ProjectAccess is what a principal holds in one project.
+message ProjectAccess {
+  // A project name, or "*" for roles held in every project.
+  string project = 1;
+  repeated string roles = 2;
+  // Permissions the roles grant. Roles with conditions grant them only when
+  // the condition holds for the request.
+  repeated string permissions = 3;
+}
+
+message WhoAmIRequest {}
+
+message WhoAmIResponse {
+  Principal principal = 1;
+  // Holds every permission in every project.
+  bool owner = 2;
+  repeated ProjectAccess access = 3;
+  // Whether authentication is enabled on this server.
+  bool auth_enabled = 4;
+}
+
+message Project {
+  string name = 1;
+  string description = 2;
+  // "builtin", "config" or "api".
+  string source = 3;
+  google.protobuf.Timestamp created_at = 4;
+  string created_by = 5;
+}
+
+message ListProjectsRequest {}
+
+message ListProjectsResponse {
+  repeated Project projects = 1;
+}
+
+message CreateProjectRequest {
+  string name = 1;
+  string description = 2;
+}
+
+message CreateProjectResponse {
+  Project project = 1;
+}
+
+// RoleList is a list of role names.
+message RoleList {
+  repeated string roles = 1;
+}
+
+message APIKey {
+  // Unique name; bindings refer to the key as "key:<name>".
+  string name = 1;
+  // Roles per project; "*" means every project.
+  map<string, RoleList> roles = 2;
+  map<string, string> labels = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  google.protobuf.Timestamp last_used_at = 6;
+  string created_by = 7;
+  // "config" or "api".
+  string source = 8;
+  // The first characters of the key, to recognize it.
+  string prefix = 9;
+  bool revoked = 10;
+}
+
+message CreateAPIKeyRequest {
+  string name = 1;
+  map<string, RoleList> roles = 2;
+  map<string, string> labels = 3;
+  // Lifetime; no expiry when unset.
+  google.protobuf.Duration ttl = 4;
+}
+
+message CreateAPIKeyResponse {
+  APIKey key = 1;
+  // The plaintext key, shown only here. Starts with "evk_".
+  string secret = 2;
+}
+
+message ListAPIKeysRequest {
+  // Only keys with roles in this project, when set.
+  string project = 1;
+}
+
+message ListAPIKeysResponse {
+  repeated APIKey keys = 1;
+}
+
+message RevokeAPIKeyRequest {
+  string name = 1;
+}
+
+message RevokeAPIKeyResponse {}
+
+// Role is a named set of permissions.
+message Role {
+  string name = 1;
+  // The project the role belongs to; empty for an install-wide role.
+  string project = 2;
+  string description = 3;
+  // Permission names, with wildcards such as "runs.*" and "*".
+  repeated string permissions = 4;
+  // Roles whose permissions this role also grants.
+  repeated string inherits = 5;
+  // CEL expression that must hold for the role to grant anything.
+  string condition = 6;
+  // "builtin", "config" or "api".
+  string source = 7;
+}
+
+message ListRolesRequest {
+  // Roles usable in this project (its own, install-wide and built-in), when set.
+  string project = 1;
+}
+
+message ListRolesResponse {
+  repeated Role roles = 1;
+}
+
+message CreateRoleRequest {
+  Role role = 1;
+}
+
+message CreateRoleResponse {
+  Role role = 1;
+}
+
+message UpdateRoleRequest {
+  Role role = 1;
+}
+
+message UpdateRoleResponse {
+  Role role = 1;
+}
+
+message DeleteRoleRequest {
+  string name = 1;
+  string project = 2;
+}
+
+message DeleteRoleResponse {}
+
+message Permission {
+  string name = 1;
+  string description = 2;
+  // Reserved for the owner role; cannot appear in a project role.
+  bool install_wide = 3;
+}
+
+message ListPermissionsRequest {}
+
+message ListPermissionsResponse {
+  repeated Permission permissions = 1;
+}
+
+// RoleBinding grants a role to principals in a project.
+message RoleBinding {
+  // A project name, or "*" for every project.
+  string project = 1;
+  string role = 2;
+  // "user:<provider>/<subject>", "email:<address>", "group:<provider>/<group>",
+  // "key:<name>" or "cel:<expression>".
+  string subject = 3;
+  // "config" or "api".
+  string source = 4;
+  google.protobuf.Timestamp created_at = 5;
+  string created_by = 6;
+}
+
+message ListBindingsRequest {
+  string project = 1;
+}
+
+message ListBindingsResponse {
+  repeated RoleBinding bindings = 1;
+}
+
+message CreateBindingRequest {
+  RoleBinding binding = 1;
+}
+
+message CreateBindingResponse {
+  RoleBinding binding = 1;
+}
+
+message DeleteBindingRequest {
+  RoleBinding binding = 1;
+}
+
+message DeleteBindingResponse {}
+
+message AuditEvent {
+  int64 id = 1;
+  google.protobuf.Timestamp time = 2;
+  // Principal id, for example "user:corp/1234".
+  string principal = 3;
+  string action = 4;
+  string project = 5;
+  // The resource, for example "run/3f2a" or "role/support/prompt-engineer".
+  string resource = 6;
+  bool allowed = 7;
+  // What decided: a rule, a role and its binding, or the default deny.
+  string reason = 8;
+  // The RPC or HTTP route.
+  string procedure = 9;
+  string request_id = 10;
+  // The peer address.
+  string source = 11;
+  // Extra detail, for example a role's old and new definitions as JSON.
+  string detail = 12;
+}
+
+message ListAuditEventsRequest {
+  // Only this project, when set.
+  string project = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+  // Only this action, when set.
+  string action = 4;
+  // Only denied calls.
+  bool denied_only = 5;
+}
+
+message ListAuditEventsResponse {
+  repeated AuditEvent events = 1;
+  string next_page_token = 2;
+}

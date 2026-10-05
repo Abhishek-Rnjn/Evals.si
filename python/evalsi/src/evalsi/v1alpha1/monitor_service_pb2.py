@@ -27,45 +27,49 @@ from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%evalsi/v1alpha1/monitor_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc0\x02\n\x10OnlineEvalPolicy\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12\x10\n\x08\x64isabled\x18\x03 \x01(\x08\x12\x10\n\x08selector\x18\x04 \x01(\t\x12+\n\x08sampling\x18\x05 \x01(\x0b\x32\x19.evalsi.v1alpha1.Sampling\x12-\n\x06stages\x18\x06 \x03(\x0b\x32\x1d.evalsi.v1alpha1.CascadeStage\x12\r\n\x05judge\x18\x07 \x01(\t\x12)\n\x06window\x18\x08 \x01(\x0b\x32\x19.google.protobuf.Duration\x12&\n\x06\x61lerts\x18\t \x03(\x0b\x32\x16.evalsi.v1alpha1.Alert\x12+\n\x07promote\x18\n \x01(\x0b\x32\x1a.evalsi.v1alpha1.Promotion\"6\n\x08Sampling\x12\x11\n\x04rate\x18\x01 \x01(\x01H\x00\x88\x01\x01\x12\x0e\n\x06\x61lways\x18\x02 \x03(\tB\x07\n\x05_rate\"O\n\x0c\x43\x61scadeStage\x12\x31\n\nevaluators\x18\x01 \x03(\x0b\x32\x1d.evalsi.v1alpha1.EvaluatorRef\x12\x0c\n\x04when\x18\x02 \x01(\t\"y\n\x05\x41lert\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\x12\n\x05\x62\x65low\x18\x02 \x01(\x01H\x00\x88\x01\x01\x12\x12\n\x05\x61\x62ove\x18\x03 \x01(\x01H\x01\x88\x01\x01\x12\x13\n\x0bmin_samples\x18\x04 \x01(\x03\x12\x0f\n\x07webhook\x18\x05 \x01(\tB\x08\n\x06_belowB\x08\n\x06_above\"*\n\tPromotion\x12\x0c\n\x04when\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\"G\n\x12\x41pplyPolicyRequest\x12\x31\n\x06policy\x18\x01 \x01(\x0b\x32!.evalsi.v1alpha1.OnlineEvalPolicy\"H\n\x13\x41pplyPolicyResponse\x12\x31\n\x06policy\x18\x01 \x01(\x0b\x32!.evalsi.v1alpha1.OnlineEvalPolicy\"&\n\x13ListPoliciesRequest\x12\x0f\n\x07project\x18\x01 \x01(\t\"K\n\x14ListPoliciesResponse\x12\x33\n\x08policies\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.OnlineEvalPolicy\"#\n\x13\x44\x65letePolicyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"\x16\n\x14\x44\x65letePolicyResponse\"%\n\x15GetPolicyStatsRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"E\n\x0cMetricWindow\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\t\n\x01n\x18\x02 \x01(\x03\x12\x11\n\x04mean\x18\x03 \x01(\x01H\x00\x88\x01\x01\x42\x07\n\x05_mean\"n\n\nAlertState\x12%\n\x05\x61lert\x18\x01 \x01(\x0b\x32\x16.evalsi.v1alpha1.Alert\x12\x0e\n\x06\x66iring\x18\x02 \x01(\x08\x12)\n\x05since\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x8d\x02\n\x0bPolicyStats\x12\x0e\n\x06policy\x18\x01 \x01(\t\x12\x13\n\x0btraces_seen\x18\x02 \x01(\x03\x12\x16\n\x0etraces_matched\x18\x03 \x01(\x03\x12\x16\n\x0etraces_sampled\x18\x04 \x01(\x03\x12\x18\n\x10traces_evaluated\x18\x05 \x01(\x03\x12\x17\n\x0ftraces_promoted\x18\x06 \x01(\x03\x12\x19\n\x11\x65valuation_errors\x18\x07 \x01(\x03\x12.\n\x07metrics\x18\x08 \x03(\x0b\x32\x1d.evalsi.v1alpha1.MetricWindow\x12+\n\x06\x61lerts\x18\t \x03(\x0b\x32\x1b.evalsi.v1alpha1.AlertState\"E\n\x16GetPolicyStatsResponse\x12+\n\x05stats\x18\x01 \x01(\x0b\x32\x1c.evalsi.v1alpha1.PolicyStats2\x87\x03\n\x0eMonitorService\x12X\n\x0b\x41pplyPolicy\x12#.evalsi.v1alpha1.ApplyPolicyRequest\x1a$.evalsi.v1alpha1.ApplyPolicyResponse\x12[\n\x0cListPolicies\x12$.evalsi.v1alpha1.ListPoliciesRequest\x1a%.evalsi.v1alpha1.ListPoliciesResponse\x12[\n\x0c\x44\x65letePolicy\x12$.evalsi.v1alpha1.DeletePolicyRequest\x1a%.evalsi.v1alpha1.DeletePolicyResponse\x12\x61\n\x0eGetPolicyStats\x12&.evalsi.v1alpha1.GetPolicyStatsRequest\x1a\'.evalsi.v1alpha1.GetPolicyStatsResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%evalsi/v1alpha1/monitor_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xae\x03\n\x10OnlineEvalPolicy\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12\x10\n\x08\x64isabled\x18\x03 \x01(\x08\x12\x10\n\x08selector\x18\x04 \x01(\t\x12+\n\x08sampling\x18\x05 \x01(\x0b\x32\x19.evalsi.v1alpha1.Sampling\x12-\n\x06stages\x18\x06 \x03(\x0b\x32\x1d.evalsi.v1alpha1.CascadeStage\x12\r\n\x05judge\x18\x07 \x01(\t\x12)\n\x06window\x18\x08 \x01(\x0b\x32\x19.google.protobuf.Duration\x12&\n\x06\x61lerts\x18\t \x03(\x0b\x32\x16.evalsi.v1alpha1.Alert\x12+\n\x07promote\x18\n \x01(\x0b\x32\x1a.evalsi.v1alpha1.Promotion\x12=\n\x06labels\x18\x0b \x03(\x0b\x32-.evalsi.v1alpha1.OnlineEvalPolicy.LabelsEntry\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"6\n\x08Sampling\x12\x11\n\x04rate\x18\x01 \x01(\x01H\x00\x88\x01\x01\x12\x0e\n\x06\x61lways\x18\x02 \x03(\tB\x07\n\x05_rate\"O\n\x0c\x43\x61scadeStage\x12\x31\n\nevaluators\x18\x01 \x03(\x0b\x32\x1d.evalsi.v1alpha1.EvaluatorRef\x12\x0c\n\x04when\x18\x02 \x01(\t\"y\n\x05\x41lert\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\x12\n\x05\x62\x65low\x18\x02 \x01(\x01H\x00\x88\x01\x01\x12\x12\n\x05\x61\x62ove\x18\x03 \x01(\x01H\x01\x88\x01\x01\x12\x13\n\x0bmin_samples\x18\x04 \x01(\x03\x12\x0f\n\x07webhook\x18\x05 \x01(\tB\x08\n\x06_belowB\x08\n\x06_above\"*\n\tPromotion\x12\x0c\n\x04when\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\"G\n\x12\x41pplyPolicyRequest\x12\x31\n\x06policy\x18\x01 \x01(\x0b\x32!.evalsi.v1alpha1.OnlineEvalPolicy\"H\n\x13\x41pplyPolicyResponse\x12\x31\n\x06policy\x18\x01 \x01(\x0b\x32!.evalsi.v1alpha1.OnlineEvalPolicy\"&\n\x13ListPoliciesRequest\x12\x0f\n\x07project\x18\x01 \x01(\t\"K\n\x14ListPoliciesResponse\x12\x33\n\x08policies\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.OnlineEvalPolicy\"#\n\x13\x44\x65letePolicyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"\x16\n\x14\x44\x65letePolicyResponse\"%\n\x15GetPolicyStatsRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"E\n\x0cMetricWindow\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\t\n\x01n\x18\x02 \x01(\x03\x12\x11\n\x04mean\x18\x03 \x01(\x01H\x00\x88\x01\x01\x42\x07\n\x05_mean\"n\n\nAlertState\x12%\n\x05\x61lert\x18\x01 \x01(\x0b\x32\x16.evalsi.v1alpha1.Alert\x12\x0e\n\x06\x66iring\x18\x02 \x01(\x08\x12)\n\x05since\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x8d\x02\n\x0bPolicyStats\x12\x0e\n\x06policy\x18\x01 \x01(\t\x12\x13\n\x0btraces_seen\x18\x02 \x01(\x03\x12\x16\n\x0etraces_matched\x18\x03 \x01(\x03\x12\x16\n\x0etraces_sampled\x18\x04 \x01(\x03\x12\x18\n\x10traces_evaluated\x18\x05 \x01(\x03\x12\x17\n\x0ftraces_promoted\x18\x06 \x01(\x03\x12\x19\n\x11\x65valuation_errors\x18\x07 \x01(\x03\x12.\n\x07metrics\x18\x08 \x03(\x0b\x32\x1d.evalsi.v1alpha1.MetricWindow\x12+\n\x06\x61lerts\x18\t \x03(\x0b\x32\x1b.evalsi.v1alpha1.AlertState\"E\n\x16GetPolicyStatsResponse\x12+\n\x05stats\x18\x01 \x01(\x0b\x32\x1c.evalsi.v1alpha1.PolicyStats2\x87\x03\n\x0eMonitorService\x12X\n\x0b\x41pplyPolicy\x12#.evalsi.v1alpha1.ApplyPolicyRequest\x1a$.evalsi.v1alpha1.ApplyPolicyResponse\x12[\n\x0cListPolicies\x12$.evalsi.v1alpha1.ListPoliciesRequest\x1a%.evalsi.v1alpha1.ListPoliciesResponse\x12[\n\x0c\x44\x65letePolicy\x12$.evalsi.v1alpha1.DeletePolicyRequest\x1a%.evalsi.v1alpha1.DeletePolicyResponse\x12\x61\n\x0eGetPolicyStats\x12&.evalsi.v1alpha1.GetPolicyStatsRequest\x1a\'.evalsi.v1alpha1.GetPolicyStatsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'evalsi.v1alpha1.monitor_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
+  _globals['_ONLINEEVALPOLICY_LABELSENTRY']._loaded_options = None
+  _globals['_ONLINEEVALPOLICY_LABELSENTRY']._serialized_options = b'8\001'
   _globals['_ONLINEEVALPOLICY']._serialized_start=157
-  _globals['_ONLINEEVALPOLICY']._serialized_end=477
-  _globals['_SAMPLING']._serialized_start=479
-  _globals['_SAMPLING']._serialized_end=533
-  _globals['_CASCADESTAGE']._serialized_start=535
-  _globals['_CASCADESTAGE']._serialized_end=614
-  _globals['_ALERT']._serialized_start=616
-  _globals['_ALERT']._serialized_end=737
-  _globals['_PROMOTION']._serialized_start=739
-  _globals['_PROMOTION']._serialized_end=781
-  _globals['_APPLYPOLICYREQUEST']._serialized_start=783
-  _globals['_APPLYPOLICYREQUEST']._serialized_end=854
-  _globals['_APPLYPOLICYRESPONSE']._serialized_start=856
-  _globals['_APPLYPOLICYRESPONSE']._serialized_end=928
-  _globals['_LISTPOLICIESREQUEST']._serialized_start=930
-  _globals['_LISTPOLICIESREQUEST']._serialized_end=968
-  _globals['_LISTPOLICIESRESPONSE']._serialized_start=970
-  _globals['_LISTPOLICIESRESPONSE']._serialized_end=1045
-  _globals['_DELETEPOLICYREQUEST']._serialized_start=1047
-  _globals['_DELETEPOLICYREQUEST']._serialized_end=1082
-  _globals['_DELETEPOLICYRESPONSE']._serialized_start=1084
-  _globals['_DELETEPOLICYRESPONSE']._serialized_end=1106
-  _globals['_GETPOLICYSTATSREQUEST']._serialized_start=1108
-  _globals['_GETPOLICYSTATSREQUEST']._serialized_end=1145
-  _globals['_METRICWINDOW']._serialized_start=1147
-  _globals['_METRICWINDOW']._serialized_end=1216
-  _globals['_ALERTSTATE']._serialized_start=1218
-  _globals['_ALERTSTATE']._serialized_end=1328
-  _globals['_POLICYSTATS']._serialized_start=1331
-  _globals['_POLICYSTATS']._serialized_end=1600
-  _globals['_GETPOLICYSTATSRESPONSE']._serialized_start=1602
-  _globals['_GETPOLICYSTATSRESPONSE']._serialized_end=1671
-  _globals['_MONITORSERVICE']._serialized_start=1674
-  _globals['_MONITORSERVICE']._serialized_end=2065
+  _globals['_ONLINEEVALPOLICY']._serialized_end=587
+  _globals['_ONLINEEVALPOLICY_LABELSENTRY']._serialized_start=542
+  _globals['_ONLINEEVALPOLICY_LABELSENTRY']._serialized_end=587
+  _globals['_SAMPLING']._serialized_start=589
+  _globals['_SAMPLING']._serialized_end=643
+  _globals['_CASCADESTAGE']._serialized_start=645
+  _globals['_CASCADESTAGE']._serialized_end=724
+  _globals['_ALERT']._serialized_start=726
+  _globals['_ALERT']._serialized_end=847
+  _globals['_PROMOTION']._serialized_start=849
+  _globals['_PROMOTION']._serialized_end=891
+  _globals['_APPLYPOLICYREQUEST']._serialized_start=893
+  _globals['_APPLYPOLICYREQUEST']._serialized_end=964
+  _globals['_APPLYPOLICYRESPONSE']._serialized_start=966
+  _globals['_APPLYPOLICYRESPONSE']._serialized_end=1038
+  _globals['_LISTPOLICIESREQUEST']._serialized_start=1040
+  _globals['_LISTPOLICIESREQUEST']._serialized_end=1078
+  _globals['_LISTPOLICIESRESPONSE']._serialized_start=1080
+  _globals['_LISTPOLICIESRESPONSE']._serialized_end=1155
+  _globals['_DELETEPOLICYREQUEST']._serialized_start=1157
+  _globals['_DELETEPOLICYREQUEST']._serialized_end=1192
+  _globals['_DELETEPOLICYRESPONSE']._serialized_start=1194
+  _globals['_DELETEPOLICYRESPONSE']._serialized_end=1216
+  _globals['_GETPOLICYSTATSREQUEST']._serialized_start=1218
+  _globals['_GETPOLICYSTATSREQUEST']._serialized_end=1255
+  _globals['_METRICWINDOW']._serialized_start=1257
+  _globals['_METRICWINDOW']._serialized_end=1326
+  _globals['_ALERTSTATE']._serialized_start=1328
+  _globals['_ALERTSTATE']._serialized_end=1438
+  _globals['_POLICYSTATS']._serialized_start=1441
+  _globals['_POLICYSTATS']._serialized_end=1710
+  _globals['_GETPOLICYSTATSRESPONSE']._serialized_start=1712
+  _globals['_GETPOLICYSTATSRESPONSE']._serialized_end=1781
+  _globals['_MONITORSERVICE']._serialized_start=1784
+  _globals['_MONITORSERVICE']._serialized_end=2175
 # @@protoc_insertion_point(module_scope)

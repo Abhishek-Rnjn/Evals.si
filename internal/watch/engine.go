@@ -108,6 +108,9 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 		return nil, err
 	}
 	for _, p := range stored {
+		if p.GetProject() == "" {
+			p.Project = DefaultProject // stored before projects were enforced
+		}
 		c, err := compile(p, eval)
 		if err != nil {
 			e.log.Error("skipping stored policy", "policy", p.GetName(), "err", err)
@@ -128,6 +131,9 @@ func newState(c *compiled) *policyState {
 
 // Apply validates, stores and activates a policy, replacing one with the same name.
 func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error {
+	if p.GetProject() == "" {
+		p.Project = DefaultProject
+	}
 	c, err := compile(p, e.eval)
 	if err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
@@ -153,8 +159,12 @@ func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) 
 // the assembler's emit callback, so it must not block.
 func (e *Engine) Ingest(t ingest.Trace) {
 	record, info := ingest.ToRecord(t)
+	if info.Project == "" {
+		info.Project = DefaultProject
+	}
 	e.TracesIngested.Add(1)
 	summary := &evalsiv1alpha1.TraceSummary{
+		Project: info.Project, Labels: info.Labels,
 		TraceId: record.GetId(), Service: info.Service, Name: info.Name,
 		Duration: durationpb.New(time.Duration(info.DurationMS * float64(time.Millisecond))),
 		Error:    info.Error, Steps: int32(info.Steps),
@@ -242,6 +252,9 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 	var sampled []*candidate
 	var seen, matched int64
 	for _, it := range batch {
+		if it.info.Project != c.policy.GetProject() {
+			continue // policies only see their own project's traces
+		}
 		seen++
 		vars := activation(it.info, nil)
 		if !eval(c.selector, vars) {
@@ -294,7 +307,7 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 			continue
 		}
 		evaluated++
-		if err := e.store.PutTraceResults(ctx, cand.record.GetId(), c.policy.GetName(), cand.results); err != nil {
+		if err := e.store.PutTraceResults(ctx, cand.info.Project, cand.record.GetId(), c.policy.GetName(), cand.results); err != nil {
 			e.StoreErrors.Add(1)
 			e.log.Error("storing trace results", "trace", cand.record.GetId(), "err", err)
 		}
@@ -492,6 +505,20 @@ func (e *Engine) Policies(project string) []*evalsiv1alpha1.OnlineEvalPolicy {
 	sort.Slice(out, func(i, j int) bool { return out[i].GetName() < out[j].GetName() })
 	return out
 }
+
+// Policy returns an active policy by name.
+func (e *Engine) Policy(name string) (*evalsiv1alpha1.OnlineEvalPolicy, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := e.policies[name]
+	if st == nil {
+		return nil, false
+	}
+	return st.c.policy, true
+}
+
+// DefaultProject holds policies and traces that name no project.
+const DefaultProject = "default"
 
 // Delete removes a policy.
 func (e *Engine) Delete(ctx context.Context, name string) error {

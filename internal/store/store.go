@@ -19,10 +19,11 @@ import (
 	_ "modernc.org/sqlite" // database/sql driver "sqlite"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 )
 
-// ErrNotFound is returned for unknown run ids.
-var ErrNotFound = errors.New("store: not found")
+// ErrNotFound is returned for unknown ids and names.
+var ErrNotFound = authz.ErrNotFound
 
 // DatasetIndex is the record index used for dataset-scope results.
 const DatasetIndex = -1
@@ -50,17 +51,20 @@ CREATE TABLE IF NOT EXISTS run_results (
   PRIMARY KEY (run_id, record_idx, trial, eval_idx)
 );
 CREATE TABLE IF NOT EXISTS traces (
-  trace_id TEXT PRIMARY KEY,
+  project TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
   service TEXT NOT NULL,
   start_ns INTEGER NOT NULL,
   summary BLOB NOT NULL,
-  record BLOB NOT NULL
+  record BLOB NOT NULL,
+  PRIMARY KEY (project, trace_id)
 );
 CREATE INDEX IF NOT EXISTS traces_by_service ON traces (service, start_ns DESC);
 CREATE INDEX IF NOT EXISTS traces_by_start ON traces (start_ns DESC);
+CREATE INDEX IF NOT EXISTS traces_by_id ON traces (trace_id);
 CREATE TABLE IF NOT EXISTS trace_results (
-  trace_id TEXT NOT NULL, policy TEXT NOT NULL, evaluator TEXT NOT NULL, result BLOB NOT NULL,
-  PRIMARY KEY (trace_id, policy, evaluator)
+  project TEXT NOT NULL, trace_id TEXT NOT NULL, policy TEXT NOT NULL, evaluator TEXT NOT NULL, result BLOB NOT NULL,
+  PRIMARY KEY (project, trace_id, policy, evaluator)
 );
 CREATE TABLE IF NOT EXISTS policies (
   name TEXT PRIMARY KEY, project TEXT NOT NULL, policy BLOB NOT NULL
@@ -81,11 +85,52 @@ func Open(path string) (*Store, error) {
 	}
 	// SQLite allows one writer; a single connection keeps writes serialized and simple.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	if err := migrate(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: migrating: %w", err)
+	}
+	if _, err := db.Exec(schema + authSchema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
 	return &Store{db: db}, nil
+}
+
+// migrate upgrades databases written by earlier versions. Phase 1 keyed
+// traces by trace id alone; traces are now scoped by project, so the same id
+// in two projects is two traces and one project cannot overwrite another's.
+// Existing traces move to the default project.
+func migrate(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'traces'`).Scan(&n); err != nil || n == 0 {
+		return err
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('traces') WHERE name = 'project'`).Scan(&n); err != nil || n > 0 {
+		return err
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, stmt := range []string{
+		`DROP INDEX IF EXISTS traces_by_service`,
+		`DROP INDEX IF EXISTS traces_by_start`,
+		`ALTER TABLE traces RENAME TO traces_v1`,
+		`ALTER TABLE trace_results RENAME TO trace_results_v1`,
+		schema,
+		`INSERT INTO traces (project, trace_id, service, start_ns, summary, record)
+		   SELECT 'default', trace_id, service, start_ns, summary, record FROM traces_v1`,
+		`INSERT INTO trace_results (project, trace_id, policy, evaluator, result)
+		   SELECT 'default', trace_id, policy, evaluator, result FROM trace_results_v1`,
+		`DROP TABLE traces_v1`,
+		`DROP TABLE trace_results_v1`,
+	} {
+		if _, err := tx.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // Close closes the database.
@@ -153,9 +198,9 @@ func (s *Store) GetRun(ctx context.Context, id string) (*evalsiv1alpha1.Run, err
 	return unmarshalRun(blob)
 }
 
-// ListRuns returns runs newest first, all projects when project is empty.
-// pageToken is an opaque offset from a previous call.
-func (s *Store) ListRuns(ctx context.Context, project string, pageSize int, pageToken string) ([]*evalsiv1alpha1.Run, string, error) {
+// ListRuns returns runs newest first, in the given projects (nil: every
+// project). pageToken is an opaque offset from a previous call.
+func (s *Store) ListRuns(ctx context.Context, projects []string, pageSize int, pageToken string) ([]*evalsiv1alpha1.Run, string, error) {
 	offset := 0
 	if pageToken != "" {
 		var err error
@@ -163,9 +208,10 @@ func (s *Store) ListRuns(ctx context.Context, project string, pageSize int, page
 			return nil, "", fmt.Errorf("store: bad page token")
 		}
 	}
+	where, args := projectFilter("project", projects)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT run FROM runs WHERE (? = '' OR project = ?) ORDER BY created_at DESC, id LIMIT ? OFFSET ?`,
-		project, project, pageSize+1, offset)
+		`SELECT run FROM runs WHERE `+where+` ORDER BY created_at DESC, id LIMIT ? OFFSET ?`,
+		append(args, pageSize+1, offset)...)
 	if err != nil {
 		return nil, "", err
 	}

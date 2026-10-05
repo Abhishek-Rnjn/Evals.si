@@ -51,15 +51,15 @@ func TestRunsLifecycle(t *testing.T) {
 	if len(running) != 1 || running[0].GetId() != "r1" {
 		t.Fatalf("RunsWithStatus = %v", running)
 	}
-	page, next, err := s.ListRuns(ctx, "p", 1, "")
+	page, next, err := s.ListRuns(ctx, []string{"p"}, 1, "")
 	if err != nil || len(page) != 1 || next == "" {
 		t.Fatalf("ListRuns page 1 = %v %q %v", page, next, err)
 	}
-	page2, next2, _ := s.ListRuns(ctx, "p", 1, next)
+	page2, next2, _ := s.ListRuns(ctx, []string{"p"}, 1, next)
 	if len(page2) != 1 || next2 != "" || page2[0].GetId() == page[0].GetId() {
 		t.Fatalf("ListRuns page 2 = %v %q", page2, next2)
 	}
-	all, _, _ := s.ListRuns(ctx, "", 10, "")
+	all, _, _ := s.ListRuns(ctx, nil, 10, "")
 	if len(all) != 3 {
 		t.Fatalf("ListRuns all = %d", len(all))
 	}

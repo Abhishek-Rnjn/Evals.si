@@ -332,7 +332,7 @@ func TestTraceRetention(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("deleted %d, %v", n, err)
 	}
-	list, _, _ := h.st.ListTraces(context.Background(), "", 10, "")
+	list, _, _ := h.st.ListTraces(context.Background(), store.TraceFilter{}, 10, "")
 	if len(list) != 1 {
 		t.Fatalf("left %d traces", len(list))
 	}

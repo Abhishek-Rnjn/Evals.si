@@ -34,7 +34,11 @@ type TraceSummary struct {
 	Error     bool                   `protobuf:"varint,6,opt,name=error,proto3" json:"error,omitempty"`
 	Steps     int32                  `protobuf:"varint,7,opt,name=steps,proto3" json:"steps,omitempty"`
 	// Number of evaluation results stored for the trace.
-	Results       int32 `protobuf:"varint,8,opt,name=results,proto3" json:"results,omitempty"`
+	Results int32 `protobuf:"varint,8,opt,name=results,proto3" json:"results,omitempty"`
+	// The project the trace was ingested into, set from the ingest credential.
+	Project string `protobuf:"bytes,9,opt,name=project,proto3" json:"project,omitempty"`
+	// From resource attributes evalsi.label.<key> and the ingest credential's labels.
+	Labels        map[string]string `protobuf:"bytes,10,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -125,12 +129,28 @@ func (x *TraceSummary) GetResults() int32 {
 	return 0
 }
 
+func (x *TraceSummary) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *TraceSummary) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
 type ListTracesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Only traces from this service, when set.
-	Service       string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	PageSize      int32  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Service   string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	PageSize  int32  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Only traces in this project, when set.
+	Project       string `protobuf:"bytes,4,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -182,6 +202,13 @@ func (x *ListTracesRequest) GetPageSize() int32 {
 func (x *ListTracesRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListTracesRequest) GetProject() string {
+	if x != nil {
+		return x.Project
 	}
 	return ""
 }
@@ -242,7 +269,9 @@ func (x *ListTracesResponse) GetNextPageToken() string {
 type GetTraceRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Hex trace id.
-	TraceId       string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	// Needed only when the same trace id exists in several projects you can read.
+	Project       string `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -280,6 +309,13 @@ func (*GetTraceRequest) Descriptor() ([]byte, []int) {
 func (x *GetTraceRequest) GetTraceId() string {
 	if x != nil {
 		return x.TraceId
+	}
+	return ""
+}
+
+func (x *GetTraceRequest) GetProject() string {
+	if x != nil {
+		return x.Project
 	}
 	return ""
 }
@@ -393,7 +429,7 @@ var File_evalsi_v1alpha1_trace_service_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_trace_service_proto_rawDesc = "" +
 	"\n" +
-	"#evalsi/v1alpha1/trace_service.proto\x12\x0fevalsi.v1alpha1\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8f\x02\n" +
+	"#evalsi/v1alpha1/trace_service.proto\x12\x0fevalsi.v1alpha1\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa7\x03\n" +
 	"\fTraceSummary\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x12\n" +
@@ -403,17 +439,25 @@ const file_evalsi_v1alpha1_trace_service_proto_rawDesc = "" +
 	"\bduration\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\bduration\x12\x14\n" +
 	"\x05error\x18\x06 \x01(\bR\x05error\x12\x14\n" +
 	"\x05steps\x18\a \x01(\x05R\x05steps\x12\x18\n" +
-	"\aresults\x18\b \x01(\x05R\aresults\"i\n" +
+	"\aresults\x18\b \x01(\x05R\aresults\x12\x18\n" +
+	"\aproject\x18\t \x01(\tR\aproject\x12A\n" +
+	"\x06labels\x18\n" +
+	" \x03(\v2).evalsi.v1alpha1.TraceSummary.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x83\x01\n" +
 	"\x11ListTracesRequest\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"s\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\x12\x18\n" +
+	"\aproject\x18\x04 \x01(\tR\aproject\"s\n" +
 	"\x12ListTracesResponse\x125\n" +
 	"\x06traces\x18\x01 \x03(\v2\x1d.evalsi.v1alpha1.TraceSummaryR\x06traces\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\",\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"F\n" +
 	"\x0fGetTraceRequest\x12\x19\n" +
-	"\btrace_id\x18\x01 \x01(\tR\atraceId\"d\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
+	"\aproject\x18\x02 \x01(\tR\aproject\"d\n" +
 	"\rPolicyResults\x12\x16\n" +
 	"\x06policy\x18\x01 \x01(\tR\x06policy\x12;\n" +
 	"\aresults\x18\x02 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"\x7f\n" +
@@ -438,7 +482,7 @@ func file_evalsi_v1alpha1_trace_service_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_trace_service_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_trace_service_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_evalsi_v1alpha1_trace_service_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_evalsi_v1alpha1_trace_service_proto_goTypes = []any{
 	(*TraceSummary)(nil),          // 0: evalsi.v1alpha1.TraceSummary
 	(*ListTracesRequest)(nil),     // 1: evalsi.v1alpha1.ListTracesRequest
@@ -446,27 +490,29 @@ var file_evalsi_v1alpha1_trace_service_proto_goTypes = []any{
 	(*GetTraceRequest)(nil),       // 3: evalsi.v1alpha1.GetTraceRequest
 	(*PolicyResults)(nil),         // 4: evalsi.v1alpha1.PolicyResults
 	(*GetTraceResponse)(nil),      // 5: evalsi.v1alpha1.GetTraceResponse
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 7: google.protobuf.Duration
-	(*EvaluationResult)(nil),      // 8: evalsi.v1alpha1.EvaluationResult
-	(*Record)(nil),                // 9: evalsi.v1alpha1.Record
+	nil,                           // 6: evalsi.v1alpha1.TraceSummary.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 8: google.protobuf.Duration
+	(*EvaluationResult)(nil),      // 9: evalsi.v1alpha1.EvaluationResult
+	(*Record)(nil),                // 10: evalsi.v1alpha1.Record
 }
 var file_evalsi_v1alpha1_trace_service_proto_depIdxs = []int32{
-	6, // 0: evalsi.v1alpha1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
-	7, // 1: evalsi.v1alpha1.TraceSummary.duration:type_name -> google.protobuf.Duration
-	0, // 2: evalsi.v1alpha1.ListTracesResponse.traces:type_name -> evalsi.v1alpha1.TraceSummary
-	8, // 3: evalsi.v1alpha1.PolicyResults.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	9, // 4: evalsi.v1alpha1.GetTraceResponse.record:type_name -> evalsi.v1alpha1.Record
-	4, // 5: evalsi.v1alpha1.GetTraceResponse.policies:type_name -> evalsi.v1alpha1.PolicyResults
-	1, // 6: evalsi.v1alpha1.TraceService.ListTraces:input_type -> evalsi.v1alpha1.ListTracesRequest
-	3, // 7: evalsi.v1alpha1.TraceService.GetTrace:input_type -> evalsi.v1alpha1.GetTraceRequest
-	2, // 8: evalsi.v1alpha1.TraceService.ListTraces:output_type -> evalsi.v1alpha1.ListTracesResponse
-	5, // 9: evalsi.v1alpha1.TraceService.GetTrace:output_type -> evalsi.v1alpha1.GetTraceResponse
-	8, // [8:10] is the sub-list for method output_type
-	6, // [6:8] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	7,  // 0: evalsi.v1alpha1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
+	8,  // 1: evalsi.v1alpha1.TraceSummary.duration:type_name -> google.protobuf.Duration
+	6,  // 2: evalsi.v1alpha1.TraceSummary.labels:type_name -> evalsi.v1alpha1.TraceSummary.LabelsEntry
+	0,  // 3: evalsi.v1alpha1.ListTracesResponse.traces:type_name -> evalsi.v1alpha1.TraceSummary
+	9,  // 4: evalsi.v1alpha1.PolicyResults.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	10, // 5: evalsi.v1alpha1.GetTraceResponse.record:type_name -> evalsi.v1alpha1.Record
+	4,  // 6: evalsi.v1alpha1.GetTraceResponse.policies:type_name -> evalsi.v1alpha1.PolicyResults
+	1,  // 7: evalsi.v1alpha1.TraceService.ListTraces:input_type -> evalsi.v1alpha1.ListTracesRequest
+	3,  // 8: evalsi.v1alpha1.TraceService.GetTrace:input_type -> evalsi.v1alpha1.GetTraceRequest
+	2,  // 9: evalsi.v1alpha1.TraceService.ListTraces:output_type -> evalsi.v1alpha1.ListTracesResponse
+	5,  // 10: evalsi.v1alpha1.TraceService.GetTrace:output_type -> evalsi.v1alpha1.GetTraceResponse
+	9,  // [9:11] is the sub-list for method output_type
+	7,  // [7:9] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_trace_service_proto_init() }
@@ -482,7 +528,7 @@ func file_evalsi_v1alpha1_trace_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_trace_service_proto_rawDesc), len(file_evalsi_v1alpha1_trace_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

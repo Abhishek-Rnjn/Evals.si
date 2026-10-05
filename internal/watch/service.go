@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
@@ -29,9 +31,17 @@ func (e *Engine) ApplyPolicy(ctx context.Context, req *connect.Request[evalsiv1a
 	return connect.NewResponse(&evalsiv1alpha1.ApplyPolicyResponse{Policy: p}), nil
 }
 
-// ListPolicies implements MonitorService.
-func (e *Engine) ListPolicies(_ context.Context, req *connect.Request[evalsiv1alpha1.ListPoliciesRequest]) (*connect.Response[evalsiv1alpha1.ListPoliciesResponse], error) {
-	return connect.NewResponse(&evalsiv1alpha1.ListPoliciesResponse{Policies: e.Policies(req.Msg.GetProject())}), nil
+// ListPolicies implements MonitorService. It lists only the policies the
+// caller may read.
+func (e *Engine) ListPolicies(ctx context.Context, req *connect.Request[evalsiv1alpha1.ListPoliciesRequest]) (*connect.Response[evalsiv1alpha1.ListPoliciesResponse], error) {
+	var out []*evalsiv1alpha1.OnlineEvalPolicy
+	runsCode := authz.RunsCodeFrom(ctx)
+	for _, p := range e.Policies(req.Msg.GetProject()) {
+		if authz.Can(ctx, "policies.read", p.GetProject(), authz.PolicyResource(p, runsCode)) {
+			out = append(out, p)
+		}
+	}
+	return connect.NewResponse(&evalsiv1alpha1.ListPoliciesResponse{Policies: out}), nil
 }
 
 // DeletePolicy implements MonitorService.
@@ -54,29 +64,68 @@ func (e *Engine) GetPolicyStats(_ context.Context, req *connect.Request[evalsiv1
 // Traces implements TraceService over the store.
 type Traces struct{ Store *store.Store }
 
-// ListTraces implements TraceService.
+// ListTraces implements TraceService. It lists only traces the caller may read.
 func (t Traces) ListTraces(ctx context.Context, req *connect.Request[evalsiv1alpha1.ListTracesRequest]) (*connect.Response[evalsiv1alpha1.ListTracesResponse], error) {
 	size := int(req.Msg.GetPageSize())
 	if size <= 0 || size > 500 {
 		size = 50
 	}
-	traces, next, err := t.Store.ListTraces(ctx, req.Msg.GetService(), size, req.Msg.GetPageToken())
+	projects := authz.Projects(ctx, "traces.read")
+	if p := req.Msg.GetProject(); p != "" {
+		if projects != nil && !slices.Contains(projects, p) {
+			projects = []string{}
+		} else {
+			projects = []string{p}
+		}
+	}
+	traces, next, err := t.Store.ListTraces(ctx, store.TraceFilter{Projects: projects, Service: req.Msg.GetService()}, size, req.Msg.GetPageToken())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return connect.NewResponse(&evalsiv1alpha1.ListTracesResponse{Traces: traces, NextPageToken: next}), nil
+	visible := traces[:0]
+	for _, tr := range traces {
+		if authz.Can(ctx, "traces.read", tr.GetProject(), authz.TraceResource(tr)) {
+			visible = append(visible, tr)
+		}
+	}
+	return connect.NewResponse(&evalsiv1alpha1.ListTracesResponse{Traces: visible, NextPageToken: next}), nil
 }
 
-// GetTrace implements TraceService.
+// GetTrace implements TraceService. A trace id is unique within a project;
+// without a project, the one readable trace with that id is returned.
 func (t Traces) GetTrace(ctx context.Context, req *connect.Request[evalsiv1alpha1.GetTraceRequest]) (*connect.Response[evalsiv1alpha1.GetTraceResponse], error) {
-	record, err := t.Store.GetTrace(ctx, strings.ToLower(req.Msg.GetTraceId()))
-	if errors.Is(err, store.ErrNotFound) {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no trace %q", req.Msg.GetTraceId()))
+	id := strings.ToLower(req.Msg.GetTraceId())
+	notFound := connect.NewError(connect.CodeNotFound, fmt.Errorf("no trace %q", req.Msg.GetTraceId()))
+	candidates := []string{req.Msg.GetProject()}
+	if req.Msg.GetProject() == "" {
+		var err error
+		if candidates, err = t.Store.TraceProjects(ctx, id); err != nil {
+			return nil, err
+		}
 	}
-	if err != nil {
-		return nil, err
+	var summary *evalsiv1alpha1.TraceSummary
+	var record *evalsiv1alpha1.Record
+	for _, project := range candidates {
+		sum, rec, err := t.Store.GetTrace(ctx, project, id)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !authz.Can(ctx, "traces.read", project, authz.TraceResource(sum)) {
+			continue
+		}
+		if summary != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("trace %q exists in projects %s and %s; set project", id, summary.GetProject(), project))
+		}
+		summary, record = sum, rec
 	}
-	results, err := t.Store.TraceResults(ctx, record.GetId())
+	if summary == nil {
+		return nil, notFound
+	}
+	results, err := t.Store.TraceResults(ctx, summary.GetProject(), record.GetId())
 	if err != nil {
 		return nil, err
 	}

@@ -39,6 +39,8 @@ message OnlineEvalPolicy {
   google.protobuf.Duration window = 8;
   repeated Alert alerts = 9;
   Promotion promote = 10;
+  // Labels for access rules.
+  map<string, string> labels = 11;
 }
 
 message Sampling {

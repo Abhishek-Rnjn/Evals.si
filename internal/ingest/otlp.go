@@ -7,10 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 	collectortracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -24,23 +26,77 @@ const TraceExportProcedure = "/opentelemetry.proto.collector.trace.v1.TraceServi
 // maxBody bounds an OTLP/HTTP request body (after decompression).
 const maxBody = 32 << 20
 
+// Assign decides which project an OTLP resource's spans go to and which
+// labels they carry. It sees the request context (with the caller's
+// principal) and the resource attributes. An error, typically a
+// connect.Error with PermissionDenied, rejects the whole export.
+type Assign func(ctx context.Context, resource Attrs) (project string, labels map[string]string, err error)
+
+// LabelPrefix marks resource attributes that become trace labels.
+const LabelPrefix = "evalsi.label."
+
+// ResourceLabels reads evalsi.label.<key> resource attributes.
+func ResourceLabels(resource Attrs) map[string]string {
+	out := map[string]string{}
+	for k, v := range resource {
+		if key, ok := strings.CutPrefix(k, LabelPrefix); ok && key != "" {
+			out[key] = fmt.Sprint(v)
+		}
+	}
+	return out
+}
+
+// DefaultAssign puts every span in the default project with its resource labels.
+func DefaultAssign(_ context.Context, resource Attrs) (string, map[string]string, error) {
+	return "", ResourceLabels(resource), nil
+}
+
 // Receiver accepts OTLP traces over gRPC and HTTP (protobuf or JSON) and
 // hands the spans to an assembler.
 type Receiver struct {
 	assembler *Assembler
+	assign    Assign
+	opts      []connect.HandlerOption
 }
 
-// NewReceiver builds a receiver.
-func NewReceiver(a *Assembler) *Receiver { return &Receiver{assembler: a} }
+// NewReceiver builds a receiver. assign may be nil (DefaultAssign).
+func NewReceiver(a *Assembler, assign Assign, opts ...connect.HandlerOption) *Receiver {
+	if assign == nil {
+		assign = DefaultAssign
+	}
+	return &Receiver{assembler: a, assign: assign, opts: opts}
+}
 
 // Register mounts OTLP/gRPC (TraceService/Export) and OTLP/HTTP (/v1/traces) on mux.
 func (r *Receiver) Register(mux *http.ServeMux) {
-	mux.Handle(TraceExportProcedure, connect.NewUnaryHandler(TraceExportProcedure, r.export))
+	mux.Handle(TraceExportProcedure, connect.NewUnaryHandler(TraceExportProcedure, r.export, r.opts...))
 	mux.HandleFunc("POST /v1/traces", r.serveHTTP)
 }
 
-func (r *Receiver) export(_ context.Context, req *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error) {
-	r.assembler.Add(SpansOf(req.Msg.GetResourceSpans()))
+// accept assigns every resource's spans before buffering any, so a rejected
+// export adds nothing.
+func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTraceServiceRequest) error {
+	var spans []Span
+	for _, rs := range msg.GetResourceSpans() {
+		res := ToAttrs(rs.GetResource().GetAttributes())
+		project, labels, err := r.assign(ctx, res)
+		if err != nil {
+			return err
+		}
+		for _, ss := range rs.GetScopeSpans() {
+			for _, sp := range ss.GetSpans() {
+				spans = append(spans, Span{Span: sp, Resource: res, Project: project, Labels: labels})
+			}
+		}
+	}
+	r.assembler.Add(spans)
+	return nil
+}
+
+func (r *Receiver) export(ctx context.Context, req *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error) {
+	if err := r.accept(ctx, req.Msg); err != nil {
+		return nil, err
+	}
 	return connect.NewResponse(&collectortracepb.ExportTraceServiceResponse{}), nil
 }
 
@@ -75,7 +131,15 @@ func (r *Receiver) serveHTTP(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "decoding OTLP: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	r.assembler.Add(SpansOf(msg.GetResourceSpans()))
+	if err := r.accept(req.Context(), msg); err != nil {
+		status := http.StatusInternalServerError
+		var ce *connect.Error
+		if errors.As(err, &ce) {
+			status = connectHTTPStatus(ce.Code())
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 	resp := &collectortracepb.ExportTraceServiceResponse{}
 	if mediaType == "application/json" {
 		w.Header().Set("Content-Type", "application/json")
@@ -86,6 +150,18 @@ func (r *Receiver) serveHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/x-protobuf")
 	out, _ := proto.Marshal(resp)
 	_, _ = w.Write(out)
+}
+
+func connectHTTPStatus(c connect.Code) int {
+	switch c {
+	case connect.CodeUnauthenticated:
+		return http.StatusUnauthorized
+	case connect.CodePermissionDenied:
+		return http.StatusForbidden
+	case connect.CodeInvalidArgument:
+		return http.StatusBadRequest
+	}
+	return http.StatusInternalServerError
 }
 
 // UnmarshalOTLPJSON decodes OTLP/JSON, which differs from protojson in one

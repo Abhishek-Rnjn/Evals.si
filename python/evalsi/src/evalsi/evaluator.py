@@ -49,6 +49,9 @@ class Requirements:
     context: bool = False
     judge: bool = False
     trajectory: bool = False
+    # Executes code from the record in the sandbox. Servers expose this to
+    # access rules as ``resource.runs_code``.
+    sandbox: bool = False
 
     def missing(self, record: Record) -> str | None:
         """The reason ``record`` cannot be evaluated, or ``None`` if it can."""

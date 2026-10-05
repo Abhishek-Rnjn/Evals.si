@@ -77,10 +77,17 @@ type Dispatcher struct {
 	Dropped  atomic.Int64
 }
 
+// AuditExporter is a sink that also exports audit events.
+type AuditExporter interface {
+	ExportAudit(ctx context.Context, ev *evalsiv1alpha1.AuditEvent) error
+	exportsAudit() bool
+}
+
 type job struct {
 	sink  Sink
 	run   *evalsiv1alpha1.Run
 	trace *Trace
+	audit *evalsiv1alpha1.AuditEvent
 }
 
 // New builds the configured sinks. With none configured the dispatcher is a no-op.
@@ -149,6 +156,18 @@ func (d *Dispatcher) Trace(t *Trace) {
 	}
 }
 
+// Audit queues an audit event for every sink that exports them.
+func (d *Dispatcher) Audit(ev *evalsiv1alpha1.AuditEvent) {
+	if d == nil {
+		return
+	}
+	for _, s := range d.sinks {
+		if a, ok := s.(AuditExporter); ok && a.exportsAudit() {
+			d.enqueue(job{sink: s, audit: proto.Clone(ev).(*evalsiv1alpha1.AuditEvent)})
+		}
+	}
+}
+
 func (d *Dispatcher) enqueue(j job) {
 	defer func() {
 		// Close already happened: the export is dropped like a full queue.
@@ -171,9 +190,12 @@ func (d *Dispatcher) export(j job) {
 			time.Sleep(d.backoff << (attempt - 1))
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		if j.run != nil {
+		switch {
+		case j.audit != nil:
+			err = j.sink.(AuditExporter).ExportAudit(ctx, j.audit)
+		case j.run != nil:
 			err = j.sink.ExportRun(ctx, j.run)
-		} else {
+		default:
 			err = j.sink.ExportTrace(ctx, j.trace)
 		}
 		cancel()

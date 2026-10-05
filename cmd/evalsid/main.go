@@ -1,5 +1,5 @@
-// Command evalsid is the Evals.si daemon: API server, scheduler and (later)
-// OTLP ingest. Users normally start it through the Python CLI with `evalsi serve`.
+// Command evalsid is the Evals.si daemon: API server, scheduler and OTLP
+// ingest. Users normally start it through the Python CLI with `evalsi serve`.
 package main
 
 import (
@@ -26,6 +26,9 @@ commands:
   serve            run the server (evalsid serve -h for flags)
   sandbox probe    report which sandbox rungs work on this host
   sandbox run      run a JSON request from stdin in the sandbox, print the JSON result
+  auth check       explain an authorization decision for a token or API key
+  auth new-key     generate an API key and the hash to put in config
+  auth hash-key    hash an API key read from stdin
 `
 
 func main() {
@@ -47,6 +50,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return serve(ctx, args[1:], stderr)
 	case "sandbox":
 		return sandboxcli.Main(ctx, args[1:], os.Stdin, stdout, stderr)
+	case "auth":
+		return authMain(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "sandbox-exec":
 		// Internal: the launcher that confines itself, then executes the command.
 		return sandbox.Exec(stderr)

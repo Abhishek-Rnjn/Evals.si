@@ -27,47 +27,51 @@ from evalsi.v1alpha1 import run_pb2 as evalsi_dot_v1alpha1_dot_run__pb2
 from evalsi.v1alpha1 import score_pb2 as evalsi_dot_v1alpha1_dot_score__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!evalsi/v1alpha1/run_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x19\x65valsi/v1alpha1/run.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\"Y\n\x10\x43reateRunRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12&\n\x04spec\x18\x03 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\"6\n\x11\x43reateRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1b\n\rGetRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"3\n\x0eGetRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"I\n\x0fListRunsRequest\x12\x0f\n\x07project\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"O\n\x10ListRunsResponse\x12\"\n\x04runs\x18\x01 \x03(\x0b\x32\x14.evalsi.v1alpha1.Run\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"6\n\x0fWatchRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x17\n\x0finclude_results\x18\x02 \x01(\x08\"\xa4\x01\n\x10WatchRunResponse\x12#\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.RunH\x00\x12-\n\x08progress\x18\x02 \x01(\x0b\x32\x19.evalsi.v1alpha1.ProgressH\x00\x12\x33\n\x06result\x18\x03 \x01(\x0b\x32!.evalsi.v1alpha1.EvaluationResultH\x00\x42\x07\n\x05\x65vent\"\x1e\n\x10\x43\x61ncelRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11\x43\x61ncelRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1e\n\x10ResumeRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11ResumeRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"a\n\x15ListRunResultsRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\x12\x11\n\tevaluator\x18\x04 \x01(\t\"\x8f\x01\n\x16ListRunResultsResponse\x12\x32\n\x07results\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\x12(\n\x07records\x18\x02 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x17\n\x0fnext_page_token\x18\x03 \x01(\t\"a\n\x12\x43ompareRunsRequest\x12\x17\n\x0f\x62\x61seline_run_id\x18\x01 \x01(\t\x12\x18\n\x10\x63\x61ndidate_run_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfidence_level\x18\x03 \x01(\x01\"\xf9\x01\n\x10MetricComparison\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\x1a\n\rbaseline_mean\x18\x02 \x01(\x01H\x00\x88\x01\x01\x12\x1b\n\x0e\x63\x61ndidate_mean\x18\x03 \x01(\x01H\x01\x88\x01\x01\x12\x11\n\x04\x64iff\x18\x04 \x01(\x01H\x02\x88\x01\x01\x12\x34\n\x07\x64iff_ci\x18\x05 \x01(\x0b\x32#.evalsi.v1alpha1.ConfidenceInterval\x12\x10\n\x08paired_n\x18\x06 \x01(\x03\x12\x13\n\x0bsignificant\x18\x07 \x01(\x08\x42\x10\n\x0e_baseline_meanB\x11\n\x0f_candidate_meanB\x07\n\x05_diff\"M\n\x13\x43ompareRunsResponse\x12\x36\n\x0b\x63omparisons\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.MetricComparison2\xb4\x05\n\nRunService\x12R\n\tCreateRun\x12!.evalsi.v1alpha1.CreateRunRequest\x1a\".evalsi.v1alpha1.CreateRunResponse\x12I\n\x06GetRun\x12\x1e.evalsi.v1alpha1.GetRunRequest\x1a\x1f.evalsi.v1alpha1.GetRunResponse\x12O\n\x08ListRuns\x12 .evalsi.v1alpha1.ListRunsRequest\x1a!.evalsi.v1alpha1.ListRunsResponse\x12Q\n\x08WatchRun\x12 .evalsi.v1alpha1.WatchRunRequest\x1a!.evalsi.v1alpha1.WatchRunResponse0\x01\x12R\n\tCancelRun\x12!.evalsi.v1alpha1.CancelRunRequest\x1a\".evalsi.v1alpha1.CancelRunResponse\x12R\n\tResumeRun\x12!.evalsi.v1alpha1.ResumeRunRequest\x1a\".evalsi.v1alpha1.ResumeRunResponse\x12\x61\n\x0eListRunResults\x12&.evalsi.v1alpha1.ListRunResultsRequest\x1a\'.evalsi.v1alpha1.ListRunResultsResponse\x12X\n\x0b\x43ompareRuns\x12#.evalsi.v1alpha1.CompareRunsRequest\x1a$.evalsi.v1alpha1.CompareRunsResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!evalsi/v1alpha1/run_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x19\x65valsi/v1alpha1/run.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\"\xc7\x01\n\x10\x43reateRunRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12&\n\x04spec\x18\x03 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12=\n\x06labels\x18\x04 \x03(\x0b\x32-.evalsi.v1alpha1.CreateRunRequest.LabelsEntry\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"6\n\x11\x43reateRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1b\n\rGetRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"3\n\x0eGetRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"I\n\x0fListRunsRequest\x12\x0f\n\x07project\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"O\n\x10ListRunsResponse\x12\"\n\x04runs\x18\x01 \x03(\x0b\x32\x14.evalsi.v1alpha1.Run\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"6\n\x0fWatchRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x17\n\x0finclude_results\x18\x02 \x01(\x08\"\xa4\x01\n\x10WatchRunResponse\x12#\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.RunH\x00\x12-\n\x08progress\x18\x02 \x01(\x0b\x32\x19.evalsi.v1alpha1.ProgressH\x00\x12\x33\n\x06result\x18\x03 \x01(\x0b\x32!.evalsi.v1alpha1.EvaluationResultH\x00\x42\x07\n\x05\x65vent\"\x1e\n\x10\x43\x61ncelRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11\x43\x61ncelRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1e\n\x10ResumeRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11ResumeRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"a\n\x15ListRunResultsRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\x12\x11\n\tevaluator\x18\x04 \x01(\t\"\x8f\x01\n\x16ListRunResultsResponse\x12\x32\n\x07results\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\x12(\n\x07records\x18\x02 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x17\n\x0fnext_page_token\x18\x03 \x01(\t\"a\n\x12\x43ompareRunsRequest\x12\x17\n\x0f\x62\x61seline_run_id\x18\x01 \x01(\t\x12\x18\n\x10\x63\x61ndidate_run_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfidence_level\x18\x03 \x01(\x01\"\xf9\x01\n\x10MetricComparison\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\x1a\n\rbaseline_mean\x18\x02 \x01(\x01H\x00\x88\x01\x01\x12\x1b\n\x0e\x63\x61ndidate_mean\x18\x03 \x01(\x01H\x01\x88\x01\x01\x12\x11\n\x04\x64iff\x18\x04 \x01(\x01H\x02\x88\x01\x01\x12\x34\n\x07\x64iff_ci\x18\x05 \x01(\x0b\x32#.evalsi.v1alpha1.ConfidenceInterval\x12\x10\n\x08paired_n\x18\x06 \x01(\x03\x12\x13\n\x0bsignificant\x18\x07 \x01(\x08\x42\x10\n\x0e_baseline_meanB\x11\n\x0f_candidate_meanB\x07\n\x05_diff\"M\n\x13\x43ompareRunsResponse\x12\x36\n\x0b\x63omparisons\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.MetricComparison2\xb4\x05\n\nRunService\x12R\n\tCreateRun\x12!.evalsi.v1alpha1.CreateRunRequest\x1a\".evalsi.v1alpha1.CreateRunResponse\x12I\n\x06GetRun\x12\x1e.evalsi.v1alpha1.GetRunRequest\x1a\x1f.evalsi.v1alpha1.GetRunResponse\x12O\n\x08ListRuns\x12 .evalsi.v1alpha1.ListRunsRequest\x1a!.evalsi.v1alpha1.ListRunsResponse\x12Q\n\x08WatchRun\x12 .evalsi.v1alpha1.WatchRunRequest\x1a!.evalsi.v1alpha1.WatchRunResponse0\x01\x12R\n\tCancelRun\x12!.evalsi.v1alpha1.CancelRunRequest\x1a\".evalsi.v1alpha1.CancelRunResponse\x12R\n\tResumeRun\x12!.evalsi.v1alpha1.ResumeRunRequest\x1a\".evalsi.v1alpha1.ResumeRunResponse\x12\x61\n\x0eListRunResults\x12&.evalsi.v1alpha1.ListRunResultsRequest\x1a\'.evalsi.v1alpha1.ListRunResultsResponse\x12X\n\x0b\x43ompareRuns\x12#.evalsi.v1alpha1.CompareRunsRequest\x1a$.evalsi.v1alpha1.CompareRunsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'evalsi.v1alpha1.run_service_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_CREATERUNREQUEST']._serialized_start=140
-  _globals['_CREATERUNREQUEST']._serialized_end=229
-  _globals['_CREATERUNRESPONSE']._serialized_start=231
-  _globals['_CREATERUNRESPONSE']._serialized_end=285
-  _globals['_GETRUNREQUEST']._serialized_start=287
-  _globals['_GETRUNREQUEST']._serialized_end=314
-  _globals['_GETRUNRESPONSE']._serialized_start=316
-  _globals['_GETRUNRESPONSE']._serialized_end=367
-  _globals['_LISTRUNSREQUEST']._serialized_start=369
-  _globals['_LISTRUNSREQUEST']._serialized_end=442
-  _globals['_LISTRUNSRESPONSE']._serialized_start=444
-  _globals['_LISTRUNSRESPONSE']._serialized_end=523
-  _globals['_WATCHRUNREQUEST']._serialized_start=525
-  _globals['_WATCHRUNREQUEST']._serialized_end=579
-  _globals['_WATCHRUNRESPONSE']._serialized_start=582
-  _globals['_WATCHRUNRESPONSE']._serialized_end=746
-  _globals['_CANCELRUNREQUEST']._serialized_start=748
-  _globals['_CANCELRUNREQUEST']._serialized_end=778
-  _globals['_CANCELRUNRESPONSE']._serialized_start=780
-  _globals['_CANCELRUNRESPONSE']._serialized_end=834
-  _globals['_RESUMERUNREQUEST']._serialized_start=836
-  _globals['_RESUMERUNREQUEST']._serialized_end=866
-  _globals['_RESUMERUNRESPONSE']._serialized_start=868
-  _globals['_RESUMERUNRESPONSE']._serialized_end=922
-  _globals['_LISTRUNRESULTSREQUEST']._serialized_start=924
-  _globals['_LISTRUNRESULTSREQUEST']._serialized_end=1021
-  _globals['_LISTRUNRESULTSRESPONSE']._serialized_start=1024
-  _globals['_LISTRUNRESULTSRESPONSE']._serialized_end=1167
-  _globals['_COMPARERUNSREQUEST']._serialized_start=1169
-  _globals['_COMPARERUNSREQUEST']._serialized_end=1266
-  _globals['_METRICCOMPARISON']._serialized_start=1269
-  _globals['_METRICCOMPARISON']._serialized_end=1518
-  _globals['_COMPARERUNSRESPONSE']._serialized_start=1520
-  _globals['_COMPARERUNSRESPONSE']._serialized_end=1597
-  _globals['_RUNSERVICE']._serialized_start=1600
-  _globals['_RUNSERVICE']._serialized_end=2292
+  _globals['_CREATERUNREQUEST_LABELSENTRY']._loaded_options = None
+  _globals['_CREATERUNREQUEST_LABELSENTRY']._serialized_options = b'8\001'
+  _globals['_CREATERUNREQUEST']._serialized_start=141
+  _globals['_CREATERUNREQUEST']._serialized_end=340
+  _globals['_CREATERUNREQUEST_LABELSENTRY']._serialized_start=295
+  _globals['_CREATERUNREQUEST_LABELSENTRY']._serialized_end=340
+  _globals['_CREATERUNRESPONSE']._serialized_start=342
+  _globals['_CREATERUNRESPONSE']._serialized_end=396
+  _globals['_GETRUNREQUEST']._serialized_start=398
+  _globals['_GETRUNREQUEST']._serialized_end=425
+  _globals['_GETRUNRESPONSE']._serialized_start=427
+  _globals['_GETRUNRESPONSE']._serialized_end=478
+  _globals['_LISTRUNSREQUEST']._serialized_start=480
+  _globals['_LISTRUNSREQUEST']._serialized_end=553
+  _globals['_LISTRUNSRESPONSE']._serialized_start=555
+  _globals['_LISTRUNSRESPONSE']._serialized_end=634
+  _globals['_WATCHRUNREQUEST']._serialized_start=636
+  _globals['_WATCHRUNREQUEST']._serialized_end=690
+  _globals['_WATCHRUNRESPONSE']._serialized_start=693
+  _globals['_WATCHRUNRESPONSE']._serialized_end=857
+  _globals['_CANCELRUNREQUEST']._serialized_start=859
+  _globals['_CANCELRUNREQUEST']._serialized_end=889
+  _globals['_CANCELRUNRESPONSE']._serialized_start=891
+  _globals['_CANCELRUNRESPONSE']._serialized_end=945
+  _globals['_RESUMERUNREQUEST']._serialized_start=947
+  _globals['_RESUMERUNREQUEST']._serialized_end=977
+  _globals['_RESUMERUNRESPONSE']._serialized_start=979
+  _globals['_RESUMERUNRESPONSE']._serialized_end=1033
+  _globals['_LISTRUNRESULTSREQUEST']._serialized_start=1035
+  _globals['_LISTRUNRESULTSREQUEST']._serialized_end=1132
+  _globals['_LISTRUNRESULTSRESPONSE']._serialized_start=1135
+  _globals['_LISTRUNRESULTSRESPONSE']._serialized_end=1278
+  _globals['_COMPARERUNSREQUEST']._serialized_start=1280
+  _globals['_COMPARERUNSREQUEST']._serialized_end=1377
+  _globals['_METRICCOMPARISON']._serialized_start=1380
+  _globals['_METRICCOMPARISON']._serialized_end=1629
+  _globals['_COMPARERUNSRESPONSE']._serialized_start=1631
+  _globals['_COMPARERUNSRESPONSE']._serialized_end=1708
+  _globals['_RUNSERVICE']._serialized_start=1711
+  _globals['_RUNSERVICE']._serialized_end=2403
 # @@protoc_insertion_point(module_scope)
