@@ -11,7 +11,15 @@ This guide sets up authentication and authorization on `evalsid`. The design and
   - **External authorization** (optional) defers to a central policy engine.
 - **One gate covers every surface:** gRPC, gRPC-Web, Connect, the REST routes, OTLP (gRPC and HTTP), `/metrics` and reflection. `/healthz`, gRPC health and `/.well-known/evalsi-auth` stay open.
 
-The server refuses to start on a non-loopback address without an `auth` section. To run open on purpose, set `auth: {mode: none}`; it logs a warning on every start.
+The server refuses to start on a non-loopback address without an `auth` section. Overrides such as `--listen` get the same check.
+
+**Turning authentication off** (development, testing, demos):
+
+- `evalsid serve --no-auth` (or `evalsi serve --no-auth`);
+- `EVALSID_NO_AUTH=1`;
+- `auth: {mode: none}` in the file.
+
+Every caller is then treated as an owner, and a warning is logged on every start. Your `auth`, `rbac` and `authorization` sections stay in the config, unenforced, so switching back is just dropping the flag.
 
 ## 1. Start with API keys
 

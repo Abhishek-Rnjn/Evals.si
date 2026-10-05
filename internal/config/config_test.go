@@ -136,3 +136,32 @@ func TestLocalAuthExampleNeedsARealHash(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestDisableAuthKeepsTheRestOfTheConfig(t *testing.T) {
+	path := write(t, `
+listen: 0.0.0.0:8080
+auth:
+  api_keys: {keys: [{name: k, key: "sha256:`+strings.Repeat("ab", 32)+`"}]}
+rbac: {owners: [key:k], projects: {demo: {}}}
+authorization: {rules: [{require: "true"}]}
+`)
+	// As written, plaintext bearer keys on a network address are refused.
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected the plaintext check to fail")
+	}
+	cfg, err := LoadWith(path, func(c *Config) { c.DisableAuth() })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AuthEnabled() || len(cfg.Auth.APIKeys.Keys) != 1 || len(cfg.RBAC.Owners) != 1 {
+		t.Errorf("auth = %+v, rbac = %+v", cfg.Auth, cfg.RBAC)
+	}
+	// Overrides are validated like the file: --listen cannot dodge the auth rule.
+	if _, err := LoadWith("", func(c *Config) { c.Listen = "0.0.0.0:8080" }); err == nil || !strings.Contains(err.Error(), "without authentication") {
+		t.Errorf("--listen override: %v", err)
+	}
+	// mode: none in the file keeps rbac and rules, switched off.
+	if _, err := Load(write(t, "auth: {mode: none, api_keys: {}}\nrbac: {owners: [key:k]}")); err != nil {
+		t.Errorf("mode none with rbac: %v", err)
+	}
+}

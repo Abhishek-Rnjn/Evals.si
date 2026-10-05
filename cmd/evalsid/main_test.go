@@ -26,6 +26,7 @@ func TestRun(t *testing.T) {
 		{name: "version", args: []string{"version"}, wantCode: 0, wantOut: "api evalsi.v1alpha1"},
 		{name: "serve bad config", args: []string{"serve", "--config", "/nonexistent/evalsi.yaml"}, wantCode: 1, wantErr: "no such file"},
 		{name: "serve bad flag", args: []string{"serve", "--bogus"}, wantCode: 2, wantErr: "flag provided but not defined"},
+		{name: "serve network without auth", args: []string{"serve", "--listen", "0.0.0.0:0"}, wantCode: 1, wantErr: "without authentication"},
 		{name: "unknown", args: []string{"bogus"}, wantCode: 2, wantErr: `unknown command "bogus"`},
 	}
 	for _, tt := range tests {
@@ -104,5 +105,13 @@ authorization:
 	out.Reset()
 	if code := run(context.Background(), []string{"auth", "check", "--config", cfg, "--api-key", "evk_wrong", "--action", "runs.read"}, &out, &errb); code != 3 || !strings.Contains(out.String(), "FAILED") {
 		t.Errorf("bad key: %d %s", code, out.String())
+	}
+}
+
+func TestEnvTrue(t *testing.T) {
+	for v, want := range map[string]bool{"1": true, "true": true, "ON": true, "yes": true, "": false, "0": false, "false": false} {
+		if envTrue(v) != want {
+			t.Errorf("envTrue(%q) = %v", v, !want)
+		}
 	}
 }

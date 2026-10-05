@@ -4,6 +4,7 @@
 #
 #   bin/evalsid auth new-key      # paste the printed hash below
 #   evalsi serve --config ../examples/auth/local.yaml
+# Development without access control: add --no-auth to `serve`, or set EVALSID_NO_AUTH=1.
 listen: 127.0.0.1:8080
 data_dir: .evalsi-auth-demo
 

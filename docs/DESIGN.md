@@ -912,7 +912,7 @@ Platform builders run Evals.si as a shared service ([decision 0008](decisions/00
 
   Our config keeps evalsi.yaml's snake_case, but every concept and name maps one to one.
 - **Secure by default:**
-  - On a non-loopback address, `evalsid` refuses to start without an `auth` section. Running unauthenticated takes an explicit `auth: {mode: none}`, which logs a warning on every start.
+  - On a non-loopback address, `evalsid` refuses to start without an `auth` section. Running unauthenticated takes an explicit `auth: {mode: none}`, `evalsid serve --no-auth` or `EVALSID_NO_AUTH=1` (for development and tests; the rest of the auth config stays in place, unenforced). Each logs a warning on every start.
   - With auth enabled, the default decision is deny.
 - **One enforcement point.** A single authenticator and authorizer covers every surface: gRPC, gRPC-Web, Connect, the REST routes, OTLP ingest, `/metrics` and reflection. A new RPC cannot ship without an entry in the action table; a test walks the service descriptors to enforce this.
 - **Roles shaped by the application.** Built-in roles cover the common cases. Clients define custom roles from the permission list, with optional CEL conditions, and can map roles straight from their identity provider's claims. Global CEL rules are only for install-wide restrictions.

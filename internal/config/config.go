@@ -140,6 +140,12 @@ func Default() Config {
 
 // Load reads a YAML (or JSON) file over the defaults. An empty path returns the defaults.
 func Load(path string) (Config, error) {
+	return LoadWith(path)
+}
+
+// LoadWith reads a file like Load, then applies overrides (command-line
+// flags) before validating, so overrides get the same checks as the file.
+func LoadWith(path string, overrides ...func(*Config)) (Config, error) {
 	cfg := Default()
 	if path != "" {
 		raw, err := os.ReadFile(path)
@@ -150,7 +156,21 @@ func Load(path string) (Config, error) {
 			return cfg, fmt.Errorf("%s: %w", path, err)
 		}
 	}
+	for _, o := range overrides {
+		o(&cfg)
+	}
 	return cfg, cfg.Validate()
+}
+
+// DisableAuth turns authentication and authorization off for development
+// (`evalsid serve --no-auth`, or EVALSID_NO_AUTH=1). The rest of the auth,
+// rbac and authorization sections stay in the config, unenforced, so
+// removing the switch restores them.
+func (c *Config) DisableAuth() {
+	if c.Auth == nil {
+		c.Auth = &auth.Config{}
+	}
+	c.Auth.Mode = auth.ModeNone
 }
 
 // Duration parses a validated duration field.
@@ -257,7 +277,8 @@ func (c Config) validateAccess() []error {
 	if c.Metrics.Listen != "" && !auth.IsLoopback(c.Metrics.Listen) {
 		errs = append(errs, fmt.Errorf("metrics.listen %s serves without authentication and must be a loopback address", c.Metrics.Listen))
 	}
-	if !c.AuthEnabled() && (len(c.RBAC.Roles) > 0 || len(c.RBAC.Projects) > 0 || len(c.RBAC.Owners) > 0 || len(c.Authorization.Rules) > 0) {
+	// With mode: none the sections are kept but switched off on purpose.
+	if c.Auth == nil && (len(c.RBAC.Roles) > 0 || len(c.RBAC.Projects) > 0 || len(c.RBAC.Owners) > 0 || len(c.Authorization.Rules) > 0) {
 		errs = append(errs, errors.New("rbac and authorization need an auth section; without one nothing would be enforced"))
 	}
 	return errs

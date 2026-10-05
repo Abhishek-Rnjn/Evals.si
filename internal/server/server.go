@@ -168,7 +168,8 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	}
 	switch {
 	case !cfg.AuthEnabled() && cfg.Auth != nil:
-		log.Warn("authentication is turned off (auth.mode: none): anyone who can reach evalsid can use it")
+		log.Warn("AUTHENTICATION IS OFF (auth.mode: none, --no-auth or EVALSID_NO_AUTH): every caller is an owner; "+
+			"use this for development only", "listen", cfg.Listen, "loopback", auth.IsLoopback(cfg.Listen))
 	case !cfg.AuthEnabled():
 		log.Info("no auth section: serving unauthenticated on loopback only")
 	}

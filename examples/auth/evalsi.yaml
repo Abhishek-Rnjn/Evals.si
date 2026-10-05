@@ -1,5 +1,6 @@
 # evalsid with identity and access. See docs/guides/identity.md.
 #   evalsi serve --config examples/auth/evalsi.yaml
+# Development without access control: add --no-auth to `serve`, or set EVALSID_NO_AUTH=1.
 listen: 0.0.0.0:8080
 data_dir: .evalsi
 

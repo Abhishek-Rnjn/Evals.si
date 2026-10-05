@@ -81,7 +81,19 @@ cd python && uv sync --all-packages          # installs evalsi[server] into pyth
 EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/server/evalsi.yaml
 ```
 
-On `127.0.0.1` with no `auth` section, the server runs without authentication, as the log says. That is fine on a laptop. To try access control, see [Try access control locally](#try-access-control-locally).
+**Authentication is optional.**
+
+- **Loopback, no `auth` section.** On `127.0.0.1` with no `auth` section the server runs without authentication, as the log says. That is fine on a laptop.
+- **Any other address** needs authentication, unless you switch it off explicitly.
+- **To switch it off for development or testing,** even with an `auth` section in the config, use one of:
+  - `evalsi serve --no-auth`;
+  - `evalsid serve --no-auth`;
+  - `EVALSID_NO_AUTH=1` (convenient in containers);
+  - `auth: {mode: none}` in the file.
+
+  With any of these, every caller is treated as an owner and the server logs a warning at startup. The rest of your auth, roles and rules stay in the config, unenforced, so removing the switch restores them.
+
+To try access control, see [Try access control locally](#try-access-control-locally).
 
 The example's default judge is Claude: export `ANTHROPIC_API_KEY` before starting the server for `llm-judge` to work. Without it, `exact-match` still scores and `llm-judge` reports an error, never a zero. To use a local OpenAI-compatible model instead, edit the `local` judge in the config.
 
@@ -240,7 +252,7 @@ Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN`; GitHub Actions jobs set `
      --action runs.create --project demo --resource '{"target":{"model":"gpt-5"}}'   # deny: model not allowed
    ```
 
-Delete `python/.evalsi-auth-demo` to start over.
+Delete `python/.evalsi-auth-demo` to start over. To use the same config without access control for a while, add `--no-auth` to the `serve` command.
 
 ## Repository layout
 
