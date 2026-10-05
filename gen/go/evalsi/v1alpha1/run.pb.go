@@ -155,8 +155,13 @@ type RunSpec struct {
 	Trials  int32           `protobuf:"varint,5,opt,name=trials,proto3" json:"trials,omitempty"`
 	Summary *SummaryOptions `protobuf:"bytes,6,opt,name=summary,proto3" json:"summary,omitempty"`
 	// All gates must pass for the run to succeed.
-	Gates         []*Gate `protobuf:"bytes,7,rep,name=gates,proto3" json:"gates,omitempty"`
-	Budget        *Budget `protobuf:"bytes,8,opt,name=budget,proto3" json:"budget,omitempty"`
+	Gates  []*Gate `protobuf:"bytes,7,rep,name=gates,proto3" json:"gates,omitempty"`
+	Budget *Budget `protobuf:"bytes,8,opt,name=budget,proto3" json:"budget,omitempty"`
+	// Drives an agent through each record as a task (an agent run). Without
+	// one, a target with an agent uses the built-in harness with defaults.
+	Harness *Harness `protobuf:"bytes,9,opt,name=harness,proto3" json:"harness,omitempty"`
+	// Where agent tasks run; records may override it in metadata["environment"].
+	Environment   *Environment `protobuf:"bytes,10,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -247,9 +252,24 @@ func (x *RunSpec) GetBudget() *Budget {
 	return nil
 }
 
+func (x *RunSpec) GetHarness() *Harness {
+	if x != nil {
+		return x.Harness
+	}
+	return nil
+}
+
+func (x *RunSpec) GetEnvironment() *Environment {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
+}
+
 type Target struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "openai-compatible" or "anthropic".
+	// "openai-compatible" or "anthropic". For an agent run without an agent
+	// below, the model the built-in reference agent uses.
 	Connector string `protobuf:"bytes,1,opt,name=connector,proto3" json:"connector,omitempty"`
 	Model     string `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
 	// Required for openai-compatible, for example http://localhost:8000/v1.
@@ -260,7 +280,9 @@ type Target struct {
 	MaxTokens    int32    `protobuf:"varint,6,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"`
 	Temperature  *float64 `protobuf:"fixed64,7,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
 	// Anthropic only: output_config.effort.
-	Effort        string `protobuf:"bytes,8,opt,name=effort,proto3" json:"effort,omitempty"`
+	Effort string `protobuf:"bytes,8,opt,name=effort,proto3" json:"effort,omitempty"`
+	// A bring-your-own agent instead of a model.
+	Agent         *AgentTarget `protobuf:"bytes,9,opt,name=agent,proto3" json:"agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -349,6 +371,13 @@ func (x *Target) GetEffort() string {
 		return x.Effort
 	}
 	return ""
+}
+
+func (x *Target) GetAgent() *AgentTarget {
+	if x != nil {
+		return x.Agent
+	}
+	return nil
 }
 
 type DatasetSource struct {
@@ -947,7 +976,7 @@ var File_evalsi_v1alpha1_run_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\n" +
-	"\x19evalsi/v1alpha1/run.proto\x12\x0fevalsi.v1alpha1\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfa\x02\n" +
+	"\x19evalsi/v1alpha1/run.proto\x12\x0fevalsi.v1alpha1\x1a\x1bevalsi/v1alpha1/agent.proto\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xee\x03\n" +
 	"\aRunSpec\x12/\n" +
 	"\x06target\x18\x01 \x01(\v2\x17.evalsi.v1alpha1.TargetR\x06target\x128\n" +
 	"\adataset\x18\x02 \x01(\v2\x1e.evalsi.v1alpha1.DatasetSourceR\adataset\x12=\n" +
@@ -958,7 +987,10 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x06trials\x18\x05 \x01(\x05R\x06trials\x129\n" +
 	"\asummary\x18\x06 \x01(\v2\x1f.evalsi.v1alpha1.SummaryOptionsR\asummary\x12+\n" +
 	"\x05gates\x18\a \x03(\v2\x15.evalsi.v1alpha1.GateR\x05gates\x12/\n" +
-	"\x06budget\x18\b \x01(\v2\x17.evalsi.v1alpha1.BudgetR\x06budget\"\x8a\x02\n" +
+	"\x06budget\x18\b \x01(\v2\x17.evalsi.v1alpha1.BudgetR\x06budget\x122\n" +
+	"\aharness\x18\t \x01(\v2\x18.evalsi.v1alpha1.HarnessR\aharness\x12>\n" +
+	"\venvironment\x18\n" +
+	" \x01(\v2\x1c.evalsi.v1alpha1.EnvironmentR\venvironment\"\xbe\x02\n" +
 	"\x06Target\x12\x1c\n" +
 	"\tconnector\x18\x01 \x01(\tR\tconnector\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x19\n" +
@@ -968,7 +1000,8 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\n" +
 	"max_tokens\x18\x06 \x01(\x05R\tmaxTokens\x12%\n" +
 	"\vtemperature\x18\a \x01(\x01H\x00R\vtemperature\x88\x01\x01\x12\x16\n" +
-	"\x06effort\x18\b \x01(\tR\x06effortB\x0e\n" +
+	"\x06effort\x18\b \x01(\tR\x06effort\x122\n" +
+	"\x05agent\x18\t \x01(\v2\x1c.evalsi.v1alpha1.AgentTargetR\x05agentB\x0e\n" +
 	"\f_temperature\"\x96\x02\n" +
 	"\rDatasetSource\x128\n" +
 	"\x06inline\x18\x01 \x01(\v2\x1e.evalsi.v1alpha1.InlineRecordsH\x00R\x06inline\x12\x14\n" +
@@ -1075,10 +1108,13 @@ var file_evalsi_v1alpha1_run_proto_goTypes = []any{
 	nil,                           // 12: evalsi.v1alpha1.Run.LabelsEntry
 	(*EvaluatorRef)(nil),          // 13: evalsi.v1alpha1.EvaluatorRef
 	(*SummaryOptions)(nil),        // 14: evalsi.v1alpha1.SummaryOptions
-	(*Record)(nil),                // 15: evalsi.v1alpha1.Record
-	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
-	(*MetricSummary)(nil),         // 17: evalsi.v1alpha1.MetricSummary
-	(*Usage)(nil),                 // 18: evalsi.v1alpha1.Usage
+	(*Harness)(nil),               // 15: evalsi.v1alpha1.Harness
+	(*Environment)(nil),           // 16: evalsi.v1alpha1.Environment
+	(*AgentTarget)(nil),           // 17: evalsi.v1alpha1.AgentTarget
+	(*Record)(nil),                // 18: evalsi.v1alpha1.Record
+	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
+	(*MetricSummary)(nil),         // 20: evalsi.v1alpha1.MetricSummary
+	(*Usage)(nil),                 // 21: evalsi.v1alpha1.Usage
 }
 var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	3,  // 0: evalsi.v1alpha1.RunSpec.target:type_name -> evalsi.v1alpha1.Target
@@ -1087,27 +1123,30 @@ var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	14, // 3: evalsi.v1alpha1.RunSpec.summary:type_name -> evalsi.v1alpha1.SummaryOptions
 	6,  // 4: evalsi.v1alpha1.RunSpec.gates:type_name -> evalsi.v1alpha1.Gate
 	8,  // 5: evalsi.v1alpha1.RunSpec.budget:type_name -> evalsi.v1alpha1.Budget
-	5,  // 6: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
-	11, // 7: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
-	15, // 8: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
-	0,  // 9: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
-	6,  // 10: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
-	2,  // 11: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
-	1,  // 12: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
-	16, // 13: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
-	16, // 14: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
-	16, // 15: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
-	9,  // 16: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
-	17, // 17: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
-	7,  // 18: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
-	18, // 19: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
-	18, // 20: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
-	12, // 21: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	15, // 6: evalsi.v1alpha1.RunSpec.harness:type_name -> evalsi.v1alpha1.Harness
+	16, // 7: evalsi.v1alpha1.RunSpec.environment:type_name -> evalsi.v1alpha1.Environment
+	17, // 8: evalsi.v1alpha1.Target.agent:type_name -> evalsi.v1alpha1.AgentTarget
+	5,  // 9: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
+	11, // 10: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
+	18, // 11: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
+	0,  // 12: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
+	6,  // 13: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
+	2,  // 14: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
+	1,  // 15: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
+	19, // 16: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
+	19, // 17: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
+	19, // 18: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
+	9,  // 19: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
+	20, // 20: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
+	7,  // 21: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
+	21, // 22: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
+	21, // 23: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
+	12, // 24: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
+	25, // [25:25] is the sub-list for method output_type
+	25, // [25:25] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_proto_init() }
@@ -1115,6 +1154,7 @@ func file_evalsi_v1alpha1_run_proto_init() {
 	if File_evalsi_v1alpha1_run_proto != nil {
 		return
 	}
+	file_evalsi_v1alpha1_agent_proto_init()
 	file_evalsi_v1alpha1_evaluation_service_proto_init()
 	file_evalsi_v1alpha1_evaluator_proto_init()
 	file_evalsi_v1alpha1_record_proto_init()

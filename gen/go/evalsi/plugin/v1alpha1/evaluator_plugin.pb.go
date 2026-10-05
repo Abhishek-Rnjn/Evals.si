@@ -7,6 +7,7 @@
 package pluginv1alpha1
 
 import (
+	v1alpha11 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
 	v1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -612,11 +613,217 @@ func (x *LoadDatasetResponse) GetRecords() []*v1alpha1.Record {
 	return nil
 }
 
+type RunTaskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Spec          *v1alpha1.RunSpec      `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	Record        *v1alpha1.Record       `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
+	Trial         int32                  `protobuf:"varint,3,opt,name=trial,proto3" json:"trial,omitempty"`
+	RunId         string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunTaskRequest) Reset() {
+	*x = RunTaskRequest{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunTaskRequest) ProtoMessage() {}
+
+func (x *RunTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunTaskRequest.ProtoReflect.Descriptor instead.
+func (*RunTaskRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RunTaskRequest) GetSpec() *v1alpha1.RunSpec {
+	if x != nil {
+		return x.Spec
+	}
+	return nil
+}
+
+func (x *RunTaskRequest) GetRecord() *v1alpha1.Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+func (x *RunTaskRequest) GetTrial() int32 {
+	if x != nil {
+		return x.Trial
+	}
+	return 0
+}
+
+func (x *RunTaskRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+type TaskResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The record with output, trajectory, usage, check and provenance
+	// (including the sandbox isolation). Empty when error is set.
+	Record *v1alpha1.Record `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+	// The task could not run (environment setup failed, the agent was
+	// unreachable). The record is graded as an error, not as a failure.
+	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TaskResult) Reset() {
+	*x = TaskResult{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TaskResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TaskResult) ProtoMessage() {}
+
+func (x *TaskResult) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TaskResult.ProtoReflect.Descriptor instead.
+func (*TaskResult) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *TaskResult) GetRecord() *v1alpha1.Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+func (x *TaskResult) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type RunTaskResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*RunTaskResponse_Trajectory
+	//	*RunTaskResponse_Result
+	Event         isRunTaskResponse_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunTaskResponse) Reset() {
+	*x = RunTaskResponse{}
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunTaskResponse) ProtoMessage() {}
+
+func (x *RunTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunTaskResponse.ProtoReflect.Descriptor instead.
+func (*RunTaskResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RunTaskResponse) GetEvent() isRunTaskResponse_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *RunTaskResponse) GetTrajectory() *v1alpha11.TrajectoryEvent {
+	if x != nil {
+		if x, ok := x.Event.(*RunTaskResponse_Trajectory); ok {
+			return x.Trajectory
+		}
+	}
+	return nil
+}
+
+func (x *RunTaskResponse) GetResult() *TaskResult {
+	if x != nil {
+		if x, ok := x.Event.(*RunTaskResponse_Result); ok {
+			return x.Result
+		}
+	}
+	return nil
+}
+
+type isRunTaskResponse_Event interface {
+	isRunTaskResponse_Event()
+}
+
+type RunTaskResponse_Trajectory struct {
+	Trajectory *v1alpha11.TrajectoryEvent `protobuf:"bytes,1,opt,name=trajectory,proto3,oneof"`
+}
+
+type RunTaskResponse_Result struct {
+	Result *TaskResult `protobuf:"bytes,2,opt,name=result,proto3,oneof"`
+}
+
+func (*RunTaskResponse_Trajectory) isRunTaskResponse_Event() {}
+
+func (*RunTaskResponse_Result) isRunTaskResponse_Event() {}
+
 var File_evalsi_plugin_v1alpha1_evaluator_plugin_proto protoreflect.FileDescriptor
 
 const file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc = "" +
 	"\n" +
-	"-evalsi/plugin/v1alpha1/evaluator_plugin.proto\x12\x16evalsi.plugin.v1alpha1\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x19evalsi/v1alpha1/run.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x11\n" +
+	"-evalsi/plugin/v1alpha1/evaluator_plugin.proto\x12\x16evalsi.plugin.v1alpha1\x1a%evalsi/harness/v1alpha1/harness.proto\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x19evalsi/v1alpha1/run.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x11\n" +
 	"\x0fDescribeRequest\"V\n" +
 	"\x10DescribeResponse\x12B\n" +
 	"\n" +
@@ -652,13 +859,29 @@ const file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc = "" +
 	"\x12LoadDatasetRequest\x126\n" +
 	"\x06source\x18\x01 \x01(\v2\x1e.evalsi.v1alpha1.DatasetSourceR\x06source\"H\n" +
 	"\x13LoadDatasetResponse\x121\n" +
-	"\arecords\x18\x01 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords2\xfc\x03\n" +
+	"\arecords\x18\x01 \x03(\v2\x17.evalsi.v1alpha1.RecordR\arecords\"\x9c\x01\n" +
+	"\x0eRunTaskRequest\x12,\n" +
+	"\x04spec\x18\x01 \x01(\v2\x18.evalsi.v1alpha1.RunSpecR\x04spec\x12/\n" +
+	"\x06record\x18\x02 \x01(\v2\x17.evalsi.v1alpha1.RecordR\x06record\x12\x14\n" +
+	"\x05trial\x18\x03 \x01(\x05R\x05trial\x12\x15\n" +
+	"\x06run_id\x18\x04 \x01(\tR\x05runId\"S\n" +
+	"\n" +
+	"TaskResult\x12/\n" +
+	"\x06record\x18\x01 \x01(\v2\x17.evalsi.v1alpha1.RecordR\x06record\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xa4\x01\n" +
+	"\x0fRunTaskResponse\x12J\n" +
+	"\n" +
+	"trajectory\x18\x01 \x01(\v2(.evalsi.harness.v1alpha1.TrajectoryEventH\x00R\n" +
+	"trajectory\x12<\n" +
+	"\x06result\x18\x02 \x01(\v2\".evalsi.plugin.v1alpha1.TaskResultH\x00R\x06resultB\a\n" +
+	"\x05event2\xda\x04\n" +
 	"\x16EvaluatorPluginService\x12]\n" +
 	"\bDescribe\x12'.evalsi.plugin.v1alpha1.DescribeRequest\x1a(.evalsi.plugin.v1alpha1.DescribeResponse\x12a\n" +
 	"\bEvaluate\x12'.evalsi.plugin.v1alpha1.EvaluateRequest\x1a(.evalsi.plugin.v1alpha1.EvaluateResponse(\x010\x01\x12W\n" +
 	"\x06Reduce\x12%.evalsi.plugin.v1alpha1.ReduceRequest\x1a&.evalsi.plugin.v1alpha1.ReduceResponse\x12]\n" +
 	"\bGenerate\x12'.evalsi.plugin.v1alpha1.GenerateRequest\x1a(.evalsi.plugin.v1alpha1.GenerateResponse\x12h\n" +
-	"\vLoadDataset\x12*.evalsi.plugin.v1alpha1.LoadDatasetRequest\x1a+.evalsi.plugin.v1alpha1.LoadDatasetResponse0\x01B\xfc\x01\n" +
+	"\vLoadDataset\x12*.evalsi.plugin.v1alpha1.LoadDatasetRequest\x1a+.evalsi.plugin.v1alpha1.LoadDatasetResponse0\x01\x12\\\n" +
+	"\aRunTask\x12&.evalsi.plugin.v1alpha1.RunTaskRequest\x1a'.evalsi.plugin.v1alpha1.RunTaskResponse0\x01B\xfc\x01\n" +
 	"\x1acom.evalsi.plugin.v1alpha1B\x14EvaluatorPluginProtoP\x01ZNgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1;pluginv1alpha1\xa2\x02\x03EPX\xaa\x02\x16Evalsi.Plugin.V1alpha1\xca\x02\x16Evalsi\\Plugin\\V1alpha1\xe2\x02\"Evalsi\\Plugin\\V1alpha1\\GPBMetadata\xea\x02\x18Evalsi::Plugin::V1alpha1b\x06proto3"
 
 var (
@@ -673,7 +896,7 @@ func file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescGZIP() []byte {
 	return file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescData
 }
 
-var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_goTypes = []any{
 	(*DescribeRequest)(nil),            // 0: evalsi.plugin.v1alpha1.DescribeRequest
 	(*DescribeResponse)(nil),           // 1: evalsi.plugin.v1alpha1.DescribeResponse
@@ -686,47 +909,59 @@ var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_goTypes = []any{
 	(*GenerateResponse)(nil),           // 8: evalsi.plugin.v1alpha1.GenerateResponse
 	(*LoadDatasetRequest)(nil),         // 9: evalsi.plugin.v1alpha1.LoadDatasetRequest
 	(*LoadDatasetResponse)(nil),        // 10: evalsi.plugin.v1alpha1.LoadDatasetResponse
-	(*v1alpha1.EvaluatorManifest)(nil), // 11: evalsi.v1alpha1.EvaluatorManifest
-	(*structpb.Struct)(nil),            // 12: google.protobuf.Struct
-	(*v1alpha1.Record)(nil),            // 13: evalsi.v1alpha1.Record
-	(*v1alpha1.EvaluationResult)(nil),  // 14: evalsi.v1alpha1.EvaluationResult
-	(*v1alpha1.Score)(nil),             // 15: evalsi.v1alpha1.Score
-	(*v1alpha1.Target)(nil),            // 16: evalsi.v1alpha1.Target
-	(*v1alpha1.Content)(nil),           // 17: evalsi.v1alpha1.Content
-	(*v1alpha1.Usage)(nil),             // 18: evalsi.v1alpha1.Usage
-	(*v1alpha1.DatasetSource)(nil),     // 19: evalsi.v1alpha1.DatasetSource
+	(*RunTaskRequest)(nil),             // 11: evalsi.plugin.v1alpha1.RunTaskRequest
+	(*TaskResult)(nil),                 // 12: evalsi.plugin.v1alpha1.TaskResult
+	(*RunTaskResponse)(nil),            // 13: evalsi.plugin.v1alpha1.RunTaskResponse
+	(*v1alpha1.EvaluatorManifest)(nil), // 14: evalsi.v1alpha1.EvaluatorManifest
+	(*structpb.Struct)(nil),            // 15: google.protobuf.Struct
+	(*v1alpha1.Record)(nil),            // 16: evalsi.v1alpha1.Record
+	(*v1alpha1.EvaluationResult)(nil),  // 17: evalsi.v1alpha1.EvaluationResult
+	(*v1alpha1.Score)(nil),             // 18: evalsi.v1alpha1.Score
+	(*v1alpha1.Target)(nil),            // 19: evalsi.v1alpha1.Target
+	(*v1alpha1.Content)(nil),           // 20: evalsi.v1alpha1.Content
+	(*v1alpha1.Usage)(nil),             // 21: evalsi.v1alpha1.Usage
+	(*v1alpha1.DatasetSource)(nil),     // 22: evalsi.v1alpha1.DatasetSource
+	(*v1alpha1.RunSpec)(nil),           // 23: evalsi.v1alpha1.RunSpec
+	(*v1alpha11.TrajectoryEvent)(nil),  // 24: evalsi.harness.v1alpha1.TrajectoryEvent
 }
 var file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_depIdxs = []int32{
-	11, // 0: evalsi.plugin.v1alpha1.DescribeResponse.evaluators:type_name -> evalsi.v1alpha1.EvaluatorManifest
-	12, // 1: evalsi.plugin.v1alpha1.EvaluateRequest.params:type_name -> google.protobuf.Struct
-	13, // 2: evalsi.plugin.v1alpha1.EvaluateRequest.records:type_name -> evalsi.v1alpha1.Record
-	14, // 3: evalsi.plugin.v1alpha1.EvaluateResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	12, // 4: evalsi.plugin.v1alpha1.ReduceRequest.params:type_name -> google.protobuf.Struct
-	13, // 5: evalsi.plugin.v1alpha1.ReduceRequest.records:type_name -> evalsi.v1alpha1.Record
-	14, // 6: evalsi.plugin.v1alpha1.ReduceRequest.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	15, // 7: evalsi.plugin.v1alpha1.ReduceResponse.scores:type_name -> evalsi.v1alpha1.Score
-	16, // 8: evalsi.plugin.v1alpha1.GenerateRequest.target:type_name -> evalsi.v1alpha1.Target
-	13, // 9: evalsi.plugin.v1alpha1.GenerateRequest.records:type_name -> evalsi.v1alpha1.Record
-	17, // 10: evalsi.plugin.v1alpha1.GenerateResult.output:type_name -> evalsi.v1alpha1.Content
-	18, // 11: evalsi.plugin.v1alpha1.GenerateResult.usage:type_name -> evalsi.v1alpha1.Usage
+	14, // 0: evalsi.plugin.v1alpha1.DescribeResponse.evaluators:type_name -> evalsi.v1alpha1.EvaluatorManifest
+	15, // 1: evalsi.plugin.v1alpha1.EvaluateRequest.params:type_name -> google.protobuf.Struct
+	16, // 2: evalsi.plugin.v1alpha1.EvaluateRequest.records:type_name -> evalsi.v1alpha1.Record
+	17, // 3: evalsi.plugin.v1alpha1.EvaluateResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	15, // 4: evalsi.plugin.v1alpha1.ReduceRequest.params:type_name -> google.protobuf.Struct
+	16, // 5: evalsi.plugin.v1alpha1.ReduceRequest.records:type_name -> evalsi.v1alpha1.Record
+	17, // 6: evalsi.plugin.v1alpha1.ReduceRequest.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	18, // 7: evalsi.plugin.v1alpha1.ReduceResponse.scores:type_name -> evalsi.v1alpha1.Score
+	19, // 8: evalsi.plugin.v1alpha1.GenerateRequest.target:type_name -> evalsi.v1alpha1.Target
+	16, // 9: evalsi.plugin.v1alpha1.GenerateRequest.records:type_name -> evalsi.v1alpha1.Record
+	20, // 10: evalsi.plugin.v1alpha1.GenerateResult.output:type_name -> evalsi.v1alpha1.Content
+	21, // 11: evalsi.plugin.v1alpha1.GenerateResult.usage:type_name -> evalsi.v1alpha1.Usage
 	7,  // 12: evalsi.plugin.v1alpha1.GenerateResponse.results:type_name -> evalsi.plugin.v1alpha1.GenerateResult
-	19, // 13: evalsi.plugin.v1alpha1.LoadDatasetRequest.source:type_name -> evalsi.v1alpha1.DatasetSource
-	13, // 14: evalsi.plugin.v1alpha1.LoadDatasetResponse.records:type_name -> evalsi.v1alpha1.Record
-	0,  // 15: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:input_type -> evalsi.plugin.v1alpha1.DescribeRequest
-	2,  // 16: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:input_type -> evalsi.plugin.v1alpha1.EvaluateRequest
-	4,  // 17: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:input_type -> evalsi.plugin.v1alpha1.ReduceRequest
-	6,  // 18: evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate:input_type -> evalsi.plugin.v1alpha1.GenerateRequest
-	9,  // 19: evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset:input_type -> evalsi.plugin.v1alpha1.LoadDatasetRequest
-	1,  // 20: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:output_type -> evalsi.plugin.v1alpha1.DescribeResponse
-	3,  // 21: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:output_type -> evalsi.plugin.v1alpha1.EvaluateResponse
-	5,  // 22: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:output_type -> evalsi.plugin.v1alpha1.ReduceResponse
-	8,  // 23: evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate:output_type -> evalsi.plugin.v1alpha1.GenerateResponse
-	10, // 24: evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset:output_type -> evalsi.plugin.v1alpha1.LoadDatasetResponse
-	20, // [20:25] is the sub-list for method output_type
-	15, // [15:20] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	22, // 13: evalsi.plugin.v1alpha1.LoadDatasetRequest.source:type_name -> evalsi.v1alpha1.DatasetSource
+	16, // 14: evalsi.plugin.v1alpha1.LoadDatasetResponse.records:type_name -> evalsi.v1alpha1.Record
+	23, // 15: evalsi.plugin.v1alpha1.RunTaskRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
+	16, // 16: evalsi.plugin.v1alpha1.RunTaskRequest.record:type_name -> evalsi.v1alpha1.Record
+	16, // 17: evalsi.plugin.v1alpha1.TaskResult.record:type_name -> evalsi.v1alpha1.Record
+	24, // 18: evalsi.plugin.v1alpha1.RunTaskResponse.trajectory:type_name -> evalsi.harness.v1alpha1.TrajectoryEvent
+	12, // 19: evalsi.plugin.v1alpha1.RunTaskResponse.result:type_name -> evalsi.plugin.v1alpha1.TaskResult
+	0,  // 20: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:input_type -> evalsi.plugin.v1alpha1.DescribeRequest
+	2,  // 21: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:input_type -> evalsi.plugin.v1alpha1.EvaluateRequest
+	4,  // 22: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:input_type -> evalsi.plugin.v1alpha1.ReduceRequest
+	6,  // 23: evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate:input_type -> evalsi.plugin.v1alpha1.GenerateRequest
+	9,  // 24: evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset:input_type -> evalsi.plugin.v1alpha1.LoadDatasetRequest
+	11, // 25: evalsi.plugin.v1alpha1.EvaluatorPluginService.RunTask:input_type -> evalsi.plugin.v1alpha1.RunTaskRequest
+	1,  // 26: evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe:output_type -> evalsi.plugin.v1alpha1.DescribeResponse
+	3,  // 27: evalsi.plugin.v1alpha1.EvaluatorPluginService.Evaluate:output_type -> evalsi.plugin.v1alpha1.EvaluateResponse
+	5,  // 28: evalsi.plugin.v1alpha1.EvaluatorPluginService.Reduce:output_type -> evalsi.plugin.v1alpha1.ReduceResponse
+	8,  // 29: evalsi.plugin.v1alpha1.EvaluatorPluginService.Generate:output_type -> evalsi.plugin.v1alpha1.GenerateResponse
+	10, // 30: evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset:output_type -> evalsi.plugin.v1alpha1.LoadDatasetResponse
+	13, // 31: evalsi.plugin.v1alpha1.EvaluatorPluginService.RunTask:output_type -> evalsi.plugin.v1alpha1.RunTaskResponse
+	26, // [26:32] is the sub-list for method output_type
+	20, // [20:26] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_init() }
@@ -734,13 +969,17 @@ func file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_init() {
 	if File_evalsi_plugin_v1alpha1_evaluator_plugin_proto != nil {
 		return
 	}
+	file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_msgTypes[13].OneofWrappers = []any{
+		(*RunTaskResponse_Trajectory)(nil),
+		(*RunTaskResponse_Result)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc), len(file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

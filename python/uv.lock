@@ -17,11 +17,13 @@ resolution-markers = [
 [manifest]
 members = [
     "evalsi",
+    "evalsi-harness",
 ]
 
 [manifest.dependency-groups]
 dev = [
     { name = "evalsi", extras = ["anthropic", "jsonschema", "server"], editable = "evalsi" },
+    { name = "evalsi-harness", editable = "evalsi-harness" },
     { name = "grpcio-tools", specifier = "==1.84.0" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "mypy-protobuf", specifier = "==5.0.0" },
@@ -540,6 +542,20 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
 ]
 provides-extras = ["anthropic", "hf", "jsonschema", "server"]
+
+[[package]]
+name = "evalsi-harness"
+source = { editable = "evalsi-harness" }
+dependencies = [
+    { name = "evalsi", extra = ["server"] },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "evalsi", extras = ["server"], editable = "evalsi" },
+    { name = "httpx", specifier = ">=0.27" },
+]
 
 [[package]]
 name = "filelock"

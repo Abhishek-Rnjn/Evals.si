@@ -54,6 +54,11 @@ class EvaluatorPluginServiceStub:
     """Runs the target (the system under test) on records to produce outputs."""
     LoadDataset: _grpc.UnaryStreamMultiCallable[_evaluator_plugin_pb2.LoadDatasetRequest, _evaluator_plugin_pb2.LoadDatasetResponse]
     """Loads a dataset (file or hf:// URI) and streams its records in chunks."""
+    RunTask: _grpc.UnaryStreamMultiCallable[_evaluator_plugin_pb2.RunTaskRequest, _evaluator_plugin_pb2.RunTaskResponse]
+    """Runs one agent task (a record and a trial) through the spec's harness,
+    streaming trajectory events, then the record with its output,
+    trajectory and check.
+    """
 
 @_typing.type_check_only
 class EvaluatorPluginServiceAsyncStub(EvaluatorPluginServiceStub):
@@ -81,6 +86,11 @@ class EvaluatorPluginServiceAsyncStub(EvaluatorPluginServiceStub):
     """Runs the target (the system under test) on records to produce outputs."""
     LoadDataset: _aio.UnaryStreamMultiCallable[_evaluator_plugin_pb2.LoadDatasetRequest, _evaluator_plugin_pb2.LoadDatasetResponse]  # type: ignore[assignment]
     """Loads a dataset (file or hf:// URI) and streams its records in chunks."""
+    RunTask: _aio.UnaryStreamMultiCallable[_evaluator_plugin_pb2.RunTaskRequest, _evaluator_plugin_pb2.RunTaskResponse]  # type: ignore[assignment]
+    """Runs one agent task (a record and a trial) through the spec's harness,
+    streaming trajectory events, then the record with its output,
+    trajectory and check.
+    """
 
 class EvaluatorPluginServiceServicer(metaclass=_abc_1.ABCMeta):
     """EvaluatorPluginService is implemented by every out-of-process evaluator
@@ -135,5 +145,16 @@ class EvaluatorPluginServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_abc.Iterator[_evaluator_plugin_pb2.LoadDatasetResponse], _abc.AsyncIterator[_evaluator_plugin_pb2.LoadDatasetResponse]]:
         """Loads a dataset (file or hf:// URI) and streams its records in chunks."""
+
+    @_abc_1.abstractmethod
+    def RunTask(
+        self,
+        request: _evaluator_plugin_pb2.RunTaskRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_abc.Iterator[_evaluator_plugin_pb2.RunTaskResponse], _abc.AsyncIterator[_evaluator_plugin_pb2.RunTaskResponse]]:
+        """Runs one agent task (a record and a trial) through the spec's harness,
+        streaming trajectory events, then the record with its output,
+        trajectory and check.
+        """
 
 def add_EvaluatorPluginServiceServicer_to_server(servicer: EvaluatorPluginServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

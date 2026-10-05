@@ -1,13 +1,15 @@
 # uv workspace for the Python half of Evals.si (SDK, packs, adapters, harness).
 [tool.uv.workspace]
-members = ["evalsi"]
+members = ["evalsi", "evalsi-harness"]
 
 [tool.uv.sources]
 evalsi = { workspace = true }
+evalsi-harness = { workspace = true }
 
 [dependency-groups]
 dev = [
     "evalsi[anthropic,jsonschema,server]",
+    "evalsi-harness",
     "grpcio-tools==1.84.0",
     "mypy-protobuf==5.0.0",
     "types-grpcio",
@@ -40,12 +42,12 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["evalsi", "evalsi_*", "conftest"]
+known-first-party = ["evalsi", "evalsi_harness", "evalsi_*", "conftest"]
 
 [tool.mypy]
 strict = true
 python_version = "3.11"
-files = ["evalsi/src", "evalsi/tests"]
+files = ["evalsi/src", "evalsi/tests", "evalsi-harness/src", "evalsi-harness/tests"]
 
 [[tool.mypy.overrides]]
 module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*"]
@@ -62,4 +64,4 @@ module = [
 ignore_errors = true
 
 [tool.pytest.ini_options]
-testpaths = ["evalsi/tests"]
+testpaths = ["evalsi/tests", "evalsi-harness/tests"]

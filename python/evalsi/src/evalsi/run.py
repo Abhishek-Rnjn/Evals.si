@@ -7,6 +7,7 @@ and pass^k), gates decide success, and budgets stop runaway spend.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -45,6 +46,11 @@ class RunResult:
     @property
     def passed(self) -> bool:
         return all(g.passed for g in self.gates)
+
+
+def is_agent_run(spec: run_pb2.RunSpec) -> bool:
+    """A run that drives an agent through tasks (a harness or an agent target)."""
+    return spec.HasField("harness") or (spec.HasField("target") and spec.target.HasField("agent"))
 
 
 def target_config(target: run_pb2.Target) -> TargetConfig:
@@ -131,7 +137,11 @@ async def execute(
 
     judge_client = judge if isinstance(judge, JudgeClient) else None
     owned: JudgeClient | None = None
-    if judge_client is None and any(i.spec.requires.judge for i in instances):
+    agent_run = is_agent_run(spec)
+    needs_judge = any(i.spec.requires.judge for i in instances) or (
+        agent_run and spec.harness.builtin.HasField("user_simulator")
+    )
+    if judge_client is None and needs_judge:
         config = judge if isinstance(judge, JudgeConfig) else JudgeConfig.from_env()
         if config is None:
             raise EvaluatorConfigError(
@@ -139,21 +149,29 @@ async def execute(
             )
         owned = judge_client = create_judge(config, cache=JudgeCache() if cache else None)
 
-    target = create_target(target_config(spec.target)) if spec.HasField("target") else None
+    target = None
+    agent: _AgentRunner | None = None
+    if agent_run:
+        agent = _AgentRunner(spec, run, judge_client, concurrency)
+    elif spec.HasField("target"):
+        target = create_target(target_config(spec.target))
     target_usage, judge_usage = Usage(), Usage()
     results: list[EvaluationResult] = []
     all_outputs: list[Record] = []
     started = datetime.now(UTC)
     try:
         for trial in range(trials):
-            outputs, failed = await _produce(
-                target,
-                records,
-                trial,
-                target_usage,
-                concurrency=concurrency,
-                on_progress=on_progress,
-            )
+            if agent is not None:
+                outputs, failed = await agent.run_trial(records, trial, target_usage, on_progress)
+            else:
+                outputs, failed = await _produce(
+                    target,
+                    records,
+                    trial,
+                    target_usage,
+                    concurrency=concurrency,
+                    on_progress=on_progress,
+                )
             if (
                 spec.budget.max_target_tokens
                 and _tokens(target_usage) > spec.budget.max_target_tokens
@@ -184,6 +202,8 @@ async def execute(
     finally:
         if target is not None:
             await target.aclose()
+        if agent is not None:
+            await agent.aclose()
         if owned is not None:
             await owned.aclose()
 
@@ -206,6 +226,7 @@ async def execute(
         "spec": spec_to_dict(spec),
         "dataset": {"records": len(records), "sha256": records_hash(records)},
         "target": target.config.describe() if target is not None else None,
+        "agent": agent.describe() if agent is not None else None,
         "evaluators": [{"name": i.name, "ref": i.spec.ref, "params": i.params} for i in instances],
         "judge": judge_client.config.describe() if judge_client is not None else None,
         "trials": trials,
@@ -263,8 +284,97 @@ def _failed_results(
             evaluator=inst.name,
             evaluator_ref=inst.spec.ref,
             outcome=Outcome.ERROR,
-            reason=f"target failed: {error}",
+            reason=error if error.startswith("task failed:") else f"target failed: {error}",
         )
         for record, error in failed
         for inst in instances
     ]
+
+
+class _AgentRunner:
+    """Agent runs: each record is a task, driven through the spec's harness."""
+
+    def __init__(
+        self,
+        spec: run_pb2.RunSpec,
+        run: RunFile,
+        judge: JudgeClient | None,
+        concurrency: int,
+    ) -> None:
+        try:
+            from evalsi_harness import HarnessContext, load_harness
+        except ImportError as exc:
+            raise EvaluatorConfigError(
+                "this spec is an agent run, which needs the harness: pip install evalsi-harness"
+            ) from exc
+        from evalsi.sandbox.client import SandboxClient, connect
+
+        self.spec = spec
+        self.run = run
+        self.concurrency = concurrency
+        self._sandboxes: SandboxClient | None = None
+        self._lock = asyncio.Lock()
+
+        async def sandboxes() -> SandboxClient:
+            async with self._lock:
+                if self._sandboxes is None:
+                    self._sandboxes = await connect()
+                return self._sandboxes
+
+        def judge_for(name: str) -> JudgeClient:
+            if judge is None:
+                raise ValueError(
+                    "the user simulator needs a judge: pass --judge-* or EVALSI_JUDGE_*"
+                )
+            return judge
+
+        self.harness = load_harness(
+            spec, HarnessContext(sandboxes=sandboxes, judge=judge_for, base_dir=run.base_dir)
+        )
+
+    def describe(self) -> dict[str, Any]:
+        info = self.harness.describe()
+        return {
+            "harness": {"name": info.name, "version": info.version},
+            "agent": spec_to_dict(self.spec).get("target"),
+        }
+
+    async def run_trial(
+        self,
+        records: list[Record],
+        trial: int,
+        usage: Usage,
+        on_progress: ProgressFn | None,
+    ) -> tuple[list[Record], list[tuple[Record, str]]]:
+        from evalsi_harness import Task, run_task
+
+        semaphore = asyncio.Semaphore(self.concurrency)
+        done = 0
+        stage = f"agent tasks (trial {trial + 1})"
+        if on_progress:
+            on_progress(stage, 0, len(records))
+
+        async def one(record: Record) -> tuple[Record, Record | None, str]:
+            nonlocal done
+            async with semaphore:
+                task = Task.build(self.spec, record, trial=trial, run_id=self.run.name)
+                outcome = await run_task(task, self.harness)
+            done += 1
+            if on_progress:
+                on_progress(stage, done, len(records))
+            return record, outcome.record, outcome.error
+
+        outputs: list[Record] = []
+        failed: list[tuple[Record, str]] = []
+        for record, result, error in await asyncio.gather(*(one(r) for r in records)):
+            if result is None:
+                failed.append((record, f"task failed: {error}"))
+                continue
+            _add(usage, result.usage)
+            outputs.append(result)
+        return outputs, failed
+
+    async def aclose(self) -> None:
+        await self.harness.aclose()
+        if self._sandboxes is not None:
+            await self._sandboxes.aclose()

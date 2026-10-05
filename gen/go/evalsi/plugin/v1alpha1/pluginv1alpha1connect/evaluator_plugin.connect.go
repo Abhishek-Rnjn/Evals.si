@@ -48,6 +48,9 @@ const (
 	// EvaluatorPluginServiceLoadDatasetProcedure is the fully-qualified name of the
 	// EvaluatorPluginService's LoadDataset RPC.
 	EvaluatorPluginServiceLoadDatasetProcedure = "/evalsi.plugin.v1alpha1.EvaluatorPluginService/LoadDataset"
+	// EvaluatorPluginServiceRunTaskProcedure is the fully-qualified name of the
+	// EvaluatorPluginService's RunTask RPC.
+	EvaluatorPluginServiceRunTaskProcedure = "/evalsi.plugin.v1alpha1.EvaluatorPluginService/RunTask"
 )
 
 // EvaluatorPluginServiceClient is a client for the evalsi.plugin.v1alpha1.EvaluatorPluginService
@@ -65,6 +68,10 @@ type EvaluatorPluginServiceClient interface {
 	Generate(context.Context, *connect.Request[v1alpha1.GenerateRequest]) (*connect.Response[v1alpha1.GenerateResponse], error)
 	// Loads a dataset (file or hf:// URI) and streams its records in chunks.
 	LoadDataset(context.Context, *connect.Request[v1alpha1.LoadDatasetRequest]) (*connect.ServerStreamForClient[v1alpha1.LoadDatasetResponse], error)
+	// Runs one agent task (a record and a trial) through the spec's harness,
+	// streaming trajectory events, then the record with its output,
+	// trajectory and check.
+	RunTask(context.Context, *connect.Request[v1alpha1.RunTaskRequest]) (*connect.ServerStreamForClient[v1alpha1.RunTaskResponse], error)
 }
 
 // NewEvaluatorPluginServiceClient constructs a client for the
@@ -109,6 +116,12 @@ func NewEvaluatorPluginServiceClient(httpClient connect.HTTPClient, baseURL stri
 			connect.WithSchema(evaluatorPluginServiceMethods.ByName("LoadDataset")),
 			connect.WithClientOptions(opts...),
 		),
+		runTask: connect.NewClient[v1alpha1.RunTaskRequest, v1alpha1.RunTaskResponse](
+			httpClient,
+			baseURL+EvaluatorPluginServiceRunTaskProcedure,
+			connect.WithSchema(evaluatorPluginServiceMethods.ByName("RunTask")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -119,6 +132,7 @@ type evaluatorPluginServiceClient struct {
 	reduce      *connect.Client[v1alpha1.ReduceRequest, v1alpha1.ReduceResponse]
 	generate    *connect.Client[v1alpha1.GenerateRequest, v1alpha1.GenerateResponse]
 	loadDataset *connect.Client[v1alpha1.LoadDatasetRequest, v1alpha1.LoadDatasetResponse]
+	runTask     *connect.Client[v1alpha1.RunTaskRequest, v1alpha1.RunTaskResponse]
 }
 
 // Describe calls evalsi.plugin.v1alpha1.EvaluatorPluginService.Describe.
@@ -146,6 +160,11 @@ func (c *evaluatorPluginServiceClient) LoadDataset(ctx context.Context, req *con
 	return c.loadDataset.CallServerStream(ctx, req)
 }
 
+// RunTask calls evalsi.plugin.v1alpha1.EvaluatorPluginService.RunTask.
+func (c *evaluatorPluginServiceClient) RunTask(ctx context.Context, req *connect.Request[v1alpha1.RunTaskRequest]) (*connect.ServerStreamForClient[v1alpha1.RunTaskResponse], error) {
+	return c.runTask.CallServerStream(ctx, req)
+}
+
 // EvaluatorPluginServiceHandler is an implementation of the
 // evalsi.plugin.v1alpha1.EvaluatorPluginService service.
 type EvaluatorPluginServiceHandler interface {
@@ -161,6 +180,10 @@ type EvaluatorPluginServiceHandler interface {
 	Generate(context.Context, *connect.Request[v1alpha1.GenerateRequest]) (*connect.Response[v1alpha1.GenerateResponse], error)
 	// Loads a dataset (file or hf:// URI) and streams its records in chunks.
 	LoadDataset(context.Context, *connect.Request[v1alpha1.LoadDatasetRequest], *connect.ServerStream[v1alpha1.LoadDatasetResponse]) error
+	// Runs one agent task (a record and a trial) through the spec's harness,
+	// streaming trajectory events, then the record with its output,
+	// trajectory and check.
+	RunTask(context.Context, *connect.Request[v1alpha1.RunTaskRequest], *connect.ServerStream[v1alpha1.RunTaskResponse]) error
 }
 
 // NewEvaluatorPluginServiceHandler builds an HTTP handler from the service implementation. It
@@ -200,6 +223,12 @@ func NewEvaluatorPluginServiceHandler(svc EvaluatorPluginServiceHandler, opts ..
 		connect.WithSchema(evaluatorPluginServiceMethods.ByName("LoadDataset")),
 		connect.WithHandlerOptions(opts...),
 	)
+	evaluatorPluginServiceRunTaskHandler := connect.NewServerStreamHandler(
+		EvaluatorPluginServiceRunTaskProcedure,
+		svc.RunTask,
+		connect.WithSchema(evaluatorPluginServiceMethods.ByName("RunTask")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/evalsi.plugin.v1alpha1.EvaluatorPluginService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EvaluatorPluginServiceDescribeProcedure:
@@ -212,6 +241,8 @@ func NewEvaluatorPluginServiceHandler(svc EvaluatorPluginServiceHandler, opts ..
 			evaluatorPluginServiceGenerateHandler.ServeHTTP(w, r)
 		case EvaluatorPluginServiceLoadDatasetProcedure:
 			evaluatorPluginServiceLoadDatasetHandler.ServeHTTP(w, r)
+		case EvaluatorPluginServiceRunTaskProcedure:
+			evaluatorPluginServiceRunTaskHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -239,4 +270,8 @@ func (UnimplementedEvaluatorPluginServiceHandler) Generate(context.Context, *con
 
 func (UnimplementedEvaluatorPluginServiceHandler) LoadDataset(context.Context, *connect.Request[v1alpha1.LoadDatasetRequest], *connect.ServerStream[v1alpha1.LoadDatasetResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.plugin.v1alpha1.EvaluatorPluginService.LoadDataset is not implemented"))
+}
+
+func (UnimplementedEvaluatorPluginServiceHandler) RunTask(context.Context, *connect.Request[v1alpha1.RunTaskRequest], *connect.ServerStream[v1alpha1.RunTaskResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.plugin.v1alpha1.EvaluatorPluginService.RunTask is not implemented"))
 }

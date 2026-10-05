@@ -226,8 +226,10 @@ type Record struct {
 	// Cost of producing the output (not of evaluating it).
 	Usage *Usage `protobuf:"bytes,7,opt,name=usage,proto3" json:"usage,omitempty"`
 	// Free-form attributes used for slicing, clustering and filtering.
-	Metadata      map[string]*structpb.Value `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Provenance    *Provenance                `protobuf:"bytes,9,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	Metadata   map[string]*structpb.Value `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Provenance *Provenance                `protobuf:"bytes,9,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	// Agent runs: the environment checker's verdict on the task's end state.
+	Check         *TaskCheck `protobuf:"bytes,10,opt,name=check,proto3" json:"check,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -325,6 +327,92 @@ func (x *Record) GetProvenance() *Provenance {
 	return nil
 }
 
+func (x *Record) GetCheck() *TaskCheck {
+	if x != nil {
+		return x.Check
+	}
+	return nil
+}
+
+// TaskCheck is how the environment checker graded a task.
+type TaskCheck struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Passed  bool                   `protobuf:"varint,1,opt,name=passed,proto3" json:"passed,omitempty"`
+	Score   *float64               `protobuf:"fixed64,2,opt,name=score,proto3,oneof" json:"score,omitempty"`
+	Details string                 `protobuf:"bytes,3,opt,name=details,proto3" json:"details,omitempty"`
+	// Per-test outcomes, for example {"tests/test_x.py::test_a": "passed"}.
+	Tests map[string]string `protobuf:"bytes,4,rep,name=tests,proto3" json:"tests,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Set when the checker itself could not run; the task is then not scored.
+	Error         string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TaskCheck) Reset() {
+	*x = TaskCheck{}
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TaskCheck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TaskCheck) ProtoMessage() {}
+
+func (x *TaskCheck) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TaskCheck.ProtoReflect.Descriptor instead.
+func (*TaskCheck) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TaskCheck) GetPassed() bool {
+	if x != nil {
+		return x.Passed
+	}
+	return false
+}
+
+func (x *TaskCheck) GetScore() float64 {
+	if x != nil && x.Score != nil {
+		return *x.Score
+	}
+	return 0
+}
+
+func (x *TaskCheck) GetDetails() string {
+	if x != nil {
+		return x.Details
+	}
+	return ""
+}
+
+func (x *TaskCheck) GetTests() map[string]string {
+	if x != nil {
+		return x.Tests
+	}
+	return nil
+}
+
+func (x *TaskCheck) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type Content struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
@@ -342,7 +430,7 @@ type Content struct {
 
 func (x *Content) Reset() {
 	*x = Content{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[1]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -354,7 +442,7 @@ func (x *Content) String() string {
 func (*Content) ProtoMessage() {}
 
 func (x *Content) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[1]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -367,7 +455,7 @@ func (x *Content) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Content.ProtoReflect.Descriptor instead.
 func (*Content) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{1}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Content) GetKind() isContent_Kind {
@@ -480,7 +568,7 @@ type Messages struct {
 
 func (x *Messages) Reset() {
 	*x = Messages{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[2]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -492,7 +580,7 @@ func (x *Messages) String() string {
 func (*Messages) ProtoMessage() {}
 
 func (x *Messages) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[2]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -505,7 +593,7 @@ func (x *Messages) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Messages.ProtoReflect.Descriptor instead.
 func (*Messages) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{2}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Messages) GetMessages() []*Message {
@@ -530,7 +618,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[3]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -542,7 +630,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[3]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -555,7 +643,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{3}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Message) GetRole() string {
@@ -606,7 +694,7 @@ type ToolCall struct {
 
 func (x *ToolCall) Reset() {
 	*x = ToolCall{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +706,7 @@ func (x *ToolCall) String() string {
 func (*ToolCall) ProtoMessage() {}
 
 func (x *ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +719,7 @@ func (x *ToolCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCall.ProtoReflect.Descriptor instead.
 func (*ToolCall) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{4}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ToolCall) GetId() string {
@@ -667,7 +755,7 @@ type TabularRow struct {
 
 func (x *TabularRow) Reset() {
 	*x = TabularRow{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -679,7 +767,7 @@ func (x *TabularRow) String() string {
 func (*TabularRow) ProtoMessage() {}
 
 func (x *TabularRow) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -692,7 +780,7 @@ func (x *TabularRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TabularRow.ProtoReflect.Descriptor instead.
 func (*TabularRow) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{5}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *TabularRow) GetFeatures() map[string]*structpb.Value {
@@ -729,7 +817,7 @@ type Tensor struct {
 
 func (x *Tensor) Reset() {
 	*x = Tensor{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -741,7 +829,7 @@ func (x *Tensor) String() string {
 func (*Tensor) ProtoMessage() {}
 
 func (x *Tensor) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -754,7 +842,7 @@ func (x *Tensor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tensor.ProtoReflect.Descriptor instead.
 func (*Tensor) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{6}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Tensor) GetShape() []int64 {
@@ -789,7 +877,7 @@ type MediaRef struct {
 
 func (x *MediaRef) Reset() {
 	*x = MediaRef{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -801,7 +889,7 @@ func (x *MediaRef) String() string {
 func (*MediaRef) ProtoMessage() {}
 
 func (x *MediaRef) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -814,7 +902,7 @@ func (x *MediaRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaRef.ProtoReflect.Descriptor instead.
 func (*MediaRef) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{7}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *MediaRef) GetUri() string {
@@ -844,7 +932,7 @@ type Trajectory struct {
 
 func (x *Trajectory) Reset() {
 	*x = Trajectory{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -856,7 +944,7 @@ func (x *Trajectory) String() string {
 func (*Trajectory) ProtoMessage() {}
 
 func (x *Trajectory) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -869,7 +957,7 @@ func (x *Trajectory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Trajectory.ProtoReflect.Descriptor instead.
 func (*Trajectory) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{8}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Trajectory) GetTraceId() string {
@@ -914,7 +1002,7 @@ type Step struct {
 
 func (x *Step) Reset() {
 	*x = Step{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -926,7 +1014,7 @@ func (x *Step) String() string {
 func (*Step) ProtoMessage() {}
 
 func (x *Step) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -939,7 +1027,7 @@ func (x *Step) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Step.ProtoReflect.Descriptor instead.
 func (*Step) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{9}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Step) GetSpanId() string {
@@ -1031,7 +1119,7 @@ type Usage struct {
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1043,7 +1131,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1056,7 +1144,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{10}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Usage) GetInputTokens() int64 {
@@ -1102,7 +1190,7 @@ type Provenance struct {
 
 func (x *Provenance) Reset() {
 	*x = Provenance{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1114,7 +1202,7 @@ func (x *Provenance) String() string {
 func (*Provenance) ProtoMessage() {}
 
 func (x *Provenance) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1127,7 +1215,7 @@ func (x *Provenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provenance.ProtoReflect.Descriptor instead.
 func (*Provenance) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{11}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Provenance) GetSource() isProvenance_Source {
@@ -1189,7 +1277,7 @@ type RunProvenance struct {
 
 func (x *RunProvenance) Reset() {
 	*x = RunProvenance{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[12]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1201,7 +1289,7 @@ func (x *RunProvenance) String() string {
 func (*RunProvenance) ProtoMessage() {}
 
 func (x *RunProvenance) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[12]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1214,7 +1302,7 @@ func (x *RunProvenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunProvenance.ProtoReflect.Descriptor instead.
 func (*RunProvenance) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{12}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RunProvenance) GetRunId() string {
@@ -1248,7 +1336,7 @@ type TraceProvenance struct {
 
 func (x *TraceProvenance) Reset() {
 	*x = TraceProvenance{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[13]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1260,7 +1348,7 @@ func (x *TraceProvenance) String() string {
 func (*TraceProvenance) ProtoMessage() {}
 
 func (x *TraceProvenance) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[13]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1273,7 +1361,7 @@ func (x *TraceProvenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TraceProvenance.ProtoReflect.Descriptor instead.
 func (*TraceProvenance) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{13}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TraceProvenance) GetTraceId() string {
@@ -1304,7 +1392,7 @@ type IsolationReport struct {
 
 func (x *IsolationReport) Reset() {
 	*x = IsolationReport{}
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1316,7 +1404,7 @@ func (x *IsolationReport) String() string {
 func (*IsolationReport) ProtoMessage() {}
 
 func (x *IsolationReport) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_record_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1329,7 +1417,7 @@ func (x *IsolationReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IsolationReport.ProtoReflect.Descriptor instead.
 func (*IsolationReport) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{14}
+	return file_evalsi_v1alpha1_record_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *IsolationReport) GetDriver() string {
@@ -1364,7 +1452,7 @@ var File_evalsi_v1alpha1_record_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_record_proto_rawDesc = "" +
 	"\n" +
-	"\x1cevalsi/v1alpha1/record.proto\x12\x0fevalsi.v1alpha1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa6\x04\n" +
+	"\x1cevalsi/v1alpha1/record.proto\x12\x0fevalsi.v1alpha1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd8\x04\n" +
 	"\x06Record\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12.\n" +
 	"\x05input\x18\x02 \x01(\v2\x18.evalsi.v1alpha1.ContentR\x05input\x120\n" +
@@ -1378,10 +1466,23 @@ const file_evalsi_v1alpha1_record_proto_rawDesc = "" +
 	"\bmetadata\x18\b \x03(\v2%.evalsi.v1alpha1.Record.MetadataEntryR\bmetadata\x12;\n" +
 	"\n" +
 	"provenance\x18\t \x01(\v2\x1b.evalsi.v1alpha1.ProvenanceR\n" +
-	"provenance\x1aS\n" +
+	"provenance\x120\n" +
+	"\x05check\x18\n" +
+	" \x01(\v2\x1a.evalsi.v1alpha1.TaskCheckR\x05check\x1aS\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\xa5\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\xef\x01\n" +
+	"\tTaskCheck\x12\x16\n" +
+	"\x06passed\x18\x01 \x01(\bR\x06passed\x12\x19\n" +
+	"\x05score\x18\x02 \x01(\x01H\x00R\x05score\x88\x01\x01\x12\x18\n" +
+	"\adetails\x18\x03 \x01(\tR\adetails\x12;\n" +
+	"\x05tests\x18\x04 \x03(\v2%.evalsi.v1alpha1.TaskCheck.TestsEntryR\x05tests\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\x1a8\n" +
+	"\n" +
+	"TestsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
+	"\x06_score\"\xa5\x02\n" +
 	"\aContent\x12\x14\n" +
 	"\x04text\x18\x01 \x01(\tH\x00R\x04text\x127\n" +
 	"\bmessages\x18\x02 \x01(\v2\x19.evalsi.v1alpha1.MessagesH\x00R\bmessages\x12,\n" +
@@ -1513,75 +1614,79 @@ func file_evalsi_v1alpha1_record_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_v1alpha1_record_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_evalsi_v1alpha1_record_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_evalsi_v1alpha1_record_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_evalsi_v1alpha1_record_proto_goTypes = []any{
 	(StepType)(0),                 // 0: evalsi.v1alpha1.StepType
 	(IsolationLevel)(0),           // 1: evalsi.v1alpha1.IsolationLevel
 	(Enforcement)(0),              // 2: evalsi.v1alpha1.Enforcement
 	(*Record)(nil),                // 3: evalsi.v1alpha1.Record
-	(*Content)(nil),               // 4: evalsi.v1alpha1.Content
-	(*Messages)(nil),              // 5: evalsi.v1alpha1.Messages
-	(*Message)(nil),               // 6: evalsi.v1alpha1.Message
-	(*ToolCall)(nil),              // 7: evalsi.v1alpha1.ToolCall
-	(*TabularRow)(nil),            // 8: evalsi.v1alpha1.TabularRow
-	(*Tensor)(nil),                // 9: evalsi.v1alpha1.Tensor
-	(*MediaRef)(nil),              // 10: evalsi.v1alpha1.MediaRef
-	(*Trajectory)(nil),            // 11: evalsi.v1alpha1.Trajectory
-	(*Step)(nil),                  // 12: evalsi.v1alpha1.Step
-	(*Usage)(nil),                 // 13: evalsi.v1alpha1.Usage
-	(*Provenance)(nil),            // 14: evalsi.v1alpha1.Provenance
-	(*RunProvenance)(nil),         // 15: evalsi.v1alpha1.RunProvenance
-	(*TraceProvenance)(nil),       // 16: evalsi.v1alpha1.TraceProvenance
-	(*IsolationReport)(nil),       // 17: evalsi.v1alpha1.IsolationReport
-	nil,                           // 18: evalsi.v1alpha1.Record.MetadataEntry
-	nil,                           // 19: evalsi.v1alpha1.TabularRow.FeaturesEntry
-	nil,                           // 20: evalsi.v1alpha1.TabularRow.ProbabilitiesEntry
-	nil,                           // 21: evalsi.v1alpha1.Step.AttributesEntry
-	(*structpb.Value)(nil),        // 22: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 24: google.protobuf.Duration
+	(*TaskCheck)(nil),             // 4: evalsi.v1alpha1.TaskCheck
+	(*Content)(nil),               // 5: evalsi.v1alpha1.Content
+	(*Messages)(nil),              // 6: evalsi.v1alpha1.Messages
+	(*Message)(nil),               // 7: evalsi.v1alpha1.Message
+	(*ToolCall)(nil),              // 8: evalsi.v1alpha1.ToolCall
+	(*TabularRow)(nil),            // 9: evalsi.v1alpha1.TabularRow
+	(*Tensor)(nil),                // 10: evalsi.v1alpha1.Tensor
+	(*MediaRef)(nil),              // 11: evalsi.v1alpha1.MediaRef
+	(*Trajectory)(nil),            // 12: evalsi.v1alpha1.Trajectory
+	(*Step)(nil),                  // 13: evalsi.v1alpha1.Step
+	(*Usage)(nil),                 // 14: evalsi.v1alpha1.Usage
+	(*Provenance)(nil),            // 15: evalsi.v1alpha1.Provenance
+	(*RunProvenance)(nil),         // 16: evalsi.v1alpha1.RunProvenance
+	(*TraceProvenance)(nil),       // 17: evalsi.v1alpha1.TraceProvenance
+	(*IsolationReport)(nil),       // 18: evalsi.v1alpha1.IsolationReport
+	nil,                           // 19: evalsi.v1alpha1.Record.MetadataEntry
+	nil,                           // 20: evalsi.v1alpha1.TaskCheck.TestsEntry
+	nil,                           // 21: evalsi.v1alpha1.TabularRow.FeaturesEntry
+	nil,                           // 22: evalsi.v1alpha1.TabularRow.ProbabilitiesEntry
+	nil,                           // 23: evalsi.v1alpha1.Step.AttributesEntry
+	(*structpb.Value)(nil),        // 24: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil), // 25: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 26: google.protobuf.Duration
 }
 var file_evalsi_v1alpha1_record_proto_depIdxs = []int32{
-	4,  // 0: evalsi.v1alpha1.Record.input:type_name -> evalsi.v1alpha1.Content
-	4,  // 1: evalsi.v1alpha1.Record.output:type_name -> evalsi.v1alpha1.Content
-	4,  // 2: evalsi.v1alpha1.Record.reference:type_name -> evalsi.v1alpha1.Content
-	4,  // 3: evalsi.v1alpha1.Record.context:type_name -> evalsi.v1alpha1.Content
-	11, // 4: evalsi.v1alpha1.Record.trajectory:type_name -> evalsi.v1alpha1.Trajectory
-	13, // 5: evalsi.v1alpha1.Record.usage:type_name -> evalsi.v1alpha1.Usage
-	18, // 6: evalsi.v1alpha1.Record.metadata:type_name -> evalsi.v1alpha1.Record.MetadataEntry
-	14, // 7: evalsi.v1alpha1.Record.provenance:type_name -> evalsi.v1alpha1.Provenance
-	5,  // 8: evalsi.v1alpha1.Content.messages:type_name -> evalsi.v1alpha1.Messages
-	22, // 9: evalsi.v1alpha1.Content.json:type_name -> google.protobuf.Value
-	8,  // 10: evalsi.v1alpha1.Content.row:type_name -> evalsi.v1alpha1.TabularRow
-	9,  // 11: evalsi.v1alpha1.Content.tensor:type_name -> evalsi.v1alpha1.Tensor
-	10, // 12: evalsi.v1alpha1.Content.media:type_name -> evalsi.v1alpha1.MediaRef
-	6,  // 13: evalsi.v1alpha1.Messages.messages:type_name -> evalsi.v1alpha1.Message
-	7,  // 14: evalsi.v1alpha1.Message.tool_calls:type_name -> evalsi.v1alpha1.ToolCall
-	19, // 15: evalsi.v1alpha1.TabularRow.features:type_name -> evalsi.v1alpha1.TabularRow.FeaturesEntry
-	22, // 16: evalsi.v1alpha1.TabularRow.prediction:type_name -> google.protobuf.Value
-	20, // 17: evalsi.v1alpha1.TabularRow.probabilities:type_name -> evalsi.v1alpha1.TabularRow.ProbabilitiesEntry
-	12, // 18: evalsi.v1alpha1.Trajectory.steps:type_name -> evalsi.v1alpha1.Step
-	0,  // 19: evalsi.v1alpha1.Step.type:type_name -> evalsi.v1alpha1.StepType
-	4,  // 20: evalsi.v1alpha1.Step.input:type_name -> evalsi.v1alpha1.Content
-	4,  // 21: evalsi.v1alpha1.Step.output:type_name -> evalsi.v1alpha1.Content
-	23, // 22: evalsi.v1alpha1.Step.start_time:type_name -> google.protobuf.Timestamp
-	23, // 23: evalsi.v1alpha1.Step.end_time:type_name -> google.protobuf.Timestamp
-	13, // 24: evalsi.v1alpha1.Step.usage:type_name -> evalsi.v1alpha1.Usage
-	21, // 25: evalsi.v1alpha1.Step.attributes:type_name -> evalsi.v1alpha1.Step.AttributesEntry
-	24, // 26: evalsi.v1alpha1.Usage.latency:type_name -> google.protobuf.Duration
-	15, // 27: evalsi.v1alpha1.Provenance.run:type_name -> evalsi.v1alpha1.RunProvenance
-	16, // 28: evalsi.v1alpha1.Provenance.trace:type_name -> evalsi.v1alpha1.TraceProvenance
-	17, // 29: evalsi.v1alpha1.Provenance.isolation:type_name -> evalsi.v1alpha1.IsolationReport
-	1,  // 30: evalsi.v1alpha1.IsolationReport.level:type_name -> evalsi.v1alpha1.IsolationLevel
-	2,  // 31: evalsi.v1alpha1.IsolationReport.enforcement:type_name -> evalsi.v1alpha1.Enforcement
-	22, // 32: evalsi.v1alpha1.Record.MetadataEntry.value:type_name -> google.protobuf.Value
-	22, // 33: evalsi.v1alpha1.TabularRow.FeaturesEntry.value:type_name -> google.protobuf.Value
-	22, // 34: evalsi.v1alpha1.Step.AttributesEntry.value:type_name -> google.protobuf.Value
-	35, // [35:35] is the sub-list for method output_type
-	35, // [35:35] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	5,  // 0: evalsi.v1alpha1.Record.input:type_name -> evalsi.v1alpha1.Content
+	5,  // 1: evalsi.v1alpha1.Record.output:type_name -> evalsi.v1alpha1.Content
+	5,  // 2: evalsi.v1alpha1.Record.reference:type_name -> evalsi.v1alpha1.Content
+	5,  // 3: evalsi.v1alpha1.Record.context:type_name -> evalsi.v1alpha1.Content
+	12, // 4: evalsi.v1alpha1.Record.trajectory:type_name -> evalsi.v1alpha1.Trajectory
+	14, // 5: evalsi.v1alpha1.Record.usage:type_name -> evalsi.v1alpha1.Usage
+	19, // 6: evalsi.v1alpha1.Record.metadata:type_name -> evalsi.v1alpha1.Record.MetadataEntry
+	15, // 7: evalsi.v1alpha1.Record.provenance:type_name -> evalsi.v1alpha1.Provenance
+	4,  // 8: evalsi.v1alpha1.Record.check:type_name -> evalsi.v1alpha1.TaskCheck
+	20, // 9: evalsi.v1alpha1.TaskCheck.tests:type_name -> evalsi.v1alpha1.TaskCheck.TestsEntry
+	6,  // 10: evalsi.v1alpha1.Content.messages:type_name -> evalsi.v1alpha1.Messages
+	24, // 11: evalsi.v1alpha1.Content.json:type_name -> google.protobuf.Value
+	9,  // 12: evalsi.v1alpha1.Content.row:type_name -> evalsi.v1alpha1.TabularRow
+	10, // 13: evalsi.v1alpha1.Content.tensor:type_name -> evalsi.v1alpha1.Tensor
+	11, // 14: evalsi.v1alpha1.Content.media:type_name -> evalsi.v1alpha1.MediaRef
+	7,  // 15: evalsi.v1alpha1.Messages.messages:type_name -> evalsi.v1alpha1.Message
+	8,  // 16: evalsi.v1alpha1.Message.tool_calls:type_name -> evalsi.v1alpha1.ToolCall
+	21, // 17: evalsi.v1alpha1.TabularRow.features:type_name -> evalsi.v1alpha1.TabularRow.FeaturesEntry
+	24, // 18: evalsi.v1alpha1.TabularRow.prediction:type_name -> google.protobuf.Value
+	22, // 19: evalsi.v1alpha1.TabularRow.probabilities:type_name -> evalsi.v1alpha1.TabularRow.ProbabilitiesEntry
+	13, // 20: evalsi.v1alpha1.Trajectory.steps:type_name -> evalsi.v1alpha1.Step
+	0,  // 21: evalsi.v1alpha1.Step.type:type_name -> evalsi.v1alpha1.StepType
+	5,  // 22: evalsi.v1alpha1.Step.input:type_name -> evalsi.v1alpha1.Content
+	5,  // 23: evalsi.v1alpha1.Step.output:type_name -> evalsi.v1alpha1.Content
+	25, // 24: evalsi.v1alpha1.Step.start_time:type_name -> google.protobuf.Timestamp
+	25, // 25: evalsi.v1alpha1.Step.end_time:type_name -> google.protobuf.Timestamp
+	14, // 26: evalsi.v1alpha1.Step.usage:type_name -> evalsi.v1alpha1.Usage
+	23, // 27: evalsi.v1alpha1.Step.attributes:type_name -> evalsi.v1alpha1.Step.AttributesEntry
+	26, // 28: evalsi.v1alpha1.Usage.latency:type_name -> google.protobuf.Duration
+	16, // 29: evalsi.v1alpha1.Provenance.run:type_name -> evalsi.v1alpha1.RunProvenance
+	17, // 30: evalsi.v1alpha1.Provenance.trace:type_name -> evalsi.v1alpha1.TraceProvenance
+	18, // 31: evalsi.v1alpha1.Provenance.isolation:type_name -> evalsi.v1alpha1.IsolationReport
+	1,  // 32: evalsi.v1alpha1.IsolationReport.level:type_name -> evalsi.v1alpha1.IsolationLevel
+	2,  // 33: evalsi.v1alpha1.IsolationReport.enforcement:type_name -> evalsi.v1alpha1.Enforcement
+	24, // 34: evalsi.v1alpha1.Record.MetadataEntry.value:type_name -> google.protobuf.Value
+	24, // 35: evalsi.v1alpha1.TabularRow.FeaturesEntry.value:type_name -> google.protobuf.Value
+	24, // 36: evalsi.v1alpha1.Step.AttributesEntry.value:type_name -> google.protobuf.Value
+	37, // [37:37] is the sub-list for method output_type
+	37, // [37:37] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_record_proto_init() }
@@ -1589,7 +1694,8 @@ func file_evalsi_v1alpha1_record_proto_init() {
 	if File_evalsi_v1alpha1_record_proto != nil {
 		return
 	}
-	file_evalsi_v1alpha1_record_proto_msgTypes[1].OneofWrappers = []any{
+	file_evalsi_v1alpha1_record_proto_msgTypes[1].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_record_proto_msgTypes[2].OneofWrappers = []any{
 		(*Content_Text)(nil),
 		(*Content_Messages)(nil),
 		(*Content_Json)(nil),
@@ -1597,8 +1703,8 @@ func file_evalsi_v1alpha1_record_proto_init() {
 		(*Content_Tensor)(nil),
 		(*Content_Media)(nil),
 	}
-	file_evalsi_v1alpha1_record_proto_msgTypes[10].OneofWrappers = []any{}
-	file_evalsi_v1alpha1_record_proto_msgTypes[11].OneofWrappers = []any{
+	file_evalsi_v1alpha1_record_proto_msgTypes[11].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_record_proto_msgTypes[12].OneofWrappers = []any{
 		(*Provenance_Run)(nil),
 		(*Provenance_Trace)(nil),
 	}
@@ -1608,7 +1714,7 @@ func file_evalsi_v1alpha1_record_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_record_proto_rawDesc), len(file_evalsi_v1alpha1_record_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

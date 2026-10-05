@@ -131,6 +131,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 		DatasetsDir:   cfg.DatasetsDir,
 		MaxConcurrent: cfg.Runs.MaxConcurrent,
 		Evaluate:      cfg.Evaluate,
+		Agents:        cfg.Agents,
 		Logger:        log,
 		OnFinished:    exports.Run,
 	})
@@ -411,7 +412,9 @@ func Handler(d deps) http.Handler {
 
 // sandboxEnv tells the worker how to reach the sandbox: code evaluators run
 // `$EVALSID sandbox run` with the server's sandbox config. Rungs are probed
-// there, on first use; `evalsid sandbox probe` reports them up front.
+// there, on first use; `evalsid sandbox probe` reports them up front. It also
+// carries the agent trust policy: on a server, the worker executes only the
+// commands and Python references the config lists (the harness enforces it).
 func sandboxEnv(cfg config.Config) ([]string, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -421,7 +424,14 @@ func sandboxEnv(cfg config.Config) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []string{"EVALSID=" + exe, "EVALSI_SANDBOX=" + string(raw)}, nil
+	trust, err := json.Marshal(map[string]any{
+		"commands": append([][]string{}, cfg.Agents.TrustedCommands...),
+		"python":   append([]string{}, cfg.Agents.TrustedPython...),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []string{"EVALSID=" + exe, "EVALSI_SANDBOX=" + string(raw), "EVALSI_AGENT_TRUST=" + string(trust)}, nil
 }
 
 // rootSpan is the ID of the trace's root span, which exported scores attach to.

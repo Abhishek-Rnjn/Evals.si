@@ -4,6 +4,7 @@ isort:skip_file
 """
 
 from collections import abc as _abc
+from evalsi.v1alpha1 import agent_pb2 as _agent_pb2
 from evalsi.v1alpha1 import evaluation_service_pb2 as _evaluation_service_pb2
 from evalsi.v1alpha1 import evaluator_pb2 as _evaluator_pb2
 from evalsi.v1alpha1 import record_pb2 as _record_pb2
@@ -94,6 +95,8 @@ class RunSpec(_message.Message):
     SUMMARY_FIELD_NUMBER: _builtins.int
     GATES_FIELD_NUMBER: _builtins.int
     BUDGET_FIELD_NUMBER: _builtins.int
+    HARNESS_FIELD_NUMBER: _builtins.int
+    ENVIRONMENT_FIELD_NUMBER: _builtins.int
     judge: _builtins.str
     """Judge name for judge evaluators; the server's default when empty."""
     trials: _builtins.int
@@ -116,6 +119,16 @@ class RunSpec(_message.Message):
 
     @_builtins.property
     def budget(self) -> Global___Budget: ...
+    @_builtins.property
+    def harness(self) -> _agent_pb2.Harness:
+        """Drives an agent through each record as a task (an agent run). Without
+        one, a target with an agent uses the built-in harness with defaults.
+        """
+
+    @_builtins.property
+    def environment(self) -> _agent_pb2.Environment:
+        """Where agent tasks run; records may override it in metadata["environment"]."""
+
     def __init__(
         self,
         *,
@@ -127,10 +140,12 @@ class RunSpec(_message.Message):
         summary: _evaluation_service_pb2.SummaryOptions | None = ...,
         gates: _abc.Iterable[Global___Gate] | None = ...,
         budget: Global___Budget | None = ...,
+        harness: _agent_pb2.Harness | None = ...,
+        environment: _agent_pb2.Environment | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "summary", b"summary", "target", b"target"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "harness", b"harness", "summary", b"summary", "target", b"target"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "evaluators", b"evaluators", "gates", b"gates", "judge", b"judge", "summary", b"summary", "target", b"target", "trials", b"trials"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "evaluators", b"evaluators", "gates", b"gates", "harness", b"harness", "judge", b"judge", "summary", b"summary", "target", b"target", "trials", b"trials"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RunSpec: _TypeAlias = RunSpec  # noqa: Y015
@@ -147,8 +162,11 @@ class Target(_message.Message):
     MAX_TOKENS_FIELD_NUMBER: _builtins.int
     TEMPERATURE_FIELD_NUMBER: _builtins.int
     EFFORT_FIELD_NUMBER: _builtins.int
+    AGENT_FIELD_NUMBER: _builtins.int
     connector: _builtins.str
-    """"openai-compatible" or "anthropic"."""
+    """"openai-compatible" or "anthropic". For an agent run without an agent
+    below, the model the built-in reference agent uses.
+    """
     model: _builtins.str
     base_url: _builtins.str
     """Required for openai-compatible, for example http://localhost:8000/v1."""
@@ -159,6 +177,10 @@ class Target(_message.Message):
     temperature: _builtins.float
     effort: _builtins.str
     """Anthropic only: output_config.effort."""
+    @_builtins.property
+    def agent(self) -> _agent_pb2.AgentTarget:
+        """A bring-your-own agent instead of a model."""
+
     def __init__(
         self,
         *,
@@ -170,10 +192,11 @@ class Target(_message.Message):
         max_tokens: _builtins.int = ...,
         temperature: _builtins.float | None = ...,
         effort: _builtins.str = ...,
+        agent: _agent_pb2.AgentTarget | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "temperature", b"temperature"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "temperature", b"temperature"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "api_key_env", b"api_key_env", "base_url", b"base_url", "connector", b"connector", "effort", b"effort", "max_tokens", b"max_tokens", "model", b"model", "system_prompt", b"system_prompt", "temperature", b"temperature"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "api_key_env", b"api_key_env", "base_url", b"base_url", "connector", b"connector", "effort", b"effort", "max_tokens", b"max_tokens", "model", b"model", "system_prompt", b"system_prompt", "temperature", b"temperature"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__temperature: _TypeAlias = _typing.Literal["temperature"]  # noqa: Y015
     _WhichOneofArgType__temperature: _TypeAlias = _typing.Literal["_temperature", b"_temperature"]  # noqa: Y015

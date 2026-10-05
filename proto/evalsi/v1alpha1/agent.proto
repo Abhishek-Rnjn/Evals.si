@@ -1,0 +1,261 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+
+// Agent runs (design §11). A run with a harness, or with an agent target,
+// drives an agent through each record as a task: the record's input is the
+// instruction, the environment is a sandbox the agent works in, and the
+// environment's checker grades the end state. The trajectory, the checker's
+// verdict and any sandbox policy events are stored on the record, where the
+// agent pack's evaluators read them.
+
+// AgentTarget is a bring-your-own agent. Without one, a run with a harness
+// uses the built-in reference agent on the target's model.
+message AgentTarget {
+  oneof kind {
+    A2AAgent a2a = 1;
+    MCPAgent mcp = 2;
+    ResponsesAgent responses = 3;
+    HTTPAgent http = 4;
+    CLIAgent cli = 5;
+  }
+}
+
+// An agent that speaks the Agent2Agent protocol (JSON-RPC message/send).
+message A2AAgent {
+  string url = 1;
+  // HTTP header -> environment variable holding its value (read by the worker).
+  map<string, string> headers_env = 2;
+  google.protobuf.Duration timeout = 3;
+}
+
+// An agent exposed as a tool on an MCP server (streamable HTTP).
+message MCPAgent {
+  string url = 1;
+  // The tool to call; default: the server's only tool.
+  string tool = 2;
+  // The argument that receives the instruction; default "input".
+  string argument = 3;
+  map<string, string> headers_env = 4;
+  google.protobuf.Duration timeout = 5;
+}
+
+// An agent behind an OpenAI Responses-compatible endpoint (POST /responses).
+message ResponsesAgent {
+  string base_url = 1;
+  string model = 2;
+  string api_key_env = 3;
+  google.protobuf.Duration timeout = 4;
+}
+
+// Any HTTP agent: the instruction goes into a JSON body template and the
+// answer comes out of a path in the JSON response.
+message HTTPAgent {
+  string url = 1;
+  // "POST" by default.
+  string method = 2;
+  map<string, string> headers_env = 3;
+  // JSON with {{input}} (the instruction, JSON-escaped) and {{task_id}}.
+  // Default: {"input": {{input}}}.
+  string body_template = 4;
+  // Dotted path to the answer in the response, for example "output.text".
+  string output_path = 5;
+  // Dotted path to an OpenAI-style message list, kept as the trajectory.
+  string messages_path = 6;
+  google.protobuf.Duration timeout = 7;
+}
+
+// A command-line agent (a coding agent, for example) run inside the task's
+// sandbox, in its workdir. The instruction is passed in place of
+// {instruction} in the command, or on stdin when no argument has it.
+message CLIAgent {
+  repeated string command = 1;
+  // Commands run once in the environment before the agent (installing it).
+  repeated string install = 2;
+  // Variable in the sandbox -> variable on the worker it is copied from, for
+  // the agent's own model credentials. Nothing else is passed in.
+  map<string, string> env_from = 3;
+  // Hosts the agent may reach (its model API), through the egress proxy.
+  repeated string allow_hosts = 4;
+  google.protobuf.Duration timeout = 5;
+}
+
+// Harness drives the agent through a task.
+message Harness {
+  oneof kind {
+    BuiltinHarness builtin = 1;
+    ExternalHarness external = 2;
+  }
+}
+
+message AgentBudget {
+  // Spend, from token usage and the pricing below.
+  double usd = 1;
+  google.protobuf.Duration wall_clock = 2;
+  int64 tokens = 3;
+}
+
+// Prices for turning token usage into spend, per million tokens.
+message Pricing {
+  double input_per_mtok = 1;
+  double output_per_mtok = 2;
+}
+
+// An MCP server whose tools the agent may call.
+message MCPServer {
+  // A name used to prefix its tools when names collide.
+  string name = 1;
+  // Streamable HTTP endpoint.
+  string url = 2;
+  // Or a command started on the worker that speaks MCP over stdio. It runs
+  // outside the sandbox, so it must come from trusted configuration.
+  repeated string command = 3;
+  map<string, string> headers_env = 4;
+  // Only these tools; all when empty.
+  repeated string tools = 5;
+}
+
+// A tool answered from the spec instead of a live system.
+message MockTool {
+  string name = 1;
+  string description = 2;
+  // JSON Schema for the arguments.
+  google.protobuf.Struct input_schema = 3;
+  // The answer, or answers by exact arguments (JSON, keys sorted).
+  string response = 4;
+  map<string, string> responses = 5;
+}
+
+// A fault injected into tool calls, for robustness tests.
+message ToolFault {
+  // Tool name, or "*" for every tool.
+  string tool = 1;
+  // "timeout", "error" or "malformed".
+  string kind = 2;
+  // Probability per call, 0 to 1. Faults are seeded per task and trial, so
+  // a rerun injects the same faults.
+  double rate = 3;
+}
+
+message Tools {
+  // The sandbox tools (bash, read_file, write_file, list_files). On by
+  // default when the task has an environment.
+  optional bool sandbox = 1;
+  repeated MCPServer mcp = 2;
+  repeated MockTool mocks = 3;
+  repeated ToolFault faults = 4;
+}
+
+// An LLM-driven simulated user with a persona and goal, for multi-turn tasks
+// in the style of tau-bench. It speaks with the run's judge model.
+message UserSimulator {
+  // Judge name; the run's judge when empty.
+  string judge = 1;
+  string persona = 2;
+  // The user's goal; default: the record's input.
+  string goal = 3;
+  // Turns the simulated user may take; default 10.
+  int32 max_turns = 4;
+}
+
+// Record and replay of model calls and tool I/O.
+message Recording {
+  // "off" (default), "record" or "replay".
+  string mode = 1;
+  // Directory for cassettes, one per task and trial. Embedded: relative to
+  // the spec. Server: inside datasets_dir.
+  string dir = 2;
+  // replay: replay the first N steps, then continue live (branching).
+  int32 branch_at_step = 3;
+}
+
+// What the harness does when a sandbox denies something and the agent asks
+// for a wider policy. With no human in the loop, it denies by default.
+message EscalationPolicy {
+  // Escalations that are granted: "network".
+  repeated string allow = 1;
+}
+
+message BuiltinHarness {
+  // Model calls the agent may make; default 30.
+  int32 max_steps = 1;
+  AgentBudget budget = 2;
+  Pricing pricing = 3;
+  Tools tools = 4;
+  UserSimulator user_simulator = 5;
+  Recording recording = 6;
+  EscalationPolicy escalation = 7;
+  // Run a model's parallel tool calls concurrently (default true).
+  optional bool parallel_tool_calls = 8;
+  // Appended to the agent's system prompt.
+  string instructions = 9;
+}
+
+// A harness you bring: anything that implements evalsi.harness.v1alpha1.HarnessService.
+message ExternalHarness {
+  oneof kind {
+    // A running gRPC service, for example "dns:///harness:50051" or "unix:///path".
+    string address = 1;
+    // A command the worker starts; it serves on the Unix socket named by
+    // EVALSI_HARNESS_LISTEN.
+    CommandHarness command = 2;
+    // A Python class, "module:Class", loaded in the worker.
+    string python = 3;
+  }
+  google.protobuf.Struct config = 4;
+}
+
+message CommandHarness {
+  repeated string argv = 1;
+}
+
+// The sandbox policy for an environment.
+message SandboxPolicy {
+  // none, confined, namespaced, kernel or vm. Default: namespaced.
+  string min_isolation = 1;
+  // "deny" (default), "allowlist" or "allow".
+  string network = 2;
+  repeated string allow_hosts = 3;
+  int32 memory_mb = 4;
+  int32 max_procs = 5;
+  // The agent's working directory; default /workspace.
+  string workdir = 6;
+  bool read_only_root = 7;
+}
+
+// Checker grades the environment after the agent finishes.
+message Checker {
+  // Run in the sandbox after the agent. Without a parser, exit 0 passes.
+  repeated string command = 1;
+  // Copied in only for checking (hidden tests the agent never sees).
+  map<string, string> files = 2;
+  google.protobuf.Duration timeout = 3;
+  // How to read the result: "exit-code" (default); "json" (the last line of
+  // stdout is {"passed": bool, "score": number, "tests": {...}}); "junit:<path>";
+  // or a Python function "module:function" taking (stdout, stderr, exit_code, task).
+  string parser = 4;
+}
+
+// Environment is where a task runs. Spec-level values apply to every record;
+// a record's metadata["environment"] (same fields) overrides them per task.
+message Environment {
+  // OCI image for the root filesystem; empty: the host's system directories.
+  string image = 1;
+  // Placed in the workdir before setup.
+  map<string, string> files = 2;
+  // Shell commands run once per environment, before any trial; the result is
+  // snapshotted, so trials start from the same state.
+  repeated string setup = 3;
+  google.protobuf.Duration setup_timeout = 4;
+  // Network during setup only (package downloads); default: the sandbox's.
+  string setup_network = 5;
+  repeated string setup_allow_hosts = 6;
+  SandboxPolicy sandbox = 7;
+  Checker checker = 8;
+  map<string, string> env = 9;
+  // Per-command timeout for the agent's sandbox commands; default 120s.
+  google.protobuf.Duration command_timeout = 10;
+}

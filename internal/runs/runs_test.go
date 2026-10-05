@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
@@ -31,6 +32,7 @@ import (
 // released or cancelled; test/count counts records.
 type fakeWorker struct {
 	generateCalls atomic.Int64
+	taskCalls     atomic.Int64
 	evaluateCalls atomic.Int64
 	judgeTokens   int64
 	mu            sync.Mutex
@@ -72,6 +74,24 @@ func (f *fakeWorker) Generate(_ context.Context, req *pluginv1alpha1.GenerateReq
 	return resp, nil
 }
 
+// RunTask: "pass" tasks pass the checker, "fail" ones do not, "flaky" ones
+// pass on even trials, and "crash" ones cannot run (an infrastructure error).
+func (f *fakeWorker) RunTask(_ context.Context, req *pluginv1alpha1.RunTaskRequest, _ func(*harnessv1alpha1.TrajectoryEvent)) (*pluginv1alpha1.TaskResult, error) {
+	f.taskCalls.Add(1)
+	rec := proto.Clone(req.GetRecord()).(*evalsiv1alpha1.Record)
+	in := rec.GetInput().GetText()
+	if in == "crash" {
+		return &pluginv1alpha1.TaskResult{Error: "environment setup failed"}, nil
+	}
+	passed := in == "pass" || in == "flaky" && req.GetTrial()%2 == 0
+	rec.Output = text("done")
+	rec.Usage = &evalsiv1alpha1.Usage{InputTokens: proto.Int64(100), OutputTokens: proto.Int64(10)}
+	rec.Check = &evalsiv1alpha1.TaskCheck{Passed: passed}
+	rec.Trajectory = &evalsiv1alpha1.Trajectory{Steps: []*evalsiv1alpha1.Step{{Type: evalsiv1alpha1.StepType_STEP_TYPE_TOOL, Name: "bash"}}}
+	rec.Provenance = &evalsiv1alpha1.Provenance{Isolation: &evalsiv1alpha1.IsolationReport{Driver: "bwrap", Level: evalsiv1alpha1.IsolationLevel_ISOLATION_LEVEL_NAMESPACED}}
+	return &pluginv1alpha1.TaskResult{Record: rec}, nil
+}
+
 func (f *fakeWorker) LoadDataset(_ context.Context, req *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error) {
 	path := req.GetSource().GetPath()
 	if uri := req.GetSource().GetUri(); uri != "" {
@@ -95,7 +115,9 @@ func (f *fakeWorker) Evaluate(ctx context.Context, req *pluginv1alpha1.EvaluateR
 	for _, r := range req.GetRecords() {
 		res := &evalsiv1alpha1.EvaluationResult{RecordId: r.GetId(), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}
 		score := &evalsiv1alpha1.Score{Name: catalog.ShortName(req.GetEvaluator())}
-		if req.GetEvaluator() == "builtin/exact-match" {
+		if req.GetEvaluator() == "builtin/task-success" {
+			score.Value = &evalsiv1alpha1.Score_Passed{Passed: r.GetCheck().GetPassed()}
+		} else if req.GetEvaluator() == "builtin/exact-match" {
 			score.Value = &evalsiv1alpha1.Score_Passed{Passed: r.GetOutput().GetText() == r.GetReference().GetText()}
 			score.Cost = &evalsiv1alpha1.Usage{InputTokens: proto.Int64(f.judgeTokens)}
 		} else {
@@ -122,6 +144,9 @@ func manifests() []*evalsiv1alpha1.EvaluatorManifest {
 	return []*evalsiv1alpha1.EvaluatorManifest{
 		{Name: "builtin/exact-match", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
 			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "exact-match", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}},
+			ParamsSchema: emptySchema()},
+		{Name: "builtin/task-success", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
+			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "task-success", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}},
 			ParamsSchema: emptySchema()},
 		{Name: "test/slow", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
 			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "slow", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}},
@@ -516,5 +541,141 @@ func TestListAndCompare(t *testing.T) {
 	}
 	if _, err := h.m.CompareRuns(context.Background(), connect.NewRequest(&evalsiv1alpha1.CompareRunsRequest{BaselineRunId: "x", CandidateRunId: cand.GetId()})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("unknown run: %v", err)
+	}
+}
+
+func agentSpec(inputs ...string) *evalsiv1alpha1.RunSpec {
+	return &evalsiv1alpha1.RunSpec{
+		Target:      target(),
+		Harness:     &evalsiv1alpha1.Harness{Kind: &evalsiv1alpha1.Harness_Builtin{Builtin: &evalsiv1alpha1.BuiltinHarness{MaxSteps: 10}}},
+		Environment: &evalsiv1alpha1.Environment{Image: "python:3.12-slim"},
+		Dataset:     inline(inputs...),
+		Evaluators:  refs("task-success"),
+		Trials:      2,
+		Gates:       []*evalsiv1alpha1.Gate{{Metric: "task-success.pass^2", Min: proto.Float64(0.3)}},
+	}
+}
+
+func TestAgentRunsDriveTasksThroughTheWorker(t *testing.T) {
+	h := newHarness(t)
+	run := h.wait(t, h.create(t, agentSpec("pass", "fail", "flaky", "crash")).GetId())
+	if run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED {
+		t.Fatalf("status %v: %s", run.GetStatus(), run.GetError())
+	}
+	if h.worker.taskCalls.Load() != 8 || h.worker.generateCalls.Load() != 0 {
+		t.Errorf("tasks %d, generate %d", h.worker.taskCalls.Load(), h.worker.generateCalls.Load())
+	}
+	// pass and flaky trial 0 of 3 scorable tasks per trial; crash is an error, not a failure.
+	if s := summary(run, "task-success"); s.GetMean() != 0.5 || s.GetN() != 6 {
+		t.Errorf("task-success %v", s)
+	}
+	if s := summary(run, "task-success.pass^2"); s.GetMean() < 0.33 || s.GetMean() > 0.34 {
+		t.Errorf("pass^2 %v", s)
+	}
+	if run.GetTargetUsage().GetInputTokens() != 600 {
+		t.Errorf("usage %v", run.GetTargetUsage())
+	}
+	outputs, err := h.st.Outputs(context.Background(), run.GetId())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range outputs {
+		if o.Record == nil {
+			if o.Error != "environment setup failed" {
+				t.Errorf("crash output: %+v", o)
+			}
+			continue
+		}
+		p := o.Record.GetProvenance()
+		if p.GetRun().GetRunId() != run.GetId() || p.GetIsolation().GetDriver() != "bwrap" || o.Record.GetCheck() == nil {
+			t.Errorf("stored record lost its provenance or check: %v", o.Record)
+		}
+	}
+	results, err := h.st.Results(context.Background(), run.GetId(), "", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errored := 0
+	for _, r := range results {
+		if r.Result.GetOutcome() == evalsiv1alpha1.Outcome_OUTCOME_ERROR {
+			errored++
+		}
+	}
+	if errored != 2 {
+		t.Errorf("errored results = %d, want the crash task twice", errored)
+	}
+	// Resuming re-runs nothing that finished.
+	if _, err := h.m.ResumeRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.ResumeRunRequest{Id: run.GetId()})); err == nil {
+		h.wait(t, run.GetId())
+		if h.worker.taskCalls.Load() != 8 {
+			t.Errorf("resume re-ran tasks: %d", h.worker.taskCalls.Load())
+		}
+	}
+}
+
+func TestAgentRunValidation(t *testing.T) {
+	h := newHarness(t)
+	h.m.opts.Agents = config.Agents{TrustedCommands: [][]string{{"npx", "mcp-crm"}}, TrustedPython: []string{"acme.check:parse"}}
+	cases := map[string]func(*evalsiv1alpha1.RunSpec){
+		"builtin needs a model": func(s *evalsiv1alpha1.RunSpec) { s.Target = nil },
+		"cli needs an environment": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{Command: []string{"agent"}}}}
+			s.Environment = nil
+		},
+		"untrusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"rm", "-rf", "/"}}}}
+		},
+		"untrusted python harness": func(s *evalsiv1alpha1.RunSpec) {
+			s.Harness = &evalsiv1alpha1.Harness{Kind: &evalsiv1alpha1.Harness_External{External: &evalsiv1alpha1.ExternalHarness{Kind: &evalsiv1alpha1.ExternalHarness_Python{Python: "os:system"}}}}
+		},
+		"untrusted checker parser": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"pytest"}, Parser: "os:system"}
+		},
+		"recording outside datasets_dir": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "../out"}
+		},
+		"bad network": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Sandbox = &evalsiv1alpha1.SandboxPolicy{Network: "allowlist"}
+		},
+	}
+	for name, mutate := range cases {
+		spec := agentSpec("pass")
+		mutate(spec)
+		_, err := h.m.CreateRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Spec: spec}))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	ok := map[string]func(*evalsiv1alpha1.RunSpec){
+		"trusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "crm", Command: []string{"npx", "mcp-crm"}}}}
+		},
+		"adapter parser": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"pytest"}, Parser: "evalsi_swebench:parse"}
+		},
+		"trusted parser": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"pytest"}, Parser: "acme.check:parse"}
+		},
+		"a2a agent": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_A2A{A2A: &evalsiv1alpha1.A2AAgent{Url: "http://agent"}}}}
+		},
+		"recording": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+	}
+	for name, mutate := range ok {
+		spec := agentSpec("pass")
+		mutate(spec)
+		if _, err := h.m.CreateRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Spec: spec})); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	spec, err := h.m.workerSpec(func() *evalsiv1alpha1.RunSpec {
+		s := agentSpec("pass")
+		s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "replay", Dir: "tapes"}
+		return s
+	}())
+	if err != nil || !filepath.IsAbs(spec.GetHarness().GetBuiltin().GetRecording().GetDir()) {
+		t.Errorf("worker spec recording dir: %v %v", spec, err)
 	}
 }

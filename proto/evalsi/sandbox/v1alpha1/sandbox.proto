@@ -188,6 +188,9 @@ message SnapshotResponse {
 
 message RestoreRequest {
   string snapshot_id = 1;
+  // A different network policy for the restored sandbox, for example none
+  // after a setup step that downloaded packages.
+  NetworkPolicy network = 2;
 }
 
 message RestoreResponse {

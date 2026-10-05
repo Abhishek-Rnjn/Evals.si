@@ -30,6 +30,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
@@ -114,6 +115,10 @@ func (fakeWorker) Generate(_ context.Context, req *pluginv1alpha1.GenerateReques
 		resp.Results = append(resp.Results, &pluginv1alpha1.GenerateResult{RecordId: r.GetId(), Output: text("Paris")})
 	}
 	return resp, nil
+}
+
+func (fakeWorker) RunTask(context.Context, *pluginv1alpha1.RunTaskRequest, func(*harnessv1alpha1.TrajectoryEvent)) (*pluginv1alpha1.TaskResult, error) {
+	return &pluginv1alpha1.TaskResult{Error: "no agents in this test"}, nil
 }
 
 func (fakeWorker) LoadDataset(context.Context, *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error) {

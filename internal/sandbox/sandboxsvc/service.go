@@ -225,7 +225,11 @@ func (s *Service) Snapshot(ctx context.Context, req *connect.Request[sandboxv1al
 }
 
 func (s *Service) Restore(ctx context.Context, req *connect.Request[sandboxv1alpha1.RestoreRequest]) (*connect.Response[sandboxv1alpha1.RestoreResponse], error) {
-	sess, err := s.m.Restore(ctx, req.Msg.GetSnapshotId())
+	var network *sandbox.Network
+	if n := req.Msg.GetNetwork(); n != nil {
+		network = &sandbox.Network{Mode: networkModes[n.GetMode()], Allow: n.GetAllow()}
+	}
+	sess, err := s.m.Restore(ctx, req.Msg.GetSnapshotId(), network)
 	if err != nil {
 		return nil, toErr(err)
 	}

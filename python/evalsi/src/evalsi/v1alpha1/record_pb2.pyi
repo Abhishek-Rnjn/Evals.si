@@ -146,6 +146,7 @@ class Record(_message.Message):
     USAGE_FIELD_NUMBER: _builtins.int
     METADATA_FIELD_NUMBER: _builtins.int
     PROVENANCE_FIELD_NUMBER: _builtins.int
+    CHECK_FIELD_NUMBER: _builtins.int
     id: _builtins.str
     @_builtins.property
     def input(self) -> Global___Content: ...
@@ -173,6 +174,10 @@ class Record(_message.Message):
 
     @_builtins.property
     def provenance(self) -> Global___Provenance: ...
+    @_builtins.property
+    def check(self) -> Global___TaskCheck:
+        """Agent runs: the environment checker's verdict on the task's end state."""
+
     def __init__(
         self,
         *,
@@ -185,13 +190,70 @@ class Record(_message.Message):
         usage: Global___Usage | None = ...,
         metadata: _abc.Mapping[_builtins.str, _struct_pb2.Value] | None = ...,
         provenance: Global___Provenance | None = ...,
+        check: Global___TaskCheck | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["input", b"input", "output", b"output", "provenance", b"provenance", "reference", b"reference", "trajectory", b"trajectory", "usage", b"usage"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["check", b"check", "input", b"input", "output", b"output", "provenance", b"provenance", "reference", b"reference", "trajectory", b"trajectory", "usage", b"usage"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["context", b"context", "id", b"id", "input", b"input", "metadata", b"metadata", "output", b"output", "provenance", b"provenance", "reference", b"reference", "trajectory", b"trajectory", "usage", b"usage"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["check", b"check", "context", b"context", "id", b"id", "input", b"input", "metadata", b"metadata", "output", b"output", "provenance", b"provenance", "reference", b"reference", "trajectory", b"trajectory", "usage", b"usage"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Record: _TypeAlias = Record  # noqa: Y015
+
+@_typing.final
+class TaskCheck(_message.Message):
+    """TaskCheck is how the environment checker graded a task."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class TestsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    PASSED_FIELD_NUMBER: _builtins.int
+    SCORE_FIELD_NUMBER: _builtins.int
+    DETAILS_FIELD_NUMBER: _builtins.int
+    TESTS_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    passed: _builtins.bool
+    score: _builtins.float
+    details: _builtins.str
+    error: _builtins.str
+    """Set when the checker itself could not run; the task is then not scored."""
+    @_builtins.property
+    def tests(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Per-test outcomes, for example {"tests/test_x.py::test_a": "passed"}."""
+
+    def __init__(
+        self,
+        *,
+        passed: _builtins.bool = ...,
+        score: _builtins.float | None = ...,
+        details: _builtins.str = ...,
+        tests: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_score", b"_score", "score", b"score"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_score", b"_score", "details", b"details", "error", b"error", "passed", b"passed", "score", b"score", "tests", b"tests"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__score: _TypeAlias = _typing.Literal["score"]  # noqa: Y015
+    _WhichOneofArgType__score: _TypeAlias = _typing.Literal["_score", b"_score"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__score) -> _WhichOneofReturnType__score | None: ...
+
+Global___TaskCheck: _TypeAlias = TaskCheck  # noqa: Y015
 
 @_typing.final
 class Content(_message.Message):

@@ -169,8 +169,9 @@ func (m *Manager) Snapshot(ctx context.Context, id string) (string, error) {
 	return snap.id, nil
 }
 
-// Restore makes a new session from a snapshot, on the rung it was taken on.
-func (m *Manager) Restore(ctx context.Context, snapID string) (*Session, error) {
+// Restore makes a new session from a snapshot, on the rung it was taken on,
+// optionally with a different network policy.
+func (m *Manager) Restore(ctx context.Context, snapID string, network *Network) (*Session, error) {
 	m.mu.Lock()
 	snap, ok := m.snapshots[snapID]
 	m.mu.Unlock()
@@ -181,6 +182,15 @@ func (m *Manager) Restore(ctx context.Context, snapID string) (*Session, error) 
 		return nil, err
 	}
 	sp := snap.spec
+	if network != nil {
+		sp.Network = *network
+		if err := sp.Validate(); err != nil {
+			return nil, err
+		}
+		if err := snap.driver.supports(&sp); err != nil {
+			return nil, fmt.Errorf("%w: %s: %v", ErrUnavailable, snap.driver.name(), err)
+		}
+	}
 	s, err := m.sb.openWith(ctx, snap.driver, &sp, filepath.Join(snap.dir, "state"))
 	if err != nil {
 		return nil, err

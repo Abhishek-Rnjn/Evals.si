@@ -4,6 +4,7 @@ isort:skip_file
 """
 
 from collections import abc as _abc
+from evalsi.harness.v1alpha1 import harness_pb2 as _harness_pb2
 from evalsi.v1alpha1 import evaluator_pb2 as _evaluator_pb2
 from evalsi.v1alpha1 import record_pb2 as _record_pb2
 from evalsi.v1alpha1 import run_pb2 as _run_pb2
@@ -271,3 +272,87 @@ class LoadDatasetResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___LoadDatasetResponse: _TypeAlias = LoadDatasetResponse  # noqa: Y015
+
+@_typing.final
+class RunTaskRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SPEC_FIELD_NUMBER: _builtins.int
+    RECORD_FIELD_NUMBER: _builtins.int
+    TRIAL_FIELD_NUMBER: _builtins.int
+    RUN_ID_FIELD_NUMBER: _builtins.int
+    trial: _builtins.int
+    run_id: _builtins.str
+    @_builtins.property
+    def spec(self) -> _run_pb2.RunSpec: ...
+    @_builtins.property
+    def record(self) -> _record_pb2.Record: ...
+    def __init__(
+        self,
+        *,
+        spec: _run_pb2.RunSpec | None = ...,
+        record: _record_pb2.Record | None = ...,
+        trial: _builtins.int = ...,
+        run_id: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["record", b"record", "spec", b"spec"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["record", b"record", "run_id", b"run_id", "spec", b"spec", "trial", b"trial"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___RunTaskRequest: _TypeAlias = RunTaskRequest  # noqa: Y015
+
+@_typing.final
+class TaskResult(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RECORD_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    error: _builtins.str
+    """The task could not run (environment setup failed, the agent was
+    unreachable). The record is graded as an error, not as a failure.
+    """
+    @_builtins.property
+    def record(self) -> _record_pb2.Record:
+        """The record with output, trajectory, usage, check and provenance
+        (including the sandbox isolation). Empty when error is set.
+        """
+
+    def __init__(
+        self,
+        *,
+        record: _record_pb2.Record | None = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["record", b"record"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "record", b"record"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___TaskResult: _TypeAlias = TaskResult  # noqa: Y015
+
+@_typing.final
+class RunTaskResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TRAJECTORY_FIELD_NUMBER: _builtins.int
+    RESULT_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def trajectory(self) -> _harness_pb2.TrajectoryEvent: ...
+    @_builtins.property
+    def result(self) -> Global___TaskResult: ...
+    def __init__(
+        self,
+        *,
+        trajectory: _harness_pb2.TrajectoryEvent | None = ...,
+        result: Global___TaskResult | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["event", b"event", "result", b"result", "trajectory", b"trajectory"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["event", b"event", "result", b"result", "trajectory", b"trajectory"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType_event: _TypeAlias = _typing.Literal["trajectory", "result"]  # noqa: Y015
+    _WhichOneofArgType_event: _TypeAlias = _typing.Literal["event", b"event"]  # noqa: Y015
+    def WhichOneof(self, oneof_group: _WhichOneofArgType_event) -> _WhichOneofReturnType_event | None: ...
+
+Global___RunTaskResponse: _TypeAlias = RunTaskResponse  # noqa: Y015

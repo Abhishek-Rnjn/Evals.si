@@ -591,13 +591,23 @@ class RestoreRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     SNAPSHOT_ID_FIELD_NUMBER: _builtins.int
+    NETWORK_FIELD_NUMBER: _builtins.int
     snapshot_id: _builtins.str
+    @_builtins.property
+    def network(self) -> Global___NetworkPolicy:
+        """A different network policy for the restored sandbox, for example none
+        after a setup step that downloaded packages.
+        """
+
     def __init__(
         self,
         *,
         snapshot_id: _builtins.str = ...,
+        network: Global___NetworkPolicy | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["snapshot_id", b"snapshot_id"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["network", b"network"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["network", b"network", "snapshot_id", b"snapshot_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RestoreRequest: _TypeAlias = RestoreRequest  # noqa: Y015

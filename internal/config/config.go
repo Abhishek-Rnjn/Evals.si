@@ -96,8 +96,10 @@ type Config struct {
 	Judges       map[string]Judge  `json:"judges"`
 	DefaultJudge string            `json:"default_judge"`
 	Evaluate     Evaluate          `json:"evaluate"`
-	// Isolation for code-executing evaluators (the code pack).
+	// Isolation for code-executing evaluators and agent tasks.
 	Sandbox sandbox.Config `json:"sandbox"`
+	// What agent-run specs may make the worker execute outside the sandbox.
+	Agents Agents `json:"agents"`
 	// Where finished runs and online scores are exported (MLflow, OTel).
 	Sinks []sinks.Config `json:"sinks"`
 	// Authentication: JWT providers, API keys, TLS. Required on a
@@ -109,6 +111,17 @@ type Config struct {
 	Authorization authz.AuthorizationConfig `json:"authorization"`
 	Audit         authz.AuditConfig         `json:"audit"`
 	Metrics       Metrics                   `json:"metrics"`
+}
+
+// Agents lists what agent-run specs may make the worker itself execute.
+// Everything an agent does runs in the sandbox; these are the exceptions,
+// because a spec comes from an API caller: stdio MCP servers and external
+// harness commands (exact argv lists), and Python harness classes and checker
+// parsers ("module:name"). References into installed evalsi_* packages (the
+// benchmark adapters) are always allowed.
+type Agents struct {
+	TrustedCommands [][]string `json:"trusted_commands,omitempty"`
+	TrustedPython   []string   `json:"trusted_python,omitempty"`
 }
 
 // Metrics configures Prometheus metrics.

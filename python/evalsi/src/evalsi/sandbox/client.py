@@ -296,9 +296,19 @@ class SandboxClient:
         sandbox.image_digest = resp.image_digest
         return sandbox
 
-    async def restore(self, snapshot_id: str) -> Sandbox:
+    async def restore(
+        self, snapshot_id: str, *, network: str = "", allow_hosts: Sequence[str] = ()
+    ) -> Sandbox:
+        """A new sandbox from a snapshot; ``network`` replaces the snapshot's policy."""
+        request = pb.RestoreRequest(snapshot_id=snapshot_id)
+        if network:
+            if network not in _NETWORK:
+                raise ValueError(f"network must be one of {sorted(_NETWORK)}, not {network!r}")
+            request.network.CopyFrom(
+                pb.NetworkPolicy(mode=_NETWORK[network], allow=list(allow_hosts))
+            )
         try:
-            resp = await self.stub.Restore(pb.RestoreRequest(snapshot_id=snapshot_id))
+            resp = await self.stub.Restore(request)
         except grpc.aio.AioRpcError as exc:
             _raise(exc)
         return Sandbox(self, resp.sandbox_id, Isolation.from_proto(resp.isolation))

@@ -67,6 +67,11 @@ class EvaluatorPluginServiceStub:
                 request_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetRequest.SerializeToString,
                 response_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetResponse.FromString,
                 _registered_method=True)
+        self.RunTask = channel.unary_stream(
+                '/evalsi.plugin.v1alpha1.EvaluatorPluginService/RunTask',
+                request_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.RunTaskRequest.SerializeToString,
+                response_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.RunTaskResponse.FromString,
+                _registered_method=True)
 
 
 class EvaluatorPluginServiceServicer:
@@ -117,6 +122,15 @@ class EvaluatorPluginServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RunTask(self, request, context):
+        """Runs one agent task (a record and a trial) through the spec's harness,
+        streaming trajectory events, then the record with its output,
+        trajectory and check.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_EvaluatorPluginServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -144,6 +158,11 @@ def add_EvaluatorPluginServiceServicer_to_server(servicer, server):
                     servicer.LoadDataset,
                     request_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetRequest.FromString,
                     response_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetResponse.SerializeToString,
+            ),
+            'RunTask': grpc.unary_stream_rpc_method_handler(
+                    servicer.RunTask,
+                    request_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.RunTaskRequest.FromString,
+                    response_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.RunTaskResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -289,6 +308,33 @@ class EvaluatorPluginService:
             '/evalsi.plugin.v1alpha1.EvaluatorPluginService/LoadDataset',
             evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetRequest.SerializeToString,
             evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RunTask(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/evalsi.plugin.v1alpha1.EvaluatorPluginService/RunTask',
+            evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.RunTaskRequest.SerializeToString,
+            evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.RunTaskResponse.FromString,
             options,
             channel_credentials,
             insecure,

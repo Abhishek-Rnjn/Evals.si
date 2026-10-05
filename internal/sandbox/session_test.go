@@ -142,7 +142,7 @@ func TestSnapshotAndRestore(t *testing.T) {
 		}
 		execIn(t, sess, "sh", "-c", "echo changed > state.txt")
 		for range 2 {
-			clone, err := m.Restore(context.Background(), snap)
+			clone, err := m.Restore(context.Background(), snap, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -154,13 +154,17 @@ func TestSnapshotAndRestore(t *testing.T) {
 				t.Errorf("restored on %s, taken on %s", clone.Driver, sess.Driver)
 			}
 		}
+		open, err := m.Restore(context.Background(), snap, &Network{Mode: NetworkAllow})
+		if err != nil || open.Spec.Network.Mode != NetworkAllow {
+			t.Fatalf("restore with a network override: %v", err)
+		}
 		if r := execIn(t, sess, "cat", "state.txt"); r.stdout != "changed\n" {
 			t.Fatalf("original %q", r.stdout)
 		}
 		if err := m.DeleteSnapshot(snap); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := m.Restore(context.Background(), snap); !errors.Is(err, ErrNotFound) {
+		if _, err := m.Restore(context.Background(), snap, nil); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("deleted snapshot: %v", err)
 		}
 	})

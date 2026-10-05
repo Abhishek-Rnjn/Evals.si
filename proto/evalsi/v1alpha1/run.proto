@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package evalsi.v1alpha1;
 
+import "evalsi/v1alpha1/agent.proto";
 import "evalsi/v1alpha1/evaluation_service.proto";
 import "evalsi/v1alpha1/evaluator.proto";
 import "evalsi/v1alpha1/record.proto";
@@ -24,10 +25,16 @@ message RunSpec {
   // All gates must pass for the run to succeed.
   repeated Gate gates = 7;
   Budget budget = 8;
+  // Drives an agent through each record as a task (an agent run). Without
+  // one, a target with an agent uses the built-in harness with defaults.
+  Harness harness = 9;
+  // Where agent tasks run; records may override it in metadata["environment"].
+  Environment environment = 10;
 }
 
 message Target {
-  // "openai-compatible" or "anthropic".
+  // "openai-compatible" or "anthropic". For an agent run without an agent
+  // below, the model the built-in reference agent uses.
   string connector = 1;
   string model = 2;
   // Required for openai-compatible, for example http://localhost:8000/v1.
@@ -39,6 +46,8 @@ message Target {
   optional double temperature = 7;
   // Anthropic only: output_config.effort.
   string effort = 8;
+  // A bring-your-own agent instead of a model.
+  AgentTarget agent = 9;
 }
 
 message DatasetSource {

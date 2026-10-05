@@ -1281,8 +1281,11 @@ func (x *SnapshotResponse) GetSnapshotId() string {
 }
 
 type RestoreRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SnapshotId    string                 `protobuf:"bytes,1,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	SnapshotId string                 `protobuf:"bytes,1,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	// A different network policy for the restored sandbox, for example none
+	// after a setup step that downloaded packages.
+	Network       *NetworkPolicy `protobuf:"bytes,2,opt,name=network,proto3" json:"network,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1322,6 +1325,13 @@ func (x *RestoreRequest) GetSnapshotId() string {
 		return x.SnapshotId
 	}
 	return ""
+}
+
+func (x *RestoreRequest) GetNetwork() *NetworkPolicy {
+	if x != nil {
+		return x.Network
+	}
+	return nil
 }
 
 type RestoreResponse struct {
@@ -1829,10 +1839,11 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"3\n" +
 	"\x10SnapshotResponse\x12\x1f\n" +
 	"\vsnapshot_id\x18\x01 \x01(\tR\n" +
-	"snapshotId\"1\n" +
+	"snapshotId\"s\n" +
 	"\x0eRestoreRequest\x12\x1f\n" +
 	"\vsnapshot_id\x18\x01 \x01(\tR\n" +
-	"snapshotId\"p\n" +
+	"snapshotId\x12@\n" +
+	"\anetwork\x18\x02 \x01(\v2&.evalsi.sandbox.v1alpha1.NetworkPolicyR\anetwork\"p\n" +
 	"\x0fRestoreResponse\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12>\n" +
@@ -1956,35 +1967,36 @@ var file_evalsi_sandbox_v1alpha1_sandbox_proto_depIdxs = []int32{
 	11, // 14: evalsi.sandbox.v1alpha1.ExecResponse.result:type_name -> evalsi.sandbox.v1alpha1.ExecResult
 	13, // 15: evalsi.sandbox.v1alpha1.WriteFilesRequest.files:type_name -> evalsi.sandbox.v1alpha1.File
 	13, // 16: evalsi.sandbox.v1alpha1.ReadFilesResponse.files:type_name -> evalsi.sandbox.v1alpha1.File
-	34, // 17: evalsi.sandbox.v1alpha1.RestoreResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
-	35, // 18: evalsi.sandbox.v1alpha1.EgressEvent.time:type_name -> google.protobuf.Timestamp
-	33, // 19: evalsi.sandbox.v1alpha1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
-	23, // 20: evalsi.sandbox.v1alpha1.StatsResponse.egress:type_name -> evalsi.sandbox.v1alpha1.EgressEvent
-	2,  // 21: evalsi.sandbox.v1alpha1.SandboxService.Probe:input_type -> evalsi.sandbox.v1alpha1.ProbeRequest
-	8,  // 22: evalsi.sandbox.v1alpha1.SandboxService.Create:input_type -> evalsi.sandbox.v1alpha1.CreateRequest
-	10, // 23: evalsi.sandbox.v1alpha1.SandboxService.Exec:input_type -> evalsi.sandbox.v1alpha1.ExecRequest
-	14, // 24: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:input_type -> evalsi.sandbox.v1alpha1.WriteFilesRequest
-	16, // 25: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:input_type -> evalsi.sandbox.v1alpha1.ReadFilesRequest
-	18, // 26: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:input_type -> evalsi.sandbox.v1alpha1.SnapshotRequest
-	20, // 27: evalsi.sandbox.v1alpha1.SandboxService.Restore:input_type -> evalsi.sandbox.v1alpha1.RestoreRequest
-	22, // 28: evalsi.sandbox.v1alpha1.SandboxService.Stats:input_type -> evalsi.sandbox.v1alpha1.StatsRequest
-	25, // 29: evalsi.sandbox.v1alpha1.SandboxService.Destroy:input_type -> evalsi.sandbox.v1alpha1.DestroyRequest
-	27, // 30: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:input_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
-	4,  // 31: evalsi.sandbox.v1alpha1.SandboxService.Probe:output_type -> evalsi.sandbox.v1alpha1.ProbeResponse
-	9,  // 32: evalsi.sandbox.v1alpha1.SandboxService.Create:output_type -> evalsi.sandbox.v1alpha1.CreateResponse
-	12, // 33: evalsi.sandbox.v1alpha1.SandboxService.Exec:output_type -> evalsi.sandbox.v1alpha1.ExecResponse
-	15, // 34: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:output_type -> evalsi.sandbox.v1alpha1.WriteFilesResponse
-	17, // 35: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:output_type -> evalsi.sandbox.v1alpha1.ReadFilesResponse
-	19, // 36: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:output_type -> evalsi.sandbox.v1alpha1.SnapshotResponse
-	21, // 37: evalsi.sandbox.v1alpha1.SandboxService.Restore:output_type -> evalsi.sandbox.v1alpha1.RestoreResponse
-	24, // 38: evalsi.sandbox.v1alpha1.SandboxService.Stats:output_type -> evalsi.sandbox.v1alpha1.StatsResponse
-	26, // 39: evalsi.sandbox.v1alpha1.SandboxService.Destroy:output_type -> evalsi.sandbox.v1alpha1.DestroyResponse
-	28, // 40: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:output_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
-	31, // [31:41] is the sub-list for method output_type
-	21, // [21:31] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	5,  // 17: evalsi.sandbox.v1alpha1.RestoreRequest.network:type_name -> evalsi.sandbox.v1alpha1.NetworkPolicy
+	34, // 18: evalsi.sandbox.v1alpha1.RestoreResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
+	35, // 19: evalsi.sandbox.v1alpha1.EgressEvent.time:type_name -> google.protobuf.Timestamp
+	33, // 20: evalsi.sandbox.v1alpha1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
+	23, // 21: evalsi.sandbox.v1alpha1.StatsResponse.egress:type_name -> evalsi.sandbox.v1alpha1.EgressEvent
+	2,  // 22: evalsi.sandbox.v1alpha1.SandboxService.Probe:input_type -> evalsi.sandbox.v1alpha1.ProbeRequest
+	8,  // 23: evalsi.sandbox.v1alpha1.SandboxService.Create:input_type -> evalsi.sandbox.v1alpha1.CreateRequest
+	10, // 24: evalsi.sandbox.v1alpha1.SandboxService.Exec:input_type -> evalsi.sandbox.v1alpha1.ExecRequest
+	14, // 25: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:input_type -> evalsi.sandbox.v1alpha1.WriteFilesRequest
+	16, // 26: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:input_type -> evalsi.sandbox.v1alpha1.ReadFilesRequest
+	18, // 27: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:input_type -> evalsi.sandbox.v1alpha1.SnapshotRequest
+	20, // 28: evalsi.sandbox.v1alpha1.SandboxService.Restore:input_type -> evalsi.sandbox.v1alpha1.RestoreRequest
+	22, // 29: evalsi.sandbox.v1alpha1.SandboxService.Stats:input_type -> evalsi.sandbox.v1alpha1.StatsRequest
+	25, // 30: evalsi.sandbox.v1alpha1.SandboxService.Destroy:input_type -> evalsi.sandbox.v1alpha1.DestroyRequest
+	27, // 31: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:input_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
+	4,  // 32: evalsi.sandbox.v1alpha1.SandboxService.Probe:output_type -> evalsi.sandbox.v1alpha1.ProbeResponse
+	9,  // 33: evalsi.sandbox.v1alpha1.SandboxService.Create:output_type -> evalsi.sandbox.v1alpha1.CreateResponse
+	12, // 34: evalsi.sandbox.v1alpha1.SandboxService.Exec:output_type -> evalsi.sandbox.v1alpha1.ExecResponse
+	15, // 35: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:output_type -> evalsi.sandbox.v1alpha1.WriteFilesResponse
+	17, // 36: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:output_type -> evalsi.sandbox.v1alpha1.ReadFilesResponse
+	19, // 37: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:output_type -> evalsi.sandbox.v1alpha1.SnapshotResponse
+	21, // 38: evalsi.sandbox.v1alpha1.SandboxService.Restore:output_type -> evalsi.sandbox.v1alpha1.RestoreResponse
+	24, // 39: evalsi.sandbox.v1alpha1.SandboxService.Stats:output_type -> evalsi.sandbox.v1alpha1.StatsResponse
+	26, // 40: evalsi.sandbox.v1alpha1.SandboxService.Destroy:output_type -> evalsi.sandbox.v1alpha1.DestroyResponse
+	28, // 41: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:output_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
+	32, // [32:42] is the sub-list for method output_type
+	22, // [22:32] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_sandbox_v1alpha1_sandbox_proto_init() }

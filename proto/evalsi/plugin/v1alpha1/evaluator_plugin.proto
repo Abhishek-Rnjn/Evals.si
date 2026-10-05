@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package evalsi.plugin.v1alpha1;
 
+import "evalsi/harness/v1alpha1/harness.proto";
 import "evalsi/v1alpha1/evaluator.proto";
 import "evalsi/v1alpha1/record.proto";
 import "evalsi/v1alpha1/run.proto";
@@ -29,6 +30,10 @@ service EvaluatorPluginService {
   rpc Generate(GenerateRequest) returns (GenerateResponse);
   // Loads a dataset (file or hf:// URI) and streams its records in chunks.
   rpc LoadDataset(LoadDatasetRequest) returns (stream LoadDatasetResponse);
+  // Runs one agent task (a record and a trial) through the spec's harness,
+  // streaming trajectory events, then the record with its output,
+  // trajectory and check.
+  rpc RunTask(RunTaskRequest) returns (stream RunTaskResponse);
 }
 
 message DescribeRequest {}
@@ -93,4 +98,27 @@ message LoadDatasetRequest {
 
 message LoadDatasetResponse {
   repeated evalsi.v1alpha1.Record records = 1;
+}
+
+message RunTaskRequest {
+  evalsi.v1alpha1.RunSpec spec = 1;
+  evalsi.v1alpha1.Record record = 2;
+  int32 trial = 3;
+  string run_id = 4;
+}
+
+message TaskResult {
+  // The record with output, trajectory, usage, check and provenance
+  // (including the sandbox isolation). Empty when error is set.
+  evalsi.v1alpha1.Record record = 1;
+  // The task could not run (environment setup failed, the agent was
+  // unreachable). The record is graded as an error, not as a failure.
+  string error = 2;
+}
+
+message RunTaskResponse {
+  oneof event {
+    evalsi.harness.v1alpha1.TrajectoryEvent trajectory = 1;
+    TaskResult result = 2;
+  }
 }

@@ -243,11 +243,126 @@ async def goal_completion(record: Record, *, ctx: EvalContext) -> Score:
     )
 
 
+# --- agent runs: the environment checker, sandbox policy, efficiency ---
+
+
+@evaluator(
+    name="builtin/task-success",
+    version="1.0.0",
+    description=(
+        "Whether the environment checker passed the task's end state (agent runs). With "
+        "trials, its summary includes pass@k and pass^k."
+    ),
+    requires=Requirements(output=False),
+    outputs=[
+        MetricSpec("task-success", PASSED, higher_is_better=True),
+        MetricSpec("task-score", NUMBER, min=0.0, max=1.0, higher_is_better=True),
+    ],
+)
+def task_success(record: Record) -> list[Score]:
+    check = record.check
+    if check is None:
+        raise SkipRecord("no environment check: the task's environment has no checker")
+    scores = [
+        Score(
+            passed=check.passed,
+            name="task-success",
+            explanation=check.details[:1000],
+            metadata={"tests": check.tests} if check.tests else {},
+        )
+    ]
+    if check.score is not None:
+        scores.append(Score(number=check.score, name="task-score"))
+    return scores
+
+
+def _policy_steps(record: Record) -> list[tuple[str, str, bool]]:
+    out = []
+    for step in record.trajectory.steps if record.trajectory else []:
+        if step.type == "guardrail" and step.name.startswith("sandbox."):
+            granted = bool(step.attributes.get("evalsi.policy.granted"))
+            detail = step.output.as_text() if step.output else ""
+            out.append((step.name.removeprefix("sandbox."), detail, granted))
+    return out
+
+
+@evaluator(
+    name="builtin/policy-violations",
+    version="1.0.0",
+    description=(
+        "Sandbox policy events in an agent run: commands the sandbox denied, refused "
+        "egress (from the egress proxy's log) and requests for wider permissions. Passes "
+        "when there were none."
+    ),
+    requires=TRAJECTORY,
+    outputs=[
+        MetricSpec("policy-clean", PASSED, higher_is_better=True),
+        MetricSpec("policy-events", NUMBER, min=0.0, higher_is_better=False),
+        MetricSpec("escalation-requests", NUMBER, min=0.0, higher_is_better=False),
+    ],
+)
+def policy_violations(record: Record) -> list[Score]:
+    events = _policy_steps(record)
+    escalations = [e for e in events if e[0] == "escalation_request"]
+    summary = "; ".join(f"{kind}: {detail}" for kind, detail, _ in events[:10])
+    return [
+        Score(passed=not events, name="policy-clean", explanation=summary),
+        Score(
+            number=len(events),
+            name="policy-events",
+            metadata={"kinds": dict(Counter(e[0] for e in events))},
+        ),
+        Score(number=len(escalations), name="escalation-requests"),
+    ]
+
+
+@evaluator(
+    name="builtin/agent-efficiency",
+    version="1.0.0",
+    description=(
+        "Steps, tool calls, tokens and spend of an agent run, and whether it finished "
+        "within its budgets (not stopped for steps, spend or time)."
+    ),
+    requires=Requirements(output=False),
+    outputs=[
+        MetricSpec("within-budget", PASSED, higher_is_better=True),
+        MetricSpec("agent-steps", NUMBER, min=0.0, higher_is_better=False),
+        MetricSpec("agent-tokens", NUMBER, min=0.0, higher_is_better=False),
+        MetricSpec("agent-cost-usd", NUMBER, min=0.0, higher_is_better=False),
+    ],
+)
+def agent_efficiency(record: Record) -> list[Score]:
+    info = record.metadata.get("agent")
+    if not isinstance(info, dict):
+        raise SkipRecord("not an agent-run record (no metadata.agent)")
+    reason = str(info.get("stop_reason", ""))
+    scores = [
+        Score(
+            passed=reason not in ("max_steps", "budget", "timeout"),
+            name="within-budget",
+            explanation=f"stopped: {reason}",
+        )
+    ]
+    if isinstance(info.get("steps"), int | float):
+        scores.append(Score(number=info["steps"], name="agent-steps"))
+    usage = record.usage
+    if usage is not None and (usage.input_tokens is not None or usage.output_tokens is not None):
+        scores.append(
+            Score(
+                number=(usage.input_tokens or 0) + (usage.output_tokens or 0), name="agent-tokens"
+            )
+        )
+    if usage is not None and usage.cost_usd is not None:
+        scores.append(Score(number=usage.cost_usd, name="agent-cost-usd"))
+    return scores
+
+
 PACK = Pack(
     name="agent",
     description=(
-        "Agent trajectories: tool-call accuracy, trajectory match, tool errors, loops, "
-        "step budgets, judge-rated goal completion."
+        "Agent trajectories and agent runs: tool-call accuracy, trajectory match, tool "
+        "errors, loops, step budgets, judge-rated goal completion, environment-checked "
+        "task success, sandbox policy violations and efficiency."
     ),
     evaluators=[
         tool_call_accuracy,
@@ -256,5 +371,8 @@ PACK = Pack(
         loop_detection,
         step_budget,
         goal_completion,
+        task_success,
+        policy_violations,
+        agent_efficiency,
     ],
 )
