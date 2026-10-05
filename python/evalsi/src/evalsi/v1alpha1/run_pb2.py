@@ -27,10 +27,11 @@ from evalsi.v1alpha1 import evaluation_service_pb2 as evalsi_dot_v1alpha1_dot_ev
 from evalsi.v1alpha1 import evaluator_pb2 as evalsi_dot_v1alpha1_dot_evaluator__pb2
 from evalsi.v1alpha1 import record_pb2 as evalsi_dot_v1alpha1_dot_record__pb2
 from evalsi.v1alpha1 import score_pb2 as evalsi_dot_v1alpha1_dot_score__pb2
+from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19\x65valsi/v1alpha1/run.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1b\x65valsi/v1alpha1/agent.proto\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x03\n\x07RunSpec\x12\'\n\x06target\x18\x01 \x01(\x0b\x32\x17.evalsi.v1alpha1.Target\x12/\n\x07\x64\x61taset\x18\x02 \x01(\x0b\x32\x1e.evalsi.v1alpha1.DatasetSource\x12\x31\n\nevaluators\x18\x03 \x03(\x0b\x32\x1d.evalsi.v1alpha1.EvaluatorRef\x12\r\n\x05judge\x18\x04 \x01(\t\x12\x0e\n\x06trials\x18\x05 \x01(\x05\x12\x30\n\x07summary\x18\x06 \x01(\x0b\x32\x1f.evalsi.v1alpha1.SummaryOptions\x12$\n\x05gates\x18\x07 \x03(\x0b\x32\x15.evalsi.v1alpha1.Gate\x12\'\n\x06\x62udget\x18\x08 \x01(\x0b\x32\x17.evalsi.v1alpha1.Budget\x12)\n\x07harness\x18\t \x01(\x0b\x32\x18.evalsi.v1alpha1.Harness\x12\x31\n\x0b\x65nvironment\x18\n \x01(\x0b\x32\x1c.evalsi.v1alpha1.Environment\"\xe3\x01\n\x06Target\x12\x11\n\tconnector\x18\x01 \x01(\t\x12\r\n\x05model\x18\x02 \x01(\t\x12\x10\n\x08\x62\x61se_url\x18\x03 \x01(\t\x12\x13\n\x0b\x61pi_key_env\x18\x04 \x01(\t\x12\x15\n\rsystem_prompt\x18\x05 \x01(\t\x12\x12\n\nmax_tokens\x18\x06 \x01(\x05\x12\x18\n\x0btemperature\x18\x07 \x01(\x01H\x00\x88\x01\x01\x12\x0e\n\x06\x65\x66\x66ort\x18\x08 \x01(\t\x12+\n\x05\x61gent\x18\t \x01(\x0b\x32\x1c.evalsi.v1alpha1.AgentTargetB\x0e\n\x0c_temperature\"\xe7\x01\n\rDatasetSource\x12\x30\n\x06inline\x18\x01 \x01(\x0b\x32\x1e.evalsi.v1alpha1.InlineRecordsH\x00\x12\x0e\n\x04path\x18\x02 \x01(\tH\x00\x12\r\n\x03uri\x18\x03 \x01(\tH\x00\x12<\n\x07mapping\x18\x04 \x03(\x0b\x32+.evalsi.v1alpha1.DatasetSource.MappingEntry\x12\r\n\x05limit\x18\x05 \x01(\x05\x1a.\n\x0cMappingEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x08\n\x06source\"9\n\rInlineRecords\x12(\n\x07records\x18\x01 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\"s\n\x04Gate\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\'\n\x04stat\x18\x02 \x01(\x0e\x32\x19.evalsi.v1alpha1.GateStat\x12\x10\n\x03min\x18\x03 \x01(\x01H\x00\x88\x01\x01\x12\x10\n\x03max\x18\x04 \x01(\x01H\x01\x88\x01\x01\x42\x06\n\x04_minB\x06\n\x04_max\"o\n\nGateResult\x12#\n\x04gate\x18\x01 \x01(\x0b\x32\x15.evalsi.v1alpha1.Gate\x12\x0e\n\x06passed\x18\x02 \x01(\x08\x12\x12\n\x05value\x18\x03 \x01(\x01H\x00\x88\x01\x01\x12\x0e\n\x06reason\x18\x04 \x01(\tB\x08\n\x06_value\"=\n\x06\x42udget\x12\x19\n\x11max_target_tokens\x18\x01 \x01(\x03\x12\x18\n\x10max_judge_tokens\x18\x02 \x01(\x03\"\'\n\x08Progress\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0c\n\x04\x64one\x18\x02 \x01(\x03\"\xa9\x05\n\x03Run\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0f\n\x07project\x18\x03 \x01(\t\x12&\n\x04spec\x18\x04 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12*\n\x06status\x18\x05 \x01(\x0e\x32\x1a.evalsi.v1alpha1.RunStatus\x12.\n\ncreated_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nstarted_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0b\x66inished_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05\x65rror\x18\t \x01(\t\x12+\n\x08progress\x18\n \x01(\x0b\x32\x19.evalsi.v1alpha1.Progress\x12\x31\n\tsummaries\x18\x0b \x03(\x0b\x32\x1e.evalsi.v1alpha1.MetricSummary\x12*\n\x05gates\x18\x0c \x03(\x0b\x32\x1b.evalsi.v1alpha1.GateResult\x12,\n\x0ctarget_usage\x18\r \x01(\x0b\x32\x16.evalsi.v1alpha1.Usage\x12+\n\x0bjudge_usage\x18\x0e \x01(\x0b\x32\x16.evalsi.v1alpha1.Usage\x12\x16\n\x0e\x64\x61taset_sha256\x18\x0f \x01(\t\x12\x0f\n\x07records\x18\x10 \x01(\x03\x12\x30\n\x06labels\x18\x11 \x03(\x0b\x32 .evalsi.v1alpha1.Run.LabelsEntry\x12\x12\n\ncreated_by\x18\x12 \x01(\t\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01*f\n\x08GateStat\x12\x19\n\x15GATE_STAT_UNSPECIFIED\x10\x00\x12\x12\n\x0eGATE_STAT_MEAN\x10\x01\x12\x14\n\x10GATE_STAT_CI_LOW\x10\x02\x12\x15\n\x11GATE_STAT_CI_HIGH\x10\x03*\xb8\x01\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x16\n\x12RUN_STATUS_PENDING\x10\x01\x12\x16\n\x12RUN_STATUS_RUNNING\x10\x02\x12\x18\n\x14RUN_STATUS_SUCCEEDED\x10\x03\x12\x15\n\x11RUN_STATUS_FAILED\x10\x04\x12\x14\n\x10RUN_STATUS_ERROR\x10\x05\x12\x18\n\x14RUN_STATUS_CANCELLED\x10\x06\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19\x65valsi/v1alpha1/run.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1b\x65valsi/v1alpha1/agent.proto\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x94\x03\n\x07RunSpec\x12\'\n\x06target\x18\x01 \x01(\x0b\x32\x17.evalsi.v1alpha1.Target\x12/\n\x07\x64\x61taset\x18\x02 \x01(\x0b\x32\x1e.evalsi.v1alpha1.DatasetSource\x12\x31\n\nevaluators\x18\x03 \x03(\x0b\x32\x1d.evalsi.v1alpha1.EvaluatorRef\x12\r\n\x05judge\x18\x04 \x01(\t\x12\x0e\n\x06trials\x18\x05 \x01(\x05\x12\x30\n\x07summary\x18\x06 \x01(\x0b\x32\x1f.evalsi.v1alpha1.SummaryOptions\x12$\n\x05gates\x18\x07 \x03(\x0b\x32\x15.evalsi.v1alpha1.Gate\x12\'\n\x06\x62udget\x18\x08 \x01(\x0b\x32\x17.evalsi.v1alpha1.Budget\x12)\n\x07harness\x18\t \x01(\x0b\x32\x18.evalsi.v1alpha1.Harness\x12\x31\n\x0b\x65nvironment\x18\n \x01(\x0b\x32\x1c.evalsi.v1alpha1.Environment\"\xe3\x01\n\x06Target\x12\x11\n\tconnector\x18\x01 \x01(\t\x12\r\n\x05model\x18\x02 \x01(\t\x12\x10\n\x08\x62\x61se_url\x18\x03 \x01(\t\x12\x13\n\x0b\x61pi_key_env\x18\x04 \x01(\t\x12\x15\n\rsystem_prompt\x18\x05 \x01(\t\x12\x12\n\nmax_tokens\x18\x06 \x01(\x05\x12\x18\n\x0btemperature\x18\x07 \x01(\x01H\x00\x88\x01\x01\x12\x0e\n\x06\x65\x66\x66ort\x18\x08 \x01(\t\x12+\n\x05\x61gent\x18\t \x01(\x0b\x32\x1c.evalsi.v1alpha1.AgentTargetB\x0e\n\x0c_temperature\"\xc2\x02\n\rDatasetSource\x12\x30\n\x06inline\x18\x01 \x01(\x0b\x32\x1e.evalsi.v1alpha1.InlineRecordsH\x00\x12\x0e\n\x04path\x18\x02 \x01(\tH\x00\x12\r\n\x03uri\x18\x03 \x01(\tH\x00\x12-\n\x06traces\x18\x06 \x01(\x0b\x32\x1b.evalsi.v1alpha1.TraceQueryH\x00\x12*\n\x03run\x18\x07 \x01(\x0b\x32\x1b.evalsi.v1alpha1.RunOutputsH\x00\x12<\n\x07mapping\x18\x04 \x03(\x0b\x32+.evalsi.v1alpha1.DatasetSource.MappingEntry\x12\r\n\x05limit\x18\x05 \x01(\x05\x1a.\n\x0cMappingEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x08\n\x06source\"j\n\nTraceQuery\x12\x0f\n\x07service\x18\x01 \x01(\t\x12\x0e\n\x06policy\x18\x02 \x01(\t\x12\x0e\n\x06\x66ilter\x18\x03 \x01(\t\x12+\n\x08lookback\x18\x04 \x01(\x0b\x32\x19.google.protobuf.Duration\"?\n\nRunOutputs\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\r\n\x05trial\x18\x02 \x01(\x05\x12\x12\n\nall_trials\x18\x03 \x01(\x08\"9\n\rInlineRecords\x12(\n\x07records\x18\x01 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\"s\n\x04Gate\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\'\n\x04stat\x18\x02 \x01(\x0e\x32\x19.evalsi.v1alpha1.GateStat\x12\x10\n\x03min\x18\x03 \x01(\x01H\x00\x88\x01\x01\x12\x10\n\x03max\x18\x04 \x01(\x01H\x01\x88\x01\x01\x42\x06\n\x04_minB\x06\n\x04_max\"o\n\nGateResult\x12#\n\x04gate\x18\x01 \x01(\x0b\x32\x15.evalsi.v1alpha1.Gate\x12\x0e\n\x06passed\x18\x02 \x01(\x08\x12\x12\n\x05value\x18\x03 \x01(\x01H\x00\x88\x01\x01\x12\x0e\n\x06reason\x18\x04 \x01(\tB\x08\n\x06_value\"=\n\x06\x42udget\x12\x19\n\x11max_target_tokens\x18\x01 \x01(\x03\x12\x18\n\x10max_judge_tokens\x18\x02 \x01(\x03\"\'\n\x08Progress\x12\r\n\x05total\x18\x01 \x01(\x03\x12\x0c\n\x04\x64one\x18\x02 \x01(\x03\"\xa9\x05\n\x03Run\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x0f\n\x07project\x18\x03 \x01(\t\x12&\n\x04spec\x18\x04 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12*\n\x06status\x18\x05 \x01(\x0e\x32\x1a.evalsi.v1alpha1.RunStatus\x12.\n\ncreated_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nstarted_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0b\x66inished_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05\x65rror\x18\t \x01(\t\x12+\n\x08progress\x18\n \x01(\x0b\x32\x19.evalsi.v1alpha1.Progress\x12\x31\n\tsummaries\x18\x0b \x03(\x0b\x32\x1e.evalsi.v1alpha1.MetricSummary\x12*\n\x05gates\x18\x0c \x03(\x0b\x32\x1b.evalsi.v1alpha1.GateResult\x12,\n\x0ctarget_usage\x18\r \x01(\x0b\x32\x16.evalsi.v1alpha1.Usage\x12+\n\x0bjudge_usage\x18\x0e \x01(\x0b\x32\x16.evalsi.v1alpha1.Usage\x12\x16\n\x0e\x64\x61taset_sha256\x18\x0f \x01(\t\x12\x0f\n\x07records\x18\x10 \x01(\x03\x12\x30\n\x06labels\x18\x11 \x03(\x0b\x32 .evalsi.v1alpha1.Run.LabelsEntry\x12\x12\n\ncreated_by\x18\x12 \x01(\t\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01*f\n\x08GateStat\x12\x19\n\x15GATE_STAT_UNSPECIFIED\x10\x00\x12\x12\n\x0eGATE_STAT_MEAN\x10\x01\x12\x14\n\x10GATE_STAT_CI_LOW\x10\x02\x12\x15\n\x11GATE_STAT_CI_HIGH\x10\x03*\xb8\x01\n\tRunStatus\x12\x1a\n\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x16\n\x12RUN_STATUS_PENDING\x10\x01\x12\x16\n\x12RUN_STATUS_RUNNING\x10\x02\x12\x18\n\x14RUN_STATUS_SUCCEEDED\x10\x03\x12\x15\n\x11RUN_STATUS_FAILED\x10\x04\x12\x14\n\x10RUN_STATUS_ERROR\x10\x05\x12\x18\n\x14RUN_STATUS_CANCELLED\x10\x06\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -41,30 +42,34 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_DATASETSOURCE_MAPPINGENTRY']._serialized_options = b'8\001'
   _globals['_RUN_LABELSENTRY']._loaded_options = None
   _globals['_RUN_LABELSENTRY']._serialized_options = b'8\001'
-  _globals['_GATESTAT']._serialized_start=2190
-  _globals['_GATESTAT']._serialized_end=2292
-  _globals['_RUNSTATUS']._serialized_start=2295
-  _globals['_RUNSTATUS']._serialized_end=2479
-  _globals['_RUNSPEC']._serialized_start=243
-  _globals['_RUNSPEC']._serialized_end=647
-  _globals['_TARGET']._serialized_start=650
-  _globals['_TARGET']._serialized_end=877
-  _globals['_DATASETSOURCE']._serialized_start=880
-  _globals['_DATASETSOURCE']._serialized_end=1111
-  _globals['_DATASETSOURCE_MAPPINGENTRY']._serialized_start=1055
-  _globals['_DATASETSOURCE_MAPPINGENTRY']._serialized_end=1101
-  _globals['_INLINERECORDS']._serialized_start=1113
-  _globals['_INLINERECORDS']._serialized_end=1170
-  _globals['_GATE']._serialized_start=1172
-  _globals['_GATE']._serialized_end=1287
-  _globals['_GATERESULT']._serialized_start=1289
-  _globals['_GATERESULT']._serialized_end=1400
-  _globals['_BUDGET']._serialized_start=1402
-  _globals['_BUDGET']._serialized_end=1463
-  _globals['_PROGRESS']._serialized_start=1465
-  _globals['_PROGRESS']._serialized_end=1504
-  _globals['_RUN']._serialized_start=1507
-  _globals['_RUN']._serialized_end=2188
-  _globals['_RUN_LABELSENTRY']._serialized_start=2143
-  _globals['_RUN_LABELSENTRY']._serialized_end=2188
+  _globals['_GATESTAT']._serialized_start=2486
+  _globals['_GATESTAT']._serialized_end=2588
+  _globals['_RUNSTATUS']._serialized_start=2591
+  _globals['_RUNSTATUS']._serialized_end=2775
+  _globals['_RUNSPEC']._serialized_start=275
+  _globals['_RUNSPEC']._serialized_end=679
+  _globals['_TARGET']._serialized_start=682
+  _globals['_TARGET']._serialized_end=909
+  _globals['_DATASETSOURCE']._serialized_start=912
+  _globals['_DATASETSOURCE']._serialized_end=1234
+  _globals['_DATASETSOURCE_MAPPINGENTRY']._serialized_start=1178
+  _globals['_DATASETSOURCE_MAPPINGENTRY']._serialized_end=1224
+  _globals['_TRACEQUERY']._serialized_start=1236
+  _globals['_TRACEQUERY']._serialized_end=1342
+  _globals['_RUNOUTPUTS']._serialized_start=1344
+  _globals['_RUNOUTPUTS']._serialized_end=1407
+  _globals['_INLINERECORDS']._serialized_start=1409
+  _globals['_INLINERECORDS']._serialized_end=1466
+  _globals['_GATE']._serialized_start=1468
+  _globals['_GATE']._serialized_end=1583
+  _globals['_GATERESULT']._serialized_start=1585
+  _globals['_GATERESULT']._serialized_end=1696
+  _globals['_BUDGET']._serialized_start=1698
+  _globals['_BUDGET']._serialized_end=1759
+  _globals['_PROGRESS']._serialized_start=1761
+  _globals['_PROGRESS']._serialized_end=1800
+  _globals['_RUN']._serialized_start=1803
+  _globals['_RUN']._serialized_end=2484
+  _globals['_RUN_LABELSENTRY']._serialized_start=2439
+  _globals['_RUN_LABELSENTRY']._serialized_end=2484
 # @@protoc_insertion_point(module_scope)

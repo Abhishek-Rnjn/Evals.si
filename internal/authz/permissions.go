@@ -49,6 +49,7 @@ var Permissions = []Permission{
 	{Name: "self.read", Description: "Read your own identity and access (WhoAmI, ListProjects).", Public: true},
 	{Name: "projects.manage", Description: "Create projects.", InstallWide: true, Audited: true},
 	{Name: "metrics.read", Description: "Read Prometheus metrics for the whole install.", InstallWide: true},
+	{Name: "datasets.write", Description: "Promote a run's results into a dataset of the project.", Audited: true},
 }
 
 var permissionIndex = func() map[string]Permission {

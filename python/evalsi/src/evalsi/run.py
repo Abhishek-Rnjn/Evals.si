@@ -80,7 +80,12 @@ def load_dataset(source: run_pb2.DatasetSource, base_dir: Path) -> list[Record]:
         )
     if kind == "uri":
         return load_records(_resolve_uri(source.uri, base_dir), mapping=mapping, limit=limit)
-    raise EvaluatorConfigError("dataset needs one of inline, path or uri")
+    if kind in ("traces", "run"):
+        raise DatasetError(
+            f"dataset.{kind} reads the server's stored {'traces' if kind == 'traces' else 'runs'}; "
+            "run this spec with --server"
+        )
+    raise EvaluatorConfigError("dataset needs one of inline, path, uri, traces or run")
 
 
 def _resolve_uri(uri: str, base_dir: Path) -> str:

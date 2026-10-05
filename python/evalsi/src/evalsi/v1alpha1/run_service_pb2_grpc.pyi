@@ -46,6 +46,15 @@ class RunServiceStub:
     ListRunResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]
     CompareRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]
     """Paired comparison of two runs over the records they share."""
+    PromoteResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.PromoteResultsRequest, _run_service_pb2.PromoteResultsResponse]
+    """Appends a run's records that match a condition (failures, typically) to
+    a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
+    """
+    CreateShadowReplay: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.CreateShadowReplayRequest, _run_service_pb2.CreateShadowReplayResponse]
+    """Shadow replay: re-runs recorded inputs (production traces, a promoted
+    dataset, an earlier run) against a candidate and scores the recorded
+    outputs the same way, as two runs to compare with CompareRuns.
+    """
 
 @_typing.type_check_only
 class RunServiceAsyncStub(RunServiceStub):
@@ -65,6 +74,15 @@ class RunServiceAsyncStub(RunServiceStub):
     ListRunResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]  # type: ignore[assignment]
     CompareRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]  # type: ignore[assignment]
     """Paired comparison of two runs over the records they share."""
+    PromoteResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.PromoteResultsRequest, _run_service_pb2.PromoteResultsResponse]  # type: ignore[assignment]
+    """Appends a run's records that match a condition (failures, typically) to
+    a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
+    """
+    CreateShadowReplay: _aio.UnaryUnaryMultiCallable[_run_service_pb2.CreateShadowReplayRequest, _run_service_pb2.CreateShadowReplayResponse]  # type: ignore[assignment]
+    """Shadow replay: re-runs recorded inputs (production traces, a promoted
+    dataset, an earlier run) against a candidate and scores the recorded
+    outputs the same way, as two runs to compare with CompareRuns.
+    """
 
 class RunServiceServicer(metaclass=_abc_1.ABCMeta):
     """RunService manages offline runs: create, follow, cancel, resume, compare.
@@ -129,5 +147,26 @@ class RunServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_run_service_pb2.CompareRunsResponse, _abc.Awaitable[_run_service_pb2.CompareRunsResponse]]:
         """Paired comparison of two runs over the records they share."""
+
+    @_abc_1.abstractmethod
+    def PromoteResults(
+        self,
+        request: _run_service_pb2.PromoteResultsRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.PromoteResultsResponse, _abc.Awaitable[_run_service_pb2.PromoteResultsResponse]]:
+        """Appends a run's records that match a condition (failures, typically) to
+        a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
+        """
+
+    @_abc_1.abstractmethod
+    def CreateShadowReplay(
+        self,
+        request: _run_service_pb2.CreateShadowReplayRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.CreateShadowReplayResponse, _abc.Awaitable[_run_service_pb2.CreateShadowReplayResponse]]:
+        """Shadow replay: re-runs recorded inputs (production traces, a promoted
+        dataset, an earlier run) against a candidate and scores the recorded
+        outputs the same way, as two runs to compare with CompareRuns.
+        """
 
 def add_RunServiceServicer_to_server(servicer: RunServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

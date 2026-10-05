@@ -8,20 +8,18 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -29,7 +27,7 @@ import (
 
 // Options configures the engine.
 type Options struct {
-	// Root for promoted datasets (<root>/promoted/<name>.jsonl). Empty disables promotion.
+	// Root for promoted datasets (<root>/promoted/<project>/<name>.jsonl). Empty disables promotion.
 	DatasetsDir string
 	// Traces evaluated together per worker call.
 	BatchSize int
@@ -73,7 +71,6 @@ type Engine struct {
 	mu       sync.Mutex
 	policies map[string]*policyState
 
-	promoteMu sync.Mutex
 
 	TracesIngested atomic.Int64
 	TracesDropped  atomic.Int64
@@ -315,7 +312,7 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 			e.opts.OnResults(c.policy.GetName(), cand.record, cand.info, cand.results)
 		}
 		if c.promote != nil && eval(c.promote, activation(cand.info, cand.scores)) {
-			if err := e.promoteRecord(c.policy.GetPromote().GetDataset(), cand.record, cand.scores); err != nil {
+			if err := e.promoteRecord(c.policy.GetProject(), c.policy.GetPromote().GetDataset(), cand.record, cand.scores); err != nil {
 				e.log.Error("promoting trace", "trace", cand.record.GetId(), "err", err)
 			} else {
 				promoted++
@@ -427,40 +424,15 @@ func (e *Engine) notify(ev alertEvent) {
 	}
 }
 
-// promoteRecord appends a trace to a JSONL dataset that `evalsi eval` and run
-// specs can load, so failing production traces become regression cases.
-func (e *Engine) promoteRecord(dataset string, record *evalsiv1alpha1.Record, scores map[string]float64) error {
-	dir := filepath.Join(e.opts.DatasetsDir, "promoted")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	rec := proto.Clone(record).(*evalsiv1alpha1.Record)
-	raw, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(rec)
+// promoteRecord appends a trace to the project's promoted dataset
+// (promoted/<project>/<dataset>.jsonl), so failing production traces become
+// regression cases.
+func (e *Engine) promoteRecord(project, dataset string, record *evalsiv1alpha1.Record, scores map[string]float64) error {
+	row, err := datasets.Row(record, map[string]any{"online_scores": scores})
 	if err != nil {
 		return err
 	}
-	var row map[string]any
-	if err := json.Unmarshal(raw, &row); err != nil {
-		return err
-	}
-	meta, _ := row["metadata"].(map[string]any)
-	if meta == nil {
-		meta = map[string]any{}
-	}
-	meta["online_scores"] = scores
-	row["metadata"] = meta
-	line, err := json.Marshal(row)
-	if err != nil {
-		return err
-	}
-	e.promoteMu.Lock()
-	defer e.promoteMu.Unlock()
-	f, err := os.OpenFile(filepath.Join(dir, dataset+".jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = f.Write(append(line, '\n'))
+	_, err = datasets.Append(e.opts.DatasetsDir, project, dataset, [][]byte{row})
 	return err
 }
 

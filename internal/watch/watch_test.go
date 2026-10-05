@@ -259,7 +259,7 @@ func TestPolicyPipeline(t *testing.T) {
 	}
 
 	// Promoted traces form a dataset the Python loader understands.
-	raw, err := os.ReadFile(filepath.Join(h.dir, "promoted", "support-regressions.jsonl"))
+	raw, err := os.ReadFile(filepath.Join(h.dir, "promoted", "default", "support-regressions.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}

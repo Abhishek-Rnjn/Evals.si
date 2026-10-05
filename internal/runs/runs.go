@@ -45,7 +45,9 @@ type Options struct {
 	MaxConcurrent int
 	Evaluate      config.Evaluate
 	Agents        config.Agents
-	Logger        *slog.Logger
+	// Online scores of a policy's stored results, for trace datasets.
+	TraceScores func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64
+	Logger      *slog.Logger
 	// Called with a copy of each run that reaches a final status (for sinks); must not block.
 	OnFinished func(*evalsiv1alpha1.Run)
 }
@@ -225,11 +227,23 @@ func (m *Manager) resolveURI(uri string) (string, error) {
 	return out, nil
 }
 
-func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSource) ([]*evalsiv1alpha1.Record, error) {
+func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSource, project string) ([]*evalsiv1alpha1.Record, error) {
 	var records []*evalsiv1alpha1.Record
+	var err error
 	switch s := src.GetSource().(type) {
 	case *evalsiv1alpha1.DatasetSource_Inline:
 		records = s.Inline.GetRecords()
+		if n := int(src.GetLimit()); n > 0 && n < len(records) {
+			records = records[:n]
+		}
+	case *evalsiv1alpha1.DatasetSource_Traces:
+		if records, err = m.traceRecords(ctx, s.Traces, project, int(src.GetLimit())); err != nil {
+			return nil, err
+		}
+	case *evalsiv1alpha1.DatasetSource_Run:
+		if records, err = m.runRecords(ctx, s.Run); err != nil {
+			return nil, err
+		}
 		if n := int(src.GetLimit()); n > 0 && n < len(records) {
 			records = records[:n]
 		}
@@ -249,7 +263,6 @@ func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSo
 			}
 			req.Source = &evalsiv1alpha1.DatasetSource_Uri{Uri: uri}
 		}
-		var err error
 		records, err = m.worker.LoadDataset(ctx, &pluginv1alpha1.LoadDatasetRequest{Source: req})
 		if err != nil {
 			code := connect.CodeOf(err)
@@ -314,24 +327,30 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 	if err != nil {
 		return nil, err
 	}
-	records, err := m.loadDataset(ctx, spec.GetDataset())
+	project := projectOr(req.Msg.GetProject())
+	records, err := m.loadDataset(ctx, spec.GetDataset(), project)
 	if err != nil {
 		return nil, err
 	}
+	run, err := m.createRun(ctx, req.Msg.GetName(), project, req.Msg.GetLabels(), spec, insts, records)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{Run: run}), nil
+}
+
+// createRun stores a validated run over a dataset snapshot and starts it.
+func (m *Manager) createRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record) (*evalsiv1alpha1.Run, error) {
 	stored := proto.Clone(spec).(*evalsiv1alpha1.RunSpec)
 	if stored.GetDataset().GetInline() != nil {
 		// The records live in the snapshot; keep the stored spec small.
 		stored.Dataset.Source = &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{}}
 	}
-	project := req.Msg.GetProject()
-	if project == "" {
-		project = DefaultProject
-	}
 	run := &evalsiv1alpha1.Run{
 		Id:            newID(),
-		Name:          req.Msg.GetName(),
+		Name:          name,
 		Project:       project,
-		Labels:        req.Msg.GetLabels(),
+		Labels:        labels,
 		CreatedBy:     auth.PrincipalFrom(ctx).ID(),
 		Spec:          stored,
 		Status:        evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING,
@@ -344,7 +363,7 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 		return nil, err
 	}
 	m.start(run)
-	return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{Run: run}), nil
+	return run, nil
 }
 
 func (m *Manager) start(run *evalsiv1alpha1.Run) {

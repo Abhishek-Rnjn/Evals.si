@@ -33,6 +33,7 @@ func mustEnv() *cel.Env {
 		cel.Variable("attributes", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("resource", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("scores", cel.MapType(cel.StringType, cel.DoubleType)),
+		cel.Variable("labels", cel.MapType(cel.StringType, cel.StringType)),
 		// Let people write duration_ms > 20000 without 20000.0.
 		cel.CrossTypeNumericComparisons(true),
 	)
@@ -73,8 +74,15 @@ func activation(info ingest.TraceInfo, scores map[string]float64) map[string]any
 		"service": info.Service, "name": info.Name, "duration_ms": info.DurationMS,
 		"error": info.Error, "steps": int64(info.Steps), "tools": tools, "models": models,
 		"attributes": map[string]any(info.Attributes), "resource": map[string]any(info.Resource),
-		"scores": scores,
+		"scores": scores, "labels": labelsOf(info.Labels),
 	}
+}
+
+func labelsOf(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
 }
 
 // eval runs a compiled condition; a nil program is true. Evaluation errors

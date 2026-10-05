@@ -20,6 +20,13 @@ service RunService {
   rpc ListRunResults(ListRunResultsRequest) returns (ListRunResultsResponse);
   // Paired comparison of two runs over the records they share.
   rpc CompareRuns(CompareRunsRequest) returns (CompareRunsResponse);
+  // Appends a run's records that match a condition (failures, typically) to
+  // a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
+  rpc PromoteResults(PromoteResultsRequest) returns (PromoteResultsResponse);
+  // Shadow replay: re-runs recorded inputs (production traces, a promoted
+  // dataset, an earlier run) against a candidate and scores the recorded
+  // outputs the same way, as two runs to compare with CompareRuns.
+  rpc CreateShadowReplay(CreateShadowReplayRequest) returns (CreateShadowReplayResponse);
 }
 
 message CreateRunRequest {
@@ -121,4 +128,38 @@ message MetricComparison {
 
 message CompareRunsResponse {
   repeated MetricComparison comparisons = 1;
+}
+
+message PromoteResultsRequest {
+  string run_id = 1;
+  // Lowercase letters, digits, '.', '_' or '-'.
+  string dataset = 2;
+  // A CEL condition per record and trial over scores (metric -> value;
+  // pass/fail as 1 or 0), errored (an evaluation errored), trial, and
+  // record.id and record.metadata. For example: scores["task-success"] < 1.
+  string when = 3;
+  // Also keep the run's output, trajectory and check (for re-scoring and
+  // shadow baselines); without it, only what the target or agent needs.
+  bool include_outputs = 4;
+}
+
+message PromoteResultsResponse {
+  int64 promoted = 1;
+  // Relative to datasets_dir, usable as a dataset path in run specs.
+  string path = 2;
+}
+
+message CreateShadowReplayRequest {
+  string name = 1;
+  string project = 2;
+  // The candidate: a target or agent, its dataset (records with recorded
+  // outputs) and evaluators. The baseline run scores the recorded outputs
+  // with the same evaluators; gates apply to the candidate.
+  RunSpec candidate = 3;
+  map<string, string> labels = 4;
+}
+
+message CreateShadowReplayResponse {
+  Run baseline = 1;
+  Run candidate = 2;
 }

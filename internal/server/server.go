@@ -127,6 +127,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 		return err
 	}
 	auditor := authz.NewAuditor(st, exports.Audit, log)
+	var watcher *watch.Engine // created below; runs read its policies' score names
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
 		DatasetsDir:   cfg.DatasetsDir,
 		MaxConcurrent: cfg.Runs.MaxConcurrent,
@@ -134,6 +135,9 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 		Agents:        cfg.Agents,
 		Logger:        log,
 		OnFinished:    exports.Run,
+		TraceScores: func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64 {
+			return watcher.TraceScores(policy, results)
+		},
 	})
 	if err != nil {
 		return err
@@ -141,7 +145,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	// Runs stop before the worker does (deferred calls run in reverse order).
 	defer runManager.Shutdown()
 
-	watcher, err := watch.New(ctx, st, svc, watch.Options{
+	watcher, err = watch.New(ctx, st, svc, watch.Options{
 		DatasetsDir: cfg.DatasetsDir, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
 		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
 			exports.Trace(&sinks.Trace{

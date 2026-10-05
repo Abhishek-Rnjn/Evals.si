@@ -53,8 +53,10 @@ def _parser() -> argparse.ArgumentParser:
     _add_run(sub)
     _add_policy(sub)
     from evalsi.cli_auth import add_auth_commands
+    from evalsi.cli_flywheel import add_flywheel_commands
 
     add_auth_commands(sub)
+    add_flywheel_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
     cat.add_argument("--format", choices=["table", "json"], default="table")
@@ -614,6 +616,11 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     if args.format == "json":
         print(json.dumps(comparisons, indent=2))
         return 0
+    _cmd_compare_rows(comparisons)
+    return 0
+
+
+def _cmd_compare_rows(comparisons: list[dict[str, Any]]) -> None:
     rows = [["metric", "n", "baseline", "candidate", "diff", "CI", ""]]
     for c in comparisons:
         ci = c.get("diffCi")
@@ -631,7 +638,6 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     for row in rows:
         print("  ".join(cell.ljust(w) for cell, w in zip(row, widths, strict=True)).rstrip())
-    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

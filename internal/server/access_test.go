@@ -171,6 +171,8 @@ func startAuthServer(t *testing.T, mutate func(*config.Config)) *testServer {
 		"checkout-viewer": {"checkout": {"viewer"}},
 		"prompt-engineer": {"support": {"prompt-engineer"}},
 		"key-admin":       {"support": {"key-admin"}},
+		"blind-runner":    {"support": {"blind-runner"}},
+		"checkout-runner": {"checkout": {"runner"}},
 	}
 	var keys []auth.ConfigKey
 	for name, r := range roles {
@@ -194,6 +196,8 @@ func startAuthServer(t *testing.T, mutate func(*config.Config)) *testServer {
 			{Name: "prompt-engineer", Inherits: []string{"viewer"}, Permissions: []string{"evaluations.run", "runs.create"},
 				Condition: `!has(resource.target) || resource.target.model in ["qwen3"]`},
 			{Name: "key-admin", Permissions: []string{"access.manage", "runs.read"}},
+			// Starts runs but may not read production traces.
+			{Name: "blind-runner", Permissions: []string{"runs.create", "runs.read", "evaluations.run"}},
 		},
 		Projects: map[string]map[string][]string{
 			"support":  {"runner": {`cel:jwt.repository == "acme/agent" && jwt.ref == "refs/heads/main"`}},
@@ -645,5 +649,61 @@ func TestStartupRefusesNonLoopbackWithoutAuth(t *testing.T) {
 	cfg.DataDir = filepath.Join(t.TempDir(), "d")
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "without authentication") {
 		t.Errorf("Validate = %v", err)
+	}
+}
+
+// Datasets drawn from traces, earlier runs or other projects' promotions are
+// authorized as reads of those resources; promotion needs datasets.write.
+func TestFlywheelAccess(t *testing.T) {
+	s := startAuthServer(t, func(c *config.Config) { c.DatasetsDir = t.TempDir() })
+	ctx := context.Background()
+	runsAs := func(who string) evalsiv1alpha1connect.RunServiceClient {
+		return evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys[who]))
+	}
+	created, err := runsAs("runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: runSpec("qwen3")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	supportRun := created.Msg.GetRun().GetId()
+	promote := func(who string) error {
+		_, err := runsAs(who).PromoteResults(ctx, connect.NewRequest(&evalsiv1alpha1.PromoteResultsRequest{RunId: supportRun, Dataset: "regressions", When: "true"}))
+		return err
+	}
+	if err := promote("runner"); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("runner promoting: %v", err)
+	}
+	if err := promote("editor"); err != nil {
+		t.Errorf("editor promoting: %v", err)
+	}
+	withDataset := func(src *evalsiv1alpha1.DatasetSource) *evalsiv1alpha1.RunSpec {
+		spec := runSpec("qwen3")
+		spec.Target, spec.Dataset = nil, src
+		return spec
+	}
+	traces := &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Traces{Traces: &evalsiv1alpha1.TraceQuery{}}}
+	if _, err := runsAs("blind-runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: withDataset(traces)})); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("a runner without traces.read replaying traces: %v", err)
+	}
+	if _, err := runsAs("runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: withDataset(traces)})); codeOf(err) == connect.CodePermissionDenied {
+		t.Errorf("runner replaying its project's traces: %v", err)
+	}
+	fromRun := &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Run{Run: &evalsiv1alpha1.RunOutputs{RunId: supportRun}}}
+	if _, err := runsAs("checkout-runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "checkout", Spec: withDataset(fromRun)})); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("re-scoring another project's run: %v", err)
+	}
+	promoted := &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Path{Path: "promoted/support/regressions.jsonl"}}
+	if _, err := runsAs("checkout-runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "checkout", Spec: withDataset(promoted)})); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("reading another project's promoted dataset: %v", err)
+	}
+	shadow := func(who string) error {
+		spec := runSpec("qwen3")
+		_, err := runsAs(who).CreateShadowReplay(ctx, connect.NewRequest(&evalsiv1alpha1.CreateShadowReplayRequest{Project: "support", Candidate: spec}))
+		return err
+	}
+	if err := shadow("viewer"); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("viewer shadow replay: %v", err)
+	}
+	if err := shadow("runner"); codeOf(err) == connect.CodePermissionDenied {
+		t.Errorf("runner shadow replay: %v", err)
 	}
 }

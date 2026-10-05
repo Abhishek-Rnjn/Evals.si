@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -677,5 +678,131 @@ func TestAgentRunValidation(t *testing.T) {
 	}())
 	if err != nil || !filepath.IsAbs(spec.GetHarness().GetBuiltin().GetRecording().GetDir()) {
 		t.Errorf("worker spec recording dir: %v %v", spec, err)
+	}
+}
+
+func TestPromotionRescoringAndShadowReplay(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	run := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{
+		Target: target(), Dataset: inline("easy", "flaky", "broken"), Evaluators: refs("exact-match"), Trials: 2,
+	}).GetId())
+
+	// Promote the records that failed in some trial (flaky in trial 1); broken errored.
+	resp, err := h.m.PromoteResults(ctx, connect.NewRequest(&evalsiv1alpha1.PromoteResultsRequest{
+		RunId: run.GetId(), Dataset: "regressions", When: `scores["exact-match"] < 1.0 || errored`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.GetPromoted() != 2 || resp.Msg.GetPath() != "promoted/p/regressions.jsonl" {
+		t.Fatalf("promoted %v", resp.Msg)
+	}
+	raw, err := os.ReadFile(filepath.Join(h.dir, "datasets", "promoted", "p", "regressions.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], `"promoted_from"`) || strings.Contains(lines[0], `"output"`) {
+		t.Fatalf("promoted rows:\n%s", raw)
+	}
+	for _, bad := range []*evalsiv1alpha1.PromoteResultsRequest{
+		{RunId: run.GetId(), Dataset: "../x", When: "true"},
+		{RunId: run.GetId(), Dataset: "x"},
+		{RunId: run.GetId(), Dataset: "x", When: "scores"},
+	} {
+		if _, err := h.m.PromoteResults(ctx, connect.NewRequest(bad)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%v: %v", bad, err)
+		}
+	}
+
+	// Re-score the first run's outputs with another evaluator, without the target.
+	calls := h.worker.generateCalls.Load()
+	rescored := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{
+		Dataset:    &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Run{Run: &evalsiv1alpha1.RunOutputs{RunId: run.GetId(), AllTrials: true}}},
+		Evaluators: refs("exact-match"),
+	}).GetId())
+	if h.worker.generateCalls.Load() != calls || rescored.GetRecords() != 4 {
+		t.Fatalf("re-scoring ran the target or lost records: %d records", rescored.GetRecords())
+	}
+	if s := summary(rescored, "exact-match"); s.GetMean() != 0.75 {
+		t.Errorf("re-scored exact-match %v", s)
+	}
+
+	// Shadow replay: recorded production answers against the candidate.
+	recorded := &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{Records: []*evalsiv1alpha1.Record{
+		{Id: "a", Input: text("easy"), Output: text("wrong"), Reference: text("right")},
+		{Id: "b", Input: text("easy"), Output: text("right"), Reference: text("right")},
+	}}}}
+	shadow, err := h.m.CreateShadowReplay(ctx, connect.NewRequest(&evalsiv1alpha1.CreateShadowReplayRequest{
+		Name: "candidate-v2", Project: "p",
+		Candidate: &evalsiv1alpha1.RunSpec{Target: target(), Dataset: recorded, Evaluators: refs("exact-match"),
+			Gates: []*evalsiv1alpha1.Gate{{Metric: "exact-match", Min: proto.Float64(0.9)}}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := h.wait(t, shadow.Msg.GetBaseline().GetId())
+	cand := h.wait(t, shadow.Msg.GetCandidate().GetId())
+	if base.GetSpec().GetTarget() != nil || len(base.GetGates()) != 0 || base.GetName() != "candidate-v2-baseline" {
+		t.Errorf("baseline %v", base)
+	}
+	if summary(base, "exact-match").GetMean() != 0.5 || summary(cand, "exact-match").GetMean() != 1 {
+		t.Errorf("baseline %v candidate %v", summary(base, "exact-match"), summary(cand, "exact-match"))
+	}
+	cmp, err := h.m.CompareRuns(ctx, connect.NewRequest(&evalsiv1alpha1.CompareRunsRequest{BaselineRunId: base.GetId(), CandidateRunId: cand.GetId()}))
+	if err != nil || cmp.Msg.GetComparisons()[0].GetPairedN() != 2 || cmp.Msg.GetComparisons()[0].GetDiff() != 0.5 {
+		t.Fatalf("compare %v %v", cmp, err)
+	}
+	if _, err := h.m.CreateShadowReplay(ctx, connect.NewRequest(&evalsiv1alpha1.CreateShadowReplayRequest{
+		Candidate: &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy"), Evaluators: refs("exact-match")},
+	})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("a dataset without recorded outputs: %v", err)
+	}
+}
+
+func TestTraceDatasets(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	now := time.Now()
+	for i, svc := range []string{"support", "support", "billing"} {
+		id := fmt.Sprintf("trace-%d", i)
+		sum := &evalsiv1alpha1.TraceSummary{TraceId: id, Service: svc, Name: "turn", Project: "p", Error: i == 1,
+			StartTime: timestamppb.New(now.Add(-time.Duration(i) * time.Hour))}
+		rec := &evalsiv1alpha1.Record{Id: id, Input: text("easy"), Output: text("recorded"), Reference: text("right")}
+		if err := h.st.PutTrace(ctx, sum, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := &evalsiv1alpha1.TraceSummary{TraceId: "elsewhere", Service: "support", Project: "q", StartTime: timestamppb.Now()}
+	if err := h.st.PutTrace(ctx, other, &evalsiv1alpha1.Record{Id: "elsewhere", Input: text("easy")}); err != nil {
+		t.Fatal(err)
+	}
+	src := func(q *evalsiv1alpha1.TraceQuery) *evalsiv1alpha1.DatasetSource {
+		return &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Traces{Traces: q}}
+	}
+	cases := []struct {
+		q    *evalsiv1alpha1.TraceQuery
+		want int64
+	}{
+		{&evalsiv1alpha1.TraceQuery{}, 3},
+		{&evalsiv1alpha1.TraceQuery{Service: "support"}, 2},
+		{&evalsiv1alpha1.TraceQuery{Filter: `error`}, 1},
+		{&evalsiv1alpha1.TraceQuery{Lookback: durationpb.New(90 * time.Minute)}, 2},
+	}
+	for _, c := range cases {
+		run := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{Dataset: src(c.q), Evaluators: refs("exact-match")}).GetId())
+		if run.GetRecords() != c.want {
+			t.Errorf("%v: %d records, want %d", c.q, run.GetRecords(), c.want)
+		}
+	}
+	_, err := h.m.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "p", Spec: &evalsiv1alpha1.RunSpec{
+		Dataset: src(&evalsiv1alpha1.TraceQuery{Filter: "nope("}), Evaluators: refs("exact-match")}}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("bad filter: %v", err)
+	}
+	records, err := h.st.Records(ctx, h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{Dataset: src(&evalsiv1alpha1.TraceQuery{Service: "billing"}), Evaluators: refs("exact-match")}).GetId()).GetId())
+	if err != nil || records[0].GetProvenance().GetTrace().GetTraceId() != "trace-2" || records[0].GetMetadata()["trace"] == nil {
+		t.Errorf("trace provenance %v %v", records, err)
 	}
 }
