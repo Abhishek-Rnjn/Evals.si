@@ -46,6 +46,8 @@ message EvaluationResult {
   // Why the task was skipped or errored.
   string reason = 6;
   google.protobuf.Duration duration = 7;
+  // Trial number (0-based) when a run sends each record through the target several times.
+  int32 trial = 8;
 }
 
 enum MetricKind {

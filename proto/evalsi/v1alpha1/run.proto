@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/evaluation_service.proto";
+import "evalsi/v1alpha1/evaluator.proto";
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/score.proto";
+import "google/protobuf/timestamp.proto";
+
+// RunSpec is the "Run" door: execute a target over a dataset, then grade it.
+// The same spec runs embedded (`evalsi run -f run.yaml`) and on the server.
+message RunSpec {
+  // The system under test. Omit it when the dataset already has outputs.
+  Target target = 1;
+  DatasetSource dataset = 2;
+  repeated EvaluatorRef evaluators = 3;
+  // Judge name for judge evaluators; the server's default when empty.
+  string judge = 4;
+  // Times each record is run through the target. Above 1, pass@k and pass^k
+  // are reported for pass/fail metrics and intervals cluster by record.
+  int32 trials = 5;
+  SummaryOptions summary = 6;
+  // All gates must pass for the run to succeed.
+  repeated Gate gates = 7;
+  Budget budget = 8;
+}
+
+message Target {
+  // "openai-compatible" or "anthropic".
+  string connector = 1;
+  string model = 2;
+  // Required for openai-compatible, for example http://localhost:8000/v1.
+  string base_url = 3;
+  // Environment variable holding the API key, read by the worker.
+  string api_key_env = 4;
+  string system_prompt = 5;
+  int32 max_tokens = 6;
+  optional double temperature = 7;
+  // Anthropic only: output_config.effort.
+  string effort = 8;
+}
+
+message DatasetSource {
+  oneof source {
+    InlineRecords inline = 1;
+    // JSONL or JSON file. Embedded: relative to the spec file. Server:
+    // relative to the configured datasets_dir, which it may not escape.
+    string path = 2;
+    // For example hf://openai/gsm8k?config=main&split=test.
+    string uri = 3;
+  }
+  // Record field -> source column, for example input -> question.
+  map<string, string> mapping = 4;
+  // Use only the first N records; 0 means all.
+  int32 limit = 5;
+}
+
+message InlineRecords {
+  repeated Record records = 1;
+}
+
+enum GateStat {
+  GATE_STAT_UNSPECIFIED = 0;
+  GATE_STAT_MEAN = 1;
+  // The lower confidence bound, for "we are confident it is at least X".
+  GATE_STAT_CI_LOW = 2;
+  GATE_STAT_CI_HIGH = 3;
+}
+
+// A gate checks one summary statistic against bounds, for example
+// {metric: "exact-match", stat: GATE_STAT_CI_LOW, min: 0.8}.
+message Gate {
+  string metric = 1;
+  // Defaults to the mean.
+  GateStat stat = 2;
+  optional double min = 3;
+  optional double max = 4;
+}
+
+message GateResult {
+  Gate gate = 1;
+  bool passed = 2;
+  optional double value = 3;
+  string reason = 4;
+}
+
+// Token ceilings; the run stops with an error when one is exceeded.
+message Budget {
+  int64 max_target_tokens = 1;
+  int64 max_judge_tokens = 2;
+}
+
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_PENDING = 1;
+  RUN_STATUS_RUNNING = 2;
+  // Finished and every gate passed.
+  RUN_STATUS_SUCCEEDED = 3;
+  // Finished but at least one gate failed.
+  RUN_STATUS_FAILED = 4;
+  // Could not finish (worker failure, budget exceeded, server restart). Resumable.
+  RUN_STATUS_ERROR = 5;
+  // Cancelled by a user. Resumable.
+  RUN_STATUS_CANCELLED = 6;
+}
+
+message Progress {
+  // Generation and evaluation tasks in the run.
+  int64 total = 1;
+  int64 done = 2;
+}
+
+message Run {
+  string id = 1;
+  string name = 2;
+  string project = 3;
+  RunSpec spec = 4;
+  RunStatus status = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp started_at = 7;
+  google.protobuf.Timestamp finished_at = 8;
+  string error = 9;
+  Progress progress = 10;
+  repeated MetricSummary summaries = 11;
+  repeated GateResult gates = 12;
+  // Tokens spent by the target and by judges.
+  Usage target_usage = 13;
+  Usage judge_usage = 14;
+  // Content hash of the dataset snapshot the run uses.
+  string dataset_sha256 = 15;
+  int64 records = 16;
+}

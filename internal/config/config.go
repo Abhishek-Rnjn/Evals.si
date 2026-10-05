@@ -23,6 +23,8 @@ type Judge struct {
 	Effort         string   `json:"effort,omitempty"`
 	ResponseFormat string   `json:"response_format,omitempty"`
 	TimeoutS       float64  `json:"timeout_s,omitempty"`
+	// Client-side rate limit for this judge, enforced by the worker.
+	RequestsPerMinute float64 `json:"requests_per_minute,omitempty"`
 }
 
 // Worker configures the Python evaluator worker that evalsid supervises.
@@ -45,9 +47,21 @@ type Evaluate struct {
 	MaxRecords int `json:"max_records"`
 }
 
+// Runs tunes the Run door.
+type Runs struct {
+	// Runs executing at once; the rest wait as PENDING.
+	MaxConcurrent int `json:"max_concurrent"`
+}
+
 // Config is the whole evalsid configuration.
 type Config struct {
-	Listen       string           `json:"listen"`
+	Listen string `json:"listen"`
+	// Where evalsid keeps its database. Relative paths are relative to the working directory.
+	DataDir string `json:"data_dir"`
+	// Root for dataset paths in run specs. Empty means runs must send records
+	// inline or use a dataset URI.
+	DatasetsDir  string           `json:"datasets_dir"`
+	Runs         Runs             `json:"runs"`
 	Worker       Worker           `json:"worker"`
 	Judges       map[string]Judge `json:"judges"`
 	DefaultJudge string           `json:"default_judge"`
@@ -62,8 +76,10 @@ func Default() Config {
 			Command:      []string{"python3", "-m", "evalsi"},
 			StartTimeout: "60s",
 		},
+		DataDir:  ".evalsi",
 		Judges:   map[string]Judge{},
 		Evaluate: Evaluate{BatchSize: 32, Parallelism: 8, MaxRecords: 10000},
+		Runs:     Runs{MaxConcurrent: 4},
 	}
 }
 
@@ -116,6 +132,17 @@ func (c Config) Validate() error {
 	if c.DefaultJudge != "" {
 		if _, ok := c.Judges[c.DefaultJudge]; !ok {
 			errs = append(errs, fmt.Errorf("default_judge %q is not among judges", c.DefaultJudge))
+		}
+	}
+	if c.DataDir == "" {
+		errs = append(errs, errors.New("data_dir is required"))
+	}
+	if c.Runs.MaxConcurrent < 1 {
+		errs = append(errs, errors.New("runs.max_concurrent must be positive"))
+	}
+	if c.DatasetsDir != "" {
+		if info, err := os.Stat(c.DatasetsDir); err != nil || !info.IsDir() {
+			errs = append(errs, fmt.Errorf("datasets_dir %q is not a directory", c.DatasetsDir))
 		}
 	}
 	if c.Evaluate.BatchSize < 1 || c.Evaluate.Parallelism < 1 || c.Evaluate.MaxRecords < 1 {

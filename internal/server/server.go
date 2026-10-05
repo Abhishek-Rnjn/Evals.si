@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -22,6 +23,8 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
+	"github.com/abhishek-rnjn/evals.si/internal/runs"
+	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 // Run serves until ctx is cancelled, then shuts down gracefully.
@@ -51,12 +54,29 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 	sort.Strings(judges)
 	svc := evaluation.New(worker, catalog.New(manifests), judges, cfg.DefaultJudge, cfg.Evaluate)
 
+	st, err := store.Open(filepath.Join(cfg.DataDir, "evalsi.db"))
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
+		DatasetsDir:   cfg.DatasetsDir,
+		MaxConcurrent: cfg.Runs.MaxConcurrent,
+		Evaluate:      cfg.Evaluate,
+		Logger:        log,
+	})
+	if err != nil {
+		return err
+	}
+	// Runs stop before the worker does (deferred calls run in reverse order).
+	defer runManager.Shutdown()
+
 	ln, err := net.Listen("tcp", cfg.Listen)
 	if err != nil {
 		return err
 	}
 	srv := &http.Server{
-		Handler:           Handler(svc, worker),
+		Handler:           Handler(svc, runManager, worker),
 		Protocols:         protocols(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -89,11 +109,16 @@ func protocols() *http.Protocols {
 }
 
 // Handler routes every service. Exposed for tests.
-func Handler(svc *evaluation.Service, worker pluginhost.Worker) http.Handler {
+func Handler(svc *evaluation.Service, runManager *runs.Manager, worker pluginhost.Worker) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(evalsiv1alpha1connect.NewEvaluationServiceHandler(svc))
 	mux.Handle(evalsiv1alpha1connect.NewCatalogServiceHandler(svc))
-	services := []string{evalsiv1alpha1connect.EvaluationServiceName, evalsiv1alpha1connect.CatalogServiceName}
+	mux.Handle(evalsiv1alpha1connect.NewRunServiceHandler(runManager))
+	services := []string{
+		evalsiv1alpha1connect.EvaluationServiceName,
+		evalsiv1alpha1connect.CatalogServiceName,
+		evalsiv1alpha1connect.RunServiceName,
+	}
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))
 	reflector := grpcreflect.NewStaticReflector(services...)
 	mux.Handle(grpcreflect.NewHandlerV1(reflector))

@@ -18,11 +18,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
@@ -31,17 +34,34 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/server"
 )
 
-// fakeJudge speaks the OpenAI chat-completions protocol and always gives 4/5.
-func fakeJudge(t *testing.T) *httptest.Server {
+// fakeModel speaks the OpenAI chat-completions protocol. As a judge (the
+// prompt has a <rubric>) it always gives 4/5; as a target it answers capital
+// questions, getting Japan wrong.
+func fakeModel(t *testing.T) *httptest.Server {
+	answers := map[string]string{"France": "Paris", "Italy": "Rome", "Japan": "Kyoto"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
 			http.NotFound(w, r)
 			return
 		}
+		var req struct {
+			Messages []struct{ Content string } `json:"messages"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		prompt := req.Messages[len(req.Messages)-1].Content
+		content := `{"reasoning": "fine", "score": 4}`
+		if !strings.Contains(prompt, "<rubric>") {
+			content = "I don't know"
+			for country, capital := range answers {
+				if strings.Contains(prompt, country) {
+					content = capital
+				}
+			}
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"model": "fake-judge",
+			"model": "fake-model",
 			"choices": []any{map[string]any{
-				"message":       map[string]any{"content": `{"reasoning": "fine", "score": 4}`},
+				"message":       map[string]any{"content": content},
 				"finish_reason": "stop",
 			}},
 			"usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5},
@@ -51,18 +71,33 @@ func fakeJudge(t *testing.T) *httptest.Server {
 	return srv
 }
 
+type env struct {
+	base      string
+	model     string
+	datasets  string
+	workerCmd []string
+}
+
 func startServer(t *testing.T) string {
+	return start(t).base
+}
+
+func start(t *testing.T) env {
 	t.Helper()
 	worker := os.Getenv("EVALSI_E2E_WORKER")
 	if worker == "" {
 		t.Skip("set EVALSI_E2E_WORKER to run end-to-end tests")
 	}
+	model := fakeModel(t).URL + "/v1"
+	datasets := t.TempDir()
 	cfg := config.Default()
 	cfg.Listen = "127.0.0.1:0"
+	cfg.DataDir = t.TempDir()
+	cfg.DatasetsDir = datasets
 	cfg.Worker.Command = strings.Fields(worker)
 	cfg.Worker.NoCache = true
 	cfg.Judges = map[string]config.Judge{
-		"local": {Provider: "openai-compatible", Model: "fake-judge", BaseURL: fakeJudge(t).URL + "/v1"},
+		"local": {Provider: "openai-compatible", Model: "fake-judge", BaseURL: model},
 	}
 	cfg.DefaultJudge = "local"
 	cfg.Evaluate.BatchSize = 2
@@ -81,13 +116,13 @@ func startServer(t *testing.T) string {
 	})
 	select {
 	case addr := <-ready:
-		return "http://" + addr
+		return env{base: "http://" + addr, model: model, datasets: datasets, workerCmd: strings.Fields(worker)}
 	case err := <-done:
 		t.Fatalf("server exited: %v", err)
 	case <-time.After(90 * time.Second):
 		t.Fatal("server did not start")
 	}
-	return ""
+	return env{}
 }
 
 func h2cClient() *http.Client {
@@ -240,6 +275,100 @@ func TestEndToEnd(t *testing.T) {
 		resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Fatalf("status %d", resp.StatusCode)
+		}
+	})
+}
+
+func TestRuns(t *testing.T) {
+	e := start(t)
+	ctx := context.Background()
+	client := evalsiv1alpha1connect.NewRunServiceClient(h2cClient(), e.base, connect.WithGRPC())
+	data := `{"id": "fr", "question": "Capital of France?", "answer": "Paris"}
+{"id": "it", "question": "Capital of Italy?", "answer": "Rome"}
+{"id": "jp", "question": "Capital of Japan?", "answer": "Tokyo"}
+`
+	if err := os.WriteFile(filepath.Join(e.datasets, "capitals.jsonl"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec := &evalsiv1alpha1.RunSpec{
+		Target: &evalsiv1alpha1.Target{Connector: "openai-compatible", Model: "fake-model", BaseUrl: e.model},
+		Dataset: &evalsiv1alpha1.DatasetSource{
+			Source:  &evalsiv1alpha1.DatasetSource_Path{Path: "capitals.jsonl"},
+			Mapping: map[string]string{"input": "question", "reference": "answer"},
+		},
+		Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "exact-match"}, {Ref: "llm-judge"}},
+		Trials:     2,
+		Gates:      []*evalsiv1alpha1.Gate{{Metric: "exact-match", Min: proto.Float64(0.6)}},
+	}
+	created, err := client.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Name: "capitals", Spec: spec}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := client.WatchRun(ctx, connect.NewRequest(&evalsiv1alpha1.WatchRunRequest{Id: created.Msg.GetRun().GetId(), IncludeResults: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var final *evalsiv1alpha1.Run
+	results := 0
+	for stream.Receive() {
+		if r := stream.Msg().GetRun(); r != nil {
+			final = r
+		}
+		if stream.Msg().GetResult() != nil {
+			results++
+		}
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if final.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED {
+		t.Fatalf("status = %v (%s)", final.GetStatus(), final.GetError())
+	}
+	if results != 12 {
+		t.Errorf("streamed %d results, want 12 (3 records x 2 trials x 2 evaluators)", results)
+	}
+	sums := map[string]*evalsiv1alpha1.MetricSummary{}
+	for _, s := range final.GetSummaries() {
+		sums[s.GetMetric()] = s
+	}
+	if em := sums["exact-match"]; math.Abs(em.GetMean()-2.0/3) > 1e-9 || em.GetClusters() != 3 {
+		t.Errorf("exact-match = %v", em)
+	}
+	if p := sums["exact-match.pass^2"]; math.Abs(p.GetMean()-2.0/3) > 1e-9 {
+		t.Errorf("pass^2 = %v", p)
+	}
+	if j := sums["llm-judge"]; j.GetMean() != 0.75 {
+		t.Errorf("llm-judge = %v", j)
+	}
+	if final.GetTargetUsage().GetInputTokens() != 60 || !final.GetGates()[0].GetPassed() {
+		t.Errorf("usage %v gates %v", final.GetTargetUsage(), final.GetGates())
+	}
+
+	t.Run("python CLI against the server", func(t *testing.T) {
+		specFile := filepath.Join(t.TempDir(), "run.yaml")
+		yaml := `apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: from-cli}
+spec:
+  dataset:
+    inline:
+      records:
+        - {id: a, output: {text: Paris}, reference: {text: Paris}}
+        - {id: b, output: {text: Lyon}, reference: {text: Paris}}
+  evaluators: [{ref: exact-match}]
+  gates: [{metric: exact-match, min: 0.9}]
+`
+		if err := os.WriteFile(specFile, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		args := append(append([]string{}, e.workerCmd[1:]...), "run", "-f", specFile, "--server", e.base, "--quiet")
+		out, err := exec.Command(e.workerCmd[0], args...).CombinedOutput()
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 3 {
+			t.Fatalf("want exit code 3 (gate failed), got %v\n%s", err, out)
+		}
+		if !strings.Contains(string(out), "run-") || !strings.Contains(string(out), "[FAIL] exact-match") {
+			t.Errorf("output:\n%s", out)
 		}
 	})
 }

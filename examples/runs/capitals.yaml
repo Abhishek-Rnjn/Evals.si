@@ -1,0 +1,33 @@
+# A run spec. The same file runs embedded or on a server:
+#   evalsi run -f examples/runs/capitals.yaml                 # embedded
+#   evalsi run -f examples/runs/capitals.yaml --server http://localhost:8080
+# Exit code: 0 when every gate passes, 3 when a gate fails, 1 on errors.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: capitals
+  project: quickstart
+spec:
+  target:
+    connector: anthropic          # or openai-compatible with base_url
+    model: claude-opus-5-5
+    system_prompt: Answer with the name of the city only.
+    max_tokens: 1024
+    effort: low
+  dataset:
+    # Embedded: relative to this file. On a server: relative to its datasets_dir.
+    path: capitals.jsonl
+    mapping: {input: question, reference: answer}
+  evaluators:
+    - ref: exact-match
+    - ref: llm-judge
+      params: {rubric: correctness}
+  trials: 3                       # adds exact-match.pass@3 and pass^3
+  summary:
+    confidence_level: 0.95
+  gates:
+    - {metric: exact-match, min: 0.9}
+    - {metric: exact-match.pass^3, stat: GATE_STAT_MEAN, min: 0.8}
+  budget:
+    max_target_tokens: 200000
+    max_judge_tokens: 500000

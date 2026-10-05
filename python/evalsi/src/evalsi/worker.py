@@ -26,19 +26,25 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 
 from evalsi.convert import (
     coerce_params,
+    content_to_proto,
     from_struct,
     manifest_to_proto,
     record_from_proto,
+    record_to_proto,
     result_to_proto,
     score_to_proto,
+    usage_to_proto,
 )
+from evalsi.datasets import DatasetError
 from evalsi.evaluator import BoundEvaluator, EvalContext, EvaluatorConfigError, Scope
 from evalsi.judges import JudgeClient, JudgeConfig, JudgeFatalError, create_judge
 from evalsi.judges.cache import JudgeCache
 from evalsi.plugin.v1alpha1 import evaluator_plugin_pb2 as pb
 from evalsi.plugin.v1alpha1 import evaluator_plugin_pb2_grpc as pb_grpc
 from evalsi.registry import Registry, default_registry
+from evalsi.run import load_dataset, target_config
 from evalsi.runner import run_evaluators
+from evalsi.targets import Target, TargetConfig, create_target, generate_all
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +67,7 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
         self.cache = cache
         self.concurrency = concurrency
         self._judges: dict[str, JudgeClient] = {}
+        self._targets: dict[TargetConfig, Target] = {}
 
     async def Describe(self, request: pb.DescribeRequest, context: Context) -> pb.DescribeResponse:
         return pb.DescribeResponse(
@@ -106,6 +113,43 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
             await context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(exc))
         return pb.ReduceResponse(scores=[score_to_proto(s) for s in scores])
 
+    async def Generate(self, request: pb.GenerateRequest, context: Context) -> pb.GenerateResponse:
+        try:
+            config = target_config(request.target)
+        except ValueError as exc:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
+        target = self._targets.get(config)
+        if target is None:
+            target = self._targets[config] = create_target(config)
+        records = [record_from_proto(r) for r in request.records]
+        generations = await generate_all(target, records, concurrency=self.concurrency)
+        return pb.GenerateResponse(
+            results=[
+                pb.GenerateResult(
+                    record_id=record.id,
+                    output=content_to_proto(gen.output) if gen.output is not None else None,
+                    usage=usage_to_proto(gen.usage),
+                    error=gen.error,
+                )
+                for record, gen in zip(records, generations, strict=True)
+            ]
+        )
+
+    async def LoadDataset(
+        self, request: pb.LoadDatasetRequest, context: Context
+    ) -> AsyncIterator[pb.LoadDatasetResponse]:
+        source = request.source
+        if source.WhichOneof("source") == "path" and not Path(source.path).is_absolute():
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "dataset path must be absolute")
+        try:
+            records = await asyncio.to_thread(load_dataset, source, Path("/"))
+        except (DatasetError, EvaluatorConfigError) as exc:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
+        for start in range(0, len(records), 500):
+            yield pb.LoadDatasetResponse(
+                records=[record_to_proto(r) for r in records[start : start + 500]]
+            )
+
     async def _bind(self, name: str, params: Any, context: Context) -> BoundEvaluator:
         try:
             definition = self.registry.resolve(name)
@@ -132,6 +176,8 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
         return EvalContext(judge=self._judges[judge])
 
     async def aclose(self) -> None:
+        for target in self._targets.values():
+            await target.aclose()
         for client in self._judges.values():
             await client.backend.aclose()
         if self.cache is not None:

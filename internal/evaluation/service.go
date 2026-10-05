@@ -38,23 +38,25 @@ func New(worker pluginhost.Worker, cat *catalog.Catalog, judges []string, defaul
 	return &Service{worker: worker, catalog: cat, judges: judges, defaultJudge: defaultJudge, opts: opts}
 }
 
-// instance is one evaluator as used in a request: resolved, aliased, with params.
-type instance struct {
-	name     string
-	manifest *evalsiv1alpha1.EvaluatorManifest
-	params   *structpb.Struct
-	judge    string
+// Instance is one evaluator as used in a request: resolved, aliased, with params.
+type Instance struct {
+	Name     string
+	Manifest *evalsiv1alpha1.EvaluatorManifest
+	Params   *structpb.Struct
+	Judge    string
 }
 
-func (in instance) dataset() bool {
-	return in.manifest.GetScope() == evalsiv1alpha1.Scope_SCOPE_DATASET
+// Dataset reports whether the evaluator runs once over all records.
+func (in Instance) Dataset() bool {
+	return in.Manifest.GetScope() == evalsiv1alpha1.Scope_SCOPE_DATASET
 }
 
 func invalid(format string, args ...any) error {
 	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(format, args...))
 }
 
-func (s *Service) bind(refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]instance, error) {
+// Bind resolves evaluator refs, checks params and assigns judges.
+func (s *Service) Bind(refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]Instance, error) {
 	if len(refs) == 0 {
 		return nil, invalid("at least one evaluator is required")
 	}
@@ -62,7 +64,7 @@ func (s *Service) bind(refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]ins
 		judge = s.defaultJudge
 	}
 	seen := map[string]bool{}
-	var out []instance
+	var out []Instance
 	for _, ref := range refs {
 		m, err := s.catalog.Resolve(ref.GetRef())
 		if err != nil {
@@ -79,7 +81,7 @@ func (s *Service) bind(refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]ins
 		if err := checkParams(m, ref.GetParams()); err != nil {
 			return nil, err
 		}
-		in := instance{name: name, manifest: m, params: ref.GetParams()}
+		in := Instance{Name: name, Manifest: m, Params: ref.GetParams()}
 		if m.GetRequires().GetJudge() {
 			if judge == "" {
 				return nil, invalid("%s needs a judge; name one in the request or set default_judge on the server", name)
@@ -87,7 +89,7 @@ func (s *Service) bind(refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]ins
 			if !s.hasJudge(judge) {
 				return nil, invalid("unknown judge %q; configured: %v", judge, s.judges)
 			}
-			in.judge = judge
+			in.Judge = judge
 		}
 		out = append(out, in)
 	}
@@ -123,9 +125,9 @@ func checkParams(m *evalsiv1alpha1.EvaluatorManifest, params *structpb.Struct) e
 	return nil
 }
 
-// normalizeIDs gives records without an id their position, as the Python SDK
+// NormalizeIDs gives records without an id their position, as the Python SDK
 // does, and rejects duplicates. offset is the position of records[0].
-func normalizeIDs(records []*evalsiv1alpha1.Record, offset int, seen map[string]bool) error {
+func NormalizeIDs(records []*evalsiv1alpha1.Record, offset int, seen map[string]bool) error {
 	for i, r := range records {
 		if r.GetId() == "" {
 			r.Id = strconv.Itoa(offset + i)
@@ -157,12 +159,12 @@ func workerError(name string, err error) error {
 	return connect.NewError(code, fmt.Errorf("evaluator %s: %s", name, msg))
 }
 
-// runRecords runs every record-scope instance over records and returns results
-// ordered by record, then instance.
-func (s *Service) runRecords(ctx context.Context, insts []instance, records []*evalsiv1alpha1.Record) ([]*evalsiv1alpha1.EvaluationResult, error) {
-	var recordLevel []instance
+// RunRecords runs every record-scope Instance over records and returns results
+// ordered by record, then Instance.
+func (s *Service) RunRecords(ctx context.Context, insts []Instance, records []*evalsiv1alpha1.Record) ([]*evalsiv1alpha1.EvaluationResult, error) {
+	var recordLevel []Instance
 	for _, in := range insts {
-		if !in.dataset() {
+		if !in.Dataset() {
 			recordLevel = append(recordLevel, in)
 		}
 	}
@@ -178,21 +180,21 @@ func (s *Service) runRecords(ctx context.Context, insts []instance, records []*e
 			end := min(start+size, len(records))
 			g.Go(func() error {
 				resp, err := s.worker.Evaluate(gctx, &pluginv1alpha1.EvaluateRequest{
-					BatchId:   fmt.Sprintf("%s:%d", in.name, start),
-					Evaluator: in.manifest.GetName(),
-					Params:    in.params,
+					BatchId:   fmt.Sprintf("%s:%d", in.Name, start),
+					Evaluator: in.Manifest.GetName(),
+					Params:    in.Params,
 					Records:   records[start:end],
-					Judge:     in.judge,
+					Judge:     in.Judge,
 				})
 				if err != nil {
-					return workerError(in.name, err)
+					return workerError(in.Name, err)
 				}
 				if len(resp.GetResults()) != end-start {
 					return connect.NewError(connect.CodeInternal, fmt.Errorf(
-						"evaluator %s: worker returned %d results for %d records", in.name, len(resp.GetResults()), end-start))
+						"evaluator %s: worker returned %d results for %d records", in.Name, len(resp.GetResults()), end-start))
 				}
 				for k, r := range resp.GetResults() {
-					r.Evaluator = in.name
+					r.Evaluator = in.Name
 					slots[start+k][ii] = r
 				}
 				return nil
@@ -216,32 +218,32 @@ func eligible(req *evalsiv1alpha1.Requirements, r *evalsiv1alpha1.Record) bool {
 		(!req.GetContext() || len(r.GetContext()) > 0)
 }
 
-// runDataset runs the dataset-scope instances once each over all eligible records.
-func (s *Service) runDataset(ctx context.Context, insts []instance, records []*evalsiv1alpha1.Record) ([]*evalsiv1alpha1.EvaluationResult, error) {
+// RunDataset runs the dataset-scope instances once each over all eligible records.
+func (s *Service) RunDataset(ctx context.Context, insts []Instance, records []*evalsiv1alpha1.Record) ([]*evalsiv1alpha1.EvaluationResult, error) {
 	var out []*evalsiv1alpha1.EvaluationResult
 	for _, in := range insts {
-		if !in.dataset() {
+		if !in.Dataset() {
 			continue
 		}
 		var use []*evalsiv1alpha1.Record
 		for _, r := range records {
-			if eligible(in.manifest.GetRequires(), r) {
+			if eligible(in.Manifest.GetRequires(), r) {
 				use = append(use, r)
 			}
 		}
 		result := &evalsiv1alpha1.EvaluationResult{
-			Evaluator:    in.name,
-			EvaluatorRef: in.manifest.GetName() + "@" + in.manifest.GetVersion(),
+			Evaluator:    in.Name,
+			EvaluatorRef: in.Manifest.GetName() + "@" + in.Manifest.GetVersion(),
 		}
 		resp, err := s.worker.Reduce(ctx, &pluginv1alpha1.ReduceRequest{
-			Evaluator: in.manifest.GetName(),
-			Params:    in.params,
+			Evaluator: in.Manifest.GetName(),
+			Params:    in.Params,
 			Records:   use,
-			Judge:     in.judge,
+			Judge:     in.Judge,
 		})
 		switch {
 		case err != nil && (connect.CodeOf(err) == connect.CodeInvalidArgument || connect.CodeOf(err) == connect.CodeFailedPrecondition):
-			return nil, workerError(in.name, err)
+			return nil, workerError(in.Name, err)
 		case err != nil:
 			result.Outcome = evalsiv1alpha1.Outcome_OUTCOME_ERROR
 			result.Reason = err.Error()
@@ -266,23 +268,23 @@ func (s *Service) Evaluate(ctx context.Context, req *connect.Request[evalsiv1alp
 	if n := len(msg.GetRecords()); n > s.opts.MaxRecords {
 		return nil, invalid("%d records exceed this server's limit of %d for Evaluate; use EvaluateStream", n, s.opts.MaxRecords)
 	}
-	insts, err := s.bind(msg.GetEvaluators(), msg.GetJudge())
+	insts, err := s.Bind(msg.GetEvaluators(), msg.GetJudge())
 	if err != nil {
 		return nil, err
 	}
-	if err := normalizeIDs(msg.GetRecords(), 0, map[string]bool{}); err != nil {
+	if err := NormalizeIDs(msg.GetRecords(), 0, map[string]bool{}); err != nil {
 		return nil, err
 	}
-	results, err := s.runRecords(ctx, insts, msg.GetRecords())
+	results, err := s.RunRecords(ctx, insts, msg.GetRecords())
 	if err != nil {
 		return nil, err
 	}
-	dataset, err := s.runDataset(ctx, insts, msg.GetRecords())
+	dataset, err := s.RunDataset(ctx, insts, msg.GetRecords())
 	if err != nil {
 		return nil, err
 	}
 	results = append(results, dataset...)
-	summaries, err := summarize(insts, results, msg.GetRecords(), msg.GetSummary())
+	summaries, err := Summarize(insts, results, msg.GetRecords(), msg.GetSummary(), 1)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +305,7 @@ func (s *Service) EvaluateStream(ctx context.Context, stream *connect.BidiStream
 	if cfg == nil {
 		return invalid("the stream must start with a config message")
 	}
-	insts, err := s.bind(cfg.GetEvaluators(), cfg.GetJudge())
+	insts, err := s.Bind(cfg.GetEvaluators(), cfg.GetJudge())
 	if err != nil {
 		return err
 	}
@@ -314,10 +316,10 @@ func (s *Service) EvaluateStream(ctx context.Context, stream *connect.BidiStream
 		if len(pending) == 0 {
 			return nil
 		}
-		if err := normalizeIDs(pending, len(all), seen); err != nil {
+		if err := NormalizeIDs(pending, len(all), seen); err != nil {
 			return err
 		}
-		batch, err := s.runRecords(ctx, insts, pending)
+		batch, err := s.RunRecords(ctx, insts, pending)
 		if err != nil {
 			return err
 		}
@@ -356,7 +358,7 @@ func (s *Service) EvaluateStream(ctx context.Context, stream *connect.BidiStream
 	if err := flush(); err != nil {
 		return err
 	}
-	dataset, err := s.runDataset(ctx, insts, all)
+	dataset, err := s.RunDataset(ctx, insts, all)
 	if err != nil {
 		return err
 	}
@@ -367,7 +369,7 @@ func (s *Service) EvaluateStream(ctx context.Context, stream *connect.BidiStream
 			return err
 		}
 	}
-	summaries, err := summarize(insts, append(results, dataset...), all, cfg.GetSummary())
+	summaries, err := Summarize(insts, append(results, dataset...), all, cfg.GetSummary(), 1)
 	if err != nil {
 		return err
 	}

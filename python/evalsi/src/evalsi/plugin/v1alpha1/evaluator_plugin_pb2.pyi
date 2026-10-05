@@ -6,6 +6,7 @@ isort:skip_file
 from collections import abc as _abc
 from evalsi.v1alpha1 import evaluator_pb2 as _evaluator_pb2
 from evalsi.v1alpha1 import record_pb2 as _record_pb2
+from evalsi.v1alpha1 import run_pb2 as _run_pb2
 from evalsi.v1alpha1 import score_pb2 as _score_pb2
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
@@ -160,3 +161,113 @@ class ReduceResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ReduceResponse: _TypeAlias = ReduceResponse  # noqa: Y015
+
+@_typing.final
+class GenerateRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TARGET_FIELD_NUMBER: _builtins.int
+    RECORDS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def target(self) -> _run_pb2.Target: ...
+    @_builtins.property
+    def records(self) -> _containers.RepeatedCompositeFieldContainer[_record_pb2.Record]: ...
+    def __init__(
+        self,
+        *,
+        target: _run_pb2.Target | None = ...,
+        records: _abc.Iterable[_record_pb2.Record] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["target", b"target"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["records", b"records", "target", b"target"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___GenerateRequest: _TypeAlias = GenerateRequest  # noqa: Y015
+
+@_typing.final
+class GenerateResult(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RECORD_ID_FIELD_NUMBER: _builtins.int
+    OUTPUT_FIELD_NUMBER: _builtins.int
+    USAGE_FIELD_NUMBER: _builtins.int
+    ERROR_FIELD_NUMBER: _builtins.int
+    record_id: _builtins.str
+    error: _builtins.str
+    """Set when the target failed for this record; output is then empty."""
+    @_builtins.property
+    def output(self) -> _record_pb2.Content: ...
+    @_builtins.property
+    def usage(self) -> _record_pb2.Usage: ...
+    def __init__(
+        self,
+        *,
+        record_id: _builtins.str = ...,
+        output: _record_pb2.Content | None = ...,
+        usage: _record_pb2.Usage | None = ...,
+        error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["output", b"output", "usage", b"usage"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["error", b"error", "output", b"output", "record_id", b"record_id", "usage", b"usage"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___GenerateResult: _TypeAlias = GenerateResult  # noqa: Y015
+
+@_typing.final
+class GenerateResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RESULTS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def results(self) -> _containers.RepeatedCompositeFieldContainer[Global___GenerateResult]:
+        """One per request record, in order."""
+
+    def __init__(
+        self,
+        *,
+        results: _abc.Iterable[Global___GenerateResult] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["results", b"results"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___GenerateResponse: _TypeAlias = GenerateResponse  # noqa: Y015
+
+@_typing.final
+class LoadDatasetRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SOURCE_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def source(self) -> _run_pb2.DatasetSource:
+        """path must already be absolute; the host resolves and checks it."""
+
+    def __init__(
+        self,
+        *,
+        source: _run_pb2.DatasetSource | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["source", b"source"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["source", b"source"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___LoadDatasetRequest: _TypeAlias = LoadDatasetRequest  # noqa: Y015
+
+@_typing.final
+class LoadDatasetResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RECORDS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def records(self) -> _containers.RepeatedCompositeFieldContainer[_record_pb2.Record]: ...
+    def __init__(
+        self,
+        *,
+        records: _abc.Iterable[_record_pb2.Record] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["records", b"records"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___LoadDatasetResponse: _TypeAlias = LoadDatasetResponse  # noqa: Y015

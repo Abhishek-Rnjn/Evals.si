@@ -50,6 +50,10 @@ class EvaluatorPluginServiceStub:
     """
     Reduce: _grpc.UnaryUnaryMultiCallable[_evaluator_plugin_pb2.ReduceRequest, _evaluator_plugin_pb2.ReduceResponse]
     """Dataset-scope metrics: computed over all records at once."""
+    Generate: _grpc.UnaryUnaryMultiCallable[_evaluator_plugin_pb2.GenerateRequest, _evaluator_plugin_pb2.GenerateResponse]
+    """Runs the target (the system under test) on records to produce outputs."""
+    LoadDataset: _grpc.UnaryStreamMultiCallable[_evaluator_plugin_pb2.LoadDatasetRequest, _evaluator_plugin_pb2.LoadDatasetResponse]
+    """Loads a dataset (file or hf:// URI) and streams its records in chunks."""
 
 @_typing.type_check_only
 class EvaluatorPluginServiceAsyncStub(EvaluatorPluginServiceStub):
@@ -73,6 +77,10 @@ class EvaluatorPluginServiceAsyncStub(EvaluatorPluginServiceStub):
     """
     Reduce: _aio.UnaryUnaryMultiCallable[_evaluator_plugin_pb2.ReduceRequest, _evaluator_plugin_pb2.ReduceResponse]  # type: ignore[assignment]
     """Dataset-scope metrics: computed over all records at once."""
+    Generate: _aio.UnaryUnaryMultiCallable[_evaluator_plugin_pb2.GenerateRequest, _evaluator_plugin_pb2.GenerateResponse]  # type: ignore[assignment]
+    """Runs the target (the system under test) on records to produce outputs."""
+    LoadDataset: _aio.UnaryStreamMultiCallable[_evaluator_plugin_pb2.LoadDatasetRequest, _evaluator_plugin_pb2.LoadDatasetResponse]  # type: ignore[assignment]
+    """Loads a dataset (file or hf:// URI) and streams its records in chunks."""
 
 class EvaluatorPluginServiceServicer(metaclass=_abc_1.ABCMeta):
     """EvaluatorPluginService is implemented by every out-of-process evaluator
@@ -111,5 +119,21 @@ class EvaluatorPluginServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_evaluator_plugin_pb2.ReduceResponse, _abc.Awaitable[_evaluator_plugin_pb2.ReduceResponse]]:
         """Dataset-scope metrics: computed over all records at once."""
+
+    @_abc_1.abstractmethod
+    def Generate(
+        self,
+        request: _evaluator_plugin_pb2.GenerateRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_evaluator_plugin_pb2.GenerateResponse, _abc.Awaitable[_evaluator_plugin_pb2.GenerateResponse]]:
+        """Runs the target (the system under test) on records to produce outputs."""
+
+    @_abc_1.abstractmethod
+    def LoadDataset(
+        self,
+        request: _evaluator_plugin_pb2.LoadDatasetRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_abc.Iterator[_evaluator_plugin_pb2.LoadDatasetResponse], _abc.AsyncIterator[_evaluator_plugin_pb2.LoadDatasetResponse]]:
+        """Loads a dataset (file or hf:// URI) and streams its records in chunks."""
 
 def add_EvaluatorPluginServiceServicer_to_server(servicer: EvaluatorPluginServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

@@ -35,6 +35,8 @@ type Worker interface {
 	Describe(ctx context.Context) ([]*evalsiv1alpha1.EvaluatorManifest, error)
 	Evaluate(ctx context.Context, req *pluginv1alpha1.EvaluateRequest) (*pluginv1alpha1.EvaluateResponse, error)
 	Reduce(ctx context.Context, req *pluginv1alpha1.ReduceRequest) (*pluginv1alpha1.ReduceResponse, error)
+	Generate(ctx context.Context, req *pluginv1alpha1.GenerateRequest) (*pluginv1alpha1.GenerateResponse, error)
+	LoadDataset(ctx context.Context, req *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error)
 }
 
 // Options configures a supervised worker process.
@@ -284,4 +286,27 @@ func (p *Process) Reduce(ctx context.Context, req *pluginv1alpha1.ReduceRequest)
 		return nil, err
 	}
 	return resp.Msg, nil
+}
+
+// Generate runs the target on a batch of records.
+func (p *Process) Generate(ctx context.Context, req *pluginv1alpha1.GenerateRequest) (*pluginv1alpha1.GenerateResponse, error) {
+	resp, err := p.client.Generate(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+// LoadDataset loads every record of a dataset through the worker.
+func (p *Process) LoadDataset(ctx context.Context, req *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error) {
+	stream, err := p.client.LoadDataset(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+	var records []*evalsiv1alpha1.Record
+	for stream.Receive() {
+		records = append(records, stream.Msg().GetRecords()...)
+	}
+	return records, stream.Err()
 }

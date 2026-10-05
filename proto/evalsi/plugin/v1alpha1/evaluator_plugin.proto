@@ -4,6 +4,7 @@ package evalsi.plugin.v1alpha1;
 
 import "evalsi/v1alpha1/evaluator.proto";
 import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/run.proto";
 import "evalsi/v1alpha1/score.proto";
 import "google/protobuf/struct.proto";
 
@@ -24,6 +25,10 @@ service EvaluatorPluginService {
   rpc Evaluate(stream EvaluateRequest) returns (stream EvaluateResponse);
   // Dataset-scope metrics: computed over all records at once.
   rpc Reduce(ReduceRequest) returns (ReduceResponse);
+  // Runs the target (the system under test) on records to produce outputs.
+  rpc Generate(GenerateRequest) returns (GenerateResponse);
+  // Loads a dataset (file or hf:// URI) and streams its records in chunks.
+  rpc LoadDataset(LoadDatasetRequest) returns (stream LoadDatasetResponse);
 }
 
 message DescribeRequest {}
@@ -61,4 +66,31 @@ message ReduceRequest {
 
 message ReduceResponse {
   repeated evalsi.v1alpha1.Score scores = 1;
+}
+
+message GenerateRequest {
+  evalsi.v1alpha1.Target target = 1;
+  repeated evalsi.v1alpha1.Record records = 2;
+}
+
+message GenerateResult {
+  string record_id = 1;
+  evalsi.v1alpha1.Content output = 2;
+  evalsi.v1alpha1.Usage usage = 3;
+  // Set when the target failed for this record; output is then empty.
+  string error = 4;
+}
+
+message GenerateResponse {
+  // One per request record, in order.
+  repeated GenerateResult results = 1;
+}
+
+message LoadDatasetRequest {
+  // path must already be absolute; the host resolves and checks it.
+  evalsi.v1alpha1.DatasetSource source = 1;
+}
+
+message LoadDatasetResponse {
+  repeated evalsi.v1alpha1.Record records = 1;
 }

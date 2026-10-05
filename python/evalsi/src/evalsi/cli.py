@@ -72,14 +72,7 @@ def _parser() -> argparse.ArgumentParser:
     ev.add_argument("--limit", type=int, help="evaluate only the first N records")
     ev.add_argument("--concurrency", type=int, default=16)
 
-    judge = ev.add_argument_group("judge (or set EVALSI_JUDGE_* environment variables)")
-    judge.add_argument("--judge-provider", choices=PROVIDERS)
-    judge.add_argument("--judge-model")
-    judge.add_argument("--judge-base-url")
-    judge.add_argument("--judge-api-key-env", help="environment variable holding the API key")
-    judge.add_argument("--judge-effort", help="anthropic only: low, medium, high, xhigh or max")
-    judge.add_argument("--judge-max-tokens", type=int)
-    judge.add_argument("--no-cache", action="store_true", help="do not reuse judge responses")
+    _add_judge_args(ev)
 
     stats = ev.add_argument_group("statistics")
     stats.add_argument("--confidence", type=float, default=0.95)
@@ -93,6 +86,26 @@ def _parser() -> argparse.ArgumentParser:
     out.add_argument("--format", choices=["table", "json"], default="table")
     out.add_argument("--quiet", action="store_true", help="no progress output")
     ev.set_defaults(func=_cmd_eval)
+
+    rn = sub.add_parser("run", help="execute a run spec (run.yaml), embedded or on a server")
+    rn.add_argument("-f", "--file", required=True, help="the run spec")
+    rn.add_argument(
+        "--server", help="evalsid URL, e.g. http://localhost:8080; embedded when omitted"
+    )
+    rn.add_argument("--concurrency", type=int, default=8)
+    rn.add_argument("--output", help="embedded: write manifest, summaries and results as JSON")
+    rn.add_argument("--format", choices=["table", "json"], default="table")
+    rn.add_argument("--quiet", action="store_true", help="no progress output")
+    rn.add_argument("--no-wait", action="store_true", help="server: print the run id and exit")
+    _add_judge_args(rn)
+    rn.set_defaults(func=_cmd_run)
+
+    cmp = sub.add_parser("compare", help="paired comparison of two server runs")
+    cmp.add_argument("baseline")
+    cmp.add_argument("candidate")
+    cmp.add_argument("--server", required=True, help="evalsid URL")
+    cmp.add_argument("--format", choices=["table", "json"], default="table")
+    cmp.set_defaults(func=_cmd_compare)
 
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
@@ -118,6 +131,17 @@ def _parser() -> argparse.ArgumentParser:
     ver = sub.add_parser("version", help="print the version")
     ver.set_defaults(func=_cmd_version)
     return parser
+
+
+def _add_judge_args(parser: argparse.ArgumentParser) -> None:
+    judge = parser.add_argument_group("judge (or set EVALSI_JUDGE_* environment variables)")
+    judge.add_argument("--judge-provider", choices=PROVIDERS)
+    judge.add_argument("--judge-model")
+    judge.add_argument("--judge-base-url")
+    judge.add_argument("--judge-api-key-env", help="environment variable holding the API key")
+    judge.add_argument("--judge-effort", help="anthropic only: low, medium, high, xhigh or max")
+    judge.add_argument("--judge-max-tokens", type=int)
+    judge.add_argument("--no-cache", action="store_true", help="do not reuse judge responses")
 
 
 def _plural(count: int, noun: str) -> str:
@@ -315,6 +339,193 @@ def _cmd_catalog(args: argparse.Namespace) -> int:
             if params:
                 print(f"      params: {params}")
         print()
+    return 0
+
+
+EXIT_GATES_FAILED = 3
+
+
+def _print_gates(gates: list[dict[str, Any]]) -> None:
+    if not gates:
+        return
+    print("\ngates:")
+    for g in gates:
+        mark = "pass" if g.get("passed") else "FAIL"
+        bound = " ".join(f"{k} {g[k]}" for k in ("min", "max") if g.get(k) is not None)
+        detail = f" ({g['reason']})" if g.get("reason") else ""
+        print(f"  [{mark}] {g.get('metric')} {g.get('stat', 'mean')} {bound}{detail}")
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    from evalsi.runspec import load_spec
+
+    run_file = load_spec(args.file)
+    if args.server:
+        return _run_on_server(args, run_file)
+
+    import asyncio
+
+    from evalsi.run import BudgetExceeded, execute
+
+    show = not args.quiet and sys.stderr.isatty()
+
+    def progress(stage: str, done: int, total: int) -> None:
+        print(f"\r{stage}: {done}/{total}   ", end="", file=sys.stderr, flush=True)
+
+    try:
+        outcome = asyncio.run(
+            execute(
+                run_file,
+                judge=_judge(args),
+                cache=not args.no_cache,
+                concurrency=args.concurrency,
+                on_progress=progress if show else None,
+            )
+        )
+    except BudgetExceeded as exc:
+        print(f"error: budget exceeded: {exc}", file=sys.stderr)
+        return 1
+    if show:
+        print(file=sys.stderr)
+    result = outcome.result
+    if args.output:
+        payload = result.to_dict()
+        payload["gates"] = [g.to_dict() for g in outcome.gates]
+        with open(args.output, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, default=str)
+    gates = [g.to_dict() for g in outcome.gates]
+    if args.format == "json":
+        print(
+            json.dumps(
+                {
+                    "manifest": result.manifest,
+                    "summaries": [s.to_dict() for s in result.summaries],
+                    "gates": gates,
+                },
+                indent=2,
+                default=str,
+            )
+        )
+    else:
+        trials = result.manifest["trials"]
+        note = f" x {trials} trials" if trials > 1 else ""
+        print(f"{_plural(result.manifest['dataset']['records'], 'record')}{note}\n")
+        print(result.table())
+        _print_gates(gates)
+    errors = result.errors()
+    if errors and not args.quiet:
+        print(
+            f"\n{len(errors)} evaluation(s) errored and are excluded from the metrics.",
+            file=sys.stderr,
+        )
+    return 0 if outcome.passed else EXIT_GATES_FAILED
+
+
+def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
+    from evalsi.client import Client, ServerError
+    from evalsi.results import EvalResult, MetricSummary
+    from evalsi.runspec import spec_to_dict
+    from evalsi.stats import Interval
+
+    with Client(args.server) as client:
+        try:
+            run = client.create_run(
+                spec_to_dict(run_file.spec), name=run_file.name, project=run_file.project
+            )
+            if args.no_wait:
+                print(run["id"])
+                return 0
+            show = not args.quiet and sys.stderr.isatty()
+            for event in client.watch_run(run["id"]):
+                if "run" in event:
+                    run = event["run"]
+                elif "progress" in event and show:
+                    p = event["progress"]
+                    print(
+                        f"\r{run['id']}: {p.get('done', 0)}/{p.get('total', 0)}   ",
+                        end="",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            if show:
+                print(file=sys.stderr)
+        except ServerError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+    status = run.get("status", "")
+    if args.format == "json":
+        print(json.dumps(run, indent=2))
+    else:
+        summaries = []
+        for s in run.get("summaries", []):
+            ci = s.get("ci")
+            summaries.append(
+                MetricSummary(
+                    metric=s["metric"],
+                    evaluator=s.get("evaluator", ""),
+                    kind=str(s.get("kind", "")).removeprefix("METRIC_KIND_").lower(),
+                    n=int(s.get("n", 0)),
+                    mean=s.get("mean"),
+                    std=s.get("std"),
+                    ci=Interval(ci["low"], ci["high"], ci["level"], ci["method"]) if ci else None,
+                    skipped=int(s.get("skipped", 0)),
+                    errors=int(s.get("errors", 0)),
+                    labels={k: int(v) for k, v in s.get("labels", {}).items()},
+                )
+            )
+        print(f"run {run['id']}: {status.removeprefix('RUN_STATUS_').lower()}\n")
+        print(EvalResult(records=[], results=[], summaries=summaries, manifest={}).table())
+        _print_gates(
+            [
+                {
+                    **g.get("gate", {}),
+                    "stat": str(g.get("gate", {}).get("stat", "mean"))
+                    .removeprefix("GATE_STAT_")
+                    .lower(),
+                    "passed": g.get("passed", False),
+                    "reason": g.get("reason", ""),
+                }
+                for g in run.get("gates", [])
+            ]
+        )
+        if run.get("error"):
+            print(f"\nerror: {run['error']}", file=sys.stderr)
+    if status == "RUN_STATUS_SUCCEEDED":
+        return 0
+    if status == "RUN_STATUS_FAILED":
+        return EXIT_GATES_FAILED
+    return 1
+
+
+def _fmt3(value: float | None) -> str:
+    return "-" if value is None else f"{value:.3f}"
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    from evalsi.client import Client
+
+    with Client(args.server) as client:
+        comparisons = client.compare_runs(args.baseline, args.candidate)
+    if args.format == "json":
+        print(json.dumps(comparisons, indent=2))
+        return 0
+    rows = [["metric", "n", "baseline", "candidate", "diff", "CI", ""]]
+    for c in comparisons:
+        ci = c.get("diffCi")
+        rows.append(
+            [
+                c["metric"],
+                str(c.get("pairedN", 0)),
+                _fmt3(c.get("baselineMean")),
+                _fmt3(c.get("candidateMean")),
+                _fmt3(c.get("diff")),
+                f"[{ci['low']:.3f}, {ci['high']:.3f}]" if ci else "-",
+                "significant" if c.get("significant") else "",
+            ]
+        )
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    for row in rows:
+        print("  ".join(cell.ljust(w) for cell, w in zip(row, widths, strict=True)).rstrip())
     return 0
 
 

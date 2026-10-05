@@ -303,8 +303,10 @@ type EvaluationResult struct {
 	Outcome      Outcome  `protobuf:"varint,4,opt,name=outcome,proto3,enum=evalsi.v1alpha1.Outcome" json:"outcome,omitempty"`
 	Scores       []*Score `protobuf:"bytes,5,rep,name=scores,proto3" json:"scores,omitempty"`
 	// Why the task was skipped or errored.
-	Reason        string               `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
-	Duration      *durationpb.Duration `protobuf:"bytes,7,opt,name=duration,proto3" json:"duration,omitempty"`
+	Reason   string               `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	Duration *durationpb.Duration `protobuf:"bytes,7,opt,name=duration,proto3" json:"duration,omitempty"`
+	// Trial number (0-based) when a run sends each record through the target several times.
+	Trial         int32 `protobuf:"varint,8,opt,name=trial,proto3" json:"trial,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -386,6 +388,13 @@ func (x *EvaluationResult) GetDuration() *durationpb.Duration {
 		return x.Duration
 	}
 	return nil
+}
+
+func (x *EvaluationResult) GetTrial() int32 {
+	if x != nil {
+		return x.Trial
+	}
+	return 0
 }
 
 type MetricSummary struct {
@@ -608,7 +617,7 @@ const file_evalsi_v1alpha1_score_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01B\a\n" +
 	"\x05valueB\r\n" +
-	"\v_confidence\"\xa5\x02\n" +
+	"\v_confidence\"\xbb\x02\n" +
 	"\x10EvaluationResult\x12\x1b\n" +
 	"\trecord_id\x18\x01 \x01(\tR\brecordId\x12\x1c\n" +
 	"\tevaluator\x18\x02 \x01(\tR\tevaluator\x12#\n" +
@@ -616,7 +625,8 @@ const file_evalsi_v1alpha1_score_proto_rawDesc = "" +
 	"\aoutcome\x18\x04 \x01(\x0e2\x18.evalsi.v1alpha1.OutcomeR\aoutcome\x12.\n" +
 	"\x06scores\x18\x05 \x03(\v2\x16.evalsi.v1alpha1.ScoreR\x06scores\x12\x16\n" +
 	"\x06reason\x18\x06 \x01(\tR\x06reason\x125\n" +
-	"\bduration\x18\a \x01(\v2\x19.google.protobuf.DurationR\bduration\"\xd9\x03\n" +
+	"\bduration\x18\a \x01(\v2\x19.google.protobuf.DurationR\bduration\x12\x14\n" +
+	"\x05trial\x18\b \x01(\x05R\x05trial\"\xd9\x03\n" +
 	"\rMetricSummary\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x1c\n" +
 	"\tevaluator\x18\x02 \x01(\tR\tevaluator\x12/\n" +

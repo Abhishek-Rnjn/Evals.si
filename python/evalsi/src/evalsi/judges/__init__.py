@@ -14,9 +14,11 @@ unchanged evaluation costs nothing.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -50,6 +52,8 @@ class JudgeConfig:
     # OpenAI-compatible only: "json_schema", "json_object" or "none".
     response_format: str = "json_schema"
     timeout_s: float = 120.0
+    # Client-side rate limit shared by every call through this judge; None means unlimited.
+    requests_per_minute: float | None = None
 
     def __post_init__(self) -> None:
         if self.provider not in PROVIDERS:
@@ -112,8 +116,32 @@ class JudgeBackend(Protocol):
     async def aclose(self) -> None: ...
 
 
+class RateLimiter:
+    """Token bucket: at most ``per_minute`` calls per minute, bursting to one second's worth."""
+
+    def __init__(self, per_minute: float) -> None:
+        if per_minute <= 0:
+            raise ValueError("requests_per_minute must be positive")
+        self.rate = per_minute / 60.0
+        self.capacity = max(1.0, self.rate)
+        self.tokens = self.capacity
+        self.updated = time.monotonic()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            while True:
+                now = time.monotonic()
+                self.tokens = min(self.capacity, self.tokens + (now - self.updated) * self.rate)
+                self.updated = now
+                if self.tokens >= 1:
+                    self.tokens -= 1
+                    return
+                await asyncio.sleep((1 - self.tokens) / self.rate)
+
+
 class JudgeClient:
-    """What evaluators use: a backend plus the cache."""
+    """What evaluators use: a backend plus the cache and rate limiter."""
 
     def __init__(
         self, config: JudgeConfig, backend: JudgeBackend, cache: JudgeCache | None = None
@@ -121,6 +149,9 @@ class JudgeClient:
         self.config = config
         self.backend = backend
         self.cache = cache
+        self.limiter = (
+            RateLimiter(config.requests_per_minute) if config.requests_per_minute else None
+        )
 
     async def complete_json(
         self, *, system: str, prompt: str, schema: dict[str, Any]
@@ -130,6 +161,8 @@ class JudgeClient:
             hit = self.cache.get(key)
             if hit is not None:
                 return JudgeResponse(data=hit["data"], model=hit["model"], cached=True)
+        if self.limiter is not None:
+            await self.limiter.acquire()
         response = await self.backend.complete_json(system=system, prompt=prompt, schema=schema)
         if self.cache is not None:
             self.cache.put(key, {"data": response.data, "model": response.model})

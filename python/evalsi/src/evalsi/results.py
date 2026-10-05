@@ -77,7 +77,17 @@ def summarize(
     level: float = 0.95,
     cluster_by: str | None = None,
     ci_method: str = "auto",
+    trials: int = 1,
 ) -> list[MetricSummary]:
+    """Summarize results per metric.
+
+    With ``trials`` above 1 every record appears several times, so intervals
+    cluster by record unless ``cluster_by`` says otherwise, and pass/fail
+    metrics also get ``<metric>.pass@k`` (passed in at least one trial) and
+    ``<metric>.pass^k`` (passed in every trial).
+    """
+    if trials > 1 and not cluster_by:
+        cluster_by = RECORD_CLUSTER
     by_id = {r.id: r for r in records}
     summaries: list[MetricSummary] = []
     for instance in instances:
@@ -110,7 +120,32 @@ def summarize(
             if summary is not None:
                 summary.skipped, summary.errors = skipped, errors
                 summaries.append(summary)
+                if trials > 1 and summary.kind == "proportion":
+                    summaries.extend(_pass_at_k(key, instance.name, scored, trials, level))
     return summaries
+
+
+def _pass_at_k(
+    key: str, evaluator: str, scored: list[tuple[Score, str]], k: int, level: float
+) -> list[MetricSummary]:
+    """pass@k: passed in at least one trial; pass^k: passed in every trial."""
+    by_record: dict[str, list[bool]] = {}
+    for score, rid in scored:
+        if score.passed is not None:
+            by_record.setdefault(rid, []).append(score.passed)
+    out = []
+    for name, reduce in ((f"pass@{k}", any), (f"pass^{k}", all)):
+        values = [1.0 if reduce(v) else 0.0 for v in by_record.values()]
+        summary = MetricSummary(
+            metric=f"{key}.{name}", evaluator=evaluator, kind="proportion", higher_is_better=True
+        )
+        summary.n = len(values)
+        if values:
+            summary.mean = fmean(values)
+            summary.std = stdev(values) if len(values) > 1 else None
+            summary.ci = interval(values, proportion=True, level=level)
+        out.append(summary)
+    return out
 
 
 def _summarize_metric(
@@ -180,7 +215,12 @@ def _infer_type(scored: list[tuple[Score, str]]) -> ScoreType:
     return ScoreType.STRUCTURED
 
 
+RECORD_CLUSTER = "@record"
+
+
 def _cluster_of(record: Record | None, key: str, record_id: str) -> Hashable:
+    if key == RECORD_CLUSTER:
+        return ("record", record_id)
     key = key.removeprefix("metadata.")
     if record is None or key not in record.metadata:
         return ("record", record_id)  # unclustered records count as their own cluster

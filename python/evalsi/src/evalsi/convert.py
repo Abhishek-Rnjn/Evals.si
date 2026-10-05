@@ -197,6 +197,7 @@ def result_to_proto(result: EvaluationResult) -> score_pb2.EvaluationResult:
         scores=[score_to_proto(s) for s in result.scores],
         reason=result.reason,
         duration=_duration(result.duration_ms),
+        trial=result.trial,
     )
 
 
@@ -209,6 +210,7 @@ def result_from_proto(msg: score_pb2.EvaluationResult) -> EvaluationResult:
         scores=[score_from_proto(s) for s in msg.scores],
         reason=msg.reason,
         duration_ms=msg.duration.ToNanoseconds() / 1e6,
+        trial=msg.trial,
     )
 
 

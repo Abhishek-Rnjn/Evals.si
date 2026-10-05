@@ -57,6 +57,16 @@ class EvaluatorPluginServiceStub:
                 request_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.ReduceRequest.SerializeToString,
                 response_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.ReduceResponse.FromString,
                 _registered_method=True)
+        self.Generate = channel.unary_unary(
+                '/evalsi.plugin.v1alpha1.EvaluatorPluginService/Generate',
+                request_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.GenerateRequest.SerializeToString,
+                response_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.GenerateResponse.FromString,
+                _registered_method=True)
+        self.LoadDataset = channel.unary_stream(
+                '/evalsi.plugin.v1alpha1.EvaluatorPluginService/LoadDataset',
+                request_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetRequest.SerializeToString,
+                response_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetResponse.FromString,
+                _registered_method=True)
 
 
 class EvaluatorPluginServiceServicer:
@@ -93,6 +103,20 @@ class EvaluatorPluginServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Generate(self, request, context):
+        """Runs the target (the system under test) on records to produce outputs.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def LoadDataset(self, request, context):
+        """Loads a dataset (file or hf:// URI) and streams its records in chunks.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_EvaluatorPluginServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -110,6 +134,16 @@ def add_EvaluatorPluginServiceServicer_to_server(servicer, server):
                     servicer.Reduce,
                     request_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.ReduceRequest.FromString,
                     response_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.ReduceResponse.SerializeToString,
+            ),
+            'Generate': grpc.unary_unary_rpc_method_handler(
+                    servicer.Generate,
+                    request_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.GenerateRequest.FromString,
+                    response_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.GenerateResponse.SerializeToString,
+            ),
+            'LoadDataset': grpc.unary_stream_rpc_method_handler(
+                    servicer.LoadDataset,
+                    request_deserializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetRequest.FromString,
+                    response_serializer=evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -201,6 +235,60 @@ class EvaluatorPluginService:
             '/evalsi.plugin.v1alpha1.EvaluatorPluginService/Reduce',
             evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.ReduceRequest.SerializeToString,
             evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.ReduceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Generate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.plugin.v1alpha1.EvaluatorPluginService/Generate',
+            evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.GenerateRequest.SerializeToString,
+            evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.GenerateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def LoadDataset(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/evalsi.plugin.v1alpha1.EvaluatorPluginService/LoadDataset',
+            evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetRequest.SerializeToString,
+            evalsi_dot_plugin_dot_v1alpha1_dot_evaluator__plugin__pb2.LoadDatasetResponse.FromString,
             options,
             channel_credentials,
             insecure,

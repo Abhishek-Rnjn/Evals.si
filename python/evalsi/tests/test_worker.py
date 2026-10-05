@@ -252,3 +252,40 @@ def test_serve_reports_healthy_and_loads_judges(tmp_path: Path) -> None:
                 await task
 
     assert asyncio.run(main()) == health_pb2.HealthCheckResponse.SERVING
+
+
+def test_generate_and_load_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from test_runs import FakeTarget
+
+    from evalsi.v1alpha1 import run_pb2
+
+    monkeypatch.setattr("evalsi.worker.create_target", lambda config: FakeTarget())
+    data = tmp_path / "d.jsonl"
+    data.write_text("".join(f'{{"q": "q{i}", "a": "x"}}\n' for i in range(1203)))
+
+    async def call(stub: Any) -> tuple[pb.GenerateResponse, list[pb.LoadDatasetResponse]]:
+        target = run_pb2.Target(connector="openai-compatible", model="m", base_url="http://t/v1")
+        records = [record_to_proto(make_record(None, None, id=i, input="q")) for i in ("a", "b")]
+        generated = await stub.Generate(pb.GenerateRequest(target=target, records=records))
+        source = run_pb2.DatasetSource(path=str(data), mapping={"input": "q", "reference": "a"})
+        chunks = [c async for c in stub.LoadDataset(pb.LoadDatasetRequest(source=source))]
+        return generated, chunks
+
+    generated, chunks = with_worker(EvaluatorPlugin(default_registry()), call, tmp_path)
+    assert [r.output.text for r in generated.results] == ["Paris", "Rome"]
+    assert generated.results[0].usage.input_tokens == 10
+    assert [len(c.records) for c in chunks] == [500, 500, 203]
+    assert record_from_proto(chunks[0].records[0]).reference == Content(text="x")
+
+
+def test_load_dataset_rejects_relative_paths(tmp_path: Path) -> None:
+    from evalsi.v1alpha1 import run_pb2
+
+    async def call(stub: Any) -> None:
+        source = run_pb2.DatasetSource(path="d.jsonl")
+        async for _ in stub.LoadDataset(pb.LoadDatasetRequest(source=source)):
+            pass
+
+    with pytest.raises(grpc.aio.AioRpcError) as info:
+        with_worker(EvaluatorPlugin(default_registry()), call, tmp_path)
+    assert "absolute" in (info.value.details() or "")

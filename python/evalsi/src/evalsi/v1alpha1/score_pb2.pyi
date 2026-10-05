@@ -161,6 +161,7 @@ class EvaluationResult(_message.Message):
     SCORES_FIELD_NUMBER: _builtins.int
     REASON_FIELD_NUMBER: _builtins.int
     DURATION_FIELD_NUMBER: _builtins.int
+    TRIAL_FIELD_NUMBER: _builtins.int
     record_id: _builtins.str
     evaluator: _builtins.str
     """Instance name: the evaluator's short name, or the alias it was given."""
@@ -169,6 +170,8 @@ class EvaluationResult(_message.Message):
     outcome: Global___Outcome.ValueType
     reason: _builtins.str
     """Why the task was skipped or errored."""
+    trial: _builtins.int
+    """Trial number (0-based) when a run sends each record through the target several times."""
     @_builtins.property
     def scores(self) -> _containers.RepeatedCompositeFieldContainer[Global___Score]: ...
     @_builtins.property
@@ -183,10 +186,11 @@ class EvaluationResult(_message.Message):
         scores: _abc.Iterable[Global___Score] | None = ...,
         reason: _builtins.str = ...,
         duration: _duration_pb2.Duration | None = ...,
+        trial: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["duration", b"duration"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration", b"duration", "evaluator", b"evaluator", "evaluator_ref", b"evaluator_ref", "outcome", b"outcome", "reason", b"reason", "record_id", b"record_id", "scores", b"scores"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["duration", b"duration", "evaluator", b"evaluator", "evaluator_ref", b"evaluator_ref", "outcome", b"outcome", "reason", b"reason", "record_id", b"record_id", "scores", b"scores", "trial", b"trial"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___EvaluationResult: _TypeAlias = EvaluationResult  # noqa: Y015

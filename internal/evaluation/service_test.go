@@ -112,6 +112,14 @@ func (f *fakeWorker) Evaluate(_ context.Context, req *pluginv1alpha1.EvaluateReq
 	return resp, nil
 }
 
+func (f *fakeWorker) Generate(context.Context, *pluginv1alpha1.GenerateRequest) (*pluginv1alpha1.GenerateResponse, error) {
+	return nil, errors.New("not used")
+}
+
+func (f *fakeWorker) LoadDataset(context.Context, *pluginv1alpha1.LoadDatasetRequest) ([]*evalsiv1alpha1.Record, error) {
+	return nil, errors.New("not used")
+}
+
 func (f *fakeWorker) Reduce(_ context.Context, req *pluginv1alpha1.ReduceRequest) (*pluginv1alpha1.ReduceResponse, error) {
 	return &pluginv1alpha1.ReduceResponse{Scores: []*evalsiv1alpha1.Score{
 		{Name: "count", Value: &evalsiv1alpha1.Score_Number{Number: float64(len(req.GetRecords()))}},

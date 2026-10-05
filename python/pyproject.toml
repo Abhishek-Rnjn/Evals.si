@@ -13,6 +13,7 @@ dev = [
     "types-grpcio",
     "types-grpcio-health-checking",
     "types-protobuf",
+    "types-pyyaml",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",

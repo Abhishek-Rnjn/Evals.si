@@ -268,6 +268,7 @@ class EvaluationResult:
     scores: list[Score] = field(default_factory=list)
     reason: str = ""
     duration_ms: float = 0.0
+    trial: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -281,4 +282,6 @@ class EvaluationResult:
             out["scores"] = [s.to_dict() for s in self.scores]
         if self.reason:
             out["reason"] = self.reason
+        if self.trial:
+            out["trial"] = self.trial
         return out
