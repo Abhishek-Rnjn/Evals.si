@@ -90,7 +90,7 @@ class HarnessContext:
 
 
 @dataclass
-class _Live:
+class LiveTask:
     task: Task
     env: TaskEnvironment | None
     isolation: dict[str, Any] = field(default_factory=dict)
@@ -112,7 +112,7 @@ class BuiltinHarness:
         self.config = config or agent_pb2.BuiltinHarness()
         self._pool: EnvironmentPool | None = None
         self._pool_lock = asyncio.Lock()
-        self._live: dict[str, _Live] = {}
+        self._live: dict[str, LiveTask] = {}
 
     def describe(self) -> HarnessManifest:
         return HarnessManifest(
@@ -152,14 +152,14 @@ class BuiltinHarness:
                 "a CLI agent runs inside the task's sandbox, so the run needs an environment"
             )
         handle = secrets.token_hex(8)
-        live = _Live(task, env)
+        live = LiveTask(task, env)
         if env is not None:
             live.isolation = env.isolation.to_dict()
             live.closers.append(env.sandbox.destroy)
         self._live[handle] = live
         return handle
 
-    def _get(self, handle: str) -> _Live:
+    def _get(self, handle: str) -> LiveTask:
         try:
             return self._live[handle]
         except KeyError:
@@ -211,9 +211,14 @@ class BuiltinHarness:
         b = self.config.budget
         return b.wall_clock.ToNanoseconds() / 1e9 if b.HasField("wall_clock") else 0.0
 
-    def _loop_config(self) -> LoopConfig:
+    def _system(self, live: LiveTask) -> str:
+        """The agent's system prompt. Subclasses (benchmark harnesses) replace it."""
         c = self.config
-        system = DEFAULT_SYSTEM + (f"\n\n{c.instructions}" if c.instructions else "")
+        return DEFAULT_SYSTEM + (f"\n\n{c.instructions}" if c.instructions else "")
+
+    def _loop_config(self, live: LiveTask) -> LoopConfig:
+        c = self.config
+        system = self._system(live)
         return LoopConfig(
             max_steps=c.max_steps or 30,
             max_tokens=c.budget.tokens,
@@ -225,7 +230,7 @@ class BuiltinHarness:
             system=system,
         )
 
-    async def _tools(self, live: _Live) -> list[Tool]:
+    async def _tools(self, live: LiveTask) -> list[Tool]:
         tools: list[Tool] = []
         cfg = self.config.tools
         use_sandbox = cfg.sandbox if cfg.HasField("sandbox") else live.env is not None
@@ -265,7 +270,7 @@ class BuiltinHarness:
             tools = [FaultyTool(t, faults, seed) for t in tools]
         return tools
 
-    def _escalation_tool(self, live: _Live) -> Tool:
+    def _escalation_tool(self, live: LiveTask) -> Tool:
         allowed = set(self.config.escalation.allow)
 
         async def request_escalation(kind: str, reason: str = "") -> ToolResult:
@@ -330,7 +335,7 @@ class BuiltinHarness:
             seed=f"{task.id}#{task.trial}",
         )
 
-    def _cassette(self, live: _Live) -> Cassette | None:
+    def _cassette(self, live: LiveTask) -> Cassette | None:
         rec = self.config.recording
         if rec.mode in ("", "off"):
             return None
@@ -341,7 +346,7 @@ class BuiltinHarness:
             base / f"{live.task.slug}.jsonl", rec.mode, branch_at_step=rec.branch_at_step
         )
 
-    async def _run_loop(self, live: _Live, emit: Callable[[Event], None]) -> FinalEvent:
+    async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:
         task = live.task
         no_model = not task.spec.HasField("target") or not task.spec.target.model
         if no_model and self.config.recording.mode != "replay":
@@ -365,19 +370,27 @@ class BuiltinHarness:
             ]
         assert model is not None
         user = self._user_simulator(task)
-        loop = AgentLoop(model, tools, self._loop_config(), emit, user=user)
-        conversation = task.conversation
+        loop = AgentLoop(model, tools, self._loop_config(live), emit, user=user)
+        conversation = await self._conversation(live, user, emit)
+        try:
+            return await loop.run(conversation)
+        finally:
+            if cassette is not None:
+                cassette.save()
+
+    async def _conversation(
+        self, live: LiveTask, user: UserSimulator | None, emit: Callable[[Event], None]
+    ) -> list[dict[str, Any]]:
+        """The messages the agent starts from. Subclasses may open with the
+        simulated user, or replay a task's history."""
+        conversation = live.task.conversation
         if live.env is not None and conversation and conversation[-1]["role"] == "user":
             conversation[-1] = {
                 **conversation[-1],
                 "content": f"{conversation[-1]['content']}\n\n"
                 f"(Your working directory in the sandbox is {live.env.workdir}.)",
             }
-        try:
-            return await loop.run(conversation)
-        finally:
-            if cassette is not None:
-                cassette.save()
+        return conversation
 
     async def check(self, handle: str) -> TaskCheck | None:
         live = self._get(handle)
@@ -407,4 +420,11 @@ class BuiltinHarness:
             await self._pool.aclose()
 
 
-__all__ = ["BuiltinHarness", "Harness", "HarnessContext", "HarnessManifest", "StepEvent"]
+__all__ = [
+    "BuiltinHarness",
+    "Harness",
+    "HarnessContext",
+    "HarnessManifest",
+    "LiveTask",
+    "StepEvent",
+]
