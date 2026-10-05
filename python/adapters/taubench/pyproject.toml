@@ -36,5 +36,5 @@ strict = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["tau2.*"]
+module = ["tau2.*", "google.protobuf.*"]
 ignore_missing_imports = true

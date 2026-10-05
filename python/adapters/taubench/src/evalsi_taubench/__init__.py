@@ -394,6 +394,9 @@ def _to_check(info: Any, stop_reason: str) -> TaskCheck:
         tests[f"communicate: {c.info}"] = verdict(c.met)
     basis = ", ".join(str(getattr(b, "value", b)) for b in info.reward_basis or [])
     details = f"reward {info.reward:g}" + (f" on {basis}" if basis else "")
+    failed = [name for name, v in tests.items() if v == "failed"]
+    if failed:
+        details += "; failed: " + "; ".join(failed)
     if stop_reason not in ("completed", ""):
         details += f" (the conversation stopped: {stop_reason})"
     note = (info.info or {}).get("note") if isinstance(info.info, dict) else None
