@@ -36,6 +36,7 @@ text = "evalsi.packs.text:PACK"
 rag = "evalsi.packs.rag:PACK"
 safety = "evalsi.packs.safety:PACK"
 agent = "evalsi.packs.agent:PACK"
+code = "evalsi.packs.code:PACK"
 
 [project.urls]
 Repository = "https://github.com/abhishek-rnjn/evals.si"

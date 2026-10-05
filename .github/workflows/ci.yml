@@ -41,10 +41,19 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Sandbox prerequisites
+        # bubblewrap for the namespaced rung; Ubuntu 24.04 restricts unprivileged
+        # user namespaces through AppArmor unless this is relaxed.
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: gofmt
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - run: go vet ./...
       - run: go test -race ./...
+        env:
+          # Both sandbox rungs must work here; skipping them would hide regressions.
+          EVALSI_REQUIRE_SANDBOX: "1"
       - run: go build ./cmd/evalsid
 
   python:
@@ -97,6 +106,12 @@ jobs:
         with:
           go-version-file: go.mod
       - uses: astral-sh/setup-uv@v7
+      - name: Sandbox prerequisites
+        # bubblewrap for the namespaced rung; Ubuntu 24.04 restricts unprivileged
+        # user namespaces through AppArmor unless this is relaxed.
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: uv sync --locked --all-packages
         working-directory: python
       - name: Generated Python code is current

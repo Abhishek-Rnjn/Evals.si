@@ -5,12 +5,14 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -36,7 +38,12 @@ import (
 // Run serves until ctx is cancelled, then shuts down gracefully.
 // ready, if non-nil, receives the bound address once the server accepts connections.
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput io.Writer, ready chan<- string) error {
+	workerEnv, err := sandboxEnv(cfg)
+	if err != nil {
+		return err
+	}
 	worker, err := pluginhost.Start(ctx, pluginhost.Options{
+		Env:          workerEnv,
 		Command:      cfg.Worker.Command,
 		Judges:       cfg.Judges,
 		NoCache:      cfg.Worker.NoCache,
@@ -220,4 +227,19 @@ func Handler(svc *evaluation.Service, runManager *runs.Manager, watcher *watch.E
 		_, _ = io.WriteString(w, "ok\n")
 	})
 	return mux
+}
+
+// sandboxEnv tells the worker how to reach the sandbox: code evaluators run
+// `$EVALSID sandbox run` with the server's sandbox config. Rungs are probed
+// there, on first use; `evalsid sandbox probe` reports them up front.
+func sandboxEnv(cfg config.Config) ([]string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(cfg.Sandbox)
+	if err != nil {
+		return nil, err
+	}
+	return []string{"EVALSID=" + exe, "EVALSI_SANDBOX=" + string(raw)}, nil
 }

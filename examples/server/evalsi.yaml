@@ -52,3 +52,12 @@ policies:
   - name: all-agents-latency
     stages:
       - evaluators: [{ref: builtin/latency}]
+
+# Isolation for code-executing evaluators (builtin/unit-tests). Rungs are tried
+# strongest first; nothing runs unconfined. `evalsid sandbox probe` shows which
+# rungs work on this host.
+sandbox:
+  ladder: [bwrap, landlock]
+  min_isolation: confined
+  # Interpreters or toolchains outside /usr that sandboxed code may use.
+  read_only_paths: []

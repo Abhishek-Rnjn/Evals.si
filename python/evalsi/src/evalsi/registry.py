@@ -32,9 +32,9 @@ class Pack:
 
 
 def _builtin_packs() -> list[Pack]:
-    from evalsi.packs import agent, core, judge, rag, safety, text
+    from evalsi.packs import agent, code, core, judge, rag, safety, text
 
-    return [core.PACK, judge.PACK, text.PACK, rag.PACK, safety.PACK, agent.PACK]
+    return [core.PACK, judge.PACK, text.PACK, rag.PACK, safety.PACK, agent.PACK, code.PACK]
 
 
 class Registry:

@@ -13,6 +13,8 @@ import (
 	"syscall"
 
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxcli"
 	"github.com/abhishek-rnjn/evals.si/internal/server"
 	"github.com/abhishek-rnjn/evals.si/internal/version"
 )
@@ -20,8 +22,10 @@ import (
 const usage = `usage: evalsid <command> [flags]
 
 commands:
-  version   print the build and API version
-  serve     run the server (evalsid serve -h for flags)
+  version          print the build and API version
+  serve            run the server (evalsid serve -h for flags)
+  sandbox probe    report which sandbox rungs work on this host
+  sandbox run      run a JSON request from stdin in the sandbox, print the JSON result
 `
 
 func main() {
@@ -41,6 +45,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "serve":
 		return serve(ctx, args[1:], stderr)
+	case "sandbox":
+		return sandboxcli.Main(ctx, args[1:], os.Stdin, stdout, stderr)
+	case "sandbox-exec":
+		// Internal: the launcher that confines itself, then executes the command.
+		return sandbox.Exec(stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, usage)
 		return 0

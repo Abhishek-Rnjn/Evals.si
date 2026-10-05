@@ -32,8 +32,24 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxcli"
 	"github.com/abhishek-rnjn/evals.si/internal/server"
 )
+
+// The server runs in this test binary, so the worker's EVALSID points here:
+// answer `sandbox run` and `sandbox-exec` the way evalsid does.
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "sandbox-exec":
+			os.Exit(sandbox.Exec(os.Stderr))
+		case "sandbox":
+			os.Exit(sandboxcli.Main(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+		}
+	}
+	os.Exit(m.Run())
+}
 
 // fakeModel speaks the OpenAI chat-completions protocol. As a judge (the
 // prompt has a <rubric>) it always gives 4/5; as a target it answers capital
@@ -479,4 +495,57 @@ func mustStruct(m map[string]any) *structpb.Struct {
 		panic(err)
 	}
 	return s
+}
+
+// TestCodeSandbox runs generated code against tests through the worker and
+// the real sandbox: passing, failing and escaping programs.
+func TestCodeSandbox(t *testing.T) {
+	base := startServer(t)
+	probe, err := sandbox.New(sandbox.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	usable := false
+	for _, st := range probe.Probe(context.Background()) {
+		usable = usable || st.Available
+	}
+	if !usable {
+		t.Skip("no sandbox rung works on this host")
+	}
+	tests := "def check(f):\n    assert f(2, 3) == 5\n"
+	rec := func(id, code string) *evalsiv1alpha1.Record {
+		return &evalsiv1alpha1.Record{
+			Id: id, Output: text(code), Reference: text(tests),
+			Metadata: map[string]*structpb.Value{"entry_point": structpb.NewStringValue("add")},
+		}
+	}
+	client := evalsiv1alpha1connect.NewEvaluationServiceClient(h2cClient(), base, connect.WithGRPC())
+	resp, err := client.Evaluate(context.Background(), connect.NewRequest(&evalsiv1alpha1.EvaluateRequest{
+		Records: []*evalsiv1alpha1.Record{
+			rec("good", "```python\ndef add(a, b):\n    return a + b\n```"),
+			rec("wrong", "def add(a, b):\n    return a - b\n"),
+			rec("escape", "open('/usr/evalsi-escape', 'w')\ndef add(a, b):\n    return a + b\n"),
+		},
+		Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "unit-tests"}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"good": true, "wrong": false, "escape": false}
+	for _, r := range resp.Msg.GetResults() {
+		if r.GetOutcome() != evalsiv1alpha1.Outcome_OUTCOME_SCORED {
+			t.Fatalf("%s: %v %s", r.GetRecordId(), r.GetOutcome(), r.GetReason())
+		}
+		s := r.GetScores()[0]
+		if s.GetPassed() != want[r.GetRecordId()] {
+			t.Errorf("%s: passed=%v (%s)", r.GetRecordId(), s.GetPassed(), s.GetExplanation())
+		}
+		if s.GetMetadata()["isolation"].GetStructValue().GetFields()["driver"].GetStringValue() == "" {
+			t.Errorf("%s: no isolation report", r.GetRecordId())
+		}
+	}
+	if _, err := os.Stat("/usr/evalsi-escape"); err == nil {
+		os.Remove("/usr/evalsi-escape")
+		t.Fatal("generated code wrote to the host")
+	}
 }

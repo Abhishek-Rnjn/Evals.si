@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"sigs.k8s.io/yaml"
+
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 )
 
 // Judge mirrors evalsi.judges.JudgeConfig in the Python SDK; it is handed to
@@ -91,6 +93,8 @@ type Config struct {
 	Judges       map[string]Judge  `json:"judges"`
 	DefaultJudge string            `json:"default_judge"`
 	Evaluate     Evaluate          `json:"evaluate"`
+	// Isolation for code-executing evaluators (the code pack).
+	Sandbox sandbox.Config `json:"sandbox"`
 }
 
 // Default returns the configuration used when no file is given.
@@ -182,6 +186,9 @@ func (c Config) Validate() error {
 		if info, err := os.Stat(c.DatasetsDir); err != nil || !info.IsDir() {
 			errs = append(errs, fmt.Errorf("datasets_dir %q is not a directory", c.DatasetsDir))
 		}
+	}
+	if err := c.Sandbox.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("sandbox: %w", err))
 	}
 	if c.Evaluate.BatchSize < 1 || c.Evaluate.Parallelism < 1 || c.Evaluate.MaxRecords < 1 {
 		errs = append(errs, errors.New("evaluate.batch_size, parallelism and max_records must be positive"))
