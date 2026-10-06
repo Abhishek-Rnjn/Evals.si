@@ -15,12 +15,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -40,6 +42,8 @@ type Config struct {
 	// Path-style requests (http://host/bucket/key), which most non-AWS
 	// servers need; default: virtual-hosted on AWS, path-style elsewhere.
 	PathStyle bool `json:"path_style,omitempty"`
+	// A private CA, and a client certificate (mutual TLS).
+	TLS *auth.ClientTLSConfig `json:"tls,omitempty"`
 }
 
 var (
@@ -101,9 +105,17 @@ func New(cfg Config) (*Client, error) {
 	if cfg.PathStyle {
 		lookup = minio.BucketLookupPath
 	}
-	mc, err := minio.New(endpoint, &minio.Options{
-		Creds: creds, Secure: !cfg.Insecure, Region: cfg.Region, BucketLookup: lookup,
-	})
+	opts := &minio.Options{Creds: creds, Secure: !cfg.Insecure, Region: cfg.Region, BucketLookup: lookup}
+	if cfg.TLS != nil {
+		tc, err := auth.ClientTLS(cfg.TLS)
+		if err != nil {
+			return nil, fmt.Errorf("objstore: %w", err)
+		}
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.TLSClientConfig = tc
+		opts.Transport = tr
+	}
+	mc, err := minio.New(endpoint, opts)
 	if err != nil {
 		return nil, fmt.Errorf("objstore: %w", err)
 	}

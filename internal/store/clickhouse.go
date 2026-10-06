@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/auth"
 )
 
 // ClickHouseConfig points the trace store at ClickHouse.
@@ -32,6 +33,8 @@ type ClickHouseConfig struct {
 	PasswordEnv string `json:"password_env,omitempty"`
 	// Per-request timeout; default 30s.
 	Timeout string `json:"timeout,omitempty"`
+	// For https://: a private CA, and a client certificate (mutual TLS).
+	TLS *auth.ClientTLSConfig `json:"tls,omitempty"`
 }
 
 // clickhouse keeps traces and their online scores in ClickHouse, over its
@@ -80,7 +83,17 @@ func OpenClickHouse(ctx context.Context, cfg ClickHouseConfig, password string) 
 		}
 		u.User = nil
 	}
-	c := &clickhouse{base: u, db: db, user: user, password: password, client: &http.Client{Timeout: timeout}}
+	hc := &http.Client{Timeout: timeout}
+	if cfg.TLS != nil {
+		tc, err := auth.ClientTLS(cfg.TLS)
+		if err != nil {
+			return nil, fmt.Errorf("clickhouse: %w", err)
+		}
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.TLSClientConfig = tc
+		hc.Transport = tr
+	}
+	c := &clickhouse{base: u, db: db, user: user, password: password, client: hc}
 	if err := c.exec(ctx, `CREATE DATABASE IF NOT EXISTS `+db, nil, nil); err != nil {
 		return nil, err
 	}

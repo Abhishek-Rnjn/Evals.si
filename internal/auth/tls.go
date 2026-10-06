@@ -89,3 +89,42 @@ func (r *certReloader) get(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	}
 	return r.cert, nil
 }
+
+// ClientTLSConfig is the client side of TLS to a backing service (ClickHouse,
+// S3): a CA to trust beyond the system's, and a certificate for mutual TLS.
+type ClientTLSConfig struct {
+	CAFile   string `json:"ca_file,omitempty"`
+	CertFile string `json:"cert_file,omitempty"`
+	KeyFile  string `json:"key_file,omitempty"`
+	// The name to verify, when it differs from the address's host.
+	ServerName string `json:"server_name,omitempty"`
+}
+
+// ClientTLS builds a client TLS config. The certificate is reloaded when its
+// files change (cert-manager rotates them in place).
+func ClientTLS(c *ClientTLSConfig) (*tls.Config, error) {
+	out := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: c.ServerName}
+	if c.CAFile != "" {
+		pem, err := os.ReadFile(c.CAFile)
+		if err != nil {
+			return nil, err
+		}
+		if out.RootCAs, err = x509.SystemCertPool(); err != nil {
+			out.RootCAs = x509.NewCertPool()
+		}
+		if !out.RootCAs.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("%s: no certificates", c.CAFile)
+		}
+	}
+	if (c.CertFile == "") != (c.KeyFile == "") {
+		return nil, errors.New("tls: cert_file and key_file go together")
+	}
+	if c.CertFile != "" {
+		r := &certReloader{certFile: c.CertFile, keyFile: c.KeyFile}
+		if err := r.load(); err != nil {
+			return nil, err
+		}
+		out.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return r.get(nil) }
+	}
+	return out, nil
+}

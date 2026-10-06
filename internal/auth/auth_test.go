@@ -12,11 +12,14 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -387,5 +390,92 @@ func TestIsLoopback(t *testing.T) {
 		if IsLoopback(addr) != want {
 			t.Errorf("IsLoopback(%q) = %v", addr, !want)
 		}
+	}
+}
+
+// kubeAPI stands in for a Kubernetes API server's service-account issuer:
+// its key endpoints need a service-account token, as on a real cluster.
+func kubeAPI(t *testing.T, is *issuer) (Provider, string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	srv := httptest.NewTLSServer(mux)
+	t.Cleanup(srv.Close)
+	authorized := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Header.Get("Authorization") != "Bearer reader-token" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return false
+		}
+		return true
+	}
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		if authorized(w, r) {
+			// jwks_uri on an address unreachable from here, as is common.
+			_ = json.NewEncoder(w).Encode(map[string]string{"issuer": "https://kubernetes.default.svc.cluster.local", "jwks_uri": "https://203.0.113.1:6443/openid/v1/jwks"})
+		}
+	})
+	mux.HandleFunc("/openid/v1/jwks", func(w http.ResponseWriter, r *http.Request) {
+		if authorized(w, r) {
+			_ = json.NewEncoder(w).Encode(is.public())
+		}
+	})
+	dir := t.TempDir()
+	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	_ = os.WriteFile(dir+"/ca.crt", ca, 0o600)
+	_ = os.WriteFile(dir+"/token", []byte("reader-token\n"), 0o600)
+	return Provider{
+		Name: "cluster", Audiences: []string{"evalsi"},
+		Kubernetes: &KubernetesIssuer{APIServer: srv.URL, CAFile: dir + "/ca.crt", TokenFile: dir + "/token", Namespaces: []string{"evalsi", "ci"}},
+	}, dir
+}
+
+func saToken(t *testing.T, is *issuer, namespace, name, aud string) string {
+	t.Helper()
+	now := time.Now()
+	return is.sign(t, "rsa-1", map[string]any{
+		"iss": "https://kubernetes.default.svc.cluster.local", "aud": []string{aud},
+		"sub": "system:serviceaccount:" + namespace + ":" + name,
+		"iat": now.Unix(), "nbf": now.Unix(), "exp": now.Add(time.Hour).Unix(),
+		"kubernetes.io": map[string]any{
+			"namespace":      namespace,
+			"serviceaccount": map[string]any{"name": name, "uid": "u-1"},
+			"pod":            map[string]any{"name": name + "-abc", "uid": "u-2"},
+		},
+	})
+}
+
+func TestKubernetesServiceAccounts(t *testing.T) {
+	is := newIssuer(t)
+	p, dir := kubeAPI(t, is)
+	a := newAuth(t, &Config{JWT: &JWTConfig{Providers: []Provider{p}}}, nil, nil)
+
+	res := a.Authenticate(request(bearer(saToken(t, is, "evalsi", "evalsi-operator", "evalsi"))))
+	if res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	pr := res.Principal
+	if pr.Kind != KindService || pr.Subject != "system:serviceaccount:evalsi:evalsi-operator" || pr.Name != "evalsi/evalsi-operator" ||
+		!slices.Equal(pr.Groups, []string{"system:serviceaccounts", "system:serviceaccounts:evalsi"}) {
+		t.Errorf("principal %+v", pr)
+	}
+	for name, tok := range map[string]string{
+		"another namespace":     saToken(t, is, "default", "evalsi-operator", "evalsi"),
+		"another audience":      saToken(t, is, "ci", "runner", "https://kubernetes.default.svc"),
+		"not a service account": is.sign(t, "rsa-1", map[string]any{"iss": "https://kubernetes.default.svc.cluster.local", "aud": "evalsi", "sub": "x", "exp": time.Now().Add(time.Hour).Unix()}),
+	} {
+		if res := a.Authenticate(request(bearer(tok))); res.Err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+
+	// Without the reader token the API server refuses: startup fails
+	// rather than every request.
+	_ = os.WriteFile(dir+"/token", []byte("wrong\n"), 0o600)
+	if _, err := New(&Config{JWT: &JWTConfig{Providers: []Provider{p}}}, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "401") {
+		t.Errorf("New with a bad reader token: %v", err)
+	}
+	// jwks cannot be set as well.
+	p.JWKS.Discovery = true
+	if err := (&Config{JWT: &JWTConfig{Providers: []Provider{p}}}).Validate(); err == nil {
+		t.Error("kubernetes with jwks validated")
 	}
 }

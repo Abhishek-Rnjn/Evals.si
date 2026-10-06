@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,6 +93,11 @@ func (k *keySource) loadLocked(ctx context.Context) error {
 	default:
 		if k.jwksURL == "" {
 			k.jwksURL = k.p.JWKS.URL
+			if kube := k.p.Kubernetes; kube != nil {
+				// The API server's own endpoint: the discovery document's
+				// jwks_uri is often an address only reachable from outside.
+				k.jwksURL = kube.apiServer() + "/openid/v1/jwks"
+			}
 			if k.p.JWKS.Discovery {
 				if k.jwksURL, err = k.discover(ctx); err != nil {
 					return err
@@ -144,6 +151,14 @@ func (k *keySource) get(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if kube := k.p.Kubernetes; kube != nil {
+		// Read per fetch: the kubelet rotates projected tokens.
+		token, err := os.ReadFile(kube.tokenFile())
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(token)))
+	}
 	resp, err := k.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -165,6 +180,20 @@ type jwtProvider struct {
 }
 
 func newJWTProvider(p Provider, client *http.Client) (*jwtProvider, error) {
+	if p.Kubernetes != nil {
+		var err error
+		if client, err = kubernetesClient(p.Kubernetes, client); err != nil {
+			return nil, fmt.Errorf("provider %s: %w", p.Name, err)
+		}
+		if p.Kind == "" {
+			p.Kind = KindService
+		}
+		if p.Issuer == "" {
+			if p.Issuer, err = kubernetesIssuer(p, client); err != nil {
+				return nil, fmt.Errorf("provider %s: %w", p.Name, err)
+			}
+		}
+	}
 	ks, err := newKeySource(p, client)
 	if err != nil {
 		return nil, err
@@ -265,7 +294,60 @@ func (p *jwtProvider) verify(ctx context.Context, tok *jwt.JSONWebToken, kid str
 			return nil, fmt.Errorf("missing required claim %q", c)
 		}
 	}
+	if kube := p.cfg.Kubernetes; kube != nil {
+		ns, sa := serviceAccount(claims)
+		if ns == "" || sa == "" {
+			return nil, errors.New("not a service-account token")
+		}
+		if len(kube.Namespaces) > 0 && !slices.Contains(kube.Namespaces, ns) {
+			return nil, fmt.Errorf("service accounts of namespace %q are not trusted", ns)
+		}
+	}
 	return claims, nil
+}
+
+// serviceAccount reads a service-account token's namespace and name.
+func serviceAccount(claims map[string]any) (namespace, name string) {
+	k8s, _ := claims["kubernetes.io"].(map[string]any)
+	if k8s == nil {
+		return "", ""
+	}
+	namespace, _ = k8s["namespace"].(string)
+	sa, _ := k8s["serviceaccount"].(map[string]any)
+	name, _ = sa["name"].(string)
+	return namespace, name
+}
+
+// kubernetesClient trusts the cluster's CA, on top of client's settings.
+func kubernetesClient(k *KubernetesIssuer, client *http.Client) (*http.Client, error) {
+	pem, err := os.ReadFile(k.caFile())
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("%s: no certificates", k.caFile())
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	return &http.Client{Transport: tr, Timeout: client.Timeout}, nil
+}
+
+// kubernetesIssuer reads the service-account issuer from the API server's
+// discovery document.
+func kubernetesIssuer(p Provider, client *http.Client) (string, error) {
+	k := &keySource{p: p, client: client}
+	raw, err := k.get(context.Background(), p.Kubernetes.apiServer()+"/.well-known/openid-configuration")
+	if err != nil {
+		return "", fmt.Errorf("service-account issuer discovery: %w", err)
+	}
+	var doc struct {
+		Issuer string `json:"issuer"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil || doc.Issuer == "" {
+		return "", fmt.Errorf("service-account issuer discovery: no issuer (%v)", err)
+	}
+	return doc.Issuer, nil
 }
 
 // principal builds a principal from verified claims.
@@ -279,6 +361,12 @@ func (p *jwtProvider) principal(claims map[string]any) *Principal {
 	}
 	if p.cfg.Kind != "" {
 		pr.Kind = p.cfg.Kind
+	}
+	if p.cfg.Kubernetes != nil {
+		ns, sa := serviceAccount(claims)
+		pr.Name = ns + "/" + sa
+		pr.Groups = append(pr.Groups, "system:serviceaccounts", "system:serviceaccounts:"+ns)
+		return pr
 	}
 	if m.Name != "" {
 		pr.Name = claimString(claims, m.Name)
