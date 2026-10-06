@@ -143,9 +143,13 @@ func (r *EvalRunReconciler) create(ctx context.Context, run *v1.EvalRun) (ctrl.R
 	if err != nil {
 		return ctrl.Result{}, r.invalid(ctx, run, err)
 	}
-	created, err := r.API.Runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{
-		Name: run.Name, Project: Project(run), Spec: s, Labels: apiLabels(run),
-	}))
+	var created *connect.Response[evalsiv1alpha1.CreateRunResponse]
+	err = r.API.withProject(ctx, Project(run), func() (err error) {
+		created, err = r.API.Runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{
+			Name: run.Name, Project: Project(run), Spec: s, Labels: apiLabels(run),
+		}))
+		return err
+	})
 	if err != nil {
 		if permanent(err) {
 			return ctrl.Result{}, r.invalid(ctx, run, err)

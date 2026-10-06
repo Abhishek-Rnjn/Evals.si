@@ -1,0 +1,8 @@
+apiVersion: v2
+name: evalsi-crds
+description: The cluster-scoped part of Evals.si - the evals.si CRDs, the admission webhooks that validate them and record their creators, and the operator's cluster-wide permissions. Install once per cluster, before evalsi.
+type: application
+version: 0.4.0
+appVersion: "0.4.0"
+home: https://github.com/abhishek-rnjn/evals.si
+kubeVersion: ">=1.30.0-0"

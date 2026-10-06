@@ -1,0 +1,11 @@
+# A sandbox pool on the pod rung: one hardened pod per sandbox.
+apiVersion: evals.si/v1alpha1
+kind: SandboxClass
+metadata:
+  name: pods
+spec:
+  ladder: [pod]
+  minIsolation: namespaced
+  pod:
+    defaultImage: airgap.invalid/python:3.13-slim
+    networkPolicyEnforced: true

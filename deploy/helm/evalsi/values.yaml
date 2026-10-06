@@ -1,0 +1,147 @@
+# The evalsi image (evalsid, the Python worker, evalsi-guest, the operator).
+image:
+  repository: ghcr.io/abhishek-rnjn/evalsi
+  tag: ""                 # default: the chart's appVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+global:
+  # Air-gapped installs: pull every image from this registry instead (the
+  # bundle pushes them there under the same paths, docker.io/library
+  # images at their short names).
+  imageRegistry: ""
+
+# evalsid serve: the API, OTLP ingest, the run scheduler and the policy
+# engine. Several replicas need storage.postgres; the scheduler and policy
+# engine then run on one of them at a time (leases), ingest on all.
+server:
+  replicas: 1
+  resources: {}
+  # Serve TLS with the chart's internal CA (clients outside the cluster
+  # usually reach it through an ingress or agentgateway instead).
+  tls: true
+  otlp:
+    enabled: true         # 4317 (gRPC) and 4318 (HTTP) beside the API on 8080
+  # Without postgres: SQLite on this volume (one replica only).
+  persistence:
+    enabled: false
+    size: 10Gi
+    storageClassName: ""
+  # Merged into evalsi.yaml as is: judges, sinks, policies, runs, traces...
+  config: {}
+  env: []
+  envFrom: []             # e.g. [{secretRef: {name: evalsi-providers}}] for ANTHROPIC_API_KEY
+  nodeSelector: {}
+  tolerations: []
+
+storage:
+  postgres:
+    # A Secret key holding the DSN (postgres://user:pass@host/db?sslmode=verify-full).
+    dsnSecret: {name: "", key: dsn}
+  clickhouse:
+    url: ""               # http(s)://clickhouse:8123
+    database: evalsi
+    user: ""
+    passwordSecret: {name: "", key: password}
+  s3:
+    endpoint: ""          # s3.amazonaws.com, or minio:9000
+    bucket: ""            # datasets_dir becomes s3://<bucket>/<prefix>
+    prefix: datasets
+    region: ""
+    # A Secret with access_key and secret_key; empty uses the standard chain
+    # (IRSA and other web identity, the node's role).
+    credentialsSecret: ""
+    insecure: false
+    pathStyle: true
+
+# A throwaway PostgreSQL in the namespace, for trying several replicas out.
+# Not for production: no backups, no HA.
+devPostgres:
+  enabled: false
+  image: postgres:17
+  storage: 5Gi
+
+# NATS JetStream: the work queues, the span stream, events and leases' signals.
+nats:
+  # An existing NATS (for example the official chart, three nodes): its URL.
+  url: ""
+  # Otherwise one JetStream node in the namespace.
+  image: nats:2.12-alpine
+  storage: 10Gi
+  storageClassName: ""
+  resources: {}
+  # Stream replicas (3 on a three-node cluster).
+  streamReplicas: 1
+
+auth:
+  # Accept the cluster's service-account tokens (the operator, CI jobs,
+  # agents) projected for this audience.
+  kubernetes:
+    enabled: true
+    audience: evals.si
+    namespaces: []        # default: every namespace
+  # Merged into the auth section: jwt providers, api_keys, trusted_proxy...
+  config: {}
+# Merged into the rbac section; the operator is always an owner.
+rbac:
+  owners: []
+  projects: {}
+  roles: []
+
+# Workers per pool: evalsid worker processes driving a Python worker.
+workers:
+  pools:
+    cpu: {replicas: 1, concurrency: 8, resources: {}}
+    judge: {replicas: 1, concurrency: 16, resources: {}}
+    sandbox: {replicas: 1, concurrency: 4, resources: {}}
+    harness: {replicas: 1, concurrency: 2, resources: {}}
+    # gpu: {replicas: 1, concurrency: 1, resources: {limits: {nvidia.com/gpu: 1}}, nodeSelector: {...}}
+  # Merged into the workers' evalsi.yaml (judges, default_judge, agents...).
+  config: {}
+  env: []
+  envFrom: []
+  nodeSelector: {}
+  tolerations: []
+
+# KEDA scaling per pool on its JetStream consumer's backlog (KEDA must be
+# installed). Replaces workers.pools.*.replicas.
+keda:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 20
+  lagThreshold: 10
+  pollingInterval: 10
+
+sandbox:
+  # Where workers run agent sandboxes and code evaluators: a sandbox pool
+  # (tls://evalsi-sandboxd.<namespace>.svc:7443 from the evalsi-sandboxd
+  # chart, or a SandboxClass's status.address). Empty: in the worker pods,
+  # which then need the privileges bwrap needs.
+  address: ""
+  # The pod rung: a service account pools may run as, allowed to manage
+  # sandbox pods here, and a NetworkPolicy confining those pods.
+  podRung:
+    enabled: true
+    networkPolicy: true
+
+operator:
+  enabled: true
+  replicas: 1
+  # Reconcile SandboxClasses (cluster-scoped: needs evalsi-crds with
+  # operator.sandboxClasses).
+  sandboxClasses: false
+  # Watch EvalRuns and the rest in every namespace (needs evalsi-crds with
+  # operator.allNamespaces); default: this namespace.
+  allNamespaces: false
+  # Serve the admission webhooks (evalsi-crds installs their configuration
+  # and certificate).
+  webhooks: true
+  createProjects: true
+  resources: {}
+
+tls:
+  # Internal certificates (the API, sandbox pools, worker client
+  # certificates) from cert-manager instead of the chart's own CA.
+  certManager:
+    enabled: false
+    issuerRef: {}         # {name: ..., kind: ClusterIssuer}

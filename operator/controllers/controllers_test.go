@@ -130,6 +130,12 @@ func TestOperator(t *testing.T) {
 		if run.Status.Project != "team-a" {
 			t.Errorf("project %q: the namespace is the default", run.Status.Project)
 		}
+		e.api.mu.Lock()
+		created := e.api.projects["team-a"]
+		e.api.mu.Unlock()
+		if !created {
+			t.Error("the namespace's project was not created")
+		}
 		if err := alice.Delete(ctx, run); err != nil {
 			t.Fatal(err)
 		}

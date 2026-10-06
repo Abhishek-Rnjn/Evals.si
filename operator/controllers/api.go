@@ -20,6 +20,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 )
 
@@ -27,6 +28,10 @@ import (
 type API struct {
 	Runs    evalsiv1alpha1connect.RunServiceClient
 	Monitor evalsiv1alpha1connect.MonitorServiceClient
+	Auth    evalsiv1alpha1connect.AuthServiceClient
+	// Create a resource's project when the server does not know it (the
+	// namespace, usually), instead of failing the resource.
+	CreateProjects bool
 }
 
 // APIConfig says how to reach evalsid.
@@ -39,6 +44,8 @@ type APIConfig struct {
 	Token     string
 	// CA for an https URL; client certificate for mutual TLS.
 	CAFile, CertFile, KeyFile string
+	// See API.CreateProjects.
+	CreateProjects bool
 }
 
 func NewAPI(cfg APIConfig) (*API, error) {
@@ -90,7 +97,27 @@ func NewAPI(cfg APIConfig) (*API, error) {
 	return &API{
 		Runs:    evalsiv1alpha1connect.NewRunServiceClient(client, base, opts),
 		Monitor: evalsiv1alpha1connect.NewMonitorServiceClient(client, base, opts),
+		Auth:    evalsiv1alpha1connect.NewAuthServiceClient(client, base, opts),
+
+		CreateProjects: cfg.CreateProjects,
 	}, nil
+}
+
+// withProject calls f, and when the server does not know the project and
+// creating projects is on, creates it and calls f again.
+func (a *API) withProject(ctx context.Context, project string, f func() error) error {
+	err := f()
+	if err == nil || !a.CreateProjects || connect.CodeOf(err) != connect.CodeInvalidArgument ||
+		!strings.Contains(err.Error(), "unknown project") {
+		return err
+	}
+	_, cerr := a.Auth.CreateProject(ctx, connect.NewRequest(&evalsiv1alpha1.CreateProjectRequest{
+		Name: project, Description: "created by evalsi-operator for its Kubernetes namespace",
+	}))
+	if cerr != nil && connect.CodeOf(cerr) != connect.CodeAlreadyExists {
+		return fmt.Errorf("%w (and creating project %q: %v)", err, project, cerr)
+	}
+	return f()
 }
 
 // permanent reports API errors that retrying the same request cannot fix.

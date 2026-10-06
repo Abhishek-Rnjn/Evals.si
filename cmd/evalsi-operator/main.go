@@ -66,6 +66,7 @@ func run() error {
 	flag.StringVar(&api.CAFile, "ca-file", "", "CA for an https evalsid URL")
 	flag.StringVar(&api.CertFile, "cert-file", "", "client certificate for mutual TLS to evalsid")
 	flag.StringVar(&api.KeyFile, "key-file", "", "its key")
+	flag.BoolVar(&api.CreateProjects, "create-projects", true, "create a namespace's project when evalsid does not know it")
 	flag.Var(&watchNS, "watch-namespace", "only watch this namespace (repeatable; default: all)")
 	flag.StringVar(&namespace, "namespace", namespace, "where sandbox pools run (default: $POD_NAMESPACE)")
 	flag.StringVar(&enabled, "controllers", enabled, "controllers to run")

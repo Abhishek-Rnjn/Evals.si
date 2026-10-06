@@ -1,0 +1,103 @@
+{{- $v := .Values }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evalsi-worker
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+{{- range $pool, $p := $v.workers.pools }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evalsi-worker-{{ $pool }}
+  labels: {{- include "evalsi.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: evalsi-worker
+    evals.si/pool: {{ $pool }}
+spec:
+  {{- if not $v.keda.enabled }}
+  replicas: {{ $p.replicas }}
+  {{- end }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: evalsi-worker, evals.si/pool: {{ $pool }}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: evalsi-worker, app.kubernetes.io/part-of: evalsi, evals.si/pool: {{ $pool }}}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") $ | sha256sum }}
+    spec:
+      serviceAccountName: evalsi-worker
+      securityContext: {{- include "evalsi.podSecurity" $ | nindent 8 }}
+      {{- with $v.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if eq $pool "harness" }}
+      # Agent trials run long; let them finish (or be redelivered) on shutdown.
+      terminationGracePeriodSeconds: 600
+      {{- end }}
+      containers:
+        - name: worker
+          image: {{ include "evalsi.image" $ }}
+          imagePullPolicy: {{ $v.image.pullPolicy }}
+          args: [worker, --config, /etc/evalsi/evalsi.yaml, --pools, {{ $pool }}, --concurrency, {{ $p.concurrency | quote }}]
+          env:
+            {{- if $v.storage.s3.credentialsSecret }}
+            - name: EVALSI_S3_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: access_key}}
+            - name: EVALSI_S3_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: secret_key}}
+            {{- end }}
+            {{- with $v.workers.env }}{{ toYaml . | nindent 12 }}{{ end }}
+          {{- with $v.workers.envFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          securityContext: {{- include "evalsi.restricted" $ | nindent 12 }}
+          resources: {{- toYaml ($p.resources | default dict) | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/evalsi, readOnly: true}
+            {{- if $v.sandbox.address }}
+            - {name: worker-tls, mountPath: /etc/evalsi/worker-tls, readOnly: true}
+            {{- end }}
+            - {name: home, mountPath: /var/lib/evalsi}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: evalsi-worker}
+        {{- if $v.sandbox.address }}
+        - name: worker-tls
+          secret: {secretName: evalsi-worker-tls}
+        {{- end }}
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with ($p.nodeSelector | default $v.workers.nodeSelector) }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with ($p.tolerations | default $v.workers.tolerations) }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if $v.keda.enabled }}
+---
+# Scales the pool on its JetStream consumer's backlog.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: evalsi-worker-{{ $pool }}
+  labels: {{- include "evalsi.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef: {name: evalsi-worker-{{ $pool }}}
+  minReplicaCount: {{ $p.minReplicas | default $v.keda.minReplicas }}
+  maxReplicaCount: {{ $p.maxReplicas | default $v.keda.maxReplicas }}
+  pollingInterval: {{ $v.keda.pollingInterval }}
+  triggers:
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: {{ printf "evalsi-nats.%s.svc:8222" $.Release.Namespace | quote }}
+        account: "$G"
+        stream: EVALSI_WORK
+        consumer: pool-{{ $pool }}
+        lagThreshold: {{ $v.keda.lagThreshold | quote }}
+        activationLagThreshold: "0"
+{{- end }}
+{{- end }}

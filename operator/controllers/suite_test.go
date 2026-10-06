@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,7 +33,10 @@ import (
 type fakeAPI struct {
 	evalsiv1alpha1connect.UnimplementedRunServiceHandler
 	evalsiv1alpha1connect.UnimplementedMonitorServiceHandler
-	mu        sync.Mutex
+	evalsiv1alpha1connect.UnimplementedAuthServiceHandler
+	mu sync.Mutex
+	// Projects the server knows; runs and policies elsewhere are refused.
+	projects  map[string]bool
 	runs      map[string]*evalsiv1alpha1.Run
 	creates   []*evalsiv1alpha1.CreateRunRequest
 	cancelled []string
@@ -52,6 +56,9 @@ func (f *fakeAPI) CreateRun(_ context.Context, req *connect.Request[evalsiv1alph
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.token(req.Header())
+	if !f.projects[req.Msg.GetProject()] {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", req.Msg.GetProject()))
+	}
 	f.creates = append(f.creates, req.Msg)
 	id := "run-" + string(rune('a'+len(f.runs)))
 	r := &evalsiv1alpha1.Run{Id: id, Name: req.Msg.GetName(), Project: req.Msg.GetProject(), Spec: req.Msg.GetSpec(), Status: evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING}
@@ -95,6 +102,9 @@ func (f *fakeAPI) ApplyPolicy(_ context.Context, req *connect.Request[evalsiv1al
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	p := req.Msg.GetPolicy()
+	if !f.projects[p.GetProject()] {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", p.GetProject()))
+	}
 	f.policies[p.GetName()] = p
 	f.applied = append(f.applied, p)
 	return connect.NewResponse(&evalsiv1alpha1.ApplyPolicyResponse{Policy: p}), nil
@@ -116,6 +126,13 @@ func (f *fakeAPI) DeletePolicy(_ context.Context, req *connect.Request[evalsiv1a
 	delete(f.policies, req.Msg.GetName())
 	f.deleted = append(f.deleted, req.Msg.GetName())
 	return connect.NewResponse(&evalsiv1alpha1.DeletePolicyResponse{}), nil
+}
+
+func (f *fakeAPI) CreateProject(_ context.Context, req *connect.Request[evalsiv1alpha1.CreateProjectRequest]) (*connect.Response[evalsiv1alpha1.CreateProjectResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.projects[req.Msg.GetName()] = true
+	return connect.NewResponse(&evalsiv1alpha1.CreateProjectResponse{Project: &evalsiv1alpha1.Project{Name: req.Msg.GetName()}}), nil
 }
 
 func (f *fakeAPI) GetPolicyStats(_ context.Context, req *connect.Request[evalsiv1alpha1.GetPolicyStatsRequest]) (*connect.Response[evalsiv1alpha1.GetPolicyStatsResponse], error) {
@@ -144,10 +161,12 @@ func start(t *testing.T) *env {
 		}
 		t.Setenv("KUBEBUILDER_ASSETS", "/opt/envtest/bin")
 	}
-	fake := &fakeAPI{runs: map[string]*evalsiv1alpha1.Run{}, policies: map[string]*evalsiv1alpha1.OnlineEvalPolicy{}, holdJudge: "hold"}
+	fake := &fakeAPI{runs: map[string]*evalsiv1alpha1.Run{}, policies: map[string]*evalsiv1alpha1.OnlineEvalPolicy{}, holdJudge: "hold",
+		projects: map[string]bool{"quickstart": true, "support": true}}
 	mux := http.NewServeMux()
 	mux.Handle(evalsiv1alpha1connect.NewRunServiceHandler(fake))
 	mux.Handle(evalsiv1alpha1connect.NewMonitorServiceHandler(fake))
+	mux.Handle(evalsiv1alpha1connect.NewAuthServiceHandler(fake))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -180,7 +199,7 @@ func start(t *testing.T) *env {
 	_ = os.WriteFile(tokenFile, []byte("sa-token\n"), 0o600)
 	if err := Setup(mgr, Config{
 		Enabled: []string{"evalrun", "onlineevalpolicy", "evaluator", "sandboxclass"},
-		API:     APIConfig{URL: srv.URL, TokenFile: tokenFile}, PollInterval: 200 * time.Millisecond, StatsInterval: 200 * time.Millisecond,
+		API:     APIConfig{URL: srv.URL, TokenFile: tokenFile, CreateProjects: true}, PollInterval: 200 * time.Millisecond, StatsInterval: 200 * time.Millisecond,
 		Namespace: "evalsi", Image: "ghcr.io/abhishek-rnjn/evalsi:test", SandboxTLSSecret: "sandbox-tls",
 		SandboxAllowClients: []string{"spiffe://evals.si/ns/evalsi/sa/evalsi-worker"}, SandboxServiceAccount: "evalsi-sandboxd",
 		WorkerConfigMap: "evalsi-worker", NATSMonitoringEndpoint: "evalsi-nats.evalsi.svc:8222",

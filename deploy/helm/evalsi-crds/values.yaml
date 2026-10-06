@@ -1,0 +1,17 @@
+# Where the evalsi chart (and its operator) is installed.
+operator:
+  namespace: evalsi
+  # Let the operator reconcile SandboxClasses (cluster-scoped).
+  sandboxClasses: true
+  # Let it watch evals.si resources in every namespace.
+  allNamespaces: false
+
+webhooks:
+  enabled: true
+  # Fail closed: without the operator, evals.si resources cannot be created
+  # (an unvalidated EvalRun would fail later, less clearly).
+  failurePolicy: Fail
+  # The serving certificate: generated here, or from cert-manager.
+  certManager:
+    enabled: false
+    issuerRef: {}

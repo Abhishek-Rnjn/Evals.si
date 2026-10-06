@@ -102,7 +102,11 @@ func (r *PolicyReconciler) apply(ctx context.Context, p *v1.OnlineEvalPolicy, na
 		}
 	}
 	policy.Name, policy.Project, policy.Labels = name, project, apiLabels(p)
-	if _, err := r.API.Monitor.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy})); err != nil {
+	err = r.API.withProject(ctx, project, func() error {
+		_, err := r.API.Monitor.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy}))
+		return err
+	})
+	if err != nil {
 		if permanent(err) {
 			return fail("Rejected", err)
 		}

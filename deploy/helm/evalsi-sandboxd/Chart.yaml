@@ -1,0 +1,8 @@
+apiVersion: v2
+name: evalsi-sandboxd
+description: Sandbox pools on nodes - sandboxd as a DaemonSet serving the sandbox service over mutual TLS, with the bubblewrap rung (in a user namespace) or the Firecracker rung (on KVM nodes). Install into the evalsi chart's namespace, whose internal certificates it uses.
+type: application
+version: 0.4.0
+appVersion: "0.4.0"
+home: https://github.com/abhishek-rnjn/evals.si
+kubeVersion: ">=1.30.0-0"

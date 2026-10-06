@@ -1,0 +1,68 @@
+{{- /*
+Internal certificates, from one CA: the API's serving certificate, the
+sandbox pools' (evalsi-sandboxd and SandboxClass pools), and the workers'
+client certificate, which pools admit by its name (evalsi-worker). Each
+Secret carries ca.crt. Generated once and kept across upgrades, or issued
+by cert-manager.
+*/ -}}
+{{- $ns := .Release.Namespace -}}
+{{- $certs := list
+  (dict "name" "evalsi-server-tls" "cn" "evalsi" "dns" (list "evalsi" (printf "evalsi.%s" $ns) (printf "evalsi.%s.svc" $ns) (printf "evalsi.%s.svc.cluster.local" $ns) "localhost"))
+  (dict "name" "evalsi-sandbox-tls" "cn" "evalsi-sandbox" "dns" (list (printf "*.%s.svc" $ns) (printf "*.%s.svc.cluster.local" $ns) "evalsi-sandboxd"))
+  (dict "name" "evalsi-worker-tls" "cn" "evalsi-worker" "dns" (list "evalsi-worker"))
+-}}
+{{- if .Values.tls.certManager.enabled }}
+{{- range $certs }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .name }}
+  labels: {{- include "evalsi.labels" $ | nindent 4 }}
+spec:
+  secretName: {{ .name }}
+  commonName: {{ .cn }}
+  dnsNames: {{- toYaml .dns | nindent 4 }}
+  usages: [server auth, client auth]
+  privateKey: {algorithm: ECDSA, size: 256, rotationPolicy: Always}
+  issuerRef: {{- toYaml $.Values.tls.certManager.issuerRef | nindent 4 }}
+{{- end }}
+{{- else }}
+{{- $existing := lookup "v1" "Secret" $ns "evalsi-internal-ca" }}
+{{- $ca := dict }}
+{{- if $existing }}
+{{- $ca = buildCustomCert (index $existing.data "tls.crt") (index $existing.data "tls.key") }}
+{{- else }}
+{{- $ca = genCA "evalsi internal CA" 3650 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: evalsi-internal-ca
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+  annotations: {helm.sh/resource-policy: keep}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $ca.Cert | b64enc }}
+  tls.key: {{ $ca.Key | b64enc }}
+{{- range $certs }}
+{{- $old := lookup "v1" "Secret" $ns .name }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .name }}
+  labels: {{- include "evalsi.labels" $ | nindent 4 }}
+type: kubernetes.io/tls
+data:
+{{- if and $old $existing }}
+  {{- toYaml $old.data | nindent 2 }}
+{{- else }}
+{{- $cert := genSignedCert .cn nil .dns 825 $ca }}
+  tls.crt: {{ $cert.Cert | b64enc }}
+  tls.key: {{ $cert.Key | b64enc }}
+  ca.crt: {{ $ca.Cert | b64enc }}
+{{- end }}
+{{- end }}
+{{- end }}

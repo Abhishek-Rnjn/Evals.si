@@ -1,0 +1,92 @@
+{{- $ns := .Release.Namespace -}}
+{{- $v := .Values -}}
+{{- if and (gt (int $v.server.replicas) 1) (not $v.storage.postgres.dsnSecret.name) (not $v.devPostgres.enabled) }}
+{{- fail "server.replicas above 1 needs storage.postgres (or devPostgres for a trial)" }}
+{{- end }}
+{{- $cluster := dict "url" (include "evalsi.natsURL" .) "replicas" (int $v.nats.streamReplicas) -}}
+
+{{- /* evalsid serve */ -}}
+{{- $storage := dict -}}
+{{- if or $v.storage.postgres.dsnSecret.name $v.devPostgres.enabled }}
+{{- $_ := set $storage "postgres" (dict "dsn_env" "EVALSI_POSTGRES_DSN") }}
+{{- end }}
+{{- with $v.storage.clickhouse }}{{ if .url }}
+{{- $ch := dict "url" .url "database" .database }}
+{{- if .user }}{{ $_ := set $ch "user" .user }}{{ end }}
+{{- if .passwordSecret.name }}{{ $_ := set $ch "password_env" "EVALSI_CLICKHOUSE_PASSWORD" }}{{ end }}
+{{- $_ := set $storage "clickhouse" $ch }}
+{{- end }}{{ end }}
+{{- $datasets := "/var/lib/evalsi/datasets" }}
+{{- with $v.storage.s3 }}{{ if .bucket }}
+{{- $s3 := dict "insecure" .insecure "path_style" .pathStyle }}
+{{- if .endpoint }}{{ $_ := set $s3 "endpoint" .endpoint }}{{ end }}
+{{- if .region }}{{ $_ := set $s3 "region" .region }}{{ end }}
+{{- if .credentialsSecret }}{{ $_ := set $s3 "access_key_env" "EVALSI_S3_ACCESS_KEY" }}{{ $_ := set $s3 "secret_key_env" "EVALSI_S3_SECRET_KEY" }}{{ end }}
+{{- $_ := set $storage "s3" $s3 }}
+{{- $datasets = printf "s3://%s/%s" .bucket .prefix }}
+{{- end }}{{ end }}
+
+{{- $auth := dict -}}
+{{- if $v.auth.kubernetes.enabled }}
+{{- $k8s := dict }}
+{{- with $v.auth.kubernetes.namespaces }}{{ $_ := set $k8s "namespaces" . }}{{ end }}
+{{- $_ := set $auth "jwt" (dict "providers" (list (dict "name" "kubernetes" "audiences" (list $v.auth.kubernetes.audience) "kubernetes" $k8s))) }}
+{{- end }}
+{{- if $v.server.tls }}
+{{- $_ := set $auth "tls" (dict "cert_file" "/etc/evalsi/tls/tls.crt" "key_file" "/etc/evalsi/tls/tls.key" "client_ca" "/etc/evalsi/tls/ca.crt") }}
+{{- else }}
+{{- $_ := set $auth "allow_plaintext" true }}
+{{- end }}
+{{- $auth = mergeOverwrite $auth (deepCopy $v.auth.config) }}
+
+{{- $owners := list (printf "user:kubernetes/system:serviceaccount:%s:evalsi-operator" $ns) }}
+{{- $rbac := dict "owners" (concat $owners $v.rbac.owners) }}
+{{- with $v.rbac.projects }}{{ $_ := set $rbac "projects" . }}{{ end }}
+{{- with $v.rbac.roles }}{{ $_ := set $rbac "roles" . }}{{ end }}
+
+{{- $server := dict
+  "listen" "0.0.0.0:8080"
+  "data_dir" "/var/lib/evalsi/data"
+  "datasets_dir" $datasets
+  "storage" $storage
+  "cluster" $cluster
+  "auth" $auth
+  "rbac" $rbac
+-}}
+{{- if $v.server.otlp.enabled }}
+{{- $_ := set $server "otlp" (dict "grpc_listen" "0.0.0.0:4317" "http_listen" "0.0.0.0:4318") }}
+{{- end }}
+{{- $server = mergeOverwrite $server (deepCopy $v.server.config) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evalsi
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+data:
+  evalsi.yaml: |
+    {{- toYaml $server | nindent 4 }}
+
+{{- /* evalsid worker: no database, no listener; sandboxes go to the pool. */ -}}
+{{- $worker := dict "cluster" $cluster "data_dir" "/tmp/evalsi" }}
+{{- if hasKey $storage "s3" }}
+{{- $_ := set $worker "storage" (pick $storage "s3") }}
+{{- $_ := set $worker "datasets_dir" $datasets }}
+{{- end }}
+{{- if $v.sandbox.address }}
+{{- $_ := set $worker "worker" (dict "sandbox_service" (dict
+  "address" $v.sandbox.address
+  "ca_file" "/etc/evalsi/worker-tls/ca.crt"
+  "cert_file" "/etc/evalsi/worker-tls/tls.crt"
+  "key_file" "/etc/evalsi/worker-tls/tls.key")) }}
+{{- end }}
+{{- $worker = mergeOverwrite $worker (deepCopy $v.workers.config) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evalsi-worker
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+data:
+  evalsi.yaml: |
+    {{- toYaml $worker | nindent 4 }}

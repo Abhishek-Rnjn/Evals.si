@@ -1,0 +1,63 @@
+{{- $ns := .Values.operator.namespace }}
+{{- if or .Values.operator.sandboxClasses .Values.operator.allNamespaces }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: evalsi-operator
+rules:
+  {{- if .Values.operator.sandboxClasses }}
+  - apiGroups: [evals.si]
+    resources: [sandboxclasses]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [evals.si]
+    resources: [sandboxclasses/status]
+    verbs: [get, update, patch]
+  {{- end }}
+  {{- if .Values.operator.allNamespaces }}
+  - apiGroups: [evals.si]
+    resources: [evalruns, onlineevalpolicies, evaluators]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [evals.si]
+    resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, evaluators/status]
+    verbs: [get, update, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects]
+    verbs: [get, list, watch, create, update, patch, delete]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: evalsi-operator
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: evalsi-operator}
+subjects:
+  - {kind: ServiceAccount, name: evalsi-operator, namespace: {{ $ns }}}
+{{- end }}
+---
+# Who may use evals.si resources: aggregated into the built-in roles, so
+# namespace admins and editors manage them and viewers read them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: evalsi-edit
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+  - apiGroups: [evals.si]
+    resources: [evalruns, onlineevalpolicies, evaluators]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: evalsi-view
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [evals.si]
+    resources: [evalruns, onlineevalpolicies, evaluators, sandboxclasses]
+    verbs: [get, list, watch]

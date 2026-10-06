@@ -13,6 +13,10 @@ func TestExamples(t *testing.T) {
 	for path, kind := range map[string]string{
 		"../../examples/runs/capitals.yaml":        "run",
 		"../../examples/watch/support-policy.yaml": "policy",
+		"../../deploy/e2e/parity-run.yaml":         "run",
+		"../../deploy/e2e/sandbox-run.yaml":        "run",
+		"../../deploy/e2e/agent-run.yaml":          "run",
+		"../../deploy/e2e/policy.yaml":             "policy",
 	} {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -28,12 +32,12 @@ func TestExamples(t *testing.T) {
 		raw, _ = yaml.YAMLToJSON(raw)
 		if kind == "run" {
 			s, err := Run(raw)
-			if err != nil || s.GetTrials() != 3 || len(s.GetGates()) != 2 {
+			if err != nil || (strings.Contains(path, "capitals") && (s.GetTrials() != 3 || len(s.GetGates()) != 2)) {
 				t.Errorf("%s: %v %v", path, s, err)
 			}
 		} else {
 			p, err := Policy(raw)
-			if err != nil || p.GetWindow().AsDuration().Seconds() != 300 || len(p.GetStages()) != 2 {
+			if err != nil || p.GetWindow().AsDuration().Seconds() != 300 || len(p.GetStages()) == 0 {
 				t.Errorf("%s: %v %v", path, p, err)
 			}
 		}

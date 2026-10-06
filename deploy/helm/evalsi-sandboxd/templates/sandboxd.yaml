@@ -1,0 +1,116 @@
+{{- $v := .Values }}
+{{- $ref := printf "%s:%s" $v.image.repository (default .Chart.AppVersion $v.image.tag) }}
+{{- if $v.global.imageRegistry }}
+{{- $ref = printf "%s/%s" (trimSuffix "/" $v.global.imageRegistry) (join "/" (rest (splitList "/" $ref))) }}
+{{- end }}
+{{- $ladder := ternary (list "firecracker") (list "bwrap" "landlock") (eq $v.mode "firecracker") }}
+{{- $sandbox := dict "ladder" $ladder "min_isolation" $v.minIsolation "max_sandboxes" (int $v.maxSandboxes)
+  "work_dir" "/var/lib/evalsi/sandboxes" "cache_dir" "/var/lib/evalsi/cache" }}
+{{- if eq $v.mode "firecracker" }}
+{{- $_ := set $sandbox "firecracker" (dict "kernel" "/opt/evalsi/vmlinux" "warm_pool" (int $v.firecracker.warmPool) "vcpus" (int $v.firecracker.vcpus) "memory_mb" (int $v.firecracker.memoryMB)) }}
+{{- end }}
+{{- if not (has $v.mode (list "bwrap" "privileged" "firecracker")) }}
+{{- fail "mode must be bwrap, privileged or firecracker" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evalsi-sandboxd
+  labels: {app.kubernetes.io/part-of: evalsi, app.kubernetes.io/managed-by: {{ .Release.Service }}}
+data:
+  evalsi.yaml: |
+    {{- toYaml (dict "sandbox" $sandbox) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: evalsi-sandboxd
+  labels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/part-of: evalsi}
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: node-pool}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: node-pool, app.kubernetes.io/part-of: evalsi}
+      annotations:
+        checksum/config: {{ toYaml $sandbox | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      {{- if eq $v.mode "bwrap" }}
+      # Root here is an unprivileged user on the node.
+      hostUsers: false
+      {{- end }}
+      securityContext: {runAsUser: 0}
+      {{- with $v.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: sandboxd
+          image: {{ $ref }}
+          imagePullPolicy: {{ $v.image.pullPolicy }}
+          args:
+            - sandbox
+            - serve
+            - --config=/etc/evalsi/evalsi.yaml
+            - --listen=tcp://0.0.0.0:7443
+            - --tls-cert=/etc/evalsi/tls/tls.crt
+            - --tls-key=/etc/evalsi/tls/tls.key
+            - --client-ca=/etc/evalsi/tls/ca.crt
+            {{- range $v.allowClients }}
+            - --allow-client={{ . }}
+            {{- end }}
+          ports: [{name: sandbox, containerPort: 7443}]
+          readinessProbe:
+            tcpSocket: {port: sandbox}
+            periodSeconds: 5
+          securityContext:
+            {{- if eq $v.mode "bwrap" }}
+            procMount: Unmasked
+            seccompProfile: {type: Unconfined}
+            appArmorProfile: {type: Unconfined}
+            {{- else }}
+            privileged: true
+            {{- end }}
+          resources: {{- toYaml $v.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/evalsi, readOnly: true}
+            - {name: tls, mountPath: /etc/evalsi/tls, readOnly: true}
+            - {name: state, mountPath: /var/lib/evalsi}
+            - {name: tmp, mountPath: /tmp}
+            {{- if eq $v.mode "firecracker" }}
+            - {name: kvm, mountPath: /dev/kvm}
+            - {name: kernel, mountPath: /opt/evalsi/vmlinux, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap: {name: evalsi-sandboxd}
+        - name: tls
+          secret: {secretName: {{ $v.tlsSecret }}}
+        - name: state
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if eq $v.mode "firecracker" }}
+        - name: kvm
+          hostPath: {path: /dev/kvm, type: CharDevice}
+        - name: kernel
+          hostPath: {path: {{ $v.firecracker.kernel }}, type: File}
+        {{- end }}
+      {{- with $v.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evalsi-sandboxd
+  labels: {app.kubernetes.io/part-of: evalsi}
+spec:
+  selector: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: node-pool}
+  {{- if $v.nodeLocal }}
+  internalTrafficPolicy: Local
+  {{- end }}
+  ports: [{name: sandbox, port: 7443, targetPort: sandbox}]

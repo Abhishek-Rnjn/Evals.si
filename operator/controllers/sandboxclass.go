@@ -174,6 +174,7 @@ func (r *SandboxClassReconciler) podSpec(sc *v1.SandboxClass, name string, spec 
 	local := slices.Contains(ladder, "bwrap") || slices.Contains(ladder, "landlock")
 	switch {
 	case slices.Contains(ladder, "firecracker") || (local && sc.Spec.PodSecurity == "privileged"):
+		spec.SecurityContext = &corev1.PodSecurityContext{RunAsUser: ptr.To(int64(0))}
 		c.SecurityContext = &corev1.SecurityContext{Privileged: ptr.To(true)}
 		if slices.Contains(ladder, "firecracker") {
 			c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: "kvm", MountPath: "/dev/kvm"})
@@ -185,6 +186,7 @@ func (r *SandboxClassReconciler) podSpec(sc *v1.SandboxClass, name string, spec 
 		// Root in a user namespace: no privilege on the node, but enough to
 		// make the namespaces bwrap needs and mount its own /proc.
 		spec.HostUsers = ptr.To(false)
+		spec.SecurityContext = &corev1.PodSecurityContext{RunAsUser: ptr.To(int64(0))}
 		c.SecurityContext = &corev1.SecurityContext{
 			ProcMount:       ptr.To(corev1.UnmaskedProcMount),
 			SeccompProfile:  &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeUnconfined},

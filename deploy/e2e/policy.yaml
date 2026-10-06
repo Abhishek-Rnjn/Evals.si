@@ -1,0 +1,10 @@
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: e2e-latency
+  labels: {evals.si/project: e2e}
+spec:
+  selector: service == "e2e"
+  stages:
+    - evaluators: [{ref: builtin/latency}]
+  window: 5m

@@ -1,0 +1,34 @@
+image:
+  repository: ghcr.io/abhishek-rnjn/evalsi
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+global:
+  imageRegistry: ""
+
+# bwrap: bubblewrap and Landlock, as root in a user namespace with an
+#   unmasked /proc and no seccomp or AppArmor profile (needs Kubernetes user
+#   namespaces: 1.33+, a runtime and kernel that support them).
+# privileged: the same rungs in a privileged container, for nodes without
+#   user namespaces.
+# firecracker: microVMs, privileged with /dev/kvm (KVM nodes only).
+mode: bwrap
+minIsolation: namespaced
+maxSandboxes: 32
+firecracker:
+  kernel: /var/lib/evalsi/vmlinux   # on the node (mounted from hostPath)
+  warmPool: 2
+  vcpus: 2
+  memoryMB: 2048
+
+# The evalsi chart's sandbox certificate (server) and the clients pools
+# admit (its workers' certificate name).
+tlsSecret: evalsi-sandbox-tls
+allowClients: [evalsi-worker]
+
+# Route each worker to the pool on its own node (needs a pool on every
+# node that runs workers).
+nodeLocal: false
+resources: {}
+nodeSelector: {}
+tolerations: []
