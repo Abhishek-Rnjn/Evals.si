@@ -280,6 +280,13 @@ func New(cfg Config) (*Sandbox, error) {
 		}
 		cfg.CacheDir = filepath.Join(base, "evalsi", "sandbox")
 	}
+	// Sandboxes and probes are made under the work directory, which a
+	// fresh volume does not have yet.
+	if cfg.WorkDir != "" {
+		if err := os.MkdirAll(cfg.WorkDir, 0o700); err != nil {
+			return nil, fmt.Errorf("sandbox.work_dir: %w", err)
+		}
+	}
 	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}, images: newImageStore(filepath.Join(cfg.CacheDir, "images"))}
 	for _, name := range cfg.Ladder {
 		switch name {
