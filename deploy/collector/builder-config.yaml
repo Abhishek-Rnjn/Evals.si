@@ -1,0 +1,39 @@
+# evalsi-collector: an OpenTelemetry Collector distribution for sending
+# agent and LLM traces to evalsid (online evaluation) and, alongside, to
+# another backend. Built with the OpenTelemetry Collector Builder:
+#
+#   go run go.opentelemetry.io/collector/cmd/builder@v0.162.0 --config deploy/collector/builder-config.yaml
+#
+# It keeps to components a GenAI pipeline needs: OTLP in and out, batching
+# and memory limits, attribute and filter processing (drop or redact prompt
+# content before it leaves), Kubernetes metadata, bearer-token auth for an
+# evalsid with authentication on, and health checks.
+dist:
+  name: evalsi-collector
+  description: OpenTelemetry Collector for Evals.si
+  output_path: ./_build
+  version: 0.5.0
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.162.0
+
+processors:
+  - gomod: go.opentelemetry.io/collector/processor/batchprocessor v0.162.0
+  - gomod: go.opentelemetry.io/collector/processor/memorylimiterprocessor v0.162.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/attributesprocessor v0.162.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/filterprocessor v0.162.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/transformprocessor v0.162.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sattributesprocessor v1.1.0
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.162.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.162.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.162.0
+
+extensions:
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/bearertokenauthextension v0.162.0
+  - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension v0.162.0
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.68.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.68.0

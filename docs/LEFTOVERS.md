@@ -23,11 +23,9 @@ Last updated: 2026-10-06, at the end of Phase 5.
 |------|-------|----------------|
 | DuckDB for standalone analytics | Waits for cross-run analytics. | Decision 0009 |
 | cgroup limits in the bubblewrap and Landlock rungs | rlimits only. On the Landlock rung the process cap is not enforced, because the uid is shared. | §23 Phase 1 deferrals |
-| Statically built bubblewrap in the release | Waits for a release pipeline; the rung uses the host's `bwrap`. | §13, §23 Phase 1 deferrals |
-| Release pipeline | No published wheels, images or charts; platform wheels bundling `evalsid` are an idea in decision 0006. | Decision 0006 |
+| Platform wheels bundling evalsid | Releases publish archives (evalsid, a static bubblewrap), wheels, images, charts and the bundle (`.github/workflows/release.yml`), but no tag has been cut, and the wheels do not bundle evalsid as decision 0006 suggests. | Decision 0006 |
 | Sandbox-time quotas | Per-project quotas cover concurrent and stored runs, daily judge and target tokens, and reward rollouts in flight; sandbox minutes are not metered. Concurrency quotas are per replica. | §17 "Tenancy" |
 | Image signature verification (cosign) | Plugin and environment images are pinned by digest only. | §17 "Other security controls" |
-| `evalsi-collector` distribution | An OTel Collector build with our exporters. | §21 |
 | Feeding scores back into agentgateway | Quality-aware routing; depends on the gateway's extension points. | §16 "Working with agentgateway" |
 | Separate process roles | Every `evalsid serve` replica serves API and ingest; leases pick the scheduler and policy engine. Split only if load needs it. | §23 Phase 4 deviations |
 | Typed `EvalRun` and `OnlineEvalPolicy` CRD schemas | Specs are preserved as is; the admission webhook validates them. | §23 Phase 4 deviations |

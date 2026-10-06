@@ -147,7 +147,8 @@ type Config struct {
 	Ladder []string `json:"ladder,omitempty"`
 	// The weakest isolation any request may get, whatever it asks for.
 	MinIsolation string `json:"min_isolation,omitempty"`
-	// bubblewrap binary; default: bwrap on PATH.
+	// bubblewrap binary; default: a bwrap beside evalsid (the release's
+	// static build), else bwrap on PATH.
 	BwrapPath string `json:"bwrap_path,omitempty"`
 	// An unpacked root filesystem used as / by bwrap when a request names no
 	// image, instead of the host's system directories.

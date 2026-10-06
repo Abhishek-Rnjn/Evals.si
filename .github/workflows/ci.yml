@@ -243,6 +243,25 @@ jobs:
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
           cd tests/trainers && EVALSID="$RUNNER_TEMP/evalsid" "$RUNNER_TEMP/trainers/bin/python" -m pytest -q
 
+  release-check:
+    # The release archive builds (static Go binaries and a static
+    # bubblewrap) and runs, so a tag cannot find it broken.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: scripts/release-binaries.sh 0.0.0-ci amd64 dist
+      - name: The archive runs, and evalsid uses its bubblewrap
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          tar -C dist -xzf dist/evalsi_0.0.0-ci_linux_amd64.tar.gz
+          dir=dist/evalsi_0.0.0-ci_linux_amd64
+          "$dir/evalsid" version | grep -q 0.0.0-ci
+          echo '{"command":["/bin/sh","-c","echo ok"],"min_isolation":"namespaced","timeout_s":10}' \
+            | PATH=/nonexistent "$dir/evalsid" sandbox run | tee /dev/stderr | grep -q '"outcome":"exit"'
+
   kubernetes:
     # Phase 4's exit criteria on a kind cluster: an air-gapped install from
     # the bundle (two API replicas on PostgreSQL, NATS, workers, the operator,

@@ -1,0 +1,31 @@
+# evalsi-collector for a local evalsid without TLS or authentication
+# (evalsid serve --no-auth): OTLP in on 4317 and 4318, traces to
+# EVALSI_OTLP_ENDPOINT (host:port) in plaintext. Tokens are never sent over
+# plaintext; use config.yaml for anything else.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: 0.0.0.0:4317}
+      http: {endpoint: 0.0.0.0:4318}
+
+processors:
+  batch:
+    timeout: 1s
+
+exporters:
+  otlp/evalsi:
+    endpoint: ${env:EVALSI_OTLP_ENDPOINT}
+    tls:
+      insecure: true
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/evalsi]

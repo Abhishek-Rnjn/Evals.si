@@ -36,7 +36,25 @@ func (d *bwrapDriver) binary() (string, error) {
 	if d.cfg.BwrapPath != "" {
 		return d.cfg.BwrapPath, nil
 	}
+	if bundled := bundledBwrap(); bundled != "" {
+		return bundled, nil
+	}
 	return exec.LookPath("bwrap")
+}
+
+// bundledBwrap is the static bubblewrap released beside evalsid
+// (scripts/build-static-bwrap.sh), if there is one, so the rung does not
+// depend on the host's package.
+func bundledBwrap() string {
+	self, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	candidate := filepath.Join(filepath.Dir(self), "bwrap")
+	if st, err := os.Stat(candidate); err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0 {
+		return candidate
+	}
+	return ""
 }
 
 func (d *bwrapDriver) available() error {

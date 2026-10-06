@@ -710,7 +710,7 @@ The deepseek-harness profile was built to confine a coding assistant on its user
 
 Implementation notes:
 
-- **Static bubblewrap.** We build bubblewrap statically against musl in our release pipeline, so the rung does not depend on a distro package. bubblewrap is LGPL-2.0-or-later, so it ships as a separate executable with its license and a source reference.
+- **Static bubblewrap.** The release builds bubblewrap statically (`scripts/build-static-bwrap.sh`) and ships it beside evalsid, which prefers it over the host's, so the rung does not depend on a distro package. bubblewrap is LGPL-2.0-or-later, so it ships as a separate executable with its license and a source reference.
 - **Landlock from Go.** The Landlock rung uses `go-landlock`. A Landlock ruleset applies to the calling process and is inherited across `execve`, so `evalsi` re-executes itself as a small launcher (`evalsi sandbox-exec`) that applies the ruleset and then executes the target command.
 - **User namespaces.** These can be disabled or restricted on some distributions (Ubuntu's AppArmor restriction, for example), and default container seccomp and AppArmor profiles usually block them inside pods. The functional probe detects this. On Kubernetes, sandbox-pool pods can use a `Localhost` seccomp profile that permits user-namespace creation. Otherwise the ladder falls through to the pod rung.
 
@@ -1294,7 +1294,7 @@ Evals.si/
 └── docs/                          # this plan, the decision records (docs/decisions) and guides (docs/guides)
 ```
 
-Not built yet: `evalsi mcp` (Phase 6) and an `evalsi-collector` distribution.
+Not built yet: `evalsi mcp` (Phase 6). The `evalsi-collector` distribution is in `deploy/collector`, and the release workflow in `.github/workflows/release.yml`.
 
 ## 22. Decisions
 
