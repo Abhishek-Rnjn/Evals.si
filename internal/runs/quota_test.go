@@ -143,3 +143,16 @@ func TestQuotaLimitsInheritTheDefault(t *testing.T) {
 		t.Errorf("y: %+v", l)
 	}
 }
+
+func TestRunMetrics(t *testing.T) {
+	h := newHarness(t)
+	run := h.create(t, &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy"), Evaluators: refs("exact-match")})
+	h.wait(t, run.GetId())
+	var b strings.Builder
+	h.m.WriteMetrics(&b)
+	for _, want := range []string{"evalsi_runs_active 0", "evalsi_runs_executing 0", `evalsi_runs_finished_total{status="succeeded"} 1`, `evalsi_runs_finished_total{status="error"} 0`} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, b.String())
+		}
+	}
+}

@@ -433,7 +433,7 @@ func Handler(d deps) http.Handler {
 	}
 	mux.Handle("/v1alpha1/", rest)
 	registerOTLP(mux, d)
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics)))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,

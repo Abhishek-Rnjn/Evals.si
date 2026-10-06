@@ -1,0 +1,21 @@
+/* The style of evalsi report's HTML pages (light and dark). */
+:root { --bg:#fff; --fg:#1d1d1f; --muted:#666; --line:#e3e3e8; --ok:#1a7f37; --bad:#c62828; --code:#f6f6f8; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#16161a; --fg:#ececf0; --muted:#a0a0aa; --line:#2c2c33; --ok:#4cc26b; --bad:#ff6b6b; --code:#1f1f25; }
+}
+body { background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; margin:0; padding:24px 16px; }
+main { max-width:960px; margin:auto; }
+h1 { font-size:24px; margin:0 0 12px; }
+h2 { font-size:18px; margin:28px 0 8px; }
+dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; color:var(--muted); }
+dd { margin:0; color:var(--fg); overflow-wrap:anywhere; }
+.scroll { overflow-x:auto; }
+table { border-collapse:collapse; width:100%; }
+th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:left; }
+td.n { text-align:right; font-variant-numeric:tabular-nums; }
+.ok { color:var(--ok); }
+.bad { color:var(--bad); }
+details { border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin:8px 0; }
+summary { cursor:pointer; }
+pre { background:var(--code); padding:8px; border-radius:6px; white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0 8px; }
+.label { color:var(--muted); font-size:13px; }

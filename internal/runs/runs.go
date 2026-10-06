@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path"
@@ -93,7 +94,10 @@ type Manager struct {
 	active map[string]*activeRun
 	// Per-project concurrency slots, made on first use.
 	projectSlots map[string]chan struct{}
-	stopping     bool
+	// Runs that finished here, by final status (for /metrics).
+	finished  map[evalsiv1alpha1.RunStatus]int64
+	executing int
+	stopping  bool
 	// Stops the cluster loops (adoption, cancel subscription).
 	stopCluster func()
 }
@@ -128,6 +132,7 @@ func New(ctx context.Context, st *store.Store, worker pluginhost.Worker, engine 
 		active: map[string]*activeRun{},
 
 		projectSlots: map[string]chan struct{}{},
+		finished:     map[evalsiv1alpha1.RunStatus]int64{},
 	}
 	if opts.Cluster != nil {
 		return m, m.joinCluster()
@@ -467,7 +472,13 @@ func (m *Manager) start(run *evalsiv1alpha1.Run) {
 			defer func() { <-m.slots }()
 		case <-ctx.Done():
 		}
+		m.mu.Lock()
+		m.executing++
+		m.mu.Unlock()
 		m.execute(ctx, run.GetId(), a)
+		m.mu.Lock()
+		m.executing--
+		m.mu.Unlock()
 		m.mu.Lock()
 		delete(m.active, run.GetId())
 		for ch := range a.subs {
@@ -530,6 +541,9 @@ func (m *Manager) execute(ctx context.Context, id string, a *activeRun) {
 			return // another replica continues it
 		}
 		run.Status, run.Error, run.FinishedAt = status, msg, timestamppb.Now()
+		m.mu.Lock()
+		m.finished[status]++
+		m.mu.Unlock()
 		if err := m.store.UpdateRun(context.Background(), run); err != nil {
 			m.log.Error("saving run", "run", id, "err", err)
 		}
@@ -1181,4 +1195,25 @@ func (ex *execution) runTasks(ctx context.Context, trial int) error {
 		})
 	}
 	return g.Wait()
+}
+
+// WriteMetrics writes the run metrics of this replica.
+func (m *Manager) WriteMetrics(w io.Writer) {
+	m.mu.Lock()
+	active, executing := len(m.active), m.executing
+	finished := make(map[evalsiv1alpha1.RunStatus]int64, len(m.finished))
+	for k, v := range m.finished {
+		finished[k] = v
+	}
+	m.mu.Unlock()
+	fmt.Fprintf(w, "# HELP evalsi_runs_active Runs on this replica, executing or waiting for a slot.\n# TYPE evalsi_runs_active gauge\nevalsi_runs_active %d\n", active)
+	fmt.Fprintf(w, "# HELP evalsi_runs_executing Runs executing on this replica.\n# TYPE evalsi_runs_executing gauge\nevalsi_runs_executing %d\n", executing)
+	fmt.Fprintf(w, "# HELP evalsi_runs_finished_total Runs that finished on this replica, by status.\n# TYPE evalsi_runs_finished_total counter\n")
+	for _, st := range []evalsiv1alpha1.RunStatus{
+		evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED, evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED,
+		evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR, evalsiv1alpha1.RunStatus_RUN_STATUS_CANCELLED,
+	} {
+		name := strings.ToLower(strings.TrimPrefix(st.String(), "RUN_STATUS_"))
+		fmt.Fprintf(w, "evalsi_runs_finished_total{status=%q} %d\n", name, finished[st])
+	}
 }

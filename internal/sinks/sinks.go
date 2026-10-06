@@ -22,21 +22,33 @@ import (
 
 // Config is one entry of the sinks list in evalsi.yaml; exactly one field is set.
 type Config struct {
-	MLflow *MLflowConfig `json:"mlflow,omitempty"`
-	OTel   *OTelConfig   `json:"otel,omitempty"`
+	MLflow   *MLflowConfig   `json:"mlflow,omitempty"`
+	OTel     *OTelConfig     `json:"otel,omitempty"`
+	Langfuse *LangfuseConfig `json:"langfuse,omitempty"`
+	Phoenix  *PhoenixConfig  `json:"phoenix,omitempty"`
 }
 
 // Validate checks that exactly one sink is described and that it is usable.
 func (c Config) Validate() error {
+	set := 0
+	for _, on := range []bool{c.MLflow != nil, c.OTel != nil, c.Langfuse != nil, c.Phoenix != nil} {
+		if on {
+			set++
+		}
+	}
 	switch {
-	case c.MLflow != nil && c.OTel != nil:
+	case set > 1:
 		return errors.New("each sinks entry configures one sink")
 	case c.MLflow != nil:
 		return c.MLflow.validate()
 	case c.OTel != nil:
 		return c.OTel.validate()
+	case c.Langfuse != nil:
+		return c.Langfuse.validate()
+	case c.Phoenix != nil:
+		return c.Phoenix.validate()
 	}
-	return errors.New("empty sinks entry; use mlflow or otel")
+	return errors.New("empty sinks entry; use mlflow, otel, langfuse or phoenix")
 }
 
 // Trace is one trace's results from an online policy.
@@ -105,6 +117,10 @@ func New(cfgs []Config, client *http.Client, log *slog.Logger) (*Dispatcher, err
 			d.sinks = append(d.sinks, newMLflow(*c.MLflow, client))
 		case c.OTel != nil:
 			d.sinks = append(d.sinks, newOTel(*c.OTel, client))
+		case c.Langfuse != nil:
+			d.sinks = append(d.sinks, newLangfuse(*c.Langfuse, client))
+		case c.Phoenix != nil:
+			d.sinks = append(d.sinks, newPhoenix(*c.Phoenix, client))
 		}
 	}
 	return d, nil

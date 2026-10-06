@@ -4,10 +4,13 @@ package helm
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -429,4 +432,45 @@ type container struct {
 	Ports []struct {
 		HostPort int `json:"hostPort"`
 	} `json:"ports"`
+}
+
+// TestDashboardMetricsExist: every metric the Grafana dashboard queries is
+// one evalsid exports, so renames cannot silently break the dashboard.
+func TestDashboardMetricsExist(t *testing.T) {
+	raw, err := os.ReadFile("../../deploy/helm/evalsi/dashboards/evalsi.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dash map[string]any
+	if err := json.Unmarshal(raw, &dash); err != nil {
+		t.Fatalf("dashboard is not JSON: %v", err)
+	}
+	exported := map[string]bool{}
+	name := regexp.MustCompile(`evalsi_[a-z_]+`)
+	err = filepath.WalkDir("../../internal", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		src, err := os.ReadFile(path)
+		for _, m := range name.FindAllString(string(src), -1) {
+			exported[m] = true
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	used := name.FindAllString(string(raw), -1)
+	if len(used) == 0 {
+		t.Fatal("the dashboard queries no metrics")
+	}
+	for _, m := range used {
+		if !exported[m] {
+			t.Errorf("the dashboard queries %s, which evalsid does not export", m)
+		}
+	}
+	cm := find(t, render(t, "evalsi", "grafana.dashboard.enabled=true"), "ConfigMap", "evalsi-dashboard")
+	if cm.Data["evalsi.json"] != strings.TrimSuffix(string(raw), "\n") {
+		t.Error("the chart's dashboard ConfigMap does not carry the dashboard")
+	}
 }

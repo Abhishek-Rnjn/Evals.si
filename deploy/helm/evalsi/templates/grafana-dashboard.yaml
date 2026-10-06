@@ -1,0 +1,14 @@
+{{- if .Values.grafana.dashboard.enabled }}
+# The Evals.si dashboard (runs, online evaluation, rewards) for Grafana's
+# dashboard sidecar, which picks up ConfigMaps with these labels.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evalsi-dashboard
+  labels:
+    {{- include "evalsi.labels" . | nindent 4 }}
+    {{- toYaml .Values.grafana.dashboard.labels | nindent 4 }}
+data:
+  evalsi.json: |-
+{{ .Files.Get "dashboards/evalsi.json" | indent 4 }}
+{{- end }}

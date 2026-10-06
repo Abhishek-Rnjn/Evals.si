@@ -249,6 +249,7 @@ class EvalResult:
             "manifest": self.manifest,
             "summaries": [s.to_dict() for s in self.summaries],
             "results": [r.to_dict() for r in self.results],
+            "records": [r.to_dict() for r in self.records],
         }
 
     def save(self, path: str | Path) -> None:

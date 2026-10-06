@@ -206,3 +206,13 @@ The `kubernetes` job ([`deploy/e2e/kind-e2e.sh`](../../deploy/e2e/kind-e2e.sh)) 
 - a namespace-only install works for a user who is only `admin` of a namespace that enforces Pod Security `restricted`: it installs with no cluster-scoped object, and code evaluation and an agent run, through the CLI, pass on the chart's pod-rung pool and then on Landlock.
 
 The operator is also tested against a real API server and etcd (envtest), and the charts by rendering them and loading every `evalsi.yaml` they produce through `evalsid`'s config validation.
+
+## Dashboards
+
+evalsid serves Prometheus metrics on `/metrics`: runs, online evaluation (traces, policy stages, window means, alerts) and the Reward Service. The `evalsi` chart can ship a Grafana dashboard for them as a ConfigMap that Grafana's dashboard sidecar picks up:
+
+```bash
+helm upgrade evalsi deploy/helm/evalsi -n evalsi --reuse-values --set grafana.dashboard.enabled=true
+```
+
+The dashboard's JSON is `deploy/helm/evalsi/dashboards/evalsi.json`, if you import it by hand.

@@ -42,6 +42,37 @@ def add_rewards_commands(sub: Any) -> None:
     sv.set_defaults(func=_cmd_serve)
 
 
+def add_report_command(sub: Any) -> None:
+    rp = sub.add_parser("report", help="write an HTML or Markdown report of a run")
+    rp.add_argument(
+        "source", help="a results JSON (evalsi run/eval --output), or a run id with --server"
+    )
+    rp.add_argument("-o", "--out", required=True, help="report.html or report.md")
+    rp.add_argument("--server", help="read the run from this evalsid")
+    rp.add_argument("--examples", type=int, default=5, help="lowest-scoring records per metric")
+    add_credential_args(rp)
+    rp.set_defaults(func=_cmd_report)
+
+
+def _cmd_report(args: argparse.Namespace) -> int:
+    from evalsi import report
+
+    if args.server:
+        from evalsi.cli import server_client
+
+        with server_client(args) as client:
+            r = report.from_server(client, args.source, examples=args.examples)
+    else:
+        r = report.from_results_file(json.loads(Path(args.source).read_text()), args.examples)
+    out = Path(args.out)
+    if out.suffix.lower() in (".md", ".markdown"):
+        out.write_text(report.to_markdown(r), encoding="utf-8")
+    else:
+        out.write_text(report.to_html(r), encoding="utf-8")
+    print(f"wrote {out}", file=sys.stderr)
+    return 0
+
+
 def _load(args: argparse.Namespace) -> Any:
     from evalsi.rewards import load
 

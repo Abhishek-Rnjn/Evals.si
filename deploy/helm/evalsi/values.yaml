@@ -185,3 +185,11 @@ tls:
   certManager:
     enabled: false
     issuerRef: {}         # {name: ..., kind: ClusterIssuer}
+
+# A Grafana dashboard for evalsid's /metrics (runs, online evaluation and
+# rewards), as a ConfigMap for Grafana's dashboard sidecar.
+grafana:
+  dashboard:
+    enabled: false
+    labels:
+      grafana_dashboard: "1"

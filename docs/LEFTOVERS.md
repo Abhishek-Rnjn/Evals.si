@@ -28,7 +28,6 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | Sandbox-time quotas | Per-project quotas cover concurrent and stored runs, daily judge and target tokens, and reward rollouts in flight; sandbox minutes are not metered. Concurrency quotas are per replica. | §17 "Tenancy" |
 | Image signature verification (cosign) | Plugin and environment images are pinned by digest only. | §17 "Other security controls" |
 | `evalsi-collector` distribution | An OTel Collector build with our exporters. | §21 |
-| Reports and dashboards | Static HTML or Markdown reports, Grafana dashboards, and write-back to Langfuse and Phoenix (MLflow and OTel sinks exist). | §19, D3 |
 | Feeding scores back into agentgateway | Quality-aware routing; depends on the gateway's extension points. | §16 "Working with agentgateway" |
 | Separate process roles | Every `evalsid serve` replica serves API and ingest; leases pick the scheduler and policy engine. Split only if load needs it. | §23 Phase 4 deviations |
 | Typed `EvalRun` and `OnlineEvalPolicy` CRD schemas | Specs are preserved as is; the admission webhook validates them. | §23 Phase 4 deviations |

@@ -100,6 +100,14 @@ sinks: []
 #  - otel:
 #      endpoint: http://otel-collector:4318   # gen_ai.evaluation.result events on /v1/logs
 #      headers_env: {x-api-key: OTEL_API_KEY}
+#  - langfuse:
+#      host: https://cloud.langfuse.com       # runs become traces with a score per metric
+#      public_key_env: LANGFUSE_PUBLIC_KEY
+#      secret_key_env: LANGFUSE_SECRET_KEY
+#      trace_feedback: true                   # online scores onto the same trace IDs in Langfuse
+#  - phoenix:
+#      endpoint: http://phoenix:6006          # online scores as trace annotations
+#      api_key_env: PHOENIX_API_KEY
 
 # The Reward Service (rewards for RL trainers; docs/guides/fine-tuning.md).
 rewards:

@@ -308,6 +308,15 @@ kubectl apply -n evalsi -f examples/runs/capitals.yaml
 kubectl get evalruns -n evalsi      # PHASE, RUN, DONE, TOTAL
 ```
 
+### Reports, dashboards and sinks
+
+```bash
+uv run evalsi eval --data qa.jsonl --evaluators exact-match --output results.json
+uv run evalsi report results.json -o report.html    # or .md; --server URL RUN_ID for a server run
+```
+
+A report has the metrics with their intervals, the gates, and the lowest-scoring records with their inputs, outputs and explanations. Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
+
 ### Fine-tuning and RL
 
 A `RewardSpec` composes evaluators into a reward: weights, gates, and a breakdown per component. The `rl` pack adds verifiers for format, math answers, sandboxed code tests and overlong penalties.
