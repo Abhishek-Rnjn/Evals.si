@@ -5,11 +5,11 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 
 - **Score / Run / Watch**: grade outputs you already have, execute a target on a dataset, or continuously evaluate live OpenTelemetry traces.
 - **Pluggable**: existing frameworks (lm-evaluation-harness, Inspect AI, RAGAS, DeepEval, SWE-bench, τ-bench, …) plug in as isolated adapters.
-- **Standalone or Kubernetes**: a single binary or an operator with CRDs; gRPC and HTTP APIs, with MCP planned.
+- **Standalone or Kubernetes**: a single binary, or Helm charts and an operator with CRDs; gRPC and HTTP APIs, with MCP planned (Phase 6).
 - **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
 - **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
 
-> **Status:** Phases 0 to 3 are done. The standalone server covers three doors:
+> **Status:** Phases 0 to 4 are done; fine-tuning and RL (Phase 5) is next. The server runs standalone or on Kubernetes and covers three doors:
 >
 > - **Score:** grade outputs you already have.
 > - **Run:** durable, resumable runs with trials, gates and budgets. That includes agent runs, which put the built-in agent or your own agent to work on sandboxed tasks.
@@ -23,6 +23,8 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 > - MLflow and OTel sinks;
 > - identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log;
 > - Kubernetes: an operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator` and `SandboxClass`, Helm charts, PostgreSQL/ClickHouse/S3 storage, NATS work queues with KEDA scaling, HA replicas, sandbox pools (bubblewrap, Firecracker, hardened pods), service-account identity and an air-gapped bundle.
+>
+> The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)).
 >
 > See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
 
@@ -200,8 +202,11 @@ A policy has these parts:
 
 **Sandbox for code evaluators.** Code evaluators run untrusted code under the strongest rung that works on the host:
 
+- **Firecracker (vm):** a microVM per sandbox where `/dev/kvm` is usable.
 - **bubblewrap (namespaced):** no network, a read-only system root, seccomp and resource limits.
 - **Landlock (confined):** the fallback when bubblewrap is unavailable.
+
+On Kubernetes, workers never run sandboxes themselves: they lease them over mutual TLS from a sandbox pool (`evalsi-sandboxd` with bubblewrap or Firecracker), or from a `SandboxClass` on the **hardened pod** rung, one locked-down pod per sandbox.
 
 The sandbox fails closed: when no rung works, it never runs code unconfined. Check what works on a host with:
 
@@ -239,7 +244,7 @@ evalsi auth audit --denied --server https://evals.example.com
 evalsid auth check --config evalsi.yaml --api-key "$KEY" --action runs.create --project support
 ```
 
-Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN`; GitHub Actions jobs set `EVALSI_OIDC_AUDIENCE`. See the [setup guide](docs/guides/identity.md) and [`examples/auth/evalsi.yaml`](examples/auth/evalsi.yaml).
+Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN` (or `EVALSI_TOKEN_FILE`, for a projected Kubernetes service-account token); GitHub Actions jobs set `EVALSI_OIDC_AUDIENCE`. On Kubernetes, the cluster's service-account tokens work as one more OIDC provider, and components talk to each other over mutual TLS. See the [setup guide](docs/guides/identity.md) and [`examples/auth/evalsi.yaml`](examples/auth/evalsi.yaml).
 
 #### Try access control locally
 
@@ -283,7 +288,15 @@ Delete `python/.evalsi-auth-demo` to start over. To use the same config without 
 
 ### On Kubernetes
 
-The same run and policy files apply as resources; the operator runs them through the API and writes their state back. See the [Kubernetes guide](docs/guides/kubernetes.md) (and [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md)).
+The same run and policy files apply as resources; the operator runs them through the API and writes their state back. What you get:
+
+- **Resources:** `EvalRun`, `OnlineEvalPolicy`, `Evaluator` (a KEDA-scaled worker pool) and `SandboxClass` (a sandbox pool), validated on admission with the CLI's rules and stamped with their creator (`evals.si/created-by`).
+- **Charts:** the namespace-scoped `evalsi`, plus the cluster-scoped `evalsi-crds` (CRDs, webhooks, aggregated roles) and `evalsi-sandboxd` (the sandbox pool).
+- **Storage:** PostgreSQL for metadata and results, ClickHouse for traces at volume, S3-compatible storage for datasets; TLS and client certificates on each.
+- **High availability:** several API replicas share the database; leases decide which replica schedules runs and runs the policy engine, and a replica adopts a stopped one's runs. Work goes to pools over NATS JetStream.
+- **Air-gapped installs:** `deploy/airgap/bundle.sh` packs every image, the charts and optionally the CLI wheels; `install.sh` loads them into your registry and installs.
+
+See the [Kubernetes guide](docs/guides/kubernetes.md) (and [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md)).
 
 ```bash
 kubectl create namespace evalsi
@@ -321,6 +334,14 @@ make proto   # lint, format and regenerate code after editing proto/
 make check   # everything CI runs: gofmt, go vet/test, buf lint/format, ruff, mypy, pytest
 make e2e     # evalsid against a real Python worker; EVALSI_E2E_IMAGES=1 adds tests that pull images
 make adapters-check   # each framework adapter's contract tests, in its own environment
+make operator-gen     # regenerate the CRDs and deepcopy code after editing operator/api, and copy the CRDs into the chart
 ```
+
+For the Kubernetes pieces:
+
+- **Operator tests** run against a real API server and etcd (envtest). Install its binaries with `setup-envtest` and set `KUBEBUILDER_ASSETS`; without it, those tests skip.
+- **Chart tests** (`tests/helm`) need `helm` on the `PATH`; without it, they skip.
+- **The kind e2e** (`deploy/e2e/kind-e2e.sh`) needs Docker, kind, kubectl and helm. It builds the image, makes an air-gapped bundle and installs from it, as the CI `kubernetes` job does.
+- **The load test:** `EVALSI_LOAD=1 go test -run TestLoad -timeout 30m ./tests/e2e/`. `EVALSI_LOAD_SPANS` and `EVALSI_LOAD_RUN_RECORDS` set its sizes (the 1M-task result used `EVALSI_LOAD_RUN_RECORDS=1000000`), and `EVALSI_LOAD_CLICKHOUSE_URL` runs the trace half against ClickHouse.
 
 The sandbox tests need bubblewrap and unprivileged user namespaces. On Ubuntu 24.04, also run `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0`.

@@ -1,6 +1,6 @@
 # 0007. Testing the sandbox rungs
 
-- **Status:** Accepted, 2026-10-05 (design plan D13)
+- **Status:** Accepted, 2026-10-05 (design plan D13). As of Phase 4, CI tests bubblewrap and Landlock on GitHub runners, and the bubblewrap pool and the pod rung on kind (`deploy/e2e/kind-e2e.sh`). The Firecracker tests run only on hosts with a usable `/dev/kvm`, which CI does not have.
 
 ## Decision
 
