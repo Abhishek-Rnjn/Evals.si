@@ -179,11 +179,20 @@ spec:
                       type: string
                     ciLow:
                       type: string
+                    errors:
+                      format: int64
+                      type: integer
                     mean:
                       type: string
                     metric:
                       type: string
                     "n":
+                      format: int64
+                      type: integer
+                    skipped:
+                      description: |-
+                        Records left out of n: skipped (not applicable) or errored
+                        (infrastructure errors, which are retried and never scored).
                       format: int64
                       type: integer
                   required:

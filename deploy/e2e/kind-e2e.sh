@@ -53,6 +53,35 @@ phase() {
   return 1
 }
 
+# results prints every result of an EvalRun's run, with its outcome and
+# reason, through the API as the operator's service account.
+results() {
+  local run token
+  run="$(kubectl get evalrun "$1" -n "$ns" -o jsonpath='{.status.runId}')"
+  token="$(kubectl create token evalsi-operator -n "$ns" --audience evals.si)"
+  kubectl port-forward -n "$ns" svc/evalsi 18080:8080 >/dev/null 2>&1 &
+  local pf=$!
+  sleep 3
+  curl -sk -X POST https://127.0.0.1:18080/evalsi.v1alpha1.RunService/ListRunResults \
+    -H "Authorization: Bearer $token" -H 'content-type: application/json' -d "{\"id\":\"$run\"}" |
+    python3 -c 'import json, sys
+for r in json.load(sys.stdin).get("results", []):
+    print(r.get("recordId"), r.get("evaluator"), r.get("outcome"), r.get("reason", "")[:400])' || true
+  kill "$pf" 2>/dev/null || true
+}
+
+# expect fails, showing the run's results, when a metric's mean is not want.
+expect() {
+  local got
+  got="$(mean "$1" "$2")"
+  if [ "$got" != "$3" ]; then
+    echo "evalrun/$1: $2 mean '$got', want $3" >&2
+    kubectl get evalrun "$1" -n "$ns" -o jsonpath='{.status.summaries}' >&2; echo >&2
+    results "$1" >&2
+    return 1
+  fi
+}
+
 # mean prints a metric's mean from an EvalRun's status.
 mean() {
   kubectl get evalrun "$1" -n "$ns" -o jsonpath="{.status.summaries[?(@.metric==\"$2\")].mean}"
@@ -130,8 +159,8 @@ kubectl wait onlineevalpolicy/e2e-latency -n "$ns" --for=condition=Synced --time
 
 step "code evaluation on the bubblewrap pool"
 kubectl apply -n "$ns" -f "$here/sandbox-run.yaml"
-phase unit-tests Succeeded
-[ "$(mean unit-tests unit-tests)" = "0.5" ] || { echo "unit-tests mean $(mean unit-tests unit-tests)" >&2; exit 1; }
+phase unit-tests Succeeded || { results unit-tests >&2; exit 1; }
+expect unit-tests unit-tests 0.5
 kubectl logs -n "$ns" ds/evalsi-sandboxd --tail=50 | tee "$work/sandboxd.log"
 
 step "an agent run on the pod rung"
@@ -143,9 +172,9 @@ helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns" --reuse-val
 kubectl get pods -n "$ns" -l evals.si/sandbox=true -w -o name > "$work/sandbox-pods.txt" &
 watcher=$!
 kubectl apply -n "$ns" -f "$here/agent-run.yaml"
-phase agent Succeeded
+phase agent Succeeded || { results agent >&2; exit 1; }
 kill "$watcher" 2>/dev/null || true
-[ "$(mean agent task-success)" = "1" ] || { echo "task-success mean $(mean agent task-success)" >&2; exit 1; }
+expect agent task-success 1
 sort -u "$work/sandbox-pods.txt"
 [ -s "$work/sandbox-pods.txt" ] || { echo "no sandbox pods were created" >&2; exit 1; }
 left="$(kubectl get pods -n "$ns" -l evals.si/sandbox=true -o name | wc -l)"

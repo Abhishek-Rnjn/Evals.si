@@ -73,6 +73,10 @@ type MetricSummary struct {
 	Mean   string `json:"mean,omitempty"`
 	CILow  string `json:"ciLow,omitempty"`
 	CIHigh string `json:"ciHigh,omitempty"`
+	// Records left out of n: skipped (not applicable) or errored
+	// (infrastructure errors, which are retried and never scored).
+	Skipped int64 `json:"skipped,omitempty"`
+	Errors  int64 `json:"errors,omitempty"`
 }
 
 type GateResult struct {

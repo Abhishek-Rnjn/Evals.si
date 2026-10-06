@@ -210,7 +210,7 @@ func mirror(s *v1.EvalRunStatus, m *evalsiv1alpha1.Run) {
 	}
 	s.Summaries = nil
 	for _, x := range m.GetSummaries() {
-		out := v1.MetricSummary{Metric: x.GetMetric(), N: x.GetN()}
+		out := v1.MetricSummary{Metric: x.GetMetric(), N: x.GetN(), Skipped: x.GetSkipped(), Errors: x.GetErrors()}
 		if x.Mean != nil {
 			out.Mean = num(x.GetMean())
 		}
