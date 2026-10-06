@@ -26,7 +26,6 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | Statically built bubblewrap in the release | Waits for a release pipeline; the rung uses the host's `bwrap`. | §13, §23 Phase 1 deferrals |
 | Release pipeline | No published wheels, images or charts; platform wheels bundling `evalsid` are an idea in decision 0006. | Decision 0006 |
 | Per-project quotas | Concurrent tasks, sandbox minutes, judge tokens and storage (§17 "Tenancy"). Nothing enforces them yet. | §17, §23 Phase 2 deferrals |
-| Reserved `tenant_id` on stored keys | §16 and D5 say every stored key carries it; the store has `project_id` only. Add it, or correct the docs, before data volumes grow. | §16, D5 |
 | Image signature verification (cosign) | Plugin and environment images are pinned by digest only. | §17 "Other security controls" |
 | `evalsi-collector` distribution | An OTel Collector build with our exporters. | §21 |
 | Reports and dashboards | Static HTML or Markdown reports, Grafana dashboards, and write-back to Langfuse and Phoenix (MLflow and OTel sinks exist). | §19, D3 |

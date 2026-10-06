@@ -110,6 +110,9 @@ func OpenClickHouse(ctx context.Context, cfg ClickHouseConfig, password string) 
 			result String CODEC(ZSTD), version Int64
 		) ENGINE = ReplacingMergeTree(version)
 		ORDER BY (project, trace_id, policy, evaluator)`,
+		// Reserved for a tenant boundary above projects (decision 0004).
+		`ALTER TABLE ` + db + `.traces ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT ''`,
+		`ALTER TABLE ` + db + `.trace_results ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT ''`,
 	} {
 		if err := c.exec(ctx, stmt, nil, nil); err != nil {
 			return nil, err
@@ -233,7 +236,7 @@ func (c *clickhouse) PutTraces(ctx context.Context, traces []TraceWrite) error {
 			"version": version + int64(i),
 		})
 	}
-	return c.exec(ctx, `INSERT INTO traces SELECT project, trace_id, service, start_ns,
+	return c.exec(ctx, `INSERT INTO traces (project, trace_id, service, start_ns, summary, record, version) SELECT project, trace_id, service, start_ns,
 		base64Decode(summary), base64Decode(record), version
 		FROM input('project String, trace_id String, service String, start_ns Int64, summary String, record String, version Int64')
 		FORMAT JSONEachRow`, nil, &body)
@@ -372,7 +375,7 @@ func (c *clickhouse) PutTraceResults(ctx context.Context, project, traceID, poli
 		body.Write(row)
 		body.WriteByte('\n')
 	}
-	return c.exec(ctx, `INSERT INTO trace_results SELECT project, trace_id, policy, evaluator, base64Decode(result), version
+	return c.exec(ctx, `INSERT INTO trace_results (project, trace_id, policy, evaluator, result, version) SELECT project, trace_id, policy, evaluator, base64Decode(result), version
 		FROM input('project String, trace_id String, policy String, evaluator String, result String, version Int64')
 		FORMAT JSONEachRow`, nil, &body)
 }

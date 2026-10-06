@@ -64,6 +64,10 @@ func OpenPostgres(ctx context.Context, dsn string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
+	if err := addTenantColumns(ctx, tx, postgresDialect); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: migrating: %w", err)
+	}
 	if err := tx.Commit(); err != nil {
 		_ = db.Close()
 		return nil, err

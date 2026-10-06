@@ -840,7 +840,7 @@ For now, every form factor is installed and operated by the client, inside their
   - observability (their OTel Collector, Prometheus, Grafana).
 - **Air-gapped installs.** An offline bundle (`deploy/airgap/bundle.sh`) contains every image the charts use, the charts, extra images such as the tasks' sandbox images, and optionally the CLI's Python wheels; `install.sh` loads it into the client's registry and installs. A mirror tool that copies benchmark datasets into the client's object store, respecting each dataset's license, is not built yet.
 - **Least-privilege install.** The main Helm install is namespace-scoped. Cluster-scoped pieces (CRDs, the optional `sandboxd` DaemonSet, its node labels) are separate charts, because on many clusters a platform team owns those. The operator's ClusterRoleBinding is opt-in. A namespace admin can install the main chart alone, under Pod Security `restricted`, with the chart's own sandbox pool and the API in place of the CRDs ([guide](guides/kubernetes.md#installing-without-cluster-admin)).
-- **Single tenant per install, with projects inside it.** Every stored key still carries `project_id` and a reserved `tenant_id`, so a hosted multi-tenant offering can be added later without a data migration.
+- **Single tenant per install, with projects inside it.** Every project-scoped row carries `project_id` and a reserved `tenant_id` column (empty in a single-tenant install; SQLite, PostgreSQL and ClickHouse), so a hosted multi-tenant offering can fill it in rather than reshape stored data.
 
 ### Tier 0: Embedded library (`pip install evalsi`)
 
