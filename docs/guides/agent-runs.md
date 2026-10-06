@@ -174,6 +174,16 @@ Supported categories: `simple_python`, `simple_java`, `simple_javascript`, `mult
 
 The ladder (`sandbox.ladder`) defaults to `firecracker`, `bwrap`, `landlock`. The strongest rung that works is used, and `evalsid sandbox probe` shows which rungs work on a host. A task that sets `min_isolation` is refused, never downgraded, when no rung meets it.
 
+**Resource limits.** On the bubblewrap and Landlock rungs, each command gets rlimits (memory, file size, and processes on bubblewrap). With a delegated cgroup v2 directory, it also gets its own cgroup with `memory.max`, `pids.max` and optionally `cpu.max`. These cover the whole process tree, which is the only process cap on Landlock. Anything the command leaves running is killed when it ends.
+
+```yaml
+sandbox:
+  cgroup: auto          # default: evalsid's own cgroup when delegated (systemd Delegate=yes); "off"; or a path
+  cgroup_cpus: 2        # cpu.max per command; default: no limit
+```
+
+The isolation report says which limits applied, and an out-of-memory kill appears in the result's denials.
+
 To enable Firecracker:
 
 ```yaml

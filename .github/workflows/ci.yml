@@ -88,6 +88,10 @@ jobs:
           # Both sandbox rungs must work here; skipping them would hide regressions.
           EVALSI_REQUIRE_SANDBOX: "1"
           EVALSI_REQUIRE_HELM: "1"
+      - name: cgroup limits (as root, in a cgroup v2 directory with memory and pids)
+        run: |
+          go test -c -o "$RUNNER_TEMP/sandbox.test" ./internal/sandbox
+          sudo EVALSI_REQUIRE_CGROUP=1 EVALSI_REQUIRE_SANDBOX=1 "$RUNNER_TEMP/sandbox.test" -test.run Cgroup -test.v
       - name: Static binaries
         run: make build
 

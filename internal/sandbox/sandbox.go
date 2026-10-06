@@ -169,6 +169,13 @@ type Config struct {
 	Firecracker *FirecrackerConfig `json:"firecracker,omitempty"`
 	// The pod rung (in a Kubernetes sandbox pool).
 	Pod *PodConfig `json:"pod,omitempty"`
+	// cgroup v2 limits for the bubblewrap and Landlock rungs: "auto"
+	// (default: evalsid's own cgroup, when it is delegated), "off", or the
+	// path of a delegated cgroup directory. Without one, those rungs limit
+	// with rlimits only.
+	Cgroup string `json:"cgroup,omitempty"`
+	// CPUs each execution may use (cpu.max), with cgroups; 0: no limit.
+	CgroupCPUs float64 `json:"cgroup_cpus,omitempty"`
 }
 
 // Defaults for requests that leave limits unset.
@@ -216,6 +223,8 @@ type Sandbox struct {
 	drivers []driver
 	min     Level
 	images  *imageStore
+	// Per-execution cgroups for the host rungs; nil without a delegated cgroup.
+	cgroups *cgroupPool
 
 	mu     sync.Mutex
 	probes map[string]error
@@ -247,6 +256,9 @@ func (c Config) Validate() error {
 		if err := c.Pod.validate(); err != nil {
 			return err
 		}
+	}
+	if c.CgroupCPUs < 0 {
+		return errors.New("sandbox.cgroup_cpus must not be negative")
 	}
 	_, err := ParseLevel(c.MinIsolation)
 	return err
@@ -289,6 +301,13 @@ func New(cfg Config) (*Sandbox, error) {
 		}
 	}
 	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}, images: newImageStore(filepath.Join(cfg.CacheDir, "images"))}
+	if slices.Contains(cfg.Ladder, "bwrap") || slices.Contains(cfg.Ladder, "landlock") {
+		pool, err := setupCgroups(cfg.Cgroup, cfg.CgroupCPUs)
+		if err != nil {
+			return nil, err
+		}
+		s.cgroups = pool
+	}
 	for _, name := range cfg.Ladder {
 		switch name {
 		case "firecracker":

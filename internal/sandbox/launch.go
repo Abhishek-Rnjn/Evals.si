@@ -26,6 +26,9 @@ type launchSpec struct {
 	CPUSeconds  uint64 `json:"cpu_seconds,omitempty"`
 	MaxProcs    uint64 `json:"max_procs,omitempty"`
 	MaxFile     uint64 `json:"max_file_bytes,omitempty"`
+	// MaxProcs is for the cgroup only: RLIMIT_NPROC counts every process
+	// of the uid, which the Landlock rung shares with the host.
+	NoNprocRlimit bool `json:"no_nproc_rlimit,omitempty"`
 
 	// Landlock rules to apply to the launcher before exec (landlock rung).
 	Landlock *landlockRules `json:"landlock,omitempty"`
@@ -94,7 +97,20 @@ func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, stdin []byte, ti
 	cmd.Stdin = bytes.NewReader(stdin)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var lease *cgroupLease
+	if s.cgroups != nil {
+		lease, err = s.cgroups.lease(spec)
+		if err != nil {
+			return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: "cgroup: " + err.Error()}
+		}
+		defer lease.close()
+		lease.attach(cmd.SysProcAttr)
+	}
 	cmd.Cancel = func() error {
+		if lease != nil {
+			// Every process, including any that left the process group.
+			_ = lease.kill()
+		}
 		// The whole group: the command may have forked.
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
@@ -125,8 +141,15 @@ func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, stdin []byte, ti
 		res.Outcome, res.ExitCode = OutcomeRunnerFailure, -1
 		res.Error = err.Error()
 	}
+	if lease != nil && lease.oomKilled() {
+		res.Denials = append(res.Denials, memoryLimitDenial)
+	}
 	return res
 }
+
+// memoryLimitDenial is reported when the kernel killed the command for
+// exceeding its cgroup's memory.max.
+const memoryLimitDenial = "memory limit exceeded (killed by the kernel)"
 
 // capped passes the first limit bytes on to w (when set) and notes whether
 // more arrived. With keep, it also keeps them, for classification.

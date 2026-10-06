@@ -15,6 +15,7 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | Several-node NATS (stream replicas 3) | Configuration only; tests use one node. | §23 Phase 4 limits |
 | 10k+ concurrent agent trials (§14 target) | Needs a cluster sized for it. | §23 Phase 4 load test |
 | Real SWE-bench Verified images | Several GB each; CI runs fixtures in the same format, graded by the same code. | §23 Phase 3 limits |
+| cgroup v2 limits in an unprivileged container | Tested as root on CI's cgroup v2. In a pod, the cgroup mount is read-only unless the pod is privileged (as the bubblewrap pool is), so other deployments fall back to rlimits. | §13 implementation notes |
 | Kata Containers as the `vm` level on the owner's cluster (D13) | Supported as a pod `runtimeClassName`; not run on a cluster with Kata installed. | D13, decision 0007 |
 
 ## Deferred features
@@ -22,7 +23,6 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | Item | Notes | Where recorded |
 |------|-------|----------------|
 | DuckDB for standalone analytics | Waits for cross-run analytics. | Decision 0009 |
-| cgroup limits in the bubblewrap and Landlock rungs | rlimits only. On the Landlock rung the process cap is not enforced, because the uid is shared. | §23 Phase 1 deferrals |
 | Platform wheels bundling evalsid | Releases publish archives (evalsid, a static bubblewrap), wheels, images, charts and the bundle (`.github/workflows/release.yml`), but no tag has been cut, and the wheels do not bundle evalsid as decision 0006 suggests. | Decision 0006 |
 | Sandbox-time quotas | Per-project quotas cover concurrent and stored runs, daily judge and target tokens, and reward rollouts in flight; sandbox minutes are not metered. Concurrency quotas are per replica. | §17 "Tenancy" |
 | Image signature verification (cosign) | Plugin and environment images are pinned by digest only. | §17 "Other security controls" |

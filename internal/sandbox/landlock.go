@@ -56,8 +56,15 @@ func (d *landlockDriver) isolation(b *hostBackend) Isolation {
 			fmt.Sprintf("landlock ABI %d", abi),
 			"shares the host's PID and mount namespaces",
 			"workdir: " + b.work + " (paths cannot be remapped; see EVALSI_WORKDIR)",
-			"limits: rlimits (memory, file size), no cgroup or process cap",
 		},
+	}
+	if c := b.sb.cgroups; c != nil {
+		iso.Notes = append(iso.Notes, "limits: rlimits (memory, file size); "+c.note())
+		if !c.has("pids") {
+			iso.Notes = append(iso.Notes, "no process cap (no pids controller)")
+		}
+	} else {
+		iso.Notes = append(iso.Notes, "limits: rlimits (memory, file size), no cgroup or process cap")
 	}
 	if abi < 3 {
 		// Before ABI 3 Landlock cannot stop truncation of readable files.
@@ -110,7 +117,7 @@ func (d *landlockDriver) launch(b *hostBackend, e *Exec) (*launchSpec, error) {
 	}
 	limits(&sp.Resources, spec)
 	// RLIMIT_NPROC counts every process of the (shared) uid here, so it would
-	// fail unrelated forks; only bwrap's user namespace gives a private count.
-	spec.MaxProcs = 0
+	// fail unrelated forks; the process cap is the cgroup's pids.max, if any.
+	spec.NoNprocRlimit = true
 	return spec, nil
 }

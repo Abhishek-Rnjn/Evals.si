@@ -129,6 +129,13 @@ func cStrings(ss []string) ([]*byte, error) {
 	return out, nil
 }
 
+func nprocLimit(spec *launchSpec) uint64 {
+	if spec.NoNprocRlimit {
+		return 0
+	}
+	return spec.MaxProcs
+}
+
 func setLimits(spec *launchSpec) error {
 	set := func(res int, v uint64) error {
 		if v == 0 {
@@ -142,7 +149,7 @@ func setLimits(spec *launchSpec) error {
 	}{
 		{unix.RLIMIT_AS, spec.MemoryBytes},
 		{unix.RLIMIT_CPU, spec.CPUSeconds},
-		{unix.RLIMIT_NPROC, spec.MaxProcs},
+		{unix.RLIMIT_NPROC, nprocLimit(spec)},
 		{unix.RLIMIT_FSIZE, spec.MaxFile},
 	} {
 		if err := set(l.res, l.v); err != nil {

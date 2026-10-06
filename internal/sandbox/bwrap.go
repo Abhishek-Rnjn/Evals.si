@@ -93,7 +93,11 @@ func (d *bwrapDriver) isolation(b *hostBackend) Isolation {
 	case NetworkAllowlist:
 		iso.Notes = append(iso.Notes, "network: allowlist through the logging egress proxy")
 	}
-	iso.Notes = append(iso.Notes, "limits: rlimits (memory, processes, file size), no cgroup")
+	if c := b.sb.cgroups; c != nil {
+		iso.Notes = append(iso.Notes, "limits: rlimits (memory, processes, file size); "+c.note())
+	} else {
+		iso.Notes = append(iso.Notes, "limits: rlimits (memory, processes, file size), no cgroup")
+	}
 	return iso
 }
 

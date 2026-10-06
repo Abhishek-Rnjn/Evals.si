@@ -711,6 +711,7 @@ The deepseek-harness profile was built to confine a coding assistant on its user
 Implementation notes:
 
 - **Static bubblewrap.** The release builds bubblewrap statically (`scripts/build-static-bwrap.sh`) and ships it beside evalsid, which prefers it over the host's, so the rung does not depend on a distro package. bubblewrap is LGPL-2.0-or-later, so it ships as a separate executable with its license and a source reference.
+- **cgroup limits.** With a delegated cgroup v2 directory (`sandbox.cgroup`: by default evalsid's own cgroup, when it is writable and holds no other process, as under a systemd unit with `Delegate=yes`), each execution of the bubblewrap and Landlock rungs starts directly in its own child cgroup (`CLONE_INTO_CGROUP`). The child sets `memory.max` (no swap, the whole group killed on OOM), `pids.max` and, optionally, `cpu.max`. When the execution ends, `cgroup.kill` stops anything it left running, including processes that started a new session. memory.events reports an out-of-memory kill as a denial. rlimits stay as the per-process bound; without a cgroup they are the only one, and the isolation report says so.
 - **Landlock from Go.** The Landlock rung uses `go-landlock`. A Landlock ruleset applies to the calling process and is inherited across `execve`, so `evalsi` re-executes itself as a small launcher (`evalsi sandbox-exec`) that applies the ruleset and then executes the target command.
 - **User namespaces.** These can be disabled or restricted on some distributions (Ubuntu's AppArmor restriction, for example), and default container seccomp and AppArmor profiles usually block them inside pods. The functional probe detects this. On Kubernetes, sandbox-pool pods can use a `Localhost` seccomp profile that permits user-namespace creation. Otherwise the ladder falls through to the pod rung.
 
@@ -1396,8 +1397,8 @@ The exit criterion runs end to end, verified against a local OpenAI-compatible j
 
 - **Embedded NATS and DuckDB** (decision 0009).
 - **OCI image roots for the bubblewrap rung.** Phase 1 binds the host's system directories read-only, or a configured `rootfs`. Image unpacking arrives with the harness environments in Phase 3.
-- **cgroup limits.** Phase 1 uses rlimits. On the Landlock rung the process cap is not enforced, because the uid is shared; isolation reports note both.
-- **A statically built bubblewrap in the release.** It waits for the release pipeline; until then the rung uses `bwrap` from the host.
+- **cgroup limits.** Phase 1 uses rlimits. On the Landlock rung the process cap is not enforced, because the uid is shared; isolation reports note both. (Added after Phase 5: per-execution cgroup v2 limits where a cgroup is delegated, see §13.)
+- **A statically built bubblewrap in the release.** It waits for the release pipeline; until then the rung uses `bwrap` from the host. (Added after Phase 5 with the release pipeline.)
 
 The exit criteria hold:
 
