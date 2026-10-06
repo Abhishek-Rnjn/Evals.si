@@ -54,9 +54,11 @@ def _parser() -> argparse.ArgumentParser:
     _add_policy(sub)
     from evalsi.cli_auth import add_auth_commands
     from evalsi.cli_flywheel import add_flywheel_commands
+    from evalsi.cli_rewards import add_rewards_commands
 
     add_auth_commands(sub)
     add_flywheel_commands(sub)
+    add_rewards_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
     cat.add_argument("--format", choices=["table", "json"], default="table")

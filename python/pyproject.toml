@@ -50,7 +50,7 @@ python_version = "3.11"
 files = ["evalsi/src", "evalsi/tests", "evalsi-harness/src", "evalsi-harness/tests"]
 
 [[tool.mypy.overrides]]
-module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*", "sympy", "sympy.*", "math_verify"]
+module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*", "sympy", "sympy.*", "math_verify", "torch", "transformers", "transformers.*", "trl", "trl.*"]
 ignore_missing_imports = true
 
 # Generated code is typed through its .pyi stubs; do not check the .py bodies.

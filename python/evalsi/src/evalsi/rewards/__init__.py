@@ -204,6 +204,9 @@ class Reward:
     def __init__(self, spec: RewardSpec) -> None:
         self.spec = spec
         self.last_results = []
+        # Identifies the batch of the last __call__, so per-component reward
+        # functions (evalsi.rewards.trl) can reuse its results.
+        self.last_call = ""
         self.__name__ = spec.name
 
     async def ascore(self, rollouts: Sequence[Mapping[str, Any] | Record]) -> list[RewardResult]:
@@ -223,7 +226,9 @@ class Reward:
         if completions is None:
             raise TypeError("a reward function needs completions")
         rollouts = _rollouts(prompts, completions, kwargs)
-        return [r.total for r in self.score(rollouts)]
+        results = self.score(rollouts)
+        self.last_call = call_key(prompts, completions)
+        return [r.total for r in results]
 
     def compute_score(
         self,
@@ -349,6 +354,12 @@ class LocalReward(Reward):
         ]
         self.last_results = results
         return results
+
+
+def call_key(prompts: Sequence[Any] | None, completions: Sequence[Any]) -> str:
+    """A digest of one reward-function call's batch."""
+    body = json.dumps([prompts, completions], sort_keys=True, default=str)
+    return hashlib.sha256(body.encode()).hexdigest()
 
 
 def _verl_dict(result: RewardResult) -> dict[str, Any]:
