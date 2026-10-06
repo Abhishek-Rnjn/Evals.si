@@ -137,7 +137,20 @@ func TestAgentRuns(t *testing.T) {
 			}
 		}
 		if final.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED {
-			t.Fatalf("status %v: %s", final.GetStatus(), final.GetError())
+			// What each record did, so a failed gate says why.
+			if res, err := client.ListRunResults(ctx, connect.NewRequest(&evalsiv1alpha1.ListRunResultsRequest{RunId: final.GetId()})); err == nil {
+				for _, rec := range res.Msg.GetRecords() {
+					var steps []string
+					for _, st := range rec.GetTrajectory().GetSteps() {
+						steps = append(steps, fmt.Sprintf("%s %q err=%q", st.GetName(), st.GetOutput().GetText(), st.GetError()))
+					}
+					t.Logf("record %s: check %v steps %v", rec.GetId(), rec.GetCheck(), steps)
+				}
+				for _, r := range res.Msg.GetResults() {
+					t.Logf("result %s: %v %s %v", r.GetRecordId(), r.GetOutcome(), r.GetReason(), r.GetScores())
+				}
+			}
+			t.Fatalf("status %v: %s (summaries %v)", final.GetStatus(), final.GetError(), final.GetSummaries())
 		}
 		return final
 	}
