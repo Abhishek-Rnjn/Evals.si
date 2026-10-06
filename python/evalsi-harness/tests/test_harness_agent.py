@@ -427,3 +427,33 @@ def test_the_record_carries_the_agents_diff(model: Model, sandboxes: LocalSandbo
     rec = run(plain, record("Anything."), sandboxes).record
     assert rec is not None
     assert "diff" not in rec.metadata
+
+
+def test_local_snapshots_survive_files_vanishing(
+    sandboxes: LocalSandboxClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Background processes (git's auto-maintenance) delete lock files while
+    # the test sandbox copies its directory.
+    import asyncio
+    import os
+    import shutil
+
+    from evalsi.sandbox.client import SandboxSpec
+
+    copyfile = shutil.copyfile
+
+    def vanishing(src: str, dst: str, **kw: Any) -> Any:
+        if os.fspath(src).endswith(".lock"):
+            Path(src).unlink()
+        return copyfile(src, dst, **kw)
+
+    async def go() -> dict[str, bytes]:
+        box = await sandboxes.create(SandboxSpec())
+        await box.write_files({"keep.txt": "kept", "objects/maintenance.lock": ""})
+        monkeypatch.setattr(shutil, "copyfile", vanishing)
+        snap = await box.snapshot()
+        monkeypatch.setattr(shutil, "copyfile", copyfile)
+        restored = await sandboxes.restore(snap)
+        return await restored.read_files(["keep.txt"])
+
+    assert asyncio.run(go()) == {"keep.txt": b"kept"}

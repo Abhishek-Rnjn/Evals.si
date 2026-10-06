@@ -12,6 +12,7 @@ always use the Evals.si sandbox, which fails closed.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import shutil
@@ -227,7 +228,7 @@ class LocalSandbox:
 
     async def snapshot(self) -> str:
         snap = Path(tempfile.mkdtemp(prefix="evalsi-localsnap-"))
-        shutil.copytree(self.root, snap / "state", symlinks=True)
+        shutil.copytree(self.root, snap / "state", symlinks=True, copy_function=_copy_if_present)
         return str(snap)
 
     async def egress(self) -> list[EgressEvent]:
@@ -235,6 +236,15 @@ class LocalSandbox:
 
     async def destroy(self) -> None:
         shutil.rmtree(self.root, ignore_errors=True)
+
+
+def _copy_if_present(src: str, dst: str) -> None:
+    """Copy a file unless it vanished mid-snapshot. Background processes a
+    command left behind (git's auto-maintenance, for one) keep running here,
+    where the real sandbox would have killed them, and come and go with lock
+    files."""
+    with contextlib.suppress(FileNotFoundError):
+        shutil.copy2(src, dst)
 
 
 class LocalSandboxClient:
