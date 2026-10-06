@@ -80,6 +80,17 @@ type Evaluate struct {
 	MaxRecords int `json:"max_records"`
 }
 
+// Rewards tunes the Reward Service.
+type Rewards struct {
+	// Upper bound on rollouts in one ScoreRewards call.
+	MaxRollouts int `json:"max_rollouts"`
+	// Rollouts being scored at once across all calls; further calls wait
+	// (back-pressure on the trainer) until their context ends.
+	MaxInflight int `json:"max_inflight"`
+	// Component scores kept in the in-memory cache.
+	CacheSize int `json:"cache_size"`
+}
+
 // Runs tunes the Run door.
 type Runs struct {
 	// Runs executing at once; the rest wait as PENDING.
@@ -136,6 +147,7 @@ type Config struct {
 	Judges       map[string]Judge  `json:"judges"`
 	DefaultJudge string            `json:"default_judge"`
 	Evaluate     Evaluate          `json:"evaluate"`
+	Rewards      Rewards           `json:"rewards"`
 	// Isolation for code-executing evaluators and agent tasks.
 	Sandbox sandbox.Config `json:"sandbox"`
 	// What agent-run specs may make the worker execute outside the sandbox.
@@ -211,6 +223,7 @@ func Default() Config {
 		DataDir:  ".evalsi",
 		Judges:   map[string]Judge{},
 		Evaluate: Evaluate{BatchSize: 32, Parallelism: 8, MaxRecords: 10000},
+		Rewards:  Rewards{MaxRollouts: 16384, MaxInflight: 65536, CacheSize: 1 << 20},
 		Runs:     Runs{MaxConcurrent: 4},
 		OTLP:     OTLP{Grace: "2s", MaxTraces: 10000},
 		Traces:   Traces{Retention: "168h"},
@@ -347,6 +360,9 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateAccess()...)
 	if c.Evaluate.BatchSize < 1 || c.Evaluate.Parallelism < 1 || c.Evaluate.MaxRecords < 1 {
 		errs = append(errs, errors.New("evaluate.batch_size, parallelism and max_records must be positive"))
+	}
+	if r := c.Rewards; r.MaxRollouts < 1 || r.MaxInflight < r.MaxRollouts || r.CacheSize < 0 {
+		errs = append(errs, errors.New("rewards.max_rollouts must be positive, max_inflight at least max_rollouts, and cache_size not negative"))
 	}
 	return errors.Join(errs...)
 }

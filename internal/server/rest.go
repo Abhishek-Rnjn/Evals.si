@@ -17,6 +17,7 @@ import (
 // EvaluateStream (bidirectional) stays on gRPC and Connect.
 //
 //	POST   /v1alpha1/evaluate                  EvaluationService.Evaluate
+//	POST   /v1alpha1/rewards:score             RewardService.ScoreRewards
 //	GET    /v1alpha1/evaluators                CatalogService.ListEvaluators
 //	POST   /v1alpha1/runs                      RunService.CreateRun
 //	GET    /v1alpha1/runs                      RunService.ListRuns (?project=&page_size=&page_token=)
@@ -64,6 +65,7 @@ func restRules() []*annotations.HttpRule {
 	const v = "/v1alpha1"
 	return []*annotations.HttpRule{
 		rule("EvaluationService.Evaluate", http.MethodPost, v+"/evaluate", "*"),
+		rule("RewardService.ScoreRewards", http.MethodPost, v+"/rewards:score", "*"),
 		rule("CatalogService.ListEvaluators", http.MethodGet, v+"/evaluators", ""),
 		rule("RunService.CreateRun", http.MethodPost, v+"/runs", "*"),
 		rule("RunService.ListRuns", http.MethodGet, v+"/runs", ""),
@@ -103,6 +105,7 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 	names := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
+		evalsiv1alpha1connect.RewardServiceName,
 		evalsiv1alpha1connect.RunServiceName,
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,

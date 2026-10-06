@@ -152,6 +152,7 @@ def test_sandbox_settings_become_params() -> None:
     reward = rewards.load(
         {"components": [{"ref": "code-exec-tests", "sandbox": {"minIsolation": "namespaced"}}]}
     )
+    assert isinstance(reward, rewards.LocalReward)
     assert reward._instances[0].params["min_isolation"] == "namespaced"
 
 
@@ -194,3 +195,43 @@ def test_ascore_runs_inside_an_event_loop() -> None:
         return [results[0].total, *sync]
 
     assert asyncio.run(main()) == [1.0, 0.0]
+
+
+def test_server_spec_and_results() -> None:
+    import yaml
+
+    from evalsi.rewards import _result_from_json, spec_to_proto_json
+
+    spec = rewards.load_spec(yaml.safe_load(SPEC))
+    body = spec_to_proto_json(spec)
+    assert body["onError"] == "REWARD_ON_ERROR_RAISE"
+    assert body["components"][0] == {
+        "ref": "format-check",
+        "name": "format-check",
+        "weight": 0.2,
+        "gate": True,
+        "threshold": 1.0,
+        "params": {"pattern": ".*<answer>.*</answer>\\s*"},
+    }
+    result = _result_from_json(
+        {
+            "rolloutId": "0",
+            "gated": True,
+            "total": 0,
+            "components": {
+                "format-check": {"status": "REWARD_COMPONENT_STATUS_SCORED", "cached": True},
+                "math-equiv": {"status": "REWARD_COMPONENT_STATUS_ERROR", "reason": "x"},
+            },
+        }
+    )
+    assert result.total == 0.0
+    assert result.gated is True
+    assert result.components["format-check"].cached is True
+    assert result.components["math-equiv"].status == "error"
+    with pytest.raises(RewardSpecError, match="judge"):
+        rewards.load(
+            {"judge": {"provider": "anthropic", "model": "m"}, "components": ["math-equiv"]},
+            server="http://localhost:1",
+        )
+    with pytest.raises(EvaluatorConfigError, match="server judge"):
+        rewards.load({"judge": "local", "components": ["llm-judge"]})

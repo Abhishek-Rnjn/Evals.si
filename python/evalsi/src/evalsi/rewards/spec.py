@@ -65,11 +65,9 @@ class Component:
     # The metric to read when the evaluator reports several; default: its first.
     metric: str = ""
     params: Mapping[str, Any] = field(default_factory=dict)
-    # Sandbox requirements. min_isolation and memory_mb become params of
-    # evaluators that take them; warm_pool sizes the server's pool.
+    # sandbox.minIsolation: becomes the min_isolation param of evaluators
+    # that run code in the sandbox.
     min_isolation: str = ""
-    network: str = ""
-    warm_pool: int = 0
 
     @property
     def key(self) -> str:
@@ -86,17 +84,8 @@ class Component:
             out["metric"] = self.metric
         if self.params:
             out["params"] = dict(self.params)
-        sandbox = {
-            k: v
-            for k, v in (
-                ("minIsolation", self.min_isolation),
-                ("network", self.network),
-                ("warmPool", self.warm_pool),
-            )
-            if v
-        }
-        if sandbox:
-            out["sandbox"] = sandbox
+        if self.min_isolation:
+            out["sandbox"] = {"minIsolation": self.min_isolation}
         return out
 
 
@@ -113,7 +102,9 @@ class RewardSpec:
     concurrency: int = 64
     # Column holding the reference answer; empty means the first of REFERENCE_COLUMNS.
     reference_field: str = ""
-    judge: Mapping[str, Any] | None = None
+    # JudgeConfig fields for in-process scoring, or the name of a judge
+    # configured on the server.
+    judge: Mapping[str, Any] | str | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> RewardSpec:
@@ -167,8 +158,10 @@ class RewardSpec:
         if concurrency < 1:
             raise RewardSpecError("concurrency must be at least 1")
         judge = body.get("judge")
-        if judge is not None and not isinstance(judge, Mapping):
-            raise RewardSpecError("judge must be a mapping of JudgeConfig fields")
+        if judge is not None and not isinstance(judge, Mapping | str):
+            raise RewardSpecError(
+                "judge must be JudgeConfig fields, or the name of a judge on the server"
+            )
         return cls(
             name=name or str(body.get("name", "")) or "reward",
             components=components,
@@ -180,7 +173,7 @@ class RewardSpec:
             breakdown=bool(body.get("breakdown", True)),
             concurrency=concurrency,
             reference_field=str(body.get("referenceField", "")),
-            judge=dict(judge) if judge else None,
+            judge=dict(judge) if isinstance(judge, Mapping) else (judge or None),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -197,7 +190,7 @@ class RewardSpec:
         if self.reference_field:
             body["referenceField"] = self.reference_field
         if self.judge:
-            body["judge"] = dict(self.judge)
+            body["judge"] = dict(self.judge) if isinstance(self.judge, Mapping) else self.judge
         return {
             "apiVersion": API_VERSION,
             "kind": KIND,
@@ -225,7 +218,7 @@ def _component(data: Any, index: int) -> Component:
     sandbox = data.get("sandbox") or {}
     if not isinstance(sandbox, Mapping):
         raise RewardSpecError(f"component {data['ref']!r}: sandbox must be a mapping")
-    unknown = set(sandbox) - {"minIsolation", "network", "warmPool"}
+    unknown = set(sandbox) - {"minIsolation"}
     if unknown:
         raise RewardSpecError(
             f"component {data['ref']!r}: unknown sandbox fields {sorted(unknown)}"
@@ -242,8 +235,6 @@ def _component(data: Any, index: int) -> Component:
         metric=str(data.get("metric", "")),
         params=dict(params),
         min_isolation=str(sandbox.get("minIsolation", "")),
-        network=str(sandbox.get("network", "")),
-        warm_pool=int(sandbox.get("warmPool", 0)),
     )
 
 

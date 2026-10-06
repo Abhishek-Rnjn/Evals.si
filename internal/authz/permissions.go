@@ -35,7 +35,7 @@ type Permission struct {
 // Permissions is the permission registry, in display order.
 var Permissions = []Permission{
 	{Name: "catalog.read", Description: "List evaluators and use gRPC reflection."},
-	{Name: "evaluations.run", Description: "Score records (Evaluate, EvaluateStream). Spends judge budget and may run code."},
+	{Name: "evaluations.run", Description: "Score records (Evaluate, EvaluateStream) and RL rollouts (ScoreRewards). Spends judge budget and may run code."},
 	{Name: "runs.read", Description: "Read runs, their results and comparisons."},
 	{Name: "runs.create", Description: "Start runs. Spends target and judge budget and may run code.", Audited: true},
 	{Name: "runs.cancel", Description: "Cancel runs.", Audited: true},

@@ -16,8 +16,8 @@
     results = reward.score([{"prompt": p, "completion": c, "answer": a}])
 
 The spec format and the scoring rules are in :mod:`evalsi.rewards.spec`.
-Rewards run in-process by default; with ``server=`` (or ``EVALSI_SERVER``)
-they are scored by the server's Reward Service instead.
+Rewards run in-process by default; with ``server=`` they are scored by the
+server's Reward Service instead.
 """
 
 from __future__ import annotations
@@ -49,6 +49,8 @@ from evalsi.types import Content, Outcome, Record, Usage
 __all__ = [
     "Component",
     "ComponentResult",
+    "LocalReward",
+    "RemoteReward",
     "Reward",
     "RewardError",
     "RewardResult",
@@ -192,89 +194,20 @@ class _LRU:
 class Reward:
     """A loaded reward: callable as a TRL reward function, with
     :meth:`compute_score` for verl, and :meth:`score` / :meth:`ascore` for
-    totals with breakdowns."""
+    totals with breakdowns. :func:`load` returns a :class:`LocalReward` or,
+    with ``server=``, a :class:`RemoteReward`."""
 
-    def __init__(
-        self,
-        spec: RewardSpec,
-        *,
-        registry: Registry | None = None,
-        judge: JudgeConfig | JudgeClient | None = None,
-        concurrency: int | None = None,
-    ) -> None:
+    spec: RewardSpec
+    # The most recent batch's results, for logging (see evalsi.rewards.trl).
+    last_results: list[RewardResult]
+
+    def __init__(self, spec: RewardSpec) -> None:
         self.spec = spec
-        self.concurrency = concurrency or spec.concurrency
-        self._registry = registry or default_registry()
-        self._instances = [_bind(c, self._registry) for c in spec.components]
-        self._needs_judge = any(i.spec.requires.judge for i in self._instances)
-        self._judge = judge
-        if self._needs_judge and judge is None:
-            self._judge = JudgeConfig(**spec.judge) if spec.judge else JudgeConfig.from_env()
-            if self._judge is None:
-                raise EvaluatorConfigError(
-                    "this reward uses a judge: set 'judge' in the spec, pass judge=, or set "
-                    "EVALSI_JUDGE_*"
-                )
-        self._cache = _LRU(spec.cache_size) if spec.cache else None
-        self._prefixes = [
-            json.dumps(
-                {"ref": i.spec.ref, "params": i.params, "metric": c.metric},
-                sort_keys=True,
-                default=str,
-            )
-            for c, i in zip(spec.components, self._instances, strict=True)
-        ]
-        # The most recent batch's results, for logging (see evalsi.rewards.trl).
-        self.last_results: list[RewardResult] = []
+        self.last_results = []
         self.__name__ = spec.name
 
     async def ascore(self, rollouts: Sequence[Mapping[str, Any] | Record]) -> list[RewardResult]:
-        records = [
-            to_record(r, index=i, reference_field=self.spec.reference_field)
-            for i, r in enumerate(rollouts)
-        ]
-        owned: JudgeClient | None = None
-        judge = self._judge if isinstance(self._judge, JudgeClient) else None
-        if self._needs_judge and judge is None:
-            assert isinstance(self._judge, JudgeConfig)
-            owned = judge = create_judge(self._judge, cache=JudgeCache())
-        ctx = EvalContext(judge=judge)
-        slots: list[dict[str, ComponentResult]] = [{} for _ in records]
-        semaphore = asyncio.Semaphore(self.concurrency)
-
-        async def one(ri: int, ci: int) -> None:
-            component, inst = self.spec.components[ci], self._instances[ci]
-            record = records[ri]
-            key = ""
-            if self._cache is not None:
-                body = json.dumps(record.to_dict() | {"id": ""}, sort_keys=True, default=str)
-                key = hashlib.sha256((self._prefixes[ci] + "\0" + body).encode()).hexdigest()
-                hit = self._cache.get(key)
-                if hit is not None:
-                    slots[ri][component.key] = ComponentResult(
-                        hit.status, hit.value, hit.reason, cached=True
-                    )
-                    return
-            async with semaphore:
-                result = await _evaluate_one(inst, record, record.id, ctx)
-            got = _component_result(component, result.outcome, result.scores, result.reason)
-            slots[ri][component.key] = got
-            if self._cache is not None and got.status != "error":
-                self._cache.put(key, got)
-
-        try:
-            async with asyncio.TaskGroup() as group:
-                for ri in range(len(records)):
-                    for ci in range(len(self._instances)):
-                        group.create_task(one(ri, ci))
-        finally:
-            if owned is not None:
-                await owned.aclose()
-        results = [
-            compose(self.spec, {c.key: slot[c.key] for c in self.spec.components}) for slot in slots
-        ]
-        self.last_results = results
-        return results
+        raise NotImplementedError
 
     def score(self, rollouts: Sequence[Mapping[str, Any] | Record]) -> list[RewardResult]:
         return _run_sync(self.ascore(rollouts))
@@ -330,6 +263,94 @@ class Reward:
         return [_verl_dict(r) for r in self.score(rollouts)]
 
 
+class LocalReward(Reward):
+    """Scores rollouts in this process."""
+
+    def __init__(
+        self,
+        spec: RewardSpec,
+        *,
+        registry: Registry | None = None,
+        judge: JudgeConfig | JudgeClient | None = None,
+        concurrency: int | None = None,
+    ) -> None:
+        super().__init__(spec)
+        self.concurrency = concurrency or spec.concurrency
+        self._registry = registry or default_registry()
+        self._instances = [_bind(c, self._registry) for c in spec.components]
+        self._needs_judge = any(i.spec.requires.judge for i in self._instances)
+        self._judge = judge
+        if self._needs_judge and judge is None:
+            if isinstance(spec.judge, str):
+                raise EvaluatorConfigError(
+                    f"judge {spec.judge!r} names a server judge; load the reward with server= "
+                    "or give the judge's settings in the spec"
+                )
+            self._judge = JudgeConfig(**spec.judge) if spec.judge else JudgeConfig.from_env()
+            if self._judge is None:
+                raise EvaluatorConfigError(
+                    "this reward uses a judge: set 'judge' in the spec, pass judge=, or set "
+                    "EVALSI_JUDGE_*"
+                )
+        self._cache = _LRU(spec.cache_size) if spec.cache else None
+        self._prefixes = [
+            json.dumps(
+                {"ref": i.spec.ref, "params": i.params, "metric": c.metric},
+                sort_keys=True,
+                default=str,
+            )
+            for c, i in zip(spec.components, self._instances, strict=True)
+        ]
+
+    async def ascore(self, rollouts: Sequence[Mapping[str, Any] | Record]) -> list[RewardResult]:
+        records = [
+            to_record(r, index=i, reference_field=self.spec.reference_field)
+            for i, r in enumerate(rollouts)
+        ]
+        owned: JudgeClient | None = None
+        judge = self._judge if isinstance(self._judge, JudgeClient) else None
+        if self._needs_judge and judge is None:
+            assert isinstance(self._judge, JudgeConfig)
+            owned = judge = create_judge(self._judge, cache=JudgeCache())
+        ctx = EvalContext(judge=judge)
+        slots: list[dict[str, ComponentResult]] = [{} for _ in records]
+        semaphore = asyncio.Semaphore(self.concurrency)
+
+        async def one(ri: int, ci: int) -> None:
+            component, inst = self.spec.components[ci], self._instances[ci]
+            record = records[ri]
+            key = ""
+            if self._cache is not None:
+                body = json.dumps(record.to_dict() | {"id": ""}, sort_keys=True, default=str)
+                key = hashlib.sha256((self._prefixes[ci] + "\0" + body).encode()).hexdigest()
+                hit = self._cache.get(key)
+                if hit is not None:
+                    slots[ri][component.key] = ComponentResult(
+                        hit.status, hit.value, hit.reason, cached=True
+                    )
+                    return
+            async with semaphore:
+                result = await _evaluate_one(inst, record, record.id, ctx)
+            got = _component_result(component, result.outcome, result.scores, result.reason)
+            slots[ri][component.key] = got
+            if self._cache is not None and got.status != "error":
+                self._cache.put(key, got)
+
+        try:
+            async with asyncio.TaskGroup() as group:
+                for ri in range(len(records)):
+                    for ci in range(len(self._instances)):
+                        group.create_task(one(ri, ci))
+        finally:
+            if owned is not None:
+                await owned.aclose()
+        results = [
+            compose(self.spec, {c.key: slot[c.key] for c in self.spec.components}) for slot in slots
+        ]
+        self.last_results = results
+        return results
+
+
 def _verl_dict(result: RewardResult) -> dict[str, Any]:
     out: dict[str, Any] = {"score": result.total if result.total is not None else math.nan}
     for name, value in result.breakdown().items():
@@ -374,16 +395,13 @@ def _component_result(
 def _bind(component: Component, registry: Registry) -> BoundEvaluator:
     definition = registry.resolve(component.ref)
     params = dict(component.params)
-    for key, value in (("min_isolation", component.min_isolation), ("network", component.network)):
-        if not value:
-            continue
-        if key not in definition.spec.params:
+    if component.min_isolation:
+        if "min_isolation" not in definition.spec.params:
             raise RewardSpecError(
                 f"component {component.key!r}: {definition.spec.name} does not run code in a "
-                f"sandbox, so sandbox.{'minIsolation' if key == 'min_isolation' else key} "
-                "does not apply"
+                "sandbox, so sandbox.minIsolation does not apply"
             )
-        params.setdefault(key, value)
+        params.setdefault("min_isolation", component.min_isolation)
     if component.metric and definition.spec.output(component.metric) is None:
         raise RewardSpecError(
             f"component {component.key!r}: {definition.spec.name} has no metric "
@@ -392,12 +410,158 @@ def _bind(component: Component, registry: Registry) -> BoundEvaluator:
     return definition.bind(params, alias=component.key)
 
 
+class RemoteReward(Reward):
+    """Scores rollouts with the server's Reward Service, in batches of
+    ``batch_size`` sent ``concurrency`` at a time."""
+
+    def __init__(
+        self,
+        spec: RewardSpec,
+        server: str,
+        *,
+        project: str = "",
+        token: str | None = None,
+        api_key: str | None = None,
+        batch_size: int = 512,
+        concurrency: int = 4,
+        timeout_s: float = 600.0,
+    ) -> None:
+        from evalsi.client import Client
+
+        super().__init__(spec)
+        if isinstance(spec.judge, Mapping):
+            raise RewardSpecError(
+                "on the server, judge names a judge configured there; judge settings in the "
+                "spec apply only in-process"
+            )
+        if batch_size < 1 or concurrency < 1:
+            raise ValueError("batch_size and concurrency must be at least 1")
+        self.project = project
+        self.batch_size = batch_size
+        self.concurrency = concurrency
+        self._client = Client(server, timeout=timeout_s, token=token, api_key=api_key)
+        self._spec = spec_to_proto_json(spec)
+
+    def close(self) -> None:
+        self._client.close()
+
+    async def ascore(self, rollouts: Sequence[Mapping[str, Any] | Record]) -> list[RewardResult]:
+        from google.protobuf import json_format
+
+        from evalsi.convert import record_to_proto
+
+        records = [
+            to_record(r, index=i, reference_field=self.spec.reference_field)
+            for i, r in enumerate(rollouts)
+        ]
+        batches = [
+            records[i : i + self.batch_size] for i in range(0, len(records), self.batch_size)
+        ]
+        semaphore = asyncio.Semaphore(self.concurrency)
+
+        async def send(batch: list[Record]) -> list[RewardResult]:
+            body = {
+                "project": self.project,
+                "spec": self._spec,
+                "rollouts": [json_format.MessageToDict(record_to_proto(r)) for r in batch],
+            }
+            async with semaphore:
+                out = await asyncio.to_thread(
+                    self._client.call, "RewardService", "ScoreRewards", body
+                )
+            rewards = out.get("rewards", [])
+            if len(rewards) != len(batch):
+                raise RewardError(f"the server returned {len(rewards)} rewards for {len(batch)}")
+            return [_result_from_json(r) for r in rewards]
+
+        parts = await asyncio.gather(*(send(b) for b in batches))
+        results = [r for part in parts for r in part]
+        self.last_results = results
+        return results
+
+
+_STATUS = {
+    "REWARD_COMPONENT_STATUS_SCORED": "scored",
+    "REWARD_COMPONENT_STATUS_SKIPPED": "skipped",
+    "REWARD_COMPONENT_STATUS_ERROR": "error",
+}
+
+
+def _result_from_json(data: Mapping[str, Any]) -> RewardResult:
+    components = {
+        name: ComponentResult(
+            status=_STATUS.get(str(c.get("status", "")), "error"),
+            value=None if c.get("value") is None else float(c["value"]),
+            reason=str(c.get("reason", "")),
+            cached=bool(c.get("cached", False)),
+        )
+        for name, c in (data.get("components") or {}).items()
+    }
+    total = data.get("total")
+    return RewardResult(
+        total=None if total is None else float(total),
+        components=components,
+        gated=bool(data.get("gated", False)),
+    )
+
+
+def spec_to_proto_json(spec: RewardSpec) -> dict[str, Any]:
+    """The spec as the server's ``RewardSpec`` message, in protojson form."""
+    out: dict[str, Any] = {
+        "name": spec.name,
+        "components": [],
+        "floor": spec.floor,
+        "onError": "REWARD_ON_ERROR_" + spec.on_error.upper(),
+        "disableCache": not spec.cache,
+    }
+    for c in spec.components:
+        component: dict[str, Any] = {"ref": c.ref, "name": c.key, "weight": c.weight}
+        if c.gate:
+            component["gate"] = True
+            component["threshold"] = c.threshold
+        if c.metric:
+            component["metric"] = c.metric
+        if c.params:
+            component["params"] = dict(c.params)
+        if c.min_isolation:
+            component["minIsolation"] = c.min_isolation
+        out["components"].append(component)
+    if spec.clip is not None:
+        out["clip"] = {"low": spec.clip[0], "high": spec.clip[1]}
+    if isinstance(spec.judge, str):
+        out["judge"] = spec.judge
+    return out
+
+
 def load(
     source: str | Path | Mapping[str, Any] | RewardSpec,
     *,
+    server: str | None = None,
+    project: str = "",
+    token: str | None = None,
+    api_key: str | None = None,
     registry: Registry | None = None,
     judge: JudgeConfig | JudgeClient | None = None,
     concurrency: int | None = None,
+    batch_size: int = 512,
 ) -> Reward:
-    """Load a reward from a spec file, mapping or :class:`RewardSpec`."""
-    return Reward(load_spec(source), registry=registry, judge=judge, concurrency=concurrency)
+    """Load a reward from a spec file, mapping or :class:`RewardSpec`.
+
+    Without ``server`` it is scored in this process; with ``server`` (an
+    evalsid URL) by the server's Reward Service, which runs code components
+    in its sandbox pools. ``concurrency`` is evaluator tasks in flight
+    in-process, or batches in flight to the server (default 4)."""
+    spec = load_spec(source)
+    if server:
+        if registry is not None or judge is not None:
+            raise ValueError("registry and judge apply only to in-process rewards")
+        return RemoteReward(
+            spec,
+            server,
+            project=project,
+            token=token,
+            api_key=api_key,
+            batch_size=batch_size,
+            concurrency=concurrency or 4,
+        )
+    return LocalReward(spec, registry=registry, judge=judge, concurrency=concurrency)
