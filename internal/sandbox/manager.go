@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,7 +26,12 @@ type Manager struct {
 	snapshots map[string]*snapshot
 	stop      chan struct{}
 	wg        sync.WaitGroup
+	// Sandboxes created since start (metrics, tests).
+	created atomic.Int64
 }
+
+// Created reports how many sandboxes this manager has created.
+func (m *Manager) Created() int64 { return m.created.Load() }
 
 type snapshot struct {
 	id     string
@@ -97,6 +103,7 @@ func (m *Manager) reserve() error {
 }
 
 func (m *Manager) add(s *Session) {
+	m.created.Add(1)
 	m.mu.Lock()
 	m.sessions[s.ID] = s
 	m.mu.Unlock()

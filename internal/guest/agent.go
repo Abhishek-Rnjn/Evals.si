@@ -10,6 +10,7 @@ package guest
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"io"
@@ -49,6 +50,12 @@ type Agent struct {
 	DialHost func(port uint32) (net.Conn, error)
 	// System applies entropy and the clock (in a VM); nil records only.
 	System System
+	// In a pod: the container's own environment (the image's ENV), under
+	// each command's variables. In a VM commands get exactly what they ask.
+	BaseEnv []string
+	// In a pod, where the agent is on the pod network: every call must
+	// carry this bearer token.
+	Token string
 
 	mu        sync.Mutex
 	egress    []net.Listener
@@ -73,7 +80,18 @@ func (a *Agent) Serve(ln net.Listener) error {
 	p := new(http.Protocols)
 	p.SetHTTP1(true)
 	p.SetUnencryptedHTTP2(true)
-	srv := &http.Server{Handler: mux, Protocols: p, ReadHeaderTimeout: 10 * time.Second}
+	var h http.Handler = mux
+	if a.Token != "" {
+		want := []byte("Bearer " + a.Token)
+		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+				http.Error(w, "unauthenticated", http.StatusUnauthorized)
+				return
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
+	srv := &http.Server{Handler: h, Protocols: p, ReadHeaderTimeout: 10 * time.Second}
 	return srv.Serve(ln)
 }
 
@@ -180,8 +198,8 @@ func (a *Agent) Exec(ctx context.Context, req *connect.Request[guestv1alpha1.Exe
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Env = m.GetEnv()
-	if p := lookPath(argv[0], m.GetEnv()); p != "" {
+	cmd.Env = mergeEnv(a.BaseEnv, m.GetEnv())
+	if p := lookPath(argv[0], cmd.Env); p != "" {
 		cmd.Path = p
 	}
 	cmd.Dir = dir
@@ -222,6 +240,27 @@ func (a *Agent) Exec(ctx context.Context, req *connect.Request[guestv1alpha1.Exe
 	mu.Lock()
 	defer mu.Unlock()
 	return stream.Send(&guestv1alpha1.ExecResponse{Event: &guestv1alpha1.ExecResponse_Result{Result: res}})
+}
+
+// mergeEnv is base with overrides applied, as KEY=VALUE pairs.
+func mergeEnv(base, overrides []string) []string {
+	if len(base) == 0 {
+		return overrides
+	}
+	vars := map[string]string{}
+	var order []string
+	for _, kv := range append(append([]string{}, base...), overrides...) {
+		k, v, _ := strings.Cut(kv, "=")
+		if _, seen := vars[k]; !seen {
+			order = append(order, k)
+		}
+		vars[k] = v
+	}
+	out := make([]string, 0, len(order))
+	for _, k := range order {
+		out = append(out, k+"="+vars[k])
+	}
+	return out
 }
 
 // lookPath resolves a command against the PATH in the command's environment.

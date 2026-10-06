@@ -457,3 +457,25 @@ def test_local_snapshots_survive_files_vanishing(
         return await restored.read_files(["keep.txt"])
 
     assert asyncio.run(go()) == {"keep.txt": b"kept"}
+
+
+def test_rungs_without_snapshots_set_up_every_trial(model: Model) -> None:
+    sandboxes = LocalSandboxClient(snapshots=False)
+    server = model(calls_then([{"text": "done"}]))
+    env = {
+        "setup": ["echo built >> setup.log"],
+        "checker": {"command": ["sh", "-c", "test $(wc -l < setup.log) -eq 1"]},
+    }
+    spec = spec_of({"target": target(server), "environment": env})
+    for trial in range(2):
+        out = run(spec, record(), sandboxes, trial=trial)
+        assert out.error == ""
+        assert out.record is not None
+        assert out.record.check is not None
+        assert out.record.check.passed  # setup ran once, in this trial's sandbox
+    # A setup that needs more network than the agent may have is refused,
+    # rather than the agent getting the setup's network.
+    wider = spec_of({"target": target(server), "environment": {**env, "setup_network": "allow"}})
+    out = run(wider, record(), sandboxes)
+    assert out.record is None
+    assert "cannot snapshot" in out.error

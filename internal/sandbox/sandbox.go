@@ -166,6 +166,8 @@ type Config struct {
 	IdleTimeoutS float64 `json:"idle_timeout_s,omitempty"`
 	// The microVM rung (design §13).
 	Firecracker *FirecrackerConfig `json:"firecracker,omitempty"`
+	// The pod rung (in a Kubernetes sandbox pool).
+	Pod *PodConfig `json:"pod,omitempty"`
 }
 
 // Defaults for requests that leave limits unset.
@@ -225,14 +227,23 @@ func (c Config) Validate() error {
 	for _, name := range c.Ladder {
 		switch name {
 		case "firecracker", "bwrap", "landlock":
-		case "kata", "gvisor", "pod":
-			return fmt.Errorf("sandbox rung %q is not available in standalone mode (it arrives with Kubernetes in Phase 4)", name)
+		case "pod":
+			if c.Pod == nil {
+				return errors.New("sandbox rung pod needs a sandbox.pod section")
+			}
+		case "kata", "gvisor":
+			return fmt.Errorf("sandbox rung %q: use the pod rung with sandbox.pod.runtime_class_name", name)
 		default:
 			return fmt.Errorf("unknown sandbox rung %q (use %s)", name, strings.Join(rungNames, ", "))
 		}
 	}
 	if c.Firecracker != nil {
 		if err := c.Firecracker.validate(); err != nil {
+			return err
+		}
+	}
+	if c.Pod != nil {
+		if err := c.Pod.validate(); err != nil {
 			return err
 		}
 	}
@@ -248,6 +259,11 @@ func New(cfg Config) (*Sandbox, error) {
 	}
 	if len(cfg.Ladder) == 0 {
 		cfg.Ladder = rungNames
+		if cfg.Pod != nil {
+			// Last, as on Kubernetes: a pod per sandbox when nothing in this
+			// process can confine the work.
+			cfg.Ladder = append(append([]string{}, rungNames...), "pod")
+		}
 	}
 	min, _ := ParseLevel(cfg.MinIsolation)
 	if cfg.Launcher == "" {
@@ -273,6 +289,8 @@ func New(cfg Config) (*Sandbox, error) {
 			s.drivers = append(s.drivers, &processRung{sb: s, kind: &bwrapDriver{cfg: &s.cfg}})
 		case "landlock":
 			s.drivers = append(s.drivers, &processRung{sb: s, kind: &landlockDriver{cfg: &s.cfg}})
+		case "pod":
+			s.drivers = append(s.drivers, newPodDriver(s))
 		}
 	}
 	return s, nil

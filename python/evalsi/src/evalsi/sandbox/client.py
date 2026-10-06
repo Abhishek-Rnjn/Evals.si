@@ -54,6 +54,10 @@ class SandboxUnavailable(SandboxError):
     """No rung on this host meets the requested isolation (fail closed)."""
 
 
+class SnapshotsUnsupported(SandboxError):
+    """The sandbox's rung cannot snapshot (the pod rung)."""
+
+
 @dataclass
 class SandboxSpec:
     """What a sandbox looks like; mirrors ``SandboxSpec`` in the proto."""
@@ -163,6 +167,8 @@ def _raise(exc: grpc.aio.AioRpcError) -> None:
     detail = exc.details() or ""
     if detail.startswith("SANDBOX_UNAVAILABLE"):
         raise SandboxUnavailable(detail) from exc
+    if exc.code() == grpc.StatusCode.UNIMPLEMENTED:
+        raise SnapshotsUnsupported(f"sandbox service: {detail}") from exc
     raise SandboxError(f"sandbox service: {exc.code().name}: {detail}") from exc
 
 
@@ -279,12 +285,36 @@ class Sandbox:
         await self.destroy()
 
 
+def _channel(address: str) -> aio.Channel:
+    """unix:///path (a local evalsid), or tls://host:port: sandboxd on another
+    pod, with mutual TLS from EVALSI_SANDBOX_TLS_CA, _CERT and _KEY."""
+    target = address.removeprefix("tls://")
+    if target == address:
+        return aio.insecure_channel(address)
+
+    def read(var: str) -> bytes:
+        path = os.environ.get(var)
+        if not path:
+            raise SandboxError(f"{address}: set {var} (mutual TLS to the sandbox service)")
+        return Path(path).read_bytes()
+
+    creds = grpc.ssl_channel_credentials(
+        root_certificates=read("EVALSI_SANDBOX_TLS_CA"),
+        private_key=read("EVALSI_SANDBOX_TLS_KEY"),
+        certificate_chain=read("EVALSI_SANDBOX_TLS_CERT"),
+    )
+    options = []
+    if name := os.environ.get("EVALSI_SANDBOX_TLS_SERVER_NAME"):
+        options.append(("grpc.ssl_target_name_override", name))
+    return aio.secure_channel(target, creds, options=options)
+
+
 class SandboxClient:
     def __init__(self, address: str, process: asyncio.subprocess.Process | None = None) -> None:
         self.address = address
         self._process = process
         self._cleanup: Path | None = None
-        self._channel = aio.insecure_channel(address)
+        self._channel = _channel(address)
         self.stub = pb_grpc.SandboxServiceStub(self._channel)
 
     async def create(self, spec: SandboxSpec | None = None) -> Sandbox:

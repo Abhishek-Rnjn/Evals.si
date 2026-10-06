@@ -23,7 +23,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from evalsi.sandbox.client import EgressEvent, ExecResult, Isolation, SandboxSpec
+from evalsi.sandbox.client import (
+    EgressEvent,
+    ExecResult,
+    Isolation,
+    SandboxSpec,
+    SnapshotsUnsupported,
+)
 
 # (messages in chat-completions form, tool names)
 #   -> {"text": str, "tool_calls": [(name, args_dict), ...]}
@@ -156,9 +162,10 @@ class ScriptedModelServer:
 class LocalSandbox:
     """Unconfined stand-in for a sandbox: a temporary directory. Tests only."""
 
-    def __init__(self, root: Path, spec: SandboxSpec) -> None:
+    def __init__(self, root: Path, spec: SandboxSpec, *, snapshots: bool = True) -> None:
         self.root = root
         self.spec = spec
+        self.snapshots = snapshots
         self.id = f"local-{root.name}"
         self.isolation = Isolation(
             driver="local-test",
@@ -227,6 +234,10 @@ class LocalSandbox:
         return out
 
     async def snapshot(self) -> str:
+        if not self.snapshots:
+            raise SnapshotsUnsupported(
+                "sandbox service: this sandbox rung does not support snapshots"
+            )
         snap = Path(tempfile.mkdtemp(prefix="evalsi-localsnap-"))
         shutil.copytree(self.root, snap / "state", symlinks=True, copy_function=_copy_if_present)
         return str(snap)
@@ -250,15 +261,17 @@ def _copy_if_present(src: str, dst: str) -> None:
 class LocalSandboxClient:
     """Creates LocalSandboxes. Records every spec it was asked for. Tests only."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, snapshots: bool = True) -> None:
         self.created: list[SandboxSpec] = []
         self.restored: list[tuple[str, str]] = []
+        # False: behave like a rung that cannot snapshot (the pod rung).
+        self.snapshots = snapshots
 
     async def create(self, spec: SandboxSpec | None = None) -> LocalSandbox:
         spec = spec or SandboxSpec()
         self.created.append(spec)
         root = Path(tempfile.mkdtemp(prefix="evalsi-local-"))
-        sandbox = LocalSandbox(root, spec)
+        sandbox = LocalSandbox(root, spec, snapshots=self.snapshots)
         await sandbox.write_files(spec.files)
         return sandbox
 

@@ -18,7 +18,13 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from evalsi.sandbox import SandboxError
-from evalsi.sandbox.client import EgressEvent, ExecResult, Isolation, SandboxSpec
+from evalsi.sandbox.client import (
+    EgressEvent,
+    ExecResult,
+    Isolation,
+    SandboxSpec,
+    SnapshotsUnsupported,
+)
 from evalsi_harness.events import PolicyEvent
 from evalsi_harness.task import EnvironmentConfig, TaskError
 
@@ -116,6 +122,9 @@ class EnvironmentPool:
     def __init__(self, client: SandboxClientLike) -> None:
         self.client = client
         self._snapshots: dict[str, str] = {}
+        # Environments whose rung cannot snapshot (the pod rung): their setup
+        # runs again in every trial's own sandbox.
+        self._per_trial: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
         self._failed: dict[str, str] = {}
 
@@ -132,12 +141,53 @@ class EnvironmentPool:
                 sandbox = await self.client.create(_spec(config, network, allow))
                 return TaskEnvironment(sandbox, config)
             snapshot = await self._setup(config)
+            if snapshot is None:
+                return await self._set_up_in_place(config, network, allow)
             sandbox = await self.client.restore(snapshot, network=network, allow_hosts=allow)
         except SandboxError as exc:
             raise TaskError(f"environment: {exc}") from exc
         return TaskEnvironment(sandbox, config)
 
-    async def _setup(self, config: EnvironmentConfig) -> str:
+    async def _set_up_in_place(
+        self, config: EnvironmentConfig, network: str, allow: list[str]
+    ) -> TaskEnvironment:
+        """Without snapshots, setup runs in the trial's own sandbox, so it gets
+        the agent's network: a setup that needs more fails, rather than the
+        agent getting the setup's network."""
+        setup_network = config.setup_network or config.sandbox.network
+        setup_allow = set(config.setup_allow_hosts or config.sandbox.allow_hosts)
+        wider = (setup_network == "allow" and network != "allow") or (
+            setup_network == "allowlist" and network != "allow" and not setup_allow <= set(allow)
+        )
+        if wider:
+            raise TaskError(
+                "environment: this sandbox rung cannot snapshot, so setup would run with the "
+                "agent's network, which is narrower than setup_network; use a prebuilt image "
+                "(environment.image) or a rung with snapshots (bubblewrap, Firecracker)"
+            )
+        sandbox = await self.client.create(_spec(config, network, allow))
+        try:
+            await self._run_setup(sandbox, config)
+        except BaseException:
+            await sandbox.destroy()
+            raise
+        return TaskEnvironment(sandbox, config)
+
+    async def _run_setup(self, sandbox: Any, config: EnvironmentConfig) -> None:
+        for command in config.setup:
+            result = await sandbox.exec(
+                ["sh", "-c", command], timeout_s=config.setup_timeout_s, env=config.env
+            )
+            if not result.ok:
+                tail = (result.stderr or result.stdout)[-1500:]
+                raise TaskError(
+                    f"environment setup failed ({result.outcome}, exit "
+                    f"{result.exit_code}) running {shlex.quote(command)}: {tail}"
+                )
+
+    async def _setup(self, config: EnvironmentConfig) -> str | None:
+        """The environment's setup snapshot, made once; None when the rung
+        cannot snapshot (setup then runs per trial)."""
         key = config.key()
         lock = self._locks.setdefault(key, asyncio.Lock())
         async with lock:
@@ -145,24 +195,24 @@ class EnvironmentPool:
                 raise TaskError(self._failed[key])
             if key in self._snapshots:
                 return self._snapshots[key]
+            if key in self._per_trial:
+                return None
             network = config.setup_network or config.sandbox.network
             allow = config.setup_allow_hosts or config.sandbox.allow_hosts
             if network != "allowlist":
                 allow = []
             sandbox = await self.client.create(_spec(config, network, allow))
             try:
-                for command in config.setup:
-                    result = await sandbox.exec(
-                        ["sh", "-c", command], timeout_s=config.setup_timeout_s, env=config.env
-                    )
-                    if not result.ok:
-                        tail = (result.stderr or result.stdout)[-1500:]
-                        self._failed[key] = (
-                            f"environment setup failed ({result.outcome}, exit "
-                            f"{result.exit_code}) running {shlex.quote(command)}: {tail}"
-                        )
-                        raise TaskError(self._failed[key])
-                snapshot: str = await sandbox.snapshot()
+                try:
+                    await self._run_setup(sandbox, config)
+                except TaskError as exc:
+                    self._failed[key] = str(exc)
+                    raise
+                try:
+                    snapshot: str = await sandbox.snapshot()
+                except SnapshotsUnsupported:
+                    self._per_trial.add(key)
+                    return None
             finally:
                 await sandbox.destroy()
             self._snapshots[key] = snapshot

@@ -5,6 +5,8 @@ package sandboxsvc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -77,6 +79,8 @@ func toErr(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case errors.Is(err, sandbox.ErrNoSnapshots):
+		return connect.NewError(connect.CodeUnimplemented, err)
 	case errors.Is(err, sandbox.ErrUnavailable):
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("SANDBOX_UNAVAILABLE: "+err.Error()))
 	case errors.Is(err, sandbox.ErrNotFound):
@@ -264,4 +268,63 @@ func (s *Service) DeleteSnapshot(_ context.Context, req *connect.Request[sandbox
 		return nil, toErr(err)
 	}
 	return connect.NewResponse(&sandboxv1alpha1.DeleteSnapshotResponse{}), nil
+}
+
+// ServeTLS listens on a TCP address with mutual TLS until ctx ends: the
+// sandbox pool and the sandboxd DaemonSet, which workers on other pods
+// reach. Every client must present a certificate from the configured CA;
+// with allowed set, its SPIFFE ID (or subject common name) must be listed.
+// It returns the bound address.
+func ServeTLS(ctx context.Context, m *sandbox.Manager, addr string, tlsCfg *tls.Config, allowed []string) (stop func(), bound string, err error) {
+	if tlsCfg == nil || tlsCfg.ClientAuth != tls.RequireAndVerifyClientCert {
+		return nil, "", errors.New("sandbox service on TCP needs mutual TLS (a client CA, client certificates required)")
+	}
+	ln, err := tls.Listen("tcp", addr, tlsCfg)
+	if err != nil {
+		return nil, "", err
+	}
+	mux := http.NewServeMux()
+	mux.Handle(New(m).Handler())
+	var h http.Handler = mux
+	if len(allowed) > 0 {
+		ok := map[string]bool{}
+		for _, a := range allowed {
+			ok[a] = true
+		}
+		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 || !ok[peerID(r.TLS.PeerCertificates[0])] {
+				http.Error(w, "client not allowed", http.StatusForbidden)
+				return
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
+	p := new(http.Protocols)
+	p.SetHTTP1(true)
+	p.SetHTTP2(true)
+	srv := &http.Server{Handler: h, Protocols: p, ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(ln) }()
+	var once sync.Once
+	stop = func() {
+		once.Do(func() {
+			sctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(sctx)
+		})
+	}
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+	return stop, ln.Addr().String(), nil
+}
+
+// peerID is a client certificate's SPIFFE ID, or its subject common name.
+func peerID(c *x509.Certificate) string {
+	for _, u := range c.URIs {
+		if u.Scheme == "spiffe" {
+			return u.String()
+		}
+	}
+	return c.Subject.CommonName
 }

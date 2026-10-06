@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/yaml"
@@ -51,6 +52,22 @@ type Worker struct {
 	Pools []string `json:"pools,omitempty"`
 	// Tasks a worker process runs at once, per pool; default 4.
 	Concurrency int `json:"concurrency,omitempty"`
+	// A remote sandbox service (the Kubernetes sandbox pool, or sandboxd on
+	// KVM nodes) for agent sandboxes and code evaluators, instead of
+	// sandboxes in this process. Worker pods hold credentials; sandboxes
+	// then never run beside them.
+	SandboxService *SandboxService `json:"sandbox_service,omitempty"`
+}
+
+// SandboxService is a remote SandboxService, reached over mutual TLS.
+type SandboxService struct {
+	// tls://host:port
+	Address  string `json:"address"`
+	CAFile   string `json:"ca_file"`
+	CertFile string `json:"cert_file"`
+	KeyFile  string `json:"key_file"`
+	// The name its certificate is checked against, when not the address host.
+	ServerName string `json:"server_name,omitempty"`
 }
 
 // Evaluate tunes the Score path.
@@ -307,6 +324,14 @@ func (c Config) Validate() error {
 	}
 	if p := c.Storage.Postgres; p != nil && p.ResolvedDSN() == "" {
 		errs = append(errs, errors.New("storage.postgres needs dsn, or dsn_env naming a set variable"))
+	}
+	if s := c.Worker.SandboxService; s != nil {
+		if !strings.HasPrefix(s.Address, "tls://") {
+			errs = append(errs, errors.New("worker.sandbox_service.address must be tls://host:port"))
+		}
+		if s.CAFile == "" || s.CertFile == "" || s.KeyFile == "" {
+			errs = append(errs, errors.New("worker.sandbox_service needs ca_file, cert_file and key_file (mutual TLS)"))
+		}
 	}
 	if ch := c.Storage.ClickHouse; ch != nil && ch.URL == "" {
 		errs = append(errs, errors.New("storage.clickhouse needs url"))

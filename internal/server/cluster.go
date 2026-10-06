@@ -30,6 +30,16 @@ func startLocalWorker(ctx context.Context, cfg config.Config, log *slog.Logger, 
 	if err != nil {
 		return nil, nil, err
 	}
+	if remote := cfg.Worker.SandboxService; remote != nil {
+		// Sandboxes live in the sandbox pool; none run here.
+		workerEnv = append(workerEnv,
+			"EVALSI_SANDBOX_ADDR="+remote.Address, "EVALSI_SANDBOX_TLS_CA="+remote.CAFile,
+			"EVALSI_SANDBOX_TLS_CERT="+remote.CertFile, "EVALSI_SANDBOX_TLS_KEY="+remote.KeyFile)
+		if remote.ServerName != "" {
+			workerEnv = append(workerEnv, "EVALSI_SANDBOX_TLS_SERVER_NAME="+remote.ServerName)
+		}
+		return startPython(ctx, cfg, workerEnv, log, output, nil)
+	}
 	// Agent harnesses in the worker create persistent sandboxes through
 	// SandboxService on a private socket; it is never on the API port.
 	sb, err := sandbox.New(cfg.Sandbox)
@@ -58,6 +68,16 @@ func startLocalWorker(ctx context.Context, cfg config.Config, log *slog.Logger, 
 	}
 	cleanups = append(cleanups, stopSandbox)
 	workerEnv = append(workerEnv, "EVALSI_SANDBOX_ADDR=unix://"+socket)
+	return startPython(ctx, cfg, workerEnv, log, output, cleanups)
+}
+
+// startPython starts the Python worker; cleanups run, in reverse, after it stops.
+func startPython(ctx context.Context, cfg config.Config, workerEnv []string, log *slog.Logger, output io.Writer, cleanups []func()) (pluginhost.Worker, func(), error) {
+	stop := func() {
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+	}
 	proc, err := pluginhost.Start(ctx, pluginhost.Options{
 		Env:          workerEnv,
 		Command:      cfg.Worker.Command,

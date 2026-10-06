@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -36,6 +37,8 @@ func main() {
 		switch os.Args[1] {
 		case "agent":
 			os.Exit(agent(os.Args[2:]))
+		case "install":
+			os.Exit(install(os.Args[2:]))
 		case "limit":
 			os.Exit(limit(os.Args[2:]))
 		case "version":
@@ -144,7 +147,9 @@ func (system) SetTime(t time.Time) error {
 
 func agent(args []string) int {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
-	listen := fs.String("listen", "", "tests: unix:///path instead of vsock")
+	listen := fs.String("listen", "", "unix:///path (tests) or tcp://:PORT (a sandbox pod) instead of vsock")
+	tokenEnv := fs.String("token-env", "", "a sandbox pod: environment variable holding the bearer token callers must present")
+	egress := fs.String("egress", "", "a sandbox pod: host:port of the egress proxy, for StartEgress")
 	root := fs.String("root", "", "tests: a directory standing in for the guest's /")
 	hostSocket := fs.String("host-socket", "", "tests: unix socket prefix standing in for the host's vsock ports")
 	if err := fs.Parse(args); err != nil {
@@ -161,7 +166,29 @@ func agent(args []string) int {
 	}
 	var ln net.Listener
 	var err error
-	if socket, ok := strings.CutPrefix(*listen, "unix://"); ok {
+	if addr, ok := strings.CutPrefix(*listen, "tcp://"); ok {
+		// A sandbox pod: on the pod network, behind a token, with the
+		// container's environment as the base for commands.
+		if *tokenEnv == "" || os.Getenv(*tokenEnv) == "" {
+			fmt.Fprintln(os.Stderr, "evalsi-guest: a tcp listener needs --token-env naming a set variable")
+			return 2
+		}
+		a.Token = os.Getenv(*tokenEnv)
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, *tokenEnv+"=") {
+				a.BaseEnv = append(a.BaseEnv, kv)
+			}
+		}
+		_ = os.Unsetenv(*tokenEnv)
+		upstream := *egress
+		a.DialHost = func(uint32) (net.Conn, error) {
+			if upstream == "" {
+				return nil, fmt.Errorf("no egress proxy")
+			}
+			return net.DialTimeout("tcp", upstream, 10*time.Second)
+		}
+		ln, err = net.Listen("tcp", addr)
+	} else if socket, ok := strings.CutPrefix(*listen, "unix://"); ok {
 		_ = os.Remove(socket)
 		ln, err = net.Listen("unix", socket)
 		a.DialHost = func(port uint32) (net.Conn, error) {
@@ -209,4 +236,27 @@ func limit(args []string) int {
 	err = syscall.Exec(path, argv, os.Environ())
 	fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], err)
 	return 126
+}
+
+// install is `evalsi-guest install DIR`: it copies itself to DIR, which is how
+// a sandbox pod's init container hands the agent to the task's image.
+func install(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "evalsi-guest: install DIR")
+		return 2
+	}
+	self, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "evalsi-guest: %v\n", err)
+		return 1
+	}
+	data, err := os.ReadFile(self)
+	if err == nil {
+		err = os.WriteFile(filepath.Join(args[0], "evalsi-guest"), data, 0o755)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "evalsi-guest: install: %v\n", err)
+		return 1
+	}
+	return 0
 }
