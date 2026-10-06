@@ -2,11 +2,12 @@
 
 An agent run puts an agent to work on tasks and grades the result. Each task
 has its own sandboxed environment. A checker grades the end state; evaluators
-then score the trajectory and the change the agent made. This is Phase 3 of
-the [roadmap](../DESIGN.md#23-roadmap).
+then score the trajectory and the change the agent made. Agent runs arrived in
+Phase 3 of the [roadmap](../DESIGN.md#23-roadmap); Phase 4 runs them on
+Kubernetes too.
 
 - **The agent** is either the built-in tool-calling agent on any OpenAI-compatible or Anthropic model, or your own agent: over A2A, MCP, an OpenAI Responses-compatible API or plain HTTP, or as a command-line program run inside the sandbox.
-- **The environment** is an OCI image with files, setup commands and a sandbox policy. It runs on the strongest sandbox rung the host has: Firecracker, bubblewrap or Landlock.
+- **The environment** is an OCI image with files, setup commands and a sandbox policy. It runs on the strongest sandbox rung the host has: Firecracker, bubblewrap or Landlock, or on Kubernetes a hardened pod per sandbox.
 - **The grading** is the environment's checker, which runs after the agent finishes, plus any evaluators. With trials, pass@k and pass^k come for free.
 - **Benchmarks** import directly: SWE-bench, τ-bench (tau2), Terminal-Bench and other Harbor datasets, and BFCL.
 
@@ -193,6 +194,10 @@ How the Firecracker rung works:
 - Each VM runs `evalsi-guest` as init, which evalsid talks to over vsock.
 - There is no network device. Egress, when a policy allows it, reaches the same logging egress proxy over vsock, so the rung needs no tap devices or root.
 - Snapshots restore with fresh entropy and the clock set.
+
+### On Kubernetes
+
+Workers hold credentials, so they never run sandboxes themselves: they lease them over mutual TLS from a sandbox pool, set as `sandbox.address` in the workers' config. A pool is either `evalsi-sandboxd` (bubblewrap, or Firecracker on KVM nodes) or a `SandboxClass`, which can also use the **pod** rung: one hardened pod per sandbox from the task's image, with no service-account token and a NetworkPolicy that lets it reach only its pool. The pod rung cannot snapshot, so environment setup runs once per trial. The same run file works with `kubectl apply` as an `EvalRun`. See the [Kubernetes guide](kubernetes.md#sandboxes-on-kubernetes).
 
 ## Running untrusted specs on a server
 

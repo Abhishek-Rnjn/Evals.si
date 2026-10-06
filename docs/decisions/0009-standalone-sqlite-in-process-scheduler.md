@@ -1,6 +1,6 @@
 # 0009. Standalone storage and scheduling: SQLite and an in-process scheduler
 
-- **Status:** Accepted, 2026-10-05 (Phase 1)
+- **Status:** Accepted, 2026-10-05 (Phase 1). Phase 4 added NATS JetStream, PostgreSQL and ClickHouse for Kubernetes as planned; standalone is unchanged, and DuckDB is still deferred.
 
 ## Context
 

@@ -1,6 +1,6 @@
 # 0005. Sandbox isolation ladder
 
-- **Status:** Accepted, 2026-10-05 (design plan D6)
+- **Status:** Accepted, 2026-10-05 (design plan D6). Implemented: the standalone ladder in Phases 1 and 3, the Kubernetes ladder in Phase 4.
 
 ## Decision
 
