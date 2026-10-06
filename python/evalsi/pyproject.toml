@@ -21,6 +21,8 @@ classifiers = [
 anthropic = ["anthropic>=1.0"]
 hf = ["datasets>=2.18"]
 jsonschema = ["jsonschema>=4.0"]
+# Symbolic answer equivalence in the rl pack's math-equiv.
+math = ["sympy>=1.13"]
 # The worker that serves evaluators to the evalsid server over gRPC.
 server = ["grpcio>=1.84", "grpcio-health-checking>=1.84"]
 
@@ -37,6 +39,7 @@ rag = "evalsi.packs.rag:PACK"
 safety = "evalsi.packs.safety:PACK"
 agent = "evalsi.packs.agent:PACK"
 code = "evalsi.packs.code:PACK"
+rl = "evalsi.packs.rl:PACK"
 
 [project.urls]
 Repository = "https://github.com/abhishek-rnjn/evals.si"
