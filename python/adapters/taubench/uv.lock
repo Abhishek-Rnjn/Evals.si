@@ -437,8 +437,9 @@ requires-dist = [
     { name = "jsonschema", marker = "extra == 'jsonschema'", specifier = ">=4.0" },
     { name = "protobuf", specifier = ">=7.35" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "sympy", marker = "extra == 'math'", specifier = ">=1.13" },
 ]
-provides-extras = ["anthropic", "hf", "jsonschema", "server"]
+provides-extras = ["anthropic", "hf", "jsonschema", "math", "server"]
 
 [[package]]
 name = "evalsi-adapter-taubench"
