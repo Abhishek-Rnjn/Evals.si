@@ -184,6 +184,17 @@ sandbox:
 
 The isolation report says which limits applied, and an out-of-memory kill appears in the result's denials.
 
+**Signed images.** To use only images signed with your cosign key:
+
+```yaml
+sandbox:
+  image_signatures:
+    keys: [/etc/evalsi/cosign.pub]   # files or PEM text; any one key suffices
+    # allow_local: true              # also allow oci-layout:, docker-archive: and dir: images
+```
+
+An image is used only when the registry holds a signature by one of the keys, on the image or on the index its tag points to (`cosign sign --key cosign.key <image>`). Signatures must be in cosign's `.sig` tag format, which is cosign 2's default. Verification is offline, with no transparency log. For an air-gapped registry, copy signatures with `cosign copy`. The pod rung's images are pulled by the kubelet, so enforce signatures there with your cluster's admission policy.
+
 To enable Firecracker:
 
 ```yaml

@@ -25,7 +25,7 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | DuckDB for standalone analytics | Waits for cross-run analytics. | Decision 0009 |
 | Platform wheels bundling evalsid | Releases publish archives (evalsid, a static bubblewrap), wheels, images, charts and the bundle (`.github/workflows/release.yml`), but no tag has been cut, and the wheels do not bundle evalsid as decision 0006 suggests. | Decision 0006 |
 | Sandbox-time quotas | Per-project quotas cover concurrent and stored runs, daily judge and target tokens, and reward rollouts in flight; sandbox minutes are not metered. Concurrency quotas are per replica. | §17 "Tenancy" |
-| Image signature verification (cosign) | Plugin and environment images are pinned by digest only. | §17 "Other security controls" |
+| Keyless image signatures | `sandbox.image_signatures` verifies cosign key signatures (`.sig` tags) offline. Keyless (Fulcio certificates, Rekor) and the newer bundle-as-referrer format are not supported, and our own release images are not signed yet. | §17 "Other security controls" |
 | Feeding scores back into agentgateway | Quality-aware routing; depends on the gateway's extension points. | §16 "Working with agentgateway" |
 | Separate process roles | Every `evalsid serve` replica serves API and ingest; leases pick the scheduler and policy engine. Split only if load needs it. | §23 Phase 4 deviations |
 | Pod-rung snapshots | The pod rung cannot snapshot, so environment setup runs per trial. | §23 Phase 4 deviations |

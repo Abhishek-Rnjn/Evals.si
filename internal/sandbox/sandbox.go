@@ -176,6 +176,10 @@ type Config struct {
 	Cgroup string `json:"cgroup,omitempty"`
 	// CPUs each execution may use (cpu.max), with cgroups; 0: no limit.
 	CgroupCPUs float64 `json:"cgroup_cpus,omitempty"`
+	// Require cosign signatures on the images sandboxes use (the
+	// bubblewrap and Firecracker rungs; the pod rung's images are pulled by
+	// the kubelet, where cluster admission policy applies).
+	ImageSignatures *SignaturePolicy `json:"image_signatures,omitempty"`
 }
 
 // Defaults for requests that leave limits unset.
@@ -257,6 +261,11 @@ func (c Config) Validate() error {
 			return err
 		}
 	}
+	if c.ImageSignatures != nil {
+		if err := c.ImageSignatures.validate(); err != nil {
+			return err
+		}
+	}
 	if c.CgroupCPUs < 0 {
 		return errors.New("sandbox.cgroup_cpus must not be negative")
 	}
@@ -301,6 +310,13 @@ func New(cfg Config) (*Sandbox, error) {
 		}
 	}
 	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}, images: newImageStore(filepath.Join(cfg.CacheDir, "images"))}
+	if cfg.ImageSignatures != nil {
+		v, err := newSignatureVerifier(cfg.ImageSignatures)
+		if err != nil {
+			return nil, err
+		}
+		s.images.verifier = v
+	}
 	if slices.Contains(cfg.Ladder, "bwrap") || slices.Contains(cfg.Ladder, "landlock") {
 		pool, err := setupCgroups(cfg.Cgroup, cfg.CgroupCPUs)
 		if err != nil {

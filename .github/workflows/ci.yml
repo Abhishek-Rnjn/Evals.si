@@ -66,6 +66,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - uses: sigstore/cosign-installer@v3   # image signatures made by the real CLI must verify
+        with:
+          cosign-release: v2.6.1
       - name: Sandbox prerequisites
         # bubblewrap for the namespaced rung; Ubuntu 24.04 restricts unprivileged
         # user namespaces through AppArmor unless this is relaxed.
