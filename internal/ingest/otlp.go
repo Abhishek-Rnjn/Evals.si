@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	collectortracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -57,6 +58,30 @@ type Receiver struct {
 	assembler *Assembler
 	assign    Assign
 	opts      []connect.HandlerOption
+	// In a cluster, received spans go to the shared span stream instead of
+	// the local assembler (see Forward).
+	forward Forward
+}
+
+// Forward sends one OTLP resource's spans, with the project and labels its
+// credential was assigned, to wherever traces are assembled. An error fails
+// the export, so the client retries.
+type Forward func(ctx context.Context, rs *tracepb.ResourceSpans, project string, labels map[string]string) error
+
+// SetForward sends spans to forward instead of the local assembler.
+func (r *Receiver) SetForward(f Forward) { r.forward = f }
+
+// SpansOfResource rebuilds the spans of one resource that a Forward sent,
+// for the assembler.
+func SpansOfResource(rs *tracepb.ResourceSpans, project string, labels map[string]string) []Span {
+	res := ToAttrs(rs.GetResource().GetAttributes())
+	var out []Span
+	for _, ss := range rs.GetScopeSpans() {
+		for _, sp := range ss.GetSpans() {
+			out = append(out, Span{Span: sp, Resource: res, Project: project, Labels: labels})
+		}
+	}
+	return out
 }
 
 // NewReceiver builds a receiver. assign may be nil (DefaultAssign).
@@ -76,18 +101,30 @@ func (r *Receiver) Register(mux *http.ServeMux) {
 // accept assigns every resource's spans before buffering any, so a rejected
 // export adds nothing.
 func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTraceServiceRequest) error {
-	var spans []Span
+	type assigned struct {
+		rs      *tracepb.ResourceSpans
+		project string
+		labels  map[string]string
+	}
+	var all []assigned
 	for _, rs := range msg.GetResourceSpans() {
-		res := ToAttrs(rs.GetResource().GetAttributes())
-		project, labels, err := r.assign(ctx, res)
+		project, labels, err := r.assign(ctx, ToAttrs(rs.GetResource().GetAttributes()))
 		if err != nil {
 			return err
 		}
-		for _, ss := range rs.GetScopeSpans() {
-			for _, sp := range ss.GetSpans() {
-				spans = append(spans, Span{Span: sp, Resource: res, Project: project, Labels: labels})
+		all = append(all, assigned{rs, project, labels})
+	}
+	if r.forward != nil {
+		for _, a := range all {
+			if err := r.forward(ctx, a.rs, a.project, a.labels); err != nil {
+				return connect.NewError(connect.CodeUnavailable, err)
 			}
 		}
+		return nil
+	}
+	var spans []Span
+	for _, a := range all {
+		spans = append(spans, SpansOfResource(a.rs, a.project, a.labels)...)
 	}
 	r.assembler.Add(spans)
 	return nil

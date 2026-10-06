@@ -24,6 +24,16 @@ data_dir: .evalsi            # SQLite database for runs, traces and policies
 #     endpoint: s3.us-east-1.amazonaws.com         # or minio:9000 with insecure and path_style
 #     region: us-east-1                            # credentials: the AWS chain (IRSA, ...)
 
+# Several replicas and worker processes (Kubernetes): work goes through NATS
+# JetStream queues per pool, served by `evalsid worker --pools ...`. API
+# replicas share storage.postgres; runs survive a replica stopping (another
+# adopts them), and one replica at a time is elected the policy engine.
+# cluster:
+#   url: nats://nats:4222
+#   # embedded: {listen: 127.0.0.1:4222}    # or run NATS inside this evalsid
+# worker:
+#   pools: [cpu, judge]                       # this process also serves these pools
+
 worker:
   # Runs the evalsi CLI; evalsid appends "worker --listen unix://...".
   # Use the interpreter of the environment where evalsi[server] is installed.

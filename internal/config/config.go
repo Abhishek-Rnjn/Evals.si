@@ -12,6 +12,7 @@ import (
 
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
@@ -43,6 +44,13 @@ type Worker struct {
 	StartTimeout string `json:"start_timeout"`
 	// Disable the worker's judge response cache.
 	NoCache bool `json:"no_cache"`
+	// In a cluster: the pools this process's Python worker serves from the
+	// work queues (cpu, judge, gpu, sandbox, harness). For `evalsid worker`
+	// the default is every pool; for `evalsid serve`, none (an API replica
+	// sends all work to worker processes).
+	Pools []string `json:"pools,omitempty"`
+	// Tasks a worker process runs at once, per pool; default 4.
+	Concurrency int `json:"concurrency,omitempty"`
 }
 
 // Evaluate tunes the Score path.
@@ -59,6 +67,11 @@ type Evaluate struct {
 type Runs struct {
 	// Runs executing at once; the rest wait as PENDING.
 	MaxConcurrent int `json:"max_concurrent"`
+	// In a cluster: how long a replica's claim on a run lasts without
+	// renewal (default 30s), and how often replicas look for runs to adopt
+	// from replicas that stopped (default 10s).
+	LeaseTTL      string `json:"lease_ttl,omitempty"`
+	AdoptInterval string `json:"adopt_interval,omitempty"`
 }
 
 // OTLP configures trace ingestion. OTLP is always served on the main port
@@ -92,9 +105,13 @@ type Config struct {
 	DatasetsDir string `json:"datasets_dir"`
 	// External databases and object storage; SQLite in data_dir by default.
 	Storage Storage `json:"storage"`
-	Runs    Runs    `json:"runs"`
-	OTLP    OTLP    `json:"otlp"`
-	Traces  Traces  `json:"traces"`
+	// Worker processes and evalsid replicas, connected through NATS
+	// JetStream. Several API replicas must share storage.postgres; worker
+	// processes use no database.
+	Cluster *cluster.Config `json:"cluster,omitempty"`
+	Runs    Runs            `json:"runs"`
+	OTLP    OTLP            `json:"otlp"`
+	Traces  Traces          `json:"traces"`
 	// Online evaluation policies applied at startup, in the OnlineEvalPolicy
 	// JSON form. They replace stored policies of the same name.
 	Policies     []json.RawMessage `json:"policies"`
@@ -267,6 +284,14 @@ func (c Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("data_dir is required"))
+	}
+	for name, d := range map[string]string{"runs.lease_ttl": c.Runs.LeaseTTL, "runs.adopt_interval": c.Runs.AdoptInterval} {
+		if d == "" {
+			continue
+		}
+		if v, err := time.ParseDuration(d); err != nil || v <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be a positive duration", name))
+		}
 	}
 	if c.Runs.MaxConcurrent < 1 {
 		errs = append(errs, errors.New("runs.max_concurrent must be positive"))

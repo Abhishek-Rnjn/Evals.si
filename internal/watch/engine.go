@@ -33,6 +33,11 @@ type Options struct {
 	DatasetsDir string
 	// The object-storage client, when DatasetsDir is s3://.
 	Objects *objstore.Client
+	// In a cluster: called after this replica changes policies, so the
+	// others reload; and the elected policy engine's statistics, which a
+	// replica that is not the leader returns.
+	Changed     func()
+	RemoteStats func(name string) (*evalsiv1alpha1.PolicyStats, bool, error)
 	// Traces evaluated together per worker call.
 	BatchSize int
 	// How long the dispatcher waits to fill a batch.
@@ -74,6 +79,8 @@ type Engine struct {
 
 	mu       sync.Mutex
 	policies map[string]*policyState
+	// Set on a replica that is not the elected policy engine.
+	follower atomic.Bool
 
 	TracesIngested atomic.Int64
 	TracesDropped  atomic.Int64
@@ -129,6 +136,45 @@ func newState(c *compiled) *policyState {
 	return st
 }
 
+// SetLeader marks this replica as the elected policy engine (in a cluster;
+// a single replica always is). Only the leader receives traces, so only its
+// statistics count.
+func (e *Engine) SetLeader(leader bool) { e.follower.Store(!leader) }
+
+// Reload re-reads policies from the store (another replica changed them).
+// Unchanged policies keep their state; changed ones keep their counters.
+func (e *Engine) Reload(ctx context.Context) error {
+	stored, err := e.store.Policies(ctx)
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	next := map[string]*policyState{}
+	for _, p := range stored {
+		if p.GetProject() == "" {
+			p.Project = DefaultProject
+		}
+		old := e.policies[p.GetName()]
+		if old != nil && proto.Equal(old.c.policy, p) {
+			next[p.GetName()] = old
+			continue
+		}
+		c, err := compile(p, e.eval)
+		if err != nil {
+			e.log.Error("skipping stored policy", "policy", p.GetName(), "err", err)
+			continue
+		}
+		st := newState(c)
+		if old != nil {
+			st.seen, st.matched, st.sampled, st.evaluated, st.promoted, st.errored = old.seen, old.matched, old.sampled, old.evaluated, old.promoted, old.errored
+		}
+		next[p.GetName()] = st
+	}
+	e.policies = next
+	return nil
+}
+
 // Apply validates, stores and activates a policy, replacing one with the same name.
 func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error {
 	if p.GetProject() == "" {
@@ -152,6 +198,9 @@ func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) 
 		st.seen, st.matched, st.sampled, st.evaluated, st.promoted, st.errored = old.seen, old.matched, old.sampled, old.evaluated, old.promoted, old.errored
 	}
 	e.policies[p.GetName()] = st
+	if e.opts.Changed != nil {
+		e.opts.Changed()
+	}
 	return nil
 }
 
@@ -441,6 +490,18 @@ func (e *Engine) promoteRecord(project, dataset string, record *evalsiv1alpha1.R
 
 // Stats reports a policy's counters, windows and alerts.
 func (e *Engine) Stats(name string) (*evalsiv1alpha1.PolicyStats, bool) {
+	if e.follower.Load() && e.opts.RemoteStats != nil {
+		st, ok, err := e.opts.RemoteStats(name)
+		if err == nil {
+			return st, ok
+		}
+		e.log.Warn("asking the policy engine for statistics", "policy", name, "err", err)
+	}
+	return e.LocalStats(name)
+}
+
+// LocalStats are this replica's own statistics for a policy.
+func (e *Engine) LocalStats(name string) (*evalsiv1alpha1.PolicyStats, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	st, ok := e.policies[name]
@@ -506,5 +567,8 @@ func (e *Engine) Delete(ctx context.Context, name string) error {
 	e.mu.Lock()
 	delete(e.policies, name)
 	e.mu.Unlock()
+	if e.opts.Changed != nil {
+		e.opts.Changed()
+	}
 	return nil
 }

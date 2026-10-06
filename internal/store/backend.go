@@ -57,7 +57,7 @@ func OpenPostgres(ctx context.Context, dsn string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, c.d.ddl(schema+authSchema)); err != nil {
+	if _, err := tx.ExecContext(ctx, c.d.ddl(schema+authSchema+leaseSchema)); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
