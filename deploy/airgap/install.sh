@@ -6,6 +6,9 @@
 #   ./install.sh --registry registry.internal:5000 [--namespace evalsi] [-- <helm --set ...>]
 #   ./install.sh --kind <cluster> --registry airgap.invalid   # testing
 #
+# --with-sandboxd also installs the node sandbox pool (--sandboxd-mode
+# bwrap, privileged or firecracker; see the evalsi-sandboxd chart).
+#
 # Images keep their paths under the registry, with docker.io/library images
 # at their short names (nats, postgres), as the charts' global.imageRegistry
 # expects. Needs docker, helm and kubectl.
@@ -16,12 +19,14 @@ registry=""
 namespace=evalsi
 kind_cluster=""
 sandboxd=false
+sandboxd_mode=bwrap
 while [ $# -gt 0 ]; do
   case "$1" in
     --registry) registry="$2"; shift 2 ;;
     --namespace) namespace="$2"; shift 2 ;;
     --kind) kind_cluster="$2"; shift 2 ;;
     --with-sandboxd) sandboxd=true; shift ;;
+    --sandboxd-mode) sandboxd_mode="$2"; shift 2 ;;
     --) shift; break ;;
     -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
@@ -61,6 +66,6 @@ helm upgrade --install evalsi "$bundle"/charts/evalsi-[0-9]*.tgz -n "$namespace"
   --set global.imageRegistry="$registry" --set image.tag="$tag" "$@"
 if $sandboxd; then
   helm upgrade --install evalsi-sandboxd "$bundle"/charts/evalsi-sandboxd-*.tgz -n "$namespace" \
-    --set global.imageRegistry="$registry" --set image.tag="$tag"
+    --set global.imageRegistry="$registry" --set image.tag="$tag" --set mode="$sandboxd_mode"
 fi
 echo "installed from the bundle into namespace $namespace (images from $registry)"

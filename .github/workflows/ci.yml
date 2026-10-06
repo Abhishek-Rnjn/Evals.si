@@ -69,9 +69,12 @@ jobs:
       - name: Sandbox prerequisites
         # bubblewrap for the namespaced rung; Ubuntu 24.04 restricts unprivileged
         # user namespaces through AppArmor unless this is relaxed.
+        # The pod rung's tests run their fake pods on the host, at the paths a
+        # pod would mount.
         run: |
           sudo apt-get install -y bubblewrap
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo install -d -m 1777 /workspace /work
       - name: gofmt
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - uses: azure/setup-helm@v4

@@ -10,7 +10,7 @@ global:
 #   unmasked /proc and no seccomp or AppArmor profile (needs Kubernetes user
 #   namespaces: 1.33+, a runtime and kernel that support them).
 # privileged: the same rungs in a privileged container, for nodes without
-#   user namespaces.
+#   user namespaces (and kind, whose nodes are containers).
 # firecracker: microVMs, privileged with /dev/kvm (KVM nodes only).
 mode: bwrap
 minIsolation: namespaced

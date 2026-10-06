@@ -70,7 +70,9 @@ kind get clusters | grep -qx "$cluster" || kind create cluster --name "$cluster"
 kubectl cluster-info
 
 step "install from the bundle"
-"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --with-sandboxd -- \
+# kind's nodes are containers, where runc cannot set up user-namespaced
+# pods (sysfs), so the bubblewrap pool runs privileged here.
+"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --with-sandboxd --sandboxd-mode privileged -- \
   --set server.replicas=2 --set devPostgres.enabled=true \
   --set operator.sandboxClasses=true \
   --set sandbox.address="tls://evalsi-sandboxd.$ns.svc:7443" \

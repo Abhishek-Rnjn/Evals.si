@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // fakeKube stands in for the Kubernetes API on hosts without a cluster:
@@ -93,6 +95,17 @@ func (f *fakeKube) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func podRung(t *testing.T) (*Manager, *fakeKube) {
 	t.Helper()
+	// The fake pods are host processes, so the paths a pod would mount
+	// (the default /workspace, these tests' /work) must exist here.
+	for _, dir := range []string{workspaceInside, "/work"} {
+		if err := os.MkdirAll(dir, 0o1777); err != nil || unix.Access(dir, unix.W_OK) != nil {
+			msg := fmt.Sprintf("%s is not writable here (CI creates it: sudo install -d -m 1777 /workspace /work)", dir)
+			if os.Getenv("EVALSI_REQUIRE_SANDBOX") != "" {
+				t.Fatal(msg)
+			}
+			t.Skip(msg)
+		}
+	}
 	helpers := buildHelpers(t)
 	kube := &fakeKube{t: t, guest: helpers["guest"], pods: map[string]*fakePod{}}
 	api := httptest.NewServer(kube)
