@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -36,6 +37,8 @@ func main() {
 		switch os.Args[1] {
 		case "agent":
 			os.Exit(agent(os.Args[2:]))
+		case "install":
+			os.Exit(install(os.Args[2:]))
 		case "limit":
 			os.Exit(limit(os.Args[2:]))
 		case "version":
@@ -144,24 +147,55 @@ func (system) SetTime(t time.Time) error {
 
 func agent(args []string) int {
 	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
-	listen := fs.String("listen", "", "tests: unix:///path instead of vsock")
+	listen := fs.String("listen", "", "unix:///path (tests) or tcp://:PORT (a sandbox pod) instead of vsock")
+	tokenEnv := fs.String("token-env", "", "a sandbox pod: environment variable holding the bearer token callers must present")
+	egress := fs.String("egress", "", "a sandbox pod: host:port of the egress proxy, for StartEgress")
 	root := fs.String("root", "", "tests: a directory standing in for the guest's /")
 	hostSocket := fs.String("host-socket", "", "tests: unix socket prefix standing in for the host's vsock ports")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	self, _ := os.Executable()
+	// In a pod the container's cgroup limits memory; an address-space limit
+	// on top only breaks programs that reserve more than they use (Go, JVMs).
+	pod := strings.HasPrefix(*listen, "tcp://")
 	a := &guest.Agent{
 		Root: *root,
 		Limiter: func(l *guestv1alpha1.Limits, argv []string) []string {
+			mem := l.GetMemoryMb()
+			if pod {
+				mem = 0
+			}
 			return append([]string{self, "limit",
-				strconv.Itoa(int(l.GetMemoryMb())), strconv.Itoa(int(l.GetMaxProcs())),
+				strconv.Itoa(int(mem)), strconv.Itoa(int(l.GetMaxProcs())),
 				strconv.Itoa(int(l.GetMaxFileMb())), strconv.Itoa(int(l.GetCpuSeconds())), "--"}, argv...)
 		},
 	}
 	var ln net.Listener
 	var err error
-	if socket, ok := strings.CutPrefix(*listen, "unix://"); ok {
+	if addr, ok := strings.CutPrefix(*listen, "tcp://"); ok {
+		// A sandbox pod: on the pod network, behind a token, with the
+		// container's environment as the base for commands.
+		if *tokenEnv == "" || os.Getenv(*tokenEnv) == "" {
+			fmt.Fprintln(os.Stderr, "evalsi-guest: a tcp listener needs --token-env naming a set variable")
+			return 2
+		}
+		a.Token = os.Getenv(*tokenEnv)
+		for _, kv := range os.Environ() {
+			if !strings.HasPrefix(kv, *tokenEnv+"=") {
+				a.BaseEnv = append(a.BaseEnv, kv)
+			}
+		}
+		_ = os.Unsetenv(*tokenEnv)
+		upstream := *egress
+		a.DialHost = func(uint32) (net.Conn, error) {
+			if upstream == "" {
+				return nil, fmt.Errorf("no egress proxy")
+			}
+			return net.DialTimeout("tcp", upstream, 10*time.Second)
+		}
+		ln, err = net.Listen("tcp", addr)
+	} else if socket, ok := strings.CutPrefix(*listen, "unix://"); ok {
 		_ = os.Remove(socket)
 		ln, err = net.Listen("unix", socket)
 		a.DialHost = func(port uint32) (net.Conn, error) {
@@ -191,22 +225,55 @@ func limit(args []string) int {
 		return 125
 	}
 	n := func(s string) uint64 { v, _ := strconv.ParseUint(s, 10, 64); return v }
-	set := func(res int, v uint64) {
-		if v > 0 {
-			_ = unix.Setrlimit(res, &unix.Rlimit{Cur: v, Max: v})
-		}
-	}
-	set(unix.RLIMIT_AS, n(args[0])<<20)
-	set(unix.RLIMIT_NPROC, n(args[1]))
-	set(unix.RLIMIT_FSIZE, n(args[2])<<20)
-	set(unix.RLIMIT_CPU, n(args[3]))
 	argv := args[5:]
 	path, err := exec.LookPath(argv[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox: command not found: %s\n", argv[0])
 		return 127
 	}
-	err = syscall.Exec(path, argv, os.Environ())
-	fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], err)
+	// Everything execve needs is built first: once the address space is
+	// limited, this Go process may not be able to allocate again.
+	pathp, err1 := syscall.BytePtrFromString(path)
+	argvp, err2 := syscall.SlicePtrFromStrings(argv)
+	envp, err3 := syscall.SlicePtrFromStrings(os.Environ())
+	if err := errors.Join(err1, err2, err3); err != nil {
+		fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], err)
+		return 126
+	}
+	set := func(res int, v uint64) {
+		if v > 0 {
+			_ = unix.Setrlimit(res, &unix.Rlimit{Cur: v, Max: v})
+		}
+	}
+	set(unix.RLIMIT_NPROC, n(args[1]))
+	set(unix.RLIMIT_FSIZE, n(args[2])<<20)
+	set(unix.RLIMIT_CPU, n(args[3]))
+	set(unix.RLIMIT_AS, n(args[0])<<20)
+	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(pathp)),
+		uintptr(unsafe.Pointer(&argvp[0])), uintptr(unsafe.Pointer(&envp[0])))
+	fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], errno)
 	return 126
+}
+
+// install is `evalsi-guest install DIR`: it copies itself to DIR, which is how
+// a sandbox pod's init container hands the agent to the task's image.
+func install(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "evalsi-guest: install DIR")
+		return 2
+	}
+	self, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "evalsi-guest: %v\n", err)
+		return 1
+	}
+	data, err := os.ReadFile(self)
+	if err == nil {
+		err = os.WriteFile(filepath.Join(args[0], "evalsi-guest"), data, 0o755)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "evalsi-guest: install: %v\n", err)
+		return 1
+	}
+	return 0
 }

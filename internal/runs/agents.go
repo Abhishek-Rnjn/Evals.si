@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 )
 
 // validateAgent checks an agent run's spec: the agent or the built-in
@@ -135,6 +136,9 @@ func (m *Manager) recordingDir(rel string, create bool) (string, error) {
 	}
 	if m.opts.DatasetsDir == "" {
 		return "", invalid("recording needs datasets_dir in the server config")
+	}
+	if !datasets.Local(m.opts.DatasetsDir) {
+		return "", invalid("recording needs a local datasets_dir; this server keeps datasets in object storage")
 	}
 	clean := filepath.Clean(rel)
 	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {

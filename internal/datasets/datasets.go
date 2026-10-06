@@ -8,7 +8,9 @@
 package datasets
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -20,6 +22,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 )
 
 // PromotedDir is the directory, relative to datasets_dir, that holds promotions.
@@ -72,8 +75,10 @@ var mu sync.Mutex
 
 // Append adds rows to datasets_dir/promoted/<project>/<name>.jsonl and
 // returns that path relative to datasets_dir. Writers in one process are
-// serialized, so lines never interleave.
-func Append(root, project, name string, rows [][]byte) (string, error) {
+// serialized, so lines never interleave. On object storage (datasets_dir
+// s3://...), each append is a conditional write retried on conflict, so
+// concurrent replicas never lose each other's rows.
+func Append(ctx context.Context, root string, objects *objstore.Client, project, name string, rows [][]byte) (string, error) {
 	if root == "" {
 		return "", fmt.Errorf("promotion needs datasets_dir in the server config")
 	}
@@ -84,6 +89,9 @@ func Append(root, project, name string, rows [][]byte) (string, error) {
 		return "", fmt.Errorf("project %q cannot name a dataset directory", project)
 	}
 	rel := Path(project, name)
+	if loc, ok := objstore.Parse(root); ok {
+		return rel, appendObject(ctx, objects, loc.Join(rel), rows)
+	}
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	mu.Lock()
 	defer mu.Unlock()
@@ -101,4 +109,32 @@ func Append(root, project, name string, rows [][]byte) (string, error) {
 		}
 	}
 	return rel, nil
+}
+
+func appendObject(ctx context.Context, objects *objstore.Client, loc objstore.Location, rows [][]byte) error {
+	if objects == nil {
+		return fmt.Errorf("datasets_dir %s needs storage.s3 in the server config", loc)
+	}
+	var add []byte
+	for _, row := range rows {
+		add = append(append(add, row...), '\n')
+	}
+	for attempt := 0; attempt < 8; attempt++ {
+		data, etag, err := objects.Get(ctx, loc)
+		create := errors.Is(err, objstore.ErrNotFound)
+		if err != nil && !create {
+			return err
+		}
+		_, err = objects.Put(ctx, loc, append(data, add...), etag, create)
+		if !errors.Is(err, objstore.ErrConflict) {
+			return err
+		}
+	}
+	return fmt.Errorf("appending to %s: too many concurrent writers", loc)
+}
+
+// Local reports whether datasets_dir is a local directory (not object storage).
+func Local(root string) bool {
+	_, remote := objstore.Parse(root)
+	return !remote
 }

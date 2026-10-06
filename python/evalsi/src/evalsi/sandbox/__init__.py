@@ -62,6 +62,21 @@ async def run_sandboxed(
     mode: str = "workspace-write",
     min_isolation: str = "confined",
 ) -> SandboxResult:
+    remote = os.environ.get("EVALSI_SANDBOX_ADDR", "")
+    if remote.startswith("tls://"):
+        # A worker pod: sandboxes live in the sandbox pool, never here.
+        return await _run_remote(
+            remote,
+            command,
+            files=files,
+            stdin=stdin,
+            env=env,
+            timeout_s=timeout_s,
+            memory_mb=memory_mb,
+            network=network,
+            mode=mode,
+            min_isolation=min_isolation,
+        )
     request = {
         "command": command,
         "files": files or {},
@@ -99,4 +114,49 @@ async def run_sandboxed(
         duration_ms=float(data.get("duration_ms", 0.0)),
         isolation=data.get("isolation") or {},
         denials=list(data.get("denials") or []),
+    )
+
+
+async def _run_remote(
+    address: str,
+    command: list[str],
+    *,
+    files: dict[str, str] | None,
+    stdin: str,
+    env: dict[str, str] | None,
+    timeout_s: float,
+    memory_mb: int,
+    network: str,
+    mode: str,
+    min_isolation: str,
+) -> SandboxResult:
+    """One command in a fresh sandbox of the remote sandbox service."""
+    from evalsi.sandbox.client import SandboxClient, SandboxSpec
+
+    client = SandboxClient(address)
+    try:
+        sandbox = await client.create(
+            SandboxSpec(
+                files=dict(files or {}),
+                memory_mb=memory_mb,
+                network=network,
+                mode=mode,
+                min_isolation=min_isolation,
+            )
+        )
+        try:
+            res = await sandbox.exec(command, stdin=stdin, env=env, timeout_s=timeout_s)
+        finally:
+            await sandbox.destroy()
+    finally:
+        await client.aclose()
+    return SandboxResult(
+        outcome=res.outcome,
+        exit_code=res.exit_code,
+        stdout=res.stdout,
+        stderr=res.stderr,
+        truncated=res.truncated,
+        duration_ms=res.duration_ms,
+        isolation=sandbox.isolation.to_dict(),
+        denials=list(res.denials),
     )

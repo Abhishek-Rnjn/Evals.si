@@ -1,0 +1,24 @@
+# An agent trial on the pod rung: the agent and its checker run in a pod
+# per sandbox (evalsi-guest injected, no service-account token, confined by
+# the NetworkPolicy), leased from a SandboxClass pool.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: agent
+  labels: {evals.si/project: e2e}
+spec:
+  target:
+    agent:
+      cli:
+        command: [sh, -c, "cat >/dev/null; echo done > out.txt"]
+  environment:
+    sandbox: {min_isolation: namespaced}
+    checker:
+      command: [sh, -c, 'test "$(cat out.txt)" = done']
+  dataset:
+    inline:
+      records:
+        - {id: t1, input: {text: "Write done to out.txt."}}
+        - {id: t2, input: {text: "Write done to out.txt, again."}}
+  evaluators:
+    - ref: task-success

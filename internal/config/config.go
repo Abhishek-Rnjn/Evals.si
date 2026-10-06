@@ -6,14 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/yaml"
 
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evals.si/internal/cluster"
+	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
+	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 // Judge mirrors evalsi.judges.JudgeConfig in the Python SDK; it is handed to
@@ -41,6 +45,29 @@ type Worker struct {
 	StartTimeout string `json:"start_timeout"`
 	// Disable the worker's judge response cache.
 	NoCache bool `json:"no_cache"`
+	// In a cluster: the pools this process's Python worker serves from the
+	// work queues (cpu, judge, gpu, sandbox, harness). For `evalsid worker`
+	// the default is every pool; for `evalsid serve`, none (an API replica
+	// sends all work to worker processes).
+	Pools []string `json:"pools,omitempty"`
+	// Tasks a worker process runs at once, per pool; default 4.
+	Concurrency int `json:"concurrency,omitempty"`
+	// A remote sandbox service (the Kubernetes sandbox pool, or sandboxd on
+	// KVM nodes) for agent sandboxes and code evaluators, instead of
+	// sandboxes in this process. Worker pods hold credentials; sandboxes
+	// then never run beside them.
+	SandboxService *SandboxService `json:"sandbox_service,omitempty"`
+}
+
+// SandboxService is a remote SandboxService, reached over mutual TLS.
+type SandboxService struct {
+	// tls://host:port
+	Address  string `json:"address"`
+	CAFile   string `json:"ca_file"`
+	CertFile string `json:"cert_file"`
+	KeyFile  string `json:"key_file"`
+	// The name its certificate is checked against, when not the address host.
+	ServerName string `json:"server_name,omitempty"`
 }
 
 // Evaluate tunes the Score path.
@@ -57,6 +84,11 @@ type Evaluate struct {
 type Runs struct {
 	// Runs executing at once; the rest wait as PENDING.
 	MaxConcurrent int `json:"max_concurrent"`
+	// In a cluster: how long a replica's claim on a run lasts without
+	// renewal (default 30s), and how often replicas look for runs to adopt
+	// from replicas that stopped (default 10s).
+	LeaseTTL      string `json:"lease_ttl,omitempty"`
+	AdoptInterval string `json:"adopt_interval,omitempty"`
 }
 
 // OTLP configures trace ingestion. OTLP is always served on the main port
@@ -81,14 +113,22 @@ type Traces struct {
 // Config is the whole evalsid configuration.
 type Config struct {
 	Listen string `json:"listen"`
-	// Where evalsid keeps its database. Relative paths are relative to the working directory.
+	// Where evalsid keeps its database (unless storage.postgres is set) and
+	// caches. Relative paths are relative to the working directory.
 	DataDir string `json:"data_dir"`
-	// Root for dataset paths in run specs. Empty means runs must send records
-	// inline or use a dataset URI.
+	// Root for dataset paths in run specs: a directory, or s3://bucket/prefix
+	// with storage.s3. Empty means runs must send records inline or use a
+	// dataset URI.
 	DatasetsDir string `json:"datasets_dir"`
-	Runs        Runs   `json:"runs"`
-	OTLP        OTLP   `json:"otlp"`
-	Traces      Traces `json:"traces"`
+	// External databases and object storage; SQLite in data_dir by default.
+	Storage Storage `json:"storage"`
+	// Worker processes and evalsid replicas, connected through NATS
+	// JetStream. Several API replicas must share storage.postgres; worker
+	// processes use no database.
+	Cluster *cluster.Config `json:"cluster,omitempty"`
+	Runs    Runs            `json:"runs"`
+	OTLP    OTLP            `json:"otlp"`
+	Traces  Traces          `json:"traces"`
 	// Online evaluation policies applied at startup, in the OnlineEvalPolicy
 	// JSON form. They replace stored policies of the same name.
 	Policies     []json.RawMessage `json:"policies"`
@@ -111,6 +151,32 @@ type Config struct {
 	Authorization authz.AuthorizationConfig `json:"authorization"`
 	Audit         authz.AuditConfig         `json:"audit"`
 	Metrics       Metrics                   `json:"metrics"`
+}
+
+// Storage selects the databases. Without it, everything is in SQLite under
+// data_dir, which suits a single replica.
+type Storage struct {
+	// PostgreSQL for metadata, runs and results; several replicas may share it.
+	Postgres *Postgres `json:"postgres,omitempty"`
+	// ClickHouse for traces and their online scores.
+	ClickHouse *store.ClickHouseConfig `json:"clickhouse,omitempty"`
+	// S3-compatible object storage, for datasets_dir s3://bucket/prefix.
+	S3 *objstore.Config `json:"s3,omitempty"`
+}
+
+// Postgres names the database; the DSN usually carries a password, so it
+// can come from the environment.
+type Postgres struct {
+	DSN    string `json:"dsn,omitempty"`
+	DSNEnv string `json:"dsn_env,omitempty"`
+}
+
+// ResolvedDSN is the DSN, from the environment when dsn_env is set.
+func (p *Postgres) ResolvedDSN() string {
+	if p.DSNEnv != "" {
+		return os.Getenv(p.DSNEnv)
+	}
+	return p.DSN
 }
 
 // Agents lists what agent-run specs may make the worker itself execute.
@@ -236,13 +302,39 @@ func (c Config) Validate() error {
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("data_dir is required"))
 	}
+	for name, d := range map[string]string{"runs.lease_ttl": c.Runs.LeaseTTL, "runs.adopt_interval": c.Runs.AdoptInterval} {
+		if d == "" {
+			continue
+		}
+		if v, err := time.ParseDuration(d); err != nil || v <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be a positive duration", name))
+		}
+	}
 	if c.Runs.MaxConcurrent < 1 {
 		errs = append(errs, errors.New("runs.max_concurrent must be positive"))
 	}
-	if c.DatasetsDir != "" {
+	if _, remote := objstore.Parse(c.DatasetsDir); remote {
+		if c.Storage.S3 == nil {
+			errs = append(errs, fmt.Errorf("datasets_dir %q needs storage.s3", c.DatasetsDir))
+		}
+	} else if c.DatasetsDir != "" {
 		if info, err := os.Stat(c.DatasetsDir); err != nil || !info.IsDir() {
 			errs = append(errs, fmt.Errorf("datasets_dir %q is not a directory", c.DatasetsDir))
 		}
+	}
+	if p := c.Storage.Postgres; p != nil && p.ResolvedDSN() == "" {
+		errs = append(errs, errors.New("storage.postgres needs dsn, or dsn_env naming a set variable"))
+	}
+	if s := c.Worker.SandboxService; s != nil {
+		if !strings.HasPrefix(s.Address, "tls://") {
+			errs = append(errs, errors.New("worker.sandbox_service.address must be tls://host:port"))
+		}
+		if s.CAFile == "" || s.CertFile == "" || s.KeyFile == "" {
+			errs = append(errs, errors.New("worker.sandbox_service needs ca_file, cert_file and key_file (mutual TLS)"))
+		}
+	}
+	if ch := c.Storage.ClickHouse; ch != nil && ch.URL == "" {
+		errs = append(errs, errors.New("storage.clickhouse needs url"))
 	}
 	for i, sc := range c.Sinks {
 		if err := sc.Validate(); err != nil {

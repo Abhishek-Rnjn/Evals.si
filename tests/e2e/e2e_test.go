@@ -98,6 +98,7 @@ type env struct {
 	model     string
 	datasets  string
 	workerCmd []string
+	dataDir   string
 	// Event names the OTel sink delivered to the fake collector.
 	events func() []string
 }
@@ -174,7 +175,7 @@ func start(t *testing.T, mutate ...func(*config.Config)) env {
 	})
 	select {
 	case addr := <-ready:
-		return env{base: "http://" + addr, model: model, datasets: datasets, workerCmd: strings.Fields(worker), events: events}
+		return env{base: "http://" + addr, model: model, datasets: datasets, workerCmd: strings.Fields(worker), dataDir: cfg.DataDir, events: events}
 	case err := <-done:
 		t.Fatalf("server exited: %v", err)
 	case <-time.After(90 * time.Second):

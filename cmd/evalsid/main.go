@@ -25,6 +25,7 @@ const usage = `usage: evalsid <command> [flags]
 commands:
   version          print the build and API version
   serve            run the server (evalsid serve -h for flags)
+  worker           serve worker pools from a cluster's queues (evalsid worker -h)
   sandbox probe    report which sandbox rungs work on this host
   sandbox run      run a JSON request from stdin in the sandbox, print the JSON result
   sandbox serve    serve SandboxService on a Unix socket (--listen unix:///path)
@@ -50,6 +51,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "serve":
 		return serve(ctx, args[1:], stderr)
+	case "worker":
+		return worker(ctx, args[1:], stderr)
 	case "sandbox":
 		return sandboxcli.Main(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "auth":
@@ -95,6 +98,38 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	if err := server.Run(ctx, cfg, log, stderr, nil); err != nil {
+		fmt.Fprintf(stderr, "evalsid: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// worker is a worker process in a cluster: it serves pools from the work
+// queues with a local Python worker. SIGTERM lets in-flight tasks finish.
+func worker(ctx context.Context, args []string, stderr io.Writer) int {
+	fs := flag.NewFlagSet("worker", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	configPath := fs.String("config", "", "path to evalsi.yaml (needs a cluster section)")
+	pools := fs.String("pools", "", "comma-separated pools to serve (default: worker.pools, else all)")
+	concurrency := fs.Int("concurrency", 0, "tasks at once per pool (default: worker.concurrency, else 4)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	cfg, err := config.LoadWith(*configPath, func(c *config.Config) {
+		if *concurrency > 0 {
+			c.Worker.Concurrency = *concurrency
+		}
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "evalsid: %v\n", err)
+		return 1
+	}
+	selected := cfg.Worker.Pools
+	if *pools != "" {
+		selected = strings.Split(*pools, ",")
+	}
+	log := slog.New(slog.NewTextHandler(stderr, nil))
+	if err := server.RunWorker(ctx, cfg, selected, log, stderr); err != nil {
 		fmt.Fprintf(stderr, "evalsid: %v\n", err)
 		return 1
 	}

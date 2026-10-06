@@ -14,7 +14,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -31,13 +30,12 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
+	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxsvc"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
@@ -46,48 +44,54 @@ import (
 // Run serves until ctx is cancelled, then shuts down gracefully.
 // ready, if non-nil, receives the bound address once the server accepts connections.
 func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput io.Writer, ready chan<- string) error {
-	workerEnv, err := sandboxEnv(cfg)
-	if err != nil {
-		return err
+	var cl *cluster.Cluster
+	if cfg.Cluster != nil {
+		var err error
+		if cl, err = cluster.Connect(ctx, *cfg.Cluster, "evalsid", cfg.DataDir); err != nil {
+			return err
+		}
+		defer cl.Close()
 	}
-	// Agent harnesses in the worker create persistent sandboxes through
-	// SandboxService on a private socket; it is never on the API port.
-	sb, err := sandbox.New(cfg.Sandbox)
-	if err != nil {
-		return err
+	// A single replica drives its own Python worker. In a cluster, work goes
+	// to the pools' queues, and this process serves the pools listed in
+	// worker.pools, if any (an all-in-one node).
+	var worker pluginhost.Worker
+	if cl == nil || len(cfg.Worker.Pools) > 0 {
+		local, stop, err := startLocalWorker(ctx, cfg, log, workerOutput)
+		if err != nil {
+			return err
+		}
+		defer stop()
+		worker = local
+		if cl != nil {
+			for _, p := range cfg.Worker.Pools {
+				if !validPool(p) {
+					return fmt.Errorf("worker.pools: unknown pool %q (pools: %v)", p, cluster.Pools)
+				}
+			}
+			wctx, cancel := context.WithCancel(context.Background())
+			served := make(chan struct{})
+			go func() {
+				defer close(served)
+				if err := cl.Serve(wctx, cfg.Worker.Pools, local, cfg.Worker.Concurrency, log); err != nil {
+					log.Error("serving worker pools", "err", err)
+				}
+			}()
+			// Stop pulling tasks (and finish in-flight ones) before the worker stops.
+			defer func() { cancel(); <-served }()
+		}
 	}
-	sandboxes := sandbox.NewManager(sb)
-	defer sandboxes.Close()
-	sockDir, err := os.MkdirTemp("", "evalsid-sandbox-")
-	if err != nil {
-		return err
+	if cl != nil {
+		worker = cluster.NewWorker(cl)
 	}
-	defer os.RemoveAll(sockDir)
-	socket := filepath.Join(sockDir, "sandbox.sock")
-	stopSandbox, err := sandboxsvc.Serve(ctx, sandboxes, socket)
-	if err != nil {
-		return fmt.Errorf("sandbox service: %w", err)
-	}
-	defer stopSandbox()
-	workerEnv = append(workerEnv, "EVALSI_SANDBOX_ADDR=unix://"+socket)
-	worker, err := pluginhost.Start(ctx, pluginhost.Options{
-		Env:          workerEnv,
-		Command:      cfg.Worker.Command,
-		Judges:       cfg.Judges,
-		NoCache:      cfg.Worker.NoCache,
-		StartTimeout: cfg.StartTimeout(),
-		Output:       workerOutput,
-		Logger:       log,
-	})
-	if err != nil {
-		return err
-	}
-	defer worker.Stop()
-	return serve(ctx, cfg, worker, log, ready)
+	return serve(ctx, cfg, worker, cl, log, ready)
 }
 
 // serve runs everything above the worker; tests call it with a fake worker.
-func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log *slog.Logger, ready chan<- string) error {
+func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl *cluster.Cluster, log *slog.Logger, ready chan<- string) error {
+	if cl != nil {
+		log.Info("waiting for a cpu worker to describe the evaluators")
+	}
 	manifests, err := worker.Describe(ctx)
 	if err != nil {
 		return fmt.Errorf("describing worker evaluators: %w", err)
@@ -99,7 +103,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	sort.Strings(judges)
 	svc := evaluation.New(worker, catalog.New(manifests), judges, cfg.DefaultJudge, cfg.Evaluate)
 
-	st, err := store.Open(filepath.Join(cfg.DataDir, "evalsi.db"))
+	st, objects, err := openStorage(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -130,11 +134,15 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	var watcher *watch.Engine // created below; runs read its policies' score names
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
 		DatasetsDir:   cfg.DatasetsDir,
+		Objects:       objects,
 		MaxConcurrent: cfg.Runs.MaxConcurrent,
 		Evaluate:      cfg.Evaluate,
 		Agents:        cfg.Agents,
 		Logger:        log,
 		OnFinished:    exports.Run,
+		Cluster:       runCluster(cl),
+		LeaseTTL:      optDuration(cfg.Runs.LeaseTTL),
+		AdoptInterval: optDuration(cfg.Runs.AdoptInterval),
 		TraceScores: func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64 {
 			return watcher.TraceScores(policy, results)
 		},
@@ -146,7 +154,18 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	defer runManager.Shutdown()
 
 	watcher, err = watch.New(ctx, st, svc, watch.Options{
-		DatasetsDir: cfg.DatasetsDir, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
+		DatasetsDir: cfg.DatasetsDir, Objects: objects, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
+		Changed: func() {
+			if cl != nil {
+				cl.PoliciesChanged()
+			}
+		},
+		RemoteStats: func(name string) (*evalsiv1alpha1.PolicyStats, bool, error) {
+			if cl == nil {
+				return nil, false, fmt.Errorf("no cluster")
+			}
+			return cl.Stats(name)
+		},
 		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
 			exports.Trace(&sinks.Trace{
 				TraceID: rec.GetId(), RootSpanID: rootSpan(rec), Service: info.Service,
@@ -168,10 +187,27 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	}
 	assembler := ingest.NewAssembler(ingest.AssemblerOptions{
 		Grace: config.Duration(cfg.OTLP.Grace), MaxTraces: cfg.OTLP.MaxTraces,
-	}, watcher.Ingest)
+	}, watcher.Enqueue)
 	bg, stopBG := context.WithCancel(context.Background())
 	stopAssembler := make(chan struct{})
 	var wg sync.WaitGroup
+	if cl != nil {
+		// Policies live in the database; replicas reload on any change, and
+		// only the elected policy engine sees traces.
+		watcher.SetLeader(false)
+		stopReloads, err := cl.OnPoliciesChanged(func() {
+			if err := watcher.Reload(bg); err != nil {
+				log.Warn("reloading policies", "err", err)
+			}
+		})
+		if err != nil {
+			stopBG()
+			return err
+		}
+		defer stopReloads()
+		wg.Add(1)
+		go func() { defer wg.Done(); leadPolicyEngine(bg, st, cl, assembler, watcher, log) }()
+	}
 	wg.Add(4)
 	go func() { defer wg.Done(); assembler.Run(stopAssembler, 250*time.Millisecond) }()
 	go func() { defer wg.Done(); watcher.Run(bg) }()
@@ -186,6 +222,9 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	authSvc := authz.NewService(engine, st, auditor, authn.ConfigKeys())
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, log)
 	d := deps{svc: svc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
+	if cl != nil {
+		d.forward = cl.PublishSpans
+	}
 
 	var tlsCfg *tls.Config
 	if cfg.Auth.Enabled() && cfg.Auth.TLS != nil {
@@ -334,6 +373,8 @@ type deps struct {
 	authn     *auth.Authenticator
 	gate      *gate
 	authSvc   *authz.Service
+	// In a cluster, received spans go to the span stream.
+	forward ingest.Forward
 }
 
 // registerOTLP mounts OTLP/gRPC (through the gate's interceptor) and
@@ -341,7 +382,11 @@ type deps struct {
 // the caller's credential (gate.assignTrace).
 func registerOTLP(mux *http.ServeMux, d deps) {
 	inner := http.NewServeMux()
-	ingest.NewReceiver(d.assembler, d.gate.assignTrace, connect.WithInterceptors(d.gate.interceptor())).Register(inner)
+	recv := ingest.NewReceiver(d.assembler, d.gate.assignTrace, connect.WithInterceptors(d.gate.interceptor()))
+	if d.forward != nil {
+		recv.SetForward(d.forward)
+	}
+	recv.Register(inner)
 	mux.Handle(ingest.TraceExportProcedure, inner)
 	mux.Handle("POST /v1/traces", d.gate.guardHTTP("traces.write", true, inner))
 }
@@ -446,4 +491,13 @@ func rootSpan(rec *evalsiv1alpha1.Record) string {
 		}
 	}
 	return ""
+}
+
+// runCluster adapts the cluster to the run manager (nil stays nil: an
+// interface holding a nil pointer would not).
+func runCluster(cl *cluster.Cluster) runs.Coordinator {
+	if cl == nil {
+		return nil
+	}
+	return cl
 }

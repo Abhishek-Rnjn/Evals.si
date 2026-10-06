@@ -1,0 +1,50 @@
+{{- if .Values.sandbox.podRung.enabled }}
+{{- $ns := .Release.Namespace }}
+# Sandbox pools that use the pod rung run as this account: they create one
+# pod per sandbox here, and nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evalsi-sandboxd
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: evalsi-sandboxd
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, create, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: evalsi-sandboxd
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: evalsi-sandboxd}
+subjects:
+  - {kind: ServiceAccount, name: evalsi-sandboxd, namespace: {{ $ns }}}
+{{- if .Values.sandbox.podRung.networkPolicy }}
+---
+# Sandbox pods talk to their pool and nothing else: the pool reaches their
+# agent, and their only way out is the pool's logging egress proxy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: evalsi-sandbox-pods
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {evals.si/sandbox: "true"}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: evalsi-sandboxd}}
+      ports: [{port: 7070, protocol: TCP}]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: evalsi-sandboxd}}
+{{- end }}
+{{- end }}

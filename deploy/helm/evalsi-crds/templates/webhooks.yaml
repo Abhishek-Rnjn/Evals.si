@@ -1,0 +1,71 @@
+{{- if .Values.webhooks.enabled }}
+{{- $ns := .Values.operator.namespace }}
+{{- $svc := "evalsi-operator-webhook" }}
+{{- $dns := list (printf "%s.%s.svc" $svc $ns) (printf "%s.%s.svc.cluster.local" $svc $ns) }}
+{{- $caBundle := "" }}
+{{- if .Values.webhooks.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: evalsi-operator-webhook
+  namespace: {{ $ns }}
+spec:
+  secretName: evalsi-operator-webhook-tls
+  dnsNames: {{- toYaml $dns | nindent 4 }}
+  issuerRef: {{- toYaml .Values.webhooks.certManager.issuerRef | nindent 4 }}
+{{- else }}
+{{- $old := lookup "v1" "Secret" $ns "evalsi-operator-webhook-tls" }}
+{{- $crt := "" }}{{- $key := "" }}
+{{- if $old }}
+{{- $crt = index $old.data "tls.crt" }}{{ $key = index $old.data "tls.key" }}{{ $caBundle = index $old.data "ca.crt" }}
+{{- else }}
+{{- $ca := genCA "evalsi webhook CA" 3650 }}
+{{- $cert := genSignedCert (index $dns 0) nil $dns 3650 $ca }}
+{{- $crt = $cert.Cert | b64enc }}{{ $key = $cert.Key | b64enc }}{{ $caBundle = $ca.Cert | b64enc }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: evalsi-operator-webhook-tls
+  namespace: {{ $ns }}
+type: kubernetes.io/tls
+data:
+  tls.crt: {{ $crt }}
+  tls.key: {{ $key }}
+  ca.crt: {{ $caBundle }}
+{{- end }}
+{{- range $kind := list "Mutating" "Validating" }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: {{ $kind }}WebhookConfiguration
+metadata:
+  name: evalsi-{{ lower $kind }}
+  {{- if $.Values.webhooks.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ $ns }}/evalsi-operator-webhook
+  {{- end }}
+webhooks:
+  - name: {{ ternary "mutate" "validate" (eq $kind "Mutating") }}.evals.si
+    admissionReviewVersions: [v1]
+    sideEffects: None
+    failurePolicy: {{ $.Values.webhooks.failurePolicy }}
+    timeoutSeconds: 10
+    clientConfig:
+      service:
+        name: {{ $svc }}
+        namespace: {{ $ns }}
+        path: {{ ternary "/mutate-evals-si" "/validate-evals-si" (eq $kind "Mutating") }}
+      {{- if $caBundle }}
+      caBundle: {{ $caBundle }}
+      {{- end }}
+    rules:
+      - apiGroups: [evals.si]
+        apiVersions: [v1alpha1]
+        operations: [CREATE, UPDATE]
+        {{- if eq $kind "Mutating" }}
+        resources: [evalruns, onlineevalpolicies, evaluators, sandboxclasses]
+        {{- else }}
+        resources: [evalruns, onlineevalpolicies]
+        {{- end }}
+{{- end }}
+{{- end }}

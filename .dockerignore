@@ -1,0 +1,12 @@
+.git
+bin
+**/.venv
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+.evalsi*
+docs
+examples
+tests
+deploy

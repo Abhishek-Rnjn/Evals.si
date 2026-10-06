@@ -3,7 +3,9 @@
 How a client finds its credential, first match wins:
 
 1. ``api_key=`` or ``token=`` passed explicitly (``--api-key`` / ``--token``);
-2. the ``EVALSI_API_KEY`` or ``EVALSI_TOKEN`` environment variable;
+2. the ``EVALSI_API_KEY`` or ``EVALSI_TOKEN`` environment variable, or
+   ``EVALSI_TOKEN_FILE``: a file read on every request (a Kubernetes
+   projected service-account token, which the kubelet rotates);
 3. in GitHub Actions, the job's own OIDC token, when ``EVALSI_OIDC_AUDIENCE``
    names the audience the server expects (no stored secret);
 4. the token cached by ``evalsi login`` for that server, refreshed when it
@@ -400,6 +402,7 @@ class ServerAuth(httpx.Auth):
         self._fixed: dict[str, str] = {}
         self._github_audience = ""
         self._github_token = ""
+        self._token_file = ""
         token = token or None
         api_key = api_key or None
         if api_key is None and token is None:
@@ -409,6 +412,8 @@ class ServerAuth(httpx.Auth):
             self._fixed = {"Authorization": f"Bearer {api_key}"}
         elif token:
             self._fixed = {"Authorization": f"Bearer {token}"}
+        elif token_file := os.environ.get("EVALSI_TOKEN_FILE"):
+            self._token_file = token_file
         elif audience := os.environ.get("EVALSI_OIDC_AUDIENCE"):
             self._github_audience = audience
 
@@ -418,6 +423,8 @@ class ServerAuth(httpx.Auth):
         if self._fixed:
             value = self._fixed["Authorization"].removeprefix("Bearer ")
             return "api-key" if value.startswith(API_KEY_PREFIX) else "token"
+        if self._token_file:
+            return "token-file"
         if self._github_audience:
             return "github-actions"
         return "login" if load_credentials(self.server) else "none"
@@ -430,6 +437,9 @@ class ServerAuth(httpx.Auth):
     def headers(self) -> dict[str, str]:
         if self._fixed:
             return dict(self._fixed)
+        if self._token_file:
+            with open(self._token_file, encoding="utf-8") as handle:
+                return {"Authorization": f"Bearer {handle.read().strip()}"}
         with self._lock:
             if self._github_audience:
                 if not self._github_token or Credentials(id_token=self._github_token).expired():

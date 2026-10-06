@@ -15,11 +15,29 @@ import (
 
 // PutTrace stores (or replaces, when late spans re-assemble it) a trace in
 // its project (summary.Project).
-func (s *Store) PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO traces (project, trace_id, service, start_ns, summary, record) VALUES (?, ?, ?, ?, ?, ?)`,
+const putTraceSQL = `INSERT INTO traces (project, trace_id, service, start_ns, summary, record) VALUES (?, ?, ?, ?, ?, ?)
+	ON CONFLICT (project, trace_id) DO UPDATE SET service = excluded.service, start_ns = excluded.start_ns, summary = excluded.summary, record = excluded.record`
+
+func (s *sqlTraces) PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error {
+	_, err := s.db.ExecContext(ctx, putTraceSQL,
 		summary.GetProject(), summary.GetTraceId(), summary.GetService(), summary.GetStartTime().AsTime().UnixNano(), marshal(summary), marshal(record))
 	return err
+}
+
+func (s *sqlTraces) PutTraces(ctx context.Context, traces []TraceWrite) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, t := range traces {
+		if _, err := tx.ExecContext(ctx, putTraceSQL,
+			t.Summary.GetProject(), t.Summary.GetTraceId(), t.Summary.GetService(), t.Summary.GetStartTime().AsTime().UnixNano(),
+			marshal(t.Summary), marshal(t.Record)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // TraceFilter selects traces.
@@ -30,7 +48,7 @@ type TraceFilter struct {
 }
 
 // ListTraces returns trace summaries newest first, with result counts.
-func (s *Store) ListTraces(ctx context.Context, f TraceFilter, pageSize int, pageToken string) ([]*evalsiv1alpha1.TraceSummary, string, error) {
+func (s *sqlTraces) ListTraces(ctx context.Context, f TraceFilter, pageSize int, pageToken string) ([]*evalsiv1alpha1.TraceSummary, string, error) {
 	offset := 0
 	if pageToken != "" {
 		var err error
@@ -72,7 +90,7 @@ func (s *Store) ListTraces(ctx context.Context, f TraceFilter, pageSize int, pag
 }
 
 // TraceProjects lists the projects holding a trace with this id.
-func (s *Store) TraceProjects(ctx context.Context, traceID string) ([]string, error) {
+func (s *sqlTraces) TraceProjects(ctx context.Context, traceID string) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT project FROM traces WHERE trace_id = ? ORDER BY project`, traceID)
 	if err != nil {
 		return nil, err
@@ -90,7 +108,7 @@ func (s *Store) TraceProjects(ctx context.Context, traceID string) ([]string, er
 }
 
 // GetTrace returns a stored trace's summary and record.
-func (s *Store) GetTrace(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error) {
+func (s *sqlTraces) GetTrace(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error) {
 	var sumBlob, recBlob []byte
 	err := s.db.QueryRowContext(ctx, `SELECT summary, record FROM traces WHERE project = ? AND trace_id = ?`, project, traceID).Scan(&sumBlob, &recBlob)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -108,7 +126,7 @@ func (s *Store) GetTrace(ctx context.Context, project, traceID string) (*evalsiv
 }
 
 // PutTraceResults stores a policy's results for a trace.
-func (s *Store) PutTraceResults(ctx context.Context, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
+func (s *sqlTraces) PutTraceResults(ctx context.Context, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -116,7 +134,8 @@ func (s *Store) PutTraceResults(ctx context.Context, project, traceID, policy st
 	defer func() { _ = tx.Rollback() }()
 	for _, r := range results {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO trace_results (project, trace_id, policy, evaluator, result) VALUES (?, ?, ?, ?, ?)`,
+			`INSERT INTO trace_results (project, trace_id, policy, evaluator, result) VALUES (?, ?, ?, ?, ?)
+			 ON CONFLICT (project, trace_id, policy, evaluator) DO UPDATE SET result = excluded.result`,
 			project, traceID, policy, r.GetEvaluator(), marshal(r)); err != nil {
 			return err
 		}
@@ -125,8 +144,8 @@ func (s *Store) PutTraceResults(ctx context.Context, project, traceID, policy st
 }
 
 // TraceResults returns results for a trace grouped by policy, policies sorted.
-func (s *Store) TraceResults(ctx context.Context, project, traceID string) ([]*evalsiv1alpha1.PolicyResults, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT policy, result FROM trace_results WHERE project = ? AND trace_id = ? ORDER BY policy, rowid`, project, traceID)
+func (s *sqlTraces) TraceResults(ctx context.Context, project, traceID string) ([]*evalsiv1alpha1.PolicyResults, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT policy, result FROM trace_results WHERE project = ? AND trace_id = ? ORDER BY policy, evaluator`, project, traceID)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +170,7 @@ func (s *Store) TraceResults(ctx context.Context, project, traceID string) ([]*e
 }
 
 // DeleteTracesBefore removes traces (and their results) that started before t.
-func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
+func (s *sqlTraces) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -170,7 +189,8 @@ func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, err
 
 // PutPolicy creates or replaces a policy.
 func (s *Store) PutPolicy(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error {
-	_, err := s.db.ExecContext(ctx, `INSERT OR REPLACE INTO policies (name, project, policy) VALUES (?, ?, ?)`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO policies (name, project, policy) VALUES (?, ?, ?)
+		 ON CONFLICT (name) DO UPDATE SET project = excluded.project, policy = excluded.policy`,
 		p.GetName(), p.GetProject(), marshal(p))
 	return err
 }
@@ -229,10 +249,10 @@ type StoredTrace struct {
 }
 
 // QueryTraces returns the traces a query selects.
-func (s *Store) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrace, error) {
+func (s *sqlTraces) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrace, error) {
 	limit := q.Limit
 	if limit <= 0 {
-		limit = -1
+		limit = 1 << 62 // no limit, in a form both dialects accept
 	}
 	var since int64
 	if !q.Since.IsZero() {

@@ -16,11 +16,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
@@ -33,14 +35,18 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 // Options configures the manager.
 type Options struct {
-	// Root that dataset paths are resolved against. Empty disallows paths.
+	// Root that dataset paths are resolved against: a directory or
+	// s3://bucket/prefix. Empty disallows paths.
 	DatasetsDir string
+	// The object-storage client, when DatasetsDir is s3://.
+	Objects *objstore.Client
 	// Runs executing at once; others wait in PENDING.
 	MaxConcurrent int
 	Evaluate      config.Evaluate
@@ -50,6 +56,24 @@ type Options struct {
 	Logger      *slog.Logger
 	// Called with a copy of each run that reaches a final status (for sinks); must not block.
 	OnFinished func(*evalsiv1alpha1.Run)
+	// Coordinates replicas that share the database; nil for a single replica.
+	Cluster Coordinator
+	// Lease timing in a cluster; defaults 30s and 10s (shorter in tests).
+	LeaseTTL      time.Duration
+	AdoptInterval time.Duration
+}
+
+// Coordinator connects the replicas sharing a database (see the cluster
+// package). With it, a run executes on the replica that holds its lease
+// (run:<id>), renewed while it runs; runs whose lease expires (their
+// replica died) are adopted by another replica and resume where they were.
+// Watchers and cancellations reach the executing replica over it.
+type Coordinator interface {
+	Owner() string
+	PublishRunEvent(id string, ev *evalsiv1alpha1.WatchRunResponse)
+	SubscribeRunEvents(id string) (<-chan *evalsiv1alpha1.WatchRunResponse, func(), error)
+	RequestCancel(id string) error
+	OnCancel(fn func(id string)) (func(), error)
 }
 
 // Manager implements evalsiv1alpha1connect.RunServiceHandler.
@@ -61,15 +85,22 @@ type Manager struct {
 	slots  chan struct{}
 	log    *slog.Logger
 
-	mu     sync.Mutex
-	active map[string]*activeRun
+	mu       sync.Mutex
+	active   map[string]*activeRun
+	stopping bool
+	// Stops the cluster loops (adoption, cancel subscription).
+	stopCluster func()
 }
 
 type activeRun struct {
+	id        string
 	cancel    context.CancelFunc
 	cancelled bool
-	done      chan struct{}
-	subs      map[chan *evalsiv1alpha1.WatchRunResponse]bool
+	// In a cluster: the run stopped without finishing here (shutdown, or
+	// its lease went to another replica), so its state is not written.
+	handoff bool
+	done    chan struct{}
+	subs    map[chan *evalsiv1alpha1.WatchRunResponse]bool
 }
 
 // New builds a manager and marks runs left unfinished by a previous process
@@ -86,6 +117,9 @@ func New(ctx context.Context, st *store.Store, worker pluginhost.Worker, engine 
 		slots:  make(chan struct{}, opts.MaxConcurrent),
 		log:    opts.Logger,
 		active: map[string]*activeRun{},
+	}
+	if opts.Cluster != nil {
+		return m, m.joinCluster()
 	}
 	stale, err := st.RunsWithStatus(ctx, evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING, evalsiv1alpha1.RunStatus_RUN_STATUS_RUNNING)
 	if err != nil {
@@ -114,13 +148,22 @@ func (m *Manager) Wait() {
 	}
 }
 
-// Shutdown cancels every executing run (it becomes ERROR, resumable) and waits.
+// Shutdown cancels every executing run and waits. A single replica marks
+// them ERROR (resumable); in a cluster they are handed off: their leases are
+// released and another replica adopts them.
 func (m *Manager) Shutdown() {
 	m.mu.Lock()
+	m.stopping = true
 	for _, a := range m.active {
+		if m.opts.Cluster != nil {
+			a.handoff = true
+		}
 		a.cancel()
 	}
 	m.mu.Unlock()
+	if m.stopCluster != nil {
+		m.stopCluster()
+	}
 	m.Wait()
 }
 
@@ -182,10 +225,18 @@ func (m *Manager) validate(spec *evalsiv1alpha1.RunSpec) ([]evaluation.Instance,
 	return insts, nil
 }
 
-// resolvePath keeps dataset paths inside DatasetsDir, symlinks included.
+// resolvePath keeps dataset paths inside DatasetsDir, symlinks included. On
+// object storage the result is an s3:// URL, which the worker side fetches.
 func (m *Manager) resolvePath(rel string) (string, error) {
 	if m.opts.DatasetsDir == "" {
 		return "", invalid("this server does not accept dataset paths; set datasets_dir in its config, or send records inline")
+	}
+	if loc, ok := objstore.Parse(m.opts.DatasetsDir); ok {
+		clean := path.Clean(filepath.ToSlash(rel))
+		if path.IsAbs(clean) || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+			return "", invalid("dataset %q must be a path inside the server's datasets_dir", rel)
+		}
+		return loc.Join(clean).String(), nil
 	}
 	root, err := filepath.EvalSymlinks(m.opts.DatasetsDir)
 	if err != nil {
@@ -368,13 +419,26 @@ func (m *Manager) createRun(ctx context.Context, name, project string, labels ma
 
 func (m *Manager) start(run *evalsiv1alpha1.Run) {
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &activeRun{cancel: cancel, done: make(chan struct{}), subs: map[chan *evalsiv1alpha1.WatchRunResponse]bool{}}
+	a := &activeRun{id: run.GetId(), cancel: cancel, done: make(chan struct{}), subs: map[chan *evalsiv1alpha1.WatchRunResponse]bool{}}
 	m.mu.Lock()
+	if _, dup := m.active[run.GetId()]; dup || m.stopping {
+		m.mu.Unlock()
+		cancel()
+		return
+	}
 	m.active[run.GetId()] = a
 	m.mu.Unlock()
 	go func() {
 		defer close(a.done)
 		defer cancel()
+		if m.opts.Cluster != nil {
+			if !m.holdLease(ctx, a) {
+				m.mu.Lock()
+				delete(m.active, run.GetId())
+				m.mu.Unlock()
+				return
+			}
+		}
 		select {
 		case m.slots <- struct{}{}:
 			defer func() { <-m.slots }()
@@ -400,6 +464,9 @@ func (m *Manager) publishRun(a *activeRun, run *evalsiv1alpha1.Run) {
 // publish sends an event to every watcher without blocking. A watcher that
 // falls too far behind is dropped; it can reconnect and read the run state.
 func (m *Manager) publish(a *activeRun, ev *evalsiv1alpha1.WatchRunResponse) {
+	if m.opts.Cluster != nil && !a.handoff {
+		m.opts.Cluster.PublishRunEvent(a.id, ev)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for ch := range a.subs {
@@ -430,6 +497,12 @@ func (m *Manager) execute(ctx context.Context, id string, a *activeRun) {
 		return
 	}
 	finish := func(status evalsiv1alpha1.RunStatus, msg string) {
+		m.mu.Lock()
+		handoff := a.handoff
+		m.mu.Unlock()
+		if handoff {
+			return // another replica continues it
+		}
 		run.Status, run.Error, run.FinishedAt = status, msg, timestamppb.Now()
 		if err := m.store.UpdateRun(context.Background(), run); err != nil {
 			m.log.Error("saving run", "run", id, "err", err)
@@ -890,6 +963,9 @@ func (m *Manager) WatchRun(ctx context.Context, req *connect.Request[evalsiv1alp
 		return err
 	}
 	if a == nil {
+		if m.opts.Cluster != nil && !terminal(run.GetStatus()) {
+			return m.watchRemote(ctx, id, req.Msg.GetIncludeResults(), stream.Send)
+		}
 		return nil // not executing: the state above is final
 	}
 	for {
@@ -930,6 +1006,12 @@ func (m *Manager) CancelRun(ctx context.Context, req *connect.Request[evalsiv1al
 	m.mu.Unlock()
 	if a != nil {
 		<-a.done
+	} else if m.opts.Cluster != nil {
+		run, err := m.cancelRemote(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&evalsiv1alpha1.CancelRunResponse{Run: run}), nil
 	}
 	run, err := m.get(ctx, id)
 	if err != nil {
@@ -947,6 +1029,13 @@ func (m *Manager) ResumeRun(ctx context.Context, req *connect.Request[evalsiv1al
 	m.mu.Lock()
 	_, running := m.active[run.GetId()]
 	m.mu.Unlock()
+	if m.opts.Cluster != nil && !running {
+		holder, err := m.store.LeaseHolder(ctx, leaseName(run.GetId()))
+		if err != nil {
+			return nil, err
+		}
+		running = holder != ""
+	}
 	if running || (run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR && run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_CANCELLED) {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %s is %s; only errored or cancelled runs can be resumed", run.GetId(), run.GetStatus()))
 	}

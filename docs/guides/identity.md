@@ -265,6 +265,49 @@ steps:
     env: {EVALSI_OIDC_AUDIENCE: https://evals.example.com}
 ```
 
+### On Kubernetes: service-account tokens
+
+Workloads in the cluster (the operator, CI runners, agents) sign in with their own service account; no key to store or rotate. Trust the cluster's service-account issuer: `evalsid` reads its keys from the API server with its own token and CA, and discovers the issuer:
+
+```yaml
+auth:
+  jwt:
+    providers:
+      - name: cluster
+        audiences: [evals.si]            # tokens projected for evals.si only
+        kubernetes:
+          namespaces: [evalsi, ci]       # default: every namespace
+rbac:
+  projects:
+    support:
+      runner: ['group:cluster/system:serviceaccounts:ci']
+  owners: ['user:cluster/system:serviceaccount:evalsi:evalsi-operator']
+```
+
+A service account becomes `system:serviceaccount:<namespace>:<name>` (kind `service`), in the groups `system:serviceaccounts` and `system:serviceaccounts:<namespace>`. Mount a token for the `evals.si` audience and point the CLI at it; it is read on every request, so the kubelet's rotation needs nothing:
+
+```yaml
+volumes:
+  - name: evalsi-token
+    projected:
+      sources: [{serviceAccountToken: {audience: evals.si, expirationSeconds: 3600, path: token}}]
+env:
+  - {name: EVALSI_TOKEN_FILE, value: /var/run/secrets/evalsi/token}
+```
+
+### Between components: mutual TLS
+
+Every hop can run over mutual TLS with certificates from your CA (cert-manager, for example), reloaded when they rotate:
+
+| Hop | Configure |
+|---|---|
+| clients to `evalsid` | `auth.tls` (`client_ca`, `require_client_cert`); a verified certificate's SPIFFE ID or common name is the principal |
+| operator to `evalsid` | `--ca-file`, `--cert-file`, `--key-file` |
+| `evalsid` and workers to NATS | `cluster.tls` |
+| workers to sandbox pools | `worker.sandbox_service` (`ca_file`, `cert_file`, `key_file`); pools accept only the clients named by `--allow-client` |
+| to ClickHouse and S3 | `storage.clickhouse.tls`, `storage.s3.tls` (`ca_file`, `cert_file`, `key_file`, `server_name`) |
+| to PostgreSQL | the DSN: `sslmode=verify-full sslrootcert=... sslcert=... sslkey=...` |
+
 ## 6. Behind agentgateway
 
 - **Forward the token.** Let agentgateway validate the JWT and forward it (`preserveToken`); `evalsid` validates the same token again against the same issuer. Trusting identity headers instead (`auth.trusted_proxy`, limited to configured CIDRs) is supported but discouraged.

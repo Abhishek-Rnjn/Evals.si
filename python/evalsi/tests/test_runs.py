@@ -138,6 +138,11 @@ def test_parse_spec_and_validation() -> None:
     assert run.labels == {}
     labeled = parse_spec({**SPEC, "metadata": {**SPEC["metadata"], "labels": {"app": "checkout"}}})
     assert labeled.labels == {"app": "checkout"}
+    # As on Kubernetes: the project label, which stays out of the API's labels.
+    k8s = parse_spec(
+        {**SPEC, "metadata": {"name": "n", "labels": {"evals.si/project": "team", "app": "x"}}}
+    )
+    assert (k8s.project, k8s.labels) == ("team", {"app": "x"})
     bad = [
         ({**SPEC, "metadata": {"labels": ["x"]}}, "metadata.labels"),
         ({**SPEC, "kind": "Other"}, "kind must be"),

@@ -31,6 +31,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     for name in (
         "EVALSI_API_KEY",
         "EVALSI_TOKEN",
+        "EVALSI_TOKEN_FILE",
         "EVALSI_OIDC_AUDIENCE",
         "ACTIONS_ID_TOKEN_REQUEST_URL",
         "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
@@ -195,6 +196,19 @@ def test_resolution_order(monkeypatch: pytest.MonkeyPatch) -> None:
     assert header() == "Bearer evk_env"
     assert header(token="flag-token") == "Bearer flag-token"
     assert auth.ServerAuth(SERVER, api_key="evk_x").kind == "api-key"
+
+
+def test_token_file_is_read_per_request(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # A projected service-account token, which the kubelet rotates in place.
+    path = tmp_path / "token"
+    path.write_text("sa-1\n")
+    monkeypatch.setenv("EVALSI_TOKEN_FILE", str(path))
+    a = auth.ServerAuth(SERVER)
+    assert (a.kind, a.headers()) == ("token-file", {"Authorization": "Bearer sa-1"})
+    path.write_text("sa-2\n")
+    assert a.headers() == {"Authorization": "Bearer sa-2"}
+    monkeypatch.setenv("EVALSI_TOKEN", "env-token")
+    assert auth.ServerAuth(SERVER).headers() == {"Authorization": "Bearer env-token"}
 
 
 def test_github_actions_oidc(monkeypatch: pytest.MonkeyPatch) -> None:

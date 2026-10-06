@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxsvc"
@@ -28,8 +29,13 @@ func Main(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io
 	fs := flag.NewFlagSet("sandbox "+args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	configPath := fs.String("config", "", "path to evalsi.yaml")
-	listen := fs.String("listen", "", "serve: unix:///path/to/socket")
+	listen := fs.String("listen", "", "serve: unix:///path/to/socket, or tcp://host:port with --tls-* (sandboxd)")
 	untilEOF := fs.Bool("until-stdin-eof", false, "serve: stop when stdin closes (the parent exited)")
+	tlsCert := fs.String("tls-cert", "", "serve on tcp://: the server certificate")
+	tlsKey := fs.String("tls-key", "", "serve on tcp://: its key")
+	clientCA := fs.String("client-ca", "", "serve on tcp://: CA for client certificates (required)")
+	var allowed multiFlag
+	fs.Var(&allowed, "allow-client", "serve on tcp://: a client's SPIFFE ID or common name (repeatable; default: any certificate from the CA)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -54,6 +60,9 @@ func Main(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 	if args[0] == "serve" {
+		if addr, ok := strings.CutPrefix(*listen, "tcp://"); ok {
+			return serveTLS(ctx, sb, addr, auth.TLSConfig{CertFile: *tlsCert, KeyFile: *tlsKey, ClientCA: *clientCA, RequireClientCert: true}, allowed, stdout, stderr)
+		}
 		return serve(ctx, sb, *listen, *untilEOF, stdin, stdout, stderr)
 	}
 	enc := json.NewEncoder(stdout)
@@ -107,6 +116,36 @@ func serve(ctx context.Context, sb *sandbox.Sandbox, listen string, untilEOF boo
 			cancel()
 		}()
 	}
+	<-ctx.Done()
+	return 0
+}
+
+type multiFlag []string
+
+func (m *multiFlag) String() string     { return strings.Join(*m, ",") }
+func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
+
+// serveTLS is `evalsid sandbox serve --listen tcp://...`: sandboxd, the
+// sandbox service for workers on other pods, over mutual TLS only.
+func serveTLS(ctx context.Context, sb *sandbox.Sandbox, addr string, tc auth.TLSConfig, allowed []string, stdout, stderr io.Writer) int {
+	if tc.CertFile == "" || tc.KeyFile == "" || tc.ClientCA == "" {
+		fmt.Fprint(stderr, "evalsid: sandbox serve on tcp:// needs --tls-cert, --tls-key and --client-ca: it runs code for whoever connects\n")
+		return 2
+	}
+	tlsCfg, err := auth.ServerTLS(&tc)
+	if err != nil {
+		fmt.Fprintf(stderr, "evalsid: %v\n", err)
+		return 1
+	}
+	m := sandbox.NewManager(sb)
+	defer m.Close()
+	stop, bound, err := sandboxsvc.ServeTLS(ctx, m, addr, tlsCfg, allowed)
+	if err != nil {
+		fmt.Fprintf(stderr, "evalsid: %v\n", err)
+		return 1
+	}
+	defer stop()
+	fmt.Fprintf(stdout, "listening on tcp://%s\n", bound)
 	<-ctx.Done()
 	return 0
 }

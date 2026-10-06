@@ -7,9 +7,13 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"io"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -74,5 +78,49 @@ func TestServerTLSReloads(t *testing.T) {
 	r.checked = time.Time{}
 	if got := leaf(); got != "second" {
 		t.Errorf("broken pair replaced the certificate: %q", got)
+	}
+}
+
+// ClientTLS trusts a private CA and presents a client certificate that a
+// server requiring one accepts.
+func TestClientTLS(t *testing.T) {
+	serverCert, serverKey := writePair(t, t.TempDir(), "localhost", time.Now())
+	clientCert, clientKey := writePair(t, t.TempDir(), "evalsid", time.Now())
+	srvCfg, err := ServerTLS(&TLSConfig{CertFile: serverCert, KeyFile: serverKey, ClientCA: clientCert, RequireClientCert: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.TLS.PeerCertificates[0].Subject.CommonName))
+	}))
+	srv.TLS = srvCfg
+	srv.StartTLS()
+	defer srv.Close()
+	url := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
+
+	get := func(c *ClientTLSConfig) (string, error) {
+		tc, err := ClientTLS(c)
+		if err != nil {
+			return "", err
+		}
+		resp, err := (&http.Client{Transport: &http.Transport{TLSClientConfig: tc}}).Get(url)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b), nil
+	}
+	if got, err := get(&ClientTLSConfig{CAFile: serverCert, CertFile: clientCert, KeyFile: clientKey}); err != nil || got != "evalsid" {
+		t.Fatalf("mutual TLS: %q %v", got, err)
+	}
+	if _, err := get(&ClientTLSConfig{CAFile: serverCert}); err == nil {
+		t.Error("connected without a client certificate")
+	}
+	if _, err := get(&ClientTLSConfig{CertFile: clientCert, KeyFile: clientKey}); err == nil {
+		t.Error("trusted a private CA without ca_file")
+	}
+	if _, err := ClientTLS(&ClientTLSConfig{CertFile: clientCert}); err == nil {
+		t.Error("a certificate without its key")
 	}
 }

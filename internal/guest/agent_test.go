@@ -162,3 +162,39 @@ func TestAgentEgressRelaysToTheHost(t *testing.T) {
 		t.Fatalf("relay: %q %v", buf, err)
 	}
 }
+
+// In a pod the agent is on the network: calls need its token, and commands
+// run with the container's environment under their own variables.
+func TestAgentInAPod(t *testing.T) {
+	a := &Agent{Root: t.TempDir(), Token: "s3cret", BaseEnv: []string{"PATH=/usr/bin:/bin", "IMAGE_VAR=from-image", "LANG=C"}}
+	client := serve(t, a)
+	run := func(c guestv1alpha1connect.GuestAgentServiceClient, token string) (string, error) {
+		req := connect.NewRequest(&guestv1alpha1.ExecRequest{
+			Command: []string{"sh", "-c", "echo $IMAGE_VAR $LANG"}, Env: []string{"LANG=C.UTF-8"},
+		})
+		if token != "" {
+			req.Header().Set("Authorization", "Bearer "+token)
+		}
+		stream, err := c.Exec(context.Background(), req)
+		if err != nil {
+			return "", err
+		}
+		var out string
+		for stream.Receive() {
+			out += string(stream.Msg().GetStdout())
+		}
+		return out, stream.Err()
+	}
+	if _, err := run(client, ""); connect.CodeOf(err) != connect.CodeUnauthenticated && connect.CodeOf(err) != connect.CodeUnknown {
+		t.Fatalf("no token: %v", err)
+	} else if err == nil {
+		t.Fatal("a call without the token succeeded")
+	}
+	if _, err := run(client, "wrong"); err == nil {
+		t.Fatal("a call with a wrong token succeeded")
+	}
+	out, err := run(client, "s3cret")
+	if err != nil || out != "from-image C.UTF-8\n" {
+		t.Fatalf("out %q err %v", out, err)
+	}
+}

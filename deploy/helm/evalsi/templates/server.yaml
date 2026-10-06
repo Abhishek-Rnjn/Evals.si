@@ -1,0 +1,138 @@
+{{- $v := .Values }}
+{{- define "evalsi.storageEnv" -}}
+{{- $v := .Values -}}
+{{- if $v.storage.postgres.dsnSecret.name }}
+- name: EVALSI_POSTGRES_DSN
+  valueFrom: {secretKeyRef: {name: {{ $v.storage.postgres.dsnSecret.name }}, key: {{ $v.storage.postgres.dsnSecret.key }}}}
+{{- else if $v.devPostgres.enabled }}
+- name: EVALSI_POSTGRES_DSN
+  valueFrom: {secretKeyRef: {name: evalsi-dev-postgres, key: dsn}}
+{{- end }}
+{{- if $v.storage.clickhouse.passwordSecret.name }}
+- name: EVALSI_CLICKHOUSE_PASSWORD
+  valueFrom: {secretKeyRef: {name: {{ $v.storage.clickhouse.passwordSecret.name }}, key: {{ $v.storage.clickhouse.passwordSecret.key }}}}
+{{- end }}
+{{- if $v.storage.s3.credentialsSecret }}
+- name: EVALSI_S3_ACCESS_KEY
+  valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: access_key}}
+- name: EVALSI_S3_SECRET_KEY
+  valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: secret_key}}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: evalsi
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evalsi
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+    app.kubernetes.io/name: evalsi
+spec:
+  replicas: {{ $v.server.replicas }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: evalsi}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: evalsi, app.kubernetes.io/part-of: evalsi}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: evalsi
+      securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
+      {{- with $v.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: evalsid
+          image: {{ include "evalsi.image" . }}
+          imagePullPolicy: {{ $v.image.pullPolicy }}
+          args: [serve, --config, /etc/evalsi/evalsi.yaml]
+          ports:
+            - {name: api, containerPort: 8080}
+            {{- if $v.server.otlp.enabled }}
+            - {name: otlp-grpc, containerPort: 4317}
+            - {name: otlp-http, containerPort: 4318}
+            {{- end }}
+          env:
+            {{- include "evalsi.storageEnv" . | nindent 12 }}
+            {{- with $v.server.env }}{{ toYaml . | nindent 12 }}{{ end }}
+          {{- with $v.server.envFrom }}
+          envFrom: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: api, scheme: {{ ternary "HTTPS" "HTTP" $v.server.tls }}}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: api, scheme: {{ ternary "HTTPS" "HTTP" $v.server.tls }}}
+            periodSeconds: 20
+            failureThreshold: 6
+          securityContext: {{- include "evalsi.restricted" . | nindent 12 }}
+          resources: {{- toYaml $v.server.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/evalsi, readOnly: true}
+            {{- if $v.server.tls }}
+            - {name: tls, mountPath: /etc/evalsi/tls, readOnly: true}
+            {{- end }}
+            - {name: home, mountPath: /var/lib/evalsi}
+            - {name: data, mountPath: /var/lib/evalsi/data, subPath: data}
+            - {name: data, mountPath: /var/lib/evalsi/datasets, subPath: datasets}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: home
+          emptyDir: {}
+        - name: config
+          configMap: {name: evalsi}
+        {{- if $v.server.tls }}
+        - name: tls
+          secret: {secretName: evalsi-server-tls}
+        {{- end }}
+        - name: data
+          {{- if $v.server.persistence.enabled }}
+          persistentVolumeClaim: {claimName: evalsi-data}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with $v.server.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.server.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evalsi
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+spec:
+  selector: {app.kubernetes.io/name: evalsi}
+  ports:
+    - {name: api, port: 8080, targetPort: api}
+    {{- if $v.server.otlp.enabled }}
+    - {name: otlp-grpc, port: 4317, targetPort: otlp-grpc}
+    - {name: otlp-http, port: 4318, targetPort: otlp-http}
+    {{- end }}
+{{- if $v.server.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evalsi-data
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+  annotations: {helm.sh/resource-policy: keep}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $v.server.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources: {requests: {storage: {{ $v.server.persistence.size }}}}
+{{- end }}
+{{- if and $v.server.persistence.enabled (gt (int $v.server.replicas) 1) }}
+{{- fail "server.persistence is for one replica (SQLite); several replicas share storage.postgres" }}
+{{- end }}

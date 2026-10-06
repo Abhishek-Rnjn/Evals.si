@@ -1,0 +1,8 @@
+apiVersion: v2
+name: evalsi
+description: Evals.si in one namespace - the API and ingest replicas, workers per pool, NATS, the operator, and what the pod sandbox rung needs. Install evalsi-crds first.
+type: application
+version: 0.4.0
+appVersion: "0.4.0"
+home: https://github.com/abhishek-rnjn/evals.si
+kubeVersion: ">=1.30.0-0"

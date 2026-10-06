@@ -2,8 +2,12 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,13 +16,46 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 )
 
+// open returns an empty store: SQLite, or PostgreSQL in a schema of its own
+// when EVALSI_TEST_POSTGRES_DSN is set (CI runs the package both ways).
 func open(t *testing.T) *Store {
 	t.Helper()
+	if dsn := os.Getenv("EVALSI_TEST_POSTGRES_DSN"); dsn != "" {
+		return openPostgres(t, dsn)
+	}
 	s, err := Open(filepath.Join(t.TempDir(), "sub", "evalsi.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
+
+func openPostgres(t *testing.T, dsn string) *Store {
+	t.Helper()
+	ctx := context.Background()
+	admin, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = admin.Close() })
+	schema := fmt.Sprintf("t_%d", time.Now().UnixNano())
+	if _, err := admin.ExecContext(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = admin.ExecContext(ctx, "DROP SCHEMA "+schema+" CASCADE") })
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	s, err := OpenPostgres(ctx, dsn+sep+"search_path="+schema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if s.Dialect() != "postgres" {
+		t.Fatal(s.Dialect())
+	}
 	return s
 }
 

@@ -213,7 +213,7 @@ func startAuthServer(t *testing.T, mutate func(*config.Config)) *testServer {
 	ctx, cancel := context.WithCancel(context.Background())
 	ready := make(chan string, 1)
 	done := make(chan error, 1)
-	go func() { done <- serve(ctx, cfg, fakeWorker{}, slog.New(slog.DiscardHandler), ready) }()
+	go func() { done <- serve(ctx, cfg, fakeWorker{}, nil, slog.New(slog.DiscardHandler), ready) }()
 	t.Cleanup(func() {
 		cancel()
 		if err := <-done; err != nil {

@@ -1,0 +1,52 @@
+{{- if not .Values.nats.url }}
+{{- $v := .Values }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: evalsi-nats
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+    app.kubernetes.io/name: evalsi-nats
+spec:
+  serviceName: evalsi-nats
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: evalsi-nats}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: evalsi-nats, app.kubernetes.io/part-of: evalsi}
+    spec:
+      securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
+      containers:
+        - name: nats
+          image: {{ include "evalsi.ref" (dict "root" . "ref" $v.nats.image) }}
+          args: [--jetstream, --store_dir, /data, --http_port, "8222", --port, "4222"]
+          ports:
+            - {name: client, containerPort: 4222}
+            - {name: monitor, containerPort: 8222}
+          readinessProbe:
+            httpGet: {path: "/healthz?js-enabled-only=true", port: monitor}
+            periodSeconds: 5
+          securityContext: {{- include "evalsi.restricted" . | nindent 12 }}
+          resources: {{- toYaml $v.nats.resources | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $v.nats.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources: {requests: {storage: {{ $v.nats.storage }}}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evalsi-nats
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+spec:
+  selector: {app.kubernetes.io/name: evalsi-nats}
+  ports:
+    - {name: client, port: 4222, targetPort: client}
+    - {name: monitor, port: 8222, targetPort: monitor}
+{{- end }}

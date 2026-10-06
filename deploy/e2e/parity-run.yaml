@@ -1,0 +1,22 @@
+# The same file runs embedded (`evalsi run -f`), on a server
+# (`--server`), and as a Kubernetes resource (`kubectl apply -f`); the
+# kind e2e checks the three agree. No model: the records carry outputs.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: parity
+  labels: {evals.si/project: e2e}
+spec:
+  dataset:
+    inline:
+      records:
+        - {id: a, input: {text: "2+2"}, output: {text: "4"}, reference: {text: "4"}}
+        - {id: b, input: {text: "3+3"}, output: {text: "6"}, reference: {text: "6"}}
+        - {id: c, input: {text: "capital of France"}, output: {text: "Paris"}, reference: {text: "Paris"}}
+        - {id: d, input: {text: "capital of Japan"}, output: {text: "Kyoto"}, reference: {text: "Tokyo"}}
+        - {id: e, input: {text: "5*5"}, output: {text: "25"}, reference: {text: "25"}}
+  evaluators:
+    - ref: exact-match
+    - ref: numeric-match
+  gates:
+    - {metric: exact-match, min: 0.5}

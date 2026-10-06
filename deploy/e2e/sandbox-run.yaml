@@ -1,0 +1,21 @@
+# Code evaluation in the sandbox pool: the unit tests run in a sandbox the
+# workers lease from evalsi-sandboxd (bubblewrap) over mutual TLS.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: unit-tests
+  labels: {evals.si/project: e2e}
+spec:
+  dataset:
+    inline:
+      records:
+        - id: good
+          output: {text: "def add(a, b):\n    return a + b\n"}
+          reference: {text: "def check(f):\n    assert f(2, 3) == 5\n"}
+          metadata: {entry_point: add}
+        - id: bad
+          output: {text: "def add(a, b):\n    return a - b\n"}
+          reference: {text: "def check(f):\n    assert f(2, 3) == 5\n"}
+          metadata: {entry_point: add}
+  evaluators:
+    - ref: unit-tests

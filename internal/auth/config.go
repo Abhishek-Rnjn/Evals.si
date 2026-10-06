@@ -85,7 +85,38 @@ type Provider struct {
 	RoleClaims *RoleClaims `json:"role_claims,omitempty"`
 	// "user" (default) or "service": the kind of principal tokens make.
 	Kind string `json:"kind,omitempty"`
+	// Trust a Kubernetes cluster's service-account tokens (projected with
+	// one of the audiences). Keys come from the API server itself, so jwks
+	// is left unset, and the issuer is discovered when empty.
+	Kubernetes *KubernetesIssuer `json:"kubernetes,omitempty"`
 }
+
+// KubernetesIssuer is the cluster whose service accounts are principals:
+// system:serviceaccount:<namespace>:<name>, kind service, in the groups
+// system:serviceaccounts and system:serviceaccounts:<namespace>.
+type KubernetesIssuer struct {
+	// Default: in-cluster (https://kubernetes.default.svc).
+	APIServer string `json:"api_server,omitempty"`
+	// Defaults: this pod's service-account CA and token, which the API
+	// server's key endpoints need.
+	CAFile    string `json:"ca_file,omitempty"`
+	TokenFile string `json:"token_file,omitempty"`
+	// Namespaces whose service accounts are accepted; default: all.
+	Namespaces []string `json:"namespaces,omitempty"`
+}
+
+const serviceAccountDir = "/var/run/secrets/kubernetes.io/serviceaccount"
+
+func (k *KubernetesIssuer) apiServer() string {
+	if k.APIServer != "" {
+		return strings.TrimSuffix(k.APIServer, "/")
+	}
+	return "https://kubernetes.default.svc"
+}
+
+func (k *KubernetesIssuer) caFile() string { return or(k.CAFile, serviceAccountDir+"/ca.crt") }
+
+func (k *KubernetesIssuer) tokenFile() string { return or(k.TokenFile, serviceAccountDir+"/token") }
 
 // JWKS says where a provider's signing keys come from; exactly one is set.
 type JWKS struct {
@@ -274,7 +305,7 @@ func (p Provider) validate() error {
 	if p.Name == "" || strings.ContainsAny(p.Name, "/: ") {
 		errs = append(errs, errors.New("name is required and cannot contain '/', ':' or spaces"))
 	}
-	if p.Issuer == "" {
+	if p.Issuer == "" && p.Kubernetes == nil {
 		errs = append(errs, errors.New("issuer is required"))
 	}
 	if len(p.Audiences) == 0 {
@@ -286,8 +317,14 @@ func (p Provider) validate() error {
 			n++
 		}
 	}
-	if n != 1 {
+	switch {
+	case p.Kubernetes != nil && n != 0:
+		errs = append(errs, errors.New("jwks: leave unset with kubernetes; keys come from the API server"))
+	case p.Kubernetes == nil && n != 1:
 		errs = append(errs, errors.New("jwks: set exactly one of url, file, inline or discovery"))
+	}
+	if k := p.Kubernetes; k != nil && !strings.HasPrefix(k.apiServer(), "https://") {
+		errs = append(errs, errors.New("kubernetes.api_server must use https"))
 	}
 	for _, u := range []string{p.JWKS.URL, p.discoveryURL()} {
 		if u == "" {

@@ -231,3 +231,22 @@ func TestClassify(t *testing.T) {
 		}
 	}
 }
+
+// A pool's work directory on a fresh volume (a subdirectory of an emptyDir)
+// does not exist yet; the rungs must still probe and run there.
+func TestWorkDirIsCreated(t *testing.T) {
+	work := filepath.Join(t.TempDir(), "volume", "sandboxes")
+	s, err := New(Config{Ladder: []string{"bwrap", "landlock"}, WorkDir: work, CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := s.Probe(context.Background()); !st[0].Available && !st[1].Available {
+		if os.Getenv("EVALSI_REQUIRE_SANDBOX") != "" {
+			t.Fatalf("no rung: %+v", st)
+		}
+		t.Skipf("no rung here: %+v", st)
+	}
+	if res := run(t, s, &Request{Command: sh("echo ok")}); res.Stdout != "ok\n" {
+		t.Fatalf("%+v", res)
+	}
+}

@@ -1519,6 +1519,75 @@ Deviations from the plan:
 
 The Phase 1 deferral of OCI image roots for the bubblewrap rung is resolved by slice 1.
 
+**Phase 4 plan: Kubernetes.** It lands in six slices:
+
+1. **Storage backends.**
+   - PostgreSQL for metadata, runs and results, through a dialect layer under the existing SQL store.
+   - ClickHouse for traces and their scores.
+   - S3-compatible object storage for `datasets_dir` (datasets, promotions).
+   - Selected in the `storage` section of the config. SQLite and the local directory stay the standalone default.
+2. **Distributed execution and HA.**
+   - NATS JetStream work queues per pool (`work.<pool>`), behind the same `pluginhost.Worker` interface the runs and evaluation services use.
+   - An `evalsid worker` role that pulls tasks for a pool and drives a local Python worker.
+   - Process roles (`api`, `ingest`, `scheduler`, `policy-engine`, `worker`).
+   - A leader lease, so several replicas can run the scheduler and policy engine safely.
+3. **Sandboxes on Kubernetes.**
+   - `sandboxd`: the sandbox service over TCP with mTLS, for the DaemonSet (Firecracker) and the bubblewrap sandbox pool.
+   - The **hardened pod** rung: one pod per sandbox from the task's image, with `evalsi-guest` injected by an init container, no service-account token, a restricted security context, and a NetworkPolicy that allows only the egress proxy.
+4. **Operator and CRDs.**
+   - `EvalRun`, `Evaluator`, `OnlineEvalPolicy` and `SandboxClass` (`evals.si/v1alpha1`), reconciled through the server's API with status written back.
+   - An admission webhook that records who created each resource.
+   - Tested against a real API server and etcd.
+5. **Kubernetes identity.** Service-account tokens accepted as an OIDC provider (the cluster's issuer and JWKS), and mTLS between components (workers, sandboxd, the operator).
+6. **Packaging and validation.**
+   - Helm charts: the namespace-scoped `evalsi`, plus the cluster-scoped `evalsi-crds` and `evalsi-sandboxd`, with KEDA `ScaledObject`s per pool.
+   - Container images and the air-gapped bundle.
+   - A `kind` e2e job in CI covering the bubblewrap and pod rungs.
+   - A load test against the §14 targets.
+   - The agentgateway-on-Kubernetes guide.
+
+The operator is a separate binary (`evalsi-operator`), so `evalsid` does not carry the controller libraries. The pod rung talks to the Kubernetes API over REST.
+
+**Phase 4 status (2026-10-06):** implemented, in the six planned slices. Guides: [Kubernetes](guides/kubernetes.md), [agentgateway on Kubernetes](guides/agentgateway-kubernetes.md); the main choices are in [decision 0012](decisions/0012-kubernetes-operator-and-packaging.md).
+
+1. **Storage:** PostgreSQL (through the SQL store's dialect layer, schema under an advisory lock), ClickHouse for traces and online scores (HTTP, `ReplacingMergeTree`, batched inserts), S3-compatible `datasets_dir` with conditional writes. TLS with a private CA and client certificates on every backend.
+2. **Distribution and HA:** NATS JetStream work queues per pool behind `pluginhost.Worker`, payloads over 512 KiB through the object store, heartbeats so long tasks are not redelivered. `evalsid worker` drives a local Python worker. Runs and the policy engine hold database leases; a replica adopts a stopped replica's runs and resumes them.
+3. **Sandboxes:** `evalsid sandbox serve` over mutual TLS (clients pinned by SPIFFE ID or name), and the hardened pod rung (init-container guest, no token, restricted context, NetworkPolicy, egress only through the pool's proxy).
+4. **Operator and CRDs:** `evalsi-operator` with `EvalRun`, `OnlineEvalPolicy`, `Evaluator` (KEDA `ScaledObject`s) and `SandboxClass`; admission webhooks that validate specs with the CLI's rules and record the creator. Tested against a real API server and etcd (envtest).
+5. **Identity:** the cluster's service-account tokens as an OIDC provider (`kubernetes:`), projected tokens for the operator and the CLI (`EVALSI_TOKEN_FILE`), mutual TLS between components.
+6. **Packaging:** one image; the `evalsi`, `evalsi-crds` and `evalsi-sandboxd` charts (rendered in CI, every generated `evalsi.yaml` validated); the air-gapped bundle; the kind e2e; the load test.
+
+Exit criteria:
+
+- **kind e2e in CI** (`deploy/e2e/kind-e2e.sh`): installs from the air-gapped bundle with every image under a registry name that does not resolve, then runs code evaluation on the bubblewrap pool and an agent run on the pod rung (a `SandboxClass`), with two API replicas on PostgreSQL.
+- **`kubectl apply` parity:** the same run file applied as an `EvalRun` and run with `evalsi run -f` gives the same metrics, n and confidence intervals.
+- **Air-gapped install:** the kind job is that test: any image missing from the bundle fails it.
+- **Load test** (`tests/e2e/load_test.go`, one `evalsid`, one Python worker, a 4-vCPU development host):
+
+  | Target (§14) | Measured |
+  |---|---|
+  | `Evaluate` overhead p50 < 20 ms | 3.0 ms (p95 6.5 ms) |
+  | OTLP ingest ≥ 20k spans/s per replica, stored | 28.4k spans/s on SQLite, 38.7k on ClickHouse (400k spans, including the 2 s assembly grace) |
+  | Online freshness p95 < 2 min | 2.7 s (SQLite), 3.4 s (ClickHouse), at 20 traces/s |
+  | ≥ 1M evaluation tasks per run | 1,000,000 tasks in 158 s (6.3k tasks/s), all scored |
+  | Sandbox lease: warm p95 < 250 ms, cold < 2 s (Firecracker) | bubblewrap: warm (snapshot) 45 ms, cold 69 ms, ready to run |
+  | 10k+ concurrent agent trials (cluster) | not measured: needs a cluster sized for it |
+
+  The load test found that ingest wrote one trace per transaction (6.7k spans/s stored); trace writes are now batched.
+
+Limits of that verification:
+
+- **Firecracker** on Kubernetes (`evalsi-sandboxd` with `mode: firecracker`) is rendered and its config validated, but not run: CI has no KVM. The sandbox-lease numbers are bubblewrap's.
+- **User-namespaced pools** (`mode: bwrap`, `hostUsers: false`) cannot run on kind, whose nodes are containers; the kind job runs the bubblewrap pool privileged. The user-namespace path is exercised only on real nodes.
+- **KEDA** scaling is tested by the `ScaledObject`s the operator and chart produce (envtest, chart tests), not by KEDA scaling a live pool.
+- **Several-node NATS** (stream replicas 3) is configuration only; tests use one node.
+
+Deviations from the plan:
+
+- Process roles are not separate binaries or flags: every `evalsid serve` replica serves the API and ingest, and leases decide which one schedules runs and runs the policy engine.
+- The pod rung cannot snapshot, so environment setup runs per trial on it.
+- `EvalRun` and `OnlineEvalPolicy` specs are preserved as is in the CRDs (not typed in OpenAPI); the webhook validates them.
+
 ## 24. Risks and mitigations
 
 | Risk | Mitigation |
@@ -1543,7 +1612,7 @@ apiVersion: evals.si/v1alpha1
 kind: EvalRun
 metadata:
   name: support-agent-nightly
-  project: support
+  labels: {evals.si/project: support}
 spec:
   target:
     agent:
@@ -1580,7 +1649,7 @@ apiVersion: evals.si/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: prod-support-agent
-  project: support
+  labels: {evals.si/project: support}
 spec:
   selector: 'resource["service.name"] == "support-agent" && span.type == "agent"'
   sampling:
