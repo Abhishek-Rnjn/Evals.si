@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +25,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 type vectorCase struct {
@@ -436,5 +440,46 @@ func TestScoreRewardsProjectQuota(t *testing.T) {
 	}
 	if err := <-other; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestSharedCacheAcrossReplicas: a score computed on one replica is served
+// to another through the database.
+func TestSharedCacheAcrossReplicas(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "evalsi.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	w1, w2 := &fakeWorker{}, &fakeWorker{}
+	r1, r2 := newService(t, w1, config.Rewards{}), newService(t, w2, config.Rewards{})
+	r1.UseSharedCache(st, log)
+	r2.UseSharedCache(st, log)
+	if _, err := score(t, r1, codeSpec(), rollout("<answer>shared", true)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := score(t, r2, codeSpec(), rollout("<answer>shared", true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w2.records.Load() != 0 {
+		t.Errorf("the second replica scored %d records; want them from the shared cache", w2.records.Load())
+	}
+	for name, c := range got[0].GetComponents() {
+		if !c.GetCached() {
+			t.Errorf("%s not marked cached", name)
+		}
+	}
+	if math.Abs(got[0].GetTotal()-(0.1+0.9*1.4)) > 1e-9 {
+		t.Errorf("total %v", got[0].GetTotal())
+	}
+	// Errors are never cached.
+	if _, err := score(t, r1, codeSpec(), rollout("<answer>down", true)); err == nil {
+		t.Fatal("want an error")
+	}
+	n, err := st.PruneRewardCache(context.Background(), time.Now().Add(time.Hour))
+	if err != nil || n != 2 {
+		t.Errorf("pruned %d (%v), want the 2 component scores", n, err)
 	}
 }

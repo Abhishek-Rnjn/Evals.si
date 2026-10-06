@@ -223,7 +223,12 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 
 	authSvc := authz.NewService(engine, st, auditor, authn.ConfigKeys())
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, log)
-	d := deps{svc: svc, rewards: rewards.New(svc, cfg.Rewards, cfg.Quotas), runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
+	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
+	if cfg.Rewards.SharedCache {
+		rewardSvc.UseSharedCache(st, log)
+		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
+	}
+	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -505,4 +510,27 @@ func runCluster(cl *cluster.Cluster) runs.Coordinator {
 		return nil
 	}
 	return cl
+}
+
+// pruneRewardCache drops shared reward cache entries older than ttl
+// (default a week), hourly; every replica may run it.
+func pruneRewardCache(ctx context.Context, st *store.Store, ttl string, log *slog.Logger) {
+	keep := 7 * 24 * time.Hour
+	if d, err := time.ParseDuration(ttl); err == nil && d > 0 {
+		keep = d
+	}
+	tick := time.NewTicker(time.Hour)
+	defer tick.Stop()
+	for {
+		if n, err := st.PruneRewardCache(ctx, time.Now().Add(-keep)); err != nil && ctx.Err() == nil {
+			log.Warn("pruning the reward cache", "err", err)
+		} else if n > 0 {
+			log.Info("pruned the reward cache", "entries", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
 }

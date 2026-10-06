@@ -14,9 +14,11 @@ import (
 	"container/list"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"strings"
 	"sync"
@@ -34,6 +36,12 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 )
 
+// SharedCache is a second cache tier shared by replicas (the database).
+type SharedCache interface {
+	GetRewardCache(ctx context.Context, keys []string) (map[string][]byte, error)
+	PutRewardCache(ctx context.Context, entries map[string][]byte) error
+}
+
 // Service implements evalsiv1alpha1connect.RewardServiceHandler.
 type Service struct {
 	eval     *evaluation.Service
@@ -44,9 +52,11 @@ type Service struct {
 
 	mu       sync.Mutex
 	projects map[string]*semaphore.Weighted
+	shared   SharedCache
+	log      *slog.Logger
 
-	rollouts, requests, failures atomic.Int64
-	waitNanos, scoreNanos        atomic.Int64
+	rollouts, requests, failures, sharedHits atomic.Int64
+	waitNanos, scoreNanos                    atomic.Int64
 }
 
 // New builds a reward service over an evaluation service.
@@ -59,6 +69,12 @@ func New(eval *evaluation.Service, opts config.Rewards, quotas config.Quotas) *S
 		cache:    newCache(opts.CacheSize),
 		projects: map[string]*semaphore.Weighted{},
 	}
+}
+
+// UseSharedCache adds a cache tier shared by replicas; errors in it are
+// logged and the scores computed, never failed.
+func (s *Service) UseSharedCache(c SharedCache, log *slog.Logger) {
+	s.shared, s.log = c, log
 }
 
 // projectLimit is the project's in-flight limiter and its size, or nil
@@ -247,6 +263,12 @@ func (s *Service) score(ctx context.Context, spec *evalsiv1alpha1.RewardSpec, co
 			continue
 		}
 		g.Go(func() error {
+			if s.shared != nil && useCache {
+				misses = s.fromShared(gctx, misses, ckeys, results, ci)
+				if len(misses) == 0 {
+					return nil
+				}
+			}
 			batch := make([]*evalsiv1alpha1.Record, len(misses))
 			for k, ri := range misses {
 				batch[k] = rollouts[ri]
@@ -255,11 +277,21 @@ func (s *Service) score(ctx context.Context, spec *evalsiv1alpha1.RewardSpec, co
 			if err != nil {
 				return err
 			}
+			fresh := map[string][]byte{}
 			for k, ri := range misses {
 				r := componentResult(c.spec, got[k])
 				results[ri][ci] = r
 				if useCache && r.GetStatus() != evalsiv1alpha1.RewardComponentStatus_REWARD_COMPONENT_STATUS_ERROR {
 					s.cache.put(ckeys[ri], r)
+					if s.shared != nil {
+						b, _ := proto.Marshal(r)
+						fresh[hex.EncodeToString([]byte(ckeys[ri]))] = b
+					}
+				}
+			}
+			if len(fresh) > 0 {
+				if err := s.shared.PutRewardCache(gctx, fresh); err != nil {
+					s.log.Warn("reward cache: storing scores", "err", err)
 				}
 			}
 			return nil
@@ -282,6 +314,33 @@ func (s *Service) score(ctx context.Context, spec *evalsiv1alpha1.RewardSpec, co
 		out[ri] = reward
 	}
 	return out, nil
+}
+
+// fromShared fills what the shared cache holds and returns the rest.
+func (s *Service) fromShared(ctx context.Context, misses []int, ckeys []string, results [][]*evalsiv1alpha1.RewardComponentResult, ci int) []int {
+	hexKeys := make([]string, len(misses))
+	for k, ri := range misses {
+		hexKeys[k] = hex.EncodeToString([]byte(ckeys[ri]))
+	}
+	found, err := s.shared.GetRewardCache(ctx, hexKeys)
+	if err != nil {
+		s.log.Warn("reward cache: reading scores", "err", err)
+		return misses
+	}
+	var rest []int
+	for k, ri := range misses {
+		r := &evalsiv1alpha1.RewardComponentResult{}
+		if b, ok := found[hexKeys[k]]; ok && proto.Unmarshal(b, r) == nil {
+			s.cache.put(ckeys[ri], r)
+			hit := proto.Clone(r).(*evalsiv1alpha1.RewardComponentResult)
+			hit.Cached = true
+			results[ri][ci] = hit
+			s.sharedHits.Add(1)
+			continue
+		}
+		rest = append(rest, ri)
+	}
+	return rest
 }
 
 func keys(comps []component) []string {
@@ -406,7 +465,8 @@ func (s *Service) WriteMetrics(w io.Writer) {
 	metric("evalsi_reward_rollouts_total", "Rollouts scored.", "counter", s.rollouts.Load())
 	hits, misses := s.cache.stats()
 	metric("evalsi_reward_cache_hits_total", "Component scores served from the cache.", "counter", hits)
-	metric("evalsi_reward_cache_misses_total", "Component scores computed.", "counter", misses)
+	metric("evalsi_reward_cache_misses_total", "Component scores not in the in-memory cache.", "counter", misses)
+	metric("evalsi_reward_shared_cache_hits_total", "Component scores served from the shared (database) cache.", "counter", s.sharedHits.Load())
 	metric("evalsi_reward_wait_seconds_total", "Time calls waited for capacity (back-pressure).", "counter", float64(s.waitNanos.Load())/1e9)
 	metric("evalsi_reward_score_seconds_total", "Time spent scoring.", "counter", float64(s.scoreNanos.Load())/1e9)
 }

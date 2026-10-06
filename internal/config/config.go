@@ -89,6 +89,10 @@ type Rewards struct {
 	MaxInflight int `json:"max_inflight"`
 	// Component scores kept in the in-memory cache.
 	CacheSize int `json:"cache_size"`
+	// Also keep component scores in the database, shared by every replica
+	// (with PostgreSQL), and how long to keep them (default 168h).
+	SharedCache    bool   `json:"shared_cache,omitempty"`
+	SharedCacheTTL string `json:"shared_cache_ttl,omitempty"`
 }
 
 // Quotas limit what each project may use (§17 "Tenancy"). Zero means
@@ -420,6 +424,11 @@ func (c Config) Validate() error {
 	}
 	if !quotasValid {
 		errs = append(errs, errors.New("quotas: limits must not be negative"))
+	}
+	if ttl := c.Rewards.SharedCacheTTL; ttl != "" {
+		if d, err := time.ParseDuration(ttl); err != nil || d <= 0 {
+			errs = append(errs, fmt.Errorf("rewards.shared_cache_ttl: %q is not a positive duration", ttl))
+		}
 	}
 	if r := c.Rewards; r.MaxRollouts < 1 || r.MaxInflight < r.MaxRollouts || r.CacheSize < 0 {
 		errs = append(errs, errors.New("rewards.max_rollouts must be positive, max_inflight at least max_rollouts, and cache_size not negative"))
