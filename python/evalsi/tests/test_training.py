@@ -346,3 +346,131 @@ def test_cli_watch_and_curve(
     table = capsys.readouterr().out
     assert "regressed" in table
     assert "-1.000!" in table
+
+
+class FakeMLflow:
+    """The MLflow REST calls the registry watcher makes, serving two
+    versions of a model through mlflow-artifacts."""
+
+    def __init__(self) -> None:
+        files = {
+            "1/model/config.json": b'{"v": 1}',
+            "2/model/config.json": b'{"v": 2}',
+            "2/model/sub/weights.safetensors": b"w",
+        }
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args: Any) -> None:
+                pass
+
+            def _send(self, status: int, data: bytes) -> None:
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self) -> None:
+                from urllib.parse import parse_qs, urlparse
+
+                url = urlparse(self.path)
+                q = {k: v[0] for k, v in parse_qs(url.query).items()}
+                if url.path.endswith("/model-versions/search"):
+                    assert q["filter"] == "name='policy'"
+                    versions = [
+                        {
+                            "version": "1",
+                            "status": "READY",
+                            "tags": [{"key": "step", "value": "100"}],
+                        },
+                        {"version": "2", "status": "READY", "tags": []},
+                        {"version": "3", "status": "PENDING_REGISTRATION"},
+                    ]
+                    return self._send(200, json.dumps({"model_versions": versions}).encode())
+                if url.path.endswith("/get-download-uri"):
+                    uri = f"mlflow-artifacts:/{q['version']}/model"
+                    return self._send(200, json.dumps({"artifact_uri": uri}).encode())
+                prefix = "/api/2.0/mlflow-artifacts/artifacts"
+                if url.path == prefix:
+                    rel = q.get("path", "")
+                    children: dict[str, bool] = {}
+                    for name in files:
+                        if name.startswith(rel + "/"):
+                            head, _, rest = name[len(rel) + 1 :].partition("/")
+                            children[head] = bool(rest)
+                    listing = [{"path": k, "is_dir": d} for k, d in children.items()]
+                    return self._send(200, json.dumps({"files": listing}).encode())
+                if url.path.startswith(prefix + "/"):
+                    name = url.path[len(prefix) + 1 :]
+                    return self._send(200, files[name]) if name in files else self._send(404, b"")
+                self._send(404, b"")
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+
+def test_mlflow_registry_and_stop_file(
+    tmp_path: Path, models: FakeModels, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from evalsi.training.checkpoints import find_mlflow, localize_mlflow
+
+    mlflow = FakeMLflow()
+    try:
+        found = find_mlflow("policy", mlflow.url)
+        assert [(c.step, c.location) for c in found] == [
+            (2, "mlflow:2/model"),
+            (100, "mlflow:1/model"),
+        ]
+        local = Path(localize_mlflow(found[0], mlflow.url, tmp_path / "cache"))
+        assert (local / "config.json").read_text() == '{"v": 2}'
+        assert (local / "sub" / "weights.safetensors").read_bytes() == b"w"
+
+        monkeypatch.setenv("MLFLOW_TRACKING_URI", mlflow.url)
+        models.wrong = {"base-model": 0, "run-x": 12}
+        common = [
+            "-f",
+            str(write_spec(tmp_path)),
+            "--training-run",
+            "run",
+            "--log-dir",
+            str(tmp_path / "log"),
+            "--regression",
+            "exact-match",
+        ]
+        endpoint = ["--serve", "endpoint", "--base-url", models.base_url]
+        assert (
+            main(
+                [
+                    "checkpoints",
+                    "eval",
+                    "b",
+                    "--step",
+                    "base",
+                    *endpoint,
+                    "--model",
+                    "base-model",
+                    *common,
+                ]
+            )
+            == 0
+        )
+        stop = tmp_path / "STOP"
+        code = main(
+            [
+                "checkpoints",
+                "watch",
+                "mlflow:policy",
+                "--once",
+                "--stop-file",
+                str(stop),
+                *endpoint,
+                "--model",
+                "run-x",
+                *common,
+            ]
+        )
+        assert code == 0
+        assert json.loads(stop.read_text()) == {"step": "100", "regressed": ["exact-match"]}
+    finally:
+        mlflow.server.shutdown()
+        mlflow.server.server_close()

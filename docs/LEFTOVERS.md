@@ -57,9 +57,5 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | verl and OpenRLHF against real installs | Their entry points (`compute_score`, `compute_score_batch`, `reward_func`, the remote reward-model server) are tested by signature and protocol, not inside a verl or OpenRLHF training run. TRL is tested with a real `GRPOTrainer`. | §23 Phase 5 limits |
 | Reward throughput at the §12 scale | Measured on one 4-vCPU host with bubblewrap; the §12 figure (4,096 rollouts in about 16 s) assumes 256 warm microVMs. Needs a sandbox pool sized for it, and Firecracker warm pools on KVM. | §23 Phase 5 status |
 | Operator-managed checkpoint serving | The operator does not start vLLM per checkpoint; the watcher serves checkpoints itself (vLLM process, LoRA hot-load, endpoint). | Decision 0013 |
-| Checkpoint sources | Local directories, and `s3://`, `gs://`, `hf://` through fsspec. No MLflow Model Registry watcher. | §12 |
-| Trainer hooks besides Hugging Face | Only `TrainerCallback` (Trainer, TRL). Lightning and verl hooks would use `CheckpointRunner` the same way. | §12 |
-| Batched served reward models | `reward-model` calls the endpoint once per rollout; no batching across rollouts. | §12 |
-| Shared reward cache | The Reward Service cache is in memory per replica. | §23 Phase 5 status |
+| Trainer hooks besides Hugging Face | Only `TrainerCallback` (Trainer, TRL). Other loops use `CheckpointRunner`, or the watcher with `--stop-file`; Lightning `.ckpt` files need converting before vLLM can serve them. | §12 |
 | Environment-spec compatibility | `TaskEnv` has its own `reset`/`step`; compatibility with OpenEnv and verifiers-style environments is not evaluated. | §12 |
-| Early stop outside the callback | Regression gates stop training only through the Hugging Face callback; the watcher reports but cannot signal the trainer. | §12 |

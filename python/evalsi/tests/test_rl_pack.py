@@ -152,3 +152,54 @@ def test_code_exec_tests_timeouts_fail_the_case() -> None:
 def test_code_exec_tests_needs_cases() -> None:
     with pytest.raises(SkipRecord):
         score(rl.code_exec_tests, make_record("print(1)"))
+
+
+def test_reward_model_batches_concurrent_calls() -> None:
+    import asyncio
+    import json as _json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from evalsi import EvalContext
+
+    seen: list[int] = []
+
+    class RM(BaseHTTPRequestHandler):
+        def log_message(self, *args: Any) -> None:
+            pass
+
+        def do_POST(self) -> None:
+            body = _json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if "query" in body:
+                seen.append(len(body["query"]))
+                out: Any = {"rewards": [float(len(q)) for q in body["query"]]}
+            else:
+                seen.append(len(body["input"]))
+                # vLLM may return items out of order; index says which is which.
+                items = [{"index": i, "data": [float(len(t))]} for i, t in enumerate(body["input"])]
+                out = {"data": list(reversed(items))}
+            data = _json.dumps(out).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RM)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    try:
+        for api in ("openrlhf", "vllm"):
+            seen.clear()
+            records = [make_record("x" * i, input="q", id=str(i)) for i in range(10)]
+            inst = rl.reward_model.bind({"url": url, "api": api, "max_batch": 4, "wait_ms": 20})
+
+            async def go(inst: Any = inst, records: list[Record] = records) -> list[Any]:
+                return await asyncio.gather(*(inst.run(r, EvalContext()) for r in records))
+
+            results = asyncio.run(go())
+            assert [r[0].number for r in results] == [float(1 + i) for i in range(10)]
+            # 10 concurrent requests, batches of at most 4: 4 + 4 + 2.
+            assert sorted(seen) == [2, 4, 4], api
+    finally:
+        server.shutdown()
+        server.server_close()

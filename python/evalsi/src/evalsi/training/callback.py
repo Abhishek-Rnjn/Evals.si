@@ -78,32 +78,41 @@ class CheckpointRunner:
 
 
 def evalsi_callback(
-    evaluator: CheckpointEvaluator,
+    evaluator: CheckpointEvaluator | None,
     *,
     wait: bool = False,
     stop_on_regression: bool = False,
+    stop_file: str | None = None,
 ) -> Any:
-    """A ``transformers.TrainerCallback`` that evaluates every saved checkpoint."""
+    """A ``transformers.TrainerCallback`` that evaluates every saved checkpoint.
+
+    ``stop_file`` stops training when that file appears, for example the one
+    ``evalsi checkpoints watch --stop-file`` writes when a checkpoint
+    regresses (the evaluator may then be None: the watcher evaluates)."""
     from transformers import TrainerCallback
 
     class EvalsiCallback(TrainerCallback):  # type: ignore[misc]
         def __init__(self) -> None:
-            self.runner = CheckpointRunner(evaluator, wait=wait)
+            self.runner = CheckpointRunner(evaluator, wait=wait) if evaluator else None
 
         def on_save(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
             path = Path(args.output_dir) / f"checkpoint-{state.global_step}"
-            if state.is_world_process_zero:
+            if self.runner is not None and state.is_world_process_zero:
                 self.runner.submit(str(path), int(state.global_step))
             return control
 
         def on_step_end(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
-            if stop_on_regression and self.runner.regressed:
+            if stop_on_regression and self.runner is not None and self.runner.regressed:
                 logger.warning("a checkpoint regressed against the base model; stopping")
+                control.should_training_stop = True
+            if stop_file and Path(stop_file).exists():
+                logger.warning("%s exists (a checkpoint regressed); stopping", stop_file)
                 control.should_training_stop = True
             return control
 
         def on_train_end(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
-            self.runner.close()
+            if self.runner is not None:
+                self.runner.close()
             return control
 
     return EvalsiCallback()

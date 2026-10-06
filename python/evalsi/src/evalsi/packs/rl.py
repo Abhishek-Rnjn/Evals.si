@@ -18,6 +18,7 @@ Served reward models and LLM judges come in through ``reward-model`` and the
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import os
@@ -506,13 +507,109 @@ def overlong_penalty(
     return Score(number=value, metadata={"length": length})
 
 
+class _Batcher:
+    """Collects reward-model requests made at about the same time (within
+    ``wait_s``, up to ``max_batch``) into one HTTP call."""
+
+    def __init__(
+        self, url: str, api: str, model: str, headers: dict[str, str], timeout_s: float
+    ) -> None:
+        self.url, self.api, self.model, self.headers = url, api, model, headers
+        self.timeout_s = timeout_s
+        self.pending: list[tuple[str, asyncio.Future[float]]] = []
+        self.flusher: asyncio.Task[None] | None = None
+        self.client = httpx.AsyncClient(timeout=timeout_s)
+        self.calls = 0
+        # Sends in flight; held so they are not garbage-collected mid-call.
+        self.sending: set[asyncio.Task[None]] = set()
+
+    async def score(self, text: str, *, max_batch: int, wait_s: float) -> float:
+        future: asyncio.Future[float] = asyncio.get_running_loop().create_future()
+        self.pending.append((text, future))
+        if len(self.pending) >= max_batch:
+            self._flush_now()
+        elif self.flusher is None:
+            self.flusher = asyncio.create_task(self._flush_later(wait_s))
+        return await future
+
+    async def _flush_later(self, wait_s: float) -> None:
+        await asyncio.sleep(wait_s)
+        self.flusher = None
+        self._flush_now()
+
+    def _flush_now(self) -> None:
+        batch, self.pending = self.pending, []
+        if self.flusher is not None:
+            self.flusher.cancel()
+            self.flusher = None
+        if batch:
+            task = asyncio.create_task(self._send(batch))
+            self.sending.add(task)
+            task.add_done_callback(self.sending.discard)
+
+    async def _send(self, batch: list[tuple[str, asyncio.Future[float]]]) -> None:
+        texts = [t for t, _ in batch]
+        if self.api == "openrlhf":
+            body: dict[str, Any] = {"query": texts}
+        else:
+            body = {"input": texts} | ({"model": self.model} if self.model else {})
+        try:
+            self.calls += 1
+            response = await self.client.post(self.url, json=body, headers=self.headers)
+            response.raise_for_status()
+            values = _reward_values(response.json(), self.api, len(texts))
+        except Exception as exc:  # every waiter sees the failure
+            for _, future in batch:
+                if not future.done():
+                    future.set_exception(exc)
+            return
+        for (_, future), value in zip(batch, values, strict=True):
+            if not future.done():
+                future.set_result(value)
+
+
+def _reward_values(data: Any, api: str, n: int) -> list[float]:
+    if api == "openrlhf":
+        rewards = data.get("rewards", data.get("reward"))
+        values = rewards if isinstance(rewards, list) else [rewards]
+    else:
+        items = sorted(data["data"], key=lambda d: int(d.get("index", 0)))
+        values = []
+        for item in items:
+            value = item["data"]
+            while isinstance(value, list):
+                value = value[0]
+            values.append(value)
+    if len(values) != n:
+        raise ValueError(f"the reward model returned {len(values)} rewards for {n} inputs")
+    return [float(v) for v in values]
+
+
+_batchers: dict[tuple[Any, ...], _Batcher] = {}
+
+
+def _batcher(url: str, api: str, model: str, api_key_env: str, timeout_s: float) -> _Batcher:
+    loop = asyncio.get_running_loop()
+    key = (id(loop), url, api, model, api_key_env, timeout_s)
+    found = _batchers.get(key)
+    if found is None or found.client.is_closed:
+        for stale in [k for k in _batchers if k[0] != id(loop)]:
+            del _batchers[stale]
+        headers = {}
+        if api_key_env:
+            headers["Authorization"] = f"Bearer {os.environ.get(api_key_env, '')}"
+        found = _batchers[key] = _Batcher(url, api, model, headers, timeout_s)
+    return found
+
+
 @evaluator(
     name="builtin/reward-model",
-    version="1.0.0",
+    version="1.1.0",
     description=(
         "Scores the completion with a served reward model. api: 'openrlhf' posts "
-        '{"query": [prompt + completion]} and reads "rewards"; \'vllm\' posts to vLLM\'s '
-        "/pooling endpoint and reads the first value."
+        '{"query": [prompt + completion, ...]} and reads "rewards"; \'vllm\' posts to '
+        "vLLM's /pooling endpoint. Requests made together (within wait_ms, up to "
+        "max_batch) go in one call."
     ),
     requires=Requirements(input=True, output=True),
     outputs=[MetricSpec("reward-model", NUMBER)],
@@ -525,30 +622,18 @@ async def reward_model(
     model: str = "",
     timeout_s: float = 60.0,
     api_key_env: str = "",
+    max_batch: int = 64,
+    wait_ms: float = 5.0,
 ) -> Score:
     if api not in ("openrlhf", "vllm"):
         raise ValueError("api must be openrlhf or vllm")
+    if max_batch < 1:
+        raise ValueError("max_batch must be at least 1")
     assert record.input is not None
     text = record.input.as_text() + _output_text(record)
-    headers = {}
-    if api_key_env:
-        headers["Authorization"] = f"Bearer {os.environ.get(api_key_env, '')}"
-    if api == "openrlhf":
-        body: dict[str, Any] = {"query": [text]}
-    else:
-        body = {"model": model, "input": text} if model else {"input": text}
-    async with httpx.AsyncClient(timeout=timeout_s) as client:
-        response = await client.post(url, json=body, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-    if api == "openrlhf":
-        rewards = data.get("rewards", data.get("reward"))
-        value = rewards[0] if isinstance(rewards, list) else rewards
-    else:
-        value = data["data"][0]["data"]
-        while isinstance(value, list):
-            value = value[0]
-    return Score(number=float(value))
+    batcher = _batcher(url, api, model, api_key_env, timeout_s)
+    value = await batcher.score(text, max_batch=max_batch, wait_s=wait_ms / 1000)
+    return Score(number=value)
 
 
 PACK = Pack(

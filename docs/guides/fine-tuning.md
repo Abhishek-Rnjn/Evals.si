@@ -50,7 +50,7 @@ A component is any record-scope evaluator with its params. The total follows the
 | `math-equiv` | Extracts the final answer (`\boxed{}`, `<answer>`, `#### x`, "the answer is x", else the last number) and compares it with the reference: numbers, fractions, percentages, tuples, and with sympy (`evalsi[math]`) or math-verify installed, symbolic equivalence. |
 | `code-exec-tests` | Runs the program against test cases in the sandbox, each case in its own process, and scores the fraction that pass (`all_or_nothing` gives 1 or 0). Cases are stdin/stdout pairs (`tests`, or APPS-style `inputs`/`outputs`) or asserts (MBPP `test_list`, or a test script). The result line carries a random nonce, so the program cannot print a forged result. |
 | `overlong-penalty` | DAPO's soft overlong penalty: 0 up to `max_length − buffer`, falling linearly to −1 at `max_length`. |
-| `reward-model` | A served reward model: OpenRLHF's protocol, or vLLM's `/pooling` endpoint. |
+| `reward-model` | A served reward model: OpenRLHF's protocol, or vLLM's `/pooling` endpoint. Requests made together (within `wait_ms`, up to `max_batch`) go in one call. |
 
 Any other evaluator works as a component too, for example `llm-judge` as a generative reward model, or `json-schema`.
 
@@ -111,7 +111,8 @@ The completion is the query after its prompt, the label is the reference, and co
 `RewardService.ScoreRewards` (gRPC, Connect, or `POST /v1alpha1/rewards:score`) takes a spec and a batch of rollouts as records.
 
 - Components run on the same worker path as `Evaluate`: batched, in parallel, on the cpu or sandbox pools. On Kubernetes, code runs in the sandbox pool.
-- Component scores are cached in memory (`rewards.cache_size`).
+- Component scores are cached in memory (`rewards.cache_size`), and with `rewards.shared_cache` also in the database, so replicas share them (pruned after `rewards.shared_cache_ttl`, default a week).
+- Per-project quotas can bound a project's rollouts in flight (`quotas.*.max_reward_rollouts`).
 - Calls past `rewards.max_inflight` rollouts wait, which pushes back on the trainer instead of overloading the sandboxes.
 - Authorization: the `evaluations.run` permission, with `resource.runs_code` for code components.
 - Metrics: `evalsi_reward_*`.
@@ -165,7 +166,9 @@ base  0.712                ok
 - `--serve lora` hot-loads the checkpoint as an adapter into a running vLLM, then unloads it, so one base-model server serves every step. Start that vLLM with `--enable-lora` and `VLLM_ALLOW_RUNTIME_LORA_UPDATING=True`.
 - `--serve endpoint` uses a model that is already served.
 
-**Checkpoints.** A checkpoint is a directory named `checkpoint-N`, `global_step_N` or `step-N`. It is evaluated once it holds a model and has not changed for `--settle` seconds. `s3://`, `gs://` and `hf://` locations work with fsspec installed, and are downloaded before serving.
+**Checkpoints.** A checkpoint is a directory named `checkpoint-N`, `global_step_N` or `step-N`. It is evaluated once it holds a model and has not changed for `--settle` seconds. `s3://`, `gs://` and `hf://` locations work with fsspec installed, and are downloaded before serving. `mlflow:<model>` watches a registered model's versions (with `MLFLOW_TRACKING_URI`): the step is the version's `step` tag, else its version number, and artifacts the MLflow server proxies are downloaded through it.
+
+**Stopping training from the watcher.** `--stop-file PATH` writes PATH when a checkpoint regresses. `evalsi_callback(None, stop_file=PATH)` in the trainer stops at the next step, and any other training loop can check the file the same way.
 
 **Where results live.**
 

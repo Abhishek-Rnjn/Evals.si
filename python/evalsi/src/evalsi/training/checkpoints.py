@@ -9,7 +9,8 @@ seconds, so a half-written save is never evaluated.
 
 Local directories work out of the box; ``s3://``, ``gs://``, ``hf://`` and
 other remote locations work when ``fsspec`` (and the protocol's package) is
-installed, and are downloaded into a local cache before serving.
+installed, and are downloaded into a local cache before serving. Versions
+of a model in the MLflow Model Registry work too (:func:`find_mlflow`).
 """
 
 from __future__ import annotations
@@ -117,4 +118,80 @@ def localize(checkpoint: Checkpoint, cache_dir: str | Path) -> str:
             checkpoint.location.rstrip("/") + "/", str(target), recursive=True
         )
         (target / ".complete").write_text("")
+    return str(target)
+
+
+# --- MLflow Model Registry ---------------------------------------------------
+
+MLFLOW_PREFIX = "mlflow:"
+
+
+def _mlflow_client(tracking_uri: str) -> Any:
+    import os
+
+    import httpx
+
+    headers = {}
+    if token := os.environ.get("MLFLOW_TRACKING_TOKEN"):
+        headers["Authorization"] = f"Bearer {token}"
+    return httpx.Client(base_url=tracking_uri.rstrip("/"), headers=headers, timeout=60)
+
+
+def find_mlflow(model: str, tracking_uri: str, *, step_tag: str = "step") -> list[Checkpoint]:
+    """Versions of a registered model as checkpoints: the step is the
+    version's ``step_tag`` tag, else its version number, and the location
+    its artifact URI (``mlflow:<name>/<version>`` when the registry serves
+    the artifacts itself)."""
+    with _mlflow_client(tracking_uri) as client:
+        response = client.get(
+            "/api/2.0/mlflow/model-versions/search",
+            params={"filter": f"name='{model}'", "max_results": 1000},
+        )
+        response.raise_for_status()
+        out = []
+        for v in response.json().get("model_versions", []):
+            if v.get("status", "READY") != "READY":
+                continue
+            tags = {t["key"]: t.get("value", "") for t in v.get("tags", [])}
+            step = tags.get(step_tag, "")
+            step_n = int(step) if step.isdigit() else int(v["version"])
+            uri = client.get(
+                "/api/2.0/mlflow/model-versions/get-download-uri",
+                params={"name": model, "version": v["version"]},
+            )
+            uri.raise_for_status()
+            location = str(uri.json().get("artifact_uri") or v.get("source", ""))
+            if location.startswith("mlflow-artifacts:"):
+                location = (
+                    f"{MLFLOW_PREFIX}{location.removeprefix('mlflow-artifacts:').lstrip('/')}"
+                )
+            out.append(Checkpoint(step_n, location))
+    return sorted(out, key=lambda c: c.step)
+
+
+def localize_mlflow(checkpoint: Checkpoint, tracking_uri: str, cache_dir: str | Path) -> str:
+    """Download an artifact the MLflow server proxies (mlflow-artifacts)."""
+    path = checkpoint.location.removeprefix(MLFLOW_PREFIX)
+    target = Path(cache_dir) / f"step-{checkpoint.step}"
+    if (target / ".complete").exists():
+        return str(target)
+    with _mlflow_client(tracking_uri) as client:
+
+        def fetch(rel: str) -> None:
+            listing = client.get("/api/2.0/mlflow-artifacts/artifacts", params={"path": rel})
+            listing.raise_for_status()
+            for f in listing.json().get("files", []):
+                child = f"{rel}/{f['path']}" if rel else f["path"]
+                if f.get("is_dir"):
+                    fetch(child)
+                    continue
+                data = client.get(f"/api/2.0/mlflow-artifacts/artifacts/{child}")
+                data.raise_for_status()
+                dest = target / child.removeprefix(path).lstrip("/")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data.content)
+
+        fetch(path)
+    target.mkdir(parents=True, exist_ok=True)
+    (target / ".complete").write_text("")
     return str(target)

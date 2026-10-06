@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from evalsi.cli import EXIT_GATES_FAILED, add_credential_args
@@ -32,7 +34,14 @@ def add_training_commands(sub: Any) -> None:
 
     wa = ck_sub.add_parser("watch", help="evaluate every new checkpoint in a location")
     wa.add_argument(
-        "location", help="the trainer's output directory (or s3://, hf://... with fsspec)"
+        "location",
+        help="the trainer's output directory (s3://, hf://... with fsspec), or mlflow:<model> "
+        "for a registered model's versions (MLFLOW_TRACKING_URI)",
+    )
+    wa.add_argument(
+        "--stop-file",
+        help="write this file when a checkpoint regresses; the trainer callback's stop_file "
+        "(or any training loop) can watch it to stop training",
     )
     wa.add_argument("--base", help="evaluate this base model first, if not done yet")
     wa.add_argument("--interval", type=float, default=60.0, help="seconds between scans")
@@ -127,7 +136,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 
 def _cmd_watch(args: argparse.Namespace) -> int:
     from evalsi.training import BASE, find
-    from evalsi.training.checkpoints import localize
+    from evalsi.training.checkpoints import MLFLOW_PREFIX, find_mlflow, localize, localize_mlflow
 
     evaluator = _evaluator(args)
     cache = args.cache_dir or f"{args.log_dir}/{args.training_run}/downloads"
@@ -135,14 +144,39 @@ def _cmd_watch(args: argparse.Namespace) -> int:
         print(f"evaluating the base model {args.base}", file=sys.stderr)
         _report(evaluator.evaluate_base(args.base))
     done = {r.step for r in evaluator.history() if not r.error}
+    mlflow_model = (
+        args.location.removeprefix("mlflow:") if args.location.startswith("mlflow:") else ""
+    )
+    tracking = os.environ.get("MLFLOW_TRACKING_URI", "")
+    if mlflow_model and not tracking:
+        raise ValueError("mlflow:<model> needs MLFLOW_TRACKING_URI")
     while True:
-        for checkpoint in find(args.location, settle_s=args.settle):
+        found = (
+            find_mlflow(mlflow_model, tracking)
+            if mlflow_model
+            else find(args.location, settle_s=args.settle)
+        )
+        for checkpoint in found:
             if str(checkpoint.step) in done:
                 continue
             print(f"evaluating step {checkpoint.step}: {checkpoint.location}", file=sys.stderr)
-            result = evaluator.evaluate(localize(checkpoint, cache), checkpoint.step)
+            if checkpoint.location.startswith(MLFLOW_PREFIX):
+                path = localize_mlflow(checkpoint, tracking, cache)
+            else:
+                path = localize(checkpoint, cache)
+            result = evaluator.evaluate(path, checkpoint.step)
             _report(result)
             done.add(str(checkpoint.step))
+            if args.stop_file and result.regressed:
+                Path(args.stop_file).write_text(
+                    json.dumps(
+                        {
+                            "step": result.step,
+                            "regressed": [c.metric for c in result.comparisons if c.regressed],
+                        }
+                    )
+                )
+                print(f"step {result.step} regressed; wrote {args.stop_file}", file=sys.stderr)
         if args.once:
             return 0
         time.sleep(args.interval)
