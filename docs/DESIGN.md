@@ -1572,7 +1572,7 @@ apiVersion: evals.si/v1alpha1
 kind: EvalRun
 metadata:
   name: support-agent-nightly
-  project: support
+  labels: {evals.si/project: support}
 spec:
   target:
     agent:
@@ -1609,7 +1609,7 @@ apiVersion: evals.si/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: prod-support-agent
-  project: support
+  labels: {evals.si/project: support}
 spec:
   selector: 'resource["service.name"] == "support-agent" && span.type == "agent"'
   sampling:

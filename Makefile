@@ -1,11 +1,12 @@
 # Common development tasks. Needs Go, buf and uv on PATH; `make tools` installs
 # the protobuf plugins at the versions CI uses.
 
-.PHONY: help tools proto build check go-check py-sync py-check adapters-check e2e
+.PHONY: help tools proto operator-gen build check go-check py-sync py-check adapters-check e2e
 
 help:
 	@echo "make tools     install protoc-gen-go and protoc-gen-connect-go"
 	@echo "make proto     lint, format and regenerate code from proto/"
+	@echo "make operator-gen  regenerate the CRDs, RBAC, webhook manifests and deepcopy code"
 	@echo "make build     static bin/evalsid and bin/evalsi-guest (the microVM init)"
 	@echo "make check     run every check CI runs"
 	@echo "make adapters-check  test each framework adapter in its own environment"
@@ -21,11 +22,21 @@ proto: py-sync
 	buf generate
 	scripts/gen-python-proto.sh
 
+CONTROLLER_GEN = go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.22.0
+
+operator-gen:
+	$(CONTROLLER_GEN) object paths=./operator/api/...
+	$(CONTROLLER_GEN) crd rbac:roleName=evalsi-operator webhook paths=./operator/... \
+		output:crd:artifacts:config=operator/config/crd \
+		output:rbac:artifacts:config=operator/config/rbac \
+		output:webhook:artifacts:config=operator/config/webhook
+
 # Static binaries: evalsid doubles as the in-sandbox egress forwarder (in any
 # image root), and evalsi-guest is init inside Firecracker microVMs.
 build:
 	CGO_ENABLED=0 go build -o bin/evalsid ./cmd/evalsid
 	CGO_ENABLED=0 go build -o bin/evalsi-guest ./cmd/evalsi-guest
+	CGO_ENABLED=0 go build -o bin/evalsi-operator ./cmd/evalsi-operator
 
 go-check:
 	test -z "$$(gofmt -l .)"

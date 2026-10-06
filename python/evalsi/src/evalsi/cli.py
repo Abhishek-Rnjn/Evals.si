@@ -555,6 +555,7 @@ def load_policy(path: str) -> dict[str, Any]:
     import yaml
     from google.protobuf import json_format
 
+    from evalsi.runspec import api_labels, project_of
     from evalsi.v1alpha1 import monitor_service_pb2
 
     with open(path, encoding="utf-8") as handle:
@@ -567,8 +568,8 @@ def load_policy(path: str) -> dict[str, Any]:
     body = {
         **document["spec"],
         "name": metadata.get("name", ""),
-        "project": metadata.get("project", ""),
-        "labels": metadata.get("labels") or {},
+        "project": project_of(metadata),
+        "labels": api_labels(metadata.get("labels") or {}),
     }
     try:
         message = json_format.ParseDict(body, monitor_service_pb2.OnlineEvalPolicy())

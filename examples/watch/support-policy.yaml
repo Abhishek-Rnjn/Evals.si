@@ -6,7 +6,7 @@ apiVersion: evals.si/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: support-agent
-  project: support
+  labels: {evals.si/project: support}   # on Kubernetes, default: the namespace
 spec:
   # CEL over the trace: service, name, duration_ms, error, steps, tools,
   # models, attributes, resource.

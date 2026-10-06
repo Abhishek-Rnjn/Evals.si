@@ -6,7 +6,7 @@ apiVersion: evals.si/v1alpha1
 kind: EvalRun
 metadata:
   name: capitals
-  project: quickstart
+  labels: {evals.si/project: quickstart}   # on Kubernetes, default: the namespace
 spec:
   target:
     connector: anthropic          # or openai-compatible with base_url

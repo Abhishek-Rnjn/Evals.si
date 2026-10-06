@@ -32,7 +32,8 @@ jobs:
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
           go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.0
           buf generate
-          git diff --exit-code -- gen/
+          make operator-gen
+          git diff --exit-code -- gen/ operator/
 
   go:
     runs-on: ubuntu-latest
@@ -73,6 +74,8 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: gofmt
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
+      - name: envtest (a kube-apiserver and etcd for the operator's tests)
+        run: echo "KUBEBUILDER_ASSETS=$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@v0.25.2 use -p path)" >> "$GITHUB_ENV"
       - run: go vet ./...
       - run: go test -race ./...
         env:

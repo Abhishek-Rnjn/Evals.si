@@ -8,7 +8,7 @@ apiVersion: evals.si/v1alpha1
 kind: EvalRun
 metadata:
   name: fix-calc
-  project: quickstart
+  labels: {evals.si/project: quickstart}   # on Kubernetes, default: the namespace
 spec:
   target:
     connector: anthropic
