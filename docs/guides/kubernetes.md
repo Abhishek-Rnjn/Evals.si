@@ -118,6 +118,8 @@ spec:
 
 ### Admission webhooks
 
+The `EvalRun` and `OnlineEvalPolicy` schemas are generated from the API's messages, so `kubectl explain evalrun.spec.target` documents a field, and a wrong type (a string where `trials` wants a number) fails at the API server. Run files may use either `snake_case` or `camelCase` names, enums by name, and durations such as `10m`.
+
 Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun` and `OnlineEvalPolicy` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The `admin`, `edit` and `view` roles cover the resources through aggregation.
 
 ## Sandboxes on Kubernetes

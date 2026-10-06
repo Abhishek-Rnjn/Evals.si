@@ -52,6 +52,74 @@ spec:
           metadata:
             type: object
           spec:
+            properties:
+              alerts:
+                items:
+                  properties:
+                    above:
+                      type: number
+                    below:
+                      type: number
+                    metric:
+                      type: string
+                    min_samples:
+                      x-kubernetes-int-or-string: true
+                    minSamples:
+                      x-kubernetes-int-or-string: true
+                    webhook:
+                      type: string
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              disabled:
+                type: boolean
+              judge:
+                type: string
+              promote:
+                properties:
+                  dataset:
+                    type: string
+                  when:
+                    type: string
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              sampling:
+                properties:
+                  always:
+                    items:
+                      type: string
+                    type: array
+                  rate:
+                    type: number
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              selector:
+                type: string
+              stages:
+                items:
+                  properties:
+                    evaluators:
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          params:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          ref:
+                            type: string
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      type: array
+                    when:
+                      type: string
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              window:
+                description: 'A duration: "250ms", "30s", "10m", "1.5h", or a number
+                  of seconds.'
+                x-kubernetes-int-or-string: true
             type: object
             x-kubernetes-preserve-unknown-fields: true
           status:

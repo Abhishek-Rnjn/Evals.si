@@ -1611,7 +1611,7 @@ Deviations from the plan:
 
 - Process roles are not separate binaries or flags: every `evalsid serve` replica serves the API and ingest, and leases decide which one schedules runs and runs the policy engine.
 - The pod rung cannot snapshot, so environment setup runs per trial on it.
-- `EvalRun` and `OnlineEvalPolicy` specs are preserved as is in the CRDs (not typed in OpenAPI); the webhook validates them.
+- `EvalRun` and `OnlineEvalPolicy` specs were first preserved as is in the CRDs; their schemas are now generated from the API's messages (`operator/cmd/crd-schema`), so `kubectl explain` documents them and the API server checks types. Unknown fields are kept for the webhook to name, and the webhook still checks oneofs and the CLI's rules.
 
 **Phase 5 plan: fine-tuning and RL.** Six slices:
 
