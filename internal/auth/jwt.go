@@ -150,7 +150,9 @@ func (k *keySource) get(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
+	// Key sets are often served as application/jwk-set+json, and some
+	// servers (kube-apiserver) refuse requests that do not accept it.
+	req.Header.Set("Accept", "application/json, application/jwk-set+json")
 	if kube := k.p.Kubernetes; kube != nil {
 		// Read per fetch: the kubelet rotates projected tokens.
 		token, err := os.ReadFile(kube.tokenFile())

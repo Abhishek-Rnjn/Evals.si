@@ -414,7 +414,14 @@ func kubeAPI(t *testing.T, is *issuer) (Provider, string) {
 		}
 	})
 	mux.HandleFunc("/openid/v1/jwks", func(w http.ResponseWriter, r *http.Request) {
+		// As kube-apiserver: the key set is application/jwk-set+json, and
+		// a request that does not accept it gets 406.
+		if !strings.Contains(r.Header.Get("Accept"), "application/jwk-set+json") {
+			http.Error(w, "Not Acceptable", http.StatusNotAcceptable)
+			return
+		}
 		if authorized(w, r) {
+			w.Header().Set("Content-Type", "application/jwk-set+json")
 			_ = json.NewEncoder(w).Encode(is.public())
 		}
 	})
