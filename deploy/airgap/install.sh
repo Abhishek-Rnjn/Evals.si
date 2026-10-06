@@ -12,6 +12,9 @@
 # --sandbox-classes lets the operator run SandboxClass pools (a
 # ClusterRoleBinding limited to SandboxClasses, in evalsi-crds).
 #
+# --skip-images installs without loading or pushing the images again (they
+# are already in the registry, from an earlier run).
+#
 # --namespace-only installs into an existing namespace with nothing
 # cluster-scoped (no CRDs, no operator, the chart's own sandbox pool), as a
 # user who is only admin of that namespace (values-namespaced.yaml).
@@ -29,6 +32,7 @@ sandboxd=false
 sandboxd_mode=bwrap
 namespace_only=false
 sandbox_classes=false
+skip_images=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --registry) registry="$2"; shift 2 ;;
@@ -38,8 +42,9 @@ while [ $# -gt 0 ]; do
     --sandboxd-mode) sandboxd_mode="$2"; shift 2 ;;
     --namespace-only) namespace_only=true; shift ;;
     --sandbox-classes) sandbox_classes=true; shift ;;
+    --skip-images) skip_images=true; shift ;;
     --) shift; break ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
     *) echo "unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -58,19 +63,21 @@ target() {
   echo "$registry/${ref#library/}"
 }
 
-docker load -q -i "$bundle/images.tar"
-moved=()
-while read -r img; do
-  [ -n "$img" ] || continue
-  docker tag "$img" "$(target "$img")"
-  moved+=("$(target "$img")")
-done < "$bundle/images.txt"
-if [ -n "$kind_cluster" ]; then
-  docker save "${moved[@]}" -o "$bundle/.kind-images.tar"
-  kind load image-archive "$bundle/.kind-images.tar" --name "$kind_cluster"
-  rm -f "$bundle/.kind-images.tar"
-else
-  for img in "${moved[@]}"; do docker push -q "$img"; done
+if ! $skip_images; then
+  docker load -q -i "$bundle/images.tar"
+  moved=()
+  while read -r img; do
+    [ -n "$img" ] || continue
+    docker tag "$img" "$(target "$img")"
+    moved+=("$(target "$img")")
+  done < "$bundle/images.txt"
+  if [ -n "$kind_cluster" ]; then
+    docker save "${moved[@]}" -o "$bundle/.kind-images.tar"
+    kind load image-archive "$bundle/.kind-images.tar" --name "$kind_cluster"
+    rm -f "$bundle/.kind-images.tar"
+  else
+    for img in "${moved[@]}"; do docker push -q "$img"; done
+  fi
 fi
 
 tag="$(head -n1 "$bundle/images.txt")"; tag="${tag##*:}"

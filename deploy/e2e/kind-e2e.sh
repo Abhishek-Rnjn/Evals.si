@@ -117,6 +117,11 @@ step "install from the bundle"
   --set sandbox.address="tls://evalsi-sandboxd.$ns.svc:7443" \
   --wait --timeout 10m
 kubectl rollout status ds/evalsi-sandboxd -n "$ns" --timeout 5m
+# The images are in the kind nodes now; the runner's copies only fill its disk.
+rm -f "$work/bundle/images.tar"
+docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E "^($registry/|ghcr.io/abhishek-rnjn/evalsi:|nats:|postgres:|python:)" | xargs -r docker rmi -f >/dev/null || true
+docker builder prune -af >/dev/null || true
+df -h / | tail -1
 kubectl get pods -n "$ns" -o wide
 
 step "every image came from the bundle"
@@ -203,7 +208,7 @@ for verb in "create clusterroles" "create clusterrolebindings" "create customres
   if kubectl auth can-i $verb --as alice >/dev/null; then echo "alice can $verb" >&2; exit 1; fi
 done
 ci="user:kubernetes/system:serviceaccount:$ns2:ci"
-"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --namespace "$ns2" --namespace-only -- \
+"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --namespace "$ns2" --namespace-only --skip-images -- \
   --kube-as-user alice \
   --set-json "rbac.projects={\"e2e\": {\"runner\": [\"$ci\"]}}" \
   --wait --timeout 10m

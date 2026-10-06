@@ -125,7 +125,8 @@ spec:
                   user namespace with an unmasked /proc and no seccomp or AppArmor
                   profile; privileged runs them privileged, for nodes without user
                   namespaces. The Firecracker rung is always privileged (it needs
-                  /dev/kvm); the pod rung needs neither.
+                  /dev/kvm); the pod rung and Landlock alone need neither, and run
+                  under Pod Security "restricted".
                 enum:
                 - userns
                 - privileged
