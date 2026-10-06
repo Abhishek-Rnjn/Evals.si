@@ -162,7 +162,17 @@ Both formats are read directly; no Docker daemon and no Harbor install are neede
 - takes one model turn and grades the calls with BFCL's AST checker;
 - treats the irrelevance categories as passed when the model calls nothing.
 
-Supported categories: `simple_python`, `simple_java`, `simple_javascript`, `multiple`, `parallel`, `parallel_multiple`, `irrelevance`, their `live_` counterparts, and `live_relevance`. Multi-turn, memory, web-search and format-sensitivity categories need BFCL's executable environments and are not supported.
+Supported categories: `simple_python`, `simple_java`, `simple_javascript`, `multiple`, `parallel`, `parallel_multiple`, `irrelevance`, their `live_` counterparts, and `live_relevance`.
+
+The multi-turn categories (`multi_turn_base`, `multi_turn_miss_func`, `multi_turn_miss_param`, `multi_turn_long_context`) also run, with BFCL's own loop:
+
+- In each user turn, the model calls tools until it answers without one, for at most 20 steps.
+- The calls run against BFCL's stateful API classes: file system, trading, travel and so on.
+- Functions that `miss_func` entries hold out are offered at their turn.
+- BFCL's multi-turn checker grades every turn's end state and results.
+- A call runs only when it names a function offered at that step, with its JSON arguments as Python literals, because BFCL executes calls as code.
+
+Memory, web-search and format-sensitivity categories are not supported.
 
 ## From production to regression tests
 

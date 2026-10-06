@@ -1541,7 +1541,7 @@ Deviations from the plan:
 - Firecracker egress uses vsock and the host's egress proxy instead of a tap device with nftables.
 - The bubblewrap writable root is a copy of the image, not an overlay (bubblewrap 0.9 has no overlay support).
 - τ-bench's simulated user is Evals.si's (through the run's judge), not tau2's LiteLLM user.
-- Partial benchmark coverage: no BFCL multi-turn, memory or web-search categories; no tau2 telecom; no multi-service or multi-stage Terminal-Bench tasks.
+- Partial benchmark coverage: no BFCL multi-turn, memory or web-search categories; no tau2 telecom; no multi-service or multi-stage Terminal-Bench tasks. (BFCL multi-turn was added after Phase 5.)
 - FrontierCode is not imported yet: its task format is not public in a form we could verify. CursorBench's tasks are private. `harbor://` and `code-quality` cover the parts that are public: Harbor-format tasks and a maintainer-style review of the diff.
 
 The Phase 1 deferral of OCI image roots for the bubblewrap rung is resolved by slice 1.
