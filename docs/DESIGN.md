@@ -1225,6 +1225,7 @@ evalsi run -f run.yaml [--server URL] [--dry-run]                 # Run, embedde
 evalsi watch -f policy.yaml                                        # apply an online policy
 evalsi compare <run-a> <run-b>                                     # paired stats, regressions
 evalsi report <run-id> --format html|md                            # shareable static report
+evalsi analyze slice <metric> --by <metadata>                      # cross-run analytics (DuckDB)
 evalsi catalog list [--pack rag]                                   # discover evaluators and suites
 evalsi plugin install ragas                                        # install an adapter (isolated venv)
 evalsi dataset promote --from-traces '<CEL>' --to support-regressions

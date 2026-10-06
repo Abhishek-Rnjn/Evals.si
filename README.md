@@ -315,7 +315,15 @@ uv run evalsi eval --data qa.jsonl --evaluators exact-match --output results.jso
 uv run evalsi report results.json -o report.html    # or .md; --server URL RUN_ID for a server run
 ```
 
-A report has the metrics with their intervals, the gates, and the lowest-scoring records with their inputs, outputs and explanations. Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
+A report has the metrics with their intervals, the gates, and the lowest-scoring records with their inputs, outputs and explanations.
+
+To analyze results across runs, `evalsi analyze` loads runs into DuckDB (`pip install 'evalsi[analytics]'`). The runs come from results files or from a server's API, filtered by project and labels. They land in three tables, `runs`, `scores` and `records`, which you can query with SQL or slice by record metadata:
+
+```bash
+uv run evalsi analyze slice exact-match --by category --results 'nightly-*.json'
+uv run evalsi analyze query "select model, avg(value) from scores join runs using (run_id) group by 1" \
+  --server https://evalsi.example.com --project support --label suite=nightly --db nightly.duckdb
+``` Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
 
 ### Fine-tuning and RL
 

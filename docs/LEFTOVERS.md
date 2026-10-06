@@ -22,7 +22,7 @@ Last updated: 2026-10-06, at the end of Phase 5.
 
 | Item | Notes | Where recorded |
 |------|-------|----------------|
-| DuckDB for standalone analytics | Waits for cross-run analytics. | Decision 0009 |
+| Server-side analytics | `evalsi analyze` loads runs into DuckDB on the client, through the API. It reads every result of the runs it loads, so analysis over thousands of large runs would want a server-side query (ClickHouse already holds the data on Kubernetes). | Decision 0009 |
 | Platform wheels bundling evalsid | Releases publish archives (evalsid, a static bubblewrap), wheels, images, charts and the bundle (`.github/workflows/release.yml`), but no tag has been cut, and the wheels do not bundle evalsid as decision 0006 suggests. | Decision 0006 |
 | Sandbox-time quotas | Per-project quotas cover concurrent and stored runs, daily judge and target tokens, and reward rollouts in flight; sandbox minutes are not metered. Concurrency quotas are per replica. | §17 "Tenancy" |
 | Keyless image signatures | `sandbox.image_signatures` verifies cosign key signatures (`.sig` tags) offline. Keyless (Fulcio certificates, Rekor) and the newer bundle-as-referrer format are not supported, and our own release images are not signed yet. | §17 "Other security controls" |

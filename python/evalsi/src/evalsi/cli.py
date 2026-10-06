@@ -52,6 +52,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_eval(sub)
     _add_run(sub)
     _add_policy(sub)
+    from evalsi.cli_analytics import add_analytics_commands
     from evalsi.cli_auth import add_auth_commands
     from evalsi.cli_flywheel import add_flywheel_commands
     from evalsi.cli_rewards import add_report_command, add_rewards_commands
@@ -62,6 +63,7 @@ def _parser() -> argparse.ArgumentParser:
     add_rewards_commands(sub)
     add_report_command(sub)
     add_training_commands(sub)
+    add_analytics_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
     cat.add_argument("--format", choices=["table", "json"], default="table")
