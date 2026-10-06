@@ -9,11 +9,12 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 - **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
 - **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
 
-> **Status:** Phases 0 to 4 are done; fine-tuning and RL (Phase 5) is next. The server runs standalone or on Kubernetes and covers three doors:
+> **Status:** Phases 0 to 5 are done; MCP, classic ML and the ecosystem (Phase 6) are next. The server runs standalone or on Kubernetes and covers three doors, plus rewards for RL:
 >
 > - **Score:** grade outputs you already have.
 > - **Run:** durable, resumable runs with trials, gates and budgets. That includes agent runs, which put the built-in agent or your own agent to work on sandboxed tasks.
 > - **Watch:** online evaluation of OpenTelemetry traces.
+> - **Reward:** evaluators as RL rewards for TRL, verl and OpenRLHF, in-process or from the server's Reward Service, with sandboxed code execution and a per-component breakdown; and evaluation of every training checkpoint against the base model.
 >
 > Around them are:
 >
@@ -307,21 +308,42 @@ kubectl apply -n evalsi -f examples/runs/capitals.yaml
 kubectl get evalruns -n evalsi      # PHASE, RUN, DONE, TOTAL
 ```
 
+### Fine-tuning and RL
+
+A `RewardSpec` composes evaluators into a reward: weights, gates, and a breakdown per component. The `rl` pack adds verifiers for format, math answers, sandboxed code tests and overlong penalties.
+
+```python
+from evalsi.rewards.trl import reward_funcs
+
+funcs, weights = reward_funcs("examples/finetuning/code-reward.yaml")   # server=... for the Reward Service
+trainer = GRPOTrainer(model=model, reward_funcs=funcs, args=GRPOConfig(reward_weights=weights, ...), ...)
+```
+
+Checkpoints are served (vLLM, LoRA hot-load, or an endpoint) and evaluated as they are saved, with learning curves and regression gates against the base model:
+
+```bash
+evalsi checkpoints watch out/ -f examples/finetuning/forgetting.yaml --training-run grpo-1 \
+  --serve lora --base-url http://localhost:8000/v1 --regression math-equiv:0.02
+```
+
+See the [fine-tuning and RL guide](docs/guides/fine-tuning.md) for verl, OpenRLHF, the Reward Service, and the `finetune` pack (diversity, calibration, contamination, reward hacking).
+
 ## Repository layout
 
 | Path | What |
 |------|------|
 | `proto/` | Protobuf API, the single source of truth (`evalsi.v1alpha1`, `evalsi.plugin.v1alpha1`) |
 | `gen/go/` | Generated Go code (do not edit; run `make proto`) |
-| `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, authentication (`auth`) and authorization (`authz`), worker supervision, runs, OTLP ingest and online policies, sandbox, sinks, statistics |
-| `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker and built-in packs |
-| `python/evalsi-harness/` | The agent harness: tool loop, agent connectors, environments and checkers, Harbor and Terminal-Bench importers |
+| `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, authentication (`auth`) and authorization (`authz`), worker supervision, runs, rewards, OTLP ingest and online policies, sandbox, sinks, statistics |
+| `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker, built-in packs, rewards for trainers (`evalsi.rewards`) and checkpoint evaluation (`evalsi.training`) |
+| `python/evalsi-harness/` | The agent harness: tool loop, agent connectors, environments and checkers, `reset`/`step` RL environments, Harbor and Terminal-Bench importers |
 | `python/adapters/` | Framework and benchmark adapters (DeepEval, RAGAS, Inspect AI, lm-eval, SWE-bench, τ-bench, BFCL), each in its own environment |
 | `cmd/evalsi-guest/` | The init and agent inside Firecracker microVMs, and the agent in sandbox pods |
 | `cmd/evalsi-operator/`, `operator/` | The Kubernetes operator: CRD types, controllers, admission webhooks |
 | `deploy/` | Helm charts (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), the air-gapped bundle, the kind e2e; the image is the root `Dockerfile` |
 | `tests/e2e/` | evalsid against a real Python worker (`make e2e`), and the load test (`EVALSI_LOAD=1`) |
 | `tests/helm/` | The charts, rendered and their configs validated |
+| `tests/trainers/` | TRL GRPO with Evals.si rewards and checkpoint evaluation, on CPU |
 | `examples/` | Runnable examples |
 | `docs/` | Design plan, decision records and guides |
 

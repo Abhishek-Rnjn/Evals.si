@@ -77,6 +77,55 @@ async def run_sandboxed(
             mode=mode,
             min_isolation=min_isolation,
         )
+    async with _local_slot():
+        return await _run_local(
+            command,
+            files=files,
+            stdin=stdin,
+            env=env,
+            timeout_s=timeout_s,
+            memory_mb=memory_mb,
+            network=network,
+            mode=mode,
+            min_isolation=min_isolation,
+        )
+
+
+_slots: dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
+
+
+def local_concurrency() -> int:
+    """Local sandboxes running at once: ``EVALSI_SANDBOX_CONCURRENCY``, by
+    default the number of CPUs. Timeouts are wall-clock, so running far more
+    sandboxes than cores would time out correct programs under contention."""
+    value = os.environ.get("EVALSI_SANDBOX_CONCURRENCY", "")
+    if value.isdigit() and int(value) > 0:
+        return int(value)
+    return max(1, os.cpu_count() or 1)
+
+
+def _local_slot() -> asyncio.Semaphore:
+    loop = asyncio.get_running_loop()
+    slot = _slots.get(loop)
+    if slot is None:
+        for stale in [k for k in _slots if k.is_closed()]:
+            del _slots[stale]
+        slot = _slots[loop] = asyncio.Semaphore(local_concurrency())
+    return slot
+
+
+async def _run_local(
+    command: list[str],
+    *,
+    files: dict[str, str] | None,
+    stdin: str,
+    env: dict[str, str] | None,
+    timeout_s: float,
+    memory_mb: int,
+    network: str,
+    mode: str,
+    min_isolation: str,
+) -> SandboxResult:
     request = {
         "command": command,
         "files": files or {},

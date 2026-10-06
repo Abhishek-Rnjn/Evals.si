@@ -216,6 +216,33 @@ jobs:
           EVALSI_E2E_S3_ACCESS_KEY: evalsi
           EVALSI_E2E_S3_SECRET_KEY: evalsi-secret
 
+  trainers:
+    # Phase 5's exit criterion at CPU scale: TRL GRPO trains a tiny model
+    # with Evals.si code rewards run in the real sandbox, and the
+    # TrainerCallback evaluates every checkpoint.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      - name: Sandbox prerequisites
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Trainer environment
+        run: |
+          uv venv -p 3.12 "$RUNNER_TEMP/trainers"
+          export VIRTUAL_ENV="$RUNNER_TEMP/trainers"
+          uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -r tests/trainers/requirements.txt -e python/evalsi
+      - name: GRPO with Evals.si rewards
+        run: |
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
+          cd tests/trainers && EVALSID="$RUNNER_TEMP/evalsid" "$RUNNER_TEMP/trainers/bin/python" -m pytest -q
+
   kubernetes:
     # Phase 4's exit criteria on a kind cluster: an air-gapped install from
     # the bundle (two API replicas on PostgreSQL, NATS, workers, the operator,

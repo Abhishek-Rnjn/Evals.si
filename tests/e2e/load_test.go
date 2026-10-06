@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ import (
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
@@ -67,6 +69,7 @@ func TestLoad(t *testing.T) {
 	t.Run("OnlineFreshness", func(t *testing.T) { onlineFreshness(t, e, report) })
 	t.Run("RunSize", func(t *testing.T) { runSize(t, e, report) })
 	t.Run("SandboxLease", func(t *testing.T) { sandboxLease(t, report) })
+	t.Run("RewardThroughput", func(t *testing.T) { rewardThroughput(t, e, report) })
 }
 
 func envInt(name string, def int) int {
@@ -399,4 +402,88 @@ func sandboxLease(t *testing.T, report map[string]any) {
 	if p := percentile(cold, 0.95); p >= 2*time.Second {
 		t.Errorf("cold lease p95 %v, target < 2s", p)
 	}
+}
+
+// rewardThroughput scores a GRPO step's worth of code rollouts (the §12
+// example: 512 prompts x 8 samples) through the Reward Service, each
+// running its program against two test cases in the sandbox, then the same
+// batch again from the cache (EVALSI_LOAD_ROLLOUTS sets the size).
+func rewardThroughput(t *testing.T, e env, report map[string]any) {
+	probe, err := sandbox.New(sandbox.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	usable := false
+	for _, st := range probe.Probe(context.Background()) {
+		usable = usable || st.Available
+	}
+	if !usable {
+		t.Skip("no sandbox rung works on this host")
+	}
+	n := envInt("EVALSI_LOAD_ROLLOUTS", 4096)
+	tests, _ := structpb.NewValue([]any{
+		map[string]any{"input": "2", "output": "4"},
+		map[string]any{"input": "5", "output": "10"},
+	})
+	rollouts := make([]*evalsiv1alpha1.Record, n)
+	for i := range rollouts {
+		// Distinct programs, so nothing is served from the cache on the first pass.
+		code := fmt.Sprintf("```python\nn = int(input())  # sample %d\nprint(n * %d)\n```", i, 2+i%3)
+		rollouts[i] = &evalsiv1alpha1.Record{Id: strconv.Itoa(i), Output: text(code), Metadata: map[string]*structpb.Value{"tests": tests}}
+	}
+	spec := &evalsiv1alpha1.RewardSpec{Name: "load", Components: []*evalsiv1alpha1.RewardComponent{
+		{Ref: "python-syntax", Name: "syntax", Weight: 0.1, Gate: true},
+		{Ref: "code-exec-tests", Name: "tests", Weight: 0.9},
+	}}
+	client := evalsiv1alpha1connect.NewRewardServiceClient(h2cClient(), e.base, connect.WithGRPC())
+	pass := func() (time.Duration, float64) {
+		const batch = 512
+		start := time.Now()
+		var mu sync.Mutex
+		total := 0.0
+		var wg sync.WaitGroup
+		errs := make(chan error, n/batch+1)
+		for lo := 0; lo < n; lo += batch {
+			hi := min(lo+batch, n)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				resp, err := client.ScoreRewards(context.Background(), connect.NewRequest(&evalsiv1alpha1.ScoreRewardsRequest{Spec: spec, Rollouts: rollouts[lo:hi]}))
+				if err != nil {
+					errs <- err
+					return
+				}
+				mu.Lock()
+				for _, r := range resp.Msg.GetRewards() {
+					total += r.GetTotal()
+				}
+				mu.Unlock()
+			}()
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			t.Fatal(err)
+		}
+		return time.Since(start), total
+	}
+	cold, total := pass()
+	warm, again := pass()
+	// A third of the programs double n and pass both cases.
+	want := 0.0
+	for i := range n {
+		if i%3 == 0 {
+			want += 1
+		} else {
+			want += 0.1
+		}
+	}
+	if math.Abs(total-want) > 1e-6 || math.Abs(again-want) > 1e-6 {
+		t.Errorf("summed rewards %v and %v, want %v", total, again, want)
+	}
+	report["reward_rollouts"] = n
+	report["reward_cold_s"] = cold.Seconds()
+	report["reward_rollouts_per_s"] = float64(n) / cold.Seconds()
+	report["reward_cached_s"] = warm.Seconds()
+	t.Logf("%d sandboxed code rollouts: %.1fs (%.0f/s); cached: %.2fs", n, cold.Seconds(), float64(n)/cold.Seconds(), warm.Seconds())
 }
