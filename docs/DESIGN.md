@@ -1519,6 +1519,35 @@ Deviations from the plan:
 
 The Phase 1 deferral of OCI image roots for the bubblewrap rung is resolved by slice 1.
 
+**Phase 4 plan: Kubernetes.** It lands in six slices:
+
+1. **Storage backends.**
+   - PostgreSQL for metadata, runs and results, through a dialect layer under the existing SQL store.
+   - ClickHouse for traces and their scores.
+   - S3-compatible object storage for `datasets_dir` (datasets, promotions).
+   - Selected in the `storage` section of the config. SQLite and the local directory stay the standalone default.
+2. **Distributed execution and HA.**
+   - NATS JetStream work queues per pool (`work.<pool>`), behind the same `pluginhost.Worker` interface the runs and evaluation services use.
+   - An `evalsid worker` role that pulls tasks for a pool and drives a local Python worker.
+   - Process roles (`api`, `ingest`, `scheduler`, `policy-engine`, `worker`).
+   - A leader lease, so several replicas can run the scheduler and policy engine safely.
+3. **Sandboxes on Kubernetes.**
+   - `sandboxd`: the sandbox service over TCP with mTLS, for the DaemonSet (Firecracker) and the bubblewrap sandbox pool.
+   - The **hardened pod** rung: one pod per sandbox from the task's image, with `evalsi-guest` injected by an init container, no service-account token, a restricted security context, and a NetworkPolicy that allows only the egress proxy.
+4. **Operator and CRDs.**
+   - `EvalRun`, `Evaluator`, `OnlineEvalPolicy` and `SandboxClass` (`evals.si/v1alpha1`), reconciled through the server's API with status written back.
+   - An admission webhook that records who created each resource.
+   - Tested against a real API server and etcd.
+5. **Kubernetes identity.** Service-account tokens accepted as an OIDC provider (the cluster's issuer and JWKS), and mTLS between components (workers, sandboxd, the operator).
+6. **Packaging and validation.**
+   - Helm charts: the namespace-scoped `evalsi`, plus the cluster-scoped `evalsi-crds` and `evalsi-sandboxd`, with KEDA `ScaledObject`s per pool.
+   - Container images and the air-gapped bundle.
+   - A `kind` e2e job in CI covering the bubblewrap and pod rungs.
+   - A load test against the §14 targets.
+   - The agentgateway-on-Kubernetes guide.
+
+The operator is a separate binary (`evalsi-operator`), so `evalsid` does not carry the controller libraries. The pod rung talks to the Kubernetes API over REST.
+
 ## 24. Risks and mitigations
 
 | Risk | Mitigation |
