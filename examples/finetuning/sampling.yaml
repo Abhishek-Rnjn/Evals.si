@@ -1,0 +1,20 @@
+# Sampling behaviour and mode collapse: several samples per prompt at
+# temperature 1 give pass@k and pass^k, and the diversity of the outputs.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: sampling}
+spec:
+  target:
+    connector: openai-compatible
+    model: base
+    base_url: http://localhost:8000/v1
+    max_tokens: 2048
+    temperature: 1.0
+  dataset:
+    uri: hf://openai/gsm8k?config=main&split=test
+    mapping: {input: question, reference: answer}
+    limit: 200
+  evaluators:
+    - ref: math-equiv                 # with trials: math-equiv.pass@8 and pass^8
+    - ref: diversity
+  trials: 8

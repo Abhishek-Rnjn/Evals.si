@@ -1,0 +1,23 @@
+# A reward for GRPO on code: the completion must contain a fenced Python
+# block (a gate: no block, reward 0), then the fraction of test cases its
+# program passes in the sandbox. Rollouts carry their test cases in a
+# `tests` column ([{input, output}, ...]) or MBPP-style `test_list`.
+#
+#   evalsi rewards score --spec code-reward.yaml --data rollouts.jsonl
+#   python -c "from evalsi.rewards.trl import reward_funcs; print(reward_funcs('code-reward.yaml'))"
+apiVersion: evals.si/v1alpha1
+kind: RewardSpec
+metadata: {name: code-grpo}
+spec:
+  components:
+    - ref: format-check
+      name: format
+      weight: 0.1
+      gate: true
+      params: {pattern: "(?s).*```python\\n.*```.*"}
+    - ref: code-exec-tests
+      name: tests
+      weight: 0.9
+      params: {timeout_s: 5}
+      sandbox: {minIsolation: namespaced}
+  cache: {enabled: true}
