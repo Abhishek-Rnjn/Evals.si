@@ -221,7 +221,7 @@ func newService(t *testing.T, w *fakeWorker, opts config.Rewards) *Service {
 	if opts.MaxRollouts == 0 {
 		opts = config.Rewards{MaxRollouts: 100, MaxInflight: 100, CacheSize: 1000}
 	}
-	return New(eval, opts)
+	return New(eval, opts, config.Quotas{})
 }
 
 func rollout(output string, tests bool) *evalsiv1alpha1.Record {
@@ -393,5 +393,48 @@ func TestScoreRewardsBackPressure(t *testing.T) {
 	}
 	if _, err := score(t, s, codeSpec(), rollout("<answer>c", true)); err != nil {
 		t.Fatalf("capacity was not released: %v", err)
+	}
+}
+
+// TestScoreRewardsProjectQuota: a project's max_reward_rollouts bounds its
+// calls in flight; other projects are not held back.
+func TestScoreRewardsProjectQuota(t *testing.T) {
+	w := &fakeWorker{block: make(chan struct{})}
+	eval := evaluation.New(w, catalog.New(manifests(t)), nil, "", config.Evaluate{BatchSize: 4, Parallelism: 4, MaxRecords: 100})
+	s := New(eval, config.Rewards{MaxRollouts: 100, MaxInflight: 100}, config.Quotas{
+		Projects: map[string]config.QuotaLimits{"small": {MaxRewardRollouts: 2}},
+	})
+	call := func(ctx context.Context, project string, n int) error {
+		var rollouts []*evalsiv1alpha1.Record
+		for i := 0; i < n; i++ {
+			rollouts = append(rollouts, rollout("<answer>x"+strconv.Itoa(i), true))
+		}
+		_, err := s.ScoreRewards(ctx, connect.NewRequest(&evalsiv1alpha1.ScoreRewardsRequest{Project: project, Spec: codeSpec(), Rollouts: rollouts}))
+		return err
+	}
+	if err := call(context.Background(), "small", 3); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("a batch over the quota: %v", err)
+	}
+	first := make(chan error, 1)
+	go func() { first <- call(context.Background(), "small", 2) }()
+	for w.calls.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if err := call(ctx, "small", 1); connect.CodeOf(err) != connect.CodeDeadlineExceeded {
+		t.Fatalf("the project is at its quota; want a wait, got %v", err)
+	}
+	other := make(chan error, 1)
+	go func() { other <- call(context.Background(), "", 5) }()
+	for w.calls.Load() < 3 {
+		time.Sleep(time.Millisecond)
+	}
+	close(w.block)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-other; err != nil {
+		t.Fatal(err)
 	}
 }

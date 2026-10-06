@@ -61,6 +61,10 @@ type Options struct {
 	// Lease timing in a cluster; defaults 30s and 10s (shorter in tests).
 	LeaseTTL      time.Duration
 	AdoptInterval time.Duration
+	// Per-project limits (concurrent and stored runs, daily tokens).
+	Quotas config.Quotas
+	// The time, for daily quotas; time.Now when nil (tests set it).
+	Now func() time.Time
 }
 
 // Coordinator connects the replicas sharing a database (see the cluster
@@ -85,9 +89,11 @@ type Manager struct {
 	slots  chan struct{}
 	log    *slog.Logger
 
-	mu       sync.Mutex
-	active   map[string]*activeRun
-	stopping bool
+	mu     sync.Mutex
+	active map[string]*activeRun
+	// Per-project concurrency slots, made on first use.
+	projectSlots map[string]chan struct{}
+	stopping     bool
 	// Stops the cluster loops (adoption, cancel subscription).
 	stopCluster func()
 }
@@ -112,11 +118,16 @@ func New(ctx context.Context, st *store.Store, worker pluginhost.Worker, engine 
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
+	if opts.Now == nil {
+		opts.Now = time.Now
+	}
 	m := &Manager{
 		store: st, worker: worker, engine: engine, opts: opts,
 		slots:  make(chan struct{}, opts.MaxConcurrent),
 		log:    opts.Logger,
 		active: map[string]*activeRun{},
+
+		projectSlots: map[string]chan struct{}{},
 	}
 	if opts.Cluster != nil {
 		return m, m.joinCluster()
@@ -379,6 +390,9 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 		return nil, err
 	}
 	project := projectOr(req.Msg.GetProject())
+	if err := m.checkQuota(ctx, project); err != nil {
+		return nil, err
+	}
 	records, err := m.loadDataset(ctx, spec.GetDataset(), project)
 	if err != nil {
 		return nil, err
@@ -439,6 +453,15 @@ func (m *Manager) start(run *evalsiv1alpha1.Run) {
 				return
 			}
 		}
+		// The project's slot first, so a project at its limit does not hold
+		// global slots other projects could use.
+		if slot := m.projectSlot(run.GetProject()); slot != nil {
+			select {
+			case slot <- struct{}{}:
+				defer func() { <-slot }()
+			case <-ctx.Done():
+			}
+		}
 		select {
 		case m.slots <- struct{}{}:
 			defer func() { <-m.slots }()
@@ -480,6 +503,9 @@ func (m *Manager) publish(a *activeRun, ev *evalsiv1alpha1.WatchRunResponse) {
 }
 
 type execution struct {
+	// Tokens already counted toward the project's daily quota.
+	countedJudge, countedTarget int64
+
 	m       *Manager
 	a       *activeRun
 	run     *evalsiv1alpha1.Run
@@ -602,6 +628,8 @@ func (m *Manager) prepare(ctx context.Context, run *evalsiv1alpha1.Run, a *activ
 	for _, r := range stored {
 		ex.addJudgeUsage(r.Result)
 	}
+	// What earlier attempts of this run used was counted when they ran.
+	ex.countedJudge, ex.countedTarget = tokens(run.GetJudgeUsage()), tokens(run.GetTargetUsage())
 	return ex, nil
 }
 
@@ -631,7 +659,10 @@ func (ex *execution) progress(ctx context.Context, n int) error {
 	return ex.m.store.UpdateRun(ctx, ex.run)
 }
 
-func (ex *execution) checkBudget() error {
+func (ex *execution) checkBudget(ctx context.Context) error {
+	if err := ex.checkQuota(ctx); err != nil {
+		return err
+	}
 	b := ex.spec.GetBudget()
 	if b.GetMaxTargetTokens() > 0 && tokens(ex.run.GetTargetUsage()) > b.GetMaxTargetTokens() {
 		return fmt.Errorf("budget exceeded: the target used %d tokens, over max_target_tokens %d", tokens(ex.run.GetTargetUsage()), b.GetMaxTargetTokens())
@@ -719,7 +750,7 @@ func (ex *execution) generate(ctx context.Context, trial int) error {
 		if err := ex.progress(ctx, len(results)); err != nil {
 			return err
 		}
-		if err := ex.checkBudget(); err != nil {
+		if err := ex.checkBudget(ctx); err != nil {
 			return err
 		}
 	}
@@ -823,7 +854,7 @@ func (ex *execution) save(ctx context.Context, batch []store.Result) error {
 	if err := ex.progress(ctx, len(batch)); err != nil {
 		return err
 	}
-	return ex.checkBudget()
+	return ex.checkBudget(ctx)
 }
 
 func (ex *execution) finalize(ctx context.Context) error {
@@ -1146,7 +1177,7 @@ func (ex *execution) runTasks(ctx context.Context, trial int) error {
 			if err := ex.progress(gctx, 1); err != nil {
 				return err
 			}
-			return ex.checkBudget()
+			return ex.checkBudget(gctx)
 		})
 	}
 	return g.Wait()

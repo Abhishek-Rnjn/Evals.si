@@ -1210,7 +1210,7 @@ audit: {retention: 2160h}
 - **Untrusted plugins:** they run out-of-process at the plugin's declared or overridden isolation level. Images are pinned by digest, and signature verification (cosign) comes later.
 - **Sandboxes:** the strongest available rung is used and the sandbox fails closed (§13). Egress is denied by default, resources and output sizes are capped, environments are ephemeral, and egress is logged.
 - **Data:** PII redaction at ingest, per-project retention TTLs, encryption at rest through the storage backends, and the audit log above.
-- **Tenancy:** one install per client, with projects inside it (D5). Per-project quotas cover concurrent tasks, sandbox minutes, judge tokens and storage. The reserved `tenant_id` lets a hosted multi-tenant offering add a tenant boundary above projects later.
+- **Tenancy:** one install per client, with projects inside it (D5). Per-project quotas (`quotas` in `evalsi.yaml`) bound concurrent runs (excess runs wait), stored runs, judge and target tokens per UTC day (a run stops when its project goes over), and Reward Service rollouts in flight. Sandbox time is not metered yet. The reserved `tenant_id` lets a hosted multi-tenant offering add a tenant boundary above projects later.
 
 ## 18. Reproducibility and versioning
 

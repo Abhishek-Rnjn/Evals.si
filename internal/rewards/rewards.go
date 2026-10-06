@@ -38,21 +38,47 @@ import (
 type Service struct {
 	eval     *evaluation.Service
 	opts     config.Rewards
+	quotas   config.Quotas
 	inflight *semaphore.Weighted
 	cache    *cache
+
+	mu       sync.Mutex
+	projects map[string]*semaphore.Weighted
 
 	rollouts, requests, failures atomic.Int64
 	waitNanos, scoreNanos        atomic.Int64
 }
 
 // New builds a reward service over an evaluation service.
-func New(eval *evaluation.Service, opts config.Rewards) *Service {
+func New(eval *evaluation.Service, opts config.Rewards, quotas config.Quotas) *Service {
 	return &Service{
 		eval:     eval,
 		opts:     opts,
+		quotas:   quotas,
 		inflight: semaphore.NewWeighted(int64(opts.MaxInflight)),
 		cache:    newCache(opts.CacheSize),
+		projects: map[string]*semaphore.Weighted{},
 	}
+}
+
+// projectLimit is the project's in-flight limiter and its size, or nil
+// when the project has no max_reward_rollouts quota.
+func (s *Service) projectLimit(project string) (*semaphore.Weighted, int) {
+	if project == "" {
+		project = "default"
+	}
+	limit := s.quotas.For(project).MaxRewardRollouts
+	if limit <= 0 {
+		return nil, 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sem, ok := s.projects[project]
+	if !ok {
+		sem = semaphore.NewWeighted(int64(limit))
+		s.projects[project] = sem
+	}
+	return sem, limit
 }
 
 func invalid(format string, args ...any) error {
@@ -155,10 +181,21 @@ func (s *Service) ScoreRewards(ctx context.Context, req *connect.Request[evalsiv
 	}
 	s.requests.Add(1)
 	waited := time.Now()
-	if err := s.inflight.Acquire(ctx, int64(max(n, 1))); err != nil {
+	weight := int64(max(n, 1))
+	if sem, limit := s.projectLimit(msg.GetProject()); sem != nil {
+		if n > limit {
+			return nil, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf(
+				"%d rollouts exceed the project's quota of %d in flight (max_reward_rollouts); send smaller batches", n, limit))
+		}
+		if err := sem.Acquire(ctx, weight); err != nil {
+			return nil, connect.NewError(connect.CodeDeadlineExceeded, fmt.Errorf("waiting for the project's reward quota: %w", err))
+		}
+		defer sem.Release(weight)
+	}
+	if err := s.inflight.Acquire(ctx, weight); err != nil {
 		return nil, connect.NewError(connect.CodeDeadlineExceeded, fmt.Errorf("waiting for reward capacity: %w", err))
 	}
-	defer s.inflight.Release(int64(max(n, 1)))
+	defer s.inflight.Release(weight)
 	s.waitNanos.Add(int64(time.Since(waited)))
 	started := time.Now()
 	results, err := s.score(ctx, msg.GetSpec(), comps, msg.GetRollouts())

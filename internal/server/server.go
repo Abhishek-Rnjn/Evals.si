@@ -144,6 +144,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		Cluster:       runCluster(cl),
 		LeaseTTL:      optDuration(cfg.Runs.LeaseTTL),
 		AdoptInterval: optDuration(cfg.Runs.AdoptInterval),
+		Quotas:        cfg.Quotas,
 		TraceScores: func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64 {
 			return watcher.TraceScores(policy, results)
 		},
@@ -222,7 +223,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 
 	authSvc := authz.NewService(engine, st, auditor, authn.ConfigKeys())
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, log)
-	d := deps{svc: svc, rewards: rewards.New(svc, cfg.Rewards), runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
+	d := deps{svc: svc, rewards: rewards.New(svc, cfg.Rewards, cfg.Quotas), runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}

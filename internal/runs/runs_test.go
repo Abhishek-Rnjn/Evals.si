@@ -176,14 +176,18 @@ func newHarness(t *testing.T) *harness {
 	return newHarnessWith(t, st, dir)
 }
 
-func newHarnessWith(t *testing.T, st *store.Store, dir string) *harness {
+func newHarnessWith(t *testing.T, st *store.Store, dir string, mutate ...func(*Options)) *harness {
 	t.Helper()
 	w := newFake()
 	opts := config.Evaluate{BatchSize: 2, Parallelism: 2, MaxRecords: 100}
 	engine := evaluation.New(w, catalog.New(manifests()), nil, "", opts)
 	datasets := filepath.Join(dir, "datasets")
 	_ = os.MkdirAll(datasets, 0o700)
-	m, err := New(context.Background(), st, w, engine, Options{DatasetsDir: datasets, MaxConcurrent: 2, Evaluate: opts})
+	o := Options{DatasetsDir: datasets, MaxConcurrent: 2, Evaluate: opts}
+	for _, f := range mutate {
+		f(&o)
+	}
+	m, err := New(context.Background(), st, w, engine, o)
 	if err != nil {
 		t.Fatal(err)
 	}
