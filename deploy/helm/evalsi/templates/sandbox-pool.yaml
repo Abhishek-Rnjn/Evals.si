@@ -1,0 +1,131 @@
+{{- /*
+A sandbox pool run by this chart: `evalsid sandbox serve` behind a Service,
+over mutual TLS, admitting only the workers' certificate. On the pod rung
+and on Landlock it needs no privilege and no cluster-scoped object, so a
+namespace admin can run it under Pod Security "restricted" (a SandboxClass
+does the same through the operator).
+*/ -}}
+{{- with .Values.sandbox.pool }}{{ if .enabled }}
+{{- $v := $.Values }}
+{{- $ns := $.Release.Namespace }}
+{{- $ladder := .ladder }}
+{{- range $ladder }}
+{{- if not (has . (list "pod" "landlock")) }}
+{{- fail (printf "sandbox.pool.ladder: %s needs privileges; use the evalsi-sandboxd chart or a SandboxClass for it" .) }}
+{{- end }}
+{{- end }}
+{{- $usesPods := has "pod" $ladder }}
+{{- if and $usesPods (not $v.sandbox.podRung.enabled) }}
+{{- fail "sandbox.pool with the pod rung needs sandbox.podRung.enabled (its service account and Role)" }}
+{{- end }}
+{{- $cfg := dict "ladder" $ladder "work_dir" "/var/lib/evalsi/sandboxes" "cache_dir" "/var/lib/evalsi/cache" }}
+{{- with .minIsolation }}{{ $_ := set $cfg "min_isolation" . }}{{ end }}
+{{- with .maxSandboxes }}{{ $_ := set $cfg "max_sandboxes" (int .) }}{{ end }}
+{{- if $usesPods }}
+{{- $p := .pod }}
+{{- $pod := dict "namespace" $ns "guest_image" (include "evalsi.image" $) "network_policy_enforced" $p.networkPolicyEnforced "labels" (dict "evals.si/sandbox-pool" "evalsi-sandbox-pool") }}
+{{- with $p.defaultImage }}{{ $_ := set $pod "default_image" (include "evalsi.ref" (dict "root" $ "ref" .)) }}{{ end }}
+{{- if not (kindIs "invalid" $p.runAsUser) }}{{ $_ := set $pod "run_as_user" (int64 $p.runAsUser) }}{{ end }}
+{{- if not (kindIs "invalid" $p.capabilities) }}{{ $_ := set $pod "capabilities" $p.capabilities }}{{ end }}
+{{- with $p.runtimeClassName }}{{ $_ := set $pod "runtime_class_name" . }}{{ end }}
+{{- with $p.level }}{{ $_ := set $pod "level" . }}{{ end }}
+{{- with $p.cpu }}{{ $_ := set $pod "cpu" . }}{{ end }}
+{{- with $p.startTimeout }}{{ $_ := set $pod "start_timeout" . }}{{ end }}
+{{- with $p.nodeSelector }}{{ $_ := set $pod "node_selector" . }}{{ end }}
+{{- with $p.tolerations }}{{ $_ := set $pod "tolerations" . }}{{ end }}
+{{- with $v.imagePullSecrets }}{{ $_ := set $pod "image_pull_secrets" (pluck "name" .) }}{{ end }}
+{{- $_ := set $cfg "pod" $pod }}
+{{- end }}
+{{- $rendered := toYaml (dict "sandbox" $cfg) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evalsi-sandbox-pool
+  labels: {{- include "evalsi.labels" $ | nindent 4 }}
+data:
+  evalsi.yaml: |
+    {{- $rendered | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evalsi-sandbox-pool
+  labels: {{- include "evalsi.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: evalsi-sandboxd
+    app.kubernetes.io/instance: evalsi-sandbox-pool
+spec:
+  replicas: {{ .replicas }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: evalsi-sandbox-pool}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: evalsi-sandbox-pool, app.kubernetes.io/part-of: evalsi}
+      annotations:
+        checksum/config: {{ $rendered | sha256sum }}
+    spec:
+      {{- if $usesPods }}
+      # It creates the sandbox pods: the only Kubernetes API access it has.
+      serviceAccountName: evalsi-sandboxd
+      {{- else }}
+      serviceAccountName: evalsi-worker
+      automountServiceAccountToken: false
+      {{- end }}
+      securityContext: {{- include "evalsi.podSecurity" $ | nindent 8 }}
+      {{- with $v.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: sandboxd
+          image: {{ include "evalsi.image" $ }}
+          imagePullPolicy: {{ $v.image.pullPolicy }}
+          command: [evalsid]
+          args:
+            - sandbox
+            - serve
+            - --config=/etc/evalsi/evalsi.yaml
+            - --listen=tcp://0.0.0.0:7443
+            - --tls-cert=/etc/evalsi/tls/tls.crt
+            - --tls-key=/etc/evalsi/tls/tls.key
+            - --client-ca=/etc/evalsi/tls/ca.crt
+            - --allow-client=evalsi-worker
+          env:
+            - name: POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+          ports:
+            - {name: sandbox, containerPort: 7443}
+          readinessProbe:
+            tcpSocket: {port: sandbox}
+            periodSeconds: 5
+          securityContext: {{- include "evalsi.restricted" $ | nindent 12 }}
+          resources: {{- toYaml (.resources | default dict) | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/evalsi/evalsi.yaml, subPath: evalsi.yaml, readOnly: true}
+            - {name: tls, mountPath: /etc/evalsi/tls, readOnly: true}
+            - {name: state, mountPath: /var/lib/evalsi}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap: {name: evalsi-sandbox-pool}
+        - name: tls
+          secret: {secretName: evalsi-sandbox-tls}
+        - name: state
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      {{- with .nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evalsi-sandbox-pool
+  labels: {{- include "evalsi.labels" $ | nindent 4 }}
+spec:
+  selector: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: evalsi-sandbox-pool}
+  ports:
+    - {name: sandbox, port: 7443, targetPort: sandbox}
+{{- end }}{{ end }}

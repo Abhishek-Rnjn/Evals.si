@@ -241,7 +241,8 @@ type SandboxClassSpec struct {
 	// user namespace with an unmasked /proc and no seccomp or AppArmor
 	// profile; privileged runs them privileged, for nodes without user
 	// namespaces. The Firecracker rung is always privileged (it needs
-	// /dev/kvm); the pod rung needs neither.
+	// /dev/kvm); the pod rung and Landlock alone need neither, and run
+	// under Pod Security "restricted".
 	// +kubebuilder:validation:Enum=userns;privileged
 	// +optional
 	PodSecurity string `json:"podSecurity,omitempty"`
@@ -265,8 +266,14 @@ type PodRung struct {
 	Level string `json:"level,omitempty"`
 	// +optional
 	DefaultImage string `json:"defaultImage,omitempty"`
+	// Run sandbox pods as this user; set a non-zero one, with capabilities
+	// [], where Pod Security "restricted" applies.
 	// +optional
 	RunAsUser *int64 `json:"runAsUser,omitempty"`
+	// Linux capabilities sandbox pods keep; default CHOWN, DAC_OVERRIDE,
+	// FOWNER, FSETID, KILL, SETGID, SETUID (what apt and pip need).
+	// +optional
+	Capabilities *[]string `json:"capabilities,omitempty"`
 	// +optional
 	CPU string `json:"cpu,omitempty"`
 	// +optional

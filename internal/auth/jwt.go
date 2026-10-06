@@ -93,7 +93,7 @@ func (k *keySource) loadLocked(ctx context.Context) error {
 	default:
 		if k.jwksURL == "" {
 			k.jwksURL = k.p.JWKS.URL
-			if kube := k.p.Kubernetes; kube != nil {
+			if kube := k.p.Kubernetes; k.p.fromAPIServer() {
 				// The API server's own endpoint: the discovery document's
 				// jwks_uri is often an address only reachable from outside.
 				k.jwksURL = kube.apiServer() + "/openid/v1/jwks"
@@ -153,8 +153,9 @@ func (k *keySource) get(ctx context.Context, url string) ([]byte, error) {
 	// Key sets are often served as application/jwk-set+json, and some
 	// servers (kube-apiserver) refuse requests that do not accept it.
 	req.Header.Set("Accept", "application/json, application/jwk-set+json")
-	if kube := k.p.Kubernetes; kube != nil {
-		// Read per fetch: the kubelet rotates projected tokens.
+	if kube := k.p.Kubernetes; k.p.fromAPIServer() {
+		// Only to the API server. Read per fetch: the kubelet rotates
+		// projected tokens.
 		token, err := os.ReadFile(kube.tokenFile())
 		if err != nil {
 			return nil, err
@@ -182,13 +183,13 @@ type jwtProvider struct {
 }
 
 func newJWTProvider(p Provider, client *http.Client) (*jwtProvider, error) {
-	if p.Kubernetes != nil {
+	if p.Kubernetes != nil && p.Kind == "" {
+		p.Kind = KindService
+	}
+	if p.fromAPIServer() {
 		var err error
 		if client, err = kubernetesClient(p.Kubernetes, client); err != nil {
 			return nil, fmt.Errorf("provider %s: %w", p.Name, err)
-		}
-		if p.Kind == "" {
-			p.Kind = KindService
 		}
 		if p.Issuer == "" {
 			if p.Issuer, err = kubernetesIssuer(p, client); err != nil {

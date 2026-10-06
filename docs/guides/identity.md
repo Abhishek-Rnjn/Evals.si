@@ -284,6 +284,18 @@ rbac:
   owners: ['user:cluster/system:serviceaccount:evalsi:evalsi-operator']
 ```
 
+Some hardened clusters remove the `system:service-account-issuer-discovery` binding, so service accounts cannot read those keys. Then give `evalsid` the issuer and the key set yourself. Managed clusters publish both (EKS at `https://oidc.eks.<region>.amazonaws.com/id/<id>/keys`, GKE and AKS through the issuer's discovery document); otherwise a cluster admin can export them once (`kubectl get --raw /openid/v1/jwks`), and must again when the cluster rotates its keys. The API server is then never called, and no token is sent anywhere:
+
+```yaml
+      - name: cluster
+        audiences: [evals.si]
+        issuer: https://oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLE   # the iss of the cluster's tokens
+        jwks: {url: https://oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLE/keys}   # or {file: ...}, {inline: ...}, {discovery: true}
+        kubernetes: {namespaces: [evalsi, ci]}
+```
+
+In the Helm chart these are `auth.kubernetes.issuer` with `auth.kubernetes.jwks` or `auth.kubernetes.jwksConfigMap` (a ConfigMap holding `keys.json`).
+
 A service account becomes `system:serviceaccount:<namespace>:<name>` (kind `service`), in the groups `system:serviceaccounts` and `system:serviceaccounts:<namespace>`. Mount a token for the `evals.si` audience and point the CLI at it; it is read on every request, so the kubelet's rotation needs nothing:
 
 ```yaml

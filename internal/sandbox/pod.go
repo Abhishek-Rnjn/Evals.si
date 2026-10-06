@@ -61,7 +61,9 @@ type PodConfig struct {
 	RuntimeClassName string `json:"runtime_class_name,omitempty"`
 	Level            string `json:"level,omitempty"`
 	// Run as this user; default: the image's (often root, without
-	// capabilities). Set a non-zero uid where Pod Security "restricted" applies.
+	// capabilities). Set a non-zero uid where Pod Security "restricted"
+	// applies, with capabilities []: the workdir and /tmp then become
+	// volumes the user can write, seeded with the image's workdir.
 	RunAsUser *int64 `json:"run_as_user,omitempty"`
 	// Linux capabilities kept; default CHOWN, DAC_OVERRIDE, FOWNER, FSETID,
 	// KILL, SETGID, SETUID (what apt and pip need). [] keeps none.
@@ -305,17 +307,41 @@ func (d *podDriver) manifest(sp *Spec, image, token, egress string) map[string]a
 		"allowPrivilegeEscalation": false, "privileged": false,
 		"capabilities": map[string]any{"drop": []string{"ALL"}, "add": caps},
 	}
+	restricted := map[string]any{"allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []string{"ALL"}}}
 	mounts := []map[string]any{{"name": "evalsi-guest", "mountPath": podGuestDir, "readOnly": true}}
 	volumes := []map[string]any{{"name": "evalsi-guest", "emptyDir": map[string]any{"sizeLimit": "128Mi"}}}
+	initContainers := []map[string]any{{
+		"name": "guest", "image": c.GuestImage,
+		"command":         []string{guestPath, "install", podGuestDir},
+		"volumeMounts":    []map[string]any{{"name": "evalsi-guest", "mountPath": podGuestDir}},
+		"securityContext": restricted,
+		"resources":       map[string]any{"limits": map[string]string{"memory": "64Mi", "cpu": "200m"}},
+	}}
+	nonRoot := c.RunAsUser != nil && *c.RunAsUser != 0
 	if sp.ReadOnlyRoot {
-		// The root is read-only; the workdir and /tmp are the writable parts.
 		containerSec["readOnlyRootFilesystem"] = true
+	}
+	if sp.ReadOnlyRoot || nonRoot {
+		// The workdir and /tmp are volumes: the writable parts of a read-only
+		// root, or ones a non-root user can write where the image's own
+		// directories belong to root. The image's workdir is copied in
+		// first, owned by the pod's user.
 		mounts = append(mounts,
 			map[string]any{"name": "workdir", "mountPath": sp.Workdir},
 			map[string]any{"name": "tmp", "mountPath": "/tmp"})
 		volumes = append(volumes,
 			map[string]any{"name": "workdir", "emptyDir": map[string]any{}},
 			map[string]any{"name": "tmp", "emptyDir": map[string]any{}})
+		initContainers = append(initContainers, map[string]any{
+			"name": "workdir", "image": image,
+			"command": []string{podGuestDir + "/evalsi-guest", "seed", sp.Workdir, "/evalsi/workdir"},
+			"volumeMounts": []map[string]any{
+				{"name": "evalsi-guest", "mountPath": podGuestDir, "readOnly": true},
+				{"name": "workdir", "mountPath": "/evalsi/workdir"},
+			},
+			"securityContext": restricted,
+			"resources":       map[string]any{"limits": limits},
+		})
 	}
 	podSec := map[string]any{"seccompProfile": map[string]any{"type": "RuntimeDefault"}}
 	if c.RunAsUser != nil {
@@ -328,13 +354,7 @@ func (d *podDriver) manifest(sp *Spec, image, token, egress string) map[string]a
 		"restartPolicy":                 "Never",
 		"terminationGracePeriodSeconds": 0,
 		"securityContext":               podSec,
-		"initContainers": []map[string]any{{
-			"name": "guest", "image": c.GuestImage,
-			"command":         []string{guestPath, "install", podGuestDir},
-			"volumeMounts":    []map[string]any{{"name": "evalsi-guest", "mountPath": podGuestDir}},
-			"securityContext": map[string]any{"allowPrivilegeEscalation": false, "capabilities": map[string]any{"drop": []string{"ALL"}}},
-			"resources":       map[string]any{"limits": map[string]string{"memory": "64Mi", "cpu": "200m"}},
-		}},
+		"initContainers":                initContainers,
 		"containers": []map[string]any{{
 			"name": "sandbox", "image": image, "command": args,
 			"env":             []map[string]string{{"name": podTokenEnv, "value": token}},

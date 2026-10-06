@@ -17,6 +17,7 @@
 ## Consequences
 
 - The server stays the single source of truth for runs, results and policies; the operator holds no state the server lacks, and losing it loses nothing.
+- Because the operator is only an API client, it is optional: on clusters where no cluster-admin step is possible, the `evalsi` chart installs alone (namespace-only, Pod Security `restricted`, its own pod-rung or Landlock sandbox pool), and runs go through the CLI and API instead of `kubectl apply`.
 - Specs are not typed in the CRD's OpenAPI schema (they are preserved as is), so `kubectl explain` cannot describe them; the webhook gives the errors instead.
 - User-namespaced sandbox pools need Kubernetes 1.33+ and a kernel and runtime that support them; elsewhere (including kind) the bubblewrap pool runs privileged.
 - The pod rung cannot snapshot, so environment setup runs once per trial on it.

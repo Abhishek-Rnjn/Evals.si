@@ -7,6 +7,8 @@
 //	evalsi-guest                  init (PID 1)
 //	evalsi-guest agent            the agent, on vsock
 //	evalsi-guest agent --listen unix:///path --root DIR   the agent on the host, for tests
+//	evalsi-guest install DIR      copy itself to DIR (a sandbox pod's init container)
+//	evalsi-guest seed SRC DST     copy SRC's tree into DST (a sandbox pod's init container)
 //	evalsi-guest limit ...        internal: apply resource limits, then exec
 package main
 
@@ -14,6 +16,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"net"
 	"os"
 	"os/exec"
@@ -39,6 +43,8 @@ func main() {
 			os.Exit(agent(os.Args[2:]))
 		case "install":
 			os.Exit(install(os.Args[2:]))
+		case "seed":
+			os.Exit(seed(os.Args[2:]))
 		case "limit":
 			os.Exit(limit(os.Args[2:]))
 		case "version":
@@ -276,4 +282,80 @@ func install(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+// seed is `evalsi-guest seed SRC DST`: it copies the tree at SRC (when it
+// exists) into DST. A sandbox pod that runs as a non-root user gets its
+// workdir as an empty volume it can write; an init container from the
+// task's image seeds it with what the image has there, now owned by the
+// pod's user.
+func seed(args []string) int {
+	if len(args) != 2 {
+		fmt.Fprintln(os.Stderr, "evalsi-guest: seed SRC DST")
+		return 2
+	}
+	if err := copyTree(args[0], args[1]); err != nil {
+		fmt.Fprintf(os.Stderr, "evalsi-guest: seed: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func copyTree(src, dst string) error {
+	if _, err := os.Lstat(src); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		// The copy belongs to the pod's user, who must be able to change it.
+		mode := info.Mode().Perm() | 0o200
+		switch {
+		case d.IsDir() && rel == ".":
+			// DST itself: the volume's root, which may belong to someone else.
+			return os.MkdirAll(target, 0o700)
+		case d.IsDir():
+			if err := os.Mkdir(target, 0o700); err != nil {
+				return err
+			}
+			return os.Chmod(target, mode|0o700)
+		case d.Type()&fs.ModeSymlink != 0:
+			link, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(link, target)
+		case d.Type().IsRegular():
+			return copyFile(path, target, mode)
+		default:
+			return nil // devices, sockets and pipes are not workdir content
+		}
+	})
+}
+
+func copyFile(src, dst string, mode fs.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }

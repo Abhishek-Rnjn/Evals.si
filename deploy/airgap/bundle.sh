@@ -53,6 +53,7 @@ for chart in evalsi-crds evalsi evalsi-sandboxd; do
   helm package "$root/deploy/helm/$chart" --app-version "$tag" -d "$out/charts" >/dev/null
 done
 cp "$root/deploy/airgap/install.sh" "$out/"
+cp "$root/deploy/helm/evalsi/values-namespaced.yaml" "$out/charts/"
 
 if $with_cli; then
   (cd "$root/python" && uv build --all-packages --wheel -o "$out/wheels" >/dev/null)

@@ -86,8 +86,11 @@ type Provider struct {
 	// "user" (default) or "service": the kind of principal tokens make.
 	Kind string `json:"kind,omitempty"`
 	// Trust a Kubernetes cluster's service-account tokens (projected with
-	// one of the audiences). Keys come from the API server itself, so jwks
-	// is left unset, and the issuer is discovered when empty.
+	// one of the audiences). Keys come from the API server itself, and the
+	// issuer is discovered when empty. Where the cluster does not let
+	// service accounts read its keys (system:service-account-issuer-discovery
+	// removed), set issuer and jwks instead: the cluster's public key set
+	// (EKS, GKE and AKS publish one), or a file or inline copy of it.
 	Kubernetes *KubernetesIssuer `json:"kubernetes,omitempty"`
 }
 
@@ -118,7 +121,8 @@ func (k *KubernetesIssuer) caFile() string { return or(k.CAFile, serviceAccountD
 
 func (k *KubernetesIssuer) tokenFile() string { return or(k.TokenFile, serviceAccountDir+"/token") }
 
-// JWKS says where a provider's signing keys come from; exactly one is set.
+// JWKS says where a provider's signing keys come from; exactly one is set
+// (none for a kubernetes provider that reads them from the API server).
 type JWKS struct {
 	URL    string          `json:"url,omitempty"`
 	File   string          `json:"file,omitempty"`
@@ -318,8 +322,10 @@ func (p Provider) validate() error {
 		}
 	}
 	switch {
-	case p.Kubernetes != nil && n != 0:
-		errs = append(errs, errors.New("jwks: leave unset with kubernetes; keys come from the API server"))
+	case p.Kubernetes != nil && n > 1:
+		errs = append(errs, errors.New("jwks: set at most one of url, file, inline or discovery"))
+	case p.Kubernetes != nil && n == 1 && p.Issuer == "":
+		errs = append(errs, errors.New("issuer is required with kubernetes and jwks (the cluster's service-account issuer)"))
 	case p.Kubernetes == nil && n != 1:
 		errs = append(errs, errors.New("jwks: set exactly one of url, file, inline or discovery"))
 	}
@@ -407,4 +413,15 @@ func IsLoopback(addr string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// set reports whether a key source is configured.
+func (j JWKS) set() bool {
+	return j.URL != "" || j.File != "" || len(j.Inline) > 0 || j.Discovery
+}
+
+// fromAPIServer reports whether a kubernetes provider reads its issuer and
+// keys from the API server, with this pod's service-account token.
+func (p Provider) fromAPIServer() bool {
+	return p.Kubernetes != nil && !p.JWKS.set()
 }

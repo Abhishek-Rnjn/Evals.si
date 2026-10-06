@@ -1,9 +1,14 @@
 # Where the evalsi chart (and its operator) is installed.
 operator:
   namespace: evalsi
-  # Let the operator reconcile SandboxClasses (cluster-scoped).
-  sandboxClasses: true
-  # Let it watch evals.si resources in every namespace.
+  # Let the operator reconcile SandboxClasses (cluster-scoped), with the
+  # evalsi chart's operator.sandboxClasses. The only grant this needs is on
+  # SandboxClasses themselves, but it is a ClusterRoleBinding, so it is
+  # opt-in.
+  sandboxClasses: false
+  # Let it watch evals.si resources in every namespace, and manage worker
+  # Deployments and ScaledObjects in each (the one broad grant), with the
+  # evalsi chart's operator.allNamespaces.
   allNamespaces: false
 
 webhooks:

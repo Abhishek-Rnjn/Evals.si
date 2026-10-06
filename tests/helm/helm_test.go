@@ -4,9 +4,11 @@ package helm
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -35,6 +37,7 @@ func helm(t *testing.T) string {
 
 type object struct {
 	Kind     string `json:"kind"`
+	Rules    []rule `json:"rules"`
 	Metadata struct {
 		Name      string `json:"name"`
 		Namespace string `json:"namespace"`
@@ -43,11 +46,23 @@ type object struct {
 	Spec map[string]any    `json:"spec"`
 }
 
+type rule struct {
+	APIGroups []string `json:"apiGroups"`
+	Resources []string `json:"resources"`
+	Verbs     []string `json:"verbs"`
+}
+
+// render runs helm template with --set values, and -f for those that end
+// in .yaml (relative to the chart).
 func render(t *testing.T, chart string, set ...string) []object {
 	t.Helper()
 	args := []string{"template", "t", filepath.Join(charts, chart), "-n", "evalsi", "--kube-version", "1.34.0"}
 	for _, s := range set {
-		args = append(args, "--set", s)
+		if strings.HasSuffix(s, ".yaml") {
+			args = append(args, "-f", filepath.Join(charts, chart, s))
+		} else {
+			args = append(args, "--set", s)
+		}
 	}
 	var out, stderr bytes.Buffer
 	cmd := exec.Command(helm(t), args...)
@@ -169,6 +184,10 @@ func TestSandboxdChart(t *testing.T) {
 		if mode == "firecracker" && (cfg.Sandbox.Firecracker == nil || cfg.Sandbox.Ladder[0] != "firecracker") {
 			t.Errorf("%s: %+v", mode, cfg.Sandbox)
 		}
+		// These pools need privileges: the restricted check must say so.
+		if v := restrictedViolations(t, find(t, objs, "DaemonSet", "evalsi-sandboxd")); len(v) == 0 {
+			t.Errorf("%s: the sandboxd DaemonSet passes as restricted", mode)
+		}
 		ds := toYAML(t, find(t, objs, "DaemonSet", "evalsi-sandboxd").Spec)
 		if (mode == "bwrap") != strings.Contains(ds, "hostUsers: false") {
 			t.Errorf("%s: %s", mode, ds)
@@ -203,4 +222,211 @@ func toYAML(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// The namespace-only install: nothing cluster-scoped, no CRDs needed, only
+// what the built-in admin role may grant, and every pod admissible under
+// Pod Security "restricted".
+func TestNamespacedInstall(t *testing.T) {
+	for name, set := range map[string][]string{
+		"profile":          {"values-namespaced.yaml"},
+		"with dev storage": {"values-namespaced.yaml", "devPostgres.enabled=true", "server.replicas=2", "workers.pools.graders.replicas=1", "workers.pools.graders.concurrency=4", "workers.pools.graders.image=registry.internal/graders:1.4"},
+		"landlock only":    {"values-namespaced.yaml", "sandbox.pool.ladder={landlock}"},
+		"static keys":      {"values-namespaced.yaml", "auth.kubernetes.issuer=https://oidc.example.com/id/1", "auth.kubernetes.jwksConfigMap=cluster-keys"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			objs := render(t, "evalsi", set...)
+			for _, o := range objs {
+				switch o.Kind {
+				case "ClusterRole", "ClusterRoleBinding", "CustomResourceDefinition", "ValidatingWebhookConfiguration",
+					"MutatingWebhookConfiguration", "Namespace", "PriorityClass", "StorageClass", "ScaledObject":
+					t.Errorf("%s %s in a namespace-only install", o.Kind, o.Metadata.Name)
+				case "Role":
+					for _, r := range o.Rules {
+						for _, g := range r.APIGroups {
+							// The built-in admin role grants these; a namespace
+							// admin can grant no more (RBAC escalation checks).
+							if g != "" && g != "apps" {
+								t.Errorf("Role %s needs %s", o.Metadata.Name, g)
+							}
+						}
+					}
+				case "Deployment", "StatefulSet", "DaemonSet", "Job":
+					if v := restrictedViolations(t, o); len(v) > 0 {
+						t.Errorf("%s %s is not restricted: %v", o.Kind, o.Metadata.Name, v)
+					}
+					if o.Metadata.Name == "evalsi-operator" {
+						t.Error("the operator runs without its CRDs")
+					}
+				}
+			}
+			worker := load(t, find(t, objs, "ConfigMap", "evalsi-worker"))
+			if s := worker.Worker.SandboxService; s == nil || s.Address != "tls://evalsi-sandbox-pool.evalsi.svc:7443" {
+				t.Errorf("workers' sandbox service %+v", s)
+			}
+			pool := load(t, find(t, objs, "ConfigMap", "evalsi-sandbox-pool")).Sandbox
+			switch name {
+			case "with dev storage":
+				if dep := toYAML(t, find(t, objs, "Deployment", "evalsi-worker-graders").Spec); !strings.Contains(dep, "image: registry.internal/graders:1.4") {
+					t.Errorf("graders pool image:\n%s", dep)
+				}
+			case "landlock only":
+				if pool.Pod != nil || strings.Join(pool.Ladder, ",") != "landlock" {
+					t.Errorf("pool %+v", pool)
+				}
+				if dep := toYAML(t, find(t, objs, "Deployment", "evalsi-sandbox-pool").Spec); !strings.Contains(dep, "automountServiceAccountToken: false") {
+					t.Errorf("a Landlock pool with an API token:\n%s", dep)
+				}
+			case "static keys":
+				p := load(t, find(t, objs, "ConfigMap", "evalsi")).Auth.JWT.Providers[0]
+				if p.Issuer != "https://oidc.example.com/id/1" || p.JWKS.File != "/etc/evalsi/jwks/keys.json" || p.Kubernetes == nil {
+					t.Errorf("provider %+v", p)
+				}
+				if dep := toYAML(t, find(t, objs, "Deployment", "evalsi").Spec); !strings.Contains(dep, "name: cluster-keys") {
+					t.Errorf("keys not mounted:\n%s", dep)
+				}
+			default:
+				if strings.Join(pool.Ladder, ",") != "pod,landlock" || pool.Pod == nil || pool.Pod.RunAsUser == nil || *pool.Pod.RunAsUser != 65532 ||
+					pool.Pod.Capabilities == nil || len(*pool.Pod.Capabilities) != 0 || pool.Pod.GuestImage == "" {
+					t.Errorf("pool %+v %+v", pool, pool.Pod)
+				}
+			}
+		})
+	}
+	// Rungs that need privileges are refused in the chart's pool.
+	cmd := exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", "1.34.0", "--set", "sandbox.pool.enabled=true", "--set", "sandbox.pool.ladder={bwrap}")
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "needs privileges") {
+		t.Errorf("a bwrap pool: %v %s", err, out)
+	}
+	// A key set without its issuer is refused.
+	cmd = exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", "1.34.0", "--set", "auth.kubernetes.jwksConfigMap=keys")
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "needs auth.kubernetes.issuer") {
+		t.Errorf("jwks without an issuer: %v %s", err, out)
+	}
+}
+
+// The cluster-scoped chart grants the operator nothing cluster-wide unless
+// asked.
+func TestCRDsChartRBAC(t *testing.T) {
+	for _, o := range render(t, "evalsi-crds") {
+		if o.Kind == "ClusterRoleBinding" {
+			t.Errorf("ClusterRoleBinding %s by default", o.Metadata.Name)
+		}
+	}
+	objs := render(t, "evalsi-crds", "operator.sandboxClasses=true")
+	role := find(t, objs, "ClusterRole", "evalsi-operator")
+	for _, r := range role.Rules {
+		if strings.Join(r.APIGroups, ",") != "evals.si" || !strings.HasPrefix(strings.Join(r.Resources, ","), "sandboxclasses") {
+			t.Errorf("sandboxClasses grants %+v", r)
+		}
+	}
+	find(t, objs, "ClusterRoleBinding", "evalsi-operator")
+}
+
+// restrictedViolations lists what keeps a workload's pods from Pod Security
+// "restricted" (v1.34).
+func restrictedViolations(t *testing.T, o object) []string {
+	t.Helper()
+	var w struct {
+		Template struct {
+			Spec struct {
+				HostNetwork     bool `json:"hostNetwork"`
+				HostPID         bool `json:"hostPID"`
+				HostIPC         bool `json:"hostIPC"`
+				SecurityContext struct {
+					RunAsNonRoot   *bool  `json:"runAsNonRoot"`
+					RunAsUser      *int64 `json:"runAsUser"`
+					SeccompProfile *struct {
+						Type string `json:"type"`
+					} `json:"seccompProfile"`
+				} `json:"securityContext"`
+				Containers     []container      `json:"containers"`
+				InitContainers []container      `json:"initContainers"`
+				Volumes        []map[string]any `json:"volumes"`
+			} `json:"spec"`
+		} `json:"template"`
+	}
+	if err := yaml.Unmarshal([]byte(toYAML(t, o.Spec)), &w); err != nil {
+		t.Fatal(err)
+	}
+	pod := w.Template.Spec
+	var out []string
+	if pod.HostNetwork || pod.HostPID || pod.HostIPC {
+		out = append(out, "host namespaces")
+	}
+	for _, v := range pod.Volumes {
+		ok := false
+		for _, kind := range []string{"configMap", "secret", "emptyDir", "projected", "persistentVolumeClaim", "downwardAPI", "ephemeral", "csi"} {
+			if _, has := v[kind]; has {
+				ok = true
+			}
+		}
+		if !ok {
+			out = append(out, fmt.Sprintf("volume %v", v["name"]))
+		}
+	}
+	podNonRoot := pod.SecurityContext.RunAsNonRoot != nil && *pod.SecurityContext.RunAsNonRoot
+	if pod.SecurityContext.RunAsUser != nil && *pod.SecurityContext.RunAsUser == 0 {
+		out = append(out, "runAsUser 0")
+	}
+	podSeccomp := pod.SecurityContext.SeccompProfile != nil
+	for _, c := range append(pod.Containers, pod.InitContainers...) {
+		s := c.SecurityContext
+		if s.Privileged != nil && *s.Privileged {
+			out = append(out, c.Name+": privileged")
+		}
+		if s.AllowPrivilegeEscalation == nil || *s.AllowPrivilegeEscalation {
+			out = append(out, c.Name+": allowPrivilegeEscalation")
+		}
+		if !podNonRoot && (s.RunAsNonRoot == nil || !*s.RunAsNonRoot) {
+			out = append(out, c.Name+": runAsNonRoot")
+		}
+		if s.RunAsUser != nil && *s.RunAsUser == 0 {
+			out = append(out, c.Name+": runAsUser 0")
+		}
+		if !podSeccomp && s.SeccompProfile == nil {
+			out = append(out, c.Name+": seccompProfile")
+		}
+		if s.SeccompProfile != nil && s.SeccompProfile.Type == "Unconfined" {
+			out = append(out, c.Name+": seccomp Unconfined")
+		}
+		if s.ProcMount != "" && s.ProcMount != "Default" {
+			out = append(out, c.Name+": procMount")
+		}
+		if !slices.Contains(s.Capabilities.Drop, "ALL") {
+			out = append(out, c.Name+": drop ALL")
+		}
+		for _, add := range s.Capabilities.Add {
+			if add != "NET_BIND_SERVICE" {
+				out = append(out, c.Name+": adds "+add)
+			}
+		}
+		for _, p := range c.Ports {
+			if p.HostPort != 0 {
+				out = append(out, c.Name+": hostPort")
+			}
+		}
+	}
+	return out
+}
+
+type container struct {
+	Name            string `json:"name"`
+	SecurityContext struct {
+		Privileged               *bool  `json:"privileged"`
+		AllowPrivilegeEscalation *bool  `json:"allowPrivilegeEscalation"`
+		RunAsNonRoot             *bool  `json:"runAsNonRoot"`
+		RunAsUser                *int64 `json:"runAsUser"`
+		ProcMount                string `json:"procMount"`
+		SeccompProfile           *struct {
+			Type string `json:"type"`
+		} `json:"seccompProfile"`
+		Capabilities struct {
+			Add  []string `json:"add"`
+			Drop []string `json:"drop"`
+		} `json:"capabilities"`
+	} `json:"securityContext"`
+	Ports []struct {
+		HostPort int `json:"hostPort"`
+	} `json:"ports"`
 }
