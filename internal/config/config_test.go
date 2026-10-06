@@ -57,6 +57,9 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"auth: {api_keys: {}}\nrbac: {owners: [bob]}":                                                      "rbac.owners",
 		"auth: {api_keys: {}}\nauthorization: {rules: [{allow: 'true', deny: 'false'}]}":                   "exactly one",
 		"metrics: {listen: '0.0.0.0:9464'}":                                                                "loopback",
+		"datasets_dir: s3://bucket/datasets":                                                               "needs storage.s3",
+		"storage: {postgres: {dsn_env: EVALSI_UNSET_DSN_FOR_TEST}}":                                        "storage.postgres",
+		"storage: {clickhouse: {database: x}}":                                                             "needs url",
 	} {
 		if _, err := Load(write(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Load(%q) error = %v, want it to mention %q", body, err, want)

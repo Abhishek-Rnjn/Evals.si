@@ -22,13 +22,17 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 // Options configures the engine.
 type Options struct {
-	// Root for promoted datasets (<root>/promoted/<project>/<name>.jsonl). Empty disables promotion.
+	// Root for promoted datasets (<root>/promoted/<project>/<name>.jsonl):
+	// a directory or s3://bucket/prefix. Empty disables promotion.
 	DatasetsDir string
+	// The object-storage client, when DatasetsDir is s3://.
+	Objects *objstore.Client
 	// Traces evaluated together per worker call.
 	BatchSize int
 	// How long the dispatcher waits to fill a batch.
@@ -431,7 +435,7 @@ func (e *Engine) promoteRecord(project, dataset string, record *evalsiv1alpha1.R
 	if err != nil {
 		return err
 	}
-	_, err = datasets.Append(e.opts.DatasetsDir, project, dataset, [][]byte{row})
+	_, err = datasets.Append(context.Background(), e.opts.DatasetsDir, e.opts.Objects, project, dataset, [][]byte{row})
 	return err
 }
 

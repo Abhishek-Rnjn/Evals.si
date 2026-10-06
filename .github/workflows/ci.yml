@@ -36,6 +36,30 @@ jobs:
 
   go:
     runs-on: ubuntu-latest
+    # The Kubernetes storage backends, which the store and objstore tests
+    # also run against.
+    services:
+      postgres:
+        image: postgres:17
+        env: {POSTGRES_USER: evalsi, POSTGRES_PASSWORD: evalsi, POSTGRES_DB: evalsi}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U evalsi" --health-interval 2s --health-retries 30
+      clickhouse:
+        image: clickhouse/clickhouse-server:25.8
+        env: {CLICKHOUSE_USER: evalsi, CLICKHOUSE_PASSWORD: evalsi}
+        ports: ["8123:8123"]
+        options: --health-cmd "clickhouse-client --user evalsi --password evalsi -q 'SELECT 1'" --health-interval 2s --health-retries 30
+      minio:
+        image: bitnamilegacy/minio:2025.7.23
+        env: {MINIO_ROOT_USER: evalsi, MINIO_ROOT_PASSWORD: evalsi-secret}
+        ports: ["9000:9000"]
+        options: --health-cmd "curl -sf http://127.0.0.1:9000/minio/health/live" --health-interval 2s --health-retries 30
+    env:
+      EVALSI_TEST_POSTGRES_DSN: postgres://evalsi:evalsi@127.0.0.1:5432/evalsi?sslmode=disable
+      EVALSI_TEST_CLICKHOUSE_URL: http://evalsi:evalsi@127.0.0.1:8123
+      EVALSI_TEST_S3_ENDPOINT: 127.0.0.1:9000
+      EVALSI_TEST_S3_ACCESS_KEY: evalsi
+      EVALSI_TEST_S3_SECRET_KEY: evalsi-secret
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -125,6 +149,22 @@ jobs:
   e2e:
     # evalsid against a real Python worker, plus the Python codegen check.
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env: {POSTGRES_USER: evalsi, POSTGRES_PASSWORD: evalsi, POSTGRES_DB: evalsi}
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U evalsi" --health-interval 2s --health-retries 30
+      clickhouse:
+        image: clickhouse/clickhouse-server:25.8
+        env: {CLICKHOUSE_USER: evalsi, CLICKHOUSE_PASSWORD: evalsi}
+        ports: ["8123:8123"]
+        options: --health-cmd "clickhouse-client --user evalsi --password evalsi -q 'SELECT 1'" --health-interval 2s --health-retries 30
+      minio:
+        image: bitnamilegacy/minio:2025.7.23
+        env: {MINIO_ROOT_USER: evalsi, MINIO_ROOT_PASSWORD: evalsi-secret}
+        ports: ["9000:9000"]
+        options: --health-cmd "curl -sf http://127.0.0.1:9000/minio/health/live" --health-interval 2s --health-retries 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -160,3 +200,8 @@ jobs:
           EVALSI_E2E_WORKER: ${{ github.workspace }}/python/.venv/bin/python -m evalsi
           EVALSI_E2E_SWEBENCH_WORKER: ${{ github.workspace }}/python/adapters/swebench/.venv/bin/python -m evalsi
           EVALSI_E2E_IMAGES: "1"
+          EVALSI_E2E_POSTGRES_DSN: postgres://evalsi:evalsi@127.0.0.1:5432/evalsi?sslmode=disable
+          EVALSI_E2E_CLICKHOUSE_URL: http://evalsi:evalsi@127.0.0.1:8123
+          EVALSI_E2E_S3_ENDPOINT: 127.0.0.1:9000
+          EVALSI_E2E_S3_ACCESS_KEY: evalsi
+          EVALSI_E2E_S3_SECRET_KEY: evalsi-secret

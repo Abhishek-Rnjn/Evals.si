@@ -99,11 +99,12 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	sort.Strings(judges)
 	svc := evaluation.New(worker, catalog.New(manifests), judges, cfg.DefaultJudge, cfg.Evaluate)
 
-	st, err := store.Open(filepath.Join(cfg.DataDir, "evalsi.db"))
+	st, objects, err := openStorage(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
+	worker = pluginhost.WithObjects(worker, objects, filepath.Join(cfg.DataDir, "cache", "objects"))
 	exports, err := sinks.New(cfg.Sinks, nil, log)
 	if err != nil {
 		return err
@@ -130,6 +131,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	var watcher *watch.Engine // created below; runs read its policies' score names
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
 		DatasetsDir:   cfg.DatasetsDir,
+		Objects:       objects,
 		MaxConcurrent: cfg.Runs.MaxConcurrent,
 		Evaluate:      cfg.Evaluate,
 		Agents:        cfg.Agents,
@@ -146,7 +148,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, log
 	defer runManager.Shutdown()
 
 	watcher, err = watch.New(ctx, st, svc, watch.Options{
-		DatasetsDir: cfg.DatasetsDir, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
+		DatasetsDir: cfg.DatasetsDir, Objects: objects, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
 		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
 			exports.Trace(&sinks.Trace{
 				TraceID: rec.GetId(), RootSpanID: rootSpan(rec), Service: info.Service,

@@ -254,7 +254,7 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 	}
 	path := datasets.Path(run.GetProject(), msg.GetDataset())
 	if len(rows) > 0 {
-		if path, err = datasets.Append(m.opts.DatasetsDir, run.GetProject(), msg.GetDataset(), rows); err != nil {
+		if path, err = datasets.Append(ctx, m.opts.DatasetsDir, m.opts.Objects, run.GetProject(), msg.GetDataset(), rows); err != nil {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 	}

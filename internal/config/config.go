@@ -12,8 +12,10 @@ import (
 
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
+	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 // Judge mirrors evalsi.judges.JudgeConfig in the Python SDK; it is handed to
@@ -81,14 +83,18 @@ type Traces struct {
 // Config is the whole evalsid configuration.
 type Config struct {
 	Listen string `json:"listen"`
-	// Where evalsid keeps its database. Relative paths are relative to the working directory.
+	// Where evalsid keeps its database (unless storage.postgres is set) and
+	// caches. Relative paths are relative to the working directory.
 	DataDir string `json:"data_dir"`
-	// Root for dataset paths in run specs. Empty means runs must send records
-	// inline or use a dataset URI.
+	// Root for dataset paths in run specs: a directory, or s3://bucket/prefix
+	// with storage.s3. Empty means runs must send records inline or use a
+	// dataset URI.
 	DatasetsDir string `json:"datasets_dir"`
-	Runs        Runs   `json:"runs"`
-	OTLP        OTLP   `json:"otlp"`
-	Traces      Traces `json:"traces"`
+	// External databases and object storage; SQLite in data_dir by default.
+	Storage Storage `json:"storage"`
+	Runs    Runs    `json:"runs"`
+	OTLP    OTLP    `json:"otlp"`
+	Traces  Traces  `json:"traces"`
 	// Online evaluation policies applied at startup, in the OnlineEvalPolicy
 	// JSON form. They replace stored policies of the same name.
 	Policies     []json.RawMessage `json:"policies"`
@@ -111,6 +117,32 @@ type Config struct {
 	Authorization authz.AuthorizationConfig `json:"authorization"`
 	Audit         authz.AuditConfig         `json:"audit"`
 	Metrics       Metrics                   `json:"metrics"`
+}
+
+// Storage selects the databases. Without it, everything is in SQLite under
+// data_dir, which suits a single replica.
+type Storage struct {
+	// PostgreSQL for metadata, runs and results; several replicas may share it.
+	Postgres *Postgres `json:"postgres,omitempty"`
+	// ClickHouse for traces and their online scores.
+	ClickHouse *store.ClickHouseConfig `json:"clickhouse,omitempty"`
+	// S3-compatible object storage, for datasets_dir s3://bucket/prefix.
+	S3 *objstore.Config `json:"s3,omitempty"`
+}
+
+// Postgres names the database; the DSN usually carries a password, so it
+// can come from the environment.
+type Postgres struct {
+	DSN    string `json:"dsn,omitempty"`
+	DSNEnv string `json:"dsn_env,omitempty"`
+}
+
+// ResolvedDSN is the DSN, from the environment when dsn_env is set.
+func (p *Postgres) ResolvedDSN() string {
+	if p.DSNEnv != "" {
+		return os.Getenv(p.DSNEnv)
+	}
+	return p.DSN
 }
 
 // Agents lists what agent-run specs may make the worker itself execute.
@@ -239,10 +271,20 @@ func (c Config) Validate() error {
 	if c.Runs.MaxConcurrent < 1 {
 		errs = append(errs, errors.New("runs.max_concurrent must be positive"))
 	}
-	if c.DatasetsDir != "" {
+	if _, remote := objstore.Parse(c.DatasetsDir); remote {
+		if c.Storage.S3 == nil {
+			errs = append(errs, fmt.Errorf("datasets_dir %q needs storage.s3", c.DatasetsDir))
+		}
+	} else if c.DatasetsDir != "" {
 		if info, err := os.Stat(c.DatasetsDir); err != nil || !info.IsDir() {
 			errs = append(errs, fmt.Errorf("datasets_dir %q is not a directory", c.DatasetsDir))
 		}
+	}
+	if p := c.Storage.Postgres; p != nil && p.ResolvedDSN() == "" {
+		errs = append(errs, errors.New("storage.postgres needs dsn, or dsn_env naming a set variable"))
+	}
+	if ch := c.Storage.ClickHouse; ch != nil && ch.URL == "" {
+		errs = append(errs, errors.New("storage.clickhouse needs url"))
 	}
 	for i, sc := range c.Sinks {
 		if err := sc.Validate(); err != nil {

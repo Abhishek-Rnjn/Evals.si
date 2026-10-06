@@ -1,4 +1,5 @@
-// Package store persists runs in SQLite (pure Go, no cgo).
+// Package store persists runs in SQLite (pure Go, no cgo) or PostgreSQL, and
+// traces there or in ClickHouse.
 //
 // Runs, their dataset snapshot, target outputs and evaluation results are
 // stored as protobuf blobs keyed by (run, record index, trial, evaluator
@@ -72,7 +73,11 @@ CREATE TABLE IF NOT EXISTS policies (
 `
 
 // Store is safe for concurrent use.
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *conn
+	// Traces and their online scores: the SQL tables by default, or ClickHouse.
+	traces TraceStore
+}
 
 // Open opens (creating if needed) the database at path.
 func Open(path string) (*Store, error) {
@@ -93,7 +98,7 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
-	return &Store{db: db}, nil
+	return newStore(&conn{db: db, d: sqliteDialect}), nil
 }
 
 // migrate upgrades databases written by earlier versions. Phase 1 keyed
@@ -133,8 +138,14 @@ func migrate(db *sql.DB) error {
 	return tx.Commit()
 }
 
-// Close closes the database.
-func (s *Store) Close() error { return s.db.Close() }
+// Close closes the database and the trace backend.
+func (s *Store) Close() error {
+	terr := s.traces.Close()
+	if err := s.db.Close(); err != nil {
+		return err
+	}
+	return terr
+}
 
 func marshal(m proto.Message) []byte {
 	b, err := proto.Marshal(m)
@@ -308,7 +319,8 @@ func (s *Store) PutOutputs(ctx context.Context, runID string, outputs []Output) 
 			blob = marshal(o.Record)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO run_outputs (run_id, record_idx, trial, record, error) VALUES (?, ?, ?, ?, ?)`,
+			`INSERT INTO run_outputs (run_id, record_idx, trial, record, error) VALUES (?, ?, ?, ?, ?)
+			 ON CONFLICT (run_id, record_idx, trial) DO UPDATE SET record = excluded.record, error = excluded.error`,
 			runID, o.RecordIdx, o.Trial, blob, o.Error); err != nil {
 			return err
 		}
@@ -361,7 +373,8 @@ func (s *Store) PutResults(ctx context.Context, runID string, results []Result) 
 	defer func() { _ = tx.Rollback() }()
 	for _, r := range results {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT OR REPLACE INTO run_results (run_id, record_idx, trial, eval_idx, evaluator, result) VALUES (?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO run_results (run_id, record_idx, trial, eval_idx, evaluator, result) VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (run_id, record_idx, trial, eval_idx) DO UPDATE SET evaluator = excluded.evaluator, result = excluded.result`,
 			runID, r.RecordIdx, r.Trial, r.EvalIdx, r.Result.GetEvaluator(), marshal(r.Result)); err != nil {
 			return err
 		}
@@ -391,7 +404,7 @@ func (s *Store) ResultKeys(ctx context.Context, runID string) (map[Key]bool, err
 // dataset-scope results last in each trial. evaluator filters when non-empty.
 func (s *Store) Results(ctx context.Context, runID, evaluator string, limit, offset int) ([]Result, error) {
 	if limit <= 0 {
-		limit = -1
+		limit = 1 << 62 // no limit, in a form both dialects accept
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT record_idx, trial, eval_idx, result FROM run_results

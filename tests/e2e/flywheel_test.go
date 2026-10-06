@@ -24,7 +24,10 @@ import (
 // same way; `evalsi promote` turns the candidate's misses into a dataset that
 // a later run loads.
 func TestFlywheel(t *testing.T) {
-	e := start(t)
+	flywheel(t, start(t))
+}
+
+func flywheel(t *testing.T, e env) {
 	ctx := context.Background()
 	attr := func(k, v string) map[string]any {
 		return map[string]any{"key": k, "value": map[string]any{"stringValue": v}}

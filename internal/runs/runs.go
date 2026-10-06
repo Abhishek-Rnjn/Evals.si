@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -33,14 +34,18 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 // Options configures the manager.
 type Options struct {
-	// Root that dataset paths are resolved against. Empty disallows paths.
+	// Root that dataset paths are resolved against: a directory or
+	// s3://bucket/prefix. Empty disallows paths.
 	DatasetsDir string
+	// The object-storage client, when DatasetsDir is s3://.
+	Objects *objstore.Client
 	// Runs executing at once; others wait in PENDING.
 	MaxConcurrent int
 	Evaluate      config.Evaluate
@@ -182,10 +187,18 @@ func (m *Manager) validate(spec *evalsiv1alpha1.RunSpec) ([]evaluation.Instance,
 	return insts, nil
 }
 
-// resolvePath keeps dataset paths inside DatasetsDir, symlinks included.
+// resolvePath keeps dataset paths inside DatasetsDir, symlinks included. On
+// object storage the result is an s3:// URL, which the worker side fetches.
 func (m *Manager) resolvePath(rel string) (string, error) {
 	if m.opts.DatasetsDir == "" {
 		return "", invalid("this server does not accept dataset paths; set datasets_dir in its config, or send records inline")
+	}
+	if loc, ok := objstore.Parse(m.opts.DatasetsDir); ok {
+		clean := path.Clean(filepath.ToSlash(rel))
+		if path.IsAbs(clean) || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+			return "", invalid("dataset %q must be a path inside the server's datasets_dir", rel)
+		}
+		return loc.Join(clean).String(), nil
 	}
 	root, err := filepath.EvalSymlinks(m.opts.DatasetsDir)
 	if err != nil {
