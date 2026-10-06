@@ -8,7 +8,12 @@
 #     operator and its webhooks, and evalsi-sandboxd (bubblewrap);
 #  3. checks `kubectl apply` gives what `evalsi run -f` gives, the webhooks
 #     (validation, the recorded creator), a policy, code evaluation on the
-#     bubblewrap pool, and an agent run on the pod rung (a SandboxClass).
+#     bubblewrap pool, and an agent run on the pod rung (a SandboxClass);
+#  4. installs again, namespace-only, as a user who is only admin of a
+#     namespace that enforces Pod Security "restricted": no CRDs, no
+#     cluster-scoped object, sandboxes from the chart's own pool. Code
+#     evaluation and an agent run go through the CLI, on the pod rung and
+#     then on Landlock.
 #
 # Needs docker, kind, kubectl, helm, and uv (for the embedded CLI run).
 set -euo pipefail
@@ -17,6 +22,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 here="$root/deploy/e2e"
 cluster="${CLUSTER:-evalsi-e2e}"
 ns=evalsi
+ns2=evalsi-restricted
 registry=airgap.invalid
 tag=e2e
 work="$(mktemp -d)"
@@ -26,6 +32,11 @@ step() { echo; echo "=== $*"; }
 diagnose() {
   step "diagnostics"
   kubectl get pods,deploy,sts,ds,svc -n "$ns" -o wide || true
+  kubectl get pods,deploy,events -n "$ns2" -o wide 2>/dev/null || true
+  for p in $(kubectl get pods -n "$ns2" -o name 2>/dev/null); do
+    echo "--- $ns2 $p"
+    kubectl logs -n "$ns2" "$p" --all-containers --tail=80 || true
+  done
   kubectl get evalruns,onlineevalpolicies,evaluators -n "$ns" -o yaml || true
   kubectl get sandboxclasses -o yaml || true
   kubectl get events -n "$ns" --sort-by=.lastTimestamp | tail -60 || true
@@ -101,12 +112,16 @@ kubectl cluster-info
 step "install from the bundle"
 # kind's nodes are containers, where runc cannot set up user-namespaced
 # pods (sysfs), so the bubblewrap pool runs privileged here.
-"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --with-sandboxd --sandboxd-mode privileged -- \
+"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --with-sandboxd --sandboxd-mode privileged --sandbox-classes -- \
   --set server.replicas=2 --set devPostgres.enabled=true \
-  --set operator.sandboxClasses=true \
   --set sandbox.address="tls://evalsi-sandboxd.$ns.svc:7443" \
   --wait --timeout 10m
 kubectl rollout status ds/evalsi-sandboxd -n "$ns" --timeout 5m
+# The images are in the kind nodes now; the runner's copies only fill its disk.
+rm -f "$work/bundle/images.tar"
+docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E "^($registry/|ghcr.io/abhishek-rnjn/evalsi:|nats:|postgres:|python:)" | xargs -r docker rmi -f >/dev/null || true
+docker builder prune -af >/dev/null || true
+df -h / | tail -1
 kubectl get pods -n "$ns" -o wide
 
 step "every image came from the bundle"
@@ -182,5 +197,68 @@ echo "sandbox pods left after the run: $left"
 
 step "deleting an EvalRun"
 kubectl delete evalrun parity -n "$ns" --wait --timeout=1m
+
+step "namespace-only install, as a namespace admin, under Pod Security restricted"
+# What a platform team hands out: a namespace that enforces "restricted",
+# and the built-in admin role in it. Nothing else.
+kubectl create namespace "$ns2"
+kubectl label namespace "$ns2" pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=latest
+kubectl create rolebinding alice-admin -n "$ns2" --clusterrole=admin --user=alice
+for verb in "create clusterroles" "create clusterrolebindings" "create customresourcedefinitions" "create validatingwebhookconfigurations"; do
+  if kubectl auth can-i $verb --as alice >/dev/null; then echo "alice can $verb" >&2; exit 1; fi
+done
+ci="user:kubernetes/system:serviceaccount:$ns2:ci"
+"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --namespace "$ns2" --namespace-only --skip-images -- \
+  --kube-as-user alice \
+  --set-json "rbac.projects={\"e2e\": {\"runner\": [\"$ci\"]}}" \
+  --wait --timeout 10m
+kubectl get pods -n "$ns2" -o wide
+kubectl create serviceaccount ci -n "$ns2" --as alice
+kubectl get secret evalsi-server-tls -n "$ns2" -o jsonpath='{.data.ca\.crt}' | base64 -d > "$work/ns2-ca.crt"
+kubectl port-forward -n "$ns2" svc/evalsi 18443:8080 >/dev/null 2>&1 &
+forward=$!
+sleep 3
+
+# cli runs a run file through the API as the ci service account, as a CI
+# job in the cluster would (a projected token; here minted by kubectl).
+cli() {
+  (cd "$root/python" && SSL_CERT_FILE="$work/ns2-ca.crt" \
+    EVALSI_TOKEN="$(kubectl create token ci -n "$ns2" --audience evals.si)" \
+    uv run --no-sync evalsi run -f "$1" --server https://localhost:18443 --format json --quiet > "$2")
+}
+# metric prints a metric's mean from a run (the server's JSON).
+metric() {
+  python3 -c 'import json, sys
+s = {m["metric"]: m for m in json.load(open(sys.argv[1]))["summaries"]}
+print(s[sys.argv[2]]["mean"])' "$1" "$2"
+}
+want() {
+  local got
+  got="$(metric "$1" "$2")"
+  python3 -c 'import sys; sys.exit(abs(float(sys.argv[1]) - float(sys.argv[2])) > 1e-9)' "$got" "$3" ||
+    { echo "$2 mean $got, want $3" >&2; cat "$1" >&2; exit 1; }
+}
+
+step "namespace-only: code evaluation on the pod rung"
+kubectl get pods -n "$ns2" -l evals.si/sandbox=true -w -o name > "$work/ns2-pods.txt" &
+watcher=$!
+cli "$here/sandbox-run.yaml" "$work/ns2-unit.json"
+want "$work/ns2-unit.json" unit-tests 0.5
+
+step "namespace-only: an agent run on the pod rung"
+cli "$here/agent-run.yaml" "$work/ns2-agent.json"
+want "$work/ns2-agent.json" task-success 1
+kill "$watcher" 2>/dev/null || true
+sort -u "$work/ns2-pods.txt"
+[ -s "$work/ns2-pods.txt" ] || { echo "no sandbox pods were created in $ns2" >&2; exit 1; }
+
+step "namespace-only: code evaluation on Landlock"
+helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns2" --kube-as-user alice --reuse-values \
+  --set 'sandbox.pool.ladder={landlock}' --wait --timeout 5m
+kubectl rollout status deploy/evalsi-sandbox-pool -n "$ns2" --timeout 3m
+cli "$here/sandbox-run.yaml" "$work/ns2-landlock.json"
+want "$work/ns2-landlock.json" unit-tests 0.5
+kubectl logs -n "$ns2" deploy/evalsi-sandbox-pool --tail=20
+kill "$forward" 2>/dev/null || true
 
 step "passed"

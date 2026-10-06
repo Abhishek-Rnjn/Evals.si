@@ -36,6 +36,15 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- printf "%s://evalsi.%s.svc:8080" (ternary "https" "http" .Values.server.tls) .Release.Namespace -}}
 {{- end }}
 
+{{/* Where workers lease sandboxes: sandbox.address, else this chart's pool. */}}
+{{- define "evalsi.sandboxAddress" -}}
+{{- if .Values.sandbox.address -}}
+{{- .Values.sandbox.address -}}
+{{- else if .Values.sandbox.pool.enabled -}}
+{{- printf "tls://evalsi-sandbox-pool.%s.svc:7443" .Release.Namespace -}}
+{{- end -}}
+{{- end }}
+
 {{/* A non-root, read-only container. */}}
 {{- define "evalsi.restricted" -}}
 allowPrivilegeEscalation: false

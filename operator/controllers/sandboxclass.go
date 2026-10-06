@@ -124,7 +124,7 @@ func (r *SandboxClassReconciler) sandboxConfig(sc *v1.SandboxClass) sandbox.Conf
 		}
 		cfg.Pod = &sandbox.PodConfig{
 			Namespace: r.Namespace, GuestImage: r.Image, DefaultImage: p.DefaultImage,
-			RuntimeClassName: p.RuntimeClassName, Level: p.Level, RunAsUser: p.RunAsUser, CPU: p.CPU,
+			RuntimeClassName: p.RuntimeClassName, Level: p.Level, RunAsUser: p.RunAsUser, Capabilities: p.Capabilities, CPU: p.CPU,
 			NodeSelector: p.NodeSelector, NetworkPolicyEnforced: p.NetworkPolicyEnforced,
 			Labels: map[string]string{"evals.si/sandbox-class": sc.Name},
 		}
@@ -171,7 +171,9 @@ func (r *SandboxClassReconciler) podSpec(sc *v1.SandboxClass, name string, spec 
 	}
 	spec.HostUsers = nil
 	spec.SecurityContext = nil
-	local := slices.Contains(ladder, "bwrap") || slices.Contains(ladder, "landlock")
+	// bwrap needs user and mount namespaces; Landlock alone and the pod rung
+	// need no privilege (Pod Security "restricted").
+	local := slices.Contains(ladder, "bwrap")
 	switch {
 	case slices.Contains(ladder, "firecracker") || (local && sc.Spec.PodSecurity == "privileged"):
 		spec.SecurityContext = &corev1.PodSecurityContext{RunAsUser: ptr.To(int64(0))}
@@ -193,7 +195,8 @@ func (r *SandboxClassReconciler) podSpec(sc *v1.SandboxClass, name string, spec 
 			AppArmorProfile: &corev1.AppArmorProfile{Type: corev1.AppArmorProfileTypeUnconfined},
 		}
 	default:
-		// The pod rung only talks to the API server and its sandboxes.
+		// The pod rung only talks to the API server and its sandboxes;
+		// Landlock confines its sandboxes from inside this pod.
 		spec.SecurityContext = &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true), SeccompProfile: &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault}}
 		c.SecurityContext = &corev1.SecurityContext{
 			AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true),

@@ -30,7 +30,15 @@
 {{- if $v.auth.kubernetes.enabled }}
 {{- $k8s := dict }}
 {{- with $v.auth.kubernetes.namespaces }}{{ $_ := set $k8s "namespaces" . }}{{ end }}
-{{- $_ := set $auth "jwt" (dict "providers" (list (dict "name" "kubernetes" "audiences" (list $v.auth.kubernetes.audience) "kubernetes" $k8s))) }}
+{{- $provider := dict "name" "kubernetes" "audiences" (list $v.auth.kubernetes.audience) "kubernetes" $k8s }}
+{{- $jwks := deepCopy $v.auth.kubernetes.jwks }}
+{{- with $v.auth.kubernetes.jwksConfigMap }}{{ $jwks = dict "file" "/etc/evalsi/jwks/keys.json" }}{{ end }}
+{{- with $jwks }}
+{{- if not $v.auth.kubernetes.issuer }}{{ fail "auth.kubernetes.jwks needs auth.kubernetes.issuer (the iss of the cluster's service-account tokens)" }}{{ end }}
+{{- $_ := set $provider "issuer" $v.auth.kubernetes.issuer }}
+{{- $_ := set $provider "jwks" . }}
+{{- end }}
+{{- $_ := set $auth "jwt" (dict "providers" (list $provider)) }}
 {{- end }}
 {{- if $v.server.tls }}
 {{- $_ := set $auth "tls" (dict "cert_file" "/etc/evalsi/tls/tls.crt" "key_file" "/etc/evalsi/tls/tls.key" "client_ca" "/etc/evalsi/tls/ca.crt") }}
@@ -73,9 +81,10 @@ data:
 {{- $_ := set $worker "storage" (pick $storage "s3") }}
 {{- $_ := set $worker "datasets_dir" $datasets }}
 {{- end }}
-{{- if $v.sandbox.address }}
+{{- $sandboxAddress := include "evalsi.sandboxAddress" . }}
+{{- if $sandboxAddress }}
 {{- $_ := set $worker "worker" (dict "sandbox_service" (dict
-  "address" $v.sandbox.address
+  "address" $sandboxAddress
   "ca_file" "/etc/evalsi/worker-tls/ca.crt"
   "cert_file" "/etc/evalsi/worker-tls/tls.crt"
   "key_file" "/etc/evalsi/worker-tls/tls.key")) }}

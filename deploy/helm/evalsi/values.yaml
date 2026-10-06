@@ -80,6 +80,15 @@ auth:
     enabled: true
     audience: evals.si
     namespaces: []        # default: every namespace
+    # evalsid reads the cluster's issuer and signing keys from the API
+    # server, which every service account may do unless the cluster removed
+    # that grant (system:service-account-issuer-discovery). Then set the
+    # issuer and a key set: the cluster's public one (EKS, GKE and AKS
+    # publish it) as jwks.url, or a copy in a ConfigMap (key keys.json),
+    # refreshed when the cluster rotates its keys.
+    issuer: ""
+    jwks: {}              # {url: https://...} or {inline: {...}}
+    jwksConfigMap: ""
   # Merged into the auth section: jwt providers, api_keys, trusted_proxy...
   config: {}
 # Merged into the rbac section; the operator is always an owner.
@@ -96,6 +105,9 @@ workers:
     sandbox: {replicas: 1, concurrency: 4, resources: {}}
     harness: {replicas: 1, concurrency: 2, resources: {}}
     # gpu: {replicas: 1, concurrency: 1, resources: {limits: {nvidia.com/gpu: 1}}, nodeSelector: {...}}
+    # A pool on your own image (FROM the evalsi image, plus your evaluator
+    # package), without the operator's Evaluator resource:
+    # graders: {replicas: 1, concurrency: 8, image: registry.internal/graders:1.4}
   # Merged into the workers' evalsi.yaml (judges, default_judge, agents...).
   config: {}
   env: []
@@ -123,6 +135,34 @@ sandbox:
   podRung:
     enabled: true
     networkPolicy: true
+  # A sandbox pool run by this chart (evalsi-sandbox-pool), for installs
+  # without the cluster-scoped charts: the pod rung (a pod per sandbox) and
+  # Landlock need no privilege and run under Pod Security "restricted".
+  # Workers use it unless sandbox.address is set.
+  pool:
+    enabled: false
+    ladder: [pod]         # pod and/or landlock, strongest first
+    minIsolation: ""
+    replicas: 1
+    maxSandboxes: 8       # per replica
+    resources: {}
+    nodeSelector: {}
+    tolerations: []
+    # The pod rung's sandbox pods.
+    pod:
+      defaultImage: python:3.13-slim   # for sandboxes whose spec names no image
+      # Non-root and no capabilities: what "restricted" admits. The image's
+      # workdir is copied into a volume this user can write. null runs as
+      # the image's user with the capabilities apt and pip need.
+      runAsUser: 65532
+      capabilities: []
+      runtimeClassName: ""             # gvisor or kata, with level kernel or vm
+      level: ""
+      cpu: ""
+      startTimeout: ""
+      networkPolicyEnforced: false     # true when the CNI enforces NetworkPolicy
+      nodeSelector: {}
+      tolerations: []
 
 operator:
   enabled: true

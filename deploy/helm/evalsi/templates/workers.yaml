@@ -1,4 +1,5 @@
 {{- $v := .Values }}
+{{- $sandboxAddress := include "evalsi.sandboxAddress" . }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -37,7 +38,11 @@ spec:
       {{- end }}
       containers:
         - name: worker
+          {{- if $p.image }}
+          image: {{ include "evalsi.ref" (dict "root" $ "ref" $p.image) }}
+          {{- else }}
           image: {{ include "evalsi.image" $ }}
+          {{- end }}
           imagePullPolicy: {{ $v.image.pullPolicy }}
           args: [worker, --config, /etc/evalsi/evalsi.yaml, --pools, {{ $pool }}, --concurrency, {{ $p.concurrency | quote }}]
           env:
@@ -55,7 +60,7 @@ spec:
           resources: {{- toYaml ($p.resources | default dict) | nindent 12 }}
           volumeMounts:
             - {name: config, mountPath: /etc/evalsi, readOnly: true}
-            {{- if $v.sandbox.address }}
+            {{- if $sandboxAddress }}
             - {name: worker-tls, mountPath: /etc/evalsi/worker-tls, readOnly: true}
             {{- end }}
             - {name: home, mountPath: /var/lib/evalsi}
@@ -63,7 +68,7 @@ spec:
       volumes:
         - name: config
           configMap: {name: evalsi-worker}
-        {{- if $v.sandbox.address }}
+        {{- if $sandboxAddress }}
         - name: worker-tls
           secret: {secretName: evalsi-worker-tls}
         {{- end }}

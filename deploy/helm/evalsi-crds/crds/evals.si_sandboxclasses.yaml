@@ -88,6 +88,13 @@ spec:
                 type: object
               pod:
                 properties:
+                  capabilities:
+                    description: |-
+                      Linux capabilities sandbox pods keep; default CHOWN, DAC_OVERRIDE,
+                      FOWNER, FSETID, KILL, SETGID, SETUID (what apt and pip need).
+                    items:
+                      type: string
+                    type: array
                   cpu:
                     type: string
                   defaultImage:
@@ -103,6 +110,9 @@ spec:
                       type: string
                     type: object
                   runAsUser:
+                    description: |-
+                      Run sandbox pods as this user; set a non-zero one, with capabilities
+                      [], where Pod Security "restricted" applies.
                     format: int64
                     type: integer
                   runtimeClassName:
@@ -115,7 +125,8 @@ spec:
                   user namespace with an unmasked /proc and no seccomp or AppArmor
                   profile; privileged runs them privileged, for nodes without user
                   namespaces. The Firecracker rung is always privileged (it needs
-                  /dev/kvm); the pod rung needs neither.
+                  /dev/kvm); the pod rung and Landlock alone need neither, and run
+                  under Pod Security "restricted".
                 enum:
                 - userns
                 - privileged

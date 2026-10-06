@@ -480,9 +480,41 @@ func TestKubernetesServiceAccounts(t *testing.T) {
 	if _, err := New(&Config{JWT: &JWTConfig{Providers: []Provider{p}}}, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Errorf("New with a bad reader token: %v", err)
 	}
-	// jwks cannot be set as well.
-	p.JWKS.Discovery = true
+	// Two key sources do not validate; nor does a key set without the issuer.
+	p.JWKS.Discovery, p.JWKS.URL = true, "https://oidc.example.com/keys"
 	if err := (&Config{JWT: &JWTConfig{Providers: []Provider{p}}}).Validate(); err == nil {
-		t.Error("kubernetes with jwks validated")
+		t.Error("kubernetes with two key sources validated")
+	}
+	p.JWKS = JWKS{File: dir + "/jwks.json"}
+	if err := (&Config{JWT: &JWTConfig{Providers: []Provider{p}}}).Validate(); err == nil || !strings.Contains(err.Error(), "issuer is required") {
+		t.Errorf("kubernetes with jwks and no issuer: %v", err)
+	}
+}
+
+// A cluster that does not let service accounts read its keys: the issuer
+// and a copy of its key set are configured, and the API server is never
+// asked (here it would refuse: the reader token is wrong).
+func TestKubernetesStaticKeys(t *testing.T) {
+	is := newIssuer(t)
+	p, dir := kubeAPI(t, is)
+	_ = os.WriteFile(dir+"/token", []byte("wrong\n"), 0o600)
+	raw, _ := json.Marshal(is.public())
+	_ = os.WriteFile(dir+"/jwks.json", raw, 0o600)
+	p.Issuer = "https://kubernetes.default.svc.cluster.local"
+	p.JWKS = JWKS{File: dir + "/jwks.json"}
+	cfg := &Config{JWT: &JWTConfig{Providers: []Provider{p}}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	a := newAuth(t, cfg, nil, nil)
+	res := a.Authenticate(request(bearer(saToken(t, is, "ci", "runner", "evalsi"))))
+	if res.Err != nil {
+		t.Fatal(res.Err)
+	}
+	if pr := res.Principal; pr.Kind != KindService || pr.Name != "ci/runner" || !slices.Contains(pr.Groups, "system:serviceaccounts:ci") {
+		t.Errorf("principal %+v", pr)
+	}
+	if res := a.Authenticate(request(bearer(saToken(t, is, "default", "runner", "evalsi")))); res.Err == nil {
+		t.Error("a service account outside the namespaces was accepted")
 	}
 }

@@ -262,7 +262,8 @@ func TestOperator(t *testing.T) {
 	t.Run("SandboxClass", func(t *testing.T) {
 		for _, sc := range []*v1.SandboxClass{
 			{ObjectMeta: metav1.ObjectMeta{Name: "bwrap"}, Spec: v1.SandboxClassSpec{MinIsolation: "namespaced", MaxSandboxes: 16, Replicas: ptr.To(int32(2))}},
-			{ObjectMeta: metav1.ObjectMeta{Name: "gvisor"}, Spec: v1.SandboxClassSpec{Ladder: []string{"pod"}, MinIsolation: "kernel", Pod: &v1.PodRung{RuntimeClassName: "gvisor", Level: "kernel", DefaultImage: "python:3.13-slim", NetworkPolicyEnforced: true}}},
+			{ObjectMeta: metav1.ObjectMeta{Name: "gvisor"}, Spec: v1.SandboxClassSpec{Ladder: []string{"pod"}, MinIsolation: "kernel", Pod: &v1.PodRung{RuntimeClassName: "gvisor", Level: "kernel", DefaultImage: "python:3.13-slim", NetworkPolicyEnforced: true, RunAsUser: ptr.To(int64(1000)), Capabilities: &[]string{}}}},
+			{ObjectMeta: metav1.ObjectMeta{Name: "landlock"}, Spec: v1.SandboxClassSpec{Ladder: []string{"landlock"}}},
 		} {
 			if err := alice.Create(ctx, sc); err != nil {
 				t.Fatal(err)
@@ -311,6 +312,17 @@ func TestOperator(t *testing.T) {
 		c = pod.Containers[0]
 		if pod.HostUsers != nil || !*pod.SecurityContext.RunAsNonRoot || *c.SecurityContext.AllowPrivilegeEscalation || !*pod.AutomountServiceAccountToken || pod.ServiceAccountName != "evalsi-sandboxd" {
 			t.Errorf("pod-rung pool security %+v", pod)
+		}
+		if *p.RunAsUser != 1000 || p.Capabilities == nil || len(*p.Capabilities) != 0 {
+			t.Errorf("pod rung user %v, capabilities %v", p.RunAsUser, p.Capabilities)
+		}
+
+		// Landlock alone needs no privilege: the pool runs restricted.
+		_, dep, _ = get("landlock")
+		pod = dep.Spec.Template.Spec
+		c = pod.Containers[0]
+		if pod.HostUsers != nil || !*pod.SecurityContext.RunAsNonRoot || c.SecurityContext.Privileged != nil || *pod.AutomountServiceAccountToken {
+			t.Errorf("landlock pool security %+v %+v", pod, c.SecurityContext)
 		}
 	})
 }

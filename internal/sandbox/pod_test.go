@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -225,5 +226,98 @@ PY`
 	events := sess.Egress()
 	if len(events) != 2 || !events[0].Allowed || events[1].Allowed {
 		t.Errorf("egress log %+v", events)
+	}
+}
+
+// restrictedViolations lists what keeps a pod from Pod Security
+// "restricted" (the checks that apply to what the pod rung sets).
+func restrictedViolations(m map[string]any) []string {
+	var out []string
+	b, _ := json.Marshal(m)
+	var pod struct {
+		Spec struct {
+			SecurityContext struct {
+				RunAsNonRoot   *bool `json:"runAsNonRoot"`
+				SeccompProfile *struct {
+					Type string `json:"type"`
+				} `json:"seccompProfile"`
+			} `json:"securityContext"`
+			Containers     []json.RawMessage `json:"containers"`
+			InitContainers []json.RawMessage `json:"initContainers"`
+			Volumes        []map[string]any  `json:"volumes"`
+		} `json:"spec"`
+	}
+	_ = json.Unmarshal(b, &pod)
+	sc := pod.Spec.SecurityContext
+	if sc.RunAsNonRoot == nil || !*sc.RunAsNonRoot {
+		out = append(out, "runAsNonRoot")
+	}
+	if sc.SeccompProfile == nil || sc.SeccompProfile.Type != "RuntimeDefault" {
+		out = append(out, "seccompProfile")
+	}
+	for _, v := range pod.Spec.Volumes {
+		if _, ok := v["hostPath"]; ok {
+			out = append(out, "hostPath")
+		}
+	}
+	for _, raw := range append(pod.Spec.Containers, pod.Spec.InitContainers...) {
+		var c struct {
+			Name            string `json:"name"`
+			SecurityContext struct {
+				Privileged               *bool `json:"privileged"`
+				AllowPrivilegeEscalation *bool `json:"allowPrivilegeEscalation"`
+				Capabilities             struct {
+					Add  []string `json:"add"`
+					Drop []string `json:"drop"`
+				} `json:"capabilities"`
+			} `json:"securityContext"`
+		}
+		_ = json.Unmarshal(raw, &c)
+		s := c.SecurityContext
+		if s.Privileged != nil && *s.Privileged {
+			out = append(out, c.Name+": privileged")
+		}
+		if s.AllowPrivilegeEscalation == nil || *s.AllowPrivilegeEscalation {
+			out = append(out, c.Name+": allowPrivilegeEscalation")
+		}
+		if !slices.Contains(s.Capabilities.Drop, "ALL") {
+			out = append(out, c.Name+": drop ALL")
+		}
+		for _, add := range s.Capabilities.Add {
+			if add != "NET_BIND_SERVICE" {
+				out = append(out, c.Name+": adds "+add)
+			}
+		}
+	}
+	return out
+}
+
+// With a non-root user and no capabilities, sandbox pods meet Pod Security
+// "restricted", and the workdir becomes a volume seeded from the image.
+func TestPodRungRestricted(t *testing.T) {
+	sp := &Spec{Workdir: "/testbed"}
+	root := &podDriver{cfg: &PodConfig{GuestImage: "evalsi:test"}}
+	if v := restrictedViolations(root.manifest(sp, "python:3.13-slim", "t", "")); !slices.Contains(v, "runAsNonRoot") || !slices.Contains(v, "sandbox: adds CHOWN") {
+		t.Errorf("the default pod: violations %v", v)
+	}
+	uid, none := int64(1000), []string{}
+	d := &podDriver{cfg: &PodConfig{GuestImage: "evalsi:test", RunAsUser: &uid, Capabilities: &none}}
+	m := d.manifest(sp, "swe:latest", "t", "")
+	if v := restrictedViolations(m); len(v) > 0 {
+		t.Errorf("violations %v", v)
+	}
+	b, _ := json.Marshal(m)
+	for _, want := range []string{
+		`"command":["/evalsi/bin/evalsi-guest","seed","/testbed","/evalsi/workdir"]`,
+		`"image":"swe:latest","name":"workdir"`,
+		`{"mountPath":"/testbed","name":"workdir"}`,
+		`{"mountPath":"/tmp","name":"tmp"}`,
+	} {
+		if !bytes.Contains(b, []byte(want)) {
+			t.Errorf("manifest lacks %s:\n%s", want, b)
+		}
+	}
+	if bytes.Contains(b, []byte("readOnlyRootFilesystem")) {
+		t.Error("a non-root pod got a read-only root it did not ask for")
 	}
 }

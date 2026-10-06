@@ -30,7 +30,7 @@ Three charts:
 
 | Chart | Scope | What it installs |
 |---|---|---|
-| [`evalsi-crds`](../../deploy/helm/evalsi-crds) | cluster | The CRDs, the admission webhooks and their certificate, the operator's cluster role, and roles aggregated into `admin`, `edit` and `view` |
+| [`evalsi-crds`](../../deploy/helm/evalsi-crds) | cluster | The CRDs, the admission webhooks and their certificate, roles aggregated into `admin`, `edit` and `view`, and (opt-in) the operator's cluster role |
 | [`evalsi`](../../deploy/helm/evalsi) | namespace | `evalsid` replicas, a worker Deployment per pool, NATS, the operator, internal certificates, and what the pod rung needs |
 | [`evalsi-sandboxd`](../../deploy/helm/evalsi-sandboxd) | nodes | A sandbox pool per node (DaemonSet): bubblewrap in a user namespace, or Firecracker on KVM nodes |
 
@@ -44,7 +44,7 @@ helm install evalsi deploy/helm/evalsi -n evalsi \
 helm install evalsi-sandboxd deploy/helm/evalsi-sandboxd -n evalsi
 ```
 
-The defaults are a working single-replica install on SQLite. For production:
+The defaults are a working single-replica install on SQLite. Each chart's permissions are listed under [Permissions](#permissions); on a cluster where you are not cluster-admin, see [Installing without cluster-admin](#installing-without-cluster-admin). For production:
 
 - **Storage.** `storage.postgres.dsnSecret` (a Secret holding the DSN) for several API replicas; `storage.clickhouse` for traces at volume; `storage.s3` for datasets (`datasets_dir` becomes `s3://<bucket>/<prefix>`, with IRSA or a credentials Secret). `devPostgres.enabled` starts a throwaway PostgreSQL in the namespace, for trying replicas out.
 - **NATS.** The chart runs one JetStream node. For HA, run a three-node NATS (for example the official chart) and set `nats.url` and `nats.streamReplicas: 3`.
@@ -104,7 +104,7 @@ spec:
   autoscaling: {minReplicas: 1, maxReplicas: 20, lagThreshold: 10}
 ```
 
-**`SandboxClass`** (cluster-scoped) is a sandbox pool: the isolation ladder, the minimum level, and the rungs' settings. The operator runs `evalsi-sandbox-<name>` (a Deployment and its Service) and writes the address workers use into `status.address`. Point `sandbox.address` at it.
+**`SandboxClass`** (cluster-scoped) is a sandbox pool: the isolation ladder, the minimum level, and the rungs' settings. The operator runs `evalsi-sandbox-<name>` (a Deployment and its Service) and writes the address workers use into `status.address`. Point `sandbox.address` at it. Because the kind is cluster-scoped, reconciling it needs a ClusterRoleBinding, so it is opt-in: set `operator.sandboxClasses=true` on both the `evalsi-crds` and the `evalsi` charts (or use the `evalsi` chart's own pool, `sandbox.pool`, which needs no cluster permission).
 
 ```yaml
 apiVersion: evals.si/v1alpha1
@@ -133,6 +133,64 @@ Worker pods hold credentials (provider keys, the cluster's tokens), so sandboxes
 
 The **pod rung** creates one pod per sandbox from the task's image. `evalsi-guest` is copied in by an init container; the pod has no service-account token and no service links, runs with all capabilities dropped except the few package managers need, and a NetworkPolicy lets it talk only to its pool, which relays allowed egress through its logging proxy. It cannot snapshot, so environment setup runs once per trial.
 
+## Permissions
+
+What each chart creates, and who has to install it.
+
+**`evalsi` (a namespace admin).** Only Roles and RoleBindings in its namespace:
+
+| Service account | Can | Why |
+|---|---|---|
+| `evalsi-operator` | Deployments, Services, ConfigMaps, KEDA `ScaledObject`s, leases, events, and the `evals.si` resources, in this namespace | Runs `Evaluator` pools and `SandboxClass` pools, leader election, status |
+| `evalsi-sandboxd` | Get, list, watch, create and delete pods in this namespace; nothing else | The pod rung: one pod per sandbox |
+| `evalsi-worker` | Nothing: no API token is mounted | Workers talk only to `evalsid`, NATS and the sandbox pools |
+| `evalsi` | Nothing beyond what every service account has | `evalsid` reads the cluster's service-account issuer and keys (`/.well-known/openid-configuration`, `/openid/v1/jwks`), which Kubernetes grants all service accounts through `system:service-account-issuer-discovery` |
+
+The operator watches only its own namespace unless `operator.allNamespaces` is set. Every pod the chart runs meets Pod Security `restricted`: non-root, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp, read-only root filesystems.
+
+**`evalsi-crds` (a cluster admin, once).**
+
+| Object | Scope | Notes |
+|---|---|---|
+| The four CRDs | cluster | Needed for `kubectl apply` of runs and policies, and for the operator |
+| Validating and mutating webhook configurations | cluster | Only for `evals.si` resources; `failurePolicy: Fail` |
+| `evalsi-edit`, `evalsi-view` | cluster | Aggregated into the built-in `admin`, `edit` and `view` roles, so namespace admins and editors manage the resources; they grant Evals.si itself nothing |
+| `evalsi-operator` ClusterRole and binding | cluster | Only if `operator.sandboxClasses` (read and update SandboxClasses, nothing else) or `operator.allNamespaces` is set; both are off by default |
+
+`operator.allNamespaces` is the one broad grant: the `evals.si` resources in every namespace, and creating Deployments and `ScaledObject`s in any of them (an `Evaluator`'s workers run in its own namespace). Leave it off and install the `evalsi` chart per namespace instead, if that is too much.
+
+**`evalsi-sandboxd` (a cluster admin, or a namespace that allows it).** No RBAC at all, but its pods need privileges: a pod user namespace with an unmasked `/proc` (`mode: bwrap`), a privileged container (`mode: privileged`), or `/dev/kvm` (`mode: firecracker`). The namespace must allow them, which usually means Pod Security `privileged`.
+
+## Installing without cluster-admin
+
+On a cluster with strict RBAC, a team usually gets a namespace, the built-in `admin` role in it, and Pod Security `restricted`. That is enough for everything except `kubectl apply` of runs: install the `evalsi` chart alone, with the namespace-only profile.
+
+```bash
+helm install evalsi deploy/helm/evalsi -n my-team -f deploy/helm/evalsi/values-namespaced.yaml \
+  --set-json 'rbac.projects={"my-team": {"runner": ["group:kubernetes/system:serviceaccounts:my-team"]}}'
+# air-gapped: evalsi-bundle/install.sh --registry ... --namespace my-team --namespace-only -- <helm flags>
+```
+
+What changes:
+
+| | Full install | Namespace-only |
+|---|---|---|
+| Cluster-scoped objects | CRDs, webhooks, aggregated roles | None |
+| Runs and policies | `kubectl apply`, the CLI, the API | The CLI and the API (`evalsi run -f run.yaml --server ...`, `evalsi policy apply`); the same files |
+| Who started a run | Webhook-stamped `evals.si/created-by`, and the caller on the server | The caller on the server (its token or key), in the audit log |
+| Evaluator plugins | `Evaluator` resources | A pool in `workers.pools` with your image (`workers.pools.<pool>.image`, built `FROM` the evalsi image) |
+| Sandboxes | `evalsi-sandboxd` or a `SandboxClass` | The chart's pool, `evalsi-sandbox-pool`: a pod per sandbox, or Landlock |
+| Pod Security | `restricted` for the `evalsi` chart; sandbox pools need more | `restricted` throughout |
+
+The profile turns the operator off, turns on the chart's sandbox pool (`sandbox.pool`) with the ladder `[pod, landlock]`, and points the workers at it.
+
+- **The pod rung** runs each sandbox as a pod in the namespace, as user 65532 with no capabilities, so it is admitted under `restricted`. The task image's workdir is copied into a volume that user can write, so images built for root still work as long as they do not need root at run time (installing system packages does). For gVisor or Kata, set `sandbox.pool.pod.runtimeClassName` and `level`.
+- **Landlock** confines sandboxes inside the pool's own pod, with no Kubernetes API access at all (`sandbox.pool.ladder: [landlock]`). It is weaker (level `confined`: no separate mount or process view), and needs a kernel with Landlock and a container runtime whose default seccomp profile allows its system calls; where they are missing, the pool's probe refuses the rung and sandboxes fail closed. It suits code evaluators, not agent environments that need their own image.
+
+Runs reach the API from CI jobs and agents in the cluster with a projected service-account token (`EVALSI_TOKEN_FILE`; see [Identity](#identity)), or from outside with an API key or your OIDC provider. If the cluster has taken away service accounts' access to its signing keys, set `auth.kubernetes.issuer` and `auth.kubernetes.jwks` (or `jwksConfigMap`); see [identity](identity.md#on-kubernetes-service-account-tokens).
+
+If a cluster admin later installs `evalsi-crds`, turn the operator back on (`operator.enabled=true`) for `kubectl apply`; nothing else changes.
+
 ## Identity
 
 The chart trusts the cluster's service-account tokens projected for the `evals.si` audience (see [identity](identity.md#on-kubernetes-service-account-tokens)), and makes the operator's service account an owner. CI jobs and agents in the cluster sign in the same way: bind roles to `user:kubernetes/system:serviceaccount:<namespace>:<name>` or `group:kubernetes/system:serviceaccounts:<namespace>`, mount a projected token, and set `EVALSI_TOKEN_FILE`.
@@ -144,6 +202,7 @@ The `kubernetes` job ([`deploy/e2e/kind-e2e.sh`](../../deploy/e2e/kind-e2e.sh)) 
 - `kubectl apply` of a run file gives the same summaries as `evalsi run -f` of the same file;
 - the webhooks refuse an invalid spec and a changed one, and record the creator;
 - a policy syncs;
-- code evaluation runs on the bubblewrap pool, and an agent run on the pod rung, from a `SandboxClass`.
+- code evaluation runs on the bubblewrap pool, and an agent run on the pod rung, from a `SandboxClass`;
+- a namespace-only install works for a user who is only `admin` of a namespace that enforces Pod Security `restricted`: it installs with no cluster-scoped object, and code evaluation and an agent run, through the CLI, pass on the chart's pod-rung pool and then on Landlock.
 
 The operator is also tested against a real API server and etcd (envtest), and the charts by rendering them and loading every `evalsi.yaml` they produce through `evalsid`'s config validation.

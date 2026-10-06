@@ -295,6 +295,7 @@ The same run and policy files apply as resources; the operator runs them through
 - **Storage:** PostgreSQL for metadata and results, ClickHouse for traces at volume, S3-compatible storage for datasets; TLS and client certificates on each.
 - **High availability:** several API replicas share the database; leases decide which replica schedules runs and runs the policy engine, and a replica adopts a stopped one's runs. Work goes to pools over NATS JetStream.
 - **Air-gapped installs:** `deploy/airgap/bundle.sh` packs every image, the charts and optionally the CLI wheels; `install.sh` loads them into your registry and installs.
+- **No cluster-admin needed:** on clusters with strict RBAC, a namespace admin can install the `evalsi` chart alone (`-f deploy/helm/evalsi/values-namespaced.yaml`). Nothing is cluster-scoped, every pod passes Pod Security `restricted`, and sandboxes run on the chart's own pod-rung or Landlock pool. Runs then go through the CLI and API instead of `kubectl apply`.
 
 See the [Kubernetes guide](docs/guides/kubernetes.md) (and [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md)).
 

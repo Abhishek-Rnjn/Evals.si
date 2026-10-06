@@ -1,0 +1,19 @@
+# Install with no cluster-scoped object and no cluster-admin step: everything
+# lives in one namespace, every pod meets Pod Security "restricted", and the
+# installer needs only the built-in admin role in that namespace.
+#
+#   helm install evalsi deploy/helm/evalsi -n <namespace> -f deploy/helm/evalsi/values-namespaced.yaml
+#
+# Without the CRDs there is no operator: runs and policies go through the
+# API (evalsi run -f run.yaml --server ..., evalsi policy apply), signed in
+# with a projected service-account token (EVALSI_TOKEN_FILE) or a key.
+# Sandboxes come from this chart's pool: a hardened pod per sandbox, or
+# Landlock where the pod rung is refused.
+operator:
+  enabled: false
+sandbox:
+  pool:
+    enabled: true
+    ladder: [pod, landlock]
+keda:
+  enabled: false

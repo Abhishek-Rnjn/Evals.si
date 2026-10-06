@@ -81,7 +81,14 @@ spec:
             - {name: data, mountPath: /var/lib/evalsi/data, subPath: data}
             - {name: data, mountPath: /var/lib/evalsi/datasets, subPath: datasets}
             - {name: tmp, mountPath: /tmp}
+            {{- if and $v.auth.kubernetes.enabled $v.auth.kubernetes.jwksConfigMap }}
+            - {name: jwks, mountPath: /etc/evalsi/jwks, readOnly: true}
+            {{- end }}
       volumes:
+        {{- if and $v.auth.kubernetes.enabled $v.auth.kubernetes.jwksConfigMap }}
+        - name: jwks
+          configMap: {name: {{ $v.auth.kubernetes.jwksConfigMap }}}
+        {{- end }}
         - name: home
           emptyDir: {}
         - name: config
