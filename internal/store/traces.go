@@ -15,12 +15,29 @@ import (
 
 // PutTrace stores (or replaces, when late spans re-assemble it) a trace in
 // its project (summary.Project).
+const putTraceSQL = `INSERT INTO traces (project, trace_id, service, start_ns, summary, record) VALUES (?, ?, ?, ?, ?, ?)
+	ON CONFLICT (project, trace_id) DO UPDATE SET service = excluded.service, start_ns = excluded.start_ns, summary = excluded.summary, record = excluded.record`
+
 func (s *sqlTraces) PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO traces (project, trace_id, service, start_ns, summary, record) VALUES (?, ?, ?, ?, ?, ?)
-		 ON CONFLICT (project, trace_id) DO UPDATE SET service = excluded.service, start_ns = excluded.start_ns, summary = excluded.summary, record = excluded.record`,
+	_, err := s.db.ExecContext(ctx, putTraceSQL,
 		summary.GetProject(), summary.GetTraceId(), summary.GetService(), summary.GetStartTime().AsTime().UnixNano(), marshal(summary), marshal(record))
 	return err
+}
+
+func (s *sqlTraces) PutTraces(ctx context.Context, traces []TraceWrite) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, t := range traces {
+		if _, err := tx.ExecContext(ctx, putTraceSQL,
+			t.Summary.GetProject(), t.Summary.GetTraceId(), t.Summary.GetService(), t.Summary.GetStartTime().AsTime().UnixNano(),
+			marshal(t.Summary), marshal(t.Record)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // TraceFilter selects traces.

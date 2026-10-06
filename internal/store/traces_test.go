@@ -65,6 +65,24 @@ func testTraceStore(t *testing.T, ts TraceStore) {
 	if _, _, err := ts.GetTrace(ctx, "q", "t2"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another project's trace: %v", err)
 	}
+	// A batch in one write; a trace repeated in it keeps its last version.
+	later := base.Add(48 * time.Hour) // after the retention check below
+	b1, r1 := trace("b", "x1", "batch", later)
+	b2, r2 := trace("b", "x2", "batch", later)
+	b2again, r2again := trace("b", "x2", "batch", later)
+	b2again.Name = "last"
+	if err := ts.PutTraces(ctx, []TraceWrite{{b1, r1}, {b2, r2}, {b2again, r2again}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := ts.GetTrace(ctx, "b", "x2"); err != nil || got.GetName() != "last" {
+		t.Errorf("batched x2 = %v %v", got, err)
+	}
+	if _, _, err := ts.GetTrace(ctx, "b", "x1"); err != nil {
+		t.Errorf("batched x1: %v", err)
+	}
+	if err := ts.PutTraces(ctx, nil); err != nil {
+		t.Errorf("an empty batch: %v", err)
+	}
 	projects, err := ts.TraceProjects(ctx, "t1")
 	if err != nil || fmt.Sprint(projects) != "[p q]" {
 		t.Errorf("TraceProjects = %v %v", projects, err)

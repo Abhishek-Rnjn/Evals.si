@@ -29,6 +29,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
 // TestLoad measures the §14 scale targets on one evalsid with a real Python
@@ -44,8 +45,15 @@ func TestLoad(t *testing.T) {
 		c.OTLP.MaxTraces = 100000
 		c.Sinks = nil
 		c.Evaluate = config.Default().Evaluate
+		// Traces in ClickHouse, as in production, when one is given.
+		if u := os.Getenv("EVALSI_LOAD_CLICKHOUSE_URL"); u != "" {
+			c.Storage.ClickHouse = &store.ClickHouseConfig{URL: u, Database: fmt.Sprintf("evalsi_load%d", time.Now().Unix())}
+		}
 	})
-	report := map[string]any{}
+	report := map[string]any{"trace_store": "sqlite"}
+	if os.Getenv("EVALSI_LOAD_CLICKHOUSE_URL") != "" {
+		report["trace_store"] = "clickhouse"
+	}
 	defer func() {
 		out, _ := json.MarshalIndent(report, "", "  ")
 		t.Logf("load report:\n%s", out)
@@ -213,8 +221,8 @@ func otlpIngest(t *testing.T, e env, report map[string]any) {
 	report["ingest_accepted_spans_per_s"] = int(spans / accepted.Seconds())
 	// Includes the assembler's grace before the last trace is written.
 	report["ingest_stored_spans_per_s"] = int(spans / stored.Seconds())
-	if rate := spans / accepted.Seconds(); rate < 20_000 {
-		t.Errorf("ingest %.0f spans/s, target ≥ 20k", rate)
+	if rate := spans / stored.Seconds(); rate < 20_000 {
+		t.Errorf("ingest %.0f spans/s stored, target ≥ 20k", rate)
 	}
 }
 

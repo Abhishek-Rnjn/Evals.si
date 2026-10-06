@@ -15,5 +15,6 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0009](0009-standalone-sqlite-in-process-scheduler.md) | Standalone: SQLite and an in-process scheduler; NATS with Kubernetes, DuckDB later | Accepted |
 | [0010](0010-identity-and-access-next.md) | Identity and access (OIDC/JWT, API keys, RBAC with custom roles, CEL rules) come next, modeled on agentgateway | Accepted, implemented |
 | [0011](0011-agent-environments-and-benchmarks.md) | Agent environments and benchmark grading: upstream scoring, direct format import, Firecracker without a network device | Accepted, implemented |
+| [0012](0012-kubernetes-operator-and-packaging.md) | Kubernetes: the operator as an API client, one image, three charts, service-account tokens as OIDC | Accepted, implemented |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

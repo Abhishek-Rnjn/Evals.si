@@ -214,15 +214,29 @@ func unb64(s string, m proto.Message) error {
 }
 
 func (c *clickhouse) PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error {
-	row, _ := json.Marshal(map[string]any{
-		"project": summary.GetProject(), "trace_id": summary.GetTraceId(), "service": summary.GetService(),
-		"start_ns": summary.GetStartTime().AsTime().UnixNano(), "summary": b64(summary), "record": b64(record),
-		"version": time.Now().UnixNano(),
-	})
+	return c.PutTraces(ctx, []TraceWrite{{Summary: summary, Record: record}})
+}
+
+// PutTraces inserts every trace in one INSERT (one part, as ClickHouse prefers).
+func (c *clickhouse) PutTraces(ctx context.Context, traces []TraceWrite) error {
+	if len(traces) == 0 {
+		return nil
+	}
+	var body bytes.Buffer
+	enc := json.NewEncoder(&body)
+	version := time.Now().UnixNano()
+	for i, t := range traces {
+		_ = enc.Encode(map[string]any{
+			"project": t.Summary.GetProject(), "trace_id": t.Summary.GetTraceId(), "service": t.Summary.GetService(),
+			"start_ns": t.Summary.GetStartTime().AsTime().UnixNano(), "summary": b64(t.Summary), "record": b64(t.Record),
+			// Later traces in a batch win over earlier ones with the same id.
+			"version": version + int64(i),
+		})
+	}
 	return c.exec(ctx, `INSERT INTO traces SELECT project, trace_id, service, start_ns,
 		base64Decode(summary), base64Decode(record), version
 		FROM input('project String, trace_id String, service String, start_ns Int64, summary String, record String, version Int64')
-		FORMAT JSONEachRow`, nil, bytes.NewReader(row))
+		FORMAT JSONEachRow`, nil, &body)
 }
 
 func projectsWhere(column string, projects []string, params chParams) string {

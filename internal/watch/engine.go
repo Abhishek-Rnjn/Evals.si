@@ -75,7 +75,11 @@ type Engine struct {
 	opts  Options
 	log   *slog.Logger
 	queue chan item
-	now   func() time.Time
+	// Traces waiting to be stored (Enqueue), and whether the writer is gone.
+	writes     chan ingest.Trace
+	writing    sync.RWMutex
+	writerGone bool
+	now        func() time.Time
 
 	mu       sync.Mutex
 	policies map[string]*policyState
@@ -107,7 +111,7 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 	}
 	e := &Engine{
 		store: st, eval: eval, opts: opts, log: opts.Logger,
-		queue: make(chan item, opts.QueueSize), now: time.Now,
+		queue: make(chan item, opts.QueueSize), writes: make(chan ingest.Trace, opts.QueueSize), now: time.Now,
 		policies: map[string]*policyState{},
 	}
 	stored, err := st.Policies(ctx)
@@ -204,36 +208,104 @@ func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) 
 	return nil
 }
 
-// Ingest stores an assembled trace and queues it for policy evaluation. It is
-// the assembler's emit callback, so it must not block.
-func (e *Engine) Ingest(t ingest.Trace) {
-	record, info := ingest.ToRecord(t)
-	if info.Project == "" {
-		info.Project = DefaultProject
+// Ingest stores an assembled trace and queues it for policy evaluation.
+func (e *Engine) Ingest(t ingest.Trace) { e.IngestBatch([]ingest.Trace{t}) }
+
+// IngestBatch stores traces in one write, then queues them for policy
+// evaluation, so a trace's scores never arrive before the trace.
+func (e *Engine) IngestBatch(traces []ingest.Trace) {
+	writes := make([]store.TraceWrite, 0, len(traces))
+	items := make([]item, 0, len(traces))
+	for _, t := range traces {
+		record, info := ingest.ToRecord(t)
+		if info.Project == "" {
+			info.Project = DefaultProject
+		}
+		summary := &evalsiv1alpha1.TraceSummary{
+			Project: info.Project, Labels: info.Labels,
+			TraceId: record.GetId(), Service: info.Service, Name: info.Name,
+			Duration: durationpb.New(time.Duration(info.DurationMS * float64(time.Millisecond))),
+			Error:    info.Error, Steps: int32(info.Steps),
+		}
+		if steps := record.GetTrajectory().GetSteps(); len(steps) > 0 {
+			summary.StartTime = steps[0].GetStartTime()
+		}
+		writes = append(writes, store.TraceWrite{Summary: summary, Record: record})
+		items = append(items, item{record: record, info: info})
 	}
-	e.TracesIngested.Add(1)
-	summary := &evalsiv1alpha1.TraceSummary{
-		Project: info.Project, Labels: info.Labels,
-		TraceId: record.GetId(), Service: info.Service, Name: info.Name,
-		Duration: durationpb.New(time.Duration(info.DurationMS * float64(time.Millisecond))),
-		Error:    info.Error, Steps: int32(info.Steps),
+	e.TracesIngested.Add(int64(len(traces)))
+	if err := e.store.PutTraces(context.Background(), writes); err != nil {
+		e.StoreErrors.Add(int64(len(writes)))
+		e.log.Error("storing traces", "traces", len(writes), "err", err)
 	}
-	if steps := record.GetTrajectory().GetSteps(); len(steps) > 0 {
-		summary.StartTime = steps[0].GetStartTime()
+	for _, it := range items {
+		select {
+		case e.queue <- it:
+		default:
+			e.TracesDropped.Add(1)
+		}
 	}
-	if err := e.store.PutTrace(context.Background(), summary, record); err != nil {
-		e.StoreErrors.Add(1)
-		e.log.Error("storing trace", "trace", record.GetId(), "err", err)
+}
+
+// Enqueue hands a trace to the writer, which stores traces in batches; it
+// is the assembler's emit callback, so it does not block. When the writer
+// is behind by a full buffer, the trace is stored right away instead.
+func (e *Engine) Enqueue(t ingest.Trace) {
+	e.writing.RLock()
+	if !e.writerGone {
+		select {
+		case e.writes <- t:
+			e.writing.RUnlock()
+			return
+		default:
+		}
 	}
-	select {
-	case e.queue <- item{record: record, info: info}:
-	default:
-		e.TracesDropped.Add(1)
+	e.writing.RUnlock()
+	e.Ingest(t)
+}
+
+// write stores traces handed to Enqueue, a batch per transaction, until ctx
+// is done, then drains what is left.
+func (e *Engine) write(ctx context.Context) {
+	const maxBatch = 500
+	batch := make([]ingest.Trace, 0, maxBatch)
+	for {
+		select {
+		case t := <-e.writes:
+			batch = append(batch[:0], t)
+		drain:
+			for len(batch) < maxBatch {
+				select {
+				case t := <-e.writes:
+					batch = append(batch, t)
+				default:
+					break drain
+				}
+			}
+			e.IngestBatch(batch)
+		case <-ctx.Done():
+			// From here on Enqueue stores traces itself (the assembler's
+			// last flush comes after this).
+			e.writing.Lock()
+			e.writerGone = true
+			e.writing.Unlock()
+			for {
+				select {
+				case t := <-e.writes:
+					e.Ingest(t)
+				default:
+					return
+				}
+			}
+		}
 	}
 }
 
 // Run evaluates queued traces in micro-batches until ctx is done.
 func (e *Engine) Run(ctx context.Context) {
+	writer := make(chan struct{})
+	go func() { defer close(writer); e.write(ctx) }()
+	defer func() { <-writer }()
 	var batch []item
 	timer := time.NewTimer(e.opts.FlushInterval)
 	defer timer.Stop()

@@ -15,6 +15,9 @@ import (
 // data that may live apart from the rest (ClickHouse at scale).
 type TraceStore interface {
 	PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error
+	// PutTraces stores several traces in one write (a transaction, or one
+	// insert), which is what keeps ingest fast.
+	PutTraces(ctx context.Context, traces []TraceWrite) error
 	ListTraces(ctx context.Context, f TraceFilter, pageSize int, pageToken string) ([]*evalsiv1alpha1.TraceSummary, string, error)
 	TraceProjects(ctx context.Context, traceID string) ([]string, error)
 	GetTrace(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error)
@@ -85,6 +88,17 @@ func (s *Store) Dialect() string {
 
 func (s *Store) PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error {
 	return s.traces.PutTrace(ctx, summary, record)
+}
+
+// TraceWrite is one trace to store.
+type TraceWrite struct {
+	Summary *evalsiv1alpha1.TraceSummary
+	Record  *evalsiv1alpha1.Record
+}
+
+// PutTraces stores several traces in one write.
+func (s *Store) PutTraces(ctx context.Context, traces []TraceWrite) error {
+	return s.traces.PutTraces(ctx, traces)
 }
 
 // ListTraces returns trace summaries newest first, with result counts.

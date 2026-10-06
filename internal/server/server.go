@@ -187,7 +187,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	}
 	assembler := ingest.NewAssembler(ingest.AssemblerOptions{
 		Grace: config.Duration(cfg.OTLP.Grace), MaxTraces: cfg.OTLP.MaxTraces,
-	}, watcher.Ingest)
+	}, watcher.Enqueue)
 	bg, stopBG := context.WithCancel(context.Background())
 	stopAssembler := make(chan struct{})
 	var wg sync.WaitGroup

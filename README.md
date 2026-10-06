@@ -21,9 +21,10 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 > - benchmark adapters for SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL;
 > - a fail-closed sandbox ladder (Firecracker, bubblewrap, Landlock);
 > - MLflow and OTel sinks;
-> - identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log.
+> - identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log;
+> - Kubernetes: an operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator` and `SandboxClass`, Helm charts, PostgreSQL/ClickHouse/S3 storage, NATS work queues with KEDA scaling, HA replicas, sandbox pools (bubblewrap, Firecracker, hardened pods), service-account identity and an air-gapped bundle.
 >
-> Next comes Phase 4, Kubernetes. See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
+> See the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md).
 
 ## Quickstart
 
@@ -280,6 +281,18 @@ Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN`; GitHub Actions jobs set `
 
 Delete `python/.evalsi-auth-demo` to start over. To use the same config without access control for a while, add `--no-auth` to the `serve` command.
 
+### On Kubernetes
+
+The same run and policy files apply as resources; the operator runs them through the API and writes their state back. See the [Kubernetes guide](docs/guides/kubernetes.md) (and [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md)).
+
+```bash
+kubectl create namespace evalsi
+helm install evalsi-crds deploy/helm/evalsi-crds --set operator.namespace=evalsi
+helm install evalsi deploy/helm/evalsi -n evalsi
+kubectl apply -n evalsi -f examples/runs/capitals.yaml
+kubectl get evalruns -n evalsi      # PHASE, RUN, DONE, TOTAL
+```
+
 ## Repository layout
 
 | Path | What |
@@ -290,8 +303,11 @@ Delete `python/.evalsi-auth-demo` to start over. To use the same config without 
 | `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker and built-in packs |
 | `python/evalsi-harness/` | The agent harness: tool loop, agent connectors, environments and checkers, Harbor and Terminal-Bench importers |
 | `python/adapters/` | Framework and benchmark adapters (DeepEval, RAGAS, Inspect AI, lm-eval, SWE-bench, τ-bench, BFCL), each in its own environment |
-| `cmd/evalsi-guest/` | The init and agent inside Firecracker microVMs |
-| `tests/e2e/` | evalsid against a real Python worker (`make e2e`) |
+| `cmd/evalsi-guest/` | The init and agent inside Firecracker microVMs, and the agent in sandbox pods |
+| `cmd/evalsi-operator/`, `operator/` | The Kubernetes operator: CRD types, controllers, admission webhooks |
+| `deploy/` | Helm charts (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), the air-gapped bundle, the kind e2e; the image is the root `Dockerfile` |
+| `tests/e2e/` | evalsid against a real Python worker (`make e2e`), and the load test (`EVALSI_LOAD=1`) |
+| `tests/helm/` | The charts, rendered and their configs validated |
 | `examples/` | Runnable examples |
 | `docs/` | Design plan, decision records and guides |
 
