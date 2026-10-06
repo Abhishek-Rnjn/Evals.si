@@ -40,12 +40,6 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | Multi-service and multi-stage Terminal-Bench tasks (22 of 241 Terminal-Bench 1 tasks do not import) | §23 Phase 3 deviations |
 | FrontierCode (task format not public in a verifiable form); CursorBench (tasks are private) | §23 Phase 3 deviations |
 
-## Kubernetes follow-ups from the RBAC work
-
-| Item | Notes |
-|------|-------|
-| Static issuer and JWKS on hardened clusters | Implemented and unit-tested; the kind e2e uses the API-server path only. |
-
 ## Phase 5: fine-tuning and RL
 
 | Item | Notes | Where recorded |

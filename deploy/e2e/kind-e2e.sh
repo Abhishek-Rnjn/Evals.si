@@ -13,7 +13,10 @@
 #     namespace that enforces Pod Security "restricted": no CRDs, no
 #     cluster-scoped object, sandboxes from the chart's own pool. Code
 #     evaluation and an agent run go through the CLI, on the pod rung and
-#     then on Landlock.
+#     then on Landlock;
+#  5. removes the grant that lets service accounts read the cluster's
+#     issuer and keys, checks tokens no longer verify, then gives evalsid a
+#     static issuer and key set (a ConfigMap) and checks they do again.
 #
 # Needs docker, kind, kubectl, helm, and uv (for the embedded CLI run).
 set -euo pipefail
@@ -259,6 +262,40 @@ kubectl rollout status deploy/evalsi-sandbox-pool -n "$ns2" --timeout 3m
 cli "$here/sandbox-run.yaml" "$work/ns2-landlock.json"
 want "$work/ns2-landlock.json" unit-tests 0.5
 kubectl logs -n "$ns2" deploy/evalsi-sandbox-pool --tail=20
+
+step "namespace-only: a static issuer and key set, on a cluster that hides its keys"
+# A hardened cluster removes the grant that lets every service account read
+# the issuer and its keys from the API server. A fresh evalsid then cannot
+# verify service-account tokens until it is given the issuer and a copy of
+# the public key set, which the platform team publishes (here, a ConfigMap).
+issuer="$(kubectl get --raw /.well-known/openid-configuration | python3 -c 'import json, sys; print(json.load(sys.stdin)["issuer"])')"
+kubectl get --raw /openid/v1/jwks > "$work/jwks.json"
+kubectl get clusterrolebinding system:service-account-issuer-discovery -o yaml > "$work/discovery-binding.yaml"
+kubectl delete clusterrolebinding system:service-account-issuer-discovery
+restore_discovery() { kubectl apply -f "$work/discovery-binding.yaml" >/dev/null 2>&1 || true; }
+trap 'status=$?; restore_discovery; [ $status -eq 0 ] || diagnose; exit $status' EXIT
+# reforward points the port-forward at the current server pods.
+reforward() {
+  kill "$forward" 2>/dev/null || true
+  kubectl port-forward -n "$ns2" svc/evalsi 18443:8080 >/dev/null 2>&1 &
+  forward=$!
+  sleep 3
+}
+kubectl rollout restart deploy/evalsi -n "$ns2" --as alice
+kubectl rollout status deploy/evalsi -n "$ns2" --timeout 3m
+reforward
+if cli "$here/sandbox-run.yaml" "$work/ns2-nokeys.json" 2> "$work/ns2-nokeys.err"; then
+  echo "a token verified with no access to the cluster's keys" >&2; exit 1
+fi
+grep -qiE "unauthenticated|401" "$work/ns2-nokeys.err" || { cat "$work/ns2-nokeys.err" >&2; exit 1; }
+kubectl create configmap evalsi-jwks -n "$ns2" --as alice --from-file=keys.json="$work/jwks.json"
+helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns2" --kube-as-user alice --reuse-values \
+  --set auth.kubernetes.issuer="$issuer" --set auth.kubernetes.jwksConfigMap=evalsi-jwks --wait --timeout 5m
+kubectl rollout status deploy/evalsi -n "$ns2" --timeout 3m
+reforward
+cli "$here/sandbox-run.yaml" "$work/ns2-static.json"
+want "$work/ns2-static.json" unit-tests 0.5
+restore_discovery
 kill "$forward" 2>/dev/null || true
 
 step "passed"
