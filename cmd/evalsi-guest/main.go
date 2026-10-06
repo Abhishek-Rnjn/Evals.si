@@ -156,11 +156,18 @@ func agent(args []string) int {
 		return 2
 	}
 	self, _ := os.Executable()
+	// In a pod the container's cgroup limits memory; an address-space limit
+	// on top only breaks programs that reserve more than they use (Go, JVMs).
+	pod := strings.HasPrefix(*listen, "tcp://")
 	a := &guest.Agent{
 		Root: *root,
 		Limiter: func(l *guestv1alpha1.Limits, argv []string) []string {
+			mem := l.GetMemoryMb()
+			if pod {
+				mem = 0
+			}
 			return append([]string{self, "limit",
-				strconv.Itoa(int(l.GetMemoryMb())), strconv.Itoa(int(l.GetMaxProcs())),
+				strconv.Itoa(int(mem)), strconv.Itoa(int(l.GetMaxProcs())),
 				strconv.Itoa(int(l.GetMaxFileMb())), strconv.Itoa(int(l.GetCpuSeconds())), "--"}, argv...)
 		},
 	}
@@ -218,23 +225,33 @@ func limit(args []string) int {
 		return 125
 	}
 	n := func(s string) uint64 { v, _ := strconv.ParseUint(s, 10, 64); return v }
-	set := func(res int, v uint64) {
-		if v > 0 {
-			_ = unix.Setrlimit(res, &unix.Rlimit{Cur: v, Max: v})
-		}
-	}
-	set(unix.RLIMIT_AS, n(args[0])<<20)
-	set(unix.RLIMIT_NPROC, n(args[1]))
-	set(unix.RLIMIT_FSIZE, n(args[2])<<20)
-	set(unix.RLIMIT_CPU, n(args[3]))
 	argv := args[5:]
 	path, err := exec.LookPath(argv[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox: command not found: %s\n", argv[0])
 		return 127
 	}
-	err = syscall.Exec(path, argv, os.Environ())
-	fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], err)
+	// Everything execve needs is built first: once the address space is
+	// limited, this Go process may not be able to allocate again.
+	pathp, err1 := syscall.BytePtrFromString(path)
+	argvp, err2 := syscall.SlicePtrFromStrings(argv)
+	envp, err3 := syscall.SlicePtrFromStrings(os.Environ())
+	if err := errors.Join(err1, err2, err3); err != nil {
+		fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], err)
+		return 126
+	}
+	set := func(res int, v uint64) {
+		if v > 0 {
+			_ = unix.Setrlimit(res, &unix.Rlimit{Cur: v, Max: v})
+		}
+	}
+	set(unix.RLIMIT_NPROC, n(args[1]))
+	set(unix.RLIMIT_FSIZE, n(args[2])<<20)
+	set(unix.RLIMIT_CPU, n(args[3]))
+	set(unix.RLIMIT_AS, n(args[0])<<20)
+	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(pathp)),
+		uintptr(unsafe.Pointer(&argvp[0])), uintptr(unsafe.Pointer(&envp[0])))
+	fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], errno)
 	return 126
 }
 
