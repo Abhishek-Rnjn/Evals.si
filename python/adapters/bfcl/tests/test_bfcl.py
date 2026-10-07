@@ -163,7 +163,7 @@ def replay(meta: dict[str, Any], skip: int | None = None) -> Script:
     docs = list(meta["functions"]) + [f for fs in meta["missed_function"].values() for f in fs]
     params = {f["name"]: list(f["parameters"]["properties"]) for f in docs}
 
-    def script(messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
+    def script(messages: list[dict[str, Any]], tools: list[str]) -> dict[str, Any]:
         turn = sum(1 for m in messages if m["role"] == "user") - 1
         if messages[-1]["role"] == "tool":
             return {"text": "Done."}
@@ -237,7 +237,7 @@ def test_multi_turn_held_out_functions_arrive_at_their_turn(model: Any) -> None:
 def test_multi_turn_runs_only_offered_functions(model: Any) -> None:
     row = load("multi_turn_base", ids="multi_turn_base_0")[0]
 
-    def script(messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
+    def script(messages: list[dict[str, Any]], tools: list[str]) -> dict[str, Any]:
         if messages[-1]["role"] == "tool":
             return {"text": "Done."}
         return {"tool_calls": [("open", {"file": "/tmp/evalsi-bfcl-probe", "mode": "w"})]}
@@ -257,7 +257,7 @@ def test_call_strings_are_literals() -> None:
     assert call_string("f", {"x": [1, None, True], "y": {"k": 1.5}}) == (
         "f(x=[1, None, True], y={'k': 1.5})"
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="function name"):
         call_string("os.system", {})
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="argument name"):
         call_string("f", {"a=1, b": 2})
