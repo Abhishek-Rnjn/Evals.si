@@ -198,6 +198,10 @@ A policy has these parts:
 | `safety` | PII, secret and canary leaks; refusal; harmlessness |
 | `agent` | tool-call accuracy, trajectory match, tool errors, loop detection, step budget, goal completion; for agent runs, task success (pass@k, pass^k), code quality, policy violations, efficiency |
 | `code` | unit tests run in the sandbox, Python syntax |
+| `rl` | verifiers for RL rewards: format, math answers, sandboxed code tests, overlong penalty, reward models |
+| `finetune` | diversity, calibration, contamination, reward hacking |
+| `ml-classic` | classification (accuracy, macro and micro F1, ROC-AUC, PR-AUC, log-loss, calibration), regression (MAE, MSE, RMSE, R², MAPE), ranking (NDCG, MRR, MAP, recall@k) |
+| `ml-monitoring` | drift (PSI, KS, Jensen-Shannon), data quality against a schema, group fairness (demographic parity, equal opportunity, equalized odds) |
 
 **Framework adapters.** DeepEval, RAGAS, Inspect AI and lm-evaluation-harness live in [`python/adapters`](python/adapters/README.md), as do the SWE-bench, τ-bench and BFCL benchmark adapters. Each has its own pinned environment, and judge calls go through your configured judge.
 

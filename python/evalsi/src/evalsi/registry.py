@@ -32,7 +32,19 @@ class Pack:
 
 
 def _builtin_packs() -> list[Pack]:
-    from evalsi.packs import agent, code, core, finetune, judge, rag, rl, safety, text
+    from evalsi.packs import (
+        agent,
+        code,
+        core,
+        finetune,
+        judge,
+        ml_classic,
+        ml_monitoring,
+        rag,
+        rl,
+        safety,
+        text,
+    )
 
     return [
         core.PACK,
@@ -44,6 +56,8 @@ def _builtin_packs() -> list[Pack]:
         code.PACK,
         rl.PACK,
         finetune.PACK,
+        ml_classic.PACK,
+        ml_monitoring.PACK,
     ]
 
 
