@@ -210,7 +210,11 @@ func (s *Service) Check(ctx context.Context, req *connect.Request[evalsiv1alpha1
 	case m.GetInline() != nil && m.GetGuardrail() != "":
 		return nil, invalid("set guardrail or inline, not both")
 	case m.GetInline() != nil:
-		c, cerr := compile(m.GetInline(), s.eval)
+		// An inline guardrail runs in the request's project, whose grants
+		// its evaluators' params are checked against.
+		inline := proto.Clone(m.GetInline()).(*evalsiv1alpha1.Guardrail)
+		inline.Project = project(m.GetProject())
+		c, cerr := compile(inline, s.eval)
 		if cerr != nil {
 			return nil, invalid("%v", cerr)
 		}

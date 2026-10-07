@@ -34,6 +34,19 @@ class TargetError(RuntimeError):
     """The target failed for one record."""
 
 
+NO_KEY = "none"
+
+
+def api_key(api_key_env: str, default: str) -> str | None:
+    """The key a connector sends: the named variable, the connector's default
+    variable when none is named, and no key for ``api_key_env: none`` (a model
+    server without authentication; on a server with credential grants it is
+    how a target says it needs none)."""
+    if api_key_env == NO_KEY:
+        return None
+    return os.environ.get(api_key_env or default)
+
+
 @dataclass(frozen=True)
 class TargetConfig:
     connector: str
@@ -101,7 +114,7 @@ class OpenAICompatibleTarget:
         self._client = client or httpx.AsyncClient(timeout=config.timeout_s)
         self._url = config.base_url.rstrip("/") + "/chat/completions"
         self._headers = {"Content-Type": "application/json"}
-        key = os.environ.get(config.api_key_env or "OPENAI_API_KEY")
+        key = api_key(config.api_key_env, "OPENAI_API_KEY")
         if key:
             self._headers["Authorization"] = f"Bearer {key}"
 

@@ -54,6 +54,15 @@ judges:
     base_url: http://localhost:8000/v1
 default_judge: claude
 
+# Worker variables that run specs, agents and evaluator params may name
+# (api_key_env, headers_env, env_from, params ending in _env), per project
+# and optionally per destination host. Checked whenever auth is enabled or a
+# grant is listed. See docs/guides/identity.md.
+# credentials:
+#   grants:
+#     - {env: OPENAI_API_KEY, projects: ["*"], hosts: [api.openai.com]}
+#     - {env: SUPPORT_AGENT_TOKEN, projects: [support]}
+
 evaluate:
   batch_size: 32      # records per worker call
   parallelism: 8      # concurrent worker calls per request

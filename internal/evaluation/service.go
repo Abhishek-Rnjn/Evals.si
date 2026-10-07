@@ -17,8 +17,10 @@ import (
 
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 )
 
@@ -29,6 +31,8 @@ type Service struct {
 	judges       []string
 	defaultJudge string
 	opts         config.Evaluate
+	// Which worker variables evaluator params may name, per project.
+	credentials *credentials.Policy
 }
 
 // New builds a service over a worker whose evaluators are already described.
@@ -36,6 +40,31 @@ func New(worker pluginhost.Worker, cat *catalog.Catalog, judges []string, defaul
 	judges = append([]string(nil), judges...)
 	sort.Strings(judges)
 	return &Service{worker: worker, catalog: cat, judges: judges, defaultJudge: defaultJudge, opts: opts}
+}
+
+// UseCredentials checks the worker variables that evaluator params name
+// (BindFor); nil checks nothing.
+func (s *Service) UseCredentials(p *credentials.Policy) { s.credentials = p }
+
+// Credentials is the policy set with UseCredentials.
+func (s *Service) Credentials() *credentials.Policy { return s.credentials }
+
+// BindFor binds evaluators for a request in a project: Bind, then a check
+// of the worker variables their params name against the project's grants.
+// Requests that arrive over the API bind with this; Bind alone is for
+// specs that were checked when they were stored.
+func (s *Service) BindFor(project string, refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]Instance, error) {
+	insts, err := s.Bind(refs, judge)
+	if err != nil {
+		return nil, err
+	}
+	if project == "" {
+		project = authz.DefaultProject
+	}
+	if err := s.credentials.Check(project, credentials.EvaluatorUses(refs)); err != nil {
+		return nil, err
+	}
+	return insts, nil
 }
 
 // RunsCode reports whether any referenced evaluator executes code, which
@@ -286,7 +315,7 @@ func (s *Service) Evaluate(ctx context.Context, req *connect.Request[evalsiv1alp
 	if n := len(msg.GetRecords()); n > s.opts.MaxRecords {
 		return nil, invalid("%d records exceed this server's limit of %d for Evaluate; use EvaluateStream", n, s.opts.MaxRecords)
 	}
-	insts, err := s.Bind(msg.GetEvaluators(), msg.GetJudge())
+	insts, err := s.BindFor(msg.GetProject(), msg.GetEvaluators(), msg.GetJudge())
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +352,7 @@ func (s *Service) EvaluateStream(ctx context.Context, stream *connect.BidiStream
 	if cfg == nil {
 		return invalid("the stream must start with a config message")
 	}
-	insts, err := s.Bind(cfg.GetEvaluators(), cfg.GetJudge())
+	insts, err := s.BindFor(cfg.GetProject(), cfg.GetEvaluators(), cfg.GetJudge())
 	if err != nil {
 		return err
 	}

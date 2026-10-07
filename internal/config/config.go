@@ -14,6 +14,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
+	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
@@ -228,6 +229,9 @@ type Config struct {
 	Wasm Wasm `json:"wasm"`
 	// The read-only web UI at /ui/.
 	UI UI `json:"ui"`
+	// Worker variables that requests may name (api_key_env, headers_env,
+	// env_from, evaluator params ending in _env), granted per project.
+	Credentials credentials.Config `json:"credentials"`
 }
 
 // Storage selects the databases. Without it, everything is in SQLite under
@@ -395,6 +399,9 @@ func (c Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("data_dir is required"))
+	}
+	if err := c.Credentials.Validate(); err != nil {
+		errs = append(errs, err)
 	}
 	for name, d := range map[string]string{"runs.lease_ttl": c.Runs.LeaseTTL, "runs.adopt_interval": c.Runs.AdoptInterval} {
 		if d == "" {

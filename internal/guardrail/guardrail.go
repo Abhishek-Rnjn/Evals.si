@@ -237,7 +237,7 @@ func compile(g *evalsiv1alpha1.Guardrail, eval *evaluation.Service) (*compiled, 
 		return nil, err
 	}
 	if len(g.GetEvaluators()) > 0 {
-		if c.insts, err = eval.Bind(g.GetEvaluators(), g.GetJudge()); err != nil {
+		if c.insts, err = eval.BindFor(g.GetProject(), g.GetEvaluators(), g.GetJudge()); err != nil {
 			return nil, err
 		}
 		for _, in := range c.insts {

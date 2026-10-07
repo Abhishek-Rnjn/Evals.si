@@ -351,3 +351,34 @@ Every hop can run over mutual TLS with certificates from your CA (cert-manager, 
       timeout: 200ms     # timeouts and errors deny
       cache_ttl: 30s
   ```
+
+## 8. Credentials: which worker secrets a project may use
+
+Run specs, agents and evaluator params name secrets by variable, and the worker reads them from its own environment:
+
+- `target.api_key_env`;
+- an agent's `headers_env` or `api_key_env`, and a CLI agent's `env_from`;
+- an MCP server's `headers_env`;
+- evaluator and external-harness params ending in `_env` (for example `builtin/reward-model`'s `api_key_env`).
+
+The worker sends each value to the URL the same spec names. Without a check, anyone who may create a run in any project could have the worker send any variable it holds (a database DSN, another team's key) to a host of their choosing. So variables are granted per project, and a grant can limit where its value may go:
+
+```yaml
+credentials:
+  grants:
+    - env: OPENAI_API_KEY
+      projects: ["*"]                     # every project
+      hosts: [api.openai.com]             # and only to OpenAI
+    - env: SUPPORT_AZURE_KEY
+      projects: [support]
+      hosts: ["*.openai.azure.com"]       # any subdomain, not the domain itself
+    - env: SUPPORT_AGENT_TOKEN            # no hosts: any destination
+      projects: [support]
+```
+
+- **When it applies:** checks are on whenever authentication is enabled or any grant is listed. A request naming a variable its project has no grant for, or sending a host-limited one elsewhere, is refused with `permission_denied` before anything is stored or run. `credentials: {enforce: false}` turns the checks off; that suits only a single-user server.
+- **Defaults count:** a target without `api_key_env` still sends the connector's default key (`OPENAI_API_KEY` for openai-compatible, `ANTHROPIC_API_KEY` for anthropic), so that default needs a grant too. A target that needs no key (a local model server) says `api_key_env: none`.
+- **Hosts:** they are matched against the host of the URL the value goes to: the target's `base_url` (`api.anthropic.com` for anthropic without one), the agent's or MCP server's `url`, or the `url`/`base_url` param next to an evaluator's `_env` param. A host-limited variable named where no URL is given is refused.
+- **Sandboxes:** a CLI agent's `env_from` copies the value into a sandbox, whose traffic evalsid does not see request by request. Only grants without `hosts` can be used there; limit the sandbox's network instead (`environment.sandbox.network: allowlist`).
+- **Where it is checked:** creating runs and shadow replays, `Evaluate` and `EvaluateStream`, reward scoring, online policies and guardrails (stored and inline). Policies and guardrails are checked again when a replica loads them, so removing a grant takes effect on restart.
+- **What it does not cover:** judges (`judges.*.api_key_env`) and sinks come from the server config, which is trusted. In Kubernetes, put grants under the chart's `server.config.credentials`.

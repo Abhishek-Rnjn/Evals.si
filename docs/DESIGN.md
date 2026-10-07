@@ -1510,6 +1510,7 @@ Deferred:
    - The agent pack's `task-success`, `policy-violations` and `agent-efficiency`.
    - Infrastructure errors are reported, never scored.
    - On servers, a trust policy for anything a spec would make the worker execute (`agents.trusted_commands`, `agents.trusted_python`).
+   - On servers, grants for the worker secrets a spec may name, per project and destination host (`credentials.grants`, [0015](decisions/0015-per-project-credentials.md)).
    - `resource.agent` in authorization rules.
 4. **Promotion and shadow replay.**
    - Datasets from production traces (`DatasetSource.traces`) and from earlier runs' outputs (`DatasetSource.run`).

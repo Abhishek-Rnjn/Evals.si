@@ -118,7 +118,7 @@ type component struct {
 	prefix []byte
 }
 
-func (s *Service) bind(spec *evalsiv1alpha1.RewardSpec) ([]component, error) {
+func (s *Service) bind(project string, spec *evalsiv1alpha1.RewardSpec) ([]component, error) {
 	if len(spec.GetComponents()) == 0 {
 		return nil, invalid("a reward spec needs at least one component")
 	}
@@ -145,7 +145,7 @@ func (s *Service) bind(spec *evalsiv1alpha1.RewardSpec) ([]component, error) {
 		}
 		refs[i].Params = params
 	}
-	insts, err := s.eval.Bind(refs, spec.GetJudge())
+	insts, err := s.eval.BindFor(project, refs, spec.GetJudge())
 	if err != nil {
 		var ce *connect.Error
 		if errors.As(err, &ce) && strings.Contains(ce.Message(), "unknown param \"min_isolation\"") {
@@ -188,7 +188,7 @@ func (s *Service) ScoreRewards(ctx context.Context, req *connect.Request[evalsiv
 	if n > s.opts.MaxRollouts {
 		return nil, invalid("%d rollouts exceed this server's limit of %d per call", n, s.opts.MaxRollouts)
 	}
-	comps, err := s.bind(msg.GetSpec())
+	comps, err := s.bind(msg.GetProject(), msg.GetSpec())
 	if err != nil {
 		return nil, err
 	}

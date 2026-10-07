@@ -147,7 +147,7 @@ func compile(p *evalsiv1alpha1.OnlineEvalPolicy, eng *evaluation.Service) (*comp
 	}
 	names := map[string]bool{}
 	for i, st := range p.GetStages() {
-		insts, err := eng.Bind(st.GetEvaluators(), p.GetJudge())
+		insts, err := eng.BindFor(p.GetProject(), st.GetEvaluators(), p.GetJudge())
 		if err != nil {
 			return nil, fmt.Errorf("stages[%d]: %w", i, err)
 		}

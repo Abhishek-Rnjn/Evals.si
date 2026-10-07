@@ -18,5 +18,6 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0012](0012-kubernetes-operator-and-packaging.md) | Kubernetes: the operator as an API client, one image, three charts, service-account tokens as OIDC | Accepted, implemented |
 | [0013](0013-rewards-and-checkpoint-evaluation.md) | Rewards from evaluators, composed in Python and Go with shared vectors; checkpoints served outside the operator | Accepted, implemented |
 | [0014](0014-mcp-guardrails-plugins-ui.md) | MCP locally and on evalsid; guardrails on agentgateway's protocols; Wasm plugins on wazero; a read-only web UI | Accepted, implemented |
+| [0015](0015-per-project-credentials.md) | Worker secrets named in specs are granted per project, and optionally per destination host | Accepted, implemented |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

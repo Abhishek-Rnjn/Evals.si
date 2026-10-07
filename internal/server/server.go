@@ -34,6 +34,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
@@ -117,6 +118,11 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	}
 	sort.Strings(judges)
 	svc := evaluation.New(worker, catalog.New(manifests), judges, cfg.DefaultJudge, cfg.Evaluate)
+	creds := credentials.NewPolicy(cfg.Credentials, cfg.AuthEnabled())
+	svc.UseCredentials(creds)
+	if cfg.AuthEnabled() && !creds.Enforced() {
+		log.Warn("credentials.enforce is off: any caller may name any variable on the worker and send it anywhere")
+	}
 
 	st, objects, err := openStorage(ctx, cfg)
 	if err != nil {
