@@ -245,7 +245,7 @@ type response struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
 	Result  any             `json:"result,omitempty"`
-	Error   *jsonrpcErr         `json:"error,omitempty"`
+	Error   *jsonrpcErr     `json:"error,omitempty"`
 }
 
 func rpcError(id json.RawMessage, code int, msg string) response {
