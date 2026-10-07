@@ -1,0 +1,47 @@
+import { defineConfig } from "astro/config";
+import starlight from "@astrojs/starlight";
+
+const base = (process.env.SITE_BASE ?? "/Evals.si").replace(/\/$/, "") || "/";
+const site = process.env.SITE_URL ?? "https://abhishek-rnjn.github.io";
+const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
+
+const guides = [
+  "agent-runs", "annotation", "fine-tuning", "guardrails", "identity",
+  "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui",
+];
+const examples = [
+  "quickstart", "runs", "agents", "watch", "guardrails", "annotation",
+  "finetuning", "wasm", "auth", "server", "ci",
+];
+
+export default defineConfig({
+  site,
+  base,
+  integrations: [
+    starlight({
+      title: "Evals.si",
+      logo: { src: "./src/assets/logo.svg", alt: "Evals.si", replacesTitle: true },
+      favicon: "/favicon.svg",
+      description: "One entrypoint for evaluating ML models, LLMs, RAG systems and agents.",
+      social: [{ icon: "github", label: "GitHub", href: repo }],
+      customCss: ["./src/styles/theme.css"],
+      components: { Footer: "./src/components/Footer.astro" },
+      sidebar: [
+        { label: "Start here", items: [
+          { label: "Overview", slug: "docs" },
+          { label: "Get started", slug: "docs/get-started" },
+        ] },
+        { label: "Guides", items: guides.map((g) => ({ slug: `docs/guides/${g}` })) },
+        { label: "Examples", items: [
+          { label: "All examples", slug: "examples" },
+          ...examples.map((e) => ({ slug: `examples/${e}` })),
+        ] },
+        { label: "Design", items: [
+          { slug: "docs/architecture" },
+          { slug: "docs/roadmap" },
+          { label: "Decision records", slug: "docs/decisions", collapsed: true },
+        ] },
+      ],
+    }),
+  ],
+});

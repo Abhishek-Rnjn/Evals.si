@@ -1,0 +1,152 @@
+---
+import logo from "../assets/logo.svg?raw";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const repo = "https://github.com/Abhishek-Rnjn/Evals.si";
+const doc = (p: string) => `${base}${p}`;
+
+const doors = [
+  { name: "Score", text: "Grade outputs you already have. Every mean ships with a confidence interval; records an evaluator can't judge are skipped, never scored zero.", href: "/docs/get-started/" },
+  { name: "Run", text: "Execute a target on a dataset with durable, resumable runs, trials, gates and budgets. Includes agent runs on sandboxed tasks.", href: "/docs/guides/agent-runs/" },
+  { name: "Watch", text: "Continuously evaluate live OpenTelemetry traces with online policies, windows and alerts.", href: "/examples/watch/" },
+  { name: "Reward", text: "Use evaluators as RL rewards for TRL, verl and OpenRLHF, and check every training checkpoint against the base model.", href: "/docs/guides/fine-tuning/" },
+];
+const features = [
+  { name: "Pluggable by design", text: "lm-evaluation-harness, Inspect AI, RAGAS, DeepEval, SWE-bench, τ-bench, Terminal-Bench and BFCL plug in as isolated adapters.", href: "/docs/guides/plugins/" },
+  { name: "Sandboxed, fail-closed", text: "Firecracker microVMs where available, then bubblewrap or Landlock, then hardened Kubernetes pods. If nothing qualifies, nothing runs.", href: "/docs/decisions/0005-sandbox-isolation-ladder/" },
+  { name: "Standalone or Kubernetes", text: "One binary on a laptop, or Helm charts and an operator with EvalRun, OnlineEvalPolicy, Evaluator and SandboxClass CRDs.", href: "/docs/guides/kubernetes/" },
+  { name: "MCP for coding agents", text: "Let coding agents check their own changes through evalsi mcp locally or /mcp on the server.", href: "/docs/guides/mcp/" },
+  { name: "Inline guardrails", text: "Evaluate model output in the request path through agentgateway, and block or flag it before it reaches users.", href: "/docs/guides/guardrails/" },
+  { name: "Identity and access", text: "OIDC/JWT and API keys, project-scoped RBAC with custom roles, CEL rules and an audit log.", href: "/docs/guides/identity/" },
+  { name: "Human annotation", text: "Annotation queues with progress and inter-annotator agreement next to automated scores.", href: "/docs/guides/annotation/" },
+  { name: "Wasm evaluator plugins", text: "Ship evaluators as Wasm modules and publish them through a plugin index.", href: "/docs/guides/plugins/" },
+  { name: "Read-only web UI", text: "Runs with intervals and gates, paired comparisons, policies, queues and the evaluator catalog.", href: "/docs/guides/web-ui/" },
+  { name: "Runs in your environment", text: "Self-hosted and air-gappable with your own models, storage, identity and secrets. PostgreSQL, ClickHouse, S3, NATS and KEDA at scale.", href: "/docs/decisions/0004-runs-in-client-environment/" },
+];
+const apis = ["gRPC", "gRPC-Web", "HTTP/JSON", "MCP", "OpenTelemetry", "MLflow"];
+---
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evals.si: one entrypoint for evaluations</title>
+  <meta name="description" content="A highly scalable, pluggable evaluations platform for ML models, LLMs, RAG systems and agents, offline and online." />
+  <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+  <script is:inline>
+    try { const t = localStorage.getItem("starlight-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else if (matchMedia("(prefers-color-scheme: light)").matches) document.documentElement.dataset.theme = "light"; } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href={`${base}/`} set:html={logo} aria-label="Evals.si home"></a>
+    <nav>
+      <a href={doc("/docs/get-started/")}>Docs</a>
+      <a href={doc("/examples/")}>Examples</a>
+      <a href={doc("/docs/architecture/")}>Architecture</a>
+      <a href={repo} class="gh">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Open source · self-hosted · air-gappable</p>
+      <h1>One entrypoint to evaluate <span class="grad">everything</span>.</h1>
+      <p class="lead">Classic ML models, LLMs, RAG systems, agents and RL checkpoints, offline and online. Pluggable, sandboxed and built to scale from a laptop to Kubernetes.</p>
+      <div class="cta">
+        <a class="btn primary" href={doc("/docs/get-started/")}>Get started</a>
+        <a class="btn" href={repo}>View on GitHub</a>
+      </div>
+      <pre class="term"><code><span class="dim">$</span> uv run evalsi eval --data qa.jsonl --evaluators exact-match,numeric-match,latency
+
+6 records · 3 evaluators
+
+metric         n  mean     95% CI              skipped  errors
+exact-match    6  0.333    [0.097, 0.700]            0       0
+numeric-match  3  0.667    [0.208, 0.939]            3       0
+latency        6  517.500  [276.409, 758.591]        0       0</code></pre>
+    </section>
+
+    <section class="band">
+      <h2>Four doors, one platform</h2>
+      <div class="grid four">
+        {doors.map((d) => (
+          <a class="card" href={doc(d.href)}><h3>{d.name}</h3><p>{d.text}</p></a>
+        ))}
+      </div>
+    </section>
+
+    <section class="band">
+      <h2>Built for real evaluation work</h2>
+      <div class="grid three">
+        {features.map((f) => (
+          <a class="card" href={doc(f.href)}><h3>{f.name}</h3><p>{f.text}</p></a>
+        ))}
+      </div>
+    </section>
+
+    <section class="band split">
+      <div>
+        <h2>From Python in a few lines</h2>
+        <p>Write an evaluator as a decorated function and run it next to the built-ins. Results save with a manifest, summaries and every per-record result.</p>
+        <p class="chips">{apis.map((a) => <span>{a}</span>)}</p>
+        <a class="btn" href={doc("/examples/")}>Browse examples</a>
+      </div>
+      <pre class="term"><code>import evalsi
+from evalsi import Record, Score, evaluator
+
+@evaluator(name="acme/polite", version="1.0.0")
+def polite(record: Record) -> Score:
+    return Score(passed="please" in record.output.as_text().lower())
+
+result = evalsi.evaluate("qa.jsonl", ["exact-match", polite])
+print(result.table())
+result.save("results.json")</code></pre>
+    </section>
+
+    <section class="band final">
+      <h2>Start evaluating in a minute</h2>
+      <div class="cta">
+        <a class="btn primary" href={doc("/docs/get-started/")}>Read the docs</a>
+        <a class="btn" href={doc("/docs/architecture/")}>See the architecture</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Evals.si · Apache-2.0</span>
+    <span><a href={doc("/docs/get-started/")}>Docs</a> · <a href={doc("/examples/")}>Examples</a> · <a href={repo}>GitHub</a></span>
+  </footer>
+</body>
+</html>
+
+<style is:global>
+  :root { --bg:#0b0d17; --fg:#e6e8f2; --muted:#9aa1b9; --card:#12152a; --line:#232846; --accent:#6366f1; --teal:#14b8a6; }
+  :root[data-theme="light"] { --bg:#fbfbfe; --fg:#14172b; --muted:#555c78; --card:#fff; --line:#e3e5f2; --accent:#4f46e5; --teal:#0d9488; }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+  a{color:inherit;text-decoration:none}
+  .nav{display:flex;align-items:center;justify-content:space-between;max-width:72rem;margin:0 auto;padding:1rem 1.25rem}
+  .brand svg{height:2rem;width:auto;display:block}
+  .nav nav{display:flex;gap:1.25rem;align-items:center;font-size:.95rem;color:var(--muted)}
+  .nav nav a:hover{color:var(--fg)} .gh{border:1px solid var(--line);padding:.3rem .8rem;border-radius:.5rem;color:var(--fg)}
+  main{max-width:72rem;margin:0 auto;padding:0 1.25rem}
+  .hero{padding:4rem 0 2rem;text-align:center}
+  .eyebrow{color:var(--teal);font-weight:600;font-size:.9rem;letter-spacing:.04em;text-transform:uppercase;margin:0}
+  h1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.1;margin:.75rem auto;max-width:18ch;letter-spacing:-.02em}
+  .grad{background:linear-gradient(90deg,#818cf8,#2dd4bf);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{max-width:44rem;margin:0 auto 1.75rem;color:var(--muted);font-size:1.15rem}
+  .cta{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-block;border:1px solid var(--line);padding:.65rem 1.2rem;border-radius:.6rem;font-weight:600;background:var(--card)}
+  .btn:hover{border-color:var(--accent)} .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .term{background:#0a0c16;color:#d7dbf0;border:1px solid var(--line);border-radius:.8rem;padding:1.1rem 1.25rem;overflow-x:auto;text-align:left;font:13.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:2.5rem auto 0;max-width:46rem}
+  .term .dim{color:#6b7394}
+  .band{padding:3rem 0} .band h2{font-size:1.8rem;margin:0 0 1.5rem;letter-spacing:-.01em}
+  .grid{display:grid;gap:1rem} .four{grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))} .three{grid-template-columns:repeat(auto-fit,minmax(18rem,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:.8rem;padding:1.25rem;transition:border-color .15s,transform .15s}
+  .card:hover{border-color:var(--accent);transform:translateY(-2px)} .card h3{margin:0 0 .4rem;font-size:1.1rem} .card p{margin:0;color:var(--muted);font-size:.95rem}
+  .split{display:grid;gap:2rem;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));align-items:center}
+  .split .term{margin:0;max-width:none} .split p{color:var(--muted)}
+  .chips{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0 1.5rem} .chips span{border:1px solid var(--line);border-radius:999px;padding:.15rem .75rem;font-size:.85rem;color:var(--fg)}
+  .final{text-align:center} footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;max-width:72rem;margin:2rem auto 0;padding:1.5rem 1.25rem;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+  footer a:hover{color:var(--fg)}
+  @media (max-width:560px){.nav nav{gap:.75rem;font-size:.85rem}}
+</style>
