@@ -66,6 +66,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - uses: sigstore/cosign-installer@v3   # image signatures made by the real CLI must verify
+        with:
+          cosign-release: v2.6.1
       - name: Sandbox prerequisites
         # bubblewrap for the namespaced rung; Ubuntu 24.04 restricts unprivileged
         # user namespaces through AppArmor unless this is relaxed.
@@ -88,6 +91,10 @@ jobs:
           # Both sandbox rungs must work here; skipping them would hide regressions.
           EVALSI_REQUIRE_SANDBOX: "1"
           EVALSI_REQUIRE_HELM: "1"
+      - name: cgroup limits (as root, in a cgroup v2 directory with memory and pids)
+        run: |
+          go test -c -o "$RUNNER_TEMP/sandbox.test" ./internal/sandbox
+          sudo EVALSI_REQUIRE_CGROUP=1 EVALSI_REQUIRE_SANDBOX=1 "$RUNNER_TEMP/sandbox.test" -test.run Cgroup -test.v
       - name: Static binaries
         run: make build
 
@@ -215,6 +222,52 @@ jobs:
           EVALSI_E2E_S3_ENDPOINT: 127.0.0.1:9000
           EVALSI_E2E_S3_ACCESS_KEY: evalsi
           EVALSI_E2E_S3_SECRET_KEY: evalsi-secret
+
+  trainers:
+    # Phase 5's exit criterion at CPU scale: TRL GRPO trains a tiny model
+    # with Evals.si code rewards run in the real sandbox, and the
+    # TrainerCallback evaluates every checkpoint.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      - name: Sandbox prerequisites
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Trainer environment
+        run: |
+          uv venv -p 3.12 "$RUNNER_TEMP/trainers"
+          export VIRTUAL_ENV="$RUNNER_TEMP/trainers"
+          uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -r tests/trainers/requirements.txt -e python/evalsi
+      - name: GRPO with Evals.si rewards
+        run: |
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
+          cd tests/trainers && EVALSID="$RUNNER_TEMP/evalsid" "$RUNNER_TEMP/trainers/bin/python" -m pytest -q
+
+  release-check:
+    # The release archive builds (static Go binaries and a static
+    # bubblewrap) and runs, so a tag cannot find it broken.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: scripts/release-binaries.sh 0.0.0-ci amd64 dist
+      - name: The archive runs, and evalsid uses its bubblewrap
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          tar -C dist -xzf dist/evalsi_0.0.0-ci_linux_amd64.tar.gz
+          dir=dist/evalsi_0.0.0-ci_linux_amd64
+          "$dir/evalsid" version | grep -q 0.0.0-ci
+          echo '{"command":["/bin/sh","-c","echo ok"],"min_isolation":"namespaced","timeout_s":10}' \
+            | PATH=/nonexistent "$dir/evalsid" sandbox run | tee /dev/stderr | grep -q '"outcome":"exit"'
 
   kubernetes:
     # Phase 4's exit criteria on a kind cluster: an air-gapped install from

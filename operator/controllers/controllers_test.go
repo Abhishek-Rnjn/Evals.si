@@ -112,6 +112,11 @@ func TestOperator(t *testing.T) {
 		if err := alice.Create(ctx, bad); err == nil || !strings.Contains(err.Error(), "unknown field") {
 			t.Errorf("misspelled field: %v", err)
 		}
+		// The CRD schema, typed from the API's messages, rejects wrong types itself.
+		bad.Spec.Raw = []byte(`{"evaluators":[{"ref":"x"}],"dataset":{"path":"a"},"trials":"three"}`)
+		if err := alice.Create(ctx, bad); err == nil || !strings.Contains(err.Error(), "spec.trials") {
+			t.Errorf("wrong type: %v", err)
+		}
 		pol := &v1.OnlineEvalPolicy{ObjectMeta: metav1.ObjectMeta{Name: "bad", Namespace: "team-a"}, Spec: runtime.RawExtension{Raw: []byte(`{"stages":[]}`)}}
 		if err := alice.Create(ctx, pol); err == nil || !strings.Contains(err.Error(), "at least one stage") {
 			t.Errorf("invalid policy: %v", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -321,5 +322,93 @@ func TestAuditExport(t *testing.T) {
 	if rec.GetEventName() != "evalsi.audit" || rec.GetSeverityNumber() != logs.SeverityNumber_SEVERITY_NUMBER_WARN ||
 		!strings.Contains(rec.String(), "key:ci") {
 		t.Errorf("audit event %v", rec)
+	}
+}
+
+// recorder captures the JSON bodies posted to a fake service.
+type recorder struct {
+	mu     sync.Mutex
+	paths  []string
+	bodies []map[string]any
+	auth   []string
+}
+
+func (rec *recorder) server(t *testing.T, reply func(path string) (int, string)) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		rec.mu.Lock()
+		rec.paths = append(rec.paths, r.URL.RequestURI())
+		rec.bodies = append(rec.bodies, body)
+		rec.auth = append(rec.auth, r.Header.Get("Authorization"))
+		rec.mu.Unlock()
+		status, out := reply(r.URL.Path)
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, out)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestLangfuseRunsAndScores(t *testing.T) {
+	t.Setenv("LF_PUBLIC", "pk-lf")
+	t.Setenv("LF_SECRET", "sk-lf")
+	rec := &recorder{}
+	srv := rec.server(t, func(string) (int, string) { return 207, `{"successes": [], "errors": []}` })
+	sink := newLangfuse(LangfuseConfig{Host: srv.URL + "/", PublicKeyEnv: "LF_PUBLIC", SecretKeyEnv: "LF_SECRET", TraceFeedback: true}, srv.Client())
+	if err := sink.ExportRun(context.Background(), finishedRun()); err != nil {
+		t.Fatal(err)
+	}
+	if err := sink.ExportTrace(context.Background(), traceResults()); err != nil {
+		t.Fatal(err)
+	}
+	if rec.paths[0] != "/api/public/ingestion" || rec.auth[0] != "Basic cGstbGY6c2stbGY=" {
+		t.Fatalf("path %q auth %q", rec.paths[0], rec.auth[0])
+	}
+	batch := rec.bodies[0]["batch"].([]any)
+	trace := batch[0].(map[string]any)
+	if trace["type"] != "trace-create" || trace["body"].(map[string]any)["id"] != "evalsi-run-run-123" {
+		t.Fatalf("trace event: %v", trace)
+	}
+	score := batch[1].(map[string]any)["body"].(map[string]any)
+	if score["name"] != "exact-match" || score["value"] != 0.7 || !strings.Contains(score["comment"].(string), "95% CI [0.4, 0.9]") {
+		t.Fatalf("score: %v", score)
+	}
+	online := rec.bodies[1]["batch"].([]any)
+	first := online[0].(map[string]any)["body"].(map[string]any)
+	if first["traceId"] != "0af7651916cd43dd8448eb211c80319c" || first["dataType"] != "NUMERIC" || first["comment"] != "3 of 4" {
+		t.Fatalf("online score: %v", first)
+	}
+
+	// Rejected events are permanent errors, not retried.
+	bad := rec.server(t, func(string) (int, string) {
+		return 207, `{"errors": [{"id": "x", "status": 400, "message": "invalid"}]}`
+	})
+	sink = newLangfuse(LangfuseConfig{Host: bad.URL, PublicKeyEnv: "LF_PUBLIC", SecretKeyEnv: "LF_SECRET"}, bad.Client())
+	var p permanent
+	if err := sink.ExportRun(context.Background(), finishedRun()); !errors.As(err, &p) {
+		t.Fatalf("want a permanent error, got %v", err)
+	}
+}
+
+func TestPhoenixAnnotations(t *testing.T) {
+	t.Setenv("PHX_KEY", "secret")
+	rec := &recorder{}
+	srv := rec.server(t, func(string) (int, string) { return 200, `{"data": []}` })
+	sink := newPhoenix(PhoenixConfig{Endpoint: srv.URL, APIKeyEnv: "PHX_KEY"}, srv.Client())
+	if err := sink.ExportRun(context.Background(), finishedRun()); err != nil || len(rec.paths) != 0 {
+		t.Fatalf("runs are not exported to Phoenix: %v %v", err, rec.paths)
+	}
+	if err := sink.ExportTrace(context.Background(), traceResults()); err != nil {
+		t.Fatal(err)
+	}
+	if rec.paths[0] != "/v1/trace_annotations?sync=false" || rec.auth[0] != "Bearer secret" {
+		t.Fatalf("path %q auth %q", rec.paths[0], rec.auth[0])
+	}
+	data := rec.bodies[0]["data"].([]any)
+	a := data[0].(map[string]any)
+	result := a["result"].(map[string]any)
+	if a["trace_id"] != "0af7651916cd43dd8448eb211c80319c" || a["annotator_kind"] != "LLM" || result["score"] != 0.75 || result["explanation"] != "3 of 4" {
+		t.Fatalf("annotation: %v", a)
 	}
 }

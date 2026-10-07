@@ -80,6 +80,73 @@ type Evaluate struct {
 	MaxRecords int `json:"max_records"`
 }
 
+// Rewards tunes the Reward Service.
+type Rewards struct {
+	// Upper bound on rollouts in one ScoreRewards call.
+	MaxRollouts int `json:"max_rollouts"`
+	// Rollouts being scored at once across all calls; further calls wait
+	// (back-pressure on the trainer) until their context ends.
+	MaxInflight int `json:"max_inflight"`
+	// Component scores kept in the in-memory cache.
+	CacheSize int `json:"cache_size"`
+	// Also keep component scores in the database, shared by every replica
+	// (with PostgreSQL), and how long to keep them (default 168h).
+	SharedCache    bool   `json:"shared_cache,omitempty"`
+	SharedCacheTTL string `json:"shared_cache_ttl,omitempty"`
+}
+
+// Quotas limit what each project may use (§17 "Tenancy"). Zero means
+// unlimited. Default applies to every project; Projects overrides it per
+// project, field by field (a zero there inherits the default).
+type Quotas struct {
+	Default  QuotaLimits            `json:"default"`
+	Projects map[string]QuotaLimits `json:"projects,omitempty"`
+}
+
+// QuotaLimits are one project's limits.
+type QuotaLimits struct {
+	// Runs executing at once; further runs wait in PENDING. Per replica.
+	MaxConcurrentRuns int `json:"max_concurrent_runs,omitempty"`
+	// Stored runs; CreateRun fails past it until old runs are deleted.
+	MaxStoredRuns int `json:"max_stored_runs,omitempty"`
+	// Tokens per UTC day across the project's runs: judges, and the target
+	// (the model under evaluation, or the agent's model).
+	JudgeTokensPerDay  int64 `json:"judge_tokens_per_day,omitempty"`
+	TargetTokensPerDay int64 `json:"target_tokens_per_day,omitempty"`
+	// Reward Service rollouts being scored at once; further calls wait. Per replica.
+	MaxRewardRollouts int `json:"max_reward_rollouts,omitempty"`
+}
+
+// For is a project's limits: its own fields, else the default's.
+func (q Quotas) For(project string) QuotaLimits {
+	l := q.Default
+	p, ok := q.Projects[project]
+	if !ok {
+		return l
+	}
+	if p.MaxConcurrentRuns != 0 {
+		l.MaxConcurrentRuns = p.MaxConcurrentRuns
+	}
+	if p.MaxStoredRuns != 0 {
+		l.MaxStoredRuns = p.MaxStoredRuns
+	}
+	if p.JudgeTokensPerDay != 0 {
+		l.JudgeTokensPerDay = p.JudgeTokensPerDay
+	}
+	if p.TargetTokensPerDay != 0 {
+		l.TargetTokensPerDay = p.TargetTokensPerDay
+	}
+	if p.MaxRewardRollouts != 0 {
+		l.MaxRewardRollouts = p.MaxRewardRollouts
+	}
+	return l
+}
+
+func (l QuotaLimits) valid() bool {
+	return l.MaxConcurrentRuns >= 0 && l.MaxStoredRuns >= 0 && l.JudgeTokensPerDay >= 0 &&
+		l.TargetTokensPerDay >= 0 && l.MaxRewardRollouts >= 0
+}
+
 // Runs tunes the Run door.
 type Runs struct {
 	// Runs executing at once; the rest wait as PENDING.
@@ -136,6 +203,8 @@ type Config struct {
 	Judges       map[string]Judge  `json:"judges"`
 	DefaultJudge string            `json:"default_judge"`
 	Evaluate     Evaluate          `json:"evaluate"`
+	Rewards      Rewards           `json:"rewards"`
+	Quotas       Quotas            `json:"quotas"`
 	// Isolation for code-executing evaluators and agent tasks.
 	Sandbox sandbox.Config `json:"sandbox"`
 	// What agent-run specs may make the worker execute outside the sandbox.
@@ -211,6 +280,7 @@ func Default() Config {
 		DataDir:  ".evalsi",
 		Judges:   map[string]Judge{},
 		Evaluate: Evaluate{BatchSize: 32, Parallelism: 8, MaxRecords: 10000},
+		Rewards:  Rewards{MaxRollouts: 16384, MaxInflight: 65536, CacheSize: 1 << 20},
 		Runs:     Runs{MaxConcurrent: 4},
 		OTLP:     OTLP{Grace: "2s", MaxTraces: 10000},
 		Traces:   Traces{Retention: "168h"},
@@ -347,6 +417,21 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateAccess()...)
 	if c.Evaluate.BatchSize < 1 || c.Evaluate.Parallelism < 1 || c.Evaluate.MaxRecords < 1 {
 		errs = append(errs, errors.New("evaluate.batch_size, parallelism and max_records must be positive"))
+	}
+	quotasValid := c.Quotas.Default.valid()
+	for _, l := range c.Quotas.Projects {
+		quotasValid = quotasValid && l.valid()
+	}
+	if !quotasValid {
+		errs = append(errs, errors.New("quotas: limits must not be negative"))
+	}
+	if ttl := c.Rewards.SharedCacheTTL; ttl != "" {
+		if d, err := time.ParseDuration(ttl); err != nil || d <= 0 {
+			errs = append(errs, fmt.Errorf("rewards.shared_cache_ttl: %q is not a positive duration", ttl))
+		}
+	}
+	if r := c.Rewards; r.MaxRollouts < 1 || r.MaxInflight < r.MaxRollouts || r.CacheSize < 0 {
+		errs = append(errs, errors.New("rewards.max_rollouts must be positive, max_inflight at least max_rollouts, and cache_size not negative"))
 	}
 	return errors.Join(errs...)
 }

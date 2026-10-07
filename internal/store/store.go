@@ -94,9 +94,13 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrating: %w", err)
 	}
-	if _, err := db.Exec(schema + authSchema + leaseSchema); err != nil {
+	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + rewardCacheSchema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
+	}
+	if err := addTenantColumns(context.Background(), db, sqliteDialect); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: migrating: %w", err)
 	}
 	return newStore(&conn{db: db, d: sqliteDialect}), nil
 }

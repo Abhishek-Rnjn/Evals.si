@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import stat
-import sys
 from pathlib import Path
 
 import pytest
@@ -13,38 +11,6 @@ from conftest import make_record
 from evalsi.packs import code
 from evalsi.sandbox import SandboxError
 from evalsi.testing import score
-
-# A stand-in for `evalsid sandbox run` that runs the request unconfined in a
-# temporary directory. It tests the pack's logic; the real sandbox is tested
-# in Go (internal/sandbox) and end to end (tests/e2e).
-FAKE_EVALSID = """\
-import json, os, subprocess, sys, tempfile
-req = json.load(sys.stdin)
-if os.environ.get("FAKE_SANDBOX") == "unavailable":
-    print(json.dumps({"outcome": "unavailable", "exit_code": -1, "error": "no rung"}))
-    sys.exit(0)
-with tempfile.TemporaryDirectory() as ws:
-    for name, content in req["files"].items():
-        open(os.path.join(ws, name), "w").write(content)
-    cmd = [sys.executable, *req["command"][1:]]
-    try:
-        p = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, timeout=req["timeout_s"])
-        out = {"outcome": "exit", "exit_code": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
-    except subprocess.TimeoutExpired:
-        out = {"outcome": "timeout", "exit_code": -1}
-out["isolation"] = {"driver": "fake", "level": "none", "enforcement": "full"}
-print(json.dumps(out))
-"""
-
-
-@pytest.fixture
-def fake_sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    script = tmp_path / "evalsid"
-    script.write_text(f"#!{sys.executable}\n{FAKE_EVALSID}")
-    script.chmod(script.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv("EVALSID", str(script))
-    return script
-
 
 TESTS = "def check(f):\n    assert f(2, 3) == 5\n    assert f(-1, 1) == 0\n"
 

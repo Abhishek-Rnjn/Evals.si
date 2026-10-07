@@ -161,3 +161,42 @@ func joined(xs []string) string {
 	}
 	return out
 }
+
+// TestTenantColumns: every project-scoped table carries the reserved
+// tenant_id, in new databases and in ones written before it existed.
+func TestTenantColumns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	old, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(schema + authSchema + leaseSchema); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`INSERT INTO policies (name, project, policy) VALUES ('p', 'x', X'')`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+	for _, open := range []string{path, filepath.Join(t.TempDir(), "new.db")} {
+		s, err := Open(open)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, table := range tenantTables {
+			var n int
+			if err := s.db.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'tenant_id'`, table).Scan(&n); err != nil || n != 1 {
+				t.Errorf("%s: %s has no tenant_id (%v)", open, table, err)
+			}
+		}
+		s.Close()
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var tenant string
+	if err := s.db.db.QueryRow(`SELECT tenant_id FROM policies WHERE name = 'p'`).Scan(&tenant); err != nil || tenant != "" {
+		t.Errorf("existing rows: tenant %q, %v", tenant, err)
+	}
+}

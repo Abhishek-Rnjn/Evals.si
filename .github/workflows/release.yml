@@ -1,0 +1,227 @@
+name: release
+
+# Publishes a release from a tag (v0.5.0 releases version 0.5.0):
+# - archives per architecture: static evalsid, evalsi-guest, evalsi-operator
+#   and a static bubblewrap (scripts/release-binaries.sh);
+# - Python wheels and sdists for evalsi and evalsi-harness (and PyPI, when the
+#   repository variable PUBLISH_PYPI is "true" and trusted publishing is set up);
+# - the images, multi-architecture, to ghcr.io/<owner>/evalsi:<version> and
+#   ghcr.io/<owner>/evalsi-collector:<version>;
+# - the Helm charts, to oci://ghcr.io/<owner>/charts;
+# - the air-gapped bundle (amd64, with the CLI wheels);
+# - a GitHub release with all of it and SHA256SUMS.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (no leading v), for a dry run without publishing"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # A tag publishes; a manual run builds everything and publishes nothing.
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      owner: ${{ steps.v.outputs.owner }}
+    steps:
+      - id: v
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="${{ inputs.version }}"; fi
+          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$' || { echo "bad version $v"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+  binaries:
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: docker/setup-qemu-action@v3   # the arm64 bubblewrap builds in an emulated container
+      - run: scripts/release-binaries.sh "${{ needs.version.outputs.version }}" "${{ matrix.arch }}" dist
+      - name: The archive runs (amd64)
+        if: matrix.arch == 'amd64'
+        run: |
+          tar -C dist -xzf dist/*.tar.gz
+          dir=$(echo dist/evalsi_*_linux_amd64)
+          "$dir/evalsid" version | grep -q "${{ needs.version.outputs.version }}"
+          "$dir/bwrap" --version
+      - uses: actions/upload-artifact@v5
+        with:
+          name: binaries-${{ matrix.arch }}
+          path: dist/*.tar.gz
+
+  python:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Build
+        working-directory: python
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          for p in evalsi/src/evalsi/_version.py evalsi-harness/src/evalsi_harness/_version.py; do
+            sed -i "s/^__version__ = .*/__version__ = \"$v\"/" "$p"
+          done
+          uv build --all-packages -o ../dist
+      - uses: actions/upload-artifact@v5
+        with:
+          name: python
+          path: dist/*
+
+  pypi:
+    needs: python
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # PyPI trusted publishing; no stored token
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: python
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  image:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ needs.version.outputs.version }}
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: |
+            ghcr.io/${{ needs.version.outputs.owner }}/evalsi:${{ needs.version.outputs.version }}
+            ghcr.io/${{ needs.version.outputs.owner }}/evalsi:latest
+
+  collector:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/collector/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: |
+            ghcr.io/${{ needs.version.outputs.owner }}/evalsi-collector:${{ needs.version.outputs.version }}
+            ghcr.io/${{ needs.version.outputs.owner }}/evalsi-collector:latest
+
+  charts:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.22.0
+      - name: Package
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          for c in evalsi-crds evalsi evalsi-sandboxd; do
+            helm package "deploy/helm/$c" --version "$v" --app-version "$v" -d dist
+          done
+      - name: Push
+        if: env.PUBLISH == 'true'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for c in dist/*.tgz; do helm push "$c" "oci://ghcr.io/${{ needs.version.outputs.owner }}/charts"; done
+      - uses: actions/upload-artifact@v5
+        with:
+          name: charts
+          path: dist/*.tgz
+
+  bundle:
+    needs: [version, image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.22.0
+      - name: Image
+        # The published image; on a dry run, the same Dockerfile built here.
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          img="ghcr.io/${{ needs.version.outputs.owner }}/evalsi:$v"
+          if [ "$PUBLISH" != true ]; then docker build --build-arg VERSION="$v" -t "$img" .; fi
+      - name: Bundle
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          export EVALSI_IMAGE_REPOSITORY="ghcr.io/${{ needs.version.outputs.owner }}/evalsi"
+          [ "$PUBLISH" = true ] || export PULL=0
+          deploy/airgap/bundle.sh --tag "$v" --out "evalsi-bundle-$v" --with-cli
+          tar czf "evalsi-bundle-$v-linux-amd64.tgz" "evalsi-bundle-$v"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: bundle
+          path: evalsi-bundle-*.tgz
+
+  release:
+    needs: [version, binaries, python, image, collector, charts, bundle]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum * > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.version.outputs.version, '-') }}

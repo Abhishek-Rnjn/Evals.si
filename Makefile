@@ -30,6 +30,7 @@ operator-gen:
 		output:crd:artifacts:config=operator/config/crd \
 		output:rbac:artifacts:config=operator/config/rbac \
 		output:webhook:artifacts:config=operator/config/webhook
+	go run ./operator/cmd/crd-schema operator/config/crd
 	cp operator/config/crd/*.yaml deploy/helm/evalsi-crds/crds/
 
 # Static binaries: evalsid doubles as the in-sandbox egress forwarder (in any

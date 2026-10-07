@@ -513,14 +513,16 @@ dependencies = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=1.0" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=2.18" },
+    { name = "duckdb", marker = "extra == 'analytics'", specifier = ">=1.1" },
     { name = "grpcio", marker = "extra == 'server'", specifier = ">=1.84" },
     { name = "grpcio-health-checking", marker = "extra == 'server'", specifier = ">=1.84" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jsonschema", marker = "extra == 'jsonschema'", specifier = ">=4.0" },
     { name = "protobuf", specifier = ">=7.35" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "sympy", marker = "extra == 'math'", specifier = ">=1.13" },
 ]
-provides-extras = ["anthropic", "hf", "jsonschema", "server"]
+provides-extras = ["analytics", "anthropic", "hf", "jsonschema", "math", "server"]
 
 [[package]]
 name = "evalsi-adapter-lm-eval"

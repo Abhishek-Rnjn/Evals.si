@@ -65,7 +65,9 @@ def steps(answers: list[dict[str, Any]]) -> Script:
     return script
 
 
-def run(server: ScriptedModelServer, task_id: str, user: list[dict[str, Any]]) -> TaskOutcome:
+def run(
+    server: ScriptedModelServer, task_id: str, user: list[dict[str, Any]], domain: str = "mock"
+) -> TaskOutcome:
     spec = json_format.ParseDict(
         normalize_durations(
             {
@@ -82,7 +84,7 @@ def run(server: ScriptedModelServer, task_id: str, user: list[dict[str, Any]]) -
         ),
         run_pb2.RunSpec(),
     )
-    row = load("mock", tasks=task_id)[0]
+    row = load(domain, tasks=task_id)[0]
     record = Record(id=row["id"], input=Content(text=row["input"]), metadata=row["metadata"])
     replies = iter(user)
     judge = JudgeClient(TEST_JUDGE, ScriptedJudge(lambda prompt, schema: next(replies)))
@@ -206,3 +208,75 @@ def test_the_task_history_is_replayed(model: Any) -> None:
     assert rec is not None, out.error
     assert rec.check is not None
     assert rec.check.passed, rec.check.details
+
+
+TELECOM = "[service_issue]airplane_mode_on|unseat_sim_card[PERSONA:None]"
+
+
+def phone_user(fix: bool) -> list[dict[str, Any]]:
+    def say(message: str, done: bool = False) -> dict[str, Any]:
+        return {"message": message, "tool": "", "arguments": "{}", "done": done}
+
+    def act(tool: str) -> dict[str, Any]:
+        return {"message": "", "tool": tool, "arguments": "{}", "done": False}
+
+    acts = [act("toggle_airplane_mode"), act("reseat_sim_card")] if fix else []
+    return [
+        say("My phone has no service."),
+        *acts,
+        say("I did both, and I have service now. ###STOP###"),
+    ]
+
+
+def telecom_agent() -> Script:
+    return steps([{"text": "Please turn airplane mode off and reseat your SIM card."}])
+
+
+@pytest.mark.parametrize("fix", [True, False])
+def test_the_user_acts_on_their_own_device(model: Any, fix: bool) -> None:
+    out = run(model(telecom_agent()), TELECOM, phone_user(fix), domain="telecom")
+    assert out.error == ""
+    rec = out.record
+    assert rec is not None
+    assert rec.check is not None
+    # Graded on the device's end state, which only the user's tool calls change.
+    assert rec.check.passed is fix, rec.check.details
+    assert "assertion 0: assert_service_status" in rec.check.tests
+
+
+def test_user_tool_calls_are_replayed_in_order() -> None:
+    from tau2.data_model.message import AssistantMessage, ToolMessage, UserMessage
+
+    from evalsi_taubench import _events_to_tau
+
+    class FakeUser:
+        def __init__(self) -> None:
+            self.batches = [
+                [
+                    UserMessage(role="user", content=None),
+                    ToolMessage(id="u1", role="tool", content="ok", requestor="user"),
+                ]
+            ]
+
+        def take(self) -> list[Any]:
+            return self.batches.pop(0) if self.batches else []
+
+        def take_rest(self) -> list[Any]:
+            return []
+
+    from evalsi.types import Content, Step
+    from evalsi_harness.events import StepEvent
+
+    events = [
+        StepEvent(Step(type="user", name="u", output=Content(text="hi"), span_id="1")),
+        StepEvent(Step(type="user", name="u", output=Content(text="again"), span_id="2")),
+    ]
+    out = _events_to_tau(events, set(), FakeUser())  # type: ignore[arg-type]
+    kinds = [(type(m).__name__, m.content) for m in out]
+    assert kinds == [
+        ("UserMessage", None),
+        ("ToolMessage", "ok"),
+        ("UserMessage", "hi"),
+        ("UserMessage", "again"),
+    ]
+    assert not any(isinstance(m, AssistantMessage) for m in out)

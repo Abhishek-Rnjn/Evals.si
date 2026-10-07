@@ -35,6 +35,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
+	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -143,6 +144,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		Cluster:       runCluster(cl),
 		LeaseTTL:      optDuration(cfg.Runs.LeaseTTL),
 		AdoptInterval: optDuration(cfg.Runs.AdoptInterval),
+		Quotas:        cfg.Quotas,
 		TraceScores: func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64 {
 			return watcher.TraceScores(policy, results)
 		},
@@ -221,7 +223,12 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 
 	authSvc := authz.NewService(engine, st, auditor, authn.ConfigKeys())
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, log)
-	d := deps{svc: svc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
+	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
+	if cfg.Rewards.SharedCache {
+		rewardSvc.UseSharedCache(st, log)
+		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
+	}
+	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -365,6 +372,7 @@ func protocols(tls bool) *http.Protocols {
 // deps is everything the HTTP handler serves.
 type deps struct {
 	svc       *evaluation.Service
+	rewards   *rewards.Service
 	runs      *runs.Manager
 	watcher   *watch.Engine
 	store     *store.Store
@@ -405,6 +413,7 @@ func Handler(d deps) http.Handler {
 	for _, h := range []func() (string, http.Handler){
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewEvaluationServiceHandler(d.svc, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewCatalogServiceHandler(d.svc, gated) },
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRewardServiceHandler(d.rewards, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRunServiceHandler(d.runs, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewMonitorServiceHandler(d.watcher, gated) },
 		func() (string, http.Handler) {
@@ -424,10 +433,11 @@ func Handler(d deps) http.Handler {
 	}
 	mux.Handle("/v1alpha1/", rest)
 	registerOTLP(mux, d)
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler)))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
+		evalsiv1alpha1connect.RewardServiceName,
 		evalsiv1alpha1connect.RunServiceName,
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
@@ -500,4 +510,27 @@ func runCluster(cl *cluster.Cluster) runs.Coordinator {
 		return nil
 	}
 	return cl
+}
+
+// pruneRewardCache drops shared reward cache entries older than ttl
+// (default a week), hourly; every replica may run it.
+func pruneRewardCache(ctx context.Context, st *store.Store, ttl string, log *slog.Logger) {
+	keep := 7 * 24 * time.Hour
+	if d, err := time.ParseDuration(ttl); err == nil && d > 0 {
+		keep = d
+	}
+	tick := time.NewTicker(time.Hour)
+	defer tick.Stop()
+	for {
+		if n, err := st.PruneRewardCache(ctx, time.Now().Add(-keep)); err != nil && ctx.Err() == nil {
+			log.Warn("pruning the reward cache", "err", err)
+		} else if n > 0 {
+			log.Info("pruned the reward cache", "entries", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
 }

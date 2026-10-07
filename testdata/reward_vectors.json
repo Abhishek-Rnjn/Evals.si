@@ -1,0 +1,83 @@
+{
+  "_comment": "Reward composition rules shared by evalsi.rewards.compose (Python) and the Reward Service (Go). Each case gives a RewardSpec body and component results; want is the total and gated flag, or error when the batch must fail.",
+  "cases": [
+    {
+      "name": "weighted sum",
+      "spec": {"components": [{"ref": "a", "weight": 0.25}, {"ref": "b", "weight": 0.75}]},
+      "components": {"a": {"status": "scored", "value": 1}, "b": {"status": "scored", "value": 0.5}},
+      "want": {"total": 0.625, "gated": false}
+    },
+    {
+      "name": "passing gate still counts",
+      "spec": {"components": [{"ref": "fmt", "weight": 0.1, "gate": true}, {"ref": "tests", "weight": 0.9}]},
+      "components": {"fmt": {"status": "scored", "value": 1}, "tests": {"status": "scored", "value": 1}},
+      "want": {"total": 1.0, "gated": false}
+    },
+    {
+      "name": "failed gate gives the floor",
+      "spec": {"floor": -1, "components": [{"ref": "fmt", "weight": 0.1, "gate": true}, {"ref": "tests", "weight": 0.9}]},
+      "components": {"fmt": {"status": "scored", "value": 0}, "tests": {"status": "scored", "value": 1}},
+      "want": {"total": -1.0, "gated": true}
+    },
+    {
+      "name": "numeric gate with threshold",
+      "spec": {"components": [{"ref": "judge", "gate": true, "threshold": 0.5, "weight": 0}, {"ref": "tests"}]},
+      "components": {"judge": {"status": "scored", "value": 0.5}, "tests": {"status": "scored", "value": 0.25}},
+      "want": {"total": 0.25, "gated": false}
+    },
+    {
+      "name": "skipped gate fails",
+      "spec": {"components": [{"ref": "fmt", "gate": true}, {"ref": "tests"}]},
+      "components": {"fmt": {"status": "skipped"}, "tests": {"status": "scored", "value": 1}},
+      "want": {"total": 0.0, "gated": true}
+    },
+    {
+      "name": "skipped component adds nothing",
+      "spec": {"components": [{"ref": "a"}, {"ref": "b", "weight": 2}]},
+      "components": {"a": {"status": "skipped"}, "b": {"status": "scored", "value": 0.5}},
+      "want": {"total": 1.0, "gated": false}
+    },
+    {
+      "name": "error raises by default",
+      "spec": {"components": [{"ref": "a"}, {"ref": "b"}]},
+      "components": {"a": {"status": "error", "reason": "sandbox unavailable"}, "b": {"status": "scored", "value": 1}},
+      "want": {"error": true}
+    },
+    {
+      "name": "error counts zero",
+      "spec": {"onError": "zero", "components": [{"ref": "a"}, {"ref": "b"}]},
+      "components": {"a": {"status": "error"}, "b": {"status": "scored", "value": 1}},
+      "want": {"total": 1.0, "gated": false}
+    },
+    {
+      "name": "error makes the total null",
+      "spec": {"onError": "none", "components": [{"ref": "a"}, {"ref": "b"}]},
+      "components": {"a": {"status": "error"}, "b": {"status": "scored", "value": 1}},
+      "want": {"total": null, "gated": false}
+    },
+    {
+      "name": "errored gate under onError none still gates",
+      "spec": {"onError": "none", "floor": 0.5, "components": [{"ref": "a", "gate": true}, {"ref": "b"}]},
+      "components": {"a": {"status": "error"}, "b": {"status": "scored", "value": 1}},
+      "want": {"total": 0.5, "gated": true}
+    },
+    {
+      "name": "clip",
+      "spec": {"clip": [-1, 1], "components": [{"ref": "a", "weight": 3}, {"ref": "b", "weight": -1}]},
+      "components": {"a": {"status": "scored", "value": 1}, "b": {"status": "scored", "value": 0.5}},
+      "want": {"total": 1.0, "gated": false}
+    },
+    {
+      "name": "clip applies to negative totals",
+      "spec": {"clip": [-1, 1], "components": [{"ref": "a", "weight": -4}]},
+      "components": {"a": {"status": "scored", "value": 1}},
+      "want": {"total": -1.0, "gated": false}
+    },
+    {
+      "name": "names alias components",
+      "spec": {"components": [{"ref": "math-equiv", "name": "strict", "weight": 0.5}, {"ref": "math-equiv", "name": "loose", "weight": 0.5}]},
+      "components": {"strict": {"status": "scored", "value": 0}, "loose": {"status": "scored", "value": 1}},
+      "want": {"total": 0.5, "gated": false}
+    }
+  ]
+}

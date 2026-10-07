@@ -17,4 +17,4 @@ For now, Evals.si is installed and operated by clients inside their own infrastr
   - observability.
 - **Air-gapped installs are supported.** Phase 4 shipped the offline bundle (`deploy/airgap`), tested in CI by installing from it with no registry access. The dataset mirror tool is not built yet.
 - **Least-privilege install.** The main Helm chart (`evalsi`) is namespace-scoped, and cluster-scoped pieces live in separate charts (`evalsi-crds`, `evalsi-sandboxd`).
-- **Single tenant per install, with projects inside it.** Every stored key carries `project_id` and a reserved `tenant_id`, so a hosted multi-tenant service can be added without a data migration.
+- **Single tenant per install, with projects inside it.** Every project-scoped row carries `project_id` and a reserved `tenant_id` column (empty for now), so a hosted multi-tenant service can fill it in rather than reshape stored data.

@@ -1,0 +1,16 @@
+# A reward for math RL (GSM8K, MATH): <think>/<answer> format as a small
+# shaped bonus, the final answer's correctness, and DAPO's soft overlong
+# penalty (skipped for rollouts without completion_tokens or completion_ids,
+# which TRL passes). The reference answer comes from the `answer` (or `ground_truth`,
+# `solution`) column; GSM8K's "#### 72" is understood.
+apiVersion: evals.si/v1alpha1
+kind: RewardSpec
+metadata: {name: math-grpo}
+spec:
+  components:
+    - {ref: format-check, name: format, weight: 0.1}
+    - {ref: math-equiv, name: correct, weight: 1.0}
+    - ref: overlong-penalty
+      name: overlong
+      weight: 1.0
+      params: {max_length: 4096, buffer: 512}

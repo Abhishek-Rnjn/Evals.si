@@ -115,6 +115,20 @@ class Client:
     def get_run(self, run_id: str) -> dict[str, Any]:
         return self._run("GetRun", {"id": run_id})
 
+    def list_runs(
+        self, *, project: str = "", page_size: int = 100, page_token: str = ""
+    ) -> dict[str, Any]:
+        """One page of runs, newest first: ``{"runs": [...], "nextPageToken": ...}``."""
+        body = {"project": project, "pageSize": page_size, "pageToken": page_token}
+        return self.call("RunService", "ListRuns", body)
+
+    def list_run_results(
+        self, run_id: str, *, page_size: int = 1000, page_token: str = ""
+    ) -> dict[str, Any]:
+        """One page of a run's results with their records."""
+        body = {"runId": run_id, "pageSize": page_size, "pageToken": page_token}
+        return self.call("RunService", "ListRunResults", body)
+
     def watch_run(self, run_id: str, *, include_results: bool = False) -> Iterator[dict[str, Any]]:
         return self.stream(
             "RunService", "WatchRun", {"id": run_id, "includeResults": include_results}

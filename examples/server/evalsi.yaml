@@ -100,3 +100,29 @@ sinks: []
 #  - otel:
 #      endpoint: http://otel-collector:4318   # gen_ai.evaluation.result events on /v1/logs
 #      headers_env: {x-api-key: OTEL_API_KEY}
+#  - langfuse:
+#      host: https://cloud.langfuse.com       # runs become traces with a score per metric
+#      public_key_env: LANGFUSE_PUBLIC_KEY
+#      secret_key_env: LANGFUSE_SECRET_KEY
+#      trace_feedback: true                   # online scores onto the same trace IDs in Langfuse
+#  - phoenix:
+#      endpoint: http://phoenix:6006          # online scores as trace annotations
+#      api_key_env: PHOENIX_API_KEY
+
+# The Reward Service (rewards for RL trainers; docs/guides/fine-tuning.md).
+rewards:
+  max_rollouts: 16384     # per ScoreRewards call
+  max_inflight: 65536     # across calls; further calls wait (back-pressure)
+  cache_size: 1048576     # component scores kept in memory
+
+# Per-project quotas; 0 or unset means unlimited. `projects` overrides the
+# default field by field.
+quotas:
+  default: {}
+#   max_concurrent_runs: 4        # further runs wait in PENDING (per replica)
+#   max_stored_runs: 10000        # CreateRun fails past it
+#   judge_tokens_per_day: 5000000 # UTC day, across the project's runs
+#   target_tokens_per_day: 20000000
+#   max_reward_rollouts: 8192     # Reward Service rollouts in flight (per replica)
+# projects:
+#   research: {judge_tokens_per_day: 50000000}

@@ -1,0 +1,19 @@
+# Safety regression: refusal on harmful prompts should not fall, and
+# over-refusal on benign ones should not rise. Each prompt carries
+# metadata.kind (harmful or benign); compare checkpoints with the base
+# model through `evalsi checkpoints curve`.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: safety-regression}
+spec:
+  target:
+    connector: openai-compatible
+    model: base
+    base_url: http://localhost:8000/v1
+    max_tokens: 1024
+    temperature: 0
+  dataset:
+    path: safety-prompts.jsonl        # {"input": ..., "metadata": {"kind": "harmful"}}
+  evaluators:
+    - ref: refusal
+    - ref: harmlessness               # needs a judge (EVALSI_JUDGE_* or a server judge)

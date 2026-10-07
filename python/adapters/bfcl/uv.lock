@@ -821,7 +821,7 @@ name = "cuda-bindings"
 version = "13.4.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cuda-pathfinder", marker = "python_full_version < '3.15' or (python_full_version >= '4' and sys_platform != 'emscripten')" },
+    { name = "cuda-pathfinder", marker = "python_full_version < '3.15'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/3a/06569edfd5db020c1ff7c0361268a3eaa60ead0c0ccca460fef69d68022f/cuda_bindings-13.4.3-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:df8b3767facca8acde216460df684dfc3826d519096c13adfd3030a55870dc79", size = 6494098, upload-time = "2026-09-23T02:21:50.472Z" },
@@ -1013,14 +1013,16 @@ server = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=1.0" },
     { name = "datasets", marker = "extra == 'hf'", specifier = ">=2.18" },
+    { name = "duckdb", marker = "extra == 'analytics'", specifier = ">=1.1" },
     { name = "grpcio", marker = "extra == 'server'", specifier = ">=1.84" },
     { name = "grpcio-health-checking", marker = "extra == 'server'", specifier = ">=1.84" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jsonschema", marker = "extra == 'jsonschema'", specifier = ">=4.0" },
     { name = "protobuf", specifier = ">=7.35" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "sympy", marker = "extra == 'math'", specifier = ">=1.13" },
 ]
-provides-extras = ["anthropic", "hf", "jsonschema", "server"]
+provides-extras = ["analytics", "anthropic", "hf", "jsonschema", "math", "server"]
 
 [[package]]
 name = "evalsi-adapter-bfcl"

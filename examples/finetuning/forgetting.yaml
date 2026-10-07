@@ -1,0 +1,23 @@
+# Catastrophic forgetting: general capability against the base model.
+# Run it on every checkpoint; `evalsi checkpoints curve` compares each one
+# with the base model, record by record, and fails on a significant drop.
+#
+#   evalsi checkpoints eval Qwen/Qwen3-8B --step base -f forgetting.yaml --training-run my-run
+#   evalsi checkpoints watch out/ -f forgetting.yaml --training-run my-run \
+#       --serve lora --base-url http://localhost:8000/v1 --regression math-equiv:0.02
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: forgetting}
+spec:
+  target:
+    connector: openai-compatible      # replaced by the served checkpoint
+    model: base
+    base_url: http://localhost:8000/v1
+    max_tokens: 2048
+    temperature: 0
+  dataset:
+    uri: hf://openai/gsm8k?config=main&split=test
+    mapping: {input: question, reference: answer}
+    limit: 500
+  evaluators:
+    - ref: math-equiv

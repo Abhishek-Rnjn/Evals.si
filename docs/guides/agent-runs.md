@@ -140,7 +140,8 @@ The scoring code and the image are the same on every rung. That is how the Phase
 - **Tools and prompt:** the domain's tools run against a live tau2 environment, and the agent gets tau2's agent instruction and the domain policy.
 - **The user:** the Evals.si user simulator plays the task's persona and instructions, through the run's judge. tau2's own LiteLLM user simulator is not used, so provider keys stay with the judge config. Expect scores close to, but not identical with, tau2's leaderboard.
 - **Grading:** tau2's own evaluator on the conversation.
-- **Not supported:** domains where the user has tools (telecom), and tasks graded by natural-language assertions, which the importer skips.
+- **Dual control (telecom):** the user has tools of their own: their phone. The simulated user then follows tau2's user prompt and guidelines through the run's judge. Each turn they either message the agent or call one of their tools against the same tau2 environment. Their calls are part of the conversation tau2 grades, so assertions on the device's state hold.
+- **Not supported:** tasks graded by natural-language assertions, which the importer skips.
 
 The adapter needs tau2's `data/` directory (`TAU2_DATA_DIR` or `data_dir=`). Use `trials: k` for τ-bench's pass^k.
 
@@ -162,7 +163,17 @@ Both formats are read directly; no Docker daemon and no Harbor install are neede
 - takes one model turn and grades the calls with BFCL's AST checker;
 - treats the irrelevance categories as passed when the model calls nothing.
 
-Supported categories: `simple_python`, `simple_java`, `simple_javascript`, `multiple`, `parallel`, `parallel_multiple`, `irrelevance`, their `live_` counterparts, and `live_relevance`. Multi-turn, memory, web-search and format-sensitivity categories need BFCL's executable environments and are not supported.
+Supported categories: `simple_python`, `simple_java`, `simple_javascript`, `multiple`, `parallel`, `parallel_multiple`, `irrelevance`, their `live_` counterparts, and `live_relevance`.
+
+The multi-turn categories (`multi_turn_base`, `multi_turn_miss_func`, `multi_turn_miss_param`, `multi_turn_long_context`) also run, with BFCL's own loop:
+
+- In each user turn, the model calls tools until it answers without one, for at most 20 steps.
+- The calls run against BFCL's stateful API classes: file system, trading, travel and so on.
+- Functions that `miss_func` entries hold out are offered at their turn.
+- BFCL's multi-turn checker grades every turn's end state and results.
+- A call runs only when it names a function offered at that step, with its JSON arguments as Python literals, because BFCL executes calls as code.
+
+Memory, web-search and format-sensitivity categories are not supported.
 
 ## From production to regression tests
 
@@ -173,6 +184,27 @@ Supported categories: `simple_python`, `simple_java`, `simple_javascript`, `mult
 ## Sandbox rungs
 
 The ladder (`sandbox.ladder`) defaults to `firecracker`, `bwrap`, `landlock`. The strongest rung that works is used, and `evalsid sandbox probe` shows which rungs work on a host. A task that sets `min_isolation` is refused, never downgraded, when no rung meets it.
+
+**Resource limits.** On the bubblewrap and Landlock rungs, each command gets rlimits (memory, file size, and processes on bubblewrap). With a delegated cgroup v2 directory, it also gets its own cgroup with `memory.max`, `pids.max` and optionally `cpu.max`. These cover the whole process tree, which is the only process cap on Landlock. Anything the command leaves running is killed when it ends.
+
+```yaml
+sandbox:
+  cgroup: auto          # default: evalsid's own cgroup when delegated (systemd Delegate=yes); "off"; or a path
+  cgroup_cpus: 2        # cpu.max per command; default: no limit
+```
+
+The isolation report says which limits applied, and an out-of-memory kill appears in the result's denials.
+
+**Signed images.** To use only images signed with your cosign key:
+
+```yaml
+sandbox:
+  image_signatures:
+    keys: [/etc/evalsi/cosign.pub]   # files or PEM text; any one key suffices
+    # allow_local: true              # also allow oci-layout:, docker-archive: and dir: images
+```
+
+An image is used only when the registry holds a signature by one of the keys, on the image or on the index its tag points to (`cosign sign --key cosign.key <image>`). Signatures must be in cosign's `.sig` tag format, which is cosign 2's default. Verification is offline, with no transparency log. For an air-gapped registry, copy signatures with `cosign copy`. The pod rung's images are pulled by the kubelet, so enforce signatures there with your cluster's admission policy.
 
 To enable Firecracker:
 

@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "google/protobuf/struct.proto";
+
+// RewardService is the hot path for RL: a trainer sends a batch of rollouts
+// and gets one reward per rollout, with a per-component breakdown. Rewards
+// are weighted sums of evaluator scores with gates (see RewardSpec); the
+// rules match the Python library's evalsi.rewards.compose, checked by
+// testdata/reward_vectors.json.
+service RewardService {
+  rpc ScoreRewards(ScoreRewardsRequest) returns (ScoreRewardsResponse);
+}
+
+message RewardSpec {
+  // Shown in logs and metrics.
+  string name = 1;
+  repeated RewardComponent components = 2;
+  // The total when a gate fails.
+  double floor = 3;
+  RewardOnError on_error = 4;
+  // Bounds applied to the total last. Unset means unbounded.
+  RewardClip clip = 5;
+  // Content-hash caching of component scores; on unless disabled.
+  bool disable_cache = 6;
+  // Name of a judge configured on the server, for judge components.
+  string judge = 7;
+}
+
+message RewardComponent {
+  // Evaluator reference, as in EvaluatorRef.ref.
+  string ref = 1;
+  // Key in the breakdown; defaults to the evaluator's short name.
+  string name = 2;
+  double weight = 3;
+  // A gate must reach threshold, or the total is the spec's floor.
+  bool gate = 4;
+  // Defaults to 1.
+  optional double threshold = 5;
+  // The metric to read when the evaluator reports several; default: its first.
+  string metric = 6;
+  google.protobuf.Struct params = 7;
+  // Becomes the min_isolation param of evaluators that take one.
+  string min_isolation = 8;
+}
+
+enum RewardOnError {
+  REWARD_ON_ERROR_UNSPECIFIED = 0;
+  // The request fails (the default): an outage must not train as reward 0.
+  REWARD_ON_ERROR_RAISE = 1;
+  // An errored component counts as 0.
+  REWARD_ON_ERROR_ZERO = 2;
+  // The rollout's total is unset.
+  REWARD_ON_ERROR_NONE = 3;
+}
+
+message RewardClip {
+  double low = 1;
+  double high = 2;
+}
+
+message ScoreRewardsRequest {
+  string project = 1;
+  RewardSpec spec = 2;
+  // One record per rollout: input is the prompt, output the completion,
+  // reference the expected answer; metadata carries test cases and the like.
+  repeated Record rollouts = 3;
+}
+
+message ScoreRewardsResponse {
+  // In request order.
+  repeated Reward rewards = 1;
+}
+
+message Reward {
+  string rollout_id = 1;
+  // Unset when a component errored under REWARD_ON_ERROR_NONE.
+  optional double total = 2;
+  // A gate failed; total is the floor.
+  bool gated = 3;
+  map<string, RewardComponentResult> components = 4;
+}
+
+message RewardComponentResult {
+  RewardComponentStatus status = 1;
+  optional double value = 2;
+  string reason = 3;
+  // Served from the score cache.
+  bool cached = 4;
+}
+
+enum RewardComponentStatus {
+  REWARD_COMPONENT_STATUS_UNSPECIFIED = 0;
+  REWARD_COMPONENT_STATUS_SCORED = 1;
+  REWARD_COMPONENT_STATUS_SKIPPED = 2;
+  REWARD_COMPONENT_STATUS_ERROR = 3;
+}

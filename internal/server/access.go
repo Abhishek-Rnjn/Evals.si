@@ -18,6 +18,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
 )
@@ -89,6 +90,10 @@ func (g *gate) accessRules() map[string]accessRule {
 		evalsiv1alpha1connect.EvaluationServiceEvaluateStreamProcedure: {action: "evaluations.run", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			c := msg.(*evalsiv1alpha1.EvaluateStreamRequest).GetConfig()
 			return g.evaluateTarget(c.GetProject(), c.GetEvaluators(), c.GetJudge(), 0)
+		}},
+		evalsiv1alpha1connect.RewardServiceScoreRewardsProcedure: {action: "evaluations.run", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.ScoreRewardsRequest)
+			return g.evaluateTarget(m.GetProject(), rewards.Refs(m.GetSpec()), m.GetSpec().GetJudge(), len(m.GetRollouts()))
 		}},
 		evalsiv1alpha1connect.CatalogServiceListEvaluatorsProcedure: catalog,
 		reflectV1:      catalog,

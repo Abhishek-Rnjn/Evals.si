@@ -8,7 +8,7 @@ evalsi-harness = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "evalsi[anthropic,jsonschema,server]",
+    "evalsi[analytics,anthropic,jsonschema,math,server]",
     "evalsi-harness",
     "grpcio-tools==1.84.0",
     "mypy-protobuf==5.0.0",
@@ -50,7 +50,7 @@ python_version = "3.11"
 files = ["evalsi/src", "evalsi/tests", "evalsi-harness/src", "evalsi-harness/tests"]
 
 [[tool.mypy.overrides]]
-module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*"]
+module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*", "sympy", "sympy.*", "math_verify", "torch", "transformers", "transformers.*", "trl", "trl.*", "fsspec", "fsspec.*"]
 ignore_missing_imports = true
 
 # Generated code is typed through its .pyi stubs; do not check the .py bodies.

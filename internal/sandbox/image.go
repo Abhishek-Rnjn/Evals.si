@@ -53,6 +53,8 @@ type imageRoot struct {
 // under fakeroot. Device nodes are skipped (the sandbox gets its own /dev).
 type imageStore struct {
 	dir string
+	// With sandbox.image_signatures, images must be signed before use.
+	verifier *signatureVerifier
 
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
@@ -75,6 +77,11 @@ func (st *imageStore) lock(key string) func() {
 }
 
 func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
+	if st.verifier != nil && isLocalImage(ref) {
+		if err := st.verifier.verify(ctx, ref, ""); err != nil {
+			return nil, err
+		}
+	}
 	if p, ok := strings.CutPrefix(ref, "dir:"); ok {
 		abs, err := filepath.Abs(p)
 		if err != nil {
@@ -92,6 +99,11 @@ func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
 	digest, err := img.Digest()
 	if err != nil {
 		return nil, fmt.Errorf("image %s: %w", ref, err)
+	}
+	if st.verifier != nil && !isLocalImage(ref) {
+		if err := st.verifier.verify(ctx, ref, digest.String()); err != nil {
+			return nil, err
+		}
 	}
 	key := strings.ReplaceAll(digest.String(), ":", "-")
 	defer st.lock(key)()

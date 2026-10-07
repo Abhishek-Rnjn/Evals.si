@@ -133,7 +133,7 @@ func (t Traces) GetTrace(ctx context.Context, req *connect.Request[evalsiv1alpha
 }
 
 // MetricsHandler serves Prometheus text-format metrics for ingest and policies.
-func MetricsHandler(e *Engine, a *ingest.Assembler) http.Handler {
+func MetricsHandler(e *Engine, a *ingest.Assembler, extra ...func(io.Writer)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 		var b strings.Builder
@@ -185,6 +185,9 @@ func MetricsHandler(e *Engine, a *ingest.Assembler) http.Handler {
 		b.WriteString(windows.String())
 		metric("evalsi_policy_alert_firing", "1 while an alert fires.", "gauge")
 		b.WriteString(alerts.String())
+		for _, write := range extra {
+			write(&b)
+		}
 		_, _ = io.WriteString(w, b.String())
 	})
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -109,3 +110,36 @@ func (t *txn) PrepareContext(ctx context.Context, q string) (*sql.Stmt, error) {
 
 func (t *txn) Commit() error   { return t.tx.Commit() }
 func (t *txn) Rollback() error { return t.tx.Rollback() }
+
+// tenantTables are the project-scoped tables. Each carries a reserved
+// tenant_id column (empty in a single-tenant install), so a hosted
+// multi-tenant offering can put a tenant boundary above projects later
+// without rewriting stored rows (decision 0004).
+var tenantTables = []string{"projects", "api_keys", "roles", "bindings", "audit", "runs", "traces", "trace_results", "policies"}
+
+type querier interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// addTenantColumns adds tenant_id to every project-scoped table that lacks it.
+func addTenantColumns(ctx context.Context, q querier, d dialect) error {
+	for _, table := range tenantTables {
+		if d == postgresDialect {
+			if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT ''`); err != nil {
+				return fmt.Errorf("adding tenant_id to %s: %w", table, err)
+			}
+			continue
+		}
+		var n int
+		if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'tenant_id'`, table).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''`); err != nil {
+				return fmt.Errorf("adding tenant_id to %s: %w", table, err)
+			}
+		}
+	}
+	return nil
+}

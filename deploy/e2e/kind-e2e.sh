@@ -13,7 +13,10 @@
 #     namespace that enforces Pod Security "restricted": no CRDs, no
 #     cluster-scoped object, sandboxes from the chart's own pool. Code
 #     evaluation and an agent run go through the CLI, on the pod rung and
-#     then on Landlock.
+#     then on Landlock;
+#  5. removes the grant that lets service accounts read the cluster's
+#     issuer and keys, checks a restarted evalsid fails closed, then gives it a
+#     static issuer and key set (a ConfigMap) and checks they do again.
 #
 # Needs docker, kind, kubectl, helm, and uv (for the embedded CLI run).
 set -euo pipefail
@@ -259,6 +262,47 @@ kubectl rollout status deploy/evalsi-sandbox-pool -n "$ns2" --timeout 3m
 cli "$here/sandbox-run.yaml" "$work/ns2-landlock.json"
 want "$work/ns2-landlock.json" unit-tests 0.5
 kubectl logs -n "$ns2" deploy/evalsi-sandbox-pool --tail=20
+
+step "namespace-only: a static issuer and key set, on a cluster that hides its keys"
+# A hardened cluster removes the grant that lets every service account read
+# the issuer and its keys from the API server. A fresh evalsid then cannot
+# verify service-account tokens until it is given the issuer and a copy of
+# the public key set, which the platform team publishes (here, a ConfigMap).
+issuer="$(kubectl get --raw /.well-known/openid-configuration | python3 -c 'import json, sys; print(json.load(sys.stdin)["issuer"])')"
+kubectl get --raw /openid/v1/jwks > "$work/jwks.json"
+kubectl get clusterrolebinding system:service-account-issuer-discovery -o yaml > "$work/discovery-binding.yaml"
+kubectl delete clusterrolebinding system:service-account-issuer-discovery
+restore_discovery() { kubectl apply -f "$work/discovery-binding.yaml" >/dev/null 2>&1 || true; }
+trap 'status=$?; restore_discovery; [ $status -eq 0 ] || diagnose; exit $status' EXIT
+# reforward points the port-forward at the current server pods.
+reforward() {
+  kill "$forward" 2>/dev/null || true
+  kubectl port-forward -n "$ns2" svc/evalsi 18443:8080 >/dev/null 2>&1 &
+  forward=$!
+  sleep 3
+}
+# evalsid discovers the issuer at startup, so a restarted one fails closed:
+# it exits naming the refused discovery, and the rollout never completes.
+kubectl rollout restart deploy/evalsi -n "$ns2" --as alice
+if kubectl rollout status deploy/evalsi -n "$ns2" --timeout 90s; then
+  echo "evalsid started with no access to the cluster's issuer and keys" >&2; exit 1
+fi
+found=""
+for p in $(kubectl get pods -n "$ns2" -o name | grep -E '^pod/evalsi-[a-z0-9]+-[a-z0-9]+$'); do
+  # Captured first: under pipefail, grep -q exiting early fails the pipe.
+  logs="$(kubectl logs -n "$ns2" "$p" 2>/dev/null || true; kubectl logs -n "$ns2" "$p" --previous 2>/dev/null || true)"
+  if grep -q "issuer discovery.*403" <<<"$logs"; then found="$p"; fi
+done
+[ -n "$found" ] || { echo "no evalsid pod reported the refused issuer discovery" >&2; exit 1; }
+echo "$found failed closed"
+kubectl create configmap evalsi-jwks -n "$ns2" --as alice --from-file=keys.json="$work/jwks.json"
+helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns2" --kube-as-user alice --reuse-values \
+  --set auth.kubernetes.issuer="$issuer" --set auth.kubernetes.jwksConfigMap=evalsi-jwks --wait --timeout 5m
+kubectl rollout status deploy/evalsi -n "$ns2" --timeout 3m
+reforward
+cli "$here/sandbox-run.yaml" "$work/ns2-static.json"
+want "$work/ns2-static.json" unit-tests 0.5
+restore_discovery
 kill "$forward" 2>/dev/null || true
 
 step "passed"

@@ -1,6 +1,6 @@
 # Evals.si: Architecture & Implementation Plan
 
-> **Status:** Draft for discussion · v0.5 · 2026-10-06. D1–D3, D5, D6, D10 and D13–D15 are decided (§22, [decision records](decisions/README.md)). Phases 0 to 4 are implemented (§23); fine-tuning and RL (Phase 5) is next.
+> **Status:** Draft for discussion · v0.6 · 2026-10-06. D1–D3, D5, D6, D10 and D13–D15 are decided (§22, [decision records](decisions/README.md)). Phases 0 to 5 are implemented (§23); MCP, classic ML and the ecosystem (Phase 6) are next.
 >
 > **Scope:** System design for a pluggable, scalable, single-entrypoint evaluation platform for classic ML models, LLMs and agents. It runs standalone and on Kubernetes, speaks gRPC and HTTP, and can later be used as a local MCP server.
 >
@@ -85,7 +85,7 @@
 | **Agent builder** | Measure the task success and reliability (pass^k) of a tool-using agent across 500 tasks in sandboxes, then monitor production | Run, Watch | **Primary** |
 | **Agent platform builder** | Make evaluation a built-in capability of their agent platform: online policies at the gateway across many agents, a project per team, and eval results feeding rollout gates and routing | All, API-first | **Primary** |
 | **LLM app developer** | Gate a prompt change in CI on correctness, faithfulness and cost | Score, Run | **Primary** |
-| Research / RL engineer | Use sandboxed code-execution rewards in GRPO and track capability and regressions across checkpoints | Reward, Run | Later (Phase 5) |
+| Research / RL engineer | Use sandboxed code-execution rewards in GRPO and track capability and regressions across checkpoints | Reward, Run | Phase 5 |
 | ML engineer (classic ML) | Validate a churn model before promotion, then monitor drift and fairness | Run, Watch | Later |
 | Coding agent | Call `evaluate` through local MCP to check its own work | Score | Later (Phase 6) |
 
@@ -710,7 +710,8 @@ The deepseek-harness profile was built to confine a coding assistant on its user
 
 Implementation notes:
 
-- **Static bubblewrap.** We build bubblewrap statically against musl in our release pipeline, so the rung does not depend on a distro package. bubblewrap is LGPL-2.0-or-later, so it ships as a separate executable with its license and a source reference.
+- **Static bubblewrap.** The release builds bubblewrap statically (`scripts/build-static-bwrap.sh`) and ships it beside evalsid, which prefers it over the host's, so the rung does not depend on a distro package. bubblewrap is LGPL-2.0-or-later, so it ships as a separate executable with its license and a source reference.
+- **cgroup limits.** With a delegated cgroup v2 directory (`sandbox.cgroup`: by default evalsid's own cgroup, when it is writable and holds no other process, as under a systemd unit with `Delegate=yes`), each execution of the bubblewrap and Landlock rungs starts directly in its own child cgroup (`CLONE_INTO_CGROUP`). The child sets `memory.max` (no swap, the whole group killed on OOM), `pids.max` and, optionally, `cpu.max`. When the execution ends, `cgroup.kill` stops anything it left running, including processes that started a new session. memory.events reports an out-of-memory kill as a denial. rlimits stay as the per-process bound; without a cgroup they are the only one, and the isolation report says so.
 - **Landlock from Go.** The Landlock rung uses `go-landlock`. A Landlock ruleset applies to the calling process and is inherited across `execve`, so `evalsi` re-executes itself as a small launcher (`evalsi sandbox-exec`) that applies the ruleset and then executes the target command.
 - **User namespaces.** These can be disabled or restricted on some distributions (Ubuntu's AppArmor restriction, for example), and default container seccomp and AppArmor profiles usually block them inside pods. The functional probe detects this. On Kubernetes, sandbox-pool pods can use a `Localhost` seccomp profile that permits user-namespace creation. Otherwise the ladder falls through to the pod rung.
 
@@ -840,7 +841,7 @@ For now, every form factor is installed and operated by the client, inside their
   - observability (their OTel Collector, Prometheus, Grafana).
 - **Air-gapped installs.** An offline bundle (`deploy/airgap/bundle.sh`) contains every image the charts use, the charts, extra images such as the tasks' sandbox images, and optionally the CLI's Python wheels; `install.sh` loads it into the client's registry and installs. A mirror tool that copies benchmark datasets into the client's object store, respecting each dataset's license, is not built yet.
 - **Least-privilege install.** The main Helm install is namespace-scoped. Cluster-scoped pieces (CRDs, the optional `sandboxd` DaemonSet, its node labels) are separate charts, because on many clusters a platform team owns those. The operator's ClusterRoleBinding is opt-in. A namespace admin can install the main chart alone, under Pod Security `restricted`, with the chart's own sandbox pool and the API in place of the CRDs ([guide](guides/kubernetes.md#installing-without-cluster-admin)).
-- **Single tenant per install, with projects inside it.** Every stored key still carries `project_id` and a reserved `tenant_id`, so a hosted multi-tenant offering can be added later without a data migration.
+- **Single tenant per install, with projects inside it.** Every project-scoped row carries `project_id` and a reserved `tenant_id` column (empty in a single-tenant install; SQLite, PostgreSQL and ClickHouse), so a hosted multi-tenant offering can fill it in rather than reshape stored data.
 
 ### Tier 0: Embedded library (`pip install evalsi`)
 
@@ -1207,10 +1208,10 @@ audit: {retention: 2160h}
 ### Other security controls
 
 - **Secrets:** provider keys are referenced by name (Kubernetes Secret, Vault, environment variable) and never embedded in specs or stored in results. They are injected only into the workers that need them. Sandbox hosts (sandbox-pool pods, sandbox pods, `sandboxd` nodes) hold no provider keys at all, and a sandbox only sees a secret when its spec mounts one explicitly. Model calls can optionally route through an AI gateway for central key management.
-- **Untrusted plugins:** they run out-of-process at the plugin's declared or overridden isolation level. Images are pinned by digest, and signature verification (cosign) comes later.
+- **Untrusted plugins:** they run out-of-process at the plugin's declared or overridden isolation level. Images are pinned by digest. With `sandbox.image_signatures`, sandboxes use only images carrying a cosign signature by a configured key. Signatures are read from the registry and verified offline, with no transparency log, so verification works air-gapped. Keyless (Fulcio and Rekor) verification is not supported yet.
 - **Sandboxes:** the strongest available rung is used and the sandbox fails closed (§13). Egress is denied by default, resources and output sizes are capped, environments are ephemeral, and egress is logged.
 - **Data:** PII redaction at ingest, per-project retention TTLs, encryption at rest through the storage backends, and the audit log above.
-- **Tenancy:** one install per client, with projects inside it (D5). Per-project quotas cover concurrent tasks, sandbox minutes, judge tokens and storage. The reserved `tenant_id` lets a hosted multi-tenant offering add a tenant boundary above projects later.
+- **Tenancy:** one install per client, with projects inside it (D5). Per-project quotas (`quotas` in `evalsi.yaml`) bound concurrent runs (excess runs wait), stored runs, judge and target tokens per UTC day (a run stops when its project goes over), and Reward Service rollouts in flight. Sandbox time is not metered yet. The reserved `tenant_id` lets a hosted multi-tenant offering add a tenant boundary above projects later.
 
 ## 18. Reproducibility and versioning
 
@@ -1224,6 +1225,7 @@ evalsi run -f run.yaml [--server URL] [--dry-run]                 # Run, embedde
 evalsi watch -f policy.yaml                                        # apply an online policy
 evalsi compare <run-a> <run-b>                                     # paired stats, regressions
 evalsi report <run-id> --format html|md                            # shareable static report
+evalsi analyze slice <metric> --by <metadata>                      # cross-run analytics (DuckDB)
 evalsi catalog list [--pack rag]                                   # discover evaluators and suites
 evalsi plugin install ragas                                        # install an adapter (isolated venv)
 evalsi dataset promote --from-traces '<CEL>' --to support-regressions
@@ -1253,7 +1255,7 @@ evalsi serve | evalsi mcp                                          # server and 
 
 ## 21. Repository layout
 
-As of Phase 4:
+As of Phase 5:
 
 ```text
 Evals.si/
@@ -1269,6 +1271,7 @@ Evals.si/
 │   ├── config/                    # evalsi.yaml schema and validation
 │   ├── catalog/, pluginhost/      # evaluator registry; supervised Python workers
 │   ├── evaluation/, runs/         # Score and Run: run lifecycle, trials, gates, budgets, leases
+│   ├── rewards/                   # RewardService: reward composition, score cache, back-pressure
 │   ├── ingest/, watch/            # OTLP receiver, mappers, trace assembly; online policies
 │   ├── cluster/                   # NATS JetStream work queues and the worker role
 │   ├── store/, objstore/          # SQLite, PostgreSQL, ClickHouse; S3-compatible object storage
@@ -1278,7 +1281,8 @@ Evals.si/
 │   └── sinks/, stats/             # MLflow and OTel sinks; confidence intervals and paired tests
 ├── operator/                      # CRD types (api/), controllers, admission webhooks, spec validation, generated CRDs
 ├── python/                        # uv workspace
-│   ├── evalsi/                    # SDK, CLI, embedded runner, worker runtime, evaluator API, built-in packs
+│   ├── evalsi/                    # SDK, CLI, embedded runner, worker runtime, evaluator API, built-in packs,
+│   │                              #   rewards (TRL, verl, OpenRLHF) and the checkpoint loop (evalsi.training)
 │   ├── evalsi-harness/            # built-in agent harness, connectors, environments, Harbor and Terminal-Bench importers
 │   └── adapters/                  # deepeval, inspect, lm-eval, ragas, swebench, taubench, bfcl (each its own environment)
 ├── deploy/
@@ -1288,10 +1292,11 @@ Evals.si/
 ├── Dockerfile                     # the one image every chart uses
 ├── examples/                      # runnable examples
 ├── tests/e2e/, tests/helm/        # evalsid against a real Python worker, the load test; the charts rendered and validated
+├── tests/trainers/                # TRL GRPO with Evals.si rewards and checkpoint evaluation (CPU)
 └── docs/                          # this plan, the decision records (docs/decisions) and guides (docs/guides)
 ```
 
-Not built yet: the reward service (Phase 5), `evalsi mcp` (Phase 6) and an `evalsi-collector` distribution.
+Not built yet: `evalsi mcp` (Phase 6). The `evalsi-collector` distribution is in `deploy/collector`, and the release workflow in `.github/workflows/release.yml`.
 
 ## 22. Decisions
 
@@ -1337,7 +1342,7 @@ On 2026-10-05, identity and access was inserted as Phase 2 ([decision 0010](deci
 | **2. Identity and access** ✅ | OIDC/JWT authentication (multiple providers, JWKS from a URL, a file, inline JSON or discovery; `strict`, `optional` and `permissive` modes) and hashed API keys; TLS on the API listener; a refusal to start on a non-loopback address without auth; project-scoped RBAC with built-in roles (viewer, runner, editor, admin, ingest, owner), custom roles built from the permission list with optional CEL conditions, roles mapped from token claims, and labels on resources; agentgateway-style CEL rules (`allow`, `deny`, `require`); project scoping in every store query and in OTLP ingest; `created_by` on runs; an audit log and `evalsid auth check`; `AuthService` (who-am-i, API keys, bindings, audit); `evalsi login` (device code and PKCE), `whoami` and `auth keys`; GitHub Actions OIDC for CI; optional external authorization (AuthZEN, Envoy `ext_authz`) | With any OIDC issuer configured, every surface (gRPC, Connect, REST, OTLP, metrics) rejects unauthenticated calls; a viewer cannot start runs or read another project's traces; a custom role with a model condition can start runs only on its allowed models; a project admin cannot grant a permission it lacks; a GitHub Actions job runs a gated evaluation with its own OIDC token and no stored secret; every denied call appears in the audit log with the deciding rule; the action table covers every RPC, enforced by a test |
 | **3. Agent runs** ✅ | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **4. Kubernetes** ✅ | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; Kubernetes identity (service-account tokens as an OIDC provider, mTLS between components, an admission webhook that records who created each CR); HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
-| **5. Fine-tuning and RL** | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
+| **5. Fine-tuning and RL** ✅ | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
 | **6. MCP, classic ML and ecosystem** | `evalsi mcp` (stdio, and streamable HTTP with the MCP authorization specification); `ml-classic` and `ml-monitoring` packs (pulled earlier if a client needs them); plugin index; Wasm evaluators; human annotation queues; inline guardrail mode; a minimal web UI if one is still wanted | A coding agent evaluates its own changes locally over MCP |
 
 **Phase 0 status (2026-10-05):** implemented.
@@ -1393,8 +1398,8 @@ The exit criterion runs end to end, verified against a local OpenAI-compatible j
 
 - **Embedded NATS and DuckDB** (decision 0009).
 - **OCI image roots for the bubblewrap rung.** Phase 1 binds the host's system directories read-only, or a configured `rootfs`. Image unpacking arrives with the harness environments in Phase 3.
-- **cgroup limits.** Phase 1 uses rlimits. On the Landlock rung the process cap is not enforced, because the uid is shared; isolation reports note both.
-- **A statically built bubblewrap in the release.** It waits for the release pipeline; until then the rung uses `bwrap` from the host.
+- **cgroup limits.** Phase 1 uses rlimits. On the Landlock rung the process cap is not enforced, because the uid is shared; isolation reports note both. (Added after Phase 5: per-execution cgroup v2 limits where a cgroup is delegated, see §13.)
+- **A statically built bubblewrap in the release.** It waits for the release pipeline; until then the rung uses `bwrap` from the host. (Added after Phase 5 with the release pipeline.)
 
 The exit criteria hold:
 
@@ -1536,7 +1541,7 @@ Deviations from the plan:
 - Firecracker egress uses vsock and the host's egress proxy instead of a tap device with nftables.
 - The bubblewrap writable root is a copy of the image, not an overlay (bubblewrap 0.9 has no overlay support).
 - τ-bench's simulated user is Evals.si's (through the run's judge), not tau2's LiteLLM user.
-- Partial benchmark coverage: no BFCL multi-turn, memory or web-search categories; no tau2 telecom; no multi-service or multi-stage Terminal-Bench tasks.
+- Partial benchmark coverage: no BFCL multi-turn, memory or web-search categories; no tau2 telecom; no multi-service or multi-stage Terminal-Bench tasks. (BFCL multi-turn and tau2 telecom were added after Phase 5.)
 - FrontierCode is not imported yet: its task format is not public in a form we could verify. CursorBench's tasks are private. `harbor://` and `code-quality` cover the parts that are public: Harbor-format tasks and a maintainer-style review of the diff.
 
 The Phase 1 deferral of OCI image roots for the bubblewrap rung is resolved by slice 1.
@@ -1608,7 +1613,61 @@ Deviations from the plan:
 
 - Process roles are not separate binaries or flags: every `evalsid serve` replica serves the API and ingest, and leases decide which one schedules runs and runs the policy engine.
 - The pod rung cannot snapshot, so environment setup runs per trial on it.
-- `EvalRun` and `OnlineEvalPolicy` specs are preserved as is in the CRDs (not typed in OpenAPI); the webhook validates them.
+- `EvalRun` and `OnlineEvalPolicy` specs were first preserved as is in the CRDs; their schemas are now generated from the API's messages (`operator/cmd/crd-schema`), so `kubectl explain` documents them and the API server checks types. Unknown fields are kept for the webhook to name, and the webhook still checks oneofs and the CLI's rules.
+
+**Phase 5 plan: fine-tuning and RL.** Six slices:
+
+1. **Verifiers and reward specs.** The `rl` pack, and `RewardSpec` composition in `evalsi.rewards`: weights, gates, a floor, error handling, a content-hash cache, per-component breakdowns.
+2. **The Reward Service.** `RewardService.ScoreRewards` in evalsid, sharing the composition rules with the library through test vectors, with a cache and back-pressure.
+3. **Trainer integrations.** TRL, verl and OpenRLHF; agent tasks as `reset`/`step` environments.
+4. **The checkpoint loop.** Serving checkpoints, a watcher and a trainer callback, learning curves keyed by (training run, step), regression gates against the base model.
+5. **Fine-tuning suites.** Diversity, calibration, contamination and reward-hacking evaluators; forgetting, safety and sampling specs.
+6. **Validation and docs.** TRL GRPO in CI, reward throughput in the load test, the guide.
+
+**Phase 5 status (2026-10-06):** implemented, in the six planned slices. Guide: [fine-tuning and RL](guides/fine-tuning.md); the main choices are in [decision 0013](decisions/0013-rewards-and-checkpoint-evaluation.md).
+
+1. **Verifiers and reward specs** (`evalsi.packs.rl`, `evalsi.rewards`).
+   - The `rl` pack: `format-check`, `math-equiv` (answer extraction; numeric, tuple and symbolic equivalence with sympy or math-verify), `code-exec-tests` (per-case processes in the sandbox; a nonce-tagged result line the program cannot forge), `overlong-penalty` (DAPO) and `reward-model` (OpenRLHF's protocol or vLLM pooling).
+   - `RewardSpec`: weighted components with gates, a floor, `onError` (`raise` by default), `clip`, `sandbox.minIsolation`, and a content-hash cache. Every result carries a breakdown.
+2. **The Reward Service** (`internal/rewards`, `proto/evalsi/v1alpha1/reward_service.proto`).
+   - Components bind like `Evaluate`'s and run through the same worker path.
+   - An in-memory LRU cache of component scores, and back-pressure: calls past `rewards.max_inflight` rollouts wait for capacity.
+   - Authorized as `evaluations.run`, served at `POST /v1alpha1/rewards:score`, with `evalsi_reward_*` metrics.
+   - `testdata/reward_vectors.json` checks that Go and Python compose rewards identically; the e2e test scores code rollouts in the real sandbox both ways and compares.
+3. **Trainer integrations.**
+   - TRL: `reward_funcs` gives the total plus weight-0 functions per component, so TRL logs the breakdown.
+   - verl: `compute_score` and `compute_score_batch`. OpenRLHF: a `reward_func` file and `evalsi rewards serve` for its remote reward-model protocol.
+   - `evalsi_harness.gym.TaskEnv`: `reset`/`step` over agent task environments, the checker's score as the reward.
+4. **The checkpoint loop** (`evalsi.training`).
+   - Serving by `vllm serve` per checkpoint, LoRA hot-loading into a running vLLM, or an endpoint.
+   - Checkpoint discovery in local directories, or remote locations through fsspec, once a save has settled.
+   - Results per step embedded, or as server runs labelled `training-run` and `training-step`.
+   - Paired comparisons against the base model, regression gates (`metric[:max_drop]`), `evalsi checkpoints eval|watch|curve`, and a `TrainerCallback` that evaluates every save in order and can stop training on a regression.
+5. **Fine-tuning suites.** The `finetune` pack (`diversity`, `calibration`, `contamination` with Min-K% Prob, `reward-hacking`), and example specs in `examples/finetuning`.
+6. **Validation.**
+   - The CI `trainers` job runs TRL's `GRPOTrainer` (TRL 0.24, CPU) on a tiny model built in the test, with code rewards scored in the real sandbox and every checkpoint evaluated by the callback.
+   - The load test scores a batch of code rollouts through the Reward Service (`RewardThroughput`).
+
+The exit criterion, at the scale this host allows:
+
+- **A TRL GRPO run uses Evals.si sandboxed code-execution rewards:** the `trainers` job, on CPU with a randomly initialised model. It tests the wiring (batches, columns, logging, checkpoints), not learning.
+- **Throughput:** on one 4-vCPU host with bubblewrap, 1,024 code rollouts take 59 s, or 17 rollouts/s. Each rollout is its own sandbox, a test runner and two test processes. The throughput is CPU-bound at about 4 rollouts per core per second, so the §12 GRPO step (4,096 rollouts) takes about 4 minutes here, and reaching about 16 s at this rate needs about 64 cores of sandbox pool. Repeated rollouts come from the cache: 0.03 s for the same batch.
+- **Checkpoint learning curves with regression gates:** `tests/test_training.py` drives `evalsi checkpoints` against a stand-in model whose accuracy changes by step, and a regression fails the curve.
+
+Limits of that verification:
+
+- verl and OpenRLHF are tested through their entry points' signatures and protocol, not inside their trainers.
+- vLLM serving is tested with a stand-in `vllm` that speaks its API; LoRA loading with a stand-in for vLLM's adapter endpoints.
+- No GPU: no real model was trained to a better reward in CI.
+
+Deviations from the plan:
+
+- Checkpoints are served by the evaluating process (the watcher, the callback or `evalsi checkpoints`), not by the operator.
+- Early-stop signals reach the trainer only through the Hugging Face callback.
+- The reward specs' `sandbox` section takes `minIsolation` only; warm-pool sizes belong to the sandbox pools (§13), not to rewards.
+- Environment-spec compatibility (OpenEnv, verifiers) was not evaluated; `TaskEnv` has its own `reset`/`step`.
+
+During the load test, correct programs failed under overload: wall-clock timeouts expired while about 130 sandboxes shared 4 vCPUs. Local sandboxes are now capped at the CPU count (`EVALSI_SANDBOX_CONCURRENCY`).
 
 ## 24. Risks and mitigations
 
@@ -1700,11 +1759,12 @@ kind: RewardSpec
 metadata: {name: code-grpo}
 spec:
   components:
-    - {ref: rl/format-check, weight: 0.1, gate: true}      # must pass, or the total reward is 0
-    - ref: rl/code-exec-tests
+    - {ref: format-check, weight: 0.1, gate: true}         # must pass, or the total reward is the floor (0)
+    - ref: code-exec-tests
       weight: 0.9
-      params: {timeout: 10s}
-      sandbox: {class: default, minIsolation: namespaced, warmPool: 256, network: deny}
+      params: {timeout_s: 10}
+      sandbox: {minIsolation: namespaced}                 # code never runs below this rung
+  onError: raise                                          # an outage fails the batch, never trains as 0
   cache: {enabled: true}
   breakdown: true                                         # per-component rewards for logging
 ```
