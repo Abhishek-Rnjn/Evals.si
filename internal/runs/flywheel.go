@@ -7,6 +7,7 @@ package runs
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"time"
 
@@ -161,20 +162,29 @@ func scoreValue(s *evalsiv1alpha1.Score) (float64, bool) {
 	return 0, false
 }
 
-// PromoteResults appends the run's records that match a condition to a
-// project dataset, once per record (its first matching trial).
-func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evalsiv1alpha1.PromoteResultsRequest]) (*connect.Response[evalsiv1alpha1.PromoteResultsResponse], error) {
-	msg := req.Msg
-	if !datasets.ValidName(msg.GetDataset()) {
-		return nil, invalid("dataset %q must be lowercase letters, digits, '.', '_' or '-'", msg.GetDataset())
-	}
-	prog, err := compilePromote(msg.GetWhen())
-	if err != nil {
-		return nil, err
-	}
-	run, err := m.get(ctx, msg.GetRunId())
-	if err != nil {
-		return nil, err
+// Match is one of a run's records that matched a condition, for one trial.
+type Match struct {
+	// The record as the dataset had it, and as the run produced it (output,
+	// trajectory), when it produced one.
+	Record   *evalsiv1alpha1.Record
+	Produced *evalsiv1alpha1.Record
+	Trial    int
+	// The run's scores for it, by metric.
+	Scores  map[string]float64
+	Errored bool
+}
+
+// MatchRecords returns the run's records for which the CEL condition over
+// scores, errored, trial and record holds (every record when it is
+// empty), in run order: the first matching trial of each record, or every
+// matching trial with allTrials.
+func (m *Manager) MatchRecords(ctx context.Context, run *evalsiv1alpha1.Run, when string, allTrials bool) ([]Match, error) {
+	var prog cel.Program
+	if when != "" {
+		var err error
+		if prog, err = compilePromote(when); err != nil {
+			return nil, err
+		}
 	}
 	insts, err := m.engine.Bind(run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
 	if err != nil {
@@ -214,38 +224,93 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 			}
 		}
 	}
+	// Records without per-record results (a run whose evaluators are all
+	// dataset-scope, or a record every evaluator skipped) are still the
+	// run's records: list every record and trial, in run order.
+	trials := trialsOf(run.GetSpec())
+	for rec := range records {
+		for trial := range trials {
+			k := key{rec, trial}
+			if _, ok := scores[k]; !ok {
+				scores[k] = map[string]float64{}
+				order = append(order, k)
+			}
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		if order[i].rec != order[j].rec {
+			return order[i].rec < order[j].rec
+		}
+		return order[i].trial < order[j].trial
+	})
 	done := map[int]bool{}
-	var rows [][]byte
+	var out []Match
 	for _, k := range order {
-		if done[k.rec] || k.rec >= len(records) {
+		if (done[k.rec] && !allTrials) || k.rec >= len(records) {
 			continue
 		}
 		rec := records[k.rec]
-		meta := map[string]any{}
-		for name, v := range rec.GetMetadata() {
-			meta[name] = v.AsInterface()
-		}
-		vars := map[string]any{
-			"scores": scores[k], "errored": errored[k], "trial": int64(k.trial),
-			"record": map[string]any{"id": rec.GetId(), "metadata": meta},
-		}
-		out, _, err := prog.Eval(vars)
-		if b, ok := out.(types.Bool); err != nil || !ok || !bool(b) {
-			continue
+		if prog != nil {
+			meta := map[string]any{}
+			for name, v := range rec.GetMetadata() {
+				meta[name] = v.AsInterface()
+			}
+			vars := map[string]any{
+				"scores": scores[k], "errored": errored[k], "trial": int64(k.trial),
+				"record": map[string]any{"id": rec.GetId(), "metadata": meta},
+			}
+			res, _, err := prog.Eval(vars)
+			if b, ok := res.(types.Bool); err != nil || !ok || !bool(b) {
+				continue
+			}
 		}
 		done[k.rec] = true
-		row := proto.Clone(rec).(*evalsiv1alpha1.Record)
+		match := Match{Record: rec, Trial: k.trial, Scores: scores[k], Errored: errored[k]}
+		if o, ok := outputs[[2]int{k.rec, k.trial}]; ok && o.Record != nil {
+			match.Produced = o.Record
+		}
+		out = append(out, match)
+	}
+	return out, nil
+}
+
+// Run returns a stored run (for other services; authorization is theirs).
+func (m *Manager) Run(ctx context.Context, id string) (*evalsiv1alpha1.Run, error) {
+	return m.get(ctx, id)
+}
+
+// PromoteResults appends the run's records that match a condition to a
+// project dataset, once per record (its first matching trial).
+func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evalsiv1alpha1.PromoteResultsRequest]) (*connect.Response[evalsiv1alpha1.PromoteResultsResponse], error) {
+	msg := req.Msg
+	if !datasets.ValidName(msg.GetDataset()) {
+		return nil, invalid("dataset %q must be lowercase letters, digits, '.', '_' or '-'", msg.GetDataset())
+	}
+	if _, err := compilePromote(msg.GetWhen()); err != nil {
+		return nil, err
+	}
+	run, err := m.get(ctx, msg.GetRunId())
+	if err != nil {
+		return nil, err
+	}
+	matches, err := m.MatchRecords(ctx, run, msg.GetWhen(), false)
+	if err != nil {
+		return nil, err
+	}
+	var rows [][]byte
+	for _, match := range matches {
+		row := proto.Clone(match.Record).(*evalsiv1alpha1.Record)
 		if msg.GetIncludeOutputs() {
-			if o, ok := outputs[[2]int{k.rec, k.trial}]; ok && o.Record != nil {
-				row = proto.Clone(o.Record).(*evalsiv1alpha1.Record)
+			if match.Produced != nil {
+				row = proto.Clone(match.Produced).(*evalsiv1alpha1.Record)
 			}
 		} else if generates(run.GetSpec()) {
 			// The case to replay is the input; keep the reference, drop what this run produced.
 			row.Output, row.Trajectory, row.Check, row.Usage = nil, nil, nil, nil
 		}
 		line, err := datasets.Row(row, map[string]any{
-			"promoted_from": map[string]any{"run_id": run.GetId(), "trial": k.trial},
-			"run_scores":    scores[k],
+			"promoted_from": map[string]any{"run_id": run.GetId(), "trial": match.Trial},
+			"run_scores":    match.Scores,
 		})
 		if err != nil {
 			return nil, err

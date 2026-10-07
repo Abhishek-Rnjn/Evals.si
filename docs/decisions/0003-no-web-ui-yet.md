@@ -1,6 +1,6 @@
 # 0003. No web UI for now
 
-- **Status:** Accepted, 2026-10-05 (design plan D3)
+- **Status:** Accepted, 2026-10-05 (design plan D3). Revisited 2026-10-07: a minimal read-only UI ships with evalsid ([0014](0014-mcp-guardrails-plugins-ui.md)); the rest of this record stands.
 
 ## Decision
 

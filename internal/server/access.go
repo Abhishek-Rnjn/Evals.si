@@ -11,12 +11,16 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
+	extmcp "github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp"
+	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
+	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -24,8 +28,10 @@ import (
 )
 
 // The gate is the single enforcement point: every RPC passes its Connect
-// interceptor, and every plain HTTP route other than /healthz and the login
-// discovery document passes guardHTTP. Each RPC has an entry in the action
+// interceptor, and every plain HTTP route other than /healthz, the login
+// discovery document and the web UI's static files passes guardHTTP or a
+// check of its own (authorizeTool for /mcp, authorizeGuardrail for the
+// guardrail webhook). Each RPC has an entry in the action
 // table (accessRules); a test walks the service descriptors so that no RPC
 // can ship without one.
 
@@ -193,7 +199,177 @@ func (g *gate) accessRules() map[string]accessRule {
 			return g.bindingTarget(msg.(*evalsiv1alpha1.DeleteBindingRequest).GetBinding())
 		}},
 		evalsiv1alpha1connect.AuthServiceListAuditEventsProcedure: {action: "audit.read", filtered: true},
+
+		evalsiv1alpha1connect.AnnotationServiceCreateQueueProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			q := msg.(*evalsiv1alpha1.CreateQueueRequest).GetQueue()
+			return g.newQueueTarget(q.GetProject(), q.GetName(), q.GetLabels())
+		}},
+		evalsiv1alpha1connect.AnnotationServiceDeleteQueueProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.DeleteQueueRequest)
+			return g.queueTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		evalsiv1alpha1connect.AnnotationServiceAddItemsProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.AddItemsRequest)
+			ts, err := g.queueTarget(ctx, m.GetProject(), m.GetQueue())
+			if err != nil || m.GetRun() == nil {
+				return ts, err
+			}
+			// Copying a run's records into a queue reads the run.
+			runs, err := g.runTargets(ctx, m.GetRun().GetRunId())
+			if err != nil {
+				return nil, err
+			}
+			for _, t := range runs {
+				t.action = "runs.read"
+				ts = append(ts, t)
+			}
+			return ts, nil
+		}},
+		// The service checks each queue (its name and labels).
+		evalsiv1alpha1connect.AnnotationServiceListQueuesProcedure: {action: "annotations.read", filtered: true},
+		evalsiv1alpha1connect.AnnotationServiceGetQueueProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.GetQueueRequest)
+			return g.queueTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		evalsiv1alpha1connect.AnnotationServiceListAnnotationsProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.ListAnnotationsRequest)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
+		}},
+		evalsiv1alpha1connect.AnnotationServiceSummarizeQueueProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.SummarizeQueueRequest)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
+		}},
+		evalsiv1alpha1connect.AnnotationServiceNextItemProcedure: {action: "annotations.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.NextItemRequest)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
+		}},
+		evalsiv1alpha1connect.AnnotationServiceSubmitAnnotationProcedure: {action: "annotations.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.SubmitAnnotationRequest)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
+		}},
+
+		evalsiv1alpha1connect.GuardrailServiceApplyGuardrailProcedure: {action: "guardrails.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			gr := msg.(*evalsiv1alpha1.ApplyGuardrailRequest).GetGuardrail()
+			return g.applyGuardrailTargets(ctx, gr.GetProject(), gr.GetName(), gr.GetLabels())
+		}},
+		evalsiv1alpha1connect.GuardrailServiceDeleteGuardrailProcedure: {action: "guardrails.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.DeleteGuardrailRequest)
+			return g.guardrailTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		// The service checks each guardrail (its name and labels).
+		evalsiv1alpha1connect.GuardrailServiceListGuardrailsProcedure: {action: "guardrails.read", filtered: true},
+		evalsiv1alpha1connect.GuardrailServiceGetGuardrailProcedure: {action: "guardrails.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.GetGuardrailRequest)
+			return g.guardrailTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		evalsiv1alpha1connect.GuardrailServiceCheckProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.CheckRequest)
+			if m.GetInline() == nil {
+				return g.guardrailTarget(ctx, m.GetProject(), m.GetGuardrail())
+			}
+			// An inline guardrail is a dry run: it scores like Evaluate does.
+			ts, err := g.evaluateTarget(m.GetProject(), m.GetInline().GetEvaluators(), m.GetInline().GetJudge(), 1)
+			for i := range ts {
+				ts[i].action = "evaluations.run"
+			}
+			return ts, err
+		}},
+		ext_mcpconnect.ExtMcpCheckRequestProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.mcpGuardrailTarget(ctx, msg.(*extmcp.McpRequest).GetMetadataContext())
+		}},
+		ext_mcpconnect.ExtMcpCheckResponseProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.mcpGuardrailTarget(ctx, msg.(*extmcp.McpResponse).GetMetadataContext())
+		}},
 	}
+}
+
+// guardrailTarget is an existing guardrail: its project, with its name and
+// stored labels for rules (resource.guardrail, resource.labels). A missing
+// guardrail is checked by name only; the service then reports it missing.
+func (g *gate) guardrailTarget(ctx context.Context, project, name string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	var labels map[string]string
+	if gr, err := g.store.GetGuardrail(ctx, project, name); err == nil {
+		labels = gr.GetLabels()
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.GuardrailResource(name, labels), name: "guardrail/" + name}}, nil
+}
+
+// applyGuardrailTargets checks the guardrail as submitted and, when it
+// replaces one, as stored: a rule protecting a labelled guardrail cannot be
+// sidestepped by applying it without the label.
+func (g *gate) applyGuardrailTargets(ctx context.Context, project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	ts := []target{{project: project, resource: authz.GuardrailResource(name, labels), name: "guardrail/" + name}}
+	if gr, err := g.store.GetGuardrail(ctx, project, name); err == nil {
+		ts = append(ts, target{project: project, resource: authz.GuardrailResource(name, gr.GetLabels()), name: "guardrail/" + name})
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return ts, nil
+}
+
+func (g *gate) mcpGuardrailTarget(ctx context.Context, md *structpb.Struct) ([]target, error) {
+	project, name, err := guardrail.MCPTarget(md)
+	if err != nil {
+		return nil, err
+	}
+	return g.guardrailTarget(ctx, project, name)
+}
+
+// authorizeGuardrail decides whether a guardrail webhook call may check
+// content against the guardrail (guardrails.check; not audited: a gateway
+// calls it for every request).
+func (g *gate) authorizeGuardrail(r *http.Request, project, name string) error {
+	ctx, chk, err := g.authenticate(r.Context(), "POST /guardrails", "http", r.RemoteAddr, r.Header)
+	if err != nil {
+		return err
+	}
+	if !g.engine.Enabled() {
+		return nil
+	}
+	ts, err := g.guardrailTarget(ctx, project, name)
+	if err != nil {
+		return err
+	}
+	if d := g.decide(ctx, chk, "guardrails.check", ts[0], false); !d.Allowed {
+		return permissionDenied("guardrails.check", ts[0])
+	}
+	return nil
+}
+
+// queueTarget is an existing annotation queue: its project, with its name
+// and stored labels for rules (resource.queue, resource.labels). A missing
+// queue is checked by name only; the service then reports it missing.
+func (g *gate) queueTarget(ctx context.Context, project, name string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	var labels map[string]string
+	if q, err := g.store.GetQueue(ctx, project, name); err == nil {
+		labels = q.GetLabels()
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.QueueResource(name, labels), name: "queue/" + name}}, nil
+}
+
+// newQueueTarget is a queue being created, with the labels it will have.
+func (g *gate) newQueueTarget(project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.QueueResource(name, labels), name: "queue/" + name}}, nil
 }
 
 // project normalizes a request's project: empty means the default project,
@@ -538,6 +714,33 @@ func (c *gatedConn) Receive(msg any) error {
 // guardHTTP protects a plain HTTP route. With filtered, the handler checks
 // per item (OTLP assigns each resource's project); otherwise action must be
 // allowed install-wide.
+// authorizeTool decides whether the MCP caller may call a tool
+// (mcp.tools.call, with mcp.tool.name for CEL rules). Listing does not
+// audit: tools/list asks about every tool.
+func (g *gate) authorizeTool(r *http.Request, tool string, listing bool) error {
+	ctx, chk, err := g.authenticate(r.Context(), "MCP tools/call", "mcp", r.RemoteAddr, r.Header)
+	if err != nil {
+		return err
+	}
+	if !g.engine.Enabled() {
+		return nil
+	}
+	chk.Meta.MCP = map[string]any{"tool": map[string]any{"name": tool}}
+	t := target{name: "mcp/tool/" + tool}
+	if listing {
+		req := chk.Meta
+		req.Action = "mcp.tools.call"
+		if !g.engine.Allowed(ctx, chk.Principal, req) {
+			return permissionDenied("mcp.tools.call", t)
+		}
+		return nil
+	}
+	if d := g.decide(ctx, chk, "mcp.tools.call", t, false); !d.Allowed {
+		return permissionDenied("mcp.tools.call", t)
+	}
+	return nil
+}
+
 func (g *gate) guardHTTP(action string, filtered bool, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, chk, err := g.authenticate(r.Context(), r.Method+" "+r.URL.Path, "http", r.RemoteAddr, r.Header)

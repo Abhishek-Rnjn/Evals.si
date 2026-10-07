@@ -14,6 +14,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
+	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
@@ -220,6 +221,13 @@ type Config struct {
 	Authorization authz.AuthorizationConfig `json:"authorization"`
 	Audit         authz.AuditConfig         `json:"audit"`
 	Metrics       Metrics                   `json:"metrics"`
+	// The MCP endpoint (/mcp): on by default, behind the same authentication
+	// and authorization as every other route.
+	MCP mcp.Config `json:"mcp"`
+	// Wasm evaluator plugins, run sandboxed inside evalsid.
+	Wasm Wasm `json:"wasm"`
+	// The read-only web UI at /ui/.
+	UI UI `json:"ui"`
 }
 
 // Storage selects the databases. Without it, everything is in SQLite under
@@ -270,6 +278,22 @@ type Metrics struct {
 func (c Config) AuthEnabled() bool { return c.Auth.Enabled() }
 
 // Default returns the configuration used when no file is given.
+// UI configures the read-only web UI.
+type UI struct {
+	Disabled bool `json:"disabled"`
+}
+
+// Wasm configures WebAssembly evaluator plugins (internal/wasmeval).
+type Wasm struct {
+	// Directories searched for evalsi-plugin.yaml manifests; default
+	// <data_dir>/plugins, where `evalsi plugins install --dir` puts them.
+	PluginDirs []string `json:"plugin_dirs"`
+	// Compiled modules are kept here between restarts; default
+	// <data_dir>/wasm-cache. "off" compiles on every start.
+	CacheDir string `json:"cache_dir"`
+	Disabled bool   `json:"disabled"`
+}
+
 func Default() Config {
 	return Config{
 		Listen: "127.0.0.1:8080",
@@ -410,6 +434,9 @@ func (c Config) Validate() error {
 		if err := sc.Validate(); err != nil {
 			errs = append(errs, fmt.Errorf("sinks[%d]: %w", i, err))
 		}
+	}
+	if err := c.MCP.Validate(); err != nil {
+		errs = append(errs, err)
 	}
 	if err := c.Sandbox.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("sandbox: %w", err))

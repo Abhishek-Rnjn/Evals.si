@@ -1,0 +1,13 @@
+name: test/misbehave
+version: 0.1.0
+runtime:
+  wasm: {module: misbehave.wasm, sha256: "0000000000000000000000000000000000000000000000000000000000000000"}
+limits: {memory_mb: 32, timeout: 2s}
+evaluators:
+  - {name: test/spin, outputs: [{name: spin, type: passed}]}
+  - {name: test/hog, outputs: [{name: hog, type: passed}]}
+  - {name: test/crash, outputs: [{name: crash, type: passed}]}
+  - {name: test/panic, outputs: [{name: panic, type: passed}]}
+  - {name: test/escape, outputs: [{name: escape, type: label}]}
+  - {name: test/entropy, outputs: [{name: entropy, type: label}]}
+  - {name: test/shout, outputs: [{name: shout, type: passed}]}

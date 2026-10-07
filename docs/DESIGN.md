@@ -368,7 +368,7 @@ Because the API is generated from protobuf, `evalsi mcp` can expose MCP tools wi
 | **Subprocess** with its own `uv` virtualenv, speaking gRPC over a Unix socket | Plugins whose dependencies conflict (for example `torch` pins) | Process | Low |
 | **Remote service** (container or Kubernetes Deployment) speaking gRPC | Heavy or GPU plugins, other languages (Node, Rust, Go), vendor services | Container or VM | Network hop |
 | **HTTP webhook** | SaaS evaluators, quick integrations | External | Network hop |
-| *WebAssembly (later)* | Small untrusted deterministic evaluators | Wasm | Low |
+| **WebAssembly** (WASI modules run by evalsid on wazero) | Small untrusted deterministic evaluators, community plugins | Wasm: no filesystem, network or clock; memory and time caps | Low |
 
 All of them speak the same protocol, so the host does not care which runtime a plugin uses:
 
@@ -900,7 +900,8 @@ The plan's separate API, ingest, result-writer, scheduler and policy-engine Depl
   - Both use the same OIDC providers and the same tokens: agentgateway forwards a validated JWT with `preserveToken`, and `evalsid` validates it again against the same issuer.
   - Authorization rules use the same CEL vocabulary and the same `allow`, `deny` and `require` semantics in both (§17).
   - The `ingest` role and an API key bound to one project let the gateway's trace exporter write traces without broader access.
-- **Later:** feed scores back into the gateway (quality-aware routing, auto-disabling a misbehaving MCP tool) and an inline guardrail mode through the gateway's external-processing hooks. Both depend on which extension points agentgateway exposes, and that needs validating.
+- **Inline guardrails** (Phase 6): evalsid speaks agentgateway's prompt-guard webhook for LLM traffic and its ExtMcp processor protocol (`mcpGuardrails`, kind `remote`) for MCP traffic; see the [guardrails guide](guides/guardrails.md). ext_proc is not used: it sees raw HTTP bytes, below LLM messages and MCP calls.
+- **Later:** feed scores back into the gateway (quality-aware routing, auto-disabling a misbehaving MCP tool).
 
 ## 17. Security, identity and tenancy
 
@@ -1255,7 +1256,7 @@ evalsi serve | evalsi mcp                                          # server and 
 
 ## 21. Repository layout
 
-As of Phase 5:
+As of Phase 6:
 
 ```text
 Evals.si/
@@ -1271,6 +1272,9 @@ Evals.si/
 │   ├── config/                    # evalsi.yaml schema and validation
 │   ├── catalog/, pluginhost/      # evaluator registry; supervised Python workers
 │   ├── evaluation/, runs/         # Score and Run: run lifecycle, trials, gates, budgets, leases
+│   ├── mcp/                       # the /mcp endpoint (streamable HTTP, MCP authorization)
+│   ├── annotate/, guardrail/      # human annotation queues; inline guardrails and agentgateway's protocols
+│   ├── wasmeval/, webui/          # Wasm evaluator plugins (wazero); the read-only web UI
 │   ├── rewards/                   # RewardService: reward composition, score cache, back-pressure
 │   ├── ingest/, watch/            # OTLP receiver, mappers, trace assembly; online policies
 │   ├── cluster/                   # NATS JetStream work queues and the worker role
@@ -1279,6 +1283,8 @@ Evals.si/
 │   ├── sandbox/                   # ladder and probes; drivers: firecracker, bwrap, landlock, pod; the sandbox service
 │   ├── guest/                     # evalsi-guest's agent (microVMs and sandbox pods)
 │   └── sinks/, stats/             # MLflow and OTel sinks; confidence intervals and paired tests
+├── pkg/wasmplugin/                # Go SDK for Wasm evaluator plugins
+├── plugins/index.yaml             # the plugin index
 ├── operator/                      # CRD types (api/), controllers, admission webhooks, spec validation, generated CRDs
 ├── python/                        # uv workspace
 │   ├── evalsi/                    # SDK, CLI, embedded runner, worker runtime, evaluator API, built-in packs,
@@ -1296,7 +1302,7 @@ Evals.si/
 └── docs/                          # this plan, the decision records (docs/decisions) and guides (docs/guides)
 ```
 
-Not built yet: `evalsi mcp` (Phase 6). The `evalsi-collector` distribution is in `deploy/collector`, and the release workflow in `.github/workflows/release.yml`.
+The `evalsi-collector` distribution is in `deploy/collector`, and the release workflow in `.github/workflows/release.yml`.
 
 ## 22. Decisions
 
@@ -1306,7 +1312,7 @@ Not built yet: `evalsi mcp` (Phase 6). The `evalsi-collector` distribution is in
 |---|----------|--------------------------------|
 | D1 | The first users are **agent builders, agent platform builders and LLM app developers** | Agent evaluation leads the roadmap: online over traces first, then offline runs, with agentgateway integration early. Classic ML packs and RL move later (§3, §23). For platform builders, the API and policy-as-code are first-class: everything the CLI does is an API call. |
 | D2 | **Go core, Python runtime** | §6, §20 |
-| D3 | **No web UI for now** | Reports, Grafana dashboards, the CLI, and write-back to MLflow, Langfuse or Phoenix (§19). A minimal UI is reconsidered in Phase 6. |
+| D3 | **No web UI for now** | Reports, Grafana dashboards, the CLI, and write-back to MLflow, Langfuse or Phoenix (§19). Revisited in Phase 6: a minimal read-only UI is embedded in evalsid ([decision 0014](decisions/0014-mcp-guardrails-plugins-ui.md)). |
 | D5 | **Self-hosted in the client's environment now**; a hosted multi-tenant service later, when there is compute for it | §16 "Runs in the client's environment"; `project_id` and a reserved `tenant_id` on every stored key from day one |
 | D6 | Sandbox ladder: **Firecracker when available, otherwise static bubblewrap or Landlock (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod**, always failing closed | §13 |
 | D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
@@ -1323,7 +1329,7 @@ These defaults go ahead unless you say otherwise.
 | # | Question | Default | Why it matters |
 |---|----------|---------|----------------|
 | D4 | **Own trace store, or bring-your-own only?** | Our own lightweight store plus write-back to the client's backend. Under D5 the store runs on the client's own Postgres, ClickHouse and S3 (built in Phase 4). | Online policies and offline runs need fast local access to traces |
-| D7 | **Inline (blocking) guardrail evals** | Out of scope for v1; design the policy engine so a synchronous path can be added | Different latency SLOs and failure semantics |
+| D7 | **Inline (blocking) guardrail evals** | Out of scope for v1; design the policy engine so a synchronous path can be added. Built in Phase 6 as a separate service (guardrails), fail-closed by default | Different latency SLOs and failure semantics |
 | D8 | **Workflow engine** | Our own idempotent task model; revisit Temporal if runs need complex branching | Operational weight |
 | D9 | **Human evaluation and annotation queues** | Phase 6. The data model supports human scores from day one. | Scope |
 | D11 | **Default judge and CI cost policy** | No default paid judge; the client configures one. CI uses recorded cassettes. | Surprise bills, flaky tests |
@@ -1343,7 +1349,7 @@ On 2026-10-05, identity and access was inserted as Phase 2 ([decision 0010](deci
 | **3. Agent runs** ✅ | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **4. Kubernetes** ✅ | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; Kubernetes identity (service-account tokens as an OIDC provider, mTLS between components, an admission webhook that records who created each CR); HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
 | **5. Fine-tuning and RL** ✅ | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
-| **6. MCP, classic ML and ecosystem** | `evalsi mcp` (stdio, and streamable HTTP with the MCP authorization specification); `ml-classic` and `ml-monitoring` packs (pulled earlier if a client needs them); plugin index; Wasm evaluators; human annotation queues; inline guardrail mode; a minimal web UI if one is still wanted | A coding agent evaluates its own changes locally over MCP |
+| **6. MCP, classic ML and ecosystem** ✅ | `evalsi mcp` (stdio, and streamable HTTP with the MCP authorization specification); `ml-classic` and `ml-monitoring` packs (pulled earlier if a client needs them); plugin index; Wasm evaluators; human annotation queues; inline guardrail mode; a minimal web UI if one is still wanted | A coding agent evaluates its own changes locally over MCP |
 
 **Phase 0 status (2026-10-05):** implemented.
 
@@ -1668,6 +1674,45 @@ Deviations from the plan:
 - Environment-spec compatibility (OpenEnv, verifiers) was not evaluated; `TaskEnv` has its own `reset`/`step`.
 
 During the load test, correct programs failed under overload: wall-clock timeouts expired while about 130 sandboxes shared 4 vCPUs. Local sandboxes are now capped at the CPU count (`EVALSI_SANDBOX_CONCURRENCY`).
+
+**Phase 6 plan: MCP, classic ML and ecosystem.** Seven slices: `evalsi mcp` over stdio; `/mcp` on evalsid with the MCP authorization specification; the `ml-classic` and `ml-monitoring` packs; human annotation queues; inline guardrails; Wasm evaluators and the plugin index; and docs, CI and, decided at the end, a minimal web UI.
+
+**Phase 6 status (2026-10-07):** implemented, in the seven planned slices. The main choices are in [decision 0014](decisions/0014-mcp-guardrails-plugins-ui.md).
+
+1. **`evalsi mcp`** (stdio; [MCP guide](guides/mcp.md)).
+   - Tools: `list_evaluators`, `evaluate` (inline records), `run` (a run spec, saved under `.evalsi/results`, compared with the previous run of the same name, or a baseline file or server run) and `compare`.
+   - Progress notifications and cancellation; paths confined to the project root.
+2. **`/mcp` on evalsid.**
+   - Streamable HTTP with the MCP authorization specification: protected-resource metadata (RFC 9728), `WWW-Authenticate` challenges, audience-bound tokens (RFC 8707), and an Origin check.
+   - The tools (`list_evaluators`, `evaluate`, `run`, `get_run`, `compare_runs`) call the API in process with the caller's credential, so the gate decides as for any client. `mcp.tools.call` with `mcp.tool.name` lets CEL rules restrict tools, as agentgateway's MCP authorization does.
+3. **Classic ML.** `ml-classic` (classification, ROC-AUC and average precision, calibration, regression, ranking) and `ml-monitoring` (drift with PSI, KS and JS divergence; data quality; fairness gaps), pure Python, with expected values from scikit-learn and SciPy.
+4. **Human annotation** ([guide](guides/annotation.md)). `AnnotationService`:
+   - Queues of a run's records (filtered with CEL) or inline records, and a rubric of pass/fail, score, label and text questions.
+   - Leased claims, so several annotators work at once and each item gets its `annotations_per_item` answers.
+   - Statistics: summaries with intervals, Krippendorff's alpha between annotators, and agreement with the run's metric (accuracy and Cohen's kappa, or Pearson and MAE).
+   - The `annotator` role, and `evalsi annotate`.
+5. **Inline guardrails** ([guide](guides/guardrails.md)). `GuardrailService`:
+   - Redaction rules, record-scope evaluators and a CEL `block_when` decide pass, mask or block; errors follow `failure_mode` (closed by default), and audit mode reports without changing traffic.
+   - evalsid speaks agentgateway's prompt-guard webhook (LLM traffic) and the ExtMcp processor protocol (MCP traffic). Both were taken from agentgateway's source and tested against their wire formats, not against a running gateway.
+   - The `guard` role for gateway credentials, and per-guardrail metrics.
+6. **Wasm evaluators and the plugin index** ([guide](guides/plugins.md)).
+   - WASI command modules pinned by sha256, run in evalsid on wazero: no filesystem, network or environment, a fixed clock, seeded randomness, and per-plugin memory and time caps. The ABI is JSON over stdio; `pkg/wasmplugin` is a Go SDK.
+   - Wasm evaluators work wherever evaluators do, on a server and in Python (through `evalsid wasm serve`), with the same scores.
+   - The index (`plugins/index.yaml`) and `evalsi plugins`; tiers (native, wrapped, community) in the catalog.
+7. **The web UI** ([guide](guides/web-ui.md)). A read-only UI at `/ui/`: runs, comparisons, policies, annotation queues, guardrails and the catalog, read through the REST API with the viewer's credential.
+
+The exit criterion: **a coding agent evaluates its own changes locally over MCP.** `tests/test_mcp.py` drives `evalsi mcp` as a subprocess through `evalsi_harness`'s MCP client, the way a coding agent's MCP client does: it runs a spec, changes the target, runs it again, and gets the regression comparison back. The same tools are served by evalsid at `/mcp`.
+
+Limits of that verification:
+
+- The guardrail protocols were not run against a live agentgateway; the config examples come from its source and schema.
+- No coding agent product was driven over MCP in CI; the client is ours.
+- The web UI is tested by Go tests (serving, headers, no HTML built from strings) and was checked in Chromium by hand, not in CI.
+
+Deviations from the plan:
+
+- Annotation is answered with the CLI or the API; the web UI is read-only.
+- Wasm evaluators cannot use a judge or the sandbox.
 
 ## 24. Risks and mitigations
 

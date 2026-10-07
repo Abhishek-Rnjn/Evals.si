@@ -101,7 +101,7 @@ def test_eval_errors_exit_1(
 def test_catalog(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["catalog"]) == 0
     out = capsys.readouterr().out
-    assert "core (on by default)" in out
+    assert "core (native, on by default)" in out
     assert "builtin/llm-judge@1.0.0" in out
     assert main(["catalog", "--pack", "judge", "--format", "json"]) == 0
     (pack,) = json.loads(capsys.readouterr().out)

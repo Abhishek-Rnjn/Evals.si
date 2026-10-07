@@ -169,6 +169,115 @@ class Client:
         body = {"name": name, "project": project, "candidate": spec, "labels": labels or {}}
         return self.call("RunService", "CreateShadowReplay", body)
 
+    # --- human annotation ---
+
+    def annotation_call(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self.call("AnnotationService", method, body)
+
+    def create_queue(self, queue: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = self.annotation_call("CreateQueue", {"queue": queue})["queue"]
+        return out
+
+    def list_queues(self, project: str = "") -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = self.annotation_call("ListQueues", {"project": project}).get(
+            "queues", []
+        )
+        return out
+
+    def add_items(
+        self,
+        project: str,
+        queue: str,
+        *,
+        run_id: str = "",
+        when: str = "",
+        all_trials: bool = False,
+        records: list[dict[str, Any]] | None = None,
+        limit: int = 0,
+    ) -> int:
+        """Add a run's records (those matching ``when``) or inline records; returns the count."""
+        body: dict[str, Any] = {"project": project, "queue": queue, "limit": limit}
+        if run_id:
+            body["run"] = {"runId": run_id, "when": when, "allTrials": all_trials}
+        else:
+            body["records"] = {"records": records or []}
+        return int(self.annotation_call("AddItems", body).get("added", 0))
+
+    def next_item(self, project: str, queue: str, *, lease_seconds: int = 0) -> dict[str, Any]:
+        """``{"item": ..., "remaining": ...}``; no item when nothing is left for the caller."""
+        body = {"project": project, "queue": queue, "leaseSeconds": lease_seconds}
+        return self.annotation_call("NextItem", body)
+
+    def submit_annotation(
+        self,
+        project: str,
+        queue: str,
+        item_id: str,
+        answers: list[dict[str, Any]],
+        *,
+        comment: str = "",
+        skip: bool = False,
+    ) -> dict[str, Any]:
+        body = {
+            "project": project,
+            "queue": queue,
+            "itemId": item_id,
+            "answers": answers,
+            "comment": comment,
+            "skip": skip,
+        }
+        out: dict[str, Any] = self.annotation_call("SubmitAnnotation", body)["annotation"]
+        return out
+
+    def summarize_queue(self, project: str, queue: str) -> dict[str, Any]:
+        return self.annotation_call("SummarizeQueue", {"project": project, "queue": queue})
+
+    def list_annotations(
+        self, project: str, queue: str, *, page_size: int = 500, page_token: str = ""
+    ) -> dict[str, Any]:
+        body = {"project": project, "queue": queue, "pageSize": page_size, "pageToken": page_token}
+        return self.annotation_call("ListAnnotations", body)
+
+    # --- guardrails ---
+
+    def apply_guardrail(self, guardrail: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = self.call(
+            "GuardrailService", "ApplyGuardrail", {"guardrail": guardrail}
+        )["guardrail"]
+        return out
+
+    def list_guardrails(self, project: str = "") -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = self.call(
+            "GuardrailService", "ListGuardrails", {"project": project}
+        ).get("guardrails", [])
+        return out
+
+    def delete_guardrail(self, project: str, name: str) -> None:
+        self.call("GuardrailService", "DeleteGuardrail", {"project": project, "name": name})
+
+    def check_guardrail(
+        self,
+        content: str,
+        *,
+        project: str = "",
+        guardrail: str = "",
+        inline: dict[str, Any] | None = None,
+        phase: str = "request",
+        labels: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Check content against a stored guardrail, or an inline one (a dry run)."""
+        body: dict[str, Any] = {
+            "project": project,
+            "content": content,
+            "phase": "GUARDRAIL_PHASE_" + phase.upper(),
+            "labels": labels or {},
+        }
+        if inline is not None:
+            body["inline"] = inline
+        else:
+            body["guardrail"] = guardrail
+        return self.call("GuardrailService", "Check", body)
+
     # --- identity and access ---
 
     def auth_call(self, method: str, body: dict[str, Any] | None = None) -> dict[str, Any]:

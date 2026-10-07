@@ -1,0 +1,24 @@
+# evalsi annotate create -f examples/annotation/helpfulness.yaml --server ...
+name: helpfulness
+project: support
+description: Calibrate the helpfulness judge against support leads.
+instructions: |
+  Read the customer's question and the agent's answer. Judge the answer as
+  the customer would; ignore style unless it gets in the way.
+annotations_per_item: 2
+questions:
+  - name: correct
+    prompt: Does the answer resolve the question?
+    kind: pass_fail
+    compare_metric: llm-judge.helpfulness   # agreement with the judge, per item
+  - name: quality
+    prompt: Overall quality
+    kind: score
+    min: 1
+    max: 5
+  - name: tone
+    kind: label
+    options: [polite, neutral, rude]
+  - name: notes
+    kind: text
+    optional: true

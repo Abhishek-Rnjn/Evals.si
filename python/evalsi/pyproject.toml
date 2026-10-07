@@ -43,6 +43,8 @@ agent = "evalsi.packs.agent:PACK"
 code = "evalsi.packs.code:PACK"
 rl = "evalsi.packs.rl:PACK"
 finetune = "evalsi.packs.finetune:PACK"
+ml-classic = "evalsi.packs.ml_classic:PACK"
+ml-monitoring = "evalsi.packs.ml_monitoring:PACK"
 
 [project.urls]
 Repository = "https://github.com/abhishek-rnjn/evals.si"

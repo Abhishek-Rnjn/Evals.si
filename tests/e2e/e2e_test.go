@@ -38,10 +38,11 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxcli"
 	"github.com/abhishek-rnjn/evals.si/internal/server"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
+	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 )
 
 // The server runs in this test binary, so the worker's EVALSID points here:
-// answer `sandbox run|serve`, `sandbox-exec` and `sandbox-forward` the way evalsid does.
+// answer `sandbox run|serve`, `sandbox-exec`, `sandbox-forward` and `wasm` the way evalsid does.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -51,6 +52,8 @@ func TestMain(m *testing.M) {
 			os.Exit(sandbox.Forward(os.Args[2:], os.Stderr))
 		case "sandbox":
 			os.Exit(sandboxcli.Main(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+		case "wasm":
+			os.Exit(wasmeval.Main(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 		}
 	}
 	os.Exit(m.Run())

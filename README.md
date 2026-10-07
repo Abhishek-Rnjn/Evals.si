@@ -5,11 +5,11 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 
 - **Score / Run / Watch**: grade outputs you already have, execute a target on a dataset, or continuously evaluate live OpenTelemetry traces.
 - **Pluggable**: existing frameworks (lm-evaluation-harness, Inspect AI, RAGAS, DeepEval, SWE-bench, τ-bench, …) plug in as isolated adapters.
-- **Standalone or Kubernetes**: a single binary, or Helm charts and an operator with CRDs; gRPC and HTTP APIs, with MCP planned (Phase 6).
+- **Standalone or Kubernetes**: a single binary, or Helm charts and an operator with CRDs; gRPC, HTTP and MCP APIs, and a read-only web UI.
 - **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
 - **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
 
-> **Status:** Phases 0 to 5 are done; MCP, classic ML and the ecosystem (Phase 6) are next. The server runs standalone or on Kubernetes and covers three doors, plus rewards for RL:
+> **Status:** Phases 0 to 6 of the roadmap are done. The server runs standalone or on Kubernetes and covers three doors, plus rewards for RL:
 >
 > - **Score:** grade outputs you already have.
 > - **Run:** durable, resumable runs with trials, gates and budgets. That includes agent runs, which put the built-in agent or your own agent to work on sandboxed tasks.
@@ -23,6 +23,7 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 > - a fail-closed sandbox ladder (Firecracker, bubblewrap, Landlock);
 > - MLflow and OTel sinks;
 > - identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log;
+> - MCP for coding agents (`evalsi mcp` locally, `/mcp` on the server), classic ML and monitoring packs, human annotation queues, inline guardrails through agentgateway, Wasm evaluator plugins with a plugin index, and a read-only web UI;
 > - Kubernetes: an operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator` and `SandboxClass`, Helm charts, PostgreSQL/ClickHouse/S3 storage, NATS work queues with KEDA scaling, HA replicas, sandbox pools (bubblewrap, Firecracker, hardened pods), service-account identity and an air-gapped bundle.
 >
 > The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)).
@@ -198,6 +199,10 @@ A policy has these parts:
 | `safety` | PII, secret and canary leaks; refusal; harmlessness |
 | `agent` | tool-call accuracy, trajectory match, tool errors, loop detection, step budget, goal completion; for agent runs, task success (pass@k, pass^k), code quality, policy violations, efficiency |
 | `code` | unit tests run in the sandbox, Python syntax |
+| `rl` | verifiers for RL rewards: format, math answers, sandboxed code tests, overlong penalty, reward models |
+| `finetune` | diversity, calibration, contamination, reward hacking |
+| `ml-classic` | classification (accuracy, macro and micro F1, ROC-AUC, PR-AUC, log-loss, calibration), regression (MAE, MSE, RMSE, R², MAPE), ranking (NDCG, MRR, MAP, recall@k) |
+| `ml-monitoring` | drift (PSI, KS, Jensen-Shannon), data quality against a schema, group fairness (demographic parity, equal opportunity, equalized odds) |
 
 **Framework adapters.** DeepEval, RAGAS, Inspect AI and lm-evaluation-harness live in [`python/adapters`](python/adapters/README.md), as do the SWE-bench, τ-bench and BFCL benchmark adapters. Each has its own pinned environment, and judge calls go through your configured judge.
 
@@ -323,7 +328,60 @@ To analyze results across runs, `evalsi analyze` loads runs into DuckDB (`pip in
 uv run evalsi analyze slice exact-match --by category --results 'nightly-*.json'
 uv run evalsi analyze query "select model, avg(value) from scores join runs using (run_id) group by 1" \
   --server https://evalsi.example.com --project support --label suite=nightly --db nightly.duckdb
-``` Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
+```
+
+Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
+
+### MCP: coding agents check their own changes
+
+`evalsi mcp` serves your evaluation suites to a coding agent over MCP (stdio). The agent runs a suite, makes its change, runs it again, and gets back whether any metric regressed significantly and whether the gates still pass. evalsid serves the same tools at `/mcp`, behind the MCP authorization specification.
+
+```json
+{"mcpServers": {"evalsi": {"command": "evalsi", "args": ["mcp"]}}}
+```
+
+See the [MCP guide](docs/guides/mcp.md).
+
+### Plugins and Wasm evaluators
+
+`evalsi plugins search|show|install` reads a plugin index (the default lists the native packs and the framework adapters). A plugin's tier (native, wrapped or community) shows in the catalog. Community evaluators can be WebAssembly modules that evalsid runs with no filesystem, network or clock, under memory and time caps, pinned by sha256. Untrusted evaluators therefore need no sandbox, and they score identically in Python and on a server.
+
+```bash
+GOOS=wasip1 GOARCH=wasm go build -o text-checks.wasm ./examples/wasm/text-checks
+evalsid wasm pin examples/wasm/text-checks/evalsi-plugin.yaml
+evalsi plugins install examples/wasm/text-checks/evalsi-plugin.yaml
+evalsi eval --data answers.jsonl --evaluators example/json-valid,example/word-limit
+```
+
+See the [plugins guide](docs/guides/plugins.md).
+
+### Web UI
+
+evalsid serves a read-only UI at `/ui/`. It shows runs (with intervals, gates and the lowest-scoring records), paired comparisons, online policies, annotation queues, guardrails and the evaluator catalog. It reads everything through the API with your credential. See the [web UI guide](docs/guides/web-ui.md).
+
+### Inline guardrails
+
+A guardrail checks content while a request is in flight, either between a client and a model or between an agent and its tools. It redacts what its rules match (e-mail addresses, card numbers, keys, your own patterns), then runs evaluators from any installed pack, then passes, masks or blocks. agentgateway calls it without plugins: LLM traffic through the prompt-guard webhook, MCP traffic through the `mcpGuardrails` remote processor (ExtMcp). Audit mode reports what a guardrail would block before you enforce it.
+
+```bash
+evalsi guardrails apply -f examples/guardrails/support.yaml --server $EVALSID
+evalsi guardrails check support-chat --project support --text "key AKIAIOSFODNN7EXAMPLE" --server $EVALSID   # exit 3: blocked
+```
+
+See the [guardrails guide](docs/guides/guardrails.md).
+
+### Human annotation
+
+Annotation queues put records in front of people, with a rubric of pass/fail, score, label and text questions. The records can be a run's results (filtered with CEL) or a dataset. evalsid summarizes the answers with intervals, measures agreement between annotators (Krippendorff's alpha), and compares the answers with the run's own metric (accuracy, Cohen's kappa, Pearson), which is how a judge gets calibrated. The `annotator` role can answer but cannot run anything.
+
+```bash
+evalsi annotate create -f examples/annotation/helpfulness.yaml --server $EVALSID
+evalsi annotate add helpfulness --project support --run $RUN_ID --when 'scores["llm-judge"] < 0.5' --server $EVALSID
+evalsi annotate start helpfulness --project support --server $EVALSID    # each annotator
+evalsi annotate stats helpfulness --project support --server $EVALSID
+```
+
+See the [annotation guide](docs/guides/annotation.md).
 
 ### Fine-tuning and RL
 

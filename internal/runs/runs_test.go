@@ -809,3 +809,32 @@ func TestTraceDatasets(t *testing.T) {
 		t.Errorf("trace provenance %v %v", records, err)
 	}
 }
+
+// TestMatchRecordsWithoutRecordScores: a run whose evaluators are all
+// dataset-scope still has records to match (to promote or to annotate).
+func TestMatchRecordsWithoutRecordScores(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	run := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{
+		Target: target(), Dataset: inline("easy", "flaky", "broken"), Evaluators: refs("test/count"), Trials: 2,
+	}).GetId())
+	all, err := h.m.MatchRecords(ctx, run, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 || all[0].Record.GetId() == "" || all[0].Trial != 0 {
+		t.Fatalf("one per record: %v", all)
+	}
+	trials, err := h.m.MatchRecords(ctx, run, "", true)
+	if err != nil || len(trials) != 6 || trials[1].Trial != 1 || trials[1].Record.GetId() != trials[0].Record.GetId() {
+		t.Fatalf("every trial: %d %v", len(trials), err)
+	}
+	if trials[0].Produced == nil {
+		t.Error("the run's outputs are kept")
+	}
+	// A condition on a score the record does not have matches nothing.
+	none, err := h.m.MatchRecords(ctx, run, `scores["count"] > 0.0`, false)
+	if err != nil || len(none) != 0 {
+		t.Errorf("condition: %d %v", len(none), err)
+	}
+}

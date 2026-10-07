@@ -38,6 +38,9 @@ type Request struct {
 	Headers  http.Header
 	// The peer address.
 	Source string
+	// MCP context for CEL ({"tool": {"name": ...}} on tools/call), as in
+	// agentgateway's mcpAuthorization.
+	MCP map[string]any
 }
 
 // Decision is an authorization outcome and what decided it.

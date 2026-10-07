@@ -180,11 +180,13 @@ rbac:
 
 | Role | Permissions |
 |---|---|
-| `viewer` | catalog, runs, policies and traces: read |
-| `runner` | viewer, plus evaluations and runs (create, cancel, resume) |
-| `editor` | runner, plus writing policies and promoting run results into datasets (`datasets.write`) |
+| `viewer` | catalog, runs, policies, traces, annotation queues and guardrails: read |
+| `runner` | viewer, plus evaluations, guardrail checks, and runs (create, cancel, resume) |
+| `editor` | runner, plus writing policies and guardrails, promoting run results into datasets (`datasets.write`), and setting up and answering annotation queues |
+| `annotator` | annotation queues: read and answer (`annotations.read`, `annotations.write`) |
 | `admin` | editor, plus the project's keys, roles, bindings and audit log |
 | `ingest` | `traces.write` only |
+| `guard` | `guardrails.check` only: a gateway's credential for [inline guardrails](guardrails.md) |
 | `owner` | everything, everywhere |
 
 `evalsi auth roles permissions` lists every permission. Custom roles can also be managed through the API (`evalsi auth roles create|update|delete`) and bound with `evalsi auth bindings create`.
@@ -230,6 +232,15 @@ authorization:
 5. Otherwise the request is denied.
 
 A rule that fails to evaluate (for example, a missing attribute) counts as not matched. So restrictions belong in `require` rules, which then deny.
+
+**MCP tools.** Calling a tool of the `/mcp` endpoint is the action `mcp.tools.call`, which any authenticated principal holds; rules restrict it per tool with `mcp.tool.name`, as agentgateway's `mcpAuthorization` does. Tools a principal may not call are left out of `tools/list`. Each tool still needs the permission of what it does (`evaluate` needs `evaluations.run`, `run` needs `runs.create`, and so on). Guard `require` rules on the action, since `mcp` is empty for other requests:
+
+```yaml
+authorization:
+  rules:
+    - deny: 'request.action == "mcp.tools.call" && mcp.tool.name == "run" && !("ci" in principal.groups)'
+    - require: 'request.action != "mcp.tools.call" || mcp.tool.name in ["list_evaluators", "evaluate", "get_run", "compare_runs"]'
+```
 
 Explain any decision offline:
 

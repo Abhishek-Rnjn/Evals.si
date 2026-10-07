@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -24,22 +25,27 @@ import (
 	"connectrpc.com/grpcreflect"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evals.si/internal/annotate"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
+	"github.com/abhishek-rnjn/evals.si/internal/webui"
 )
 
 // Run serves until ctx is cancelled, then shuts down gracefully.
@@ -90,12 +96,20 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 
 // serve runs everything above the worker; tests call it with a fake worker.
 func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl *cluster.Cluster, log *slog.Logger, ready chan<- string) error {
+	wasm, err := loadWasm(ctx, cfg, log)
+	if err != nil {
+		return err
+	}
+	if wasm != nil {
+		defer wasm.Close(context.Background())
+		worker = wasmeval.Wrap(worker, wasm)
+	}
 	if cl != nil {
 		log.Info("waiting for a cpu worker to describe the evaluators")
 	}
 	manifests, err := worker.Describe(ctx)
 	if err != nil {
-		return fmt.Errorf("describing worker evaluators: %w", err)
+		return fmt.Errorf("describing evaluators: %w", err)
 	}
 	judges := make([]string, 0, len(cfg.Judges))
 	for name := range cfg.Judges {
@@ -228,7 +242,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		rewardSvc.UseSharedCache(st, log)
 		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
 	}
-	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
+	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, mcp: cfg.MCP, ui: cfg.UI, log: log}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -383,6 +397,9 @@ type deps struct {
 	authSvc   *authz.Service
 	// In a cluster, received spans go to the span stream.
 	forward ingest.Forward
+	mcp     mcp.Config
+	ui      config.UI
+	log     *slog.Logger
 }
 
 // registerOTLP mounts OTLP/gRPC (through the gate's interceptor) and
@@ -409,6 +426,11 @@ func otlpHandler(d deps) http.Handler {
 func Handler(d deps) http.Handler {
 	gated := connect.WithInterceptors(d.gate.interceptor())
 	mux := http.NewServeMux()
+	log := d.log
+	if log == nil {
+		log = slog.Default()
+	}
+	guard := guardrail.New(d.store, d.svc, log)
 	handlers := map[string]http.Handler{}
 	for _, h := range []func() (string, http.Handler){
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewEvaluationServiceHandler(d.svc, gated) },
@@ -420,6 +442,10 @@ func Handler(d deps) http.Handler {
 			return evalsiv1alpha1connect.NewTraceServiceHandler(watch.Traces{Store: d.store}, gated)
 		},
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewAuthServiceHandler(d.authSvc, gated) },
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewAnnotationServiceHandler(annotate.New(d.store, d.runs), gated)
+		},
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewGuardrailServiceHandler(guard, gated) },
 	} {
 		path, handler := h()
 		mux.Handle(path, handler)
@@ -433,7 +459,11 @@ func Handler(d deps) http.Handler {
 	}
 	mux.Handle("/v1alpha1/", rest)
 	registerOTLP(mux, d)
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics)))
+	// agentgateway's inline guardrail protocols: the prompt-guard webhook
+	// (LLM traffic) and the ExtMcp processor service (MCP traffic, gRPC).
+	mux.Handle("POST /guardrails/{project}/{guardrail}/{phase}", guard.Webhook(d.gate.authorizeGuardrail))
+	mux.Handle(ext_mcpconnect.NewExtMcpHandler(guard.ExtMcp(), gated))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
@@ -442,6 +472,8 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
+		evalsiv1alpha1connect.AnnotationServiceName,
+		evalsiv1alpha1connect.GuardrailServiceName,
 	}
 	// Health reports liveness only and stays open, like /healthz.
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))
@@ -457,6 +489,11 @@ func Handler(d deps) http.Handler {
 		}
 		_, _ = io.WriteString(w, "ok\n")
 	})
+	// The read-only web UI: static files, public; the data they show comes
+	// from the API with the viewer's credential.
+	if !d.ui.Disabled {
+		webui.Register(mux)
+	}
 	// What `evalsi login` needs; public by design.
 	mux.HandleFunc("GET /.well-known/evalsi-auth", func(w http.ResponseWriter, _ *http.Request) {
 		doc := map[string]any{"auth_enabled": d.authn.Enabled()}
@@ -466,7 +503,11 @@ func Handler(d deps) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(doc)
 	})
-	return d.authn.Middleware(mux)
+	root := d.authn.Middleware(mux)
+	if !d.mcp.Disabled {
+		mcp.New(d.mcp, root, d.gate.authorizeTool, d.authn.Issuers, log).Register(mux)
+	}
+	return root
 }
 
 // sandboxEnv tells the worker how to reach the sandbox: code evaluators run
@@ -533,4 +574,37 @@ func pruneRewardCache(ctx context.Context, st *store.Store, ttl string, log *slo
 		case <-tick.C:
 		}
 	}
+}
+
+// loadWasm loads the Wasm evaluator plugins (nil when there are none).
+func loadWasm(ctx context.Context, cfg config.Config, log *slog.Logger) (*wasmeval.Host, error) {
+	if cfg.Wasm.Disabled {
+		return nil, nil
+	}
+	dirs := cfg.Wasm.PluginDirs
+	if len(dirs) == 0 {
+		dirs = []string{filepath.Join(cfg.DataDir, "plugins")}
+	}
+	cache := cfg.Wasm.CacheDir
+	switch cache {
+	case "":
+		cache = filepath.Join(cfg.DataDir, "wasm-cache")
+	case "off":
+		cache = ""
+	}
+	h, err := wasmeval.NewHost(cache)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.LoadDirs(ctx, dirs); err != nil {
+		_ = h.Close(ctx)
+		return nil, fmt.Errorf("loading Wasm plugins: %w", err)
+	}
+	n := len(h.Manifests())
+	if n == 0 {
+		_ = h.Close(ctx)
+		return nil, nil
+	}
+	log.Info("loaded Wasm evaluators", "count", n, "dirs", dirs)
+	return h, nil
 }

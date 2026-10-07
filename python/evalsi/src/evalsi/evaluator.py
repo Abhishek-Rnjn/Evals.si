@@ -85,6 +85,10 @@ class EvaluatorSpec:
     outputs: tuple[MetricSpec, ...]
     params: Mapping[str, Any]
     pack: str = ""
+    # "native", "wrapped" or "community"; see EvaluatorManifest.tier.
+    tier: str = ""
+    # "python", or "wasm" for plugins run by evalsid.
+    runtime: str = "python"
 
     @property
     def short_name(self) -> str:
