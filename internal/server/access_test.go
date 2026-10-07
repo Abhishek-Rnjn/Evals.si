@@ -37,6 +37,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 )
 
@@ -87,6 +88,9 @@ type fakeWorker struct{}
 
 func (fakeWorker) Describe(context.Context) ([]*evalsiv1alpha1.EvaluatorManifest, error) {
 	schema, _ := structpb.NewStruct(map[string]any{"type": "object", "properties": map[string]any{}})
+	rewardSchema, _ := structpb.NewStruct(map[string]any{"type": "object", "properties": map[string]any{
+		"url": map[string]any{"type": "string"}, "api_key_env": map[string]any{"type": "string"},
+	}})
 	return []*evalsiv1alpha1.EvaluatorManifest{
 		{Name: "builtin/exact-match", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD, ParamsSchema: schema,
 			Outputs: []*evalsiv1alpha1.MetricSpec{{Name: "exact-match", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}}},
@@ -94,6 +98,13 @@ func (fakeWorker) Describe(context.Context) ([]*evalsiv1alpha1.EvaluatorManifest
 			Requires:   &evalsiv1alpha1.Requirements{Isolation: evalsiv1alpha1.IsolationLevel_ISOLATION_LEVEL_CONFINED},
 			Scheduling: &evalsiv1alpha1.Scheduling{Pool: "sandbox"},
 			Outputs:    []*evalsiv1alpha1.MetricSpec{{Name: "unit-tests", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}}},
+		// Needs a judge, for judge scoping.
+		{Name: "builtin/judge-score", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD, ParamsSchema: schema,
+			Requires: &evalsiv1alpha1.Requirements{Judge: true},
+			Outputs:  []*evalsiv1alpha1.MetricSpec{{Name: "judge-score", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}}},
+		// Params naming a worker variable and where its value goes.
+		{Name: "builtin/reward-model", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD, ParamsSchema: rewardSchema,
+			Outputs: []*evalsiv1alpha1.MetricSpec{{Name: "reward-model", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}}},
 	}, nil
 }
 
@@ -207,6 +218,9 @@ func startAuthServer(t *testing.T, mutate func(*config.Config)) *testServer {
 			"checkout": {},
 		},
 	}
+	// The test targets are model servers on loopback; support and default
+	// runs may send the worker's key there.
+	cfg.Credentials.Grants = []credentials.Grant{{Env: "OPENAI_API_KEY", Projects: []string{"support", "default"}, Hosts: []string{"127.0.0.1"}}}
 	if mutate != nil {
 		mutate(&cfg)
 	}

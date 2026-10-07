@@ -361,7 +361,31 @@
     };
     filter.addEventListener("input", render);
     render();
-    show(el("h1", {}, "Evaluator catalog"), el("p", {}, filter, " ", el("span", { class: "sub" }, `${all.length} evaluators`)), holder);
+    show(el("h1", {}, "Evaluator catalog"), el("p", {}, filter, " ", el("span", { class: "sub" }, `${all.length} evaluators`)), holder,
+      await credentialsSection());
+  }
+
+  // The worker variables (names and hosts, never values) and judges the
+  // selected project's requests may use.
+  async function credentialsSection() {
+    const head = el("h2", {}, "Credentials in " + (project || "default"));
+    let resp;
+    try {
+      resp = await api("/v1alpha1/credentials", { project });
+    } catch (err) {
+      return el("section", {}, head, el("p", { class: "sub" }, "Not shown: " + (err.message || String(err))));
+    }
+    const grants = resp.grants || [];
+    return el("section", {}, head,
+      resp.enforced ? null : el("p", { class: "sub" }, "Grants are not enforced on this server: requests may name any worker variable."),
+      grants.length
+        ? table(["Variable", "May be sent to", "Notes"], grants.map((g) => [
+          el("code", {}, g.env),
+          (g.hosts || []).length ? (g.hosts || []).map((h) => el("span", { class: "chip" }, h)) : "any host",
+          [g.allowHttp ? "plain HTTP allowed" : "", g.allProjects ? "every project" : ""].filter(Boolean).join(", "),
+        ]))
+        : el("p", { class: "empty" }, "No worker variables granted to this project."),
+      el("p", {}, "Judges: ", ...((resp.judges || []).length ? resp.judges.map((j) => el("span", { class: "chip" }, j)) : ["none"])));
   }
 
   // ---- routing ----

@@ -78,6 +78,8 @@ message Promotion {
 
 message ApplyPolicyRequest {
   OnlineEvalPolicy policy = 1;
+  // Check the policy as applying it would, without storing it.
+  bool validate_only = 2;
 }
 
 message ApplyPolicyResponse {

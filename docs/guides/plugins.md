@@ -148,6 +148,16 @@ implement the ABI (`evalsi wasm ABI 1`) directly:
 Rust, for example, builds with `cargo build --target wasm32-wasip1` and
 `serde_json` over stdin and stdout.
 
+## Secrets in evaluators
+
+A Wasm evaluator sees no environment, so it cannot read a secret. A Python
+evaluator can: if it reads a worker variable named by one of its params,
+declare that param with `@evaluator(secrets={"token_var": "endpoint"})`
+(params ending in `_env` are declared for you). Servers check declared params
+against each project's [credential grants](identity.md#evaluators-that-read-secrets),
+and a worker refuses a call in which an undeclared param names one of its
+variables.
+
 ## Publish to the index
 
 1. **Host the files.** Publish the manifest and the module side by side

@@ -248,4 +248,4 @@ agents:
   trusted_python: ["my_company.harness:Harness"]
 ```
 
-References in the `evalsi_*` packages, which include every benchmark harness and parser above, are always allowed. Authorization rules see agent runs as `resource.agent` (`kind`, `harness`, `image`, `network`, `min_isolation`), and `resource.runs_code` is true for them. See the [identity guide](identity.md#4-global-rules).
+References in the `evalsi_*` packages, which include every benchmark harness and parser above, are always allowed. The secrets an agent run names (`headers_env`, `api_key_env`, `env_from`) must be granted to its project under `credentials.grants`; see the [identity guide](identity.md#8-credentials-which-worker-secrets-a-project-may-use). Authorization rules see agent runs as `resource.agent` (`kind`, `harness`, `image`, `network`, `min_isolation`), and `resource.runs_code` is true for them. See the [identity guide](identity.md#4-global-rules).

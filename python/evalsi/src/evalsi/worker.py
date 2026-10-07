@@ -34,6 +34,7 @@ from evalsi.convert import (
     record_to_proto,
     result_to_proto,
     score_to_proto,
+    undeclared_secret,
     usage_to_proto,
 )
 from evalsi.datasets import DatasetError, split_uri
@@ -246,7 +247,10 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
     async def _bind(self, name: str, params: Any, context: Context) -> BoundEvaluator:
         try:
             definition = self.registry.resolve(name)
-            return definition.bind(coerce_params(definition.spec, from_struct(params)))
+            values = coerce_params(definition.spec, from_struct(params))
+            if problem := undeclared_secret(definition.spec, values):
+                raise EvaluatorConfigError(problem)
+            return definition.bind(values)
         except EvaluatorConfigError as exc:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
             raise  # unreachable: abort raises

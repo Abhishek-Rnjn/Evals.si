@@ -14,14 +14,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 import httpx
 
-from evalsi.targets import RETRY_STATUS, TargetConfig
+from evalsi.targets import RETRY_STATUS, TargetConfig, api_key
 from evalsi.types import Usage
 
 Message = dict[str, Any]
@@ -107,7 +106,7 @@ class OpenAIChat:
         self._client = client or httpx.AsyncClient(timeout=config.timeout_s)
         self._url = config.base_url.rstrip("/") + "/chat/completions"
         self._headers = {"Content-Type": "application/json"}
-        key = os.environ.get(config.api_key_env or "OPENAI_API_KEY")
+        key = api_key(config.api_key_env, "OPENAI_API_KEY")
         if key:
             self._headers["Authorization"] = f"Bearer {key}"
 
@@ -224,7 +223,7 @@ class AnthropicChat:
         base = (config.base_url or "https://api.anthropic.com").rstrip("/")
         self._url = base + "/v1/messages"
         self._headers = {"content-type": "application/json", "anthropic-version": "2023-06-01"}
-        key = os.environ.get(config.api_key_env or "ANTHROPIC_API_KEY")
+        key = api_key(config.api_key_env, "ANTHROPIC_API_KEY")
         if key:
             self._headers["x-api-key"] = key
 

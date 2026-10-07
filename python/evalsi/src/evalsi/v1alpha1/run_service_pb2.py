@@ -27,7 +27,7 @@ from evalsi.v1alpha1 import run_pb2 as evalsi_dot_v1alpha1_dot_run__pb2
 from evalsi.v1alpha1 import score_pb2 as evalsi_dot_v1alpha1_dot_score__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!evalsi/v1alpha1/run_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x19\x65valsi/v1alpha1/run.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\"\xc7\x01\n\x10\x43reateRunRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12&\n\x04spec\x18\x03 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12=\n\x06labels\x18\x04 \x03(\x0b\x32-.evalsi.v1alpha1.CreateRunRequest.LabelsEntry\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"6\n\x11\x43reateRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1b\n\rGetRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"3\n\x0eGetRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"I\n\x0fListRunsRequest\x12\x0f\n\x07project\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"O\n\x10ListRunsResponse\x12\"\n\x04runs\x18\x01 \x03(\x0b\x32\x14.evalsi.v1alpha1.Run\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"6\n\x0fWatchRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x17\n\x0finclude_results\x18\x02 \x01(\x08\"\xa4\x01\n\x10WatchRunResponse\x12#\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.RunH\x00\x12-\n\x08progress\x18\x02 \x01(\x0b\x32\x19.evalsi.v1alpha1.ProgressH\x00\x12\x33\n\x06result\x18\x03 \x01(\x0b\x32!.evalsi.v1alpha1.EvaluationResultH\x00\x42\x07\n\x05\x65vent\"\x1e\n\x10\x43\x61ncelRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11\x43\x61ncelRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1e\n\x10ResumeRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11ResumeRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"a\n\x15ListRunResultsRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\x12\x11\n\tevaluator\x18\x04 \x01(\t\"\x8f\x01\n\x16ListRunResultsResponse\x12\x32\n\x07results\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\x12(\n\x07records\x18\x02 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x17\n\x0fnext_page_token\x18\x03 \x01(\t\"a\n\x12\x43ompareRunsRequest\x12\x17\n\x0f\x62\x61seline_run_id\x18\x01 \x01(\t\x12\x18\n\x10\x63\x61ndidate_run_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfidence_level\x18\x03 \x01(\x01\"\xf9\x01\n\x10MetricComparison\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\x1a\n\rbaseline_mean\x18\x02 \x01(\x01H\x00\x88\x01\x01\x12\x1b\n\x0e\x63\x61ndidate_mean\x18\x03 \x01(\x01H\x01\x88\x01\x01\x12\x11\n\x04\x64iff\x18\x04 \x01(\x01H\x02\x88\x01\x01\x12\x34\n\x07\x64iff_ci\x18\x05 \x01(\x0b\x32#.evalsi.v1alpha1.ConfidenceInterval\x12\x10\n\x08paired_n\x18\x06 \x01(\x03\x12\x13\n\x0bsignificant\x18\x07 \x01(\x08\x42\x10\n\x0e_baseline_meanB\x11\n\x0f_candidate_meanB\x07\n\x05_diff\"M\n\x13\x43ompareRunsResponse\x12\x36\n\x0b\x63omparisons\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.MetricComparison\"_\n\x15PromoteResultsRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\x0c\n\x04when\x18\x03 \x01(\t\x12\x17\n\x0finclude_outputs\x18\x04 \x01(\x08\"8\n\x16PromoteResultsResponse\x12\x10\n\x08promoted\x18\x01 \x01(\x03\x12\x0c\n\x04path\x18\x02 \x01(\t\"\xde\x01\n\x19\x43reateShadowReplayRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12+\n\tcandidate\x18\x03 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12\x46\n\x06labels\x18\x04 \x03(\x0b\x32\x36.evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"m\n\x1a\x43reateShadowReplayResponse\x12&\n\x08\x62\x61seline\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\x12\'\n\tcandidate\x18\x02 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run2\x86\x07\n\nRunService\x12R\n\tCreateRun\x12!.evalsi.v1alpha1.CreateRunRequest\x1a\".evalsi.v1alpha1.CreateRunResponse\x12I\n\x06GetRun\x12\x1e.evalsi.v1alpha1.GetRunRequest\x1a\x1f.evalsi.v1alpha1.GetRunResponse\x12O\n\x08ListRuns\x12 .evalsi.v1alpha1.ListRunsRequest\x1a!.evalsi.v1alpha1.ListRunsResponse\x12Q\n\x08WatchRun\x12 .evalsi.v1alpha1.WatchRunRequest\x1a!.evalsi.v1alpha1.WatchRunResponse0\x01\x12R\n\tCancelRun\x12!.evalsi.v1alpha1.CancelRunRequest\x1a\".evalsi.v1alpha1.CancelRunResponse\x12R\n\tResumeRun\x12!.evalsi.v1alpha1.ResumeRunRequest\x1a\".evalsi.v1alpha1.ResumeRunResponse\x12\x61\n\x0eListRunResults\x12&.evalsi.v1alpha1.ListRunResultsRequest\x1a\'.evalsi.v1alpha1.ListRunResultsResponse\x12X\n\x0b\x43ompareRuns\x12#.evalsi.v1alpha1.CompareRunsRequest\x1a$.evalsi.v1alpha1.CompareRunsResponse\x12\x61\n\x0ePromoteResults\x12&.evalsi.v1alpha1.PromoteResultsRequest\x1a\'.evalsi.v1alpha1.PromoteResultsResponse\x12m\n\x12\x43reateShadowReplay\x12*.evalsi.v1alpha1.CreateShadowReplayRequest\x1a+.evalsi.v1alpha1.CreateShadowReplayResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n!evalsi/v1alpha1/run_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1c\x65valsi/v1alpha1/record.proto\x1a\x19\x65valsi/v1alpha1/run.proto\x1a\x1b\x65valsi/v1alpha1/score.proto\"\xde\x01\n\x10\x43reateRunRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12&\n\x04spec\x18\x03 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12=\n\x06labels\x18\x04 \x03(\x0b\x32-.evalsi.v1alpha1.CreateRunRequest.LabelsEntry\x12\x15\n\rvalidate_only\x18\x05 \x01(\x08\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"6\n\x11\x43reateRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1b\n\rGetRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"3\n\x0eGetRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"I\n\x0fListRunsRequest\x12\x0f\n\x07project\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\"O\n\x10ListRunsResponse\x12\"\n\x04runs\x18\x01 \x03(\x0b\x32\x14.evalsi.v1alpha1.Run\x12\x17\n\x0fnext_page_token\x18\x02 \x01(\t\"6\n\x0fWatchRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x17\n\x0finclude_results\x18\x02 \x01(\x08\"\xa4\x01\n\x10WatchRunResponse\x12#\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.RunH\x00\x12-\n\x08progress\x18\x02 \x01(\x0b\x32\x19.evalsi.v1alpha1.ProgressH\x00\x12\x33\n\x06result\x18\x03 \x01(\x0b\x32!.evalsi.v1alpha1.EvaluationResultH\x00\x42\x07\n\x05\x65vent\"\x1e\n\x10\x43\x61ncelRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11\x43\x61ncelRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"\x1e\n\x10ResumeRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\"6\n\x11ResumeRunResponse\x12!\n\x03run\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\"a\n\x15ListRunResultsRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x11\n\tpage_size\x18\x02 \x01(\x05\x12\x12\n\npage_token\x18\x03 \x01(\t\x12\x11\n\tevaluator\x18\x04 \x01(\t\"\x8f\x01\n\x16ListRunResultsResponse\x12\x32\n\x07results\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.EvaluationResult\x12(\n\x07records\x18\x02 \x03(\x0b\x32\x17.evalsi.v1alpha1.Record\x12\x17\n\x0fnext_page_token\x18\x03 \x01(\t\"a\n\x12\x43ompareRunsRequest\x12\x17\n\x0f\x62\x61seline_run_id\x18\x01 \x01(\t\x12\x18\n\x10\x63\x61ndidate_run_id\x18\x02 \x01(\t\x12\x18\n\x10\x63onfidence_level\x18\x03 \x01(\x01\"\xf9\x01\n\x10MetricComparison\x12\x0e\n\x06metric\x18\x01 \x01(\t\x12\x1a\n\rbaseline_mean\x18\x02 \x01(\x01H\x00\x88\x01\x01\x12\x1b\n\x0e\x63\x61ndidate_mean\x18\x03 \x01(\x01H\x01\x88\x01\x01\x12\x11\n\x04\x64iff\x18\x04 \x01(\x01H\x02\x88\x01\x01\x12\x34\n\x07\x64iff_ci\x18\x05 \x01(\x0b\x32#.evalsi.v1alpha1.ConfidenceInterval\x12\x10\n\x08paired_n\x18\x06 \x01(\x03\x12\x13\n\x0bsignificant\x18\x07 \x01(\x08\x42\x10\n\x0e_baseline_meanB\x11\n\x0f_candidate_meanB\x07\n\x05_diff\"M\n\x13\x43ompareRunsResponse\x12\x36\n\x0b\x63omparisons\x18\x01 \x03(\x0b\x32!.evalsi.v1alpha1.MetricComparison\"_\n\x15PromoteResultsRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\x0c\n\x04when\x18\x03 \x01(\t\x12\x17\n\x0finclude_outputs\x18\x04 \x01(\x08\"8\n\x16PromoteResultsResponse\x12\x10\n\x08promoted\x18\x01 \x01(\x03\x12\x0c\n\x04path\x18\x02 \x01(\t\"\xde\x01\n\x19\x43reateShadowReplayRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07project\x18\x02 \x01(\t\x12+\n\tcandidate\x18\x03 \x01(\x0b\x32\x18.evalsi.v1alpha1.RunSpec\x12\x46\n\x06labels\x18\x04 \x03(\x0b\x32\x36.evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry\x1a-\n\x0bLabelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"m\n\x1a\x43reateShadowReplayResponse\x12&\n\x08\x62\x61seline\x18\x01 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run\x12\'\n\tcandidate\x18\x02 \x01(\x0b\x32\x14.evalsi.v1alpha1.Run2\x86\x07\n\nRunService\x12R\n\tCreateRun\x12!.evalsi.v1alpha1.CreateRunRequest\x1a\".evalsi.v1alpha1.CreateRunResponse\x12I\n\x06GetRun\x12\x1e.evalsi.v1alpha1.GetRunRequest\x1a\x1f.evalsi.v1alpha1.GetRunResponse\x12O\n\x08ListRuns\x12 .evalsi.v1alpha1.ListRunsRequest\x1a!.evalsi.v1alpha1.ListRunsResponse\x12Q\n\x08WatchRun\x12 .evalsi.v1alpha1.WatchRunRequest\x1a!.evalsi.v1alpha1.WatchRunResponse0\x01\x12R\n\tCancelRun\x12!.evalsi.v1alpha1.CancelRunRequest\x1a\".evalsi.v1alpha1.CancelRunResponse\x12R\n\tResumeRun\x12!.evalsi.v1alpha1.ResumeRunRequest\x1a\".evalsi.v1alpha1.ResumeRunResponse\x12\x61\n\x0eListRunResults\x12&.evalsi.v1alpha1.ListRunResultsRequest\x1a\'.evalsi.v1alpha1.ListRunResultsResponse\x12X\n\x0b\x43ompareRuns\x12#.evalsi.v1alpha1.CompareRunsRequest\x1a$.evalsi.v1alpha1.CompareRunsResponse\x12\x61\n\x0ePromoteResults\x12&.evalsi.v1alpha1.PromoteResultsRequest\x1a\'.evalsi.v1alpha1.PromoteResultsResponse\x12m\n\x12\x43reateShadowReplay\x12*.evalsi.v1alpha1.CreateShadowReplayRequest\x1a+.evalsi.v1alpha1.CreateShadowReplayResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,51 +39,51 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CREATESHADOWREPLAYREQUEST_LABELSENTRY']._loaded_options = None
   _globals['_CREATESHADOWREPLAYREQUEST_LABELSENTRY']._serialized_options = b'8\001'
   _globals['_CREATERUNREQUEST']._serialized_start=141
-  _globals['_CREATERUNREQUEST']._serialized_end=340
-  _globals['_CREATERUNREQUEST_LABELSENTRY']._serialized_start=295
-  _globals['_CREATERUNREQUEST_LABELSENTRY']._serialized_end=340
-  _globals['_CREATERUNRESPONSE']._serialized_start=342
-  _globals['_CREATERUNRESPONSE']._serialized_end=396
-  _globals['_GETRUNREQUEST']._serialized_start=398
-  _globals['_GETRUNREQUEST']._serialized_end=425
-  _globals['_GETRUNRESPONSE']._serialized_start=427
-  _globals['_GETRUNRESPONSE']._serialized_end=478
-  _globals['_LISTRUNSREQUEST']._serialized_start=480
-  _globals['_LISTRUNSREQUEST']._serialized_end=553
-  _globals['_LISTRUNSRESPONSE']._serialized_start=555
-  _globals['_LISTRUNSRESPONSE']._serialized_end=634
-  _globals['_WATCHRUNREQUEST']._serialized_start=636
-  _globals['_WATCHRUNREQUEST']._serialized_end=690
-  _globals['_WATCHRUNRESPONSE']._serialized_start=693
-  _globals['_WATCHRUNRESPONSE']._serialized_end=857
-  _globals['_CANCELRUNREQUEST']._serialized_start=859
-  _globals['_CANCELRUNREQUEST']._serialized_end=889
-  _globals['_CANCELRUNRESPONSE']._serialized_start=891
-  _globals['_CANCELRUNRESPONSE']._serialized_end=945
-  _globals['_RESUMERUNREQUEST']._serialized_start=947
-  _globals['_RESUMERUNREQUEST']._serialized_end=977
-  _globals['_RESUMERUNRESPONSE']._serialized_start=979
-  _globals['_RESUMERUNRESPONSE']._serialized_end=1033
-  _globals['_LISTRUNRESULTSREQUEST']._serialized_start=1035
-  _globals['_LISTRUNRESULTSREQUEST']._serialized_end=1132
-  _globals['_LISTRUNRESULTSRESPONSE']._serialized_start=1135
-  _globals['_LISTRUNRESULTSRESPONSE']._serialized_end=1278
-  _globals['_COMPARERUNSREQUEST']._serialized_start=1280
-  _globals['_COMPARERUNSREQUEST']._serialized_end=1377
-  _globals['_METRICCOMPARISON']._serialized_start=1380
-  _globals['_METRICCOMPARISON']._serialized_end=1629
-  _globals['_COMPARERUNSRESPONSE']._serialized_start=1631
-  _globals['_COMPARERUNSRESPONSE']._serialized_end=1708
-  _globals['_PROMOTERESULTSREQUEST']._serialized_start=1710
-  _globals['_PROMOTERESULTSREQUEST']._serialized_end=1805
-  _globals['_PROMOTERESULTSRESPONSE']._serialized_start=1807
-  _globals['_PROMOTERESULTSRESPONSE']._serialized_end=1863
-  _globals['_CREATESHADOWREPLAYREQUEST']._serialized_start=1866
-  _globals['_CREATESHADOWREPLAYREQUEST']._serialized_end=2088
-  _globals['_CREATESHADOWREPLAYREQUEST_LABELSENTRY']._serialized_start=295
-  _globals['_CREATESHADOWREPLAYREQUEST_LABELSENTRY']._serialized_end=340
-  _globals['_CREATESHADOWREPLAYRESPONSE']._serialized_start=2090
-  _globals['_CREATESHADOWREPLAYRESPONSE']._serialized_end=2199
-  _globals['_RUNSERVICE']._serialized_start=2202
-  _globals['_RUNSERVICE']._serialized_end=3104
+  _globals['_CREATERUNREQUEST']._serialized_end=363
+  _globals['_CREATERUNREQUEST_LABELSENTRY']._serialized_start=318
+  _globals['_CREATERUNREQUEST_LABELSENTRY']._serialized_end=363
+  _globals['_CREATERUNRESPONSE']._serialized_start=365
+  _globals['_CREATERUNRESPONSE']._serialized_end=419
+  _globals['_GETRUNREQUEST']._serialized_start=421
+  _globals['_GETRUNREQUEST']._serialized_end=448
+  _globals['_GETRUNRESPONSE']._serialized_start=450
+  _globals['_GETRUNRESPONSE']._serialized_end=501
+  _globals['_LISTRUNSREQUEST']._serialized_start=503
+  _globals['_LISTRUNSREQUEST']._serialized_end=576
+  _globals['_LISTRUNSRESPONSE']._serialized_start=578
+  _globals['_LISTRUNSRESPONSE']._serialized_end=657
+  _globals['_WATCHRUNREQUEST']._serialized_start=659
+  _globals['_WATCHRUNREQUEST']._serialized_end=713
+  _globals['_WATCHRUNRESPONSE']._serialized_start=716
+  _globals['_WATCHRUNRESPONSE']._serialized_end=880
+  _globals['_CANCELRUNREQUEST']._serialized_start=882
+  _globals['_CANCELRUNREQUEST']._serialized_end=912
+  _globals['_CANCELRUNRESPONSE']._serialized_start=914
+  _globals['_CANCELRUNRESPONSE']._serialized_end=968
+  _globals['_RESUMERUNREQUEST']._serialized_start=970
+  _globals['_RESUMERUNREQUEST']._serialized_end=1000
+  _globals['_RESUMERUNRESPONSE']._serialized_start=1002
+  _globals['_RESUMERUNRESPONSE']._serialized_end=1056
+  _globals['_LISTRUNRESULTSREQUEST']._serialized_start=1058
+  _globals['_LISTRUNRESULTSREQUEST']._serialized_end=1155
+  _globals['_LISTRUNRESULTSRESPONSE']._serialized_start=1158
+  _globals['_LISTRUNRESULTSRESPONSE']._serialized_end=1301
+  _globals['_COMPARERUNSREQUEST']._serialized_start=1303
+  _globals['_COMPARERUNSREQUEST']._serialized_end=1400
+  _globals['_METRICCOMPARISON']._serialized_start=1403
+  _globals['_METRICCOMPARISON']._serialized_end=1652
+  _globals['_COMPARERUNSRESPONSE']._serialized_start=1654
+  _globals['_COMPARERUNSRESPONSE']._serialized_end=1731
+  _globals['_PROMOTERESULTSREQUEST']._serialized_start=1733
+  _globals['_PROMOTERESULTSREQUEST']._serialized_end=1828
+  _globals['_PROMOTERESULTSRESPONSE']._serialized_start=1830
+  _globals['_PROMOTERESULTSRESPONSE']._serialized_end=1886
+  _globals['_CREATESHADOWREPLAYREQUEST']._serialized_start=1889
+  _globals['_CREATESHADOWREPLAYREQUEST']._serialized_end=2111
+  _globals['_CREATESHADOWREPLAYREQUEST_LABELSENTRY']._serialized_start=318
+  _globals['_CREATESHADOWREPLAYREQUEST_LABELSENTRY']._serialized_end=363
+  _globals['_CREATESHADOWREPLAYRESPONSE']._serialized_start=2113
+  _globals['_CREATESHADOWREPLAYRESPONSE']._serialized_end=2222
+  _globals['_RUNSERVICE']._serialized_start=2225
+  _globals['_RUNSERVICE']._serialized_end=3127
 # @@protoc_insertion_point(module_scope)

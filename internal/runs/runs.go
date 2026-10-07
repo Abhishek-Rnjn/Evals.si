@@ -35,6 +35,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
@@ -202,14 +203,32 @@ func newID() string {
 	return "run-" + hex.EncodeToString(b)
 }
 
-// validate checks a spec before anything is stored.
-func (m *Manager) validate(spec *evalsiv1alpha1.RunSpec) ([]evaluation.Instance, error) {
+// validate checks a spec before anything is stored, including the worker
+// variables it names against the project's credential grants.
+func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1alpha1.RunSpec) ([]evaluation.Instance, error) {
 	if spec == nil {
 		return nil, invalid("spec is required")
 	}
-	insts, err := m.engine.Bind(spec.GetEvaluators(), spec.GetJudge())
+	project = projectOr(project)
+	insts, err := m.engine.BindFor(ctx, project, spec.GetEvaluators(), spec.GetJudge())
 	if err != nil {
 		return nil, err
+	}
+	uses, err := credentials.SpecUses(spec)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.engine.Credentials().Check(ctx, project, uses); err != nil {
+		return nil, err
+	}
+	if sim := spec.GetHarness().GetBuiltin().GetUserSimulator(); sim != nil {
+		judge := sim.GetJudge()
+		if judge == "" {
+			judge = m.engine.JudgeOr(spec.GetJudge())
+		}
+		if err := m.engine.Credentials().CheckJudge(ctx, project, judge, "spec.harness.builtin.user_simulator"); err != nil {
+			return nil, err
+		}
 	}
 	if spec.GetDataset().GetSource() == nil {
 		return nil, invalid("spec.dataset needs one of inline, path or uri")
@@ -390,9 +409,12 @@ const DefaultProject = "default"
 // CreateRun validates, snapshots the dataset, stores the run and starts it.
 func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1alpha1.CreateRunRequest]) (*connect.Response[evalsiv1alpha1.CreateRunResponse], error) {
 	spec := req.Msg.GetSpec()
-	insts, err := m.validate(spec)
+	insts, err := m.validate(ctx, req.Msg.GetProject(), spec)
 	if err != nil {
 		return nil, err
+	}
+	if req.Msg.GetValidateOnly() {
+		return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{}), nil
 	}
 	project := projectOr(req.Msg.GetProject())
 	if err := m.checkQuota(ctx, project); err != nil {

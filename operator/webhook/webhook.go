@@ -1,22 +1,29 @@
 // Package webhook holds the operator's admission webhooks: the mutating one
 // records who created each evals.si resource (evals.si/created-by, from the
 // authenticated admission request, which the creator cannot forge), and the
-// validating one checks specs against the API's schema and keeps EvalRun
-// specs and the creator from changing.
+// validating one checks specs against the API's schema (and, with a Remote,
+// against the API itself: credential grants, judges and access rules) and
+// keeps EvalRun specs and the creator from changing.
 package webhook
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
+
+	"connectrpc.com/connect"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/operator/spec"
 )
@@ -67,11 +74,24 @@ func (Mutator) Handle(_ context.Context, req admission.Request) admission.Respon
 }
 
 // Validator checks specs.
-type Validator struct{}
+type Validator struct {
+	// Asks the API whether it would accept the resource; nil checks the
+	// schema only.
+	Remote Remote
+}
+
+// Remote checks resources against the evalsi API without creating them.
+type Remote interface {
+	CheckRun(ctx context.Context, project, name string, spec *evalsiv1alpha1.RunSpec, labels map[string]string) error
+	CheckPolicy(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error
+}
+
+// remoteTimeout bounds the API call inside an admission request.
+const remoteTimeout = 5 * time.Second
 
 // +kubebuilder:webhook:path=/validate-evals-si,mutating=false,failurePolicy=fail,sideEffects=None,groups=evals.si,resources=evalruns;onlineevalpolicies,verbs=create;update,versions=v1alpha1,name=validate.evals.si,admissionReviewVersions=v1
 
-func (Validator) Handle(_ context.Context, req admission.Request) admission.Response {
+func (val Validator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	obj, err := decode(req.Object.Raw)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
@@ -96,16 +116,54 @@ func (Validator) Handle(_ context.Context, req admission.Request) admission.Resp
 			return admission.Allowed("")
 		}
 	}
+	var check func(context.Context) error
 	switch req.Kind.Kind {
 	case "EvalRun":
-		_, err = spec.Run(raw)
+		var s *evalsiv1alpha1.RunSpec
+		if s, err = spec.Run(raw); err == nil && val.Remote != nil {
+			check = func(ctx context.Context) error {
+				return val.Remote.CheckRun(ctx, v1.ProjectOf(obj), obj.GetName(), s, v1.APILabels(obj))
+			}
+		}
 	case "OnlineEvalPolicy":
-		_, err = spec.Policy(raw)
+		var p *evalsiv1alpha1.OnlineEvalPolicy
+		if p, err = spec.Policy(raw); err == nil && val.Remote != nil {
+			p.Name, p.Project, p.Labels = obj.GetName(), v1.ProjectOf(obj), v1.APILabels(obj)
+			check = func(ctx context.Context) error { return val.Remote.CheckPolicy(ctx, p) }
+		}
 	}
 	if err != nil {
 		return admission.Denied(err.Error())
 	}
-	return admission.Allowed("")
+	if check == nil {
+		return admission.Allowed("")
+	}
+	ctx, cancel := context.WithTimeout(ctx, remoteTimeout)
+	defer cancel()
+	return remoteVerdict(check(ctx))
+}
+
+// remoteVerdict turns the API's answer into an admission response: what the
+// API would refuse is denied now, at kubectl apply, instead of failing later
+// in the resource's status. When the API cannot answer (down, slow) or the
+// project does not exist yet (the controller creates it), the resource is
+// allowed with a warning and the controller reports the outcome.
+func remoteVerdict(err error) admission.Response {
+	if err == nil {
+		return admission.Allowed("")
+	}
+	switch code := connect.CodeOf(err); {
+	case code == connect.CodePermissionDenied,
+		code == connect.CodeInvalidArgument && !strings.Contains(err.Error(), "unknown project"):
+		msg := err.Error()
+		var ce *connect.Error
+		if errors.As(err, &ce) {
+			msg = ce.Message()
+		}
+		return admission.Denied("the evalsi API refuses it: " + msg)
+	default:
+		return admission.Allowed("").WithWarnings("not checked against the evalsi API: " + err.Error())
+	}
 }
 
 func decode(raw []byte) (*unstructured.Unstructured, error) {
@@ -134,8 +192,9 @@ func jsonEqual(a, b []byte) bool {
 	return bytes.Equal(ja, jb)
 }
 
-// Register adds both webhooks to a server.
-func Register(s webhook.Server) {
+// Register adds both webhooks to a server; remote, when not nil, checks
+// EvalRuns and policies against the API before they are admitted.
+func Register(s webhook.Server, remote Remote) {
 	s.Register(MutatePath, &webhook.Admission{Handler: Mutator{}})
-	s.Register(ValidatePath, &webhook.Admission{Handler: Validator{}})
+	s.Register(ValidatePath, &webhook.Admission{Handler: Validator{Remote: remote}})
 }

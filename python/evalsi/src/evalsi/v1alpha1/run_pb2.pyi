@@ -172,7 +172,10 @@ class Target(_message.Message):
     base_url: _builtins.str
     """Required for openai-compatible, for example http://localhost:8000/v1."""
     api_key_env: _builtins.str
-    """Environment variable holding the API key, read by the worker."""
+    """Environment variable holding the API key, read by the worker; empty: the
+    connector's default (OPENAI_API_KEY, ANTHROPIC_API_KEY), "none": no key.
+    On a server it must be granted to the run's project (credentials.grants).
+    """
     system_prompt: _builtins.str
     max_tokens: _builtins.int
     temperature: _builtins.float

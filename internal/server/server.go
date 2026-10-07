@@ -34,6 +34,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
@@ -117,6 +118,11 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	}
 	sort.Strings(judges)
 	svc := evaluation.New(worker, catalog.New(manifests), judges, cfg.DefaultJudge, cfg.Evaluate)
+	creds := credentials.NewPolicy(cfg.CredentialSettings())
+	svc.UseCredentials(creds)
+	if cfg.AuthEnabled() && !creds.Enforced() {
+		log.Warn("credentials.enforce is off: any caller may name any variable on the worker and send it anywhere")
+	}
 
 	st, objects, err := openStorage(ctx, cfg)
 	if err != nil {
@@ -146,6 +152,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		return err
 	}
 	auditor := authz.NewAuditor(st, exports.Audit, log)
+	creds.OnDenied(func(ctx context.Context, d credentials.Denial) { auditDenial(ctx, auditor, d) })
 	var watcher *watch.Engine // created below; runs read its policies' score names
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
 		DatasetsDir:   cfg.DatasetsDir,
@@ -229,6 +236,10 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	go func() { defer wg.Done(); watcher.Run(bg) }()
 	go func() { defer wg.Done(); retain(bg, st, config.Duration(cfg.Traces.Retention), log) }()
 	go func() { defer wg.Done(); auditor.Retain(bg, cfg.Audit.RetentionDuration()) }()
+	if cfg.Reload != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); reloadCredentials(bg, cfg, creds, watcher, log) }()
+	}
 	defer func() {
 		close(stopAssembler) // flushes buffered traces into the engine
 		stopBG()
@@ -463,7 +474,7 @@ func Handler(d deps) http.Handler {
 	// (LLM traffic) and the ExtMcp processor service (MCP traffic, gRPC).
 	mux.Handle("POST /guardrails/{project}/{guardrail}/{phase}", guard.Webhook(d.gate.authorizeGuardrail))
 	mux.Handle(ext_mcpconnect.NewExtMcpHandler(guard.ExtMcp(), gated))
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics)))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.svc.Credentials().WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,

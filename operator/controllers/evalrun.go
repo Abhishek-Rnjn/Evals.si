@@ -60,24 +60,11 @@ type EvalRunReconciler struct {
 
 // Project is the evalsi project of a namespaced resource: its
 // evals.si/project label, else its namespace.
-func Project(obj metav1.Object) string {
-	if p := obj.GetLabels()[v1.ProjectLabel]; p != "" {
-		return p
-	}
-	return obj.GetNamespace()
-}
+func Project(obj metav1.Object) string { return v1.ProjectOf(obj) }
 
 // apiLabels are the resource's labels that travel to the API (for access
 // rules), without Kubernetes' own prefixed ones.
-func apiLabels(obj metav1.Object) map[string]string {
-	out := map[string]string{}
-	for k, v := range obj.GetLabels() {
-		if !strings.Contains(k, "/") {
-			out[k] = v
-		}
-	}
-	return out
-}
+func apiLabels(obj metav1.Object) map[string]string { return v1.APILabels(obj) }
 
 // +kubebuilder:rbac:groups=evals.si,resources=evalruns,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=evals.si,resources=evalruns/status;evalruns/finalizers,verbs=get;update;patch

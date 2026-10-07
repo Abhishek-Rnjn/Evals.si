@@ -23,6 +23,7 @@ from typing import Any, Protocol
 import httpx
 
 from evalsi.sandbox import SandboxError
+from evalsi.targets import api_key
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness.environment import TaskEnvironment
@@ -284,7 +285,7 @@ class ResponsesConnector:
         self.cfg = cfg
         self.name = cfg.model
         headers = {"Content-Type": "application/json"}
-        key = os.environ.get(cfg.api_key_env or "OPENAI_API_KEY")
+        key = api_key(cfg.api_key_env, "OPENAI_API_KEY")
         if key:
             headers["Authorization"] = f"Bearer {key}"
         self.client = httpx.AsyncClient(timeout=_timeout(cfg), headers=headers)

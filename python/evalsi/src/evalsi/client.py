@@ -278,6 +278,13 @@ class Client:
             body["guardrail"] = guardrail
         return self.call("GuardrailService", "Check", body)
 
+    # --- credentials ---
+
+    def list_credentials(self, project: str = "") -> dict[str, Any]:
+        """The worker variables (names and hosts) and judges a project's
+        requests may use, and whether grants are enforced."""
+        return self.call("CatalogService", "ListCredentials", {"project": project})
+
     # --- identity and access ---
 
     def auth_call(self, method: str, body: dict[str, Any] | None = None) -> dict[str, Any]:

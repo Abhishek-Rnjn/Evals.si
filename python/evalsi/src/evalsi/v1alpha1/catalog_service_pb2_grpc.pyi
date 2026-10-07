@@ -34,6 +34,10 @@ class CatalogServiceStub:
     @_typing.overload
     def __new__(cls, channel: _aio.Channel) -> CatalogServiceAsyncStub: ...
     ListEvaluators: _grpc.UnaryUnaryMultiCallable[_catalog_service_pb2.ListEvaluatorsRequest, _catalog_service_pb2.ListEvaluatorsResponse]
+    ListCredentials: _grpc.UnaryUnaryMultiCallable[_catalog_service_pb2.ListCredentialsRequest, _catalog_service_pb2.ListCredentialsResponse]
+    """The worker variables and judges a project's requests may use (names and
+    hosts only; values never leave the worker).
+    """
 
 @_typing.type_check_only
 class CatalogServiceAsyncStub(CatalogServiceStub):
@@ -41,6 +45,10 @@ class CatalogServiceAsyncStub(CatalogServiceStub):
 
     def __init__(self, channel: _aio.Channel) -> None: ...
     ListEvaluators: _aio.UnaryUnaryMultiCallable[_catalog_service_pb2.ListEvaluatorsRequest, _catalog_service_pb2.ListEvaluatorsResponse]  # type: ignore[assignment]
+    ListCredentials: _aio.UnaryUnaryMultiCallable[_catalog_service_pb2.ListCredentialsRequest, _catalog_service_pb2.ListCredentialsResponse]  # type: ignore[assignment]
+    """The worker variables and judges a project's requests may use (names and
+    hosts only; values never leave the worker).
+    """
 
 class CatalogServiceServicer(metaclass=_abc_1.ABCMeta):
     """CatalogService tells clients what a server can evaluate with."""
@@ -51,5 +59,15 @@ class CatalogServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _catalog_service_pb2.ListEvaluatorsRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_catalog_service_pb2.ListEvaluatorsResponse, _abc.Awaitable[_catalog_service_pb2.ListEvaluatorsResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def ListCredentials(
+        self,
+        request: _catalog_service_pb2.ListCredentialsRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_catalog_service_pb2.ListCredentialsResponse, _abc.Awaitable[_catalog_service_pb2.ListCredentialsResponse]]:
+        """The worker variables and judges a project's requests may use (names and
+        hosts only; values never leave the worker).
+        """
 
 def add_CatalogServiceServicer_to_server(servicer: CatalogServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

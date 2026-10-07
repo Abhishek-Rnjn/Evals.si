@@ -27,7 +27,11 @@ type CreateRunRequest struct {
 	Project string                 `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
 	Spec    *RunSpec               `protobuf:"bytes,3,opt,name=spec,proto3" json:"spec,omitempty"`
 	// Labels for access rules. Callers can only set labels their roles allow.
-	Labels        map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Labels map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Check the request as creating it would (authorization, the spec,
+	// credential grants and judges) without storing or starting anything; the
+	// response has no run. Admission webhooks use it.
+	ValidateOnly  bool `protobuf:"varint,5,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -88,6 +92,13 @@ func (x *CreateRunRequest) GetLabels() map[string]string {
 		return x.Labels
 	}
 	return nil
+}
+
+func (x *CreateRunRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
 }
 
 type CreateRunResponse struct {
@@ -1246,12 +1257,13 @@ var File_evalsi_v1alpha1_run_service_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\n" +
-	"!evalsi/v1alpha1/run_service.proto\x12\x0fevalsi.v1alpha1\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x19evalsi/v1alpha1/run.proto\x1a\x1bevalsi/v1alpha1/score.proto\"\xf0\x01\n" +
+	"!evalsi/v1alpha1/run_service.proto\x12\x0fevalsi.v1alpha1\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x19evalsi/v1alpha1/run.proto\x1a\x1bevalsi/v1alpha1/score.proto\"\x95\x02\n" +
 	"\x10CreateRunRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12,\n" +
 	"\x04spec\x18\x03 \x01(\v2\x18.evalsi.v1alpha1.RunSpecR\x04spec\x12E\n" +
-	"\x06labels\x18\x04 \x03(\v2-.evalsi.v1alpha1.CreateRunRequest.LabelsEntryR\x06labels\x1a9\n" +
+	"\x06labels\x18\x04 \x03(\v2-.evalsi.v1alpha1.CreateRunRequest.LabelsEntryR\x06labels\x12#\n" +
+	"\rvalidate_only\x18\x05 \x01(\bR\fvalidateOnly\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\";\n" +

@@ -25,6 +25,12 @@ func (e *Engine) ApplyPolicy(ctx context.Context, req *connect.Request[evalsiv1a
 	if p == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("policy is required"))
 	}
+	if req.Msg.GetValidateOnly() {
+		if err := e.Validate(ctx, p); err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&evalsiv1alpha1.ApplyPolicyResponse{Policy: p}), nil
+	}
 	if err := e.Apply(ctx, p); err != nil {
 		return nil, err
 	}

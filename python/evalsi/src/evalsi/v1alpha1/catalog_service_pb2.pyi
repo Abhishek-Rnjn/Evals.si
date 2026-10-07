@@ -55,3 +55,78 @@ class ListEvaluatorsResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ListEvaluatorsResponse: _TypeAlias = ListEvaluatorsResponse  # noqa: Y015
+
+@_typing.final
+class ListCredentialsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROJECT_FIELD_NUMBER: _builtins.int
+    project: _builtins.str
+    def __init__(
+        self,
+        *,
+        project: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["project", b"project"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ListCredentialsRequest: _TypeAlias = ListCredentialsRequest  # noqa: Y015
+
+@_typing.final
+class ListCredentialsResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ENFORCED_FIELD_NUMBER: _builtins.int
+    GRANTS_FIELD_NUMBER: _builtins.int
+    JUDGES_FIELD_NUMBER: _builtins.int
+    enforced: _builtins.bool
+    """Whether grants are checked; when false, any variable may be named."""
+    @_builtins.property
+    def grants(self) -> _containers.RepeatedCompositeFieldContainer[Global___CredentialGrant]: ...
+    @_builtins.property
+    def judges(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Judges the project may use."""
+
+    def __init__(
+        self,
+        *,
+        enforced: _builtins.bool = ...,
+        grants: _abc.Iterable[Global___CredentialGrant] | None = ...,
+        judges: _abc.Iterable[_builtins.str] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["enforced", b"enforced", "grants", b"grants", "judges", b"judges"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ListCredentialsResponse: _TypeAlias = ListCredentialsResponse  # noqa: Y015
+
+@_typing.final
+class CredentialGrant(_message.Message):
+    """A worker variable the project may name."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ENV_FIELD_NUMBER: _builtins.int
+    HOSTS_FIELD_NUMBER: _builtins.int
+    ALLOW_HTTP_FIELD_NUMBER: _builtins.int
+    ALL_PROJECTS_FIELD_NUMBER: _builtins.int
+    env: _builtins.str
+    allow_http: _builtins.bool
+    """Plain HTTP is allowed to those hosts, not only HTTPS."""
+    all_projects: _builtins.bool
+    """Granted to every project ("*"), not only this one."""
+    @_builtins.property
+    def hosts(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Hosts its value may be sent to; empty: any."""
+
+    def __init__(
+        self,
+        *,
+        env: _builtins.str = ...,
+        hosts: _abc.Iterable[_builtins.str] | None = ...,
+        allow_http: _builtins.bool = ...,
+        all_projects: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["all_projects", b"all_projects", "allow_http", b"allow_http", "env", b"env", "hosts", b"hosts"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___CredentialGrant: _TypeAlias = CredentialGrant  # noqa: Y015

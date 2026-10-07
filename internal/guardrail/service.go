@@ -69,17 +69,23 @@ func (s *Service) load(ctx context.Context, proj, name string) (*compiled, error
 	}
 	key := proj + "/" + name
 	version := g.GetUpdatedAt().AsTime().UnixNano()
+	grants := s.eval.Credentials().Version()
 	s.mu.Lock()
 	c := s.cache[key]
 	s.mu.Unlock()
-	if c != nil && c.version == version {
+	if c != nil && c.version == version && c.grants == grants {
 		return c, nil
 	}
-	if c, err = compile(g, s.eval); err != nil {
+	if c, err = compile(ctx, g, s.eval); err != nil {
+		if connect.CodeOf(err) == connect.CodePermissionDenied {
+			// Its evaluators name what the project may no longer use.
+			return nil, err
+		}
 		// Stored guardrails were valid when applied; a catalog change can
 		// still break one (an evaluator uninstalled).
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("guardrail %s: %w", key, err))
 	}
+	c.grants = grants
 	s.mu.Lock()
 	s.cache[key] = c
 	s.mu.Unlock()
@@ -140,7 +146,10 @@ func (s *Service) ApplyGuardrail(ctx context.Context, req *connect.Request[evals
 	if p := auth.PrincipalFrom(ctx); p != nil {
 		g.UpdatedBy = p.ID()
 	}
-	if _, err := compile(g, s.eval); err != nil {
+	if _, err := compile(ctx, g, s.eval); err != nil {
+		if connect.CodeOf(err) == connect.CodePermissionDenied {
+			return nil, err
+		}
 		return nil, invalid("%v", err)
 	}
 	if err := s.store.PutGuardrail(ctx, g); err != nil {
@@ -210,8 +219,15 @@ func (s *Service) Check(ctx context.Context, req *connect.Request[evalsiv1alpha1
 	case m.GetInline() != nil && m.GetGuardrail() != "":
 		return nil, invalid("set guardrail or inline, not both")
 	case m.GetInline() != nil:
-		c, cerr := compile(m.GetInline(), s.eval)
+		// An inline guardrail runs in the request's project, whose grants
+		// its evaluators' params are checked against.
+		inline := proto.Clone(m.GetInline()).(*evalsiv1alpha1.Guardrail)
+		inline.Project = project(m.GetProject())
+		c, cerr := compile(ctx, inline, s.eval)
 		if cerr != nil {
+			if connect.CodeOf(cerr) == connect.CodePermissionDenied {
+				return nil, cerr
+			}
 			return nil, invalid("%v", cerr)
 		}
 		res, err = s.run(ctx, project(m.GetProject()), c, in)

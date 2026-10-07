@@ -120,7 +120,7 @@ spec:
 
 The `EvalRun` and `OnlineEvalPolicy` schemas are generated from the API's messages, so `kubectl explain evalrun.spec.target` documents a field, and a wrong type (a string where `trials` wants a number) fails at the API server. Run files may use either `snake_case` or `camelCase` names, enums by name, and durations such as `10m`.
 
-Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun` and `OnlineEvalPolicy` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The `admin`, `edit` and `view` roles cover the resources through aggregation.
+Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun` and `OnlineEvalPolicy` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The webhook then asks evalsid whether it would accept the resource (`validate_only`): a variable the project has no [credential grant](identity.md#8-credentials-which-worker-secrets-a-project-may-use) for, a judge it may not use, or a spec the server refuses fails at `kubectl apply` too. When evalsid does not answer within 5 seconds, or the project does not exist yet (the operator creates it), the resource is admitted with a warning and its status reports the outcome. The `admin`, `edit` and `view` roles cover the resources through aggregation.
 
 ## Sandboxes on Kubernetes
 

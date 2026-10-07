@@ -102,6 +102,15 @@ func (g *gate) accessRules() map[string]accessRule {
 			return g.evaluateTarget(m.GetProject(), rewards.Refs(m.GetSpec()), m.GetSpec().GetJudge(), len(m.GetRollouts()))
 		}},
 		evalsiv1alpha1connect.CatalogServiceListEvaluatorsProcedure: catalog,
+		// Who may read a project's runs may see which variables (names and
+		// hosts) and judges its runs may use.
+		evalsiv1alpha1connect.CatalogServiceListCredentialsProcedure: {action: "runs.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			project, err := g.project(msg.(*evalsiv1alpha1.ListCredentialsRequest).GetProject())
+			if err != nil {
+				return nil, err
+			}
+			return []target{{project: project, resource: map[string]any{}, name: "credentials"}}, nil
+		}},
 		reflectV1:      catalog,
 		reflectV1Alpha: catalog,
 

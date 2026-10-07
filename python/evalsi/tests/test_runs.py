@@ -348,3 +348,18 @@ def test_custom_registry_is_respected_by_execute(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("evalsi.run.create_target", lambda config: FakeTarget())
     outcome = asyncio.run(execute(parse_spec(spec), registry=registry))
     assert outcome.result.metric("always").mean == 1.0
+
+
+def test_api_key_env_none_sends_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from evalsi.targets import OpenAICompatibleTarget, TargetConfig, api_key
+
+    monkeypatch.setenv("OPENAI_API_KEY", "worker-secret")
+    monkeypatch.setenv("none", "not-a-key")
+    assert api_key("", "OPENAI_API_KEY") == "worker-secret"
+    assert api_key("none", "OPENAI_API_KEY") is None
+    cfg = TargetConfig(
+        connector="openai-compatible", model="m", base_url="http://x/v1", api_key_env="none"
+    )
+    assert "Authorization" not in OpenAICompatibleTarget(cfg)._headers
+    default = TargetConfig(connector="openai-compatible", model="m", base_url="http://x/v1")
+    assert OpenAICompatibleTarget(default)._headers["Authorization"] == "Bearer worker-secret"

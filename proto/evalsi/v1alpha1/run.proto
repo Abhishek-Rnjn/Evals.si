@@ -40,7 +40,9 @@ message Target {
   string model = 2;
   // Required for openai-compatible, for example http://localhost:8000/v1.
   string base_url = 3;
-  // Environment variable holding the API key, read by the worker.
+  // Environment variable holding the API key, read by the worker; empty: the
+  // connector's default (OPENAI_API_KEY, ANTHROPIC_API_KEY), "none": no key.
+  // On a server it must be granted to the run's project (credentials.grants).
   string api_key_env = 4;
   string system_prompt = 5;
   int32 max_tokens = 6;
