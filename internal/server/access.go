@@ -538,6 +538,33 @@ func (c *gatedConn) Receive(msg any) error {
 // guardHTTP protects a plain HTTP route. With filtered, the handler checks
 // per item (OTLP assigns each resource's project); otherwise action must be
 // allowed install-wide.
+// authorizeTool decides whether the MCP caller may call a tool
+// (mcp.tools.call, with mcp.tool.name for CEL rules). Listing does not
+// audit: tools/list asks about every tool.
+func (g *gate) authorizeTool(r *http.Request, tool string, listing bool) error {
+	ctx, chk, err := g.authenticate(r.Context(), "MCP tools/call", "mcp", r.RemoteAddr, r.Header)
+	if err != nil {
+		return err
+	}
+	if !g.engine.Enabled() {
+		return nil
+	}
+	chk.Meta.MCP = map[string]any{"tool": map[string]any{"name": tool}}
+	t := target{name: "mcp/tool/" + tool}
+	if listing {
+		req := chk.Meta
+		req.Action = "mcp.tools.call"
+		if !g.engine.Allowed(ctx, chk.Principal, req) {
+			return permissionDenied("mcp.tools.call", t)
+		}
+		return nil
+	}
+	if d := g.decide(ctx, chk, "mcp.tools.call", t, false); !d.Allowed {
+		return permissionDenied("mcp.tools.call", t)
+	}
+	return nil
+}
+
 func (g *gate) guardHTTP(action string, filtered bool, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, chk, err := g.authenticate(r.Context(), r.Method+" "+r.URL.Path, "http", r.RemoteAddr, r.Header)

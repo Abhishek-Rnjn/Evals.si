@@ -35,3 +35,32 @@ Options:
 A typical loop: the agent runs the suite before its change, makes the change, runs it again, and reads whether any metric regressed significantly and whether the gates still pass.
 
 Results come back as text for the model and as `structuredContent` for clients that read it. Long runs send `notifications/progress` when the client asks for progress, and a cancelled request stops its run.
+
+## On a server: evalsid's /mcp
+
+`evalsid` serves MCP itself at `/mcp`, over streamable HTTP, for agents that should evaluate on the shared server with their own identity. Its tools are `list_evaluators`, `evaluate`, `run` (a run spec as an object or YAML text; by default compared with the previous finished run of the same name in the project), `get_run` and `compare_runs`.
+
+```json
+{
+  "mcpServers": {
+    "evalsi": {"type": "http", "url": "https://evalsi.example.com/mcp"}
+  }
+}
+```
+
+It follows the MCP authorization specification:
+
+- **Discovery.** Unauthenticated requests get `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/mcp"`. The metadata (RFC 9728) names the issuers of your JWT providers (kind `user`) as authorization servers, so an MCP client signs the user in with your identity provider.
+- **Audience-bound tokens (RFC 8707).** With `mcp.resource` set, a bearer token must carry that URI in its audience; a token minted for another service is refused with `error="invalid_token"`. Add the URI to the provider's `audiences` too.
+- **Same access as everything else.** A tool call is a call to evalsid's own API with the caller's credential, so roles, rules, quotas and the audit log apply unchanged. API keys and mutual TLS work as for other clients. Per-tool rules use `mcp.tool.name` (see the [identity guide](identity.md#4-global-rules)).
+- **Browsers.** Requests carrying an `Origin` header are refused unless the origin is listed in `mcp.allowed_origins`.
+
+```yaml
+mcp:
+  resource: https://evalsi.example.com/mcp   # recommended; enables the audience check
+  # allowed_origins: [https://studio.example.com]
+  # run_wait_s: 600       # how long `run` waits before returning the run id to poll
+  # disabled: true
+```
+
+Alternatively, put `/mcp` behind agentgateway, which implements the same specification at the gateway.

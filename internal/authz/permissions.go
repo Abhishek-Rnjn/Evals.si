@@ -50,6 +50,7 @@ var Permissions = []Permission{
 	{Name: "projects.manage", Description: "Create projects.", InstallWide: true, Audited: true},
 	{Name: "metrics.read", Description: "Read Prometheus metrics for the whole install.", InstallWide: true},
 	{Name: "datasets.write", Description: "Promote a run's results into a dataset of the project.", Audited: true},
+	{Name: "mcp.tools.call", Description: "Call a tool of the MCP endpoint (rules can restrict tools by mcp.tool.name); each tool also needs the permission of what it does.", Public: true},
 }
 
 var permissionIndex = func() map[string]Permission {

@@ -34,6 +34,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
@@ -228,7 +229,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		rewardSvc.UseSharedCache(st, log)
 		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
 	}
-	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc}
+	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, mcp: cfg.MCP, log: log}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -383,6 +384,8 @@ type deps struct {
 	authSvc   *authz.Service
 	// In a cluster, received spans go to the span stream.
 	forward ingest.Forward
+	mcp     mcp.Config
+	log     *slog.Logger
 }
 
 // registerOTLP mounts OTLP/gRPC (through the gate's interceptor) and
@@ -466,7 +469,15 @@ func Handler(d deps) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(doc)
 	})
-	return d.authn.Middleware(mux)
+	root := d.authn.Middleware(mux)
+	if !d.mcp.Disabled {
+		log := d.log
+		if log == nil {
+			log = slog.Default()
+		}
+		mcp.New(d.mcp, root, d.gate.authorizeTool, d.authn.Issuers, log).Register(mux)
+	}
+	return root
 }
 
 // sandboxEnv tells the worker how to reach the sandbox: code evaluators run

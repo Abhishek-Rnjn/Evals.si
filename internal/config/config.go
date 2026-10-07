@@ -15,6 +15,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
+	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -220,6 +221,9 @@ type Config struct {
 	Authorization authz.AuthorizationConfig `json:"authorization"`
 	Audit         authz.AuditConfig         `json:"audit"`
 	Metrics       Metrics                   `json:"metrics"`
+	// The MCP endpoint (/mcp): on by default, behind the same authentication
+	// and authorization as every other route.
+	MCP mcp.Config `json:"mcp"`
 }
 
 // Storage selects the databases. Without it, everything is in SQLite under
@@ -410,6 +414,9 @@ func (c Config) Validate() error {
 		if err := sc.Validate(); err != nil {
 			errs = append(errs, fmt.Errorf("sinks[%d]: %w", i, err))
 		}
+	}
+	if err := c.MCP.Validate(); err != nil {
+		errs = append(errs, err)
 	}
 	if err := c.Sandbox.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("sandbox: %w", err))

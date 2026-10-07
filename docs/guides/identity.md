@@ -231,6 +231,15 @@ authorization:
 
 A rule that fails to evaluate (for example, a missing attribute) counts as not matched. So restrictions belong in `require` rules, which then deny.
 
+**MCP tools.** Calling a tool of the `/mcp` endpoint is the action `mcp.tools.call`, which any authenticated principal holds; rules restrict it per tool with `mcp.tool.name`, as agentgateway's `mcpAuthorization` does. Tools a principal may not call are left out of `tools/list`. Each tool still needs the permission of what it does (`evaluate` needs `evaluations.run`, `run` needs `runs.create`, and so on). Guard `require` rules on the action, since `mcp` is empty for other requests:
+
+```yaml
+authorization:
+  rules:
+    - deny: 'request.action == "mcp.tools.call" && mcp.tool.name == "run" && !("ci" in principal.groups)'
+    - require: 'request.action != "mcp.tools.call" || mcp.tool.name in ["list_evaluators", "evaluate", "get_run", "compare_runs"]'
+```
+
 Explain any decision offline:
 
 ```bash
