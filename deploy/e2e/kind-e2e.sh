@@ -15,7 +15,7 @@
 #     evaluation and an agent run go through the CLI, on the pod rung and
 #     then on Landlock;
 #  5. removes the grant that lets service accounts read the cluster's
-#     issuer and keys, checks tokens no longer verify, then gives evalsid a
+#     issuer and keys, checks a restarted evalsid fails closed, then gives it a
 #     static issuer and key set (a ConfigMap) and checks they do again.
 #
 # Needs docker, kind, kubectl, helm, and uv (for the embedded CLI run).
@@ -281,13 +281,19 @@ reforward() {
   forward=$!
   sleep 3
 }
+# evalsid discovers the issuer at startup, so a restarted one fails closed:
+# it exits naming the refused discovery, and the rollout never completes.
 kubectl rollout restart deploy/evalsi -n "$ns2" --as alice
-kubectl rollout status deploy/evalsi -n "$ns2" --timeout 3m
-reforward
-if cli "$here/sandbox-run.yaml" "$work/ns2-nokeys.json" 2> "$work/ns2-nokeys.err"; then
-  echo "a token verified with no access to the cluster's keys" >&2; exit 1
+if kubectl rollout status deploy/evalsi -n "$ns2" --timeout 90s; then
+  echo "evalsid started with no access to the cluster's issuer and keys" >&2; exit 1
 fi
-grep -qiE "unauthenticated|401" "$work/ns2-nokeys.err" || { cat "$work/ns2-nokeys.err" >&2; exit 1; }
+found=""
+for p in $(kubectl get pods -n "$ns2" -o name | grep -E '^pod/evalsi-[a-z0-9]+-[a-z0-9]+$'); do
+  if { kubectl logs -n "$ns2" "$p" 2>/dev/null; kubectl logs -n "$ns2" "$p" --previous 2>/dev/null; } |
+    grep -q "issuer discovery.*403"; then found="$p"; fi
+done
+[ -n "$found" ] || { echo "no evalsid pod reported the refused issuer discovery" >&2; exit 1; }
+echo "$found failed closed"
 kubectl create configmap evalsi-jwks -n "$ns2" --as alice --from-file=keys.json="$work/jwks.json"
 helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns2" --kube-as-user alice --reuse-values \
   --set auth.kubernetes.issuer="$issuer" --set auth.kubernetes.jwksConfigMap=evalsi-jwks --wait --timeout 5m
