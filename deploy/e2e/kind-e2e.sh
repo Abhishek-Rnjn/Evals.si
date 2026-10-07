@@ -289,8 +289,9 @@ if kubectl rollout status deploy/evalsi -n "$ns2" --timeout 90s; then
 fi
 found=""
 for p in $(kubectl get pods -n "$ns2" -o name | grep -E '^pod/evalsi-[a-z0-9]+-[a-z0-9]+$'); do
-  if { kubectl logs -n "$ns2" "$p" 2>/dev/null; kubectl logs -n "$ns2" "$p" --previous 2>/dev/null; } |
-    grep -q "issuer discovery.*403"; then found="$p"; fi
+  # Captured first: under pipefail, grep -q exiting early fails the pipe.
+  logs="$(kubectl logs -n "$ns2" "$p" 2>/dev/null || true; kubectl logs -n "$ns2" "$p" --previous 2>/dev/null || true)"
+  if grep -q "issuer discovery.*403" <<<"$logs"; then found="$p"; fi
 done
 [ -n "$found" ] || { echo "no evalsid pod reported the refused issuer discovery" >&2; exit 1; }
 echo "$found failed closed"
