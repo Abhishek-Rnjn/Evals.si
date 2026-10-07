@@ -1,0 +1,20 @@
+# evalsi guardrails apply -f examples/guardrails/support.yaml --server ...
+name: support-chat
+project: support
+description: PII stays out of prompts and answers; no credentials, no jailbreaks.
+redact:
+  - builtin: email
+  - builtin: us-ssn
+  - builtin: credit-card
+  - pattern: 'ACCT-\d{6,}'
+    replacement: '<ACCOUNT>'
+evaluators:
+  - secret-leak          # safety pack: blocks credentials in the content
+  - ref: refusal         # recorded as a score; used in block_when below
+block_when: >-
+  scores["secret-leak"] < 1 ||
+  (phase == "response" && labels[?"tier"].orValue("") == "free" && content.size() > 20000)
+message: This request was blocked by the support-chat guardrail.
+timeout: 1.5s
+failure_mode: closed     # an evaluator error blocks; "open" lets content through
+mode: enforce            # "audit" decides and reports, but blocks nothing

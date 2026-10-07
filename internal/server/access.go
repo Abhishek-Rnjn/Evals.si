@@ -11,12 +11,16 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
+	extmcp "github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp"
+	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
+	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -242,7 +246,81 @@ func (g *gate) accessRules() map[string]accessRule {
 			m := msg.(*evalsiv1alpha1.SubmitAnnotationRequest)
 			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
 		}},
+
+		evalsiv1alpha1connect.GuardrailServiceApplyGuardrailProcedure: {action: "guardrails.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			gr := msg.(*evalsiv1alpha1.ApplyGuardrailRequest).GetGuardrail()
+			return g.guardrailTarget(gr.GetProject(), gr.GetName(), gr.GetLabels())
+		}},
+		evalsiv1alpha1connect.GuardrailServiceDeleteGuardrailProcedure: {action: "guardrails.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.DeleteGuardrailRequest)
+			return g.guardrailTarget(m.GetProject(), m.GetName(), nil)
+		}},
+		evalsiv1alpha1connect.GuardrailServiceListGuardrailsProcedure: {action: "guardrails.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.guardrailTarget(msg.(*evalsiv1alpha1.ListGuardrailsRequest).GetProject(), "", nil)
+		}},
+		evalsiv1alpha1connect.GuardrailServiceGetGuardrailProcedure: {action: "guardrails.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.GetGuardrailRequest)
+			return g.guardrailTarget(m.GetProject(), m.GetName(), nil)
+		}},
+		evalsiv1alpha1connect.GuardrailServiceCheckProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.CheckRequest)
+			if m.GetInline() == nil {
+				return g.guardrailTarget(m.GetProject(), m.GetGuardrail(), nil)
+			}
+			// An inline guardrail is a dry run: it scores like Evaluate does.
+			ts, err := g.evaluateTarget(m.GetProject(), m.GetInline().GetEvaluators(), m.GetInline().GetJudge(), 1)
+			for i := range ts {
+				ts[i].action = "evaluations.run"
+			}
+			return ts, err
+		}},
+		ext_mcpconnect.ExtMcpCheckRequestProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.mcpGuardrailTarget(msg.(*extmcp.McpRequest).GetMetadataContext())
+		}},
+		ext_mcpconnect.ExtMcpCheckResponseProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.mcpGuardrailTarget(msg.(*extmcp.McpResponse).GetMetadataContext())
+		}},
 	}
+}
+
+// guardrailTarget is a guardrail: its project, with its name and labels for
+// rules (resource.guardrail, resource.labels).
+func (g *gate) guardrailTarget(project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	res := map[string]any{"guardrail": map[string]any{"name": name}, "labels": authz.StringMap(labels)}
+	return []target{{project: project, resource: res, name: "guardrail/" + name}}, nil
+}
+
+func (g *gate) mcpGuardrailTarget(md *structpb.Struct) ([]target, error) {
+	project, name, err := guardrail.MCPTarget(md)
+	if err != nil {
+		return nil, err
+	}
+	return g.guardrailTarget(project, name, nil)
+}
+
+// authorizeGuardrail decides whether a guardrail webhook call may check
+// content against the guardrail (guardrails.check; not audited: a gateway
+// calls it for every request).
+func (g *gate) authorizeGuardrail(r *http.Request, project, name string) error {
+	ctx, chk, err := g.authenticate(r.Context(), "POST /guardrails", "http", r.RemoteAddr, r.Header)
+	if err != nil {
+		return err
+	}
+	if !g.engine.Enabled() {
+		return nil
+	}
+	ts, err := g.guardrailTarget(project, name, nil)
+	if err != nil {
+		return err
+	}
+	if d := g.decide(ctx, chk, "guardrails.check", ts[0], false); !d.Allowed {
+		return permissionDenied("guardrails.check", ts[0])
+	}
+	return nil
 }
 
 // queueTarget is an annotation queue: its project, with the queue's name

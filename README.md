@@ -331,6 +331,17 @@ uv run evalsi analyze query "select model, avg(value) from scores join runs usin
 
 Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
 
+### Inline guardrails
+
+A guardrail checks content while a request is in flight, either between a client and a model or between an agent and its tools. It redacts what its rules match (e-mail addresses, card numbers, keys, your own patterns), then runs evaluators from any installed pack, then passes, masks or blocks. agentgateway calls it without plugins: LLM traffic through the prompt-guard webhook, MCP traffic through the `mcpGuardrails` remote processor (ExtMcp). Audit mode reports what a guardrail would block before you enforce it.
+
+```bash
+evalsi guardrails apply -f examples/guardrails/support.yaml --server $EVALSID
+evalsi guardrails check support-chat --project support --text "key AKIAIOSFODNN7EXAMPLE" --server $EVALSID   # exit 3: blocked
+```
+
+See the [guardrails guide](docs/guides/guardrails.md).
+
 ### Human annotation
 
 Annotation queues put records in front of people, with a rubric of pass/fail, score, label and text questions. The records can be a run's results (filtered with CEL) or a dataset. evalsid summarizes the answers with intervals, measures agreement between annotators (Krippendorff's alpha), and compares the answers with the run's own metric (accuracy, Cohen's kappa, Pearson), which is how a judge gets calibrated. The `annotator` role can answer but cannot run anything.

@@ -123,7 +123,7 @@ func (t *txn) Rollback() error { return t.tx.Rollback() }
 // tenant_id column (empty in a single-tenant install), so a hosted
 // multi-tenant offering can put a tenant boundary above projects later
 // without rewriting stored rows (decision 0004).
-var tenantTables = []string{"projects", "api_keys", "roles", "bindings", "audit", "runs", "traces", "trace_results", "policies", "annotation_queues", "annotation_items", "annotations", "annotation_claims"}
+var tenantTables = []string{"projects", "api_keys", "roles", "bindings", "audit", "runs", "traces", "trace_results", "policies", "annotation_queues", "annotation_items", "annotations", "annotation_claims", "guardrails"}
 
 type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)

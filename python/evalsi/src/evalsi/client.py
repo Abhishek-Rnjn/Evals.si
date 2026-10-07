@@ -238,6 +238,46 @@ class Client:
         body = {"project": project, "queue": queue, "pageSize": page_size, "pageToken": page_token}
         return self.annotation_call("ListAnnotations", body)
 
+    # --- guardrails ---
+
+    def apply_guardrail(self, guardrail: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = self.call(
+            "GuardrailService", "ApplyGuardrail", {"guardrail": guardrail}
+        )["guardrail"]
+        return out
+
+    def list_guardrails(self, project: str = "") -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = self.call(
+            "GuardrailService", "ListGuardrails", {"project": project}
+        ).get("guardrails", [])
+        return out
+
+    def delete_guardrail(self, project: str, name: str) -> None:
+        self.call("GuardrailService", "DeleteGuardrail", {"project": project, "name": name})
+
+    def check_guardrail(
+        self,
+        content: str,
+        *,
+        project: str = "",
+        guardrail: str = "",
+        inline: dict[str, Any] | None = None,
+        phase: str = "request",
+        labels: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Check content against a stored guardrail, or an inline one (a dry run)."""
+        body: dict[str, Any] = {
+            "project": project,
+            "content": content,
+            "phase": "GUARDRAIL_PHASE_" + phase.upper(),
+            "labels": labels or {},
+        }
+        if inline is not None:
+            body["inline"] = inline
+        else:
+            body["guardrail"] = guardrail
+        return self.call("GuardrailService", "Check", body)
+
     # --- identity and access ---
 
     def auth_call(self, method: str, body: dict[str, Any] | None = None) -> dict[str, Any]:

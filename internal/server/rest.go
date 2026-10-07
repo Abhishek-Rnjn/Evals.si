@@ -58,6 +58,11 @@ import (
 //	POST   /v1alpha1/queues/{queue}/annotations AnnotationService.SubmitAnnotation
 //	GET    /v1alpha1/queues/{queue}/annotations AnnotationService.ListAnnotations
 //	GET    /v1alpha1/queues/{queue}/stats      AnnotationService.SummarizeQueue
+//	POST   /v1alpha1/guardrails                GuardrailService.ApplyGuardrail (body: the guardrail)
+//	GET    /v1alpha1/guardrails                GuardrailService.ListGuardrails (?project=)
+//	GET    /v1alpha1/guardrails/{name}         GuardrailService.GetGuardrail (?project=)
+//	DELETE /v1alpha1/guardrails/{name}         GuardrailService.DeleteGuardrail (?project=)
+//	POST   /v1alpha1/guardrails/{guardrail}:check GuardrailService.Check
 func restRules() []*annotations.HttpRule {
 	rule := func(method, verb, path, body string) *annotations.HttpRule {
 		r := &annotations.HttpRule{Selector: "evalsi.v1alpha1." + method, Body: body}
@@ -115,6 +120,11 @@ func restRules() []*annotations.HttpRule {
 		rule("AnnotationService.SubmitAnnotation", http.MethodPost, v+"/queues/{queue}/annotations", "*"),
 		rule("AnnotationService.ListAnnotations", http.MethodGet, v+"/queues/{queue}/annotations", ""),
 		rule("AnnotationService.SummarizeQueue", http.MethodGet, v+"/queues/{queue}/stats", ""),
+		rule("GuardrailService.ApplyGuardrail", http.MethodPost, v+"/guardrails", "guardrail"),
+		rule("GuardrailService.ListGuardrails", http.MethodGet, v+"/guardrails", ""),
+		rule("GuardrailService.GetGuardrail", http.MethodGet, v+"/guardrails/{name}", ""),
+		rule("GuardrailService.DeleteGuardrail", http.MethodDelete, v+"/guardrails/{name}", ""),
+		rule("GuardrailService.Check", http.MethodPost, v+"/guardrails/{guardrail}:check", "*"),
 	}
 }
 
@@ -129,6 +139,7 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
+		evalsiv1alpha1connect.GuardrailServiceName,
 	}
 	services := make([]*vanguard.Service, 0, len(names))
 	for _, name := range names {

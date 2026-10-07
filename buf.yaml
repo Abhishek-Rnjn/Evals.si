@@ -4,6 +4,11 @@ modules:
 lint:
   use:
     - STANDARD
+  ignore:
+    # Vendored third-party protocol, kept byte-for-byte.
+    - proto/agentgateway
 breaking:
   use:
     - FILE
+  ignore:
+    - proto/agentgateway

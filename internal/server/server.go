@@ -24,8 +24,8 @@ import (
 	"connectrpc.com/grpcreflect"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/annotate"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
@@ -34,6 +34,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
@@ -413,6 +414,11 @@ func otlpHandler(d deps) http.Handler {
 func Handler(d deps) http.Handler {
 	gated := connect.WithInterceptors(d.gate.interceptor())
 	mux := http.NewServeMux()
+	log := d.log
+	if log == nil {
+		log = slog.Default()
+	}
+	guard := guardrail.New(d.store, d.svc, log)
 	handlers := map[string]http.Handler{}
 	for _, h := range []func() (string, http.Handler){
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewEvaluationServiceHandler(d.svc, gated) },
@@ -427,6 +433,7 @@ func Handler(d deps) http.Handler {
 		func() (string, http.Handler) {
 			return evalsiv1alpha1connect.NewAnnotationServiceHandler(annotate.New(d.store, d.runs), gated)
 		},
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewGuardrailServiceHandler(guard, gated) },
 	} {
 		path, handler := h()
 		mux.Handle(path, handler)
@@ -440,7 +447,11 @@ func Handler(d deps) http.Handler {
 	}
 	mux.Handle("/v1alpha1/", rest)
 	registerOTLP(mux, d)
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics)))
+	// agentgateway's inline guardrail protocols: the prompt-guard webhook
+	// (LLM traffic) and the ExtMcp processor service (MCP traffic, gRPC).
+	mux.Handle("POST /guardrails/{project}/{guardrail}/{phase}", guard.Webhook(d.gate.authorizeGuardrail))
+	mux.Handle(ext_mcpconnect.NewExtMcpHandler(guard.ExtMcp(), gated))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
@@ -450,6 +461,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
+		evalsiv1alpha1connect.GuardrailServiceName,
 	}
 	// Health reports liveness only and stays open, like /healthz.
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))
@@ -476,10 +488,6 @@ func Handler(d deps) http.Handler {
 	})
 	root := d.authn.Middleware(mux)
 	if !d.mcp.Disabled {
-		log := d.log
-		if log == nil {
-			log = slog.Default()
-		}
 		mcp.New(d.mcp, root, d.gate.authorizeTool, d.authn.Issuers, log).Register(mux)
 	}
 	return root

@@ -180,12 +180,13 @@ rbac:
 
 | Role | Permissions |
 |---|---|
-| `viewer` | catalog, runs, policies, traces and annotation queues: read |
-| `runner` | viewer, plus evaluations and runs (create, cancel, resume) |
-| `editor` | runner, plus writing policies, promoting run results into datasets (`datasets.write`), and setting up and answering annotation queues |
+| `viewer` | catalog, runs, policies, traces, annotation queues and guardrails: read |
+| `runner` | viewer, plus evaluations, guardrail checks, and runs (create, cancel, resume) |
+| `editor` | runner, plus writing policies and guardrails, promoting run results into datasets (`datasets.write`), and setting up and answering annotation queues |
 | `annotator` | annotation queues: read and answer (`annotations.read`, `annotations.write`) |
 | `admin` | editor, plus the project's keys, roles, bindings and audit log |
 | `ingest` | `traces.write` only |
+| `guard` | `guardrails.check` only: a gateway's credential for [inline guardrails](guardrails.md) |
 | `owner` | everything, everywhere |
 
 `evalsi auth roles permissions` lists every permission. Custom roles can also be managed through the API (`evalsi auth roles create|update|delete`) and bound with `evalsi auth bindings create`.

@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/evaluator.proto";
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/score.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// GuardrailService runs evaluators inline, on content on its way to or from
+// a model or a tool, and decides whether it may pass. agentgateway calls it
+// through its prompt-guard webhook (LLM traffic) and its mcpGuardrails
+// remote processor (MCP traffic); anything else can call Check directly.
+service GuardrailService {
+  rpc ApplyGuardrail(ApplyGuardrailRequest) returns (ApplyGuardrailResponse);
+  rpc ListGuardrails(ListGuardrailsRequest) returns (ListGuardrailsResponse);
+  rpc GetGuardrail(GetGuardrailRequest) returns (GetGuardrailResponse);
+  rpc DeleteGuardrail(DeleteGuardrailRequest) returns (DeleteGuardrailResponse);
+  // Checks content against a stored guardrail, or an inline one (dry run).
+  rpc Check(CheckRequest) returns (CheckResponse);
+}
+
+enum GuardrailPhase {
+  GUARDRAIL_PHASE_UNSPECIFIED = 0;
+  // Content on its way in: a prompt, or a tool call's arguments.
+  GUARDRAIL_PHASE_REQUEST = 1;
+  // Content on its way back: a model's answer, or a tool's result.
+  GUARDRAIL_PHASE_RESPONSE = 2;
+}
+
+enum GuardrailMode {
+  GUARDRAIL_MODE_UNSPECIFIED = 0;
+  // Block and redact (the default).
+  GUARDRAIL_MODE_ENFORCE = 1;
+  // Decide and report, but always let content through unchanged.
+  GUARDRAIL_MODE_AUDIT = 2;
+}
+
+enum GuardrailFailureMode {
+  GUARDRAIL_FAILURE_MODE_UNSPECIFIED = 0;
+  // An evaluator error or timeout blocks (the default).
+  GUARDRAIL_FAILURE_MODE_CLOSED = 1;
+  // An evaluator error or timeout lets content through.
+  GUARDRAIL_FAILURE_MODE_OPEN = 2;
+}
+
+// RedactRule replaces matches in the content before evaluators see it.
+message RedactRule {
+  // One of "email", "phone", "credit-card" (Luhn-checked), "us-ssn",
+  // "ipv4", "aws-access-key", "github-token", "api-key", "private-key",
+  // "jwt"; or set pattern.
+  string builtin = 1;
+  // An RE2 regular expression.
+  string pattern = 2;
+  // Default "<TYPE>" for builtins and "[REDACTED]" for patterns.
+  string replacement = 3;
+}
+
+message Guardrail {
+  // Lowercase letters, digits, '.', '_' or '-'.
+  string name = 1;
+  string project = 2;
+  string description = 3;
+  // Phases it applies to; empty means both. A check in another phase passes.
+  repeated GuardrailPhase phases = 4;
+  // Applied first; a redaction alone never blocks.
+  repeated RedactRule redact = 5;
+  // Record-scope evaluators. They see the checked content as the record's
+  // output and what came before it (earlier messages) as its input.
+  repeated EvaluatorRef evaluators = 6;
+  string judge = 7;
+  // CEL over scores, phase ("request" or "response"), source ("llm",
+  // "mcp" or "api"), method, tool, content and labels; true blocks. Empty
+  // blocks when any pass/fail score failed. When it cannot be evaluated (a
+  // score or label is missing) failure_mode decides; labels[?"tier"]
+  // .orValue("") reads a label that may be absent.
+  string block_when = 8;
+  // Shown to the client when content is blocked.
+  string message = 9;
+  // Default 2s, at most 30s. agentgateway's own call timeout is 10s.
+  google.protobuf.Duration timeout = 10;
+  GuardrailFailureMode failure_mode = 11;
+  GuardrailMode mode = 12;
+  map<string, string> labels = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  string updated_by = 15;
+}
+
+message ApplyGuardrailRequest {
+  Guardrail guardrail = 1;
+}
+
+message ApplyGuardrailResponse {
+  Guardrail guardrail = 1;
+}
+
+message ListGuardrailsRequest {
+  string project = 1;
+}
+
+message ListGuardrailsResponse {
+  repeated Guardrail guardrails = 1;
+}
+
+message GetGuardrailRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message GetGuardrailResponse {
+  Guardrail guardrail = 1;
+}
+
+message DeleteGuardrailRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message DeleteGuardrailResponse {}
+
+message CheckRequest {
+  string project = 1;
+  // A stored guardrail's name; or set inline.
+  string guardrail = 2;
+  Guardrail inline = 3;
+  GuardrailPhase phase = 4;
+  // The content to check.
+  string content = 5;
+  // What came before it, for evaluators that need context.
+  Content context = 6;
+  // For block_when (as labels).
+  map<string, string> labels = 7;
+}
+
+enum GuardrailDecision {
+  GUARDRAIL_DECISION_UNSPECIFIED = 0;
+  GUARDRAIL_DECISION_PASS = 1;
+  // Content passes with redactions.
+  GUARDRAIL_DECISION_MASK = 2;
+  GUARDRAIL_DECISION_BLOCK = 3;
+}
+
+message CheckResponse {
+  // What the caller should do: with mode audit, PASS whatever was decided.
+  GuardrailDecision decision = 1;
+  // What the guardrail decided, before audit mode.
+  GuardrailDecision verdict = 2;
+  string reason = 3;
+  // The content after redaction (set on MASK).
+  string content = 4;
+  // Redactions by rule (builtin name or pattern).
+  map<string, int64> redactions = 5;
+  // Scores by metric.
+  map<string, double> scores = 6;
+  repeated EvaluationResult results = 7;
+  // An evaluator failed or timed out, and failure_mode decided.
+  bool failed = 8;
+  google.protobuf.Duration duration = 9;
+  // The record the evaluators saw.
+  Record record = 10;
+}

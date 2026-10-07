@@ -46,7 +46,7 @@ func TestActionTableCoversEveryRPC(t *testing.T) {
 	rules := (&gate{}).accessRules()
 	seen := map[string]bool{}
 	n := 0
-	protoregistry.GlobalFiles.RangeFilesByPackage("evalsi.v1alpha1", func(fd protoreflect.FileDescriptor) bool {
+	walk := func(fd protoreflect.FileDescriptor) bool {
 		for i := range fd.Services().Len() {
 			svc := fd.Services().Get(i)
 			for j := range svc.Methods().Len() {
@@ -59,7 +59,10 @@ func TestActionTableCoversEveryRPC(t *testing.T) {
 			}
 		}
 		return true
-	})
+	}
+	protoregistry.GlobalFiles.RangeFilesByPackage("evalsi.v1alpha1", walk)
+	// agentgateway's guardrail processor protocol, served for MCP traffic.
+	protoregistry.GlobalFiles.RangeFilesByPackage("agentgateway.dev.ext_mcp", walk)
 	if n < 30 {
 		t.Fatalf("found only %d RPCs; is the registry populated?", n)
 	}
