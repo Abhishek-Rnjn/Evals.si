@@ -336,14 +336,14 @@ func (m *Manager) CreateShadowReplay(ctx context.Context, req *connect.Request[e
 	if candidate == nil || !generates(candidate) {
 		return nil, invalid("a shadow replay's candidate needs a target or an agent")
 	}
-	insts, err := m.validate(msg.GetProject(), candidate)
+	insts, err := m.validate(ctx, msg.GetProject(), candidate)
 	if err != nil {
 		return nil, err
 	}
 	baseline := proto.Clone(candidate).(*evalsiv1alpha1.RunSpec)
 	baseline.Target, baseline.Harness, baseline.Environment = nil, nil, nil
 	baseline.Trials, baseline.Gates, baseline.Budget = 0, nil, nil
-	baseInsts, err := m.validate(msg.GetProject(), baseline)
+	baseInsts, err := m.validate(ctx, msg.GetProject(), baseline)
 	if err != nil {
 		return nil, err
 	}

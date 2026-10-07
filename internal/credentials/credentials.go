@@ -1,21 +1,26 @@
 // Package credentials decides which of the worker's environment variables a
-// request may name. Run specs, agents and evaluator params refer to secrets
-// by variable name (api_key_env, headers_env, env_from), and the worker reads
-// the value and sends it where the spec says. On a shared server that would
-// let any caller who can create a run in any project send any variable the
-// worker holds to a URL of their choosing, so names are granted per project,
-// and a grant can limit the hosts its value may be sent to.
+// request may name, and which judges it may use. Run specs, agents and
+// evaluator params refer to secrets by variable name (api_key_env,
+// headers_env, env_from), and the worker reads the value and sends it where
+// the spec says. On a shared server that would let any caller who can create
+// a run in any project send any variable the worker holds to a URL of their
+// choosing, so names are granted per project, and a grant can limit the
+// hosts its value may be sent to.
 package credentials
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -25,6 +30,10 @@ import (
 
 // None as api_key_env sends no key (a local model server, for example).
 const None = "none"
+
+// SecretKeyword marks a param in an evaluator's params schema as naming
+// worker variables: {"x-evalsi-secret": {"sent_to": "<param with the URL>"}}.
+const SecretKeyword = "x-evalsi-secret"
 
 // Config is the credentials section of the server config.
 type Config struct {
@@ -43,10 +52,14 @@ type Grant struct {
 	// Projects that may name it; "*" for every project.
 	Projects []string `json:"projects"`
 	// Hosts its value may be sent to, exact (api.openai.com) or a subdomain
-	// wildcard (*.openai.azure.com). Empty: any host. A grant with hosts is
+	// wildcard (*.openai.azure.com), over HTTPS (plain HTTP only to
+	// loopback, or with allow_http). Empty: any host. A grant with hosts is
 	// never copied into a sandbox (a CLI agent's env_from), whose traffic
 	// evalsid does not see request by request.
 	Hosts []string `json:"hosts,omitempty"`
+	// Also allow plain HTTP to the hosts above (a model server on a trusted
+	// network without TLS).
+	AllowHTTP bool `json:"allow_http,omitempty"`
 }
 
 var (
@@ -75,27 +88,95 @@ func (c Config) Validate() error {
 				errs = append(errs, fmt.Errorf("%s.hosts: %q is not a lowercase host name or *.domain", at, h))
 			}
 		}
+		if g.AllowHTTP && len(g.Hosts) == 0 {
+			errs = append(errs, fmt.Errorf("%s.allow_http needs hosts (a grant without hosts allows any URL already)", at))
+		}
 	}
 	return errors.Join(errs...)
 }
 
-// Policy checks references against the grants.
-type Policy struct {
-	enforce bool
-	grants  []Grant
+// Settings is what the policy is made from; Update replaces them.
+type Settings struct {
+	Credentials Config
+	// Judge name -> projects that may use it ("*" for all); a judge not
+	// listed, or listed with no projects, is open to every project.
+	Judges map[string][]string
+	// Authentication decides whether grants are enforced by default.
+	AuthEnabled bool
 }
 
-// NewPolicy makes the policy; authEnabled decides the default.
-func NewPolicy(c Config, authEnabled bool) *Policy {
-	enforce := authEnabled || len(c.Grants) > 0
-	if c.Enforce != nil {
-		enforce = *c.Enforce
+// Policy checks references and judges against the settings. Its methods
+// are safe for concurrent use, and a nil Policy allows everything.
+type Policy struct {
+	mu      sync.RWMutex
+	enforce bool
+	grants  []Grant
+	judges  map[string][]string
+	denied  func(ctx context.Context, d Denial)
+	version atomic.Uint64
+
+	countMu sync.Mutex
+	counts  map[[3]string]int64
+}
+
+// Denial describes one refused reference, for the audit log.
+type Denial struct {
+	Project string
+	// "env:NAME" or "judge:NAME".
+	Subject string
+	Reason  string
+}
+
+// NewPolicy makes the policy.
+func NewPolicy(s Settings) *Policy {
+	p := &Policy{counts: map[[3]string]int64{}}
+	p.Update(s)
+	return p
+}
+
+// Update replaces the grants and judge scopes (a configuration reload).
+func (p *Policy) Update(s Settings) {
+	enforce := s.AuthEnabled || len(s.Credentials.Grants) > 0
+	if s.Credentials.Enforce != nil {
+		enforce = *s.Credentials.Enforce
 	}
-	return &Policy{enforce: enforce, grants: c.Grants}
+	judges := map[string][]string{}
+	for name, projects := range s.Judges {
+		if len(projects) > 0 {
+			judges[name] = slices.Clone(projects)
+		}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.enforce, p.grants, p.judges = enforce, slices.Clone(s.Credentials.Grants), judges
+	p.version.Add(1)
+}
+
+// Version changes with every Update, so what was checked against older
+// settings (a compiled guardrail) can tell it must be checked again.
+func (p *Policy) Version() uint64 {
+	if p == nil {
+		return 0
+	}
+	return p.version.Load()
+}
+
+// OnDenied registers fn, called with every refusal.
+func (p *Policy) OnDenied(fn func(ctx context.Context, d Denial)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.denied = fn
 }
 
 // Enforced reports whether references are checked.
-func (p *Policy) Enforced() bool { return p != nil && p.enforce }
+func (p *Policy) Enforced() bool {
+	if p == nil {
+		return false
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.enforce
+}
 
 // Use is one reference to a worker variable.
 type Use struct {
@@ -103,28 +184,111 @@ type Use struct {
 	// Where in the request, for errors.
 	Field string
 	// The URL the value is sent to; empty when the request does not say
-	// (an evaluator param without a url).
+	// (an evaluator param without a destination).
 	URL string
 	// Copied into a sandbox rather than sent by the worker.
 	Sandbox bool
 }
 
 // Check refuses uses the project has no grant for.
-func (p *Policy) Check(project string, uses []Use) error {
-	if !p.Enforced() {
+func (p *Policy) Check(ctx context.Context, project string, uses []Use) error {
+	if p == nil {
+		return nil
+	}
+	p.mu.RLock()
+	enforce, grants := p.enforce, p.grants
+	p.mu.RUnlock()
+	if !enforce {
 		return nil
 	}
 	for _, u := range uses {
-		if err := p.check(project, u); err != nil {
+		if err := check(grants, project, u); err != nil {
+			p.deny(ctx, Denial{Project: project, Subject: "env:" + u.Env, Reason: err.Error()})
 			return connect.NewError(connect.CodePermissionDenied, err)
 		}
 	}
 	return nil
 }
 
-func (p *Policy) check(project string, u Use) error {
-	var granted []Grant
+// CheckJudge refuses a judge not open to the project. Judge scopes apply
+// whether or not grants are enforced: they are listed on purpose.
+func (p *Policy) CheckJudge(ctx context.Context, project, judge, field string) error {
+	if p == nil || judge == "" || p.JudgeAllowed(project, judge) {
+		return nil
+	}
+	err := fmt.Errorf("%s uses judge %q, which project %q may not use; see judges.%s.projects in the server config", field, judge, project, judge)
+	p.deny(ctx, Denial{Project: project, Subject: "judge:" + judge, Reason: err.Error()})
+	return connect.NewError(connect.CodePermissionDenied, err)
+}
+
+// JudgeAllowed reports whether the project may use the judge.
+func (p *Policy) JudgeAllowed(project, judge string) bool {
+	if p == nil {
+		return true
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	projects, scoped := p.judges[judge]
+	return !scoped || slices.Contains(projects, "*") || slices.Contains(projects, project)
+}
+
+// Grants returns the grants that apply to a project, and whether they are
+// enforced. Names and hosts only: values never leave the worker.
+func (p *Policy) Grants(project string) (bool, []Grant) {
+	if p == nil {
+		return false, nil
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	var out []Grant
 	for _, g := range p.grants {
+		if slices.Contains(g.Projects, "*") || slices.Contains(g.Projects, project) {
+			out = append(out, g)
+		}
+	}
+	return p.enforce, out
+}
+
+func (p *Policy) deny(ctx context.Context, d Denial) {
+	kind, _, _ := strings.Cut(d.Subject, ":")
+	p.countMu.Lock()
+	p.counts[[3]string{d.Project, kind, d.Subject}]++
+	p.countMu.Unlock()
+	p.mu.RLock()
+	fn := p.denied
+	p.mu.RUnlock()
+	if fn != nil {
+		fn(ctx, d)
+	}
+}
+
+// WriteMetrics writes the refusal counter.
+func (p *Policy) WriteMetrics(w io.Writer) {
+	if p == nil {
+		return
+	}
+	p.countMu.Lock()
+	keys := make([][3]string, 0, len(p.counts))
+	for k := range p.counts {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return strings.Join(keys[i][:], "\x00") < strings.Join(keys[j][:], "\x00") })
+	values := make([]int64, len(keys))
+	for i, k := range keys {
+		values[i] = p.counts[k]
+	}
+	p.countMu.Unlock()
+	const name = "evalsi_credential_denied_total"
+	fmt.Fprintf(w, "# HELP %s Requests refused for naming a worker variable or judge their project may not use.\n# TYPE %s counter\n", name, name)
+	for i, k := range keys {
+		_, subject, _ := strings.Cut(k[2], ":")
+		fmt.Fprintf(w, "%s{project=%q,kind=%q,name=%q} %d\n", name, k[0], k[1], subject, values[i])
+	}
+}
+
+func check(grants []Grant, project string, u Use) error {
+	var granted []Grant
+	for _, g := range grants {
 		if g.Env == u.Env && (slices.Contains(g.Projects, "*") || slices.Contains(g.Projects, project)) {
 			granted = append(granted, g)
 		}
@@ -133,22 +297,22 @@ func (p *Policy) check(project string, u Use) error {
 		return fmt.Errorf("%s names the worker variable %s, which project %q may not use; "+
 			"grant it under credentials.grants in the server config", u.Field, u.Env, project)
 	}
-	host := ""
+	scheme, host := "", ""
 	if u.URL != "" {
-		host = hostOf(u.URL)
+		scheme, host = destination(u.URL)
 	}
+	plain := false
 	for _, g := range granted {
 		if len(g.Hosts) == 0 {
 			return nil
 		}
-		if u.Sandbox || host == "" {
+		if u.Sandbox || host == "" || !slices.ContainsFunc(g.Hosts, func(h string) bool { return matchHost(h, host) }) {
 			continue
 		}
-		for _, h := range g.Hosts {
-			if matchHost(h, host) {
-				return nil
-			}
+		if scheme == "https" || loopback(host) || g.AllowHTTP {
+			return nil
 		}
+		plain = true
 	}
 	switch {
 	case u.Sandbox:
@@ -157,18 +321,29 @@ func (p *Policy) check(project string, u Use) error {
 	case host == "":
 		return fmt.Errorf("%s names %s without a URL to send it to, but its grant limits it to hosts %s",
 			u.Field, u.Env, hostList(granted))
+	case plain:
+		return fmt.Errorf("%s would send %s to %s over plain %s; use https (or set allow_http on its grant)",
+			u.Field, u.Env, host, scheme)
 	default:
 		return fmt.Errorf("%s would send %s to %s, which its grant does not allow (hosts %s)",
 			u.Field, u.Env, host, hostList(granted))
 	}
 }
 
-func hostOf(raw string) string {
+func destination(raw string) (scheme, host string) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
-		return ""
+		return "", ""
 	}
-	return strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	return strings.ToLower(u.Scheme), strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+}
+
+func loopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func matchHost(pattern, host string) bool {
@@ -187,10 +362,11 @@ func hostList(gs []Grant) string {
 	return strings.Join(slices.Compact(hs), ", ")
 }
 
-// SpecUses lists the worker variables a run spec names: the target's key
-// (the connector's default variable when api_key_env is empty, since the
-// worker falls back to it), an agent's headers, key or env_from, MCP
-// servers' headers, and evaluator and external-harness params.
+// SpecUses lists the worker variables a run spec names outside its
+// evaluators: the target's key (the connector's default variable when
+// api_key_env is empty, since the worker falls back to it), an agent's
+// headers, key or env_from, MCP servers' headers, and external-harness
+// config. Evaluator params are listed with their manifests (ParamUses).
 func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 	var uses []Use
 	t := spec.GetTarget()
@@ -222,8 +398,7 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 	for _, s := range spec.GetHarness().GetBuiltin().GetTools().GetMcp() {
 		uses = append(uses, headerUses("MCP server "+s.GetName()+" headers_env", s.GetHeadersEnv(), s.GetUrl())...)
 	}
-	uses = append(uses, ParamUses("spec.harness.external.config", spec.GetHarness().GetExternal().GetConfig())...)
-	uses = append(uses, EvaluatorUses(spec.GetEvaluators())...)
+	uses = append(uses, ParamUses("spec.harness.external.config", spec.GetHarness().GetExternal().GetConfig(), nil)...)
 	return uses, nil
 }
 
@@ -267,36 +442,31 @@ func headerUses(field string, headers map[string]string, dest string) []Use {
 	return uses
 }
 
-// EvaluatorUses lists the variables evaluator params name.
-func EvaluatorUses(refs []*evalsiv1alpha1.EvaluatorRef) []Use {
-	var uses []Use
-	for i, r := range refs {
-		name := r.GetName()
-		if name == "" {
-			name = r.GetRef()
-		}
-		uses = append(uses, ParamUses(fmt.Sprintf("evaluators[%d] (%s)", i, name), r.GetParams())...)
-	}
-	return uses
-}
-
-// ParamUses lists the variables a params object names. By convention a
-// param ending in _env holds a variable name (a string) or header names
-// mapped to variable names (an object); its value goes to the url or
-// base_url param beside it.
-func ParamUses(field string, params *structpb.Struct) []Use {
+// ParamUses lists the variables a params object names. A param names
+// variables when the params schema declares it (SecretKeyword, whose
+// sent_to names the param holding the destination URL), or, declared or
+// not, when its name ends in _env (destination: the url or base_url param).
+// Its value is a variable name, or header names mapped to variable names.
+func ParamUses(field string, params, schema *structpb.Struct) []Use {
 	if params == nil {
 		return nil
 	}
 	fields := params.GetFields()
-	dest := fields["url"].GetStringValue()
-	if dest == "" {
-		dest = fields["base_url"].GetStringValue()
-	}
+	declared := Declared(schema)
 	var uses []Use
 	for _, k := range sortedKeys(fields) {
-		if !strings.HasSuffix(k, "_env") {
+		sentTo, ok := declared[k]
+		if !ok && !strings.HasSuffix(k, "_env") {
 			continue
+		}
+		dest := ""
+		if ok && sentTo != "" {
+			dest = fields[sentTo].GetStringValue()
+		} else if !ok {
+			dest = fields["url"].GetStringValue()
+			if dest == "" {
+				dest = fields["base_url"].GetStringValue()
+			}
 		}
 		switch v := fields[k].GetKind().(type) {
 		case *structpb.Value_StringValue:
@@ -313,6 +483,20 @@ func ParamUses(field string, params *structpb.Struct) []Use {
 		}
 	}
 	return uses
+}
+
+// Declared returns the params a schema declares as naming worker variables,
+// each with the param that holds its destination ("" when none).
+func Declared(schema *structpb.Struct) map[string]string {
+	out := map[string]string{}
+	for name, prop := range schema.GetFields()["properties"].GetStructValue().GetFields() {
+		mark, ok := prop.GetStructValue().GetFields()[SecretKeyword]
+		if !ok {
+			continue
+		}
+		out[name] = mark.GetStructValue().GetFields()["sent_to"].GetStringValue()
+	}
+	return out
 }
 
 func sortedKeys[V any](m map[string]V) []string {

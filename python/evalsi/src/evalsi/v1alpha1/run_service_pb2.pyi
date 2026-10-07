@@ -46,8 +46,14 @@ class CreateRunRequest(_message.Message):
     PROJECT_FIELD_NUMBER: _builtins.int
     SPEC_FIELD_NUMBER: _builtins.int
     LABELS_FIELD_NUMBER: _builtins.int
+    VALIDATE_ONLY_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     project: _builtins.str
+    validate_only: _builtins.bool
+    """Check the request as creating it would (authorization, the spec,
+    credential grants and judges) without storing or starting anything; the
+    response has no run. Admission webhooks use it.
+    """
     @_builtins.property
     def spec(self) -> _run_pb2.RunSpec: ...
     @_builtins.property
@@ -61,10 +67,11 @@ class CreateRunRequest(_message.Message):
         project: _builtins.str = ...,
         spec: _run_pb2.RunSpec | None = ...,
         labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        validate_only: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["spec", b"spec"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["labels", b"labels", "name", b"name", "project", b"project", "spec", b"spec"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["labels", b"labels", "name", b"name", "project", b"project", "spec", b"spec", "validate_only", b"validate_only"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CreateRunRequest: _TypeAlias = CreateRunRequest  # noqa: Y015

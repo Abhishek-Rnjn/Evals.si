@@ -133,7 +133,18 @@ func run() error {
 		return err
 	}
 	if webhooks {
-		evalsiwebhook.Register(mgr.GetWebhookServer())
+		// With the API configured, the validating webhook also asks it
+		// whether it would accept each EvalRun and policy (credential
+		// grants, judges, access rules) before admitting them.
+		var remote evalsiwebhook.Remote
+		if api.URL != "" {
+			client, err := controllers.NewAPI(api)
+			if err != nil {
+				return err
+			}
+			remote = client
+		}
+		evalsiwebhook.Register(mgr.GetWebhookServer(), remote)
 		if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
 			return err
 		}

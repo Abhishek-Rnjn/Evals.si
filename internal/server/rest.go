@@ -19,6 +19,7 @@ import (
 //	POST   /v1alpha1/evaluate                  EvaluationService.Evaluate
 //	POST   /v1alpha1/rewards:score             RewardService.ScoreRewards
 //	GET    /v1alpha1/evaluators                CatalogService.ListEvaluators
+//	GET    /v1alpha1/credentials               CatalogService.ListCredentials (?project=)
 //	POST   /v1alpha1/runs                      RunService.CreateRun
 //	GET    /v1alpha1/runs                      RunService.ListRuns (?project=&page_size=&page_token=)
 //	GET    /v1alpha1/runs/{id}                 RunService.GetRun
@@ -81,6 +82,7 @@ func restRules() []*annotations.HttpRule {
 		rule("EvaluationService.Evaluate", http.MethodPost, v+"/evaluate", "*"),
 		rule("RewardService.ScoreRewards", http.MethodPost, v+"/rewards:score", "*"),
 		rule("CatalogService.ListEvaluators", http.MethodGet, v+"/evaluators", ""),
+		rule("CatalogService.ListCredentials", http.MethodGet, v+"/credentials", ""),
 		rule("RunService.CreateRun", http.MethodPost, v+"/runs", "*"),
 		rule("RunService.ListRuns", http.MethodGet, v+"/runs", ""),
 		rule("RunService.GetRun", http.MethodGet, v+"/runs/{id}", ""),

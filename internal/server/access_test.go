@@ -98,6 +98,10 @@ func (fakeWorker) Describe(context.Context) ([]*evalsiv1alpha1.EvaluatorManifest
 			Requires:   &evalsiv1alpha1.Requirements{Isolation: evalsiv1alpha1.IsolationLevel_ISOLATION_LEVEL_CONFINED},
 			Scheduling: &evalsiv1alpha1.Scheduling{Pool: "sandbox"},
 			Outputs:    []*evalsiv1alpha1.MetricSpec{{Name: "unit-tests", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}}},
+		// Needs a judge, for judge scoping.
+		{Name: "builtin/judge-score", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD, ParamsSchema: schema,
+			Requires: &evalsiv1alpha1.Requirements{Judge: true},
+			Outputs:  []*evalsiv1alpha1.MetricSpec{{Name: "judge-score", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}}},
 		// Params naming a worker variable and where its value goes.
 		{Name: "builtin/reward-model", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD, ParamsSchema: rewardSchema,
 			Outputs: []*evalsiv1alpha1.MetricSpec{{Name: "reward-model", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}}},

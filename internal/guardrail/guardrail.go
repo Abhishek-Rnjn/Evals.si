@@ -105,8 +105,10 @@ type redactor struct {
 
 // compiled is a guardrail ready to check content.
 type compiled struct {
-	g        *evalsiv1alpha1.Guardrail
-	version  int64
+	g       *evalsiv1alpha1.Guardrail
+	version int64
+	// The credentials policy's version it was checked against.
+	grants   uint64
 	phases   map[evalsiv1alpha1.GuardrailPhase]bool
 	redact   []redactor
 	insts    []evaluation.Instance
@@ -220,7 +222,7 @@ func (r redactor) apply(text string, counts map[string]int64) string {
 }
 
 // compile validates a guardrail and prepares it. eval binds its evaluators.
-func compile(g *evalsiv1alpha1.Guardrail, eval *evaluation.Service) (*compiled, error) {
+func compile(ctx context.Context, g *evalsiv1alpha1.Guardrail, eval *evaluation.Service) (*compiled, error) {
 	if !nameRE.MatchString(g.GetName()) {
 		return nil, fmt.Errorf("guardrail name %q must be lowercase letters, digits, '.', '_' or '-'", g.GetName())
 	}
@@ -237,7 +239,7 @@ func compile(g *evalsiv1alpha1.Guardrail, eval *evaluation.Service) (*compiled, 
 		return nil, err
 	}
 	if len(g.GetEvaluators()) > 0 {
-		if c.insts, err = eval.BindFor(g.GetProject(), g.GetEvaluators(), g.GetJudge()); err != nil {
+		if c.insts, err = eval.BindFor(ctx, g.GetProject(), g.GetEvaluators(), g.GetJudge()); err != nil {
 			return nil, err
 		}
 		for _, in := range c.insts {

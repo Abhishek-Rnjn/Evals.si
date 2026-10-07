@@ -95,3 +95,37 @@ def test_cli_apply_and_check(
     assert main(["guardrails", "check", "-f", str(EXAMPLE), "--text", "x", *server]) == 0
     assert fake[-1][1]["inline"]["name"] == "support-chat"
     assert "guardrail" not in fake[-1][1]
+
+
+def test_cli_credentials_list(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith(".CatalogService/ListCredentials")
+        assert json.loads(request.content) == {"project": "support"}
+        return httpx.Response(
+            200,
+            json={
+                "enforced": True,
+                "grants": [
+                    {"env": "OPENAI_API_KEY", "hosts": ["api.openai.com"], "allProjects": True},
+                    {"env": "AGENT_TOKEN"},
+                ],
+                "judges": ["claude"],
+            },
+        )
+
+    real = Client.__init__
+
+    def init(self: Client, base_url: str, **kw: Any) -> None:
+        kw["transport"] = httpx.MockTransport(handler)
+        real(self, base_url, **kw)
+
+    monkeypatch.setattr(Client, "__init__", init)
+    monkeypatch.setenv("EVALSI_API_KEY", "evk_test")
+    code = main(["credentials", "list", "--server", "http://evalsid", "--project", "support"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "OPENAI_API_KEY\tapi.openai.com\t(every project)" in out
+    assert "AGENT_TOKEN\tany host" in out
+    assert "judges: claude" in out

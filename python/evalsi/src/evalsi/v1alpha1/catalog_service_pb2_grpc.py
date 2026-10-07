@@ -40,6 +40,11 @@ class CatalogServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListEvaluatorsRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListEvaluatorsResponse.FromString,
                 _registered_method=True)
+        self.ListCredentials = channel.unary_unary(
+                '/evalsi.v1alpha1.CatalogService/ListCredentials',
+                request_serializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListCredentialsRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListCredentialsResponse.FromString,
+                _registered_method=True)
 
 
 class CatalogServiceServicer:
@@ -52,6 +57,14 @@ class CatalogServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListCredentials(self, request, context):
+        """The worker variables and judges a project's requests may use (names and
+        hosts only; values never leave the worker).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CatalogServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -59,6 +72,11 @@ def add_CatalogServiceServicer_to_server(servicer, server):
                     servicer.ListEvaluators,
                     request_deserializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListEvaluatorsRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListEvaluatorsResponse.SerializeToString,
+            ),
+            'ListCredentials': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListCredentials,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListCredentialsRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListCredentialsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -89,6 +107,33 @@ class CatalogService:
             '/evalsi.v1alpha1.CatalogService/ListEvaluators',
             evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListEvaluatorsRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListEvaluatorsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListCredentials(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.CatalogService/ListCredentials',
+            evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListCredentialsRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_catalog__service__pb2.ListCredentialsResponse.FromString,
             options,
             channel_credentials,
             insecure,

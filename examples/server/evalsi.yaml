@@ -48,6 +48,7 @@ judges:
     model: claude-opus-5-5
     effort: low
     requests_per_minute: 300
+    # projects: [support, research]    # only these projects may use it (default: all)
   local:
     provider: openai-compatible
     model: my-judge
@@ -58,9 +59,11 @@ default_judge: claude
 # (api_key_env, headers_env, env_from, params ending in _env), per project
 # and optionally per destination host. Checked whenever auth is enabled or a
 # grant is listed. See docs/guides/identity.md.
+# Reloaded without a restart (every 15s and on SIGHUP), with judges' projects.
 # credentials:
 #   grants:
-#     - {env: OPENAI_API_KEY, projects: ["*"], hosts: [api.openai.com]}
+#     - {env: OPENAI_API_KEY, projects: ["*"], hosts: [api.openai.com]}   # HTTPS only
+#     - {env: LAB_KEY, projects: [research], hosts: [vllm.lab], allow_http: true}
 #     - {env: SUPPORT_AGENT_TOKEN, projects: [support]}
 
 evaluate:

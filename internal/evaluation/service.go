@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -49,22 +50,66 @@ func (s *Service) UseCredentials(p *credentials.Policy) { s.credentials = p }
 // Credentials is the policy set with UseCredentials.
 func (s *Service) Credentials() *credentials.Policy { return s.credentials }
 
-// BindFor binds evaluators for a request in a project: Bind, then a check
-// of the worker variables their params name against the project's grants.
-// Requests that arrive over the API bind with this; Bind alone is for
-// specs that were checked when they were stored.
-func (s *Service) BindFor(project string, refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]Instance, error) {
+// BindFor binds evaluators for a request in a project: Bind, then Authorize.
+// Requests that arrive over the API bind with this; Bind alone is for specs
+// that were checked when they were stored.
+func (s *Service) BindFor(ctx context.Context, project string, refs []*evalsiv1alpha1.EvaluatorRef, judge string) ([]Instance, error) {
 	insts, err := s.Bind(refs, judge)
 	if err != nil {
 		return nil, err
 	}
-	if project == "" {
-		project = authz.DefaultProject
-	}
-	if err := s.credentials.Check(project, credentials.EvaluatorUses(refs)); err != nil {
+	if err := s.Authorize(ctx, project, insts); err != nil {
 		return nil, err
 	}
 	return insts, nil
+}
+
+// Authorize checks bound evaluators against the project's grants: the
+// worker variables their params name (as their manifests declare, or by
+// the _env convention) and their judges.
+func (s *Service) Authorize(ctx context.Context, project string, insts []Instance) error {
+	if project == "" {
+		project = authz.DefaultProject
+	}
+	var uses []credentials.Use
+	for i, in := range insts {
+		field := fmt.Sprintf("evaluators[%d] (%s)", i, in.Name)
+		uses = append(uses, credentials.ParamUses(field, in.Params, in.Manifest.GetParamsSchema())...)
+		if err := s.credentials.CheckJudge(ctx, project, in.Judge, field); err != nil {
+			return err
+		}
+	}
+	return s.credentials.Check(ctx, project, uses)
+}
+
+// ListCredentials lists what a project's requests may name: the grants
+// that apply to it (names and hosts) and the judges open to it.
+func (s *Service) ListCredentials(_ context.Context, req *connect.Request[evalsiv1alpha1.ListCredentialsRequest]) (*connect.Response[evalsiv1alpha1.ListCredentialsResponse], error) {
+	project := req.Msg.GetProject()
+	if project == "" {
+		project = authz.DefaultProject
+	}
+	enforced, grants := s.credentials.Grants(project)
+	out := &evalsiv1alpha1.ListCredentialsResponse{Enforced: enforced}
+	for _, g := range grants {
+		out.Grants = append(out.Grants, &evalsiv1alpha1.CredentialGrant{
+			Env: g.Env, Hosts: g.Hosts, AllowHttp: g.AllowHTTP, AllProjects: slices.Contains(g.Projects, "*"),
+		})
+	}
+	for _, j := range s.judges {
+		if s.credentials.JudgeAllowed(project, j) {
+			out.Judges = append(out.Judges, j)
+		}
+	}
+	return connect.NewResponse(out), nil
+}
+
+// JudgeOr returns name, or the server's default judge when name is empty.
+func (s *Service) JudgeOr(name string) string {
+	if name == "" {
+		return s.defaultJudge
+	}
+	return name
 }
 
 // RunsCode reports whether any referenced evaluator executes code, which
@@ -315,7 +360,7 @@ func (s *Service) Evaluate(ctx context.Context, req *connect.Request[evalsiv1alp
 	if n := len(msg.GetRecords()); n > s.opts.MaxRecords {
 		return nil, invalid("%d records exceed this server's limit of %d for Evaluate; use EvaluateStream", n, s.opts.MaxRecords)
 	}
-	insts, err := s.BindFor(msg.GetProject(), msg.GetEvaluators(), msg.GetJudge())
+	insts, err := s.BindFor(ctx, msg.GetProject(), msg.GetEvaluators(), msg.GetJudge())
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +397,7 @@ func (s *Service) EvaluateStream(ctx context.Context, stream *connect.BidiStream
 	if cfg == nil {
 		return invalid("the stream must start with a config message")
 	}
-	insts, err := s.BindFor(cfg.GetProject(), cfg.GetEvaluators(), cfg.GetJudge())
+	insts, err := s.BindFor(ctx, cfg.GetProject(), cfg.GetEvaluators(), cfg.GetJudge())
 	if err != nil {
 		return err
 	}

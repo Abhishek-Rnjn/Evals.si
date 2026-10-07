@@ -406,8 +406,10 @@ func (x *Promotion) GetDataset() string {
 }
 
 type ApplyPolicyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Policy        *OnlineEvalPolicy      `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Policy *OnlineEvalPolicy      `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
+	// Check the policy as applying it would, without storing it.
+	ValidateOnly  bool `protobuf:"varint,2,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -447,6 +449,13 @@ func (x *ApplyPolicyRequest) GetPolicy() *OnlineEvalPolicy {
 		return x.Policy
 	}
 	return nil
+}
+
+func (x *ApplyPolicyRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
 }
 
 type ApplyPolicyResponse struct {
@@ -1019,9 +1028,10 @@ const file_evalsi_v1alpha1_monitor_service_proto_rawDesc = "" +
 	"\x06_above\"9\n" +
 	"\tPromotion\x12\x12\n" +
 	"\x04when\x18\x01 \x01(\tR\x04when\x12\x18\n" +
-	"\adataset\x18\x02 \x01(\tR\adataset\"O\n" +
+	"\adataset\x18\x02 \x01(\tR\adataset\"t\n" +
 	"\x12ApplyPolicyRequest\x129\n" +
-	"\x06policy\x18\x01 \x01(\v2!.evalsi.v1alpha1.OnlineEvalPolicyR\x06policy\"P\n" +
+	"\x06policy\x18\x01 \x01(\v2!.evalsi.v1alpha1.OnlineEvalPolicyR\x06policy\x12#\n" +
+	"\rvalidate_only\x18\x02 \x01(\bR\fvalidateOnly\"P\n" +
 	"\x13ApplyPolicyResponse\x129\n" +
 	"\x06policy\x18\x01 \x01(\v2!.evalsi.v1alpha1.OnlineEvalPolicyR\x06policy\"/\n" +
 	"\x13ListPoliciesRequest\x12\x18\n" +

@@ -117,6 +117,21 @@ func TestOperator(t *testing.T) {
 		if err := alice.Create(ctx, bad); err == nil || !strings.Contains(err.Error(), "spec.trials") {
 			t.Errorf("wrong type: %v", err)
 		}
+		// What evalsid would refuse (a variable the project has no grant
+		// for) is refused at admission, not later in the run's status.
+		secret := &v1.EvalRun{
+			ObjectMeta: metav1.ObjectMeta{Name: "exfil", Namespace: "team-a", Labels: map[string]string{v1.ProjectLabel: "quickstart"}},
+			Spec:       runtime.RawExtension{Raw: []byte(`{"target":{"connector":"openai-compatible","model":"m","base_url":"https://x.example/v1","api_key_env":"DATABASE_URL"},"evaluators":[{"ref":"exact-match"}],"dataset":{"path":"a.jsonl"}}`)},
+		}
+		if err := alice.Create(ctx, secret); err == nil || !strings.Contains(err.Error(), "may not use") {
+			t.Errorf("ungranted variable: %v", err)
+		}
+		e.api.mu.Lock()
+		validated := slices.Clone(e.api.validated)
+		e.api.mu.Unlock()
+		if !slices.Contains(validated, "run/exfil") {
+			t.Errorf("the webhook did not ask the API: %v", validated)
+		}
 		pol := &v1.OnlineEvalPolicy{ObjectMeta: metav1.ObjectMeta{Name: "bad", Namespace: "team-a"}, Spec: runtime.RawExtension{Raw: []byte(`{"stages":[]}`)}}
 		if err := alice.Create(ctx, pol); err == nil || !strings.Contains(err.Error(), "at least one stage") {
 			t.Errorf("invalid policy: %v", err)
