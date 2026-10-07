@@ -140,7 +140,8 @@ The scoring code and the image are the same on every rung. That is how the Phase
 - **Tools and prompt:** the domain's tools run against a live tau2 environment, and the agent gets tau2's agent instruction and the domain policy.
 - **The user:** the Evals.si user simulator plays the task's persona and instructions, through the run's judge. tau2's own LiteLLM user simulator is not used, so provider keys stay with the judge config. Expect scores close to, but not identical with, tau2's leaderboard.
 - **Grading:** tau2's own evaluator on the conversation.
-- **Not supported:** domains where the user has tools (telecom), and tasks graded by natural-language assertions, which the importer skips.
+- **Dual control (telecom):** the user has tools of their own: their phone. The simulated user then follows tau2's user prompt and guidelines through the run's judge. Each turn they either message the agent or call one of their tools against the same tau2 environment. Their calls are part of the conversation tau2 grades, so assertions on the device's state hold.
+- **Not supported:** tasks graded by natural-language assertions, which the importer skips.
 
 The adapter needs tau2's `data/` directory (`TAU2_DATA_DIR` or `data_dir=`). Use `trials: k` for τ-bench's pass^k.
 

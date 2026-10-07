@@ -36,7 +36,7 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | Item | Where recorded |
 |------|----------------|
 | BFCL memory and web-search categories (multi-turn now runs) | §23 Phase 3 deviations |
-| τ-bench telecom domain; tau2's own LiteLLM user (we use Evals.si's simulated user through the run's judge) | §23 Phase 3 deviations |
+| τ-bench: tau2's own LiteLLM user. Evals.si's simulated user speaks through the run's judge; in telecom it follows tau2's user prompt and calls its tools through structured output rather than native tool calls. | §23 Phase 3 deviations |
 | Multi-service and multi-stage Terminal-Bench tasks (22 of 241 Terminal-Bench 1 tasks do not import) | §23 Phase 3 deviations |
 | FrontierCode (task format not public in a verifiable form); CursorBench (tasks are private) | §23 Phase 3 deviations |
 

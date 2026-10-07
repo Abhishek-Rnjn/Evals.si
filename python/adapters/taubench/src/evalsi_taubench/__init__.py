@@ -27,9 +27,15 @@ The harness config takes the built-in harness's fields (``maxSteps``,
 Options: ``tasks`` (comma-separated ids), ``task_set`` (default: the domain),
 ``data_dir`` (tau2's data directory; default ``TAU2_DATA_DIR``).
 
-Not supported: domains whose user has tools of its own (telecom), and tasks
-graded by natural-language assertions (tau2 grades those with its own LLM
-judge); the importer skips the latter.
+In domains where the user has tools of their own (telecom: the user's
+phone), the simulated user is tau2's: tau2's user prompt and guidelines,
+through the run's judge, choosing at each turn between a message to the
+agent and one of their tools, which runs against the same tau2 environment.
+Their tool calls are part of the conversation tau2 grades, so assertions on
+the device's end state hold.
+
+Not supported: tasks graded by natural-language assertions (tau2 grades
+those with its own LLM judge); the importer skips them.
 """
 
 from __future__ import annotations
@@ -104,6 +110,7 @@ def load(domain: str, **options: str) -> list[dict[str, Any]]:
 @dataclass
 class _TauState:
     domain: str
+    source: Task
     task: Any
     env: Any
     tool_names: set[str]
@@ -111,6 +118,8 @@ class _TauState:
     events: list[Event] = field(default_factory=list)
     stop_reason: str = ""
     started: float = field(default_factory=time.time)
+    # Dual-control domains: the user with tools of their own.
+    user: ToolUser | None = None
 
 
 def _history_to_chat(messages: list[Any]) -> list[dict[str, Any]]:
@@ -161,11 +170,6 @@ class TauBenchHarness(BuiltinHarness):
             env = _registry().get_env_constructor(meta["domain"])()
         except Exception as exc:  # an unknown domain or missing data
             raise TaskError(f"tau2 domain {meta['domain']}: {exc}") from exc
-        if env.user_tools is not None:
-            raise TaskError(
-                f"the {meta['domain']} domain gives the user tools of its own, "
-                "which the Evals.si user simulator does not use"
-            )
         initial = tau_task.initial_state
         history = list(initial.message_history or []) if initial else []
         env.set_state(
@@ -177,6 +181,7 @@ class TauBenchHarness(BuiltinHarness):
         live = self._get(handle)
         self._tau[id(live)] = _TauState(
             domain=meta["domain"],
+            source=task,
             task=tau_task,
             env=env,
             tool_names={t.name for t in env.get_tools()},
@@ -241,6 +246,16 @@ class TauBenchHarness(BuiltinHarness):
             judge = self.ctx.judge(us.judge)
         except ValueError as exc:
             raise TaskError(str(exc)) from exc
+        state = next((st for st in self._tau.values() if st.source is task), None)
+        if state is not None and state.env.user_tools is not None:
+            state.user = ToolUser(
+                judge,
+                env=state.env,
+                scenario=str(state.task.user_scenario),
+                max_turns=us.max_turns or 30,
+                seed=f"{task.id}#{task.trial}",
+            )
+            return state.user
         scenario = task.record.metadata["taubench"]["task"]["user_scenario"]
         instructions = scenario.get("instructions")
         goal = instructions if isinstance(instructions, str) else json.dumps(instructions)
@@ -255,8 +270,6 @@ class TauBenchHarness(BuiltinHarness):
     async def _conversation(
         self, live: LiveTask, user: UserSimulator | None, emit: Callable[[Event], None]
     ) -> list[dict[str, Any]]:
-        from tau2.data_model.message import UserMessage
-
         state = self._state(live)
         conversation = _history_to_chat(state.history)
         if conversation and conversation[-1]["role"] == "user":
@@ -265,12 +278,9 @@ class TauBenchHarness(BuiltinHarness):
         opening = await user.reply(conversation)
         if not opening.message:
             raise TaskError("the simulated user did not open the conversation")
-        step = StepEvent(
-            _user_step(opening.message, live),
-        )
-        emit(step)
-        state.events.append(step)
-        state.history.append(UserMessage(role="user", content=opening.message))
+        # The step reaches state.events through run(), which grading reads;
+        # state.history stays the task's own initial history.
+        emit(StepEvent(_user_step(opening.message, live)))
         conversation.append({"role": "user", "content": opening.message})
         return conversation
 
@@ -289,7 +299,7 @@ class TauBenchHarness(BuiltinHarness):
         from tau2.data_model.simulation import SimulationRun, TerminationReason
         from tau2.evaluator.evaluator import EvaluationType, evaluate_simulation
 
-        messages = [*state.history, *_events_to_tau(state.events, state.tool_names)]
+        messages = [*state.history, *_events_to_tau(state.events, state.tool_names, state.user)]
         reason = (
             TerminationReason.USER_STOP
             if state.stop_reason == "completed"
@@ -327,10 +337,13 @@ def _user_step(text: str, live: LiveTask) -> Any:
     return Step(type="user", name="simulated-user", output=Content(text=text), span_id=span_id())
 
 
-def _events_to_tau(events: list[Event], tool_names: set[str]) -> list[Any]:
+def _events_to_tau(
+    events: list[Event], tool_names: set[str], user: ToolUser | None = None
+) -> list[Any]:
     """The agent's conversation as tau2 messages. Tool calls that never
     reached the environment (an unknown tool, arguments that are not JSON)
-    are left out, as tau2 replays every call it is given."""
+    are left out, as tau2 replays every call it is given. With a tool-using
+    user, their tool calls go before the message they led to."""
     from tau2.data_model.message import AssistantMessage, ToolCall, ToolMessage, UserMessage
 
     out: list[Any] = []
@@ -374,8 +387,141 @@ def _events_to_tau(events: list[Event], tool_names: set[str]) -> list[Any]:
                     )
                 )
         elif step.type == "user" and step.output is not None:
+            if user is not None:
+                out.extend(user.take())
             out.append(UserMessage(role="user", content=step.output.as_text()))
+    if user is not None:
+        out.extend(user.take_rest())
     return out
+
+
+USER_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "message": {
+            "type": "string",
+            "description": "What you say to the agent; empty when you call a tool instead.",
+        },
+        "tool": {"type": "string", "description": "The tool to call, or empty."},
+        "arguments": {
+            "type": "string",
+            "description": "The tool's arguments as a JSON object, or {}.",
+        },
+        "done": {"type": "boolean", "description": "True when the conversation should end."},
+    },
+    "required": ["message", "tool", "arguments", "done"],
+    "additionalProperties": False,
+}
+_STOP_TOKENS = ("###STOP###", "###TRANSFER###", "###OUT-OF-SCOPE###")
+# Tool calls a user may make before saying something.
+MAX_USER_TOOL_CALLS = 10
+
+
+class ToolUser(UserSimulator):
+    """tau2's simulated user for dual-control domains, through the run's judge:
+    each turn they either message the agent or call one of their own tools
+    (run against the task's tau2 environment, with requestor "user")."""
+
+    def __init__(self, judge: Any, *, env: Any, scenario: str, max_turns: int, seed: str) -> None:
+        from tau2.user.user_simulator import SYSTEM_PROMPT, get_global_user_sim_guidelines
+
+        super().__init__(judge, persona="", goal=scenario, max_turns=max_turns, seed=seed)
+        self.env = env
+        self.tools = {t.name: t for t in env.get_user_tools()}
+        self.system = SYSTEM_PROMPT.format(
+            global_user_sim_guidelines=get_global_user_sim_guidelines(use_tools=True),
+            instructions=scenario,
+        )
+        self.transcript: list[str] = []
+        self.seen = 0
+        # tau2 messages of the user's tool calls, per message they led to.
+        self.exchanges: list[list[Any]] = []
+        self.pending: list[Any] = []
+        self.calls = 0
+
+    def _tool_list(self) -> str:
+        lines = []
+        for name, tool in self.tools.items():
+            fn = tool.openai_schema["function"]
+            params = json.dumps(fn.get("parameters") or {}, separators=(",", ":"))
+            lines.append(f"- {name}: {fn.get('description', '')} Parameters: {params}")
+        return "\n".join(lines)
+
+    def _catch_up(self, conversation: list[dict[str, Any]]) -> None:
+        for m in conversation[self.seen :]:
+            content = (m.get("content") or "").strip()
+            if m["role"] == "assistant" and content:
+                self.transcript.append(f"AGENT: {content}")
+        self.seen = len(conversation)
+
+    async def reply(self, conversation: list[dict[str, Any]]) -> Any:
+        from evalsi.types import Usage
+        from evalsi_harness.user_sim import UserTurn
+
+        self.turns += 1
+        if self.turns > self.max_turns:
+            return UserTurn("", True, Usage())
+        self._catch_up(conversation)
+        usage = Usage(input_tokens=0, output_tokens=0)
+        for _ in range(MAX_USER_TOOL_CALLS + 1):
+            prompt = (
+                f"<your_tools>\n{self._tool_list()}\n</your_tools>\n"
+                f'<conversation id="{self.seed}">\n'
+                + "\n".join(self.transcript)
+                + "\n</conversation>\n"
+                "Either write your next message to the agent (tool empty), or call one of your "
+                "tools (message empty), never both. Use the stop tokens as your guidelines say."
+            )
+            response = await self.judge.backend.complete_json(
+                system=self.system, prompt=prompt, schema=USER_SCHEMA
+            )
+            usage.input_tokens = (usage.input_tokens or 0) + (response.input_tokens or 0)
+            usage.output_tokens = (usage.output_tokens or 0) + (response.output_tokens or 0)
+            data = response.data
+            tool = str(data.get("tool") or "").strip()
+            message = str(data.get("message") or "").strip()
+            if tool and not message:
+                self._call(tool, str(data.get("arguments") or "{}"))
+                continue
+            done = bool(data.get("done"))
+            for token in _STOP_TOKENS:
+                if token in message:
+                    done = True
+                    message = message.replace(token, "").strip()
+            if message:
+                self.transcript.append(f"YOU: {message}")
+                self.exchanges.append(self.pending)
+                self.pending = []
+            return UserTurn(message, done, usage)
+        return UserTurn("", True, usage)
+
+    def _call(self, name: str, raw: str) -> None:
+        from tau2.data_model.message import ToolCall, UserMessage
+
+        self.calls += 1
+        call_id = f"user-{self.calls}"
+        try:
+            args = json.loads(raw or "{}")
+            if not isinstance(args, dict):
+                raise ValueError("the arguments must be a JSON object")
+            if name not in self.tools:
+                raise ValueError(f"you have no tool {name}")
+        except ValueError as exc:  # not replayed: tau2 would replay it
+            self.transcript.append(f"YOUR TOOL CALL {name}({raw}) FAILED: {exc}")
+            return
+        call = ToolCall(id=call_id, name=name, arguments=args, requestor="user")
+        result = self.env.get_response(call)
+        self.pending += [UserMessage(role="user", content=None, tool_calls=[call]), result]
+        self.transcript.append(f"YOUR TOOL CALL {name}({json.dumps(args)}) -> {result.content}")
+
+    def take(self) -> list[Any]:
+        """The tool calls behind the next user message, in order."""
+        return self.exchanges.pop(0) if self.exchanges else []
+
+    def take_rest(self) -> list[Any]:
+        rest = [m for ex in self.exchanges for m in ex] + self.pending
+        self.exchanges, self.pending = [], []
+        return rest
 
 
 def _to_check(info: Any, stop_reason: str) -> TaskCheck:
