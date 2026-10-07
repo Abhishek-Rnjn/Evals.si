@@ -56,6 +56,10 @@ def add_auth_commands(sub: Any) -> None:
         _server_arg(p)
         p.add_argument("--format", choices=["table", "json"], default="table")
         add_credential_args(p)
+    tok = au_sub.add_parser(
+        "token", help="print your login's token for a server (for the web UI or curl)"
+    )
+    _server_arg(tok)
     au.set_defaults(func=_cmd_auth)
 
 
@@ -270,8 +274,27 @@ def _table(rows: list[list[str]]) -> None:
         print("  ".join(cell.ljust(w) for cell, w in zip(row, widths, strict=True)).rstrip())
 
 
+def _cmd_token(args: argparse.Namespace) -> int:
+    import httpx
+
+    from evalsi.auth import AuthError, load_credentials, refresh, save_credentials
+
+    creds = load_credentials(args.server)
+    if creds is None:
+        raise AuthError(f"no login for {args.server}; run `evalsi login --server {args.server}`")
+    if creds.expired():
+        with httpx.Client(timeout=30) as http:
+            creds = refresh(creds, http)
+        save_credentials(args.server, creds)
+    print(creds.bearer())
+    return 0
+
+
 def _cmd_auth(args: argparse.Namespace) -> int:
     from evalsi.cli import server_client
+
+    if args.area == "token":
+        return _cmd_token(args)
 
     with server_client(args) as client:
         out, rows = _auth_action(client, args)

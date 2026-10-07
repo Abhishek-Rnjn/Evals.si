@@ -28,8 +28,10 @@ import (
 )
 
 // The gate is the single enforcement point: every RPC passes its Connect
-// interceptor, and every plain HTTP route other than /healthz and the login
-// discovery document passes guardHTTP. Each RPC has an entry in the action
+// interceptor, and every plain HTTP route other than /healthz, the login
+// discovery document and the web UI's static files passes guardHTTP or a
+// check of its own (authorizeTool for /mcp, authorizeGuardrail for the
+// guardrail webhook). Each RPC has an entry in the action
 // table (accessRules); a test walks the service descriptors so that no RPC
 // can ship without one.
 

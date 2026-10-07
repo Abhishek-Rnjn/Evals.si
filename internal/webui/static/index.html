@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evals.si</title>
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/runs">Evals.si</a>
+  <nav id="nav">
+    <a href="#/runs" data-section="runs">Runs</a>
+    <a href="#/compare" data-section="compare">Compare</a>
+    <a href="#/policies" data-section="policies">Policies</a>
+    <a href="#/queues" data-section="queues">Annotation</a>
+    <a href="#/guardrails" data-section="guardrails">Guardrails</a>
+    <a href="#/catalog" data-section="catalog">Catalog</a>
+  </nav>
+  <div class="who">
+    <label class="project">Project <select id="project"></select></label>
+    <span id="whoami"></span>
+    <button id="signout" type="button" hidden>Sign out</button>
+  </div>
+</header>
+<main id="main" aria-live="polite"></main>
+<footer class="foot">Read-only. Changes go through the CLI or the API.</footer>
+</body>
+</html>

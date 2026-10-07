@@ -226,6 +226,8 @@ type Config struct {
 	MCP mcp.Config `json:"mcp"`
 	// Wasm evaluator plugins, run sandboxed inside evalsid.
 	Wasm Wasm `json:"wasm"`
+	// The read-only web UI at /ui/.
+	UI UI `json:"ui"`
 }
 
 // Storage selects the databases. Without it, everything is in SQLite under
@@ -276,6 +278,11 @@ type Metrics struct {
 func (c Config) AuthEnabled() bool { return c.Auth.Enabled() }
 
 // Default returns the configuration used when no file is given.
+// UI configures the read-only web UI.
+type UI struct {
+	Disabled bool `json:"disabled"`
+}
+
 // Wasm configures WebAssembly evaluator plugins (internal/wasmeval).
 type Wasm struct {
 	// Directories searched for evalsi-plugin.yaml manifests; default

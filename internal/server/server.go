@@ -45,6 +45,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
+	"github.com/abhishek-rnjn/evals.si/internal/webui"
 )
 
 // Run serves until ctx is cancelled, then shuts down gracefully.
@@ -241,7 +242,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		rewardSvc.UseSharedCache(st, log)
 		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
 	}
-	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, mcp: cfg.MCP, log: log}
+	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, mcp: cfg.MCP, ui: cfg.UI, log: log}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -397,6 +398,7 @@ type deps struct {
 	// In a cluster, received spans go to the span stream.
 	forward ingest.Forward
 	mcp     mcp.Config
+	ui      config.UI
 	log     *slog.Logger
 }
 
@@ -487,6 +489,11 @@ func Handler(d deps) http.Handler {
 		}
 		_, _ = io.WriteString(w, "ok\n")
 	})
+	// The read-only web UI: static files, public; the data they show comes
+	// from the API with the viewer's credential.
+	if !d.ui.Disabled {
+		webui.Register(mux)
+	}
 	// What `evalsi login` needs; public by design.
 	mux.HandleFunc("GET /.well-known/evalsi-auth", func(w http.ResponseWriter, _ *http.Request) {
 		doc := map[string]any{"auth_enabled": d.authn.Enabled()}

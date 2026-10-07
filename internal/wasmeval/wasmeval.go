@@ -365,12 +365,17 @@ type capped struct {
 	buf  bytes.Buffer
 	max  int
 	over bool
+	// stop ends the call once the limit is passed.
+	stop func()
 }
 
 var errOutput = errors.New("output limit exceeded")
 
 func (c *capped) Write(p []byte) (int, error) {
 	if c.buf.Len()+len(p) > c.max {
+		if !c.over && c.stop != nil {
+			c.stop()
+		}
 		c.over = true
 		return 0, errOutput
 	}
@@ -397,10 +402,10 @@ func (h *Host) call(ctx context.Context, p *Plugin, verb string, req any) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	stdout := &capped{max: p.limits.MaxOutput}
-	stderr := &capped{max: 64 << 10}
 	ctx, cancel := context.WithTimeout(ctx, p.limits.Timeout)
 	defer cancel()
+	stdout := &capped{max: p.limits.MaxOutput, stop: cancel}
+	stderr := &capped{max: 64 << 10}
 	cfg := wazero.NewModuleConfig().
 		WithName(""). // anonymous: calls run concurrently
 		WithArgs(p.Manifest.Name, verb).

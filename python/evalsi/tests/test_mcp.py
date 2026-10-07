@@ -219,27 +219,35 @@ def test_compare_results_pairs_by_record_and_respects_direction() -> None:
 
 
 def test_a_real_stdio_session(tmp_path: Path) -> None:
-    """The harness's MCP client drives `evalsi mcp` as a subprocess."""
+    """The harness's MCP client drives `evalsi mcp` as a subprocess, the way a
+    coding agent does: run, change the code under test, run again, and read
+    the regression in the answer."""
     pytest.importorskip("evalsi_harness")
     from evalsi_harness.mcp import MCPClient
 
-    write_run(tmp_path, {"a": "ok", "b": "bad"})
+    good = {f"r{i}": "ok" for i in range(12)}
+    write_run(tmp_path, good)
 
-    async def go() -> tuple[list[str], str, bool]:
+    async def go() -> tuple[list[str], list[tuple[str, bool]]]:
         client = await MCPClient.connect(
             command=[sys.executable, "-m", "evalsi", "mcp", "--root", str(tmp_path)]
         )
         try:
             names = [t.name for t in await client.list_tools()]
-            result = await client.call_tool("run", {"file": "suite.yaml"})
-            return names, result.content, result.is_error
+            first = await client.call_tool("run", {"file": "suite.yaml"})
+            # The agent's change breaks most answers.
+            write_run(tmp_path, {k: ("ok" if i < 2 else "bad") for i, k in enumerate(good)})
+            second = await client.call_tool("run", {"file": "suite.yaml"})
+            return names, [(first.content, first.is_error), (second.content, second.is_error)]
         finally:
             await client.aclose()
 
-    names, text, is_error = asyncio.run(go())
+    names, results = asyncio.run(go())
     assert "run" in names
-    assert not is_error, text
-    assert "exact-match" in text
-    assert "gate exact-match" in text
+    (first, first_err), (second, second_err) = results
+    assert not first_err, first
+    assert not second_err, second
+    assert "gate exact-match" in first
+    assert "regress" in second.lower(), second
     saved = list((tmp_path / ".evalsi" / "results").glob("suite-*.json"))
-    assert len(saved) == 1
+    assert len(saved) == 2

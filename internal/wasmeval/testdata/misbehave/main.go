@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/abhishek-rnjn/evals.si/pkg/wasmplugin"
@@ -44,8 +45,9 @@ func main() {
 			return wasmplugin.Scores(wasmplugin.Score{Label: fmt.Sprintf("%d %d", time.Now().UnixNano(), rand.Int64())})
 		},
 		"test/shout": func(wasmplugin.Record, wasmplugin.Params) wasmplugin.Result {
-			for i := 0; i < 1<<18; i++ {
-				fmt.Print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+			chunk := strings.Repeat("a", 1<<20)
+			for range 64 {
+				fmt.Print(chunk)
 			}
 			return wasmplugin.Scores(wasmplugin.Pass())
 		},

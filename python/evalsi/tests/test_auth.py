@@ -372,3 +372,12 @@ def test_cli_logout(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["logout", "--server", SERVER]) == 0
     assert "signed out" in capsys.readouterr().out
     assert auth.load_credentials(SERVER) is None
+
+
+def test_auth_token_prints_the_cached_login(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["auth", "token", "--server", SERVER]) == 1
+    assert "no login for" in capsys.readouterr().err
+    token = fake_jwt(time.time() + 3600)
+    auth.save_credentials(SERVER, auth.Credentials(id_token=token))
+    assert cli.main(["auth", "token", "--server", SERVER]) == 0
+    assert capsys.readouterr().out.strip() == token
