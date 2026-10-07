@@ -27,6 +27,7 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evals.si/internal/annotate"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
@@ -423,6 +424,9 @@ func Handler(d deps) http.Handler {
 			return evalsiv1alpha1connect.NewTraceServiceHandler(watch.Traces{Store: d.store}, gated)
 		},
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewAuthServiceHandler(d.authSvc, gated) },
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewAnnotationServiceHandler(annotate.New(d.store, d.runs), gated)
+		},
 	} {
 		path, handler := h()
 		mux.Handle(path, handler)
@@ -445,6 +449,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
+		evalsiv1alpha1connect.AnnotationServiceName,
 	}
 	// Health reports liveness only and stays open, like /healthz.
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))

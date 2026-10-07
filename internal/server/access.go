@@ -193,7 +193,67 @@ func (g *gate) accessRules() map[string]accessRule {
 			return g.bindingTarget(msg.(*evalsiv1alpha1.DeleteBindingRequest).GetBinding())
 		}},
 		evalsiv1alpha1connect.AuthServiceListAuditEventsProcedure: {action: "audit.read", filtered: true},
+
+		evalsiv1alpha1connect.AnnotationServiceCreateQueueProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			q := msg.(*evalsiv1alpha1.CreateQueueRequest).GetQueue()
+			return g.queueTarget(q.GetProject(), q.GetName(), q.GetLabels())
+		}},
+		evalsiv1alpha1connect.AnnotationServiceDeleteQueueProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.DeleteQueueRequest)
+			return g.queueTarget(m.GetProject(), m.GetName(), nil)
+		}},
+		evalsiv1alpha1connect.AnnotationServiceAddItemsProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.AddItemsRequest)
+			ts, err := g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+			if err != nil || m.GetRun() == nil {
+				return ts, err
+			}
+			// Copying a run's records into a queue reads the run.
+			runs, err := g.runTargets(ctx, m.GetRun().GetRunId())
+			if err != nil {
+				return nil, err
+			}
+			for _, t := range runs {
+				t.action = "runs.read"
+				ts = append(ts, t)
+			}
+			return ts, nil
+		}},
+		evalsiv1alpha1connect.AnnotationServiceListQueuesProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.queueTarget(msg.(*evalsiv1alpha1.ListQueuesRequest).GetProject(), "", nil)
+		}},
+		evalsiv1alpha1connect.AnnotationServiceGetQueueProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.GetQueueRequest)
+			return g.queueTarget(m.GetProject(), m.GetName(), nil)
+		}},
+		evalsiv1alpha1connect.AnnotationServiceListAnnotationsProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.ListAnnotationsRequest)
+			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+		}},
+		evalsiv1alpha1connect.AnnotationServiceSummarizeQueueProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.SummarizeQueueRequest)
+			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+		}},
+		evalsiv1alpha1connect.AnnotationServiceNextItemProcedure: {action: "annotations.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.NextItemRequest)
+			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+		}},
+		evalsiv1alpha1connect.AnnotationServiceSubmitAnnotationProcedure: {action: "annotations.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.SubmitAnnotationRequest)
+			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+		}},
 	}
+}
+
+// queueTarget is an annotation queue: its project, with the queue's name
+// and labels for rules (resource.queue, resource.labels).
+func (g *gate) queueTarget(project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	res := map[string]any{"queue": map[string]any{"name": name}, "labels": authz.StringMap(labels)}
+	return []target{{project: project, resource: res, name: "queue/" + name}}, nil
 }
 
 // project normalizes a request's project: empty means the default project,

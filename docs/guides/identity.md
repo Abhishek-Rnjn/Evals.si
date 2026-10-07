@@ -180,9 +180,10 @@ rbac:
 
 | Role | Permissions |
 |---|---|
-| `viewer` | catalog, runs, policies and traces: read |
+| `viewer` | catalog, runs, policies, traces and annotation queues: read |
 | `runner` | viewer, plus evaluations and runs (create, cancel, resume) |
-| `editor` | runner, plus writing policies and promoting run results into datasets (`datasets.write`) |
+| `editor` | runner, plus writing policies, promoting run results into datasets (`datasets.write`), and setting up and answering annotation queues |
+| `annotator` | annotation queues: read and answer (`annotations.read`, `annotations.write`) |
 | `admin` | editor, plus the project's keys, roles, bindings and audit log |
 | `ingest` | `traces.write` only |
 | `owner` | everything, everywhere |

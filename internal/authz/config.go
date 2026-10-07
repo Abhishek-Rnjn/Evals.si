@@ -85,14 +85,16 @@ const OwnerRole = "owner"
 
 // BuiltinRoles ship with Evals.si. Custom roles can inherit them.
 var BuiltinRoles = []Role{
-	{Name: "viewer", Description: "Read the catalog, runs, policies and traces.",
-		Permissions: []string{"catalog.read", "runs.read", "policies.read", "traces.read"}},
+	{Name: "viewer", Description: "Read the catalog, runs, policies, traces and annotation queues.",
+		Permissions: []string{"catalog.read", "runs.read", "policies.read", "traces.read", "annotations.read"}},
 	{Name: "runner", Description: "Viewer, plus scoring and starting, cancelling and resuming runs.",
 		Inherits: []string{"viewer"}, Permissions: []string{"evaluations.run", "runs.create", "runs.cancel", "runs.resume"}},
-	{Name: "editor", Description: "Runner, plus writing online policies and promoting results into datasets.",
-		Inherits: []string{"runner"}, Permissions: []string{"policies.write", "datasets.write"}},
+	{Name: "editor", Description: "Runner, plus writing online policies, promoting results into datasets, and managing and answering annotation queues.",
+		Inherits: []string{"runner"}, Permissions: []string{"policies.write", "datasets.write", "annotations.manage", "annotations.write"}},
 	{Name: "admin", Description: "Editor, plus the project's API keys, custom roles, bindings and audit log.",
 		Inherits: []string{"editor"}, Permissions: []string{"access.manage", "audit.read"}},
+	{Name: "annotator", Description: "Answer annotation queues: read queues and their records, take items and submit answers.",
+		Permissions: []string{"annotations.read", "annotations.write"}},
 	{Name: "ingest", Description: "Ingest traces over OTLP and nothing else.",
 		Permissions: []string{"traces.write"}},
 	{Name: OwnerRole, Description: "Everything, in every project, including install-wide settings.",

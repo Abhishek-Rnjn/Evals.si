@@ -1,0 +1,245 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/run.proto";
+import "evalsi/v1alpha1/score.proto";
+import "google/protobuf/timestamp.proto";
+
+// AnnotationService runs human evaluation: queues of records (from a run's
+// results, or given directly) that people score against a rubric. Their
+// answers are summarized like any metric, and compared with an evaluator's
+// scores on the same records, which is how a judge is calibrated.
+service AnnotationService {
+  rpc CreateQueue(CreateQueueRequest) returns (CreateQueueResponse);
+  rpc ListQueues(ListQueuesRequest) returns (ListQueuesResponse);
+  rpc GetQueue(GetQueueRequest) returns (GetQueueResponse);
+  rpc DeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse);
+  // Adds records: a run's (those matching a CEL condition), or inline ones.
+  rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
+  // Claims the next item the caller has not answered, for lease_seconds.
+  rpc NextItem(NextItemRequest) returns (NextItemResponse);
+  rpc SubmitAnnotation(SubmitAnnotationRequest) returns (SubmitAnnotationResponse);
+  rpc ListAnnotations(ListAnnotationsRequest) returns (ListAnnotationsResponse);
+  // Progress, each question's summary, agreement between annotators, and
+  // agreement with the run's metric named by the question's compare_metric.
+  rpc SummarizeQueue(SummarizeQueueRequest) returns (SummarizeQueueResponse);
+}
+
+enum QuestionKind {
+  QUESTION_KIND_UNSPECIFIED = 0;
+  // Yes or no; summarized as a proportion.
+  QUESTION_KIND_PASS_FAIL = 1;
+  // A number between min and max.
+  QUESTION_KIND_SCORE = 2;
+  // One of options.
+  QUESTION_KIND_LABEL = 3;
+  // Free text; not summarized.
+  QUESTION_KIND_TEXT = 4;
+}
+
+message Question {
+  // A metric-style name: lowercase letters, digits and '-'.
+  string name = 1;
+  string prompt = 2;
+  QuestionKind kind = 3;
+  double min = 4;
+  double max = 5;
+  repeated string options = 6;
+  bool optional = 7;
+  // A metric of the source run (for example "llm-judge" or
+  // "llm-judge.helpfulness") to measure agreement with.
+  string compare_metric = 8;
+}
+
+message AnnotationQueue {
+  string name = 1;
+  string project = 2;
+  string description = 3;
+  // Shown to annotators before the first item.
+  string instructions = 4;
+  repeated Question questions = 5;
+  // Answers each item needs before it is done; default 1.
+  int32 annotations_per_item = 6;
+  map<string, string> labels = 7;
+  google.protobuf.Timestamp created_at = 8;
+  string created_by = 9;
+}
+
+message ItemSource {
+  string run_id = 1;
+  int32 trial = 2;
+}
+
+message AnnotationItem {
+  string id = 1;
+  string queue = 2;
+  // What the annotator judges: input, output, reference, trajectory.
+  Record record = 3;
+  ItemSource source = 4;
+  // The source run's scores for this record, by metric.
+  map<string, double> run_scores = 5;
+  int32 annotations = 6;
+  bool done = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message Answer {
+  string question = 1;
+  oneof value {
+    double number = 2;
+    bool passed = 3;
+    string label = 4;
+    string text = 5;
+  }
+}
+
+message Annotation {
+  string item_id = 1;
+  string queue = 2;
+  string annotator = 3;
+  repeated Answer answers = 4;
+  string comment = 5;
+  // Skipped: the annotator could not judge it; it does not count.
+  bool skipped = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message CreateQueueRequest {
+  AnnotationQueue queue = 1;
+}
+
+message CreateQueueResponse {
+  AnnotationQueue queue = 1;
+}
+
+message ListQueuesRequest {
+  string project = 1;
+}
+
+message ListQueuesResponse {
+  repeated AnnotationQueue queues = 1;
+}
+
+message GetQueueRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message GetQueueResponse {
+  AnnotationQueue queue = 1;
+}
+
+message DeleteQueueRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message DeleteQueueResponse {}
+
+message AddItemsFromRun {
+  string run_id = 1;
+  // CEL over scores, errored, trial and record (as for PromoteResults);
+  // empty adds every record.
+  string when = 2;
+  // One item per record (its first matching trial) unless set.
+  bool all_trials = 3;
+}
+
+message AddItemsRequest {
+  string project = 1;
+  string queue = 2;
+  oneof source {
+    AddItemsFromRun run = 3;
+    InlineRecords records = 4;
+  }
+  // At most this many items; 0: no limit.
+  int32 limit = 5;
+}
+
+message AddItemsResponse {
+  int64 added = 1;
+}
+
+message NextItemRequest {
+  string project = 1;
+  string queue = 2;
+  // How long the item is held for the caller; default 1800.
+  int32 lease_seconds = 3;
+}
+
+message NextItemResponse {
+  // Unset when nothing is left for the caller.
+  AnnotationItem item = 1;
+  // Items the caller could still annotate, this one included.
+  int64 remaining = 2;
+}
+
+message SubmitAnnotationRequest {
+  string project = 1;
+  string queue = 2;
+  string item_id = 3;
+  repeated Answer answers = 4;
+  string comment = 5;
+  bool skip = 6;
+}
+
+message SubmitAnnotationResponse {
+  Annotation annotation = 1;
+}
+
+message ListAnnotationsRequest {
+  string project = 1;
+  string queue = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListAnnotationsResponse {
+  repeated Annotation annotations = 1;
+  // The items the annotations are about, for this page.
+  repeated AnnotationItem items = 2;
+  string next_page_token = 3;
+}
+
+message SummarizeQueueRequest {
+  string project = 1;
+  string queue = 2;
+  double confidence_level = 3;
+}
+
+message HumanAgreement {
+  // Items with both a human answer and the run metric.
+  int64 n = 1;
+  // Pass/fail questions (the metric thresholded at 0.5).
+  optional double accuracy = 2;
+  optional double cohen_kappa = 3;
+  // Score questions.
+  optional double pearson = 4;
+  optional double mae = 5;
+}
+
+message QuestionStats {
+  string question = 1;
+  // Over items, each the mean of its annotators' answers (pass/fail, score).
+  MetricSummary summary = 2;
+  // Label questions: answers per option.
+  map<string, int64> label_counts = 3;
+  // Between annotators, on items with at least two answers: Krippendorff's
+  // alpha (nominal for pass/fail and labels, interval for scores).
+  optional double inter_annotator_alpha = 4;
+  int64 multiply_annotated = 5;
+  // With the question's compare_metric.
+  HumanAgreement metric_agreement = 6;
+}
+
+message SummarizeQueueResponse {
+  int64 items = 1;
+  int64 done = 2;
+  int64 annotations = 3;
+  int64 skipped = 4;
+  repeated QuestionStats questions = 5;
+  // Annotations per annotator.
+  map<string, int64> annotators = 6;
+}

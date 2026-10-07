@@ -327,7 +327,22 @@ To analyze results across runs, `evalsi analyze` loads runs into DuckDB (`pip in
 uv run evalsi analyze slice exact-match --by category --results 'nightly-*.json'
 uv run evalsi analyze query "select model, avg(value) from scores join runs using (run_id) group by 1" \
   --server https://evalsi.example.com --project support --label suite=nightly --db nightly.duckdb
-``` Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
+```
+
+Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
+
+### Human annotation
+
+Annotation queues put records in front of people, with a rubric of pass/fail, score, label and text questions. The records can be a run's results (filtered with CEL) or a dataset. evalsid summarizes the answers with intervals, measures agreement between annotators (Krippendorff's alpha), and compares the answers with the run's own metric (accuracy, Cohen's kappa, Pearson), which is how a judge gets calibrated. The `annotator` role can answer but cannot run anything.
+
+```bash
+evalsi annotate create -f examples/annotation/helpfulness.yaml --server $EVALSID
+evalsi annotate add helpfulness --project support --run $RUN_ID --when 'scores["llm-judge"] < 0.5' --server $EVALSID
+evalsi annotate start helpfulness --project support --server $EVALSID    # each annotator
+evalsi annotate stats helpfulness --project support --server $EVALSID
+```
+
+See the [annotation guide](docs/guides/annotation.md).
 
 ### Fine-tuning and RL
 

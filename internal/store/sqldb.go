@@ -104,6 +104,14 @@ func (t *txn) ExecContext(ctx context.Context, q string, args ...any) (sql.Resul
 	return t.tx.ExecContext(ctx, t.d.rebind(q), t.d.args(args)...)
 }
 
+func (t *txn) QueryRowContext(ctx context.Context, q string, args ...any) *sql.Row {
+	return t.tx.QueryRowContext(ctx, t.d.rebind(q), t.d.args(args)...)
+}
+
+func (t *txn) QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error) {
+	return t.tx.QueryContext(ctx, t.d.rebind(q), t.d.args(args)...)
+}
+
 func (t *txn) PrepareContext(ctx context.Context, q string) (*sql.Stmt, error) {
 	return t.tx.PrepareContext(ctx, t.d.rebind(q))
 }
@@ -115,7 +123,7 @@ func (t *txn) Rollback() error { return t.tx.Rollback() }
 // tenant_id column (empty in a single-tenant install), so a hosted
 // multi-tenant offering can put a tenant boundary above projects later
 // without rewriting stored rows (decision 0004).
-var tenantTables = []string{"projects", "api_keys", "roles", "bindings", "audit", "runs", "traces", "trace_results", "policies"}
+var tenantTables = []string{"projects", "api_keys", "roles", "bindings", "audit", "runs", "traces", "trace_results", "policies", "annotation_queues", "annotation_items", "annotations", "annotation_claims"}
 
 type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
