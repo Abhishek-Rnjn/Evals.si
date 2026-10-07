@@ -29,6 +29,9 @@ class Pack:
     description: str
     evaluators: list[EvaluatorDef] = field(default_factory=list)
     on_by_default: bool = False
+    # "native" (ships with Evals.si), "wrapped" (a shim over another
+    # framework) or "community"; third-party packs default to community.
+    tier: str = ""
 
 
 def _builtin_packs() -> list[Pack]:
@@ -73,14 +76,16 @@ class Registry:
             raise EvaluatorConfigError(f"pack {pack.name!r} is registered twice")
         self.packs[pack.name] = pack
         for definition in pack.evaluators:
-            self.add(definition, pack=pack.name)
+            self.add(definition, pack=pack.name, tier=pack.tier or "community")
 
-    def add(self, definition: EvaluatorDef, pack: str = "") -> None:
+    def add(self, definition: EvaluatorDef, pack: str = "", tier: str = "") -> None:
         name = definition.spec.name
         if name in self._by_name:
             raise EvaluatorConfigError(f"evaluator {name!r} is registered twice")
         if pack and not definition.spec.pack:
             definition.spec = replace(definition.spec, pack=pack)
+        if tier and not definition.spec.tier:
+            definition.spec = replace(definition.spec, tier=tier)
         self._by_name[name] = definition
 
     def evaluators(self) -> list[EvaluatorDef]:
@@ -108,8 +113,9 @@ class Registry:
 
 
 def discover_packs() -> list[Pack]:
-    """Built-in packs plus every pack registered under the ``evalsi.packs`` entry point."""
-    packs = {p.name: p for p in _builtin_packs()}
+    """Built-in packs, every pack registered under the ``evalsi.packs`` entry
+    point, and installed Wasm plugins (``evalsi.wasm``)."""
+    packs = {p.name: replace(p, tier=p.tier or "native") for p in _builtin_packs()}
     for ep in entry_points(group="evalsi.packs"):
         if ep.name in packs:
             continue  # built-ins register themselves too; the in-tree copy wins
@@ -120,6 +126,15 @@ def discover_packs() -> list[Pack]:
             continue
         if not isinstance(pack, Pack):
             logger.warning("entry point %r is not an evalsi Pack; ignoring it", ep.name)
+            continue
+        packs[pack.name] = pack
+    from evalsi.wasm import discover_wasm_packs
+
+    for pack in discover_wasm_packs():
+        if pack.name in packs:
+            logger.warning(
+                "Wasm plugin %r has the name of an installed pack; ignoring it", pack.name
+            )
             continue
         packs[pack.name] = pack
     return list(packs.values())

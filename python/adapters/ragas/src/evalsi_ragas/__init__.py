@@ -311,6 +311,7 @@ def _evaluator(info: MetricInfo) -> EvaluatorDef:
 
 PACK = Pack(
     name="ragas",
+    tier="wrapped",
     description=f"RAGAS metrics ({UPSTREAM}) run through the Evals.si judge.",
     evaluators=[_evaluator(m) for m in METRICS],
 )

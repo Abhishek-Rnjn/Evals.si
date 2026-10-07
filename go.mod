@@ -19,6 +19,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.15.0
 	github.com/nats-io/nats.go v1.54.0
 	github.com/nats-io/nuid v1.0.1
+	github.com/tetratelabs/wazero v1.12.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	golang.org/x/net v0.59.0
 	golang.org/x/sync v0.23.0

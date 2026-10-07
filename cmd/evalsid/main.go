@@ -18,6 +18,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxcli"
 	"github.com/abhishek-rnjn/evals.si/internal/server"
 	"github.com/abhishek-rnjn/evals.si/internal/version"
+	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 )
 
 const usage = `usage: evalsid <command> [flags]
@@ -32,6 +33,7 @@ commands:
   auth check       explain an authorization decision for a token or API key
   auth new-key     generate an API key and the hash to put in config
   auth hash-key    hash an API key read from stdin
+  wasm             check, pin, run and serve Wasm evaluator plugins (evalsid wasm -h)
 `
 
 func main() {
@@ -57,6 +59,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return sandboxcli.Main(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "auth":
 		return authMain(ctx, args[1:], os.Stdin, stdout, stderr)
+	case "wasm":
+		return wasmeval.Main(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "sandbox-exec":
 		// Internal: the launcher that confines itself, then executes the command.
 		return sandbox.Launch(stderr)

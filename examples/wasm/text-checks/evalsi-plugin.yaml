@@ -1,0 +1,40 @@
+# An example Wasm evaluator plugin. Build and pin it with:
+#   GOOS=wasip1 GOARCH=wasm go build -o text-checks.wasm .
+#   evalsid wasm pin evalsi-plugin.yaml
+name: example/text-checks
+version: 1.0.0
+tier: community
+description: Deterministic text checks (JSON validity, word limits, distinct outputs), compiled to Wasm.
+license: Apache-2.0
+runtime:
+  wasm:
+    module: text-checks.wasm
+    sha256: 0000000000000000000000000000000000000000000000000000000000000000   # evalsid wasm pin
+limits:
+  memory_mb: 64
+  timeout: 5s
+evaluators:
+  - name: example/json-valid
+    description: Passes when the output is a JSON object with the required keys.
+    requires: {output: true}
+    outputs:
+      - {name: json-valid, type: passed, higher_is_better: true}
+    params_schema:
+      type: object
+      properties:
+        required_keys: {type: array, items: {type: string}, default: []}
+  - name: example/word-limit
+    description: Passes when the output has at most max_words words; also reports the count.
+    requires: {output: true}
+    outputs:
+      - {name: word-limit, type: passed, higher_is_better: true}
+      - {name: words, type: number}
+    params_schema:
+      type: object
+      properties:
+        max_words: {type: integer, default: 100}
+  - name: example/distinct-outputs
+    description: The share of records whose output is unique (mode collapse shows as a low value).
+    scope: dataset
+    outputs:
+      - {name: distinct-outputs, type: number, min: 0, max: 1, higher_is_better: true}

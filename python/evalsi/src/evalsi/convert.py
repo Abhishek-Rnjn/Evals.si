@@ -387,6 +387,8 @@ def manifest_to_proto(spec: EvaluatorSpec) -> evaluator_pb2.EvaluatorManifest:
         scheduling=evaluator_pb2.Scheduling(
             pool="sandbox" if req.sandbox else "judge" if req.judge else "cpu"
         ),
+        tier=spec.tier,
+        runtime=spec.runtime,
     )
     for output in spec.outputs:
         out = evaluator_pb2.MetricSpec(

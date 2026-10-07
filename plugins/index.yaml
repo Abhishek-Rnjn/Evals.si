@@ -1,0 +1,123 @@
+# The Evals.si plugin index: what `evalsi plugins search|show|install` reads
+# by default. Each entry is one version of one plugin. Kinds:
+#   native   ships with evalsi (nothing to install)
+#   python   a pip requirement (install runs pip in the current environment)
+#   wasm     a manifest URL and its sha256 (install downloads and verifies the
+#            manifest, then the module it pins)
+#   image    an OCI image serving the plugin protocol (install prints how to run it)
+# To list your plugin, add an entry and open a pull request; see
+# docs/guides/plugins.md.
+apiVersion: evals.si/v1alpha1
+kind: PluginIndex
+plugins:
+  - name: core
+    version: bundled
+    tier: native
+    kind: native
+    description: Deterministic checks - matching, JSON validity, length, latency, tokens and cost.
+  - name: judge
+    version: bundled
+    tier: native
+    kind: native
+    description: Model-graded evaluators (rubric scoring with a configured judge model).
+  - name: text
+    version: bundled
+    tier: native
+    kind: native
+    description: Reference overlap - BLEU, corpus BLEU, ROUGE-1/2/L, chrF and token F1.
+  - name: rag
+    version: bundled
+    tier: native
+    kind: native
+    description: Retrieval-augmented generation - faithfulness, answer relevance, context precision and recall, citation accuracy.
+  - name: safety
+    version: bundled
+    tier: native
+    kind: native
+    description: Safety - PII, secret and canary leaks, refusals, and judge-rated harmlessness.
+  - name: agent
+    version: bundled
+    tier: native
+    kind: native
+    description: Agent trajectories and agent runs - tool-call accuracy, trajectory match, tool errors, loops, step budgets, judge-rated goal completion, environment-checked task success, judge-reviewed code quality, sandbox policy violations and efficiency.
+  - name: code
+    version: bundled
+    tier: native
+    kind: native
+    description: Code - sandboxed unit tests (pass@k with trials) and syntax checks.
+  - name: rl
+    version: bundled
+    tier: native
+    kind: native
+    description: Verifiers for rewards - format checks, math answer equivalence, sandboxed code tests, overlong penalties and served reward models.
+  - name: finetune
+    version: bundled
+    tier: native
+    kind: native
+    description: Fine-tuning and RL side effects - output diversity and mode collapse, calibration, training-data contamination, and reward-hacking signals.
+  - name: ml-classic
+    version: bundled
+    tier: native
+    kind: native
+    description: Classic ML metrics - classification (accuracy, macro and micro F1, ROC-AUC, PR-AUC, log-loss, calibration), regression (MAE, MSE, RMSE, R², MAPE) and ranking (NDCG, MRR, MAP, recall@k).
+  - name: ml-monitoring
+    version: bundled
+    tier: native
+    kind: native
+    description: Monitoring classic models - feature drift (PSI, KS, Jensen-Shannon), data quality against a schema, and group fairness (demographic parity, equal opportunity, equalized odds).
+  - name: bfcl
+    version: 0.1.0
+    tier: wrapped
+    kind: python
+    description: Berkeley Function-Calling Leaderboard tasks and its AST and execution checkers.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/bfcl
+    python:
+      requirement: "evalsi-adapter-bfcl @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/bfcl"
+  - name: deepeval
+    version: 0.1.0
+    tier: wrapped
+    kind: python
+    description: DeepEval metrics, run through the Evals.si judge.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/deepeval
+    python:
+      requirement: "evalsi-adapter-deepeval @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/deepeval"
+  - name: inspect
+    version: 0.1.0
+    tier: wrapped
+    kind: python
+    description: Inspect AI tasks, solvers and scorers; Evals.si sandboxes as an Inspect sandbox provider.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/inspect
+    python:
+      requirement: "evalsi-adapter-inspect @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/inspect"
+  - name: lm-eval
+    version: 0.1.0
+    tier: wrapped
+    kind: python
+    description: lm-evaluation-harness tasks, with generation through Evals.si connectors.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/lm-eval
+    python:
+      requirement: "evalsi-adapter-lm-eval @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/lm-eval"
+  - name: ragas
+    version: 0.1.0
+    tier: wrapped
+    kind: python
+    description: RAGAS metrics, run through the Evals.si judge.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/ragas
+    python:
+      requirement: "evalsi-adapter-ragas @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/ragas"
+  - name: swebench
+    version: 0.1.0
+    tier: wrapped
+    kind: python
+    description: SWE-bench tasks and harness, run in Evals.si sandboxes.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/swebench
+    python:
+      requirement: "evalsi-adapter-swebench @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/swebench"
+  - name: taubench
+    version: 0.1.0
+    tier: wrapped
+    kind: python
+    description: tau-bench tool-agent-user tasks with a simulated user.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/taubench
+    python:
+      requirement: "evalsi-adapter-taubench @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/taubench"

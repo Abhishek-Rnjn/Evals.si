@@ -331,6 +331,19 @@ uv run evalsi analyze query "select model, avg(value) from scores join runs usin
 
 Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
 
+### Plugins and Wasm evaluators
+
+`evalsi plugins search|show|install` reads a plugin index (the default lists the native packs and the framework adapters). A plugin's tier (native, wrapped or community) shows in the catalog. Community evaluators can be WebAssembly modules that evalsid runs with no filesystem, network or clock, under memory and time caps, pinned by sha256. Untrusted evaluators therefore need no sandbox, and they score identically in Python and on a server.
+
+```bash
+GOOS=wasip1 GOARCH=wasm go build -o text-checks.wasm ./examples/wasm/text-checks
+evalsid wasm pin examples/wasm/text-checks/evalsi-plugin.yaml
+evalsi plugins install examples/wasm/text-checks/evalsi-plugin.yaml
+evalsi eval --data answers.jsonl --evaluators example/json-valid,example/word-limit
+```
+
+See the [plugins guide](docs/guides/plugins.md).
+
 ### Inline guardrails
 
 A guardrail checks content while a request is in flight, either between a client and a model or between an agent and its tools. It redacts what its rules match (e-mail addresses, card numbers, keys, your own patterns), then runs evaluators from any installed pack, then passes, masks or blocks. agentgateway calls it without plugins: LLM traffic through the prompt-guard webhook, MCP traffic through the `mcpGuardrails` remote processor (ExtMcp). Audit mode reports what a guardrail would block before you enforce it.

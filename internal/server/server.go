@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -42,6 +43,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
 )
 
@@ -93,12 +95,20 @@ func Run(ctx context.Context, cfg config.Config, log *slog.Logger, workerOutput 
 
 // serve runs everything above the worker; tests call it with a fake worker.
 func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl *cluster.Cluster, log *slog.Logger, ready chan<- string) error {
+	wasm, err := loadWasm(ctx, cfg, log)
+	if err != nil {
+		return err
+	}
+	if wasm != nil {
+		defer wasm.Close(context.Background())
+		worker = wasmeval.Wrap(worker, wasm)
+	}
 	if cl != nil {
 		log.Info("waiting for a cpu worker to describe the evaluators")
 	}
 	manifests, err := worker.Describe(ctx)
 	if err != nil {
-		return fmt.Errorf("describing worker evaluators: %w", err)
+		return fmt.Errorf("describing evaluators: %w", err)
 	}
 	judges := make([]string, 0, len(cfg.Judges))
 	for name := range cfg.Judges {
@@ -557,4 +567,37 @@ func pruneRewardCache(ctx context.Context, st *store.Store, ttl string, log *slo
 		case <-tick.C:
 		}
 	}
+}
+
+// loadWasm loads the Wasm evaluator plugins (nil when there are none).
+func loadWasm(ctx context.Context, cfg config.Config, log *slog.Logger) (*wasmeval.Host, error) {
+	if cfg.Wasm.Disabled {
+		return nil, nil
+	}
+	dirs := cfg.Wasm.PluginDirs
+	if len(dirs) == 0 {
+		dirs = []string{filepath.Join(cfg.DataDir, "plugins")}
+	}
+	cache := cfg.Wasm.CacheDir
+	switch cache {
+	case "":
+		cache = filepath.Join(cfg.DataDir, "wasm-cache")
+	case "off":
+		cache = ""
+	}
+	h, err := wasmeval.NewHost(cache)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.LoadDirs(ctx, dirs); err != nil {
+		_ = h.Close(ctx)
+		return nil, fmt.Errorf("loading Wasm plugins: %w", err)
+	}
+	n := len(h.Manifests())
+	if n == 0 {
+		_ = h.Close(ctx)
+		return nil, nil
+	}
+	log.Info("loaded Wasm evaluators", "count", n, "dirs", dirs)
+	return h, nil
 }

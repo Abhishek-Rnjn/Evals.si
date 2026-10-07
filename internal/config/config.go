@@ -224,6 +224,8 @@ type Config struct {
 	// The MCP endpoint (/mcp): on by default, behind the same authentication
 	// and authorization as every other route.
 	MCP mcp.Config `json:"mcp"`
+	// Wasm evaluator plugins, run sandboxed inside evalsid.
+	Wasm Wasm `json:"wasm"`
 }
 
 // Storage selects the databases. Without it, everything is in SQLite under
@@ -274,6 +276,17 @@ type Metrics struct {
 func (c Config) AuthEnabled() bool { return c.Auth.Enabled() }
 
 // Default returns the configuration used when no file is given.
+// Wasm configures WebAssembly evaluator plugins (internal/wasmeval).
+type Wasm struct {
+	// Directories searched for evalsi-plugin.yaml manifests; default
+	// <data_dir>/plugins, where `evalsi plugins install --dir` puts them.
+	PluginDirs []string `json:"plugin_dirs"`
+	// Compiled modules are kept here between restarts; default
+	// <data_dir>/wasm-cache. "off" compiles on every start.
+	CacheDir string `json:"cache_dir"`
+	Disabled bool   `json:"disabled"`
+}
+
 func Default() Config {
 	return Config{
 		Listen: "127.0.0.1:8080",
