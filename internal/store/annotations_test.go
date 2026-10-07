@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -97,5 +98,46 @@ func TestAnnotationClaims(t *testing.T) {
 	}
 	if left, _ := s.QueueItems(ctx, "p", "q", 0, 0); len(left) != 0 {
 		t.Errorf("items left: %d", len(left))
+	}
+}
+
+// TestConcurrentAnswersAreCounted: answers saved at the same moment by
+// different annotators all count (on PostgreSQL each would otherwise
+// count without the others' uncommitted answers).
+func TestConcurrentAnswersAreCounted(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	const n = 8
+	if err := s.CreateQueue(ctx, &evalsiv1alpha1.AnnotationQueue{Name: "q", Project: "p", AnnotationsPerItem: n}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddItems(ctx, "p", "q", []*evalsiv1alpha1.AnnotationItem{{Record: &evalsiv1alpha1.Record{Id: "r"}}}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.QueueItems(ctx, "p", "q", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := items[0].GetId()
+	errs := make(chan error, n)
+	for i := range n {
+		go func() {
+			_, err := s.SaveAnnotation(ctx, "p", &evalsiv1alpha1.Annotation{
+				ItemId: id, Queue: "q", Annotator: fmt.Sprintf("a%d", i), CreatedAt: timestamppb.Now(),
+			}, n)
+			errs <- err
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	it, err := s.GetItem(ctx, "p", "q", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.GetAnnotations() != n || !it.GetDone() {
+		t.Errorf("after %d concurrent answers: annotations=%d done=%v", n, it.GetAnnotations(), it.GetDone())
 	}
 }

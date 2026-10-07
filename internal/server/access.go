@@ -202,15 +202,15 @@ func (g *gate) accessRules() map[string]accessRule {
 
 		evalsiv1alpha1connect.AnnotationServiceCreateQueueProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			q := msg.(*evalsiv1alpha1.CreateQueueRequest).GetQueue()
-			return g.queueTarget(q.GetProject(), q.GetName(), q.GetLabels())
+			return g.newQueueTarget(q.GetProject(), q.GetName(), q.GetLabels())
 		}},
 		evalsiv1alpha1connect.AnnotationServiceDeleteQueueProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.DeleteQueueRequest)
-			return g.queueTarget(m.GetProject(), m.GetName(), nil)
+			return g.queueTarget(ctx, m.GetProject(), m.GetName())
 		}},
 		evalsiv1alpha1connect.AnnotationServiceAddItemsProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.AddItemsRequest)
-			ts, err := g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+			ts, err := g.queueTarget(ctx, m.GetProject(), m.GetQueue())
 			if err != nil || m.GetRun() == nil {
 				return ts, err
 			}
@@ -225,49 +225,47 @@ func (g *gate) accessRules() map[string]accessRule {
 			}
 			return ts, nil
 		}},
-		evalsiv1alpha1connect.AnnotationServiceListQueuesProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
-			return g.queueTarget(msg.(*evalsiv1alpha1.ListQueuesRequest).GetProject(), "", nil)
-		}},
+		// The service checks each queue (its name and labels).
+		evalsiv1alpha1connect.AnnotationServiceListQueuesProcedure: {action: "annotations.read", filtered: true},
 		evalsiv1alpha1connect.AnnotationServiceGetQueueProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.GetQueueRequest)
-			return g.queueTarget(m.GetProject(), m.GetName(), nil)
+			return g.queueTarget(ctx, m.GetProject(), m.GetName())
 		}},
 		evalsiv1alpha1connect.AnnotationServiceListAnnotationsProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.ListAnnotationsRequest)
-			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
 		}},
 		evalsiv1alpha1connect.AnnotationServiceSummarizeQueueProcedure: {action: "annotations.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.SummarizeQueueRequest)
-			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
 		}},
 		evalsiv1alpha1connect.AnnotationServiceNextItemProcedure: {action: "annotations.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.NextItemRequest)
-			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
 		}},
 		evalsiv1alpha1connect.AnnotationServiceSubmitAnnotationProcedure: {action: "annotations.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.SubmitAnnotationRequest)
-			return g.queueTarget(m.GetProject(), m.GetQueue(), nil)
+			return g.queueTarget(ctx, m.GetProject(), m.GetQueue())
 		}},
 
 		evalsiv1alpha1connect.GuardrailServiceApplyGuardrailProcedure: {action: "guardrails.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			gr := msg.(*evalsiv1alpha1.ApplyGuardrailRequest).GetGuardrail()
-			return g.guardrailTarget(gr.GetProject(), gr.GetName(), gr.GetLabels())
+			return g.applyGuardrailTargets(ctx, gr.GetProject(), gr.GetName(), gr.GetLabels())
 		}},
 		evalsiv1alpha1connect.GuardrailServiceDeleteGuardrailProcedure: {action: "guardrails.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.DeleteGuardrailRequest)
-			return g.guardrailTarget(m.GetProject(), m.GetName(), nil)
+			return g.guardrailTarget(ctx, m.GetProject(), m.GetName())
 		}},
-		evalsiv1alpha1connect.GuardrailServiceListGuardrailsProcedure: {action: "guardrails.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
-			return g.guardrailTarget(msg.(*evalsiv1alpha1.ListGuardrailsRequest).GetProject(), "", nil)
-		}},
+		// The service checks each guardrail (its name and labels).
+		evalsiv1alpha1connect.GuardrailServiceListGuardrailsProcedure: {action: "guardrails.read", filtered: true},
 		evalsiv1alpha1connect.GuardrailServiceGetGuardrailProcedure: {action: "guardrails.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.GetGuardrailRequest)
-			return g.guardrailTarget(m.GetProject(), m.GetName(), nil)
+			return g.guardrailTarget(ctx, m.GetProject(), m.GetName())
 		}},
 		evalsiv1alpha1connect.GuardrailServiceCheckProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.CheckRequest)
 			if m.GetInline() == nil {
-				return g.guardrailTarget(m.GetProject(), m.GetGuardrail(), nil)
+				return g.guardrailTarget(ctx, m.GetProject(), m.GetGuardrail())
 			}
 			// An inline guardrail is a dry run: it scores like Evaluate does.
 			ts, err := g.evaluateTarget(m.GetProject(), m.GetInline().GetEvaluators(), m.GetInline().GetJudge(), 1)
@@ -277,31 +275,54 @@ func (g *gate) accessRules() map[string]accessRule {
 			return ts, err
 		}},
 		ext_mcpconnect.ExtMcpCheckRequestProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
-			return g.mcpGuardrailTarget(msg.(*extmcp.McpRequest).GetMetadataContext())
+			return g.mcpGuardrailTarget(ctx, msg.(*extmcp.McpRequest).GetMetadataContext())
 		}},
 		ext_mcpconnect.ExtMcpCheckResponseProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
-			return g.mcpGuardrailTarget(msg.(*extmcp.McpResponse).GetMetadataContext())
+			return g.mcpGuardrailTarget(ctx, msg.(*extmcp.McpResponse).GetMetadataContext())
 		}},
 	}
 }
 
-// guardrailTarget is a guardrail: its project, with its name and labels for
-// rules (resource.guardrail, resource.labels).
-func (g *gate) guardrailTarget(project, name string, labels map[string]string) ([]target, error) {
+// guardrailTarget is an existing guardrail: its project, with its name and
+// stored labels for rules (resource.guardrail, resource.labels). A missing
+// guardrail is checked by name only; the service then reports it missing.
+func (g *gate) guardrailTarget(ctx context.Context, project, name string) ([]target, error) {
 	project, err := g.project(project)
 	if err != nil {
 		return nil, err
 	}
-	res := map[string]any{"guardrail": map[string]any{"name": name}, "labels": authz.StringMap(labels)}
-	return []target{{project: project, resource: res, name: "guardrail/" + name}}, nil
+	var labels map[string]string
+	if gr, err := g.store.GetGuardrail(ctx, project, name); err == nil {
+		labels = gr.GetLabels()
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.GuardrailResource(name, labels), name: "guardrail/" + name}}, nil
 }
 
-func (g *gate) mcpGuardrailTarget(md *structpb.Struct) ([]target, error) {
+// applyGuardrailTargets checks the guardrail as submitted and, when it
+// replaces one, as stored: a rule protecting a labelled guardrail cannot be
+// sidestepped by applying it without the label.
+func (g *gate) applyGuardrailTargets(ctx context.Context, project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	ts := []target{{project: project, resource: authz.GuardrailResource(name, labels), name: "guardrail/" + name}}
+	if gr, err := g.store.GetGuardrail(ctx, project, name); err == nil {
+		ts = append(ts, target{project: project, resource: authz.GuardrailResource(name, gr.GetLabels()), name: "guardrail/" + name})
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return ts, nil
+}
+
+func (g *gate) mcpGuardrailTarget(ctx context.Context, md *structpb.Struct) ([]target, error) {
 	project, name, err := guardrail.MCPTarget(md)
 	if err != nil {
 		return nil, err
 	}
-	return g.guardrailTarget(project, name, nil)
+	return g.guardrailTarget(ctx, project, name)
 }
 
 // authorizeGuardrail decides whether a guardrail webhook call may check
@@ -315,7 +336,7 @@ func (g *gate) authorizeGuardrail(r *http.Request, project, name string) error {
 	if !g.engine.Enabled() {
 		return nil
 	}
-	ts, err := g.guardrailTarget(project, name, nil)
+	ts, err := g.guardrailTarget(ctx, project, name)
 	if err != nil {
 		return err
 	}
@@ -325,15 +346,30 @@ func (g *gate) authorizeGuardrail(r *http.Request, project, name string) error {
 	return nil
 }
 
-// queueTarget is an annotation queue: its project, with the queue's name
-// and labels for rules (resource.queue, resource.labels).
-func (g *gate) queueTarget(project, name string, labels map[string]string) ([]target, error) {
+// queueTarget is an existing annotation queue: its project, with its name
+// and stored labels for rules (resource.queue, resource.labels). A missing
+// queue is checked by name only; the service then reports it missing.
+func (g *gate) queueTarget(ctx context.Context, project, name string) ([]target, error) {
 	project, err := g.project(project)
 	if err != nil {
 		return nil, err
 	}
-	res := map[string]any{"queue": map[string]any{"name": name}, "labels": authz.StringMap(labels)}
-	return []target{{project: project, resource: res, name: "queue/" + name}}, nil
+	var labels map[string]string
+	if q, err := g.store.GetQueue(ctx, project, name); err == nil {
+		labels = q.GetLabels()
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.QueueResource(name, labels), name: "queue/" + name}}, nil
+}
+
+// newQueueTarget is a queue being created, with the labels it will have.
+func (g *gate) newQueueTarget(project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.QueueResource(name, labels), name: "queue/" + name}}, nil
 }
 
 // project normalizes a request's project: empty means the default project,

@@ -155,7 +155,14 @@ func (s *Service) ListGuardrails(ctx context.Context, req *connect.Request[evals
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&evalsiv1alpha1.ListGuardrailsResponse{Guardrails: gs}), nil
+	// Each guardrail is checked by its own name and labels.
+	visible := gs[:0]
+	for _, g := range gs {
+		if authz.Can(ctx, "guardrails.read", g.GetProject(), authz.GuardrailResource(g.GetName(), g.GetLabels())) {
+			visible = append(visible, g)
+		}
+	}
+	return connect.NewResponse(&evalsiv1alpha1.ListGuardrailsResponse{Guardrails: visible}), nil
 }
 
 // GetGuardrail returns a guardrail.

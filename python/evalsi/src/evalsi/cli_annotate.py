@@ -171,6 +171,11 @@ def render_content(content: dict[str, Any] | None) -> str:
     return json.dumps(next(iter(content.values())), indent=2)
 
 
+def _clip(text: str, limit: int = 400) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[:limit] + "..."
+
+
 def _show(item: dict[str, Any], show_scores: bool, out: Any) -> None:
     rec = item.get("record", {})
     print(f"\n--- item {item['id']} (record {rec.get('id', '')}) ---", file=out)
@@ -182,9 +187,15 @@ def _show(item: dict[str, Any], show_scores: bool, out: Any) -> None:
     traj = rec.get("trajectory", {}).get("steps", [])
     if traj:
         print(f"trajectory: {len(traj)} step(s)", file=out)
-        for step in traj:
-            kind = str(step.get("kind", "")).removeprefix("STEP_KIND_").lower()
-            print(f"  {kind}: {step.get('name', '')} {step.get('content', '')}"[:200], file=out)
+        for i, step in enumerate(traj, 1):
+            kind = str(step.get("type", "")).removeprefix("STEP_TYPE_").lower() or "step"
+            print(f"  {i}. {kind} {step.get('name', '')}".rstrip(), file=out)
+            for field in ("input", "output"):
+                text = render_content(step.get(field))
+                if text:
+                    print(f"     {field}: {_clip(text)}", file=out)
+            if step.get("error"):
+                print(f"     error: {_clip(step['error'])}", file=out)
     if show_scores and item.get("runScores"):
         scores = ", ".join(f"{k}={v:.3g}" for k, v in sorted(item["runScores"].items()))
         print(f"run scores: {scores}", file=out)

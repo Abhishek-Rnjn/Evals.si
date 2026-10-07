@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"cel.dev/cel-go/cel"
@@ -34,7 +35,9 @@ const (
 
 var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$`)
 
-var celEnv = func() *cel.Env {
+// celEnv is built on first use: every evalsid process (sandbox launchers
+// included) links this package, and only servers check guardrails.
+var celEnv = sync.OnceValue(func() *cel.Env {
 	env, err := cel.NewEnv(
 		cel.Variable("scores", cel.MapType(cel.StringType, cel.DoubleType)),
 		cel.Variable("phase", cel.StringType),
@@ -51,7 +54,7 @@ var celEnv = func() *cel.Env {
 		panic(err)
 	}
 	return env
-}()
+})
 
 // Input is one piece of traffic to check.
 type Input struct {
@@ -250,14 +253,14 @@ func compile(g *evalsiv1alpha1.Guardrail, eval *evaluation.Service) (*compiled, 
 		if len(c.insts) == 0 {
 			return nil, errors.New("block_when needs evaluators")
 		}
-		ast, issues := celEnv.Compile(expr)
+		ast, issues := celEnv().Compile(expr)
 		if issues != nil && issues.Err() != nil {
 			return nil, fmt.Errorf("block_when: %w", issues.Err())
 		}
 		if ast.OutputType() != types.BoolType {
 			return nil, fmt.Errorf("block_when must be a boolean expression, not %s", ast.OutputType())
 		}
-		if c.block, err = celEnv.Program(ast, cel.EvalOptions(cel.OptOptimize), cel.CostLimit(100000)); err != nil {
+		if c.block, err = celEnv().Program(ast, cel.EvalOptions(cel.OptOptimize), cel.CostLimit(100000)); err != nil {
 			return nil, fmt.Errorf("block_when: %w", err)
 		}
 	}

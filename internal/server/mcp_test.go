@@ -199,4 +199,13 @@ spec:
 	if text, isErr, _ := toolResult(t, out); isErr || !strings.Contains(text, "succeeded") {
 		t.Errorf("get_run: %s", text)
 	}
+
+	// Without a project the run goes to the default project, and so does
+	// the search for its baseline: the same name in "support" is not it.
+	noProject := strings.Replace(spec, "metadata: {name: suite, project: support}", "metadata: {name: suite}", 1)
+	_, _, out = s.mcpCall(t, s.keys["owner"], nil, "tools/call", map[string]any{"name": "run", "arguments": map[string]any{"spec": noProject}})
+	text, isErr, structured := toolResult(t, out)
+	if isErr || strings.Contains(text, "compared with run") || structured["project"] != "default" {
+		t.Errorf("default-project run compared across projects: %s %v", text, structured["project"])
+	}
 }

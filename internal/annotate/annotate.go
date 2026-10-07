@@ -164,7 +164,15 @@ func (s *Service) ListQueues(ctx context.Context, req *connect.Request[evalsiv1a
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&evalsiv1alpha1.ListQueuesResponse{Queues: qs}), nil
+	// Each queue is checked by its own name and labels, so a rule hiding
+	// one queue hides it here too.
+	visible := qs[:0]
+	for _, q := range qs {
+		if authz.Can(ctx, "annotations.read", q.GetProject(), authz.QueueResource(q.GetName(), q.GetLabels())) {
+			visible = append(visible, q)
+		}
+	}
+	return connect.NewResponse(&evalsiv1alpha1.ListQueuesResponse{Queues: visible}), nil
 }
 
 // GetQueue returns a queue.

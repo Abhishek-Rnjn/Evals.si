@@ -17,6 +17,7 @@ import (
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 )
 
 type tool struct {
@@ -372,9 +373,14 @@ func parseRunArgs(args map[string]any) (*evalsiv1alpha1.RunSpec, string, string,
 	return spec, name, project, labels, nil
 }
 
+// previousRun is the newest finished run with this name in the project the
+// new run goes to (an empty project is the default one, as for CreateRun).
 func previousRun(ctx context.Context, runs evalsiv1alpha1connect.RunServiceClient, name, project string) (string, error) {
 	if name == "" {
 		return "", nil
+	}
+	if project == "" {
+		project = authz.DefaultProject
 	}
 	token := ""
 	for range 5 {
@@ -383,7 +389,7 @@ func previousRun(ctx context.Context, runs evalsiv1alpha1connect.RunServiceClien
 			return "", rpcErr(err)
 		}
 		for _, r := range resp.Msg.GetRuns() {
-			if r.GetName() == name && (r.GetStatus() == evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED || r.GetStatus() == evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED) {
+			if r.GetName() == name && r.GetProject() == project && (r.GetStatus() == evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED || r.GetStatus() == evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED) {
 				return r.GetId(), nil
 			}
 		}

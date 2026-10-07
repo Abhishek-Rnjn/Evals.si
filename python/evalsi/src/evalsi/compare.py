@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from typing import Any
 
-from evalsi.stats import t_interval
+from evalsi.stats import clustered_interval, t_interval
 
 
 @dataclass
@@ -82,7 +82,14 @@ def compare_results(
             diffs = [b[k] - a[k] for k in shared]
             c.paired_n = len(diffs)
             c.diff = sum(diffs) / len(diffs)
-            interval = t_interval(diffs, level)
+            # Trials of one record are not independent: with repeated trials
+            # the interval is clustered by record, so repeating records does
+            # not narrow it.
+            records = [k.rsplit("#", 1)[0] for k in shared]
+            if len(set(records)) < len(records):
+                interval = clustered_interval(diffs, records, level)
+            else:
+                interval = t_interval(diffs, level)
             if interval is not None and interval.low == interval.low:  # not NaN
                 c.diff_low, c.diff_high = interval.low, interval.high
                 c.significant = interval.low > 0 or interval.high < 0

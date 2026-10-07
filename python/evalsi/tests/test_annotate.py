@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -198,3 +199,40 @@ def test_cli_add_stats_export(
     qf.write_text(json.dumps(QUEUE))
     assert main(["annotate", "create", "-f", str(qf), "--server", "http://s"]) == 0
     assert fake.calls[-1][1]["queue"]["questions"][1]["kind"] == "QUESTION_KIND_SCORE"
+
+
+def test_show_renders_trajectory_steps(capsys: pytest.CaptureFixture[str]) -> None:
+    from google.protobuf import json_format
+
+    from evalsi.cli_annotate import _show
+    from evalsi.convert import record_to_proto
+    from evalsi.types import Content, Record, Step, Trajectory
+
+    rec = Record(
+        id="r1",
+        input=Content.from_value("Refund order 42"),
+        trajectory=Trajectory(
+            steps=[
+                Step(
+                    type="tool",
+                    name="lookup_order",
+                    input=Content.from_value({"id": 42}),
+                    output=Content.from_value("shipped"),
+                ),
+                Step(
+                    type="llm",
+                    name="answer",
+                    output=Content.from_value("It shipped."),
+                    error="slow",
+                ),
+            ]
+        ),
+    )
+    item = {"id": "i1", "record": json_format.MessageToDict(record_to_proto(rec))}
+    _show(item, False, sys.stdout)
+    out = capsys.readouterr().out
+    assert "1. tool lookup_order" in out
+    assert '"id": 42' in out
+    assert "output: shipped" in out
+    assert "2. llm answer" in out
+    assert "error: slow" in out

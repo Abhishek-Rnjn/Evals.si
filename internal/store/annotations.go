@@ -255,6 +255,12 @@ func (s *Store) SaveAnnotation(ctx context.Context, project string, a *evalsiv1a
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Lock the item first, so answers to it are saved one at a time: on
+	// PostgreSQL two transactions would otherwise each count without the
+	// other's uncommitted answer, and leave the count short.
+	if _, err := tx.ExecContext(ctx, `UPDATE annotation_items SET annotations = annotations WHERE id = ?`, a.GetItemId()); err != nil {
+		return nil, err
+	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO annotations (item_id, annotator, project, queue, body, skipped, created_ns) VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (item_id, annotator) DO UPDATE SET body = excluded.body, skipped = excluded.skipped, created_ns = excluded.created_ns`,

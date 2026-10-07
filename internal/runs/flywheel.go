@@ -7,6 +7,7 @@ package runs
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"time"
 
@@ -223,6 +224,25 @@ func (m *Manager) MatchRecords(ctx context.Context, run *evalsiv1alpha1.Run, whe
 			}
 		}
 	}
+	// Records without per-record results (a run whose evaluators are all
+	// dataset-scope, or a record every evaluator skipped) are still the
+	// run's records: list every record and trial, in run order.
+	trials := trialsOf(run.GetSpec())
+	for rec := range records {
+		for trial := range trials {
+			k := key{rec, trial}
+			if _, ok := scores[k]; !ok {
+				scores[k] = map[string]float64{}
+				order = append(order, k)
+			}
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		if order[i].rec != order[j].rec {
+			return order[i].rec < order[j].rec
+		}
+		return order[i].trial < order[j].trial
+	})
 	done := map[int]bool{}
 	var out []Match
 	for _, k := range order {

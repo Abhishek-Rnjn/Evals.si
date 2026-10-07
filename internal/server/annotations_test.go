@@ -12,6 +12,7 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 )
 
@@ -217,5 +218,84 @@ func TestAnnotationQueues(t *testing.T) {
 	_ = json.NewDecoder(resp.Body).Decode(&body)
 	if resp.StatusCode != http.StatusOK || body["done"] != "4" {
 		t.Errorf("REST stats: %d %v", resp.StatusCode, body)
+	}
+}
+
+// TestQueueAndGuardrailRulesSeeStoredLabels: rules on a queue's or a
+// guardrail's name or labels apply to every call on it, listing included,
+// with the labels it was stored with.
+func TestQueueAndGuardrailRulesSeeStoredLabels(t *testing.T) {
+	s := startAuthServer(t, func(c *config.Config) {
+		c.Authorization.Rules = append(c.Authorization.Rules,
+			authz.Rule{Deny: `request.action in ["annotations.read", "annotations.write"] && resource.labels.exists(k, k == "confidential")`},
+			authz.Rule{Deny: `request.action == "annotations.read" && has(resource.queue) && resource.queue.name == "sensitive"`},
+			authz.Rule{Deny: `request.action.startsWith("guardrails.") && request.action != "guardrails.write" && resource.labels.exists(k, k == "confidential")`},
+		)
+	})
+	ctx := context.Background()
+	editor := evalsiv1alpha1connect.NewAnnotationServiceClient(s.http, s.url, as(s.keys["editor"]))
+	question := []*evalsiv1alpha1.Question{{Name: "ok", Kind: evalsiv1alpha1.QuestionKind_QUESTION_KIND_PASS_FAIL}}
+	for _, q := range []*evalsiv1alpha1.AnnotationQueue{
+		{Name: "open", Project: "support", Questions: question},
+		{Name: "sensitive", Project: "support", Questions: question},
+		{Name: "hr", Project: "support", Questions: question, Labels: map[string]string{"confidential": "yes"}},
+	} {
+		if _, err := editor.CreateQueue(ctx, connect.NewRequest(&evalsiv1alpha1.CreateQueueRequest{Queue: q})); err != nil {
+			t.Fatalf("%s: %v", q.GetName(), err)
+		}
+	}
+
+	list, err := editor.ListQueues(ctx, connect.NewRequest(&evalsiv1alpha1.ListQueuesRequest{Project: "support"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, q := range list.Msg.GetQueues() {
+		names = append(names, q.GetName())
+	}
+	if len(names) != 1 || names[0] != "open" {
+		t.Errorf("listed: %v", names)
+	}
+	// The stored label applies to calls that do not carry it.
+	for name, call := range map[string]func() error{
+		"get": func() error {
+			_, err := editor.GetQueue(ctx, connect.NewRequest(&evalsiv1alpha1.GetQueueRequest{Project: "support", Name: "hr"}))
+			return err
+		},
+		"next": func() error {
+			_, err := editor.NextItem(ctx, connect.NewRequest(&evalsiv1alpha1.NextItemRequest{Project: "support", Queue: "hr"}))
+			return err
+		},
+		"stats": func() error {
+			_, err := editor.SummarizeQueue(ctx, connect.NewRequest(&evalsiv1alpha1.SummarizeQueueRequest{Project: "support", Queue: "hr"}))
+			return err
+		},
+		"answer": func() error {
+			_, err := editor.SubmitAnnotation(ctx, connect.NewRequest(&evalsiv1alpha1.SubmitAnnotationRequest{Project: "support", Queue: "hr", ItemId: "x"}))
+			return err
+		},
+	} {
+		if err := call(); codeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("%s on the confidential queue: %v", name, err)
+		}
+	}
+
+	// Guardrails: listing and checking see the stored label too.
+	gr := evalsiv1alpha1connect.NewGuardrailServiceClient(s.http, s.url, as(s.keys["editor"]))
+	email := []*evalsiv1alpha1.RedactRule{{Builtin: "email"}}
+	for _, g := range []*evalsiv1alpha1.Guardrail{
+		{Name: "public", Project: "support", Redact: email},
+		{Name: "secret", Project: "support", Redact: email, Labels: map[string]string{"confidential": "yes"}},
+	} {
+		if _, err := gr.ApplyGuardrail(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyGuardrailRequest{Guardrail: g})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gl, err := gr.ListGuardrails(ctx, connect.NewRequest(&evalsiv1alpha1.ListGuardrailsRequest{Project: "support"}))
+	if err != nil || len(gl.Msg.GetGuardrails()) != 1 || gl.Msg.GetGuardrails()[0].GetName() != "public" {
+		t.Errorf("guardrails listed: %v %v", gl, err)
+	}
+	if _, err := gr.Check(ctx, connect.NewRequest(&evalsiv1alpha1.CheckRequest{Project: "support", Guardrail: "secret", Content: "x"})); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("check on the confidential guardrail: %v", err)
 	}
 }

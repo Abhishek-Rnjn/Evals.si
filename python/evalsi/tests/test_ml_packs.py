@@ -171,6 +171,37 @@ def test_ks_matches_scipy_on_a_known_case() -> None:
     assert d == pytest.approx(0.16666666666666669)  # scipy.stats.ks_2samp(a, b).statistic
 
 
+def test_identical_windows_do_not_drift(tmp_path: Path) -> None:
+    assert ks_2samp([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]) == (0.0, 1.0)
+    values = [float(v) for v in range(50)]
+    rows = [{"metadata": {"window": w, "x": v}} for w in ("reference", "current") for v in values]
+    got = means(rows, "drift", feature="x")
+    assert got["ks"] == 0.0
+    assert got["ks-pvalue"] == 1.0
+    assert got["drifted"] == 0.0
+    # A reference file reads content the way records are read: {"json": 3} is 3.
+    ref = tmp_path / "ref.jsonl"
+    ref.write_text("\n".join(json.dumps({"output": {"json": v}}) for v in range(30)))
+    got = means(
+        [{"output": {"json": v}} for v in range(30)],
+        "drift",
+        feature="output",
+        reference_data=str(ref),
+    )
+    assert got["ks"] == 0.0
+    assert got["drifted"] == 0.0
+
+
+def test_data_quality_keeps_metadata_types() -> None:
+    records = [{"input": "a", "metadata": {"zip": "00123", "age": "30"}}]
+    got = means(
+        records,
+        "data-quality",
+        schema={"zip": {"type": "string", "max_length": 5}, "age": "number"},
+    )
+    assert got["invalid-rate"] == pytest.approx(1 / 2)  # age is stored as a string
+
+
 def test_data_quality() -> None:
     records = [
         {"input": "q1", "metadata": {"age": 30, "country": "DE"}},

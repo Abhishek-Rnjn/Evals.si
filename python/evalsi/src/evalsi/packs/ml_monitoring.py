@@ -60,14 +60,18 @@ def _dig(data: Any, path: Sequence[str]) -> Any:
     return data
 
 
-def field_value(record: Record, path: str) -> Any:
-    """A record's field by path (see the module docstring); None when absent."""
+def field_value(record: Record, path: str, *, coerce: bool = True) -> Any:
+    """A record's field by path (see the module docstring); None when absent.
+
+    Numeric-looking strings become numbers unless coerce is False, which
+    keeps metadata as stored (for type checks)."""
     if path in ("input", "output", "reference"):
         return _scalar(getattr(record, path))
     parts = path.split(".")
     if parts[0] == "metadata":
         parts = parts[1:]
-    return _scalar(_dig(record.metadata, parts))
+    found = _dig(record.metadata, parts)
+    return _scalar(found) if coerce else found
 
 
 def _row_value(row: dict[str, Any], path: str) -> Any:
@@ -75,9 +79,9 @@ def _row_value(row: dict[str, Any], path: str) -> Any:
     parts = path.split(".")
     if parts[0] in ("input", "output", "reference"):
         value = row.get(parts[0])
-        if isinstance(value, dict) and "text" in value:
-            value = value["text"]
-        return _scalar(value)
+        # Read it the way a dataset loader builds a record, so the reference
+        # and the evaluated records agree ({"json": 3} is 3 in both).
+        return None if value is None else _scalar(Content.from_value(value))
     if parts[0] == "metadata":
         parts = parts[1:]
     found = _dig(row.get("metadata") or {}, parts)
@@ -152,6 +156,8 @@ def ks_2samp(a: Sequence[float], b: Sequence[float]) -> tuple[float, float]:
         while j < m and ys[j] == v:
             j += 1
         d = max(d, abs(i / n - j / m))
+    if d == 0:
+        return 0.0, 1.0  # identical distributions; the series below does not converge at 0
     # The Kolmogorov distribution with Stephens' small-sample correction.
     en = math.sqrt(n * m / (n + m))
     lam = (en + 0.12 + 0.11 / en) * d
@@ -331,7 +337,8 @@ def data_quality(
     for r in records:
         for field, given in schema.items():
             rule = given if isinstance(given, dict) else {"type": given}
-            value = field_value(r, field)
+            # Metadata as stored: "00123" is a string, and "30" is not a number.
+            value = field_value(r, field, coerce=False)
             if value is None or value == "":
                 if rule.get("required", True):
                     required_cells += 1

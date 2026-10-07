@@ -131,3 +131,13 @@ func TraceResource(t *evalsiv1alpha1.TraceSummary) map[string]any {
 func IngestResource(service string, labels map[string]string) map[string]any {
 	return map[string]any{"service": service, "labels": StringMap(labels)}
 }
+
+// QueueResource describes an annotation queue (resource.queue, resource.labels).
+func QueueResource(name string, labels map[string]string) map[string]any {
+	return map[string]any{"queue": map[string]any{"name": name}, "labels": StringMap(labels)}
+}
+
+// GuardrailResource describes a guardrail (resource.guardrail, resource.labels).
+func GuardrailResource(name string, labels map[string]string) map[string]any {
+	return map[string]any{"guardrail": map[string]any{"name": name}, "labels": StringMap(labels)}
+}

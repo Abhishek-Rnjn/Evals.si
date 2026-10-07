@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"unsafe"
 
@@ -108,6 +110,12 @@ func execWithLimits(spec *launchSpec, path string) error {
 	if err != nil {
 		return err
 	}
+	// The runtime has more address space mapped than a sandbox's memory
+	// limit (RLIMIT_AS) allows, so once the limits are set any mmap fails
+	// and the runtime aborts ("cannot allocate memory"). Nothing may need
+	// memory between setrlimit and execve: no GC cycle, no new thread.
+	runtime.LockOSThread()
+	debug.SetGCPercent(-1)
 	if err := setLimits(spec); err != nil {
 		return fmt.Errorf("resource limits: %w", err)
 	}

@@ -218,6 +218,33 @@ def test_compare_results_pairs_by_record_and_respects_direction() -> None:
     assert not same.significant
 
 
+def test_compare_results_clusters_trials_by_record() -> None:
+    def results(per_record: dict[str, list[float]]) -> dict[str, Any]:
+        rows = [
+            {
+                "record_id": rid,
+                "trial": t,
+                "evaluator": "m",
+                "outcome": "scored",
+                "scores": [{"number": v}],
+            }
+            for rid, vals in per_record.items()
+            for t, v in enumerate(vals)
+        ]
+        allv = [v for vals in per_record.values() for v in vals]
+        return {"summaries": [{"metric": "m", "mean": sum(allv) / len(allv)}], "results": rows}
+
+    # Two records, twenty trials each: one improved, one regressed a little.
+    # As forty independent pairs the change would look significant; as two
+    # records it is not.
+    base = results({"a": [0.5] * 20, "b": [0.5] * 20})
+    cand = results({"a": [0.9] * 20, "b": [0.4] * 20})
+    [c] = compare_results(base, cand)
+    assert c.paired_n == 40
+    assert c.diff == pytest.approx(0.15)
+    assert not c.significant
+
+
 def test_a_real_stdio_session(tmp_path: Path) -> None:
     """The harness's MCP client drives `evalsi mcp` as a subprocess, the way a
     coding agent does: run, change the code under test, run again, and read
