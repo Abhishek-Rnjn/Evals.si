@@ -31,6 +31,12 @@ export default defineConfig({
           { label: "Overview", slug: "docs" },
           { label: "Get started", slug: "docs/get-started" },
         ] },
+        { label: "Integrations", items: [
+          { label: "Overview", slug: "integrations" },
+          { label: "agentgateway", slug: "integrations/agentgateway" },
+          { label: "Kubernetes", slug: "integrations/kubernetes" },
+          { label: "Agent platforms and studios", slug: "integrations/agent-platforms" },
+        ] },
         { label: "Guides", items: guides.map((g) => ({ slug: `docs/guides/${g}` })) },
         { label: "Examples", items: [
           { label: "All examples", slug: "examples" },

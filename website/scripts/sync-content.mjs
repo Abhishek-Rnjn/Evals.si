@@ -159,4 +159,19 @@ Every example lives under [\`examples/\`](${REPO}/tree/${BRANCH}/examples) in th
 ${examples.map((e) => `- [${e.title}](${BASE}/examples/${e.dir}/): ${e.desc}`).join("\n")}
 `);
 
+// ---- hand-written pages (website/content), with __BASE__ replaced ----------
+async function copyHandwritten(dir) {
+  const src = path.resolve(here, "../content", dir);
+  for (const e of await fs.readdir(src, { withFileTypes: true }).catch(() => [])) {
+    const rel = path.join(dir, e.name);
+    if (e.isDirectory()) { await copyHandwritten(rel); continue; }
+    const text = (await fs.readFile(path.join(src, e.name), "utf8")).replaceAll("__BASE__", BASE);
+    const name = e.name === "index.md" ? "index.md" : path.join(e.name.replace(/\.md$/, ""), "index.md");
+    const dest = path.join(out, dir, name);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, text);
+  }
+}
+await copyHandwritten("integrations");
+
 console.log(`synced ${queue.length + pages.size + examples.length} pages into ${path.relative(process.cwd(), out)}`);

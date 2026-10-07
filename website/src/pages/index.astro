@@ -13,9 +13,9 @@ const doors = [
 const features = [
   { name: "Pluggable by design", text: "lm-evaluation-harness, Inspect AI, RAGAS, DeepEval, SWE-bench, τ-bench, Terminal-Bench and BFCL plug in as isolated adapters.", href: "/docs/guides/plugins/" },
   { name: "Sandboxed, fail-closed", text: "Firecracker microVMs where available, then bubblewrap or Landlock, then hardened Kubernetes pods. If nothing qualifies, nothing runs.", href: "/docs/decisions/0005-sandbox-isolation-ladder/" },
-  { name: "Standalone or Kubernetes", text: "One binary on a laptop, or Helm charts and an operator with EvalRun, OnlineEvalPolicy, Evaluator and SandboxClass CRDs.", href: "/docs/guides/kubernetes/" },
+  { name: "Standalone or Kubernetes", text: "One binary on a laptop, or Helm charts and an operator with EvalRun, OnlineEvalPolicy, Evaluator and SandboxClass CRDs.", href: "/integrations/kubernetes/" },
   { name: "MCP for coding agents", text: "Let coding agents check their own changes through evalsi mcp locally or /mcp on the server.", href: "/docs/guides/mcp/" },
-  { name: "Inline guardrails", text: "Evaluate model output in the request path through agentgateway, and block or flag it before it reaches users.", href: "/docs/guides/guardrails/" },
+  { name: "Inline guardrails", text: "Evaluate model output in the request path through agentgateway, and block or flag it before it reaches users.", href: "/integrations/agentgateway/" },
   { name: "Identity and access", text: "OIDC/JWT and API keys, project-scoped RBAC with custom roles, CEL rules and an audit log.", href: "/docs/guides/identity/" },
   { name: "Human annotation", text: "Annotation queues with progress and inter-annotator agreement next to automated scores.", href: "/docs/guides/annotation/" },
   { name: "Wasm evaluator plugins", text: "Ship evaluators as Wasm modules and publish them through a plugin index.", href: "/docs/guides/plugins/" },
@@ -42,6 +42,7 @@ const apis = ["gRPC", "gRPC-Web", "HTTP/JSON", "MCP", "OpenTelemetry", "MLflow"]
     <nav>
       <a href={doc("/docs/get-started/")}>Docs</a>
       <a href={doc("/examples/")}>Examples</a>
+      <a href={doc("/integrations/")}>Integrations</a>
       <a href={doc("/docs/architecture/")}>Architecture</a>
       <a href={repo} class="gh">GitHub</a>
     </nav>
