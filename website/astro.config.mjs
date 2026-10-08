@@ -1,5 +1,7 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import react from "@astrojs/react";
+import tailwindcss from "@tailwindcss/vite";
 
 const base = (process.env.SITE_BASE ?? "/Evals.si").replace(/\/$/, "") || "/";
 const site = process.env.SITE_URL ?? "https://abhishek-rnjn.github.io";
@@ -17,10 +19,16 @@ const examples = [
 export default defineConfig({
   site,
   base,
+  vite: { plugins: [tailwindcss()] },
   integrations: [
+    react(),
     starlight({
       title: "Evals.si",
-      logo: { src: "./src/assets/logo.svg", alt: "Evals.si", replacesTitle: true },
+      logo: { light: "./src/assets/logo.svg", dark: "./src/assets/logo-dark.svg", alt: "Evals.si", replacesTitle: true },
+      head: [
+        { tag: "link", attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" } },
+        { tag: "link", attrs: { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" } },
+      ],
       favicon: "/favicon.svg",
       description: "One entrypoint for evaluating ML models, LLMs, RAG systems and agents.",
       social: [{ icon: "github", label: "GitHub", href: repo }],
