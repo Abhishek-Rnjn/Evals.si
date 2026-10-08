@@ -24,7 +24,7 @@ export default defineConfig({
     react(),
     starlight({
       title: "Evals.si",
-      logo: { light: "./src/assets/logo.svg", dark: "./src/assets/logo-dark.svg", alt: "Evals.si", replacesTitle: true },
+      logo: { src: "./src/assets/logo.svg", alt: "Evals.si", replacesTitle: true },
       head: [
         { tag: "link", attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" } },
         { tag: "link", attrs: { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" } },
@@ -33,7 +33,12 @@ export default defineConfig({
       description: "One entrypoint for evaluating ML models, LLMs, RAG systems and agents.",
       social: [{ icon: "github", label: "GitHub", href: repo }],
       customCss: ["./src/styles/theme.css"],
-      components: { Footer: "./src/components/Footer.astro" },
+      components: {
+        Footer: "./src/components/Footer.astro",
+        // Light mode only: no theme switcher, and the theme is pinned to light.
+        ThemeProvider: "./src/components/LightTheme.astro",
+        ThemeSelect: "./src/components/NoThemeSelect.astro",
+      },
       sidebar: [
         { label: "Start here", items: [
           { label: "Overview", slug: "docs" },

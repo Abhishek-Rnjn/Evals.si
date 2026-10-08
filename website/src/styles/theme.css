@@ -32,3 +32,5 @@
 header.header { backdrop-filter: blur(16px); background-color: color-mix(in srgb, var(--sl-color-black) 75%, transparent); }
 .sl-markdown-content a:not(:where(.not-content *)) { text-underline-offset: 3px; }
 .sl-link-button.primary { background: linear-gradient(90deg, #6366f1, #14b8a6); border: 0; color: #fff; }
+/* No theme switcher, so no divider after the social icons. */
+header .social-icons::after { display: none !important; }
