@@ -1,0 +1,250 @@
+---
+import "../styles/landing.css";
+import logoSvg from "../assets/logo.svg?raw";
+const logo = logoSvg.replace(/fill="#111322"/g, "fill=\"currentColor\"");
+import { ArrowRight, BookOpen } from "lucide-react";
+import GithubIcon from "../components/GithubIcon.astro";
+import { AnimatedGradientText } from "../components/ui/animated-gradient-text";
+import { AnimatedBadge } from "../components/ui/animated-badge";
+import { RainbowButton } from "../components/ui/rainbow-button";
+import { BorderBeam } from "../components/ui/border-beam";
+import { Marquee } from "../components/ui/marquee";
+import Doors from "../components/Doors";
+import Features from "../components/Features";
+import ArchitectureBeams from "../components/ArchitectureBeams";
+import CodeTabs from "../components/CodeTabs";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const repo = "https://github.com/Abhishek-Rnjn/Evals.si";
+const doc = (p: string) => `${base}${p}`;
+
+const ecosystem = [
+  "lm-evaluation-harness", "Inspect AI", "RAGAS", "DeepEval", "SWE-bench", "τ-bench", "Terminal-Bench", "BFCL",
+  "MLflow", "OpenTelemetry", "Langfuse", "Phoenix", "agentgateway", "Kubernetes", "KEDA", "NATS",
+  "PostgreSQL", "ClickHouse", "S3", "Firecracker", "TRL", "verl", "OpenRLHF", "MCP", "A2A",
+];
+
+const tabs = [
+  { label: "CLI", lang: "bash", code: `# Install and grade outputs you already have
+cd python && uv sync --all-packages
+uv run evalsi eval --data qa.jsonl \\
+  --evaluators exact-match,numeric-match,latency
+
+# Add a judge: any OpenAI-compatible server, or Claude
+uv run evalsi eval --data qa.jsonl --evaluators llm-judge \\
+  --judge-provider anthropic --judge-model claude-opus-5-5` },
+  { label: "Python", lang: "python", code: `import evalsi
+from evalsi import Record, Score, evaluator
+
+@evaluator(name="acme/polite", version="1.0.0")
+def polite(record: Record) -> Score:
+    return Score(passed="please" in record.output.as_text().lower())
+
+result = evalsi.evaluate("qa.jsonl", ["exact-match", polite])
+print(result.table())
+result.save("results.json")` },
+  { label: "Kubernetes", lang: "yaml", code: `apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: swebench-verified
+  labels: {evals.si/project: swe}
+spec:
+  target:
+    agent:
+      cli: {command: [sh, -c, "my-agent --non-interactive"]}
+  dataset: {uri: "swebench://swebench-verified?split=test"}
+  evaluators: [{ref: task-success}, {ref: policy-violations}]
+  gates: [{metric: task-success, min: 0.3}]` },
+];
+
+const extras = [
+  { name: "Human annotation", text: "Queues with progress and agreement", href: "/docs/guides/annotation/" },
+  { name: "Wasm evaluators", text: "Ship graders as Wasm with a plugin index", href: "/docs/guides/plugins/" },
+  { name: "Read-only web UI", text: "Runs, comparisons, policies and catalog", href: "/docs/guides/web-ui/" },
+  { name: "Fine-tuning and RL", text: "Rewards and checkpoint regression checks", href: "/docs/guides/fine-tuning/" },
+];
+---
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evals.si · One entrypoint for evaluations</title>
+  <meta name="description" content="A highly scalable, pluggable evaluations platform for ML models, LLMs, RAG systems and agents, offline and online." />
+  <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body class="font-sans">
+  <!-- Nav -->
+  <header class="sticky top-0 z-50 border-b border-neutral-200/60 bg-white/70 backdrop-blur-xl dark:border-white/5 dark:bg-[#05060d]/70">
+    <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <a href={`${base}/`} aria-label="Evals.si home" class="[&>svg]:h-8 [&>svg]:w-auto" set:html={logo} />
+      <nav class="flex items-center gap-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 sm:block dark:hover:text-white" href={doc("/docs/get-started/")}>Docs</a>
+        <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 sm:block dark:hover:text-white" href={doc("/examples/")}>Examples</a>
+        <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 md:block dark:hover:text-white" href={doc("/integrations/")}>Integrations</a>
+        <a href={repo} class="ml-1 inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 font-medium text-neutral-900 transition-colors hover:border-indigo-400 dark:border-white/10 dark:text-white">
+          <GithubIcon /> GitHub
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="overflow-x-clip">
+    <!-- Hero -->
+    <section class="relative">
+      <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10 bg-[linear-gradient(to_right,#8881_1px,transparent_1px),linear-gradient(to_bottom,#8881_1px,transparent_1px)] bg-[size:44px_44px] [mask-image:radial-gradient(ellipse_70%_60%_at_50%_0%,#000_40%,transparent_100%)]"></div>
+      <div aria-hidden="true" class="pointer-events-none absolute left-1/2 top-[-12rem] -z-10 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(99,102,241,0.35),rgba(45,212,191,0.12),transparent)] blur-2xl"></div>
+
+      <div class="mx-auto max-w-6xl px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
+        <a href={doc("/docs/roadmap/")} class="animate-fade-up inline-block">
+          <AnimatedGradientText>
+            <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">Phases 0–6 shipped: MCP, guardrails, Wasm plugins and a web UI</span>
+            <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
+          </AnimatedGradientText>
+        </a>
+
+        <h1 class="animate-fade-up mx-auto mt-8 max-w-4xl text-balance text-5xl font-extrabold tracking-tight [animation-delay:80ms] sm:text-7xl">
+          One entrypoint to evaluate{" "}
+          <span class="bg-gradient-to-r from-indigo-500 via-violet-400 to-teal-400 bg-clip-text text-transparent">everything</span>.
+        </h1>
+        <p class="animate-fade-up mx-auto mt-6 max-w-2xl text-pretty text-lg text-neutral-600 [animation-delay:160ms] sm:text-xl dark:text-neutral-400">
+          Classic ML models, LLMs, RAG systems, agents and RL checkpoints, offline and online. Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
+        </p>
+        <div class="animate-fade-up mt-10 flex flex-wrap items-center justify-center gap-4 [animation-delay:240ms]">
+          <RainbowButton href={doc("/docs/get-started/")}>Get started <ArrowRight className="size-4" /></RainbowButton>
+          <a href={repo} class="inline-flex h-11 items-center gap-2 rounded-xl border border-neutral-200 bg-white/60 px-6 font-medium backdrop-blur transition-colors hover:border-indigo-400 dark:border-white/10 dark:bg-white/5">
+            <GithubIcon /> Star on GitHub
+          </a>
+        </div>
+
+        <!-- Terminal -->
+        <div class="animate-fade-up relative mx-auto mt-16 max-w-3xl [animation-delay:320ms]">
+          <div aria-hidden="true" class="absolute -inset-x-10 -bottom-10 top-10 -z-10 rounded-[3rem] bg-gradient-to-r from-indigo-500/30 to-teal-400/30 blur-3xl"></div>
+          <div class="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white/90 text-left shadow-2xl shadow-indigo-500/10 backdrop-blur">
+            <div class="flex items-center gap-2 border-b border-neutral-200 bg-neutral-50/80 px-4 py-3">
+              <span class="size-3 rounded-full bg-[#ff5f57]"></span><span class="size-3 rounded-full bg-[#febc2e]"></span><span class="size-3 rounded-full bg-[#28c840]"></span>
+              <span class="ml-3 font-mono text-xs text-neutral-500">evalsi eval</span>
+            </div>
+            <pre class="overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed text-neutral-700 sm:text-[13.5px]"><code><span class="text-teal-600">$</span> uv run evalsi eval --data qa.jsonl --evaluators exact-match,numeric-match,latency
+
+<span class="text-neutral-400">6 records · 3 evaluators</span>
+
+<span class="text-neutral-400">metric         n  mean     95% CI              skipped  errors</span>
+exact-match    6  <span class="text-indigo-600 font-medium">0.333</span>    [0.097, 0.700]            0       0
+numeric-match  3  <span class="text-indigo-600 font-medium">0.667</span>    [0.208, 0.939]            <span class="text-amber-600">3</span>       0
+latency        6  <span class="text-indigo-600 font-medium">517.500</span>  [276.409, 758.591]        0       0</code></pre>
+            <BorderBeam size={250} duration={10} />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ecosystem marquee -->
+    <section class="border-y border-neutral-200/70 py-8 dark:border-white/5">
+      <p class="mb-4 text-center text-xs font-semibold uppercase tracking-[0.2em] text-neutral-500">Works with the tools you already use</p>
+      <div class="relative">
+        <Marquee pauseOnHover className="[--duration:50s]">
+          {ecosystem.map((e) => (
+            <span class="whitespace-nowrap rounded-full border border-neutral-200 bg-white px-4 py-1.5 text-sm text-neutral-600 dark:border-white/10 dark:bg-white/[.03] dark:text-neutral-300">{e}</span>
+          ))}
+        </Marquee>
+        <div class="pointer-events-none absolute inset-y-0 left-0 w-1/5 bg-gradient-to-r from-white dark:from-[#05060d]"></div>
+        <div class="pointer-events-none absolute inset-y-0 right-0 w-1/5 bg-gradient-to-l from-white dark:from-[#05060d]"></div>
+      </div>
+    </section>
+
+    <!-- Doors -->
+    <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+      <div class="mx-auto mb-12 max-w-2xl text-center">
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">Four doors, one platform</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Score it, run it, watch it, reward it</h2>
+        <p class="mt-4 text-neutral-600 dark:text-neutral-400">The same evaluators work in every mode, so a metric means the same thing in CI, in production and in training.</p>
+      </div>
+      <Doors base={base} client:visible />
+    </section>
+
+    <!-- Architecture -->
+    <section class="relative py-24">
+      <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-transparent via-indigo-500/[.04] to-transparent"></div>
+      <div class="mx-auto grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-[1fr_1.3fr]">
+        <div>
+          <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">Fits your stack</p>
+          <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Plug in at either end</h2>
+          <p class="mt-4 text-neutral-600 dark:text-neutral-400">Send traces from any OpenTelemetry source or gateway, point runs at your own agent over A2A, MCP, HTTP or a CLI, and export results to the dashboards you already watch.</p>
+          <ul class="mt-6 space-y-3 text-sm text-neutral-600 dark:text-neutral-400">
+            <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>gRPC, gRPC-Web, HTTP/JSON and MCP on one port</li>
+            <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>Sinks for MLflow, OpenTelemetry, Langfuse and Phoenix</li>
+            <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>No default judge, so nothing is billed by surprise</li>
+          </ul>
+          <a href={doc("/integrations/")} class="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:gap-3 dark:text-indigo-300 transition-all">Explore integrations <ArrowRight className="size-4" /></a>
+        </div>
+        <div class="rounded-3xl border border-neutral-200 bg-white/60 p-2 backdrop-blur dark:border-white/10 dark:bg-white/[.02]">
+          <ArchitectureBeams client:visible />
+        </div>
+      </div>
+    </section>
+
+    <!-- Bento -->
+    <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+      <div class="mx-auto mb-12 max-w-2xl text-center">
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">Built for production</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Everything an evaluation platform needs</h2>
+      </div>
+      <Features base={base} />
+      <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {extras.map((x) => (
+          <a href={doc(x.href)} class="group rounded-2xl border border-neutral-200 p-5 transition-colors hover:border-indigo-400 dark:border-white/10">
+            <h3 class="flex items-center justify-between font-semibold">{x.name}<ArrowRight className="size-4 text-neutral-400 transition-transform group-hover:translate-x-1" /></h3>
+            <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{x.text}</p>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <!-- Code -->
+    <section class="mx-auto grid max-w-6xl items-center gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[1fr_1.2fr]">
+      <div>
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">Your way in</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">CLI, Python or Kubernetes</h2>
+        <p class="mt-4 text-neutral-600 dark:text-neutral-400">Write an evaluator as a decorated function, run it next to the built-ins, then take the same spec to a cluster as an <code class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-sm dark:bg-white/10">EvalRun</code> that gates your rollout.</p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href={doc("/examples/")} class="inline-flex items-center gap-2 rounded-xl border border-neutral-200 px-5 py-2.5 text-sm font-medium transition-colors hover:border-indigo-400 dark:border-white/10">Browse examples <ArrowRight className="size-4" /></a>
+          <a href={doc("/integrations/kubernetes/")} class="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white">Kubernetes guide</a>
+        </div>
+      </div>
+      <CodeTabs tabs={tabs} client:visible />
+    </section>
+
+    <!-- CTA -->
+    <section class="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
+      <div class="relative overflow-hidden rounded-3xl border border-neutral-200 bg-gradient-to-br from-indigo-500/10 via-transparent to-teal-400/10 px-6 py-16 text-center dark:border-white/10">
+        <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(#8882_1px,transparent_1px)] bg-[size:18px_18px] [mask-image:radial-gradient(ellipse_at_center,#000_30%,transparent_75%)]"></div>
+        <h2 class="text-balance text-3xl font-bold tracking-tight sm:text-5xl">Start evaluating in a minute</h2>
+        <p class="mx-auto mt-4 max-w-xl text-neutral-600 dark:text-neutral-400">Open source, self-hosted and air-gappable. Bring your own models, storage, identity and secrets.</p>
+        <div class="mt-8 flex flex-wrap justify-center gap-4">
+          <RainbowButton href={doc("/docs/get-started/")}>Read the docs <BookOpen className="size-4" /></RainbowButton>
+          <a href={doc("/docs/architecture/")} class="inline-flex h-11 items-center rounded-xl border border-neutral-200 bg-white/60 px-6 font-medium transition-colors hover:border-indigo-400 dark:border-white/10 dark:bg-white/5">See the architecture</a>
+        </div>
+        <BorderBeam size={300} duration={14} />
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-neutral-200 dark:border-white/5">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 text-sm text-neutral-500 sm:flex-row sm:px-6">
+      <div class="flex items-center gap-3"><span class="[&>svg]:h-6 [&>svg]:w-auto" set:html={logo} /><span>Apache-2.0</span></div>
+      <nav class="flex gap-6">
+        <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/docs/get-started/")}>Docs</a>
+        <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/examples/")}>Examples</a>
+        <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/integrations/")}>Integrations</a>
+        <a class="hover:text-neutral-900 dark:hover:text-white" href={repo}>GitHub</a>
+      </nav>
+    </div>
+  </footer>
+
+</body>
+</html>
