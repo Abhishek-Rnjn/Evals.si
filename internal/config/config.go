@@ -44,6 +44,17 @@ type Judge struct {
 	Projects []string `json:"projects,omitempty"`
 }
 
+// WorkerJudges is the judges as the Python worker sees them: settings the
+// server enforces itself, such as Projects, are left out.
+func (c Config) WorkerJudges() map[string]Judge {
+	out := make(map[string]Judge, len(c.Judges))
+	for name, j := range c.Judges {
+		j.Projects = nil
+		out[name] = j
+	}
+	return out
+}
+
 // Worker configures the Python evaluator worker that evalsid supervises.
 type Worker struct {
 	// Command that runs the evalsi CLI; "worker --listen ..." is appended.

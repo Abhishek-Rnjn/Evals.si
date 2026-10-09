@@ -168,3 +168,23 @@ authorization: {rules: [{require: "true"}]}
 		t.Errorf("mode none with rbac: %v", err)
 	}
 }
+
+func TestWorkerJudgesDropProjects(t *testing.T) {
+	cfg, err := Load(write(t, `
+judges:
+  claude:
+    provider: anthropic
+    model: m
+    projects: [e2e]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Judges["claude"].Projects; len(got) != 1 {
+		t.Fatalf("server config lost projects: %v", got)
+	}
+	j := cfg.WorkerJudges()["claude"]
+	if j.Projects != nil || j.Model != "m" {
+		t.Fatalf("worker judge = %+v; want the judge without projects", j)
+	}
+}

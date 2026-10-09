@@ -82,6 +82,22 @@ func (s *Service) record(ctx context.Context, action, project, resource string, 
 	s.auditor.Record(ctx, ev)
 }
 
+// refuse audits a grant refused as a privilege escalation and returns the
+// PermissionDenied error for it. The enforcement point allowed the call
+// itself, so without this the refusal would leave no trace in the log.
+func (s *Service) refuse(ctx context.Context, project, resource string, err error) error {
+	ev := &evalsiv1alpha1.AuditEvent{
+		Principal: auth.PrincipalFrom(ctx).ID(), Action: "access.manage", Project: project,
+		Resource: resource, Allowed: false, Reason: err.Error(),
+	}
+	if c := CheckerFrom(ctx); c != nil {
+		ev.Procedure, ev.Source = c.Meta.Procedure, c.Meta.Source
+		ev.RequestId = c.Meta.Headers.Get("X-Request-Id")
+	}
+	s.auditor.Record(ctx, ev)
+	return denied(err)
+}
+
 // WhoAmI implements AuthService.
 func (s *Service) WhoAmI(ctx context.Context, _ *connect.Request[evalsiv1alpha1.WhoAmIRequest]) (*connect.Response[evalsiv1alpha1.WhoAmIResponse], error) {
 	p := auth.PrincipalFrom(ctx)
@@ -191,7 +207,8 @@ func keyProto(k KeyRecord, source string) *evalsiv1alpha1.APIKey {
 }
 
 // checkKeyRoles validates a key's roles and that the caller may grant them.
-func (s *Service) checkKeyRoles(p *auth.Principal, roles map[string][]string) error {
+func (s *Service) checkKeyRoles(ctx context.Context, name string, roles map[string][]string) error {
+	p := auth.PrincipalFrom(ctx)
 	if len(roles) == 0 {
 		return invalid("an API key needs roles in at least one project")
 	}
@@ -205,7 +222,7 @@ func (s *Service) checkKeyRoles(p *auth.Principal, roles map[string][]string) er
 			}
 		}
 		if err := s.engine.CheckRoleNames(p, project, names); err != nil {
-			return denied(err)
+			return s.refuse(ctx, project, "apikey/"+name, err)
 		}
 	}
 	return nil
@@ -233,7 +250,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, req *connect.Request[evalsiv
 		}
 	}
 	roles := rolesFromProto(req.Msg.GetRoles())
-	if err := s.checkKeyRoles(p, roles); err != nil {
+	if err := s.checkKeyRoles(ctx, name, roles); err != nil {
 		return nil, err
 	}
 	if err := validLabels(req.Msg.GetLabels()); err != nil {
@@ -395,7 +412,7 @@ func (s *Service) putRole(ctx context.Context, msg *evalsiv1alpha1.Role, create 
 		return nil, invalid("role %q: %v", def.Name, err)
 	}
 	if err := s.engine.CheckRole(auth.PrincipalFrom(ctx), or(def.Project, "*"), def); err != nil {
-		return nil, denied(err)
+		return nil, s.refuse(ctx, or(def.Project, "*"), "role/"+or(def.Project, "*")+"/"+def.Name, err)
 	}
 	if err := s.store.PutRole(ctx, def, create); err != nil {
 		return nil, storeErr(err, "role "+def.Name)
@@ -540,7 +557,7 @@ func (s *Service) CreateBinding(ctx context.Context, req *connect.Request[evalsi
 		return nil, invalid("%v", err)
 	}
 	if err := s.engine.CheckRoleNames(auth.PrincipalFrom(ctx), b.Project, []string{b.Role}); err != nil {
-		return nil, denied(err)
+		return nil, s.refuse(ctx, b.Project, "binding/"+b.Project+"/"+b.Role, err)
 	}
 	if err := s.store.CreateBinding(ctx, b); err != nil {
 		return nil, storeErr(err, "binding")

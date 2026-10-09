@@ -338,7 +338,7 @@ Every hop can run over mutual TLS with certificates from your CA (cert-manager, 
 
 ## 7. Audit, metrics, external authorization
 
-- **Audit.** Mutating calls and every denied call are written to the audit log, with the deciding rule or role. Read it with `evalsi auth audit [--denied]`; it is kept for `audit.retention` (default 90 days). Export it to your log pipeline with an OTel sink and `audit: true`.
+- **Audit.** Mutating calls and every denied call are written to the audit log, with the deciding rule or role. When a role would grant the action but its condition fails, the reason names that role and condition. Refused grants (privilege escalation on a key, role or binding) are logged as `access.manage`, and rejected credentials as `auth.authenticate` with principal `anonymous`, at most 10 a second; `evalsi_unauthenticated_total` on `/metrics` counts all of them. Read it with `evalsi auth audit [--denied]`; it is kept for `audit.retention` (default 90 days). Export it to your log pipeline with an OTel sink and `audit: true`.
 - **Metrics.** `/metrics` on the main port needs `metrics.read` (owners). Or serve it unauthenticated on a loopback listener with `metrics: {listen: 127.0.0.1:9464}`.
 - **External authorization.** A central policy engine can decide too:
 

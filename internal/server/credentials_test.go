@@ -327,3 +327,41 @@ func TestCredentialsReload(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Refusals the enforcement point did not make itself (a privilege
+// escalation found by AuthService) and rejected credentials are audited too.
+func TestEscalationAndUnauthenticatedAreAudited(t *testing.T) {
+	s := startAuthServer(t, nil)
+	ctx := context.Background()
+	keyAdmin := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["key-admin"]))
+	_, err := keyAdmin.CreateAPIKey(ctx, connect.NewRequest(&evalsiv1alpha1.CreateAPIKeyRequest{
+		Name:  "sneaky",
+		Roles: map[string]*evalsiv1alpha1.RoleList{"support": {Roles: []string{"runner"}}},
+	}))
+	if codeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "privilege escalation") {
+		t.Fatalf("escalation: %v", err)
+	}
+	anon := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as("not-a-key"))
+	if _, err := anon.ListRuns(ctx, connect.NewRequest(&evalsiv1alpha1.ListRunsRequest{Project: "support"})); codeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("bad key: %v", err)
+	}
+
+	owner := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["owner"]))
+	events, err := owner.ListAuditEvents(ctx, connect.NewRequest(&evalsiv1alpha1.ListAuditEventsRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var escalation, unauth bool
+	for _, ev := range events.Msg.GetEvents() {
+		switch {
+		case ev.GetResource() == "apikey/sneaky" && !ev.GetAllowed() && ev.GetPrincipal() == "key:key-admin" &&
+			strings.Contains(ev.GetReason(), "privilege escalation"):
+			escalation = true
+		case ev.GetAction() == "auth.authenticate" && !ev.GetAllowed() && strings.HasSuffix(ev.GetProcedure(), "/ListRuns"):
+			unauth = true
+		}
+	}
+	if !escalation || !unauth {
+		t.Errorf("escalation audited %v, unauthenticated audited %v; events: %v", escalation, unauth, events.Msg.GetEvents())
+	}
+}

@@ -474,7 +474,7 @@ func Handler(d deps) http.Handler {
 	// (LLM traffic) and the ExtMcp processor service (MCP traffic, gRPC).
 	mux.Handle("POST /guardrails/{project}/{guardrail}/{phase}", guard.Webhook(d.gate.authorizeGuardrail))
 	mux.Handle(ext_mcpconnect.NewExtMcpHandler(guard.ExtMcp(), gated))
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.svc.Credentials().WriteMetrics)))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.svc.Credentials().WriteMetrics, d.gate.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,

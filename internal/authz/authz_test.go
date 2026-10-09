@@ -152,6 +152,15 @@ func TestCustomRoleConditions(t *testing.T) {
 	if !strings.Contains(d.Reason, "prompt-engineer") || !strings.Contains(d.Reason, "user:corp/pat") {
 		t.Errorf("reason = %q", d.Reason)
 	}
+	// A denial caused by a failed condition names the role and its condition.
+	d = e.Decide(ctx, pat, runReq("support", "gpt-5", checkout))
+	if d.Allowed || !strings.Contains(d.Reason, "condition on role prompt-engineer") {
+		t.Errorf("conditioned denial reason = %q", d.Reason)
+	}
+	d = e.Decide(ctx, pat, Request{Action: "policies.write", Project: "support"})
+	if !strings.Contains(d.Reason, "no role or rule grants") {
+		t.Errorf("ungranted action reason = %q", d.Reason)
+	}
 }
 
 func TestRulesPrecedence(t *testing.T) {
