@@ -23,6 +23,18 @@ type Config struct {
 	SandboxServiceAccount  string
 	WorkerConfigMap        string
 	NATSMonitoringEndpoint string
+	// Names of what the operator creates start with this (default "evalsi"),
+	// so releases of the chart can share a namespace.
+	NamePrefix string
+}
+
+// childName names an object the operator makes: the prefix (default
+// "evalsi"), what it is, and the resource it belongs to.
+func childName(prefix, what, name string) string {
+	if prefix == "" {
+		prefix = "evalsi"
+	}
+	return prefix + "-" + what + "-" + name
 }
 
 // Setup adds the enabled controllers to mgr.
@@ -50,7 +62,7 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 		}
 	}
 	if on("evaluator") {
-		if err := (&EvaluatorReconciler{Client: mgr.GetClient(), WorkerConfigMap: cfg.WorkerConfigMap, NATSMonitoringEndpoint: cfg.NATSMonitoringEndpoint}).SetupWithManager(mgr); err != nil {
+		if err := (&EvaluatorReconciler{Client: mgr.GetClient(), WorkerConfigMap: cfg.WorkerConfigMap, NATSMonitoringEndpoint: cfg.NATSMonitoringEndpoint, NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
 			return err
 		}
 	}
@@ -60,7 +72,7 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 		}
 		r := &SandboxClassReconciler{
 			Client: mgr.GetClient(), Namespace: cfg.Namespace, Image: cfg.Image, TLSSecret: cfg.SandboxTLSSecret,
-			AllowClients: cfg.SandboxAllowClients, ServiceAccount: cfg.SandboxServiceAccount,
+			AllowClients: cfg.SandboxAllowClients, ServiceAccount: cfg.SandboxServiceAccount, NamePrefix: cfg.NamePrefix,
 		}
 		if err := r.SetupWithManager(mgr); err != nil {
 			return err

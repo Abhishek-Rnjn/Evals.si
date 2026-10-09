@@ -1,19 +1,20 @@
 {{- if not .Values.nats.url }}
+{{- $fn := include "evalsi.fullname" $ -}}
 {{- $v := .Values }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: evalsi-nats
+  name: {{ $fn }}-nats
   labels: {{- include "evalsi.labels" . | nindent 4 }}
-    app.kubernetes.io/name: evalsi-nats
+    app.kubernetes.io/name: {{ $fn }}-nats
 spec:
-  serviceName: evalsi-nats
+  serviceName: {{ $fn }}-nats
   replicas: 1
   selector:
-    matchLabels: {app.kubernetes.io/name: evalsi-nats}
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-nats}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: evalsi-nats, app.kubernetes.io/part-of: evalsi}
+      labels: {app.kubernetes.io/name: {{ $fn }}-nats, app.kubernetes.io/part-of: evalsi}
     spec:
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
       {{- with .Values.nats.nodeSelector }}
@@ -48,13 +49,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: evalsi-nats
+  name: {{ $fn }}-nats
   labels: {{- include "evalsi.labels" . | nindent 4 }}
     {{- with .Values.nats.serviceLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
-  selector: {app.kubernetes.io/name: evalsi-nats}
+  selector: {app.kubernetes.io/name: {{ $fn }}-nats}
   ports:
     - {name: client, port: 4222, targetPort: client}
     - {name: monitor, port: 8222, targetPort: monitor}

@@ -60,7 +60,14 @@ type rule struct {
 // in .yaml (relative to the chart).
 func render(t *testing.T, chart string, set ...string) []object {
 	t.Helper()
-	args := []string{"template", "t", filepath.Join(charts, chart), "-n", "evalsi", "--kube-version", "1.34.0"}
+	// Releases are named as the docs name them, so names stay evalsi-*.
+	return renderAs(t, chart, chart, set...)
+}
+
+// renderAs is render for a release of another name.
+func renderAs(t *testing.T, release, chart string, set ...string) []object {
+	t.Helper()
+	args := []string{"template", release, filepath.Join(charts, chart), "-n", "evalsi", "--kube-version", "1.34.0"}
 	for _, s := range set {
 		if strings.HasSuffix(s, ".yaml") {
 			args = append(args, "-f", filepath.Join(charts, chart, s))

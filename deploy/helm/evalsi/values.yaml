@@ -1,3 +1,9 @@
+# Names this chart creates start with the release's name (a release named
+# for evalsi, such as "evalsi", is used as it is; any other gets "-evalsi"
+# after it). Set this to choose the prefix. The evalsi-crds chart's
+# evalsiFullname must match it.
+fullnameOverride: ""
+
 # The evalsi image (evalsid, the Python worker, evalsi-guest, the operator).
 image:
   repository: ghcr.io/abhishek-rnjn/evalsi
@@ -63,6 +69,29 @@ devPostgres:
   nodeSelector: {}
   tolerations: []
   serviceLabels: {}       # e.g. istio.io/use-waypoint: none
+
+# A throwaway S3-compatible store (MinIO) in the namespace, for trials without
+# a cloud's. When on, storage.s3 is filled in for you (bucket: storage.s3.bucket,
+# default evalsi). Not for production: no backups, no HA.
+devMinio:
+  enabled: false
+  image: bitnamilegacy/minio:2025.7.23
+  storage: 5Gi
+  storageClassName: ""
+  nodeSelector: {}
+  tolerations: []
+  serviceLabels: {}
+
+# A throwaway ClickHouse in the namespace, for trace storage in trials. When on,
+# storage.clickhouse is filled in for you. Not for production: no backups, no HA.
+devClickhouse:
+  enabled: false
+  image: clickhouse/clickhouse-server:25.8
+  storage: 5Gi
+  storageClassName: ""
+  nodeSelector: {}
+  tolerations: []
+  serviceLabels: {}
 
 # NATS JetStream: the work queues, the span stream, events and leases' signals.
 nats:

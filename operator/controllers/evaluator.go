@@ -37,6 +37,8 @@ type EvaluatorReconciler struct {
 	// sandbox service) when an Evaluator names none; it must be in the
 	// Evaluator's namespace.
 	WorkerConfigMap string
+	// Names of the Deployments it makes start with this (default "evalsi").
+	NamePrefix string
 	// NATS's monitoring endpoint (host:8222), which KEDA's JetStream scaler reads.
 	NATSMonitoringEndpoint string
 }
@@ -51,7 +53,7 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Get(ctx, req.NamespacedName, ev); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	name := "evalsi-evaluator-" + ev.Name
+	name := childName(r.NamePrefix, "evaluator", ev.Name)
 	labels := map[string]string{"app.kubernetes.io/name": "evalsi-worker", "app.kubernetes.io/instance": ev.Name, "app.kubernetes.io/managed-by": "evalsi-operator"}
 	pools := ev.Spec.Pools
 	if len(pools) == 0 {

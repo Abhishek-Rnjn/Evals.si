@@ -52,6 +52,30 @@ The defaults are a working single-replica install on SQLite. Each chart's permis
 - **Scaling.** `keda.enabled` adds a `ScaledObject` per pool on the backlog of its JetStream consumer (`pool-<pool>` on stream `EVALSI_WORK`); `workers.pools.<pool>` sets replicas, concurrency, resources and node selectors (a `gpu` pool, for example).
 - **Certificates.** The chart makes an internal CA, kept across upgrades, for the API, the sandbox pools and the workers' client certificates. `tls.certManager.enabled` issues them from cert-manager instead.
 
+### Names, and installing beside other charts
+
+Every name a chart creates starts with its release's name, so releases can share a namespace, and the chart can sit beside others (agent-studio-standalone, agent-sandbox). The `evalsi` chart builds the name this way: a release named for evalsi (such as `evalsi`) is used as it is, and any other release gets `-evalsi` after it, so release `team-a` creates `team-a-evalsi` (the API Service), `team-a-evalsi-operator`, `team-a-evalsi-worker-cpu` and so on. `fullnameOverride` sets the prefix. The default release name `evalsi` keeps the short names used throughout these guides.
+
+The other two charts follow the same rule and refer to the evalsi release by value:
+
+| Chart | Its own names | Names it must match in the evalsi release |
+|---|---|---|
+| `evalsi-crds` | The release name without a trailing `-crds`, prefixed the same way (`evalsi-crds` gives `evalsi-operator`, `evalsi-validating`...); `fullnameOverride` sets it | `operator.fullname`: the evalsi release's full name, for the operator's service account and its webhook Service and certificate |
+| `evalsi-sandboxd` | `<release>-sandboxd` (`evalsi-sandboxd` as it is) | `tlsSecret: <fullname>-sandbox-tls` and `allowClients: [<fullname>-worker]` |
+
+For release `team-a`: `helm install team-a-crds deploy/helm/evalsi-crds --set operator.namespace=team-a --set operator.fullname=team-a-evalsi`, then `helm install team-a deploy/helm/evalsi -n team-a`. Install `evalsi-crds` once per evalsi install (its cluster-scoped names carry the prefix, so they do not collide).
+
+Each dependency is either bundled or one you point at:
+
+| Dependency | Bundled (trials only: no backups, no HA) | Existing |
+|---|---|---|
+| PostgreSQL | `devPostgres.enabled` | `storage.postgres.dsnSecret` |
+| NATS JetStream | one node, on by default | `nats.url` (and `nats.streamReplicas`) |
+| S3 | `devMinio.enabled` (a MinIO; `storage.s3.bucket` names the bucket, default `evalsi`) | `storage.s3` (endpoint, bucket, `credentialsSecret` or IRSA) |
+| ClickHouse | `devClickhouse.enabled` | `storage.clickhouse` |
+
+The bundled MinIO and ClickHouse run non-root with the images CI uses for its own tests. They have been rendered and checked by the chart tests, but not yet run in a cluster by this repository's CI.
+
 ### High availability
 
 Every `evalsid` replica serves the API and OTLP ingest. The run scheduler and the policy engine run on one replica at a time, under database leases: when a replica stops, another adopts its runs (resuming them, never double-counting) and takes over the policy engine. Workers pull from the work queues, so a worker that dies mid-task loses nothing: its task is redelivered after the ack wait. The operator runs with leader election when it has more than one replica.

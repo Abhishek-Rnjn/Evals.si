@@ -6,6 +6,10 @@ imagePullSecrets: []
 global:
   imageRegistry: ""
 
+# Names start with the release's name ("evalsi-sandboxd" is used as it is,
+# any other release gets "-sandboxd" after it); set this to choose them.
+fullnameOverride: ""
+
 # bwrap: bubblewrap and Landlock, as root in a user namespace with an
 #   unmasked /proc and no seccomp or AppArmor profile (needs Kubernetes user
 #   namespaces: 1.33+, a runtime and kernel that support them).
@@ -27,7 +31,8 @@ firecracker:
   diskMB: 0
 
 # The evalsi chart's sandbox certificate (server) and the clients pools
-# admit (its workers' certificate name).
+# admit (its workers' certificate name). These are "<evalsi fullname>-sandbox-tls"
+# and "<evalsi fullname>-worker": the defaults match a release named evalsi.
 tlsSecret: evalsi-sandbox-tls
 allowClients: [evalsi-worker]
 

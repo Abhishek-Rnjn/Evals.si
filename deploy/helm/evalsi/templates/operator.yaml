@@ -1,16 +1,17 @@
 {{- if .Values.operator.enabled }}
+{{- $fn := include "evalsi.fullname" $ -}}
 {{- $v := .Values }}
 {{- $ns := .Release.Namespace }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: evalsi-operator
+  name: {{ $fn }}-operator
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: evalsi-operator
+  name: {{ $fn }}-operator
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 rules:
   - apiGroups: [evals.si]
@@ -38,27 +39,27 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: evalsi-operator
+  name: {{ $fn }}-operator
   labels: {{- include "evalsi.labels" . | nindent 4 }}
-roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: evalsi-operator}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $fn }}-operator}
 subjects:
-  - {kind: ServiceAccount, name: evalsi-operator, namespace: {{ $ns }}}
+  - {kind: ServiceAccount, name: {{ $fn }}-operator, namespace: {{ $ns }}}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: evalsi-operator
+  name: {{ $fn }}-operator
   labels: {{- include "evalsi.labels" . | nindent 4 }}
-    app.kubernetes.io/name: evalsi-operator
+    app.kubernetes.io/name: {{ $fn }}-operator
 spec:
   replicas: {{ $v.operator.replicas }}
   selector:
-    matchLabels: {app.kubernetes.io/name: evalsi-operator}
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-operator}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: evalsi-operator, app.kubernetes.io/part-of: evalsi}
+      labels: {app.kubernetes.io/name: {{ $fn }}-operator, app.kubernetes.io/part-of: evalsi}
     spec:
-      serviceAccountName: evalsi-operator
+      serviceAccountName: {{ $fn }}-operator
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
       {{- with .Values.operator.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
@@ -87,11 +88,12 @@ spec:
             {{- end }}
             - --controllers=evalrun,onlineevalpolicy,evaluator{{ if $v.operator.sandboxClasses }},sandboxclass{{ end }}
             - --image={{ include "evalsi.image" . }}
-            - --sandbox-tls-secret=evalsi-sandbox-tls
-            - --sandbox-allow-client=evalsi-worker
-            - --sandbox-service-account=evalsi-sandboxd
-            - --worker-config-map=evalsi-worker
-            - --nats-monitoring-endpoint=evalsi-nats.{{ $ns }}.svc:8222
+            - --sandbox-tls-secret={{ $fn }}-sandbox-tls
+            - --sandbox-allow-client={{ $fn }}-worker
+            - --sandbox-service-account={{ $fn }}-sandboxd
+            - --worker-config-map={{ $fn }}-worker
+            - --name-prefix={{ $fn }}
+            - --nats-monitoring-endpoint={{ $fn }}-nats.{{ $ns }}.svc:8222
             - --create-projects={{ $v.operator.createProjects }}
             - --webhooks={{ $v.operator.webhooks }}
             - --webhook-cert-dir=/etc/evalsi/webhook-tls
@@ -126,21 +128,21 @@ spec:
               - serviceAccountToken: {audience: {{ $v.auth.kubernetes.audience }}, expirationSeconds: 3600, path: token}
         {{- if $v.server.tls }}
         - name: server-tls
-          secret: {secretName: evalsi-server-tls, items: [{key: ca.crt, path: ca.crt}]}
+          secret: {secretName: {{ $fn }}-server-tls, items: [{key: ca.crt, path: ca.crt}]}
         {{- end }}
         {{- if $v.operator.webhooks }}
         - name: webhook-tls
           # Issued by the evalsi-crds chart with the webhook configurations.
-          secret: {secretName: evalsi-operator-webhook-tls}
+          secret: {secretName: {{ $fn }}-operator-webhook-tls}
         {{- end }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: evalsi-operator-webhook
+  name: {{ $fn }}-operator-webhook
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 spec:
-  selector: {app.kubernetes.io/name: evalsi-operator}
+  selector: {app.kubernetes.io/name: {{ $fn }}-operator}
   ports:
     - {name: webhook, port: 443, targetPort: webhook}
 {{- if and $v.operator.webhooks $v.operator.istio.peerAuthentication }}
@@ -150,11 +152,11 @@ spec:
 apiVersion: security.istio.io/v1
 kind: PeerAuthentication
 metadata:
-  name: evalsi-operator-webhook
+  name: {{ $fn }}-operator-webhook
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 spec:
   selector:
-    matchLabels: {app.kubernetes.io/name: evalsi-operator}
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-operator}
   mtls: {mode: STRICT}
   portLevelMtls:
     9443: {mode: PERMISSIVE}

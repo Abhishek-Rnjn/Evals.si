@@ -1,47 +1,49 @@
+{{- $fn := include "evalsi.fullname" $ -}}
 {{- $v := .Values }}
 {{- define "evalsi.storageEnv" -}}
 {{- $v := .Values -}}
+{{- $st := include "evalsi.storage" . | fromJson -}}
 {{- if $v.storage.postgres.dsnSecret.name }}
 - name: EVALSI_POSTGRES_DSN
   valueFrom: {secretKeyRef: {name: {{ $v.storage.postgres.dsnSecret.name }}, key: {{ $v.storage.postgres.dsnSecret.key }}}}
 {{- else if $v.devPostgres.enabled }}
 - name: EVALSI_POSTGRES_DSN
-  valueFrom: {secretKeyRef: {name: evalsi-dev-postgres, key: dsn}}
+  valueFrom: {secretKeyRef: {name: {{ include "evalsi.fullname" . }}-dev-postgres, key: dsn}}
 {{- end }}
-{{- if $v.storage.clickhouse.passwordSecret.name }}
+{{- if $st.clickhouse.passwordSecret.name }}
 - name: EVALSI_CLICKHOUSE_PASSWORD
-  valueFrom: {secretKeyRef: {name: {{ $v.storage.clickhouse.passwordSecret.name }}, key: {{ $v.storage.clickhouse.passwordSecret.key }}}}
+  valueFrom: {secretKeyRef: {name: {{ $st.clickhouse.passwordSecret.name }}, key: {{ $st.clickhouse.passwordSecret.key }}}}
 {{- end }}
-{{- if $v.storage.s3.credentialsSecret }}
+{{- if $st.s3.credentialsSecret }}
 - name: EVALSI_S3_ACCESS_KEY
-  valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: access_key}}
+  valueFrom: {secretKeyRef: {name: {{ $st.s3.credentialsSecret }}, key: access_key}}
 - name: EVALSI_S3_SECRET_KEY
-  valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: secret_key}}
+  valueFrom: {secretKeyRef: {name: {{ $st.s3.credentialsSecret }}, key: secret_key}}
 {{- end }}
 {{- end }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: evalsi
+  name: {{ $fn }}
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: evalsi
+  name: {{ $fn }}
   labels: {{- include "evalsi.labels" . | nindent 4 }}
-    app.kubernetes.io/name: evalsi
+    app.kubernetes.io/name: {{ $fn }}
 spec:
   replicas: {{ $v.server.replicas }}
   selector:
-    matchLabels: {app.kubernetes.io/name: evalsi}
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: evalsi, app.kubernetes.io/part-of: evalsi}
+      labels: {app.kubernetes.io/name: {{ $fn }}, app.kubernetes.io/part-of: evalsi}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
     spec:
-      serviceAccountName: evalsi
+      serviceAccountName: {{ $fn }}
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
       {{- with $v.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
@@ -92,14 +94,14 @@ spec:
         - name: home
           emptyDir: {}
         - name: config
-          configMap: {name: evalsi}
+          configMap: {name: {{ $fn }}}
         {{- if $v.server.tls }}
         - name: tls
-          secret: {secretName: evalsi-server-tls}
+          secret: {secretName: {{ $fn }}-server-tls}
         {{- end }}
         - name: data
           {{- if $v.server.persistence.enabled }}
-          persistentVolumeClaim: {claimName: evalsi-data}
+          persistentVolumeClaim: {claimName: {{ $fn }}-data}
           {{- else }}
           emptyDir: {}
           {{- end }}
@@ -115,10 +117,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: evalsi
+  name: {{ $fn }}
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 spec:
-  selector: {app.kubernetes.io/name: evalsi}
+  selector: {app.kubernetes.io/name: {{ $fn }}}
   ports:
     - {name: api, port: 8080, targetPort: api}
     {{- if $v.server.otlp.enabled }}
@@ -130,7 +132,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: evalsi-data
+  name: {{ $fn }}-data
   labels: {{- include "evalsi.labels" . | nindent 4 }}
   annotations: {helm.sh/resource-policy: keep}
 spec:

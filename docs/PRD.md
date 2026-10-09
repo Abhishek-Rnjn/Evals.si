@@ -190,7 +190,7 @@ Evals.si must install, run and upgrade like any well-behaved cluster service; mo
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
 | D1 | Install from a versioned OCI Helm chart (`oci://ghcr.io/.../evalsi`) with signed images (cosign keyless) and an SBOM | P0 | Gap: no release cut, images unsigned |
-| D2 | Installs as an independent chart beside others (agent-studio-standalone, agent-sandbox): all names prefixed by release, every external dependency (Postgres, NATS, S3, ClickHouse) either bundled or pointed at an existing one | P0 | Partly: verify release-prefixed naming and `global` values |
+| D2 | Installs as an independent chart beside others (agent-studio-standalone, agent-sandbox): all names prefixed by release, every external dependency (Postgres, NATS, S3, ClickHouse) either bundled or pointed at an existing one | P0 | Built: names carry the release's name (chart tests render two releases and check the parts refer to each other); `devPostgres`, `devMinio`, `devClickhouse` or existing ones; `global.imageRegistry` ([guide](guides/kubernetes.md#names-and-installing-beside-other-charts)). Bundled MinIO and ClickHouse are not yet run in a cluster |
 | D3 | Namespace-only install with Pod Security `restricted`, no cluster-scoped objects | P0 | Built (`values-namespaced.yaml`) |
 | D4 | Bootstrap job that creates projects, API keys and default policies from Helm values and writes keys to Secrets | P0 | Gap |
 | D5 | Horizontal scale: API replicas, KEDA-scaled worker pools per evaluator image, sandbox pools | P0 | Built; KEDA untested on a live pool |
