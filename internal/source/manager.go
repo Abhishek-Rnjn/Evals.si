@@ -374,15 +374,18 @@ func (r *runner) run(ctx context.Context) {
 				break idle
 			}
 		}
+		// Built each cycle: a rotated Secret and a changed grant apply at once.
 		var err error
-		if conn == nil {
-			conn, err = r.connect(ctx)
-		}
-		if err == nil {
+		var next Connector
+		if next, err = r.connect(ctx); err == nil {
+			conn = next
 			err = r.cycle(ctx, conn)
 		}
 		if ctx.Err() != nil {
 			return
+		}
+		if errors.Is(err, errSuperseded) {
+			err = nil
 		}
 		if err != nil {
 			failures++
@@ -461,6 +464,8 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 			st.Watermark = cycleStart
 		}
 	}
+	// What a reset (BackfillSource) is detected against: see commit.
+	startedBackfill := st.BackfillFrom
 	if st.BackfillFrom.IsZero() {
 		r.phase.Store(int32(evalsiv1alpha1.SourcePhase_SOURCE_PHASE_TAILING))
 	} else {
@@ -541,7 +546,7 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 			st.Watermark = next
 		}
 		st.Deferred = deferred
-		if err := r.m.st.PutSourceState(ctx, project, name, st); err != nil {
+		if err := r.commit(ctx, st, startedBackfill); err != nil {
 			return err
 		}
 		if res.Next == "" || len(res.Infos) == 0 {
@@ -558,7 +563,7 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 		r.phase.Store(int32(evalsiv1alpha1.SourcePhase_SOURCE_PHASE_TAILING))
 	}
 	st.Deferred, st.LastPullAt, st.LastError, st.LastErrorAt = deferred, cycleStart, "", time.Time{}
-	if err := r.m.st.PutSourceState(ctx, project, name, st); err != nil {
+	if err := r.commit(ctx, st, startedBackfill); err != nil {
 		return err
 	}
 	// Traces that started before the watermark cannot be listed again.
@@ -567,6 +572,25 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 	}
 	return nil
 }
+
+// commit stores the cycle's state, unless a backfill was requested since the
+// cycle began (the service moved the watermark back): then this cycle's view
+// is stale and it ends, leaving the next to start from the new watermark.
+func (r *runner) commit(ctx context.Context, st store.SourceState, startedBackfill time.Time) error {
+	cur, err := r.m.st.SourceState(ctx, r.src.GetProject(), r.src.GetName())
+	if err != nil {
+		return err
+	}
+	if !cur.BackfillFrom.IsZero() && !cur.BackfillFrom.Equal(startedBackfill) {
+		return errSuperseded
+	}
+	// Counters the write-back path advances meanwhile are kept.
+	st.Scored, st.LastWriteAt = cur.Scored, cur.LastWriteAt
+	return r.m.st.PutSourceState(ctx, r.src.GetProject(), r.src.GetName(), st)
+}
+
+// errSuperseded ends a cycle whose state was reset under it; it is not a failure.
+var errSuperseded = errors.New("the source was reset during the cycle")
 
 // collect gets the spans of the fresh traces and labels them as the source's.
 func (r *runner) collect(ctx context.Context, conn Connector, fresh []Info) ([]ingest.Trace, error) {

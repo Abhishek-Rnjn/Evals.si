@@ -115,6 +115,8 @@ type fakeIngester struct {
 	calls []call
 	err   error
 	block chan struct{} // when set, IngestBatchContext waits on it or ctx
+	// Called after each successful call with the number of calls so far.
+	onCall func(n int)
 }
 
 func (f *fakeIngester) IngestBatchContext(ctx context.Context, traces []ingest.Trace, policies []string) error {
@@ -126,8 +128,8 @@ func (f *fakeIngester) IngestBatchContext(ctx context.Context, traces []ingest.T
 		}
 	}
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	if f.err != nil {
+		f.mu.Unlock()
 		return f.err
 	}
 	c := call{policies: policies}
@@ -137,6 +139,11 @@ func (f *fakeIngester) IngestBatchContext(ctx context.Context, traces []ingest.T
 		c.labels = t.Spans[0].Labels
 	}
 	f.calls = append(f.calls, c)
+	n, hook := len(f.calls), f.onCall
+	f.mu.Unlock()
+	if hook != nil {
+		hook(n)
+	}
 	return nil
 }
 
