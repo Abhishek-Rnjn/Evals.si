@@ -212,6 +212,30 @@ func TestEvalsiChartSchedulingAndLabels(t *testing.T) {
 	}
 }
 
+func TestOperatorPeerAuthentication(t *testing.T) {
+	for _, o := range find2(render(t, "evalsi"), "PeerAuthentication") {
+		t.Errorf("PeerAuthentication rendered by default: %s", o.Metadata.Name)
+	}
+	pa := find(t, render(t, "evalsi", "operator.istio.peerAuthentication=true"), "PeerAuthentication", "evalsi-operator-webhook")
+	if y := toYAML(t, pa.Spec); !strings.Contains(y, `"9443":`) || !strings.Contains(y, "mode: PERMISSIVE") {
+		t.Errorf("port 9443 is not PERMISSIVE: %s", y)
+	}
+	for _, o := range find2(render(t, "evalsi", "operator.istio.peerAuthentication=true", "operator.webhooks=false"), "PeerAuthentication") {
+		t.Errorf("PeerAuthentication rendered without webhooks: %s", o.Metadata.Name)
+	}
+}
+
+// find2 returns every object of a kind.
+func find2(objs []object, kind string) []object {
+	var out []object
+	for _, o := range objs {
+		if o.Kind == kind {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 func TestSandboxdChart(t *testing.T) {
 	for _, mode := range []string{"bwrap", "privileged", "firecracker"} {
 		set := []string{"mode=" + mode, "global.imageRegistry=registry.internal:5000/mirror"}

@@ -9,6 +9,7 @@
 //	evalsi-guest agent --listen unix:///path --root DIR   the agent on the host, for tests
 //	evalsi-guest install DIR      copy itself to DIR (a sandbox pod's init container)
 //	evalsi-guest seed SRC DST     copy SRC's tree into DST (a sandbox pod's init container)
+//	evalsi-guest dial HOST:PORT   exit 0 if a TCP connection opens, 3 if it is refused or times out (the pod rung's NetworkPolicy canary)
 //	evalsi-guest limit ...        internal: apply resource limits, then exec
 package main
 
@@ -47,6 +48,8 @@ func main() {
 			os.Exit(seed(os.Args[2:]))
 		case "limit":
 			os.Exit(limit(os.Args[2:]))
+		case "dial":
+			os.Exit(dial(os.Args[2:]))
 		case "version":
 			fmt.Println(guest.Version)
 			return
@@ -281,6 +284,21 @@ func install(args []string) int {
 		fmt.Fprintf(os.Stderr, "evalsi-guest: install: %v\n", err)
 		return 1
 	}
+	return 0
+}
+
+// dial is `evalsi-guest dial HOST:PORT`: the sandbox pod's NetworkPolicy
+// canary. It exits 0 when the connection opens and 3 when it does not.
+func dial(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "evalsi-guest: dial HOST:PORT")
+		return 2
+	}
+	c, err := net.DialTimeout("tcp", args[0], 5*time.Second)
+	if err != nil {
+		return 3
+	}
+	_ = c.Close()
 	return 0
 }
 

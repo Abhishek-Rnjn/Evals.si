@@ -135,13 +135,24 @@ Worker pods hold credentials (provider keys, the cluster's tokens), so sandboxes
 
 The **pod rung** creates one pod per sandbox from the task's image. `evalsi-guest` is copied in by an init container; the pod has no service-account token and no service links, runs with all capabilities dropped except the few package managers need, and a NetworkPolicy lets it talk only to its pool, which relays allowed egress through its logging proxy. It cannot snapshot, so environment setup runs once per trial. When the task image runs as a non-root user that cannot create the workdir, set the pod rung's `runAsUser` (with `capabilities: []`): the workdir is then a volume that user owns, seeded with the image's own.
 
+### When bubblewrap pools fail, and when NetworkPolicy is not enforced
+
+`mode: bwrap` runs bubblewrap in a pod user namespace. Two real clusters could not:
+
+- **Ubuntu 24.04 nodes (AKS).** The host restricts what an unprivileged user namespace may configure, and bubblewrap fails with `loopback: Failed RTM_NEWADDR: Operation not permitted`.
+- **Nodes whose overlayfs lacks idmapped mounts.** Pod user namespaces (`hostUsers: false`) need them.
+
+Both fail the rung's probe, and the error names the way out: run the pool with `mode: privileged` (bubblewrap in a privileged pod, which needs a namespace that allows it), or use the pod rung (`ladder: [pod]`), which needs neither. `evalsid sandbox probe` shows the reason.
+
+The pod rung's network isolation has two layers: the pool's logging egress proxy, and a NetworkPolicy that admits only the pool. `networkPolicyEnforced` declares that the CNI enforces the policy, which makes isolation report `full`. Evals.si does not trust the declaration: when the probe runs, a canary pod tries to connect to the Kubernetes API, which the policy forbids. If the connection gets through, the probe prints a `warning`, and sandboxes report `partial` with the reason in their isolation notes. This was seen on Calico with Istio ambient (the policy did not stop a labelled pod's egress); the cause there is not established, and a mesh that redirects a pod's traffic through its own proxy is the suspect. On such a cluster, rely on the egress proxy only, or use `mode: firecracker`.
+
 `mode: firecracker` needs `firecracker.defaultImage`, the image a microVM boots when a spec names none (sandboxd boots it at start to check the rung); the evalsi image carries the `firecracker` binary and `mkfs.ext4`. A SandboxClass's `firecracker` takes the same `defaultImage`.
 
 ### Taints and service meshes
 
 On nodes that are all tainted, give every component its tolerations: `server`, `workers`, `operator`, `nats`, `devPostgres`, `sandbox.pool` and `sandbox.pool.pod` each take `tolerations` and `nodeSelector` (and the evalsi-sandboxd chart its own).
 
-Under Istio ambient with a waypoint, keep it off the connections it breaks: NATS speaks first, which a waypoint's proxy cannot carry, and a waypoint's external authorization may refuse the pool's calls to sandbox pods. Set `nats.serviceLabels`, `devPostgres.serviceLabels`, `sandbox.pool.pod.labels` (a SandboxClass's `pod.labels`), and the evalsi-sandboxd chart's `serviceLabels` and `podLabels` to `{istio.io/use-waypoint: none}`. Under mesh-wide STRICT mTLS the API server, which is outside the mesh, cannot reach the admission webhooks: a `PeerAuthentication` for the operator with port 9443 `PERMISSIVE` lets it in.
+Under Istio ambient with a waypoint, keep it off the connections it breaks: NATS speaks first, which a waypoint's proxy cannot carry, and a waypoint's external authorization may refuse the pool's calls to sandbox pods. Set `nats.serviceLabels`, `devPostgres.serviceLabels`, `sandbox.pool.pod.labels` (a SandboxClass's `pod.labels`), and the evalsi-sandboxd chart's `serviceLabels` and `podLabels` to `{istio.io/use-waypoint: none}`. Under mesh-wide STRICT mTLS the API server, which is outside the mesh, cannot reach the admission webhooks: set `operator.istio.peerAuthentication: true` and the chart renders a `PeerAuthentication` for the operator with port 9443 `PERMISSIVE` (off by default, since it needs Istio's CRDs).
 
 ## Permissions
 

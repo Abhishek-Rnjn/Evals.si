@@ -143,4 +143,20 @@ spec:
   selector: {app.kubernetes.io/name: evalsi-operator}
   ports:
     - {name: webhook, port: 443, targetPort: webhook}
+{{- if and $v.operator.webhooks $v.operator.istio.peerAuthentication }}
+---
+# Under mesh-wide STRICT mTLS the API server is outside the mesh and cannot
+# reach the admission webhooks; this lets plaintext in on the webhook port only.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: evalsi-operator-webhook
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: evalsi-operator}
+  mtls: {mode: STRICT}
+  portLevelMtls:
+    9443: {mode: PERMISSIVE}
+{{- end }}
 {{- end }}

@@ -186,6 +186,11 @@ operator:
   # and certificate).
   webhooks: true
   createProjects: true
+  istio:
+    # Render a PeerAuthentication that lets the API server reach the admission
+    # webhooks (port 9443 PERMISSIVE) under mesh-wide STRICT mTLS. Off by
+    # default: it needs Istio's CRDs.
+    peerAuthentication: false
   resources: {}
   nodeSelector: {}
   tolerations: []

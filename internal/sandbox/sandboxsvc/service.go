@@ -111,7 +111,7 @@ func Report(iso sandbox.Isolation) *evalsiv1alpha1.IsolationReport {
 func (s *Service) Probe(ctx context.Context, _ *connect.Request[sandboxv1alpha1.ProbeRequest]) (*connect.Response[sandboxv1alpha1.ProbeResponse], error) {
 	out := &sandboxv1alpha1.ProbeResponse{}
 	for _, r := range s.m.Sandbox().Probe(ctx) {
-		out.Rungs = append(out.Rungs, &sandboxv1alpha1.RungStatus{Driver: r.Driver, Level: levels[r.Level], Available: r.Available, Reason: r.Reason})
+		out.Rungs = append(out.Rungs, &sandboxv1alpha1.RungStatus{Driver: r.Driver, Level: levels[r.Level], Available: r.Available, Reason: r.Reason, Warning: r.Warning})
 	}
 	return connect.NewResponse(out), nil
 }

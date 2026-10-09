@@ -35,6 +35,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -94,7 +95,14 @@ const (
 	saDir          = "/var/run/secrets/kubernetes.io/serviceaccount"
 	podLabelKey    = "evals.si/sandbox"
 	podDefaultCaps = "CHOWN,DAC_OVERRIDE,FOWNER,FSETID,KILL,SETGID,SETUID"
+	// exitDialFailed is `evalsi-guest dial`'s exit status when the connection
+	// was refused or timed out (the canary was blocked).
+	exitDialFailed = 3
 )
+
+// podGuestBin is evalsi-guest inside a sandbox pod (a variable so tests can
+// point it at the host's build).
+var podGuestBin = podGuestDir + "/evalsi-guest"
 
 // ErrNoSnapshots: the rung cannot snapshot a sandbox.
 var ErrNoSnapshots = errors.New("this sandbox rung does not support snapshots")
@@ -227,6 +235,10 @@ type podDriver struct {
 	cfg  *PodConfig
 	kube *kube
 	err  error // why the rung cannot run here
+
+	// netLeak is set by verify when a canary connection got out of a pod the
+	// NetworkPolicy should have confined: the declaration is then not trusted.
+	netLeak atomic.Bool
 }
 
 func newPodDriver(s *Sandbox) *podDriver {
@@ -258,6 +270,31 @@ func (d *podDriver) level() Level {
 }
 
 func (d *podDriver) available() error { return d.err }
+
+// verify checks a declared NetworkPolicy against the live probe pod: a pod
+// the policy confines to its pool cannot reach the Kubernetes API. A CNI that
+// does not enforce NetworkPolicy, or one that a service mesh bypasses (the
+// redirected traffic leaves the pod as the mesh's, not the pod's own), lets
+// the connection through. Isolation is then reported partial, never full.
+func (d *podDriver) verify(ctx context.Context, b backend) string {
+	if !d.cfg.NetworkPolicyEnforced {
+		return ""
+	}
+	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
+	if host == "" || port == "" {
+		return "NetworkPolicy is declared enforced but could not be checked: no in-cluster API address to use as a canary"
+	}
+	target := net.JoinHostPort(host, port)
+	res := b.exec(ctx, &Exec{Command: []string{podGuestBin, "dial", target}, Timeout: 30 * time.Second}, io.Discard, io.Discard)
+	switch {
+	case res.Outcome == OutcomeExit && res.ExitCode == 0:
+		d.netLeak.Store(true)
+		return "NetworkPolicy is declared enforced, but a sandbox pod connected to " + target + ": the CNI does not enforce it for these pods (some meshes, such as Istio ambient, bypass it), so sandbox network isolation is the egress proxy only"
+	case res.Outcome == OutcomeExit && res.ExitCode == exitDialFailed:
+		return ""
+	}
+	return "NetworkPolicy is declared enforced but the canary could not run: " + firstLine(res.Error)
+}
 
 func (d *podDriver) supports(*Spec) error { return nil }
 
@@ -486,7 +523,10 @@ func (d *podDriver) open(ctx context.Context, sp *Spec, dir, from string) (backe
 		return nil, err
 	}
 	enforcement, netNote := "partial", "network: the egress proxy only; NetworkPolicy enforcement not declared (sandbox.pod.network_policy_enforced)"
-	if d.cfg.NetworkPolicyEnforced {
+	switch {
+	case d.cfg.NetworkPolicyEnforced && d.netLeak.Load():
+		netNote = "network: the egress proxy only; NetworkPolicy is declared enforced but a canary connection got through (see the probe's warning)"
+	case d.cfg.NetworkPolicyEnforced:
 		enforcement, netNote = "full", "network: NetworkPolicy admits only the sandbox pool"
 	}
 	p.iso = Isolation{Driver: d.name(), Level: d.level().String(), Enforcement: enforcement, Notes: []string{

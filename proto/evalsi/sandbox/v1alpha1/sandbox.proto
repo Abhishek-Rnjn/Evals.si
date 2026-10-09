@@ -39,6 +39,9 @@ message RungStatus {
   evalsi.v1alpha1.IsolationLevel level = 2;
   bool available = 3;
   string reason = 4;
+  // Set when the rung works but something it claims is not enforced here,
+  // e.g. a declared NetworkPolicy that a canary connection got through.
+  string warning = 5;
 }
 
 message ProbeResponse {
