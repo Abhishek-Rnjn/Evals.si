@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from evalsi.v1alpha1 import evaluator_pb2 as evalsi_dot_v1alpha1_dot_evaluator__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%evalsi/v1alpha1/catalog_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\"\x17\n\x15ListEvaluatorsRequest\"w\n\x16ListEvaluatorsResponse\x12\x36\n\nevaluators\x18\x01 \x03(\x0b\x32\".evalsi.v1alpha1.EvaluatorManifest\x12\x0e\n\x06judges\x18\x02 \x03(\t\x12\x15\n\rdefault_judge\x18\x03 \x01(\t2s\n\x0e\x43\x61talogService\x12\x61\n\x0eListEvaluators\x12&.evalsi.v1alpha1.ListEvaluatorsRequest\x1a\'.evalsi.v1alpha1.ListEvaluatorsResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n%evalsi/v1alpha1/catalog_service.proto\x12\x0f\x65valsi.v1alpha1\x1a\x1f\x65valsi/v1alpha1/evaluator.proto\"\x17\n\x15ListEvaluatorsRequest\"w\n\x16ListEvaluatorsResponse\x12\x36\n\nevaluators\x18\x01 \x03(\x0b\x32\".evalsi.v1alpha1.EvaluatorManifest\x12\x0e\n\x06judges\x18\x02 \x03(\t\x12\x15\n\rdefault_judge\x18\x03 \x01(\t\")\n\x16ListCredentialsRequest\x12\x0f\n\x07project\x18\x01 \x01(\t\"m\n\x17ListCredentialsResponse\x12\x10\n\x08\x65nforced\x18\x01 \x01(\x08\x12\x30\n\x06grants\x18\x02 \x03(\x0b\x32 .evalsi.v1alpha1.CredentialGrant\x12\x0e\n\x06judges\x18\x03 \x03(\t\"W\n\x0f\x43redentialGrant\x12\x0b\n\x03\x65nv\x18\x01 \x01(\t\x12\r\n\x05hosts\x18\x02 \x03(\t\x12\x12\n\nallow_http\x18\x03 \x01(\x08\x12\x14\n\x0c\x61ll_projects\x18\x04 \x01(\x08\x32\xd9\x01\n\x0e\x43\x61talogService\x12\x61\n\x0eListEvaluators\x12&.evalsi.v1alpha1.ListEvaluatorsRequest\x1a\'.evalsi.v1alpha1.ListEvaluatorsResponse\x12\x64\n\x0fListCredentials\x12\'.evalsi.v1alpha1.ListCredentialsRequest\x1a(.evalsi.v1alpha1.ListCredentialsResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,6 +36,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_LISTEVALUATORSREQUEST']._serialized_end=114
   _globals['_LISTEVALUATORSRESPONSE']._serialized_start=116
   _globals['_LISTEVALUATORSRESPONSE']._serialized_end=235
-  _globals['_CATALOGSERVICE']._serialized_start=237
-  _globals['_CATALOGSERVICE']._serialized_end=352
+  _globals['_LISTCREDENTIALSREQUEST']._serialized_start=237
+  _globals['_LISTCREDENTIALSREQUEST']._serialized_end=278
+  _globals['_LISTCREDENTIALSRESPONSE']._serialized_start=280
+  _globals['_LISTCREDENTIALSRESPONSE']._serialized_end=389
+  _globals['_CREDENTIALGRANT']._serialized_start=391
+  _globals['_CREDENTIALGRANT']._serialized_end=478
+  _globals['_CATALOGSERVICE']._serialized_start=481
+  _globals['_CATALOGSERVICE']._serialized_end=698
 # @@protoc_insertion_point(module_scope)

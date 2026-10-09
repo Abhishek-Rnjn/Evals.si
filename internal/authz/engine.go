@@ -38,6 +38,9 @@ type Request struct {
 	Headers  http.Header
 	// The peer address.
 	Source string
+	// MCP context for CEL ({"tool": {"name": ...}} on tools/call), as in
+	// agentgateway's mcpAuthorization.
+	MCP map[string]any
 }
 
 // Decision is an authorization outcome and what decided it.
@@ -513,6 +516,50 @@ func (s *snapshot) allows(scope, name, action string, v map[string]any, seen map
 	return false
 }
 
+// blockedBy names the first role condition that kept a role from granting
+// an action it would otherwise grant, so a denial can say which one failed.
+func (s *snapshot) blockedBy(scope, name, action string, v map[string]any, seen map[*compiledRole]bool) string {
+	r := s.resolve(scope, name)
+	if r == nil || seen[r] {
+		return ""
+	}
+	seen[r] = true
+	if !holds(r.cond, v) {
+		if s.grantsAction(r, action, map[*compiledRole]bool{}) {
+			return fmt.Sprintf("the condition on role %s (%s) does not hold", r.Name, r.Condition)
+		}
+		return ""
+	}
+	for _, in := range r.Inherits {
+		if why := s.blockedBy(r.Project, in, action, v, seen); why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
+// grantsAction reports whether a role grants an action, ignoring conditions.
+func (s *snapshot) grantsAction(r *compiledRole, action string, seen map[*compiledRole]bool) bool {
+	if seen[r] {
+		return false
+	}
+	seen[r] = true
+	if r.Source == SourceBuiltin && r.Name == OwnerRole {
+		return true
+	}
+	for _, pat := range r.Permissions {
+		if matches(pat, action) {
+			return true
+		}
+	}
+	for _, in := range r.Inherits {
+		if next := s.resolve(r.Project, in); next != nil && s.grantsAction(next, action, seen) {
+			return true
+		}
+	}
+	return false
+}
+
 func roleScope(h held) string {
 	if h.scope == "*" {
 		return ""
@@ -574,6 +621,11 @@ func (e *Engine) Decide(ctx context.Context, p *auth.Principal, req Request) Dec
 		return e.ext.Decide(ctx, p, req, local)
 	}
 	if !local.Allowed {
+		for _, h := range hs {
+			if why := s.blockedBy(roleScope(h), h.role, req.Action, v, map[*compiledRole]bool{}); why != "" {
+				return deny("%s, so %s in project %q is not granted", why, req.Action, req.Project)
+			}
+		}
 		return deny("no role or rule grants %s in project %q", req.Action, req.Project)
 	}
 	return local

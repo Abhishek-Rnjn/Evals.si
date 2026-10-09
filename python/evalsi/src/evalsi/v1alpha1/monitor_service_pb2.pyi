@@ -230,16 +230,20 @@ class ApplyPolicyRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     POLICY_FIELD_NUMBER: _builtins.int
+    VALIDATE_ONLY_FIELD_NUMBER: _builtins.int
+    validate_only: _builtins.bool
+    """Check the policy as applying it would, without storing it."""
     @_builtins.property
     def policy(self) -> Global___OnlineEvalPolicy: ...
     def __init__(
         self,
         *,
         policy: Global___OnlineEvalPolicy | None = ...,
+        validate_only: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["policy", b"policy"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["policy", b"policy"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["policy", b"policy", "validate_only", b"validate_only"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ApplyPolicyRequest: _TypeAlias = ApplyPolicyRequest  # noqa: Y015

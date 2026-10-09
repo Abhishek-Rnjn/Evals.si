@@ -229,6 +229,17 @@ def test_reduce_runs_dataset_scope_evaluators(tmp_path: Path) -> None:
     assert score_from_proto(response.scores[0]).number == 4
 
 
+def test_load_judges_ignores_server_fields(tmp_path: Path) -> None:
+    # judges.<name>.projects is enforced by the server; a worker given it must
+    # still start (it used to fail every worker with an unexpected keyword).
+    judges_file = tmp_path / "judges.json"
+    judges_file.write_text(
+        '{"j": {"provider": "openai-compatible", "model": "m", "base_url": "http://x/v1",'
+        ' "projects": ["e2e"]}}'
+    )
+    assert load_judges(judges_file)["j"].model == "m"
+
+
 def test_serve_reports_healthy_and_loads_judges(tmp_path: Path) -> None:
     judges_file = tmp_path / "judges.json"
     judges_file.write_text(
@@ -303,3 +314,67 @@ def test_load_dataset_rejects_unresolved_uris(tmp_path: Path, uri: str) -> None:
     with pytest.raises(grpc.aio.AioRpcError) as info:
         with_worker(EvaluatorPlugin(default_registry()), call, tmp_path)
     assert "dataset uri must be" in (info.value.details() or "")
+
+
+def test_secret_params_are_declared_in_the_manifest() -> None:
+    from evalsi.convert import params_schema
+
+    @evaluator(name="test/scored", version="1.0.0", secrets={"key_var": "endpoint"})
+    def scored(
+        record: Record,
+        *,
+        url: str = "",
+        api_key_env: str = "",
+        key_var: str = "",
+        endpoint: str = "",
+    ) -> Score:
+        return Score(number=1)
+
+    assert scored.spec.secrets == {"api_key_env": "url", "key_var": "endpoint"}
+    props = params_schema(scored.spec)["properties"]
+    assert props["api_key_env"]["x-evalsi-secret"] == {"sent_to": "url"}
+    assert props["key_var"]["x-evalsi-secret"] == {"sent_to": "endpoint"}
+    assert "x-evalsi-secret" not in props["url"]
+
+    from evalsi.evaluator import EvaluatorConfigError
+
+    with pytest.raises(EvaluatorConfigError, match="not a param"):
+
+        @evaluator(name="test/bad", version="1.0.0", secrets={"missing": ""})
+        def bad(record: Record) -> Score:
+            return Score(number=1)
+
+
+def test_worker_refuses_undeclared_params_naming_its_variables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A plugin reading a variable through a param it does not declare would
+    get past the server's grants; the worker refuses the call."""
+
+    @evaluator(name="test/leaky", version="1.0.0")
+    def leaky(record: Record, *, key_var: str = "", api_key_env: str = "") -> Score:
+        return Score(number=1)
+
+    monkeypatch.setenv("WORKER_SECRET", "s3cret")
+    registry = default_registry().__class__([*default_registry().packs.values()])
+    registry.add(leaky)
+    plugin = EvaluatorPlugin(registry)
+
+    def request(**params: str) -> pb.EvaluateRequest:
+        s = struct_pb2.Struct()
+        s.update(params)
+        return pb.EvaluateRequest(
+            evaluator="test/leaky", params=s, records=[record_to_proto(make_record(id="r"))]
+        )
+
+    async def call(stub: pb_grpc.EvaluatorPluginServiceAsyncStub, req: pb.EvaluateRequest) -> None:
+        async for _ in stub.Evaluate(stream(req)):
+            pass
+
+    with pytest.raises(grpc.aio.AioRpcError) as info:
+        with_worker(plugin, lambda stub: call(stub, request(key_var="WORKER_SECRET")), tmp_path)
+    assert info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+    assert "does not declare it as a secret" in (info.value.details() or "")
+    # Declared (by the _env convention) and ordinary values pass.
+    with_worker(plugin, lambda stub: call(stub, request(api_key_env="WORKER_SECRET")), tmp_path)
+    with_worker(plugin, lambda stub: call(stub, request(key_var="plain text")), tmp_path)

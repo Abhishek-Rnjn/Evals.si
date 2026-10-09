@@ -8,6 +8,7 @@ restores integer params where the evaluator's default is an integer.
 from __future__ import annotations
 
 import inspect
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -356,6 +357,10 @@ def params_schema(spec: EvaluatorSpec) -> dict[str, Any]:
             required.append(name)
         else:
             properties[name] = {"default": default}
+    for name, sent_to in spec.secrets.items():
+        # Read by evalsid (credentials.ParamUses): this param names worker
+        # variables, and sent_to holds where their values go.
+        properties[name]["x-evalsi-secret"] = {"sent_to": sent_to}
     schema: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         schema["required"] = required
@@ -387,6 +392,8 @@ def manifest_to_proto(spec: EvaluatorSpec) -> evaluator_pb2.EvaluatorManifest:
         scheduling=evaluator_pb2.Scheduling(
             pool="sandbox" if req.sandbox else "judge" if req.judge else "cpu"
         ),
+        tier=spec.tier,
+        runtime=spec.runtime,
     )
     for output in spec.outputs:
         out = evaluator_pb2.MetricSpec(
@@ -416,3 +423,26 @@ def coerce_params(spec: EvaluatorSpec, params: Mapping[str, Any]) -> dict[str, A
         ):
             out[name] = int(value)
     return out
+
+
+def undeclared_secret(spec: EvaluatorSpec, params: Mapping[str, Any]) -> str | None:
+    """The first param, not declared in ``spec.secrets``, whose value names an
+    environment variable this process has, as an error message; None when
+    there is none.
+
+    A server checks the declared params against the project's credential
+    grants, so an evaluator that reads a variable through an undeclared param
+    would bypass them; the worker refuses such a call instead.
+    """
+    for name, value in params.items():
+        if name in spec.secrets:
+            continue
+        values = value.values() if isinstance(value, Mapping) else [value]
+        for v in values:
+            if isinstance(v, str) and v and v != "none" and v in os.environ:
+                return (
+                    f"{spec.name}: param {name!r} names the worker variable {v}, but the "
+                    f"evaluator does not declare it as a secret (secrets= in @evaluator); "
+                    f"undeclared params cannot name worker variables"
+                )
+    return None

@@ -19,6 +19,7 @@ import (
 //	POST   /v1alpha1/evaluate                  EvaluationService.Evaluate
 //	POST   /v1alpha1/rewards:score             RewardService.ScoreRewards
 //	GET    /v1alpha1/evaluators                CatalogService.ListEvaluators
+//	GET    /v1alpha1/credentials               CatalogService.ListCredentials (?project=)
 //	POST   /v1alpha1/runs                      RunService.CreateRun
 //	GET    /v1alpha1/runs                      RunService.ListRuns (?project=&page_size=&page_token=)
 //	GET    /v1alpha1/runs/{id}                 RunService.GetRun
@@ -49,6 +50,20 @@ import (
 //	POST   /v1alpha1/bindings                  AuthService.CreateBinding (body: the binding)
 //	POST   /v1alpha1/bindings:delete           AuthService.DeleteBinding (body: the binding)
 //	GET    /v1alpha1/audit                     AuthService.ListAuditEvents
+//	POST   /v1alpha1/queues                    AnnotationService.CreateQueue (body: the queue)
+//	GET    /v1alpha1/queues                    AnnotationService.ListQueues (?project=)
+//	GET    /v1alpha1/queues/{name}             AnnotationService.GetQueue (?project=)
+//	DELETE /v1alpha1/queues/{name}             AnnotationService.DeleteQueue (?project=)
+//	POST   /v1alpha1/queues/{queue}/items      AnnotationService.AddItems
+//	POST   /v1alpha1/queues/{queue}:next       AnnotationService.NextItem
+//	POST   /v1alpha1/queues/{queue}/annotations AnnotationService.SubmitAnnotation
+//	GET    /v1alpha1/queues/{queue}/annotations AnnotationService.ListAnnotations
+//	GET    /v1alpha1/queues/{queue}/stats      AnnotationService.SummarizeQueue
+//	POST   /v1alpha1/guardrails                GuardrailService.ApplyGuardrail (body: the guardrail)
+//	GET    /v1alpha1/guardrails                GuardrailService.ListGuardrails (?project=)
+//	GET    /v1alpha1/guardrails/{name}         GuardrailService.GetGuardrail (?project=)
+//	DELETE /v1alpha1/guardrails/{name}         GuardrailService.DeleteGuardrail (?project=)
+//	POST   /v1alpha1/guardrails/{guardrail}:check GuardrailService.Check
 func restRules() []*annotations.HttpRule {
 	rule := func(method, verb, path, body string) *annotations.HttpRule {
 		r := &annotations.HttpRule{Selector: "evalsi.v1alpha1." + method, Body: body}
@@ -67,6 +82,7 @@ func restRules() []*annotations.HttpRule {
 		rule("EvaluationService.Evaluate", http.MethodPost, v+"/evaluate", "*"),
 		rule("RewardService.ScoreRewards", http.MethodPost, v+"/rewards:score", "*"),
 		rule("CatalogService.ListEvaluators", http.MethodGet, v+"/evaluators", ""),
+		rule("CatalogService.ListCredentials", http.MethodGet, v+"/credentials", ""),
 		rule("RunService.CreateRun", http.MethodPost, v+"/runs", "*"),
 		rule("RunService.ListRuns", http.MethodGet, v+"/runs", ""),
 		rule("RunService.GetRun", http.MethodGet, v+"/runs/{id}", ""),
@@ -97,6 +113,20 @@ func restRules() []*annotations.HttpRule {
 		rule("AuthService.CreateBinding", http.MethodPost, v+"/bindings", "binding"),
 		rule("AuthService.DeleteBinding", http.MethodPost, v+"/bindings:delete", "binding"),
 		rule("AuthService.ListAuditEvents", http.MethodGet, v+"/audit", ""),
+		rule("AnnotationService.CreateQueue", http.MethodPost, v+"/queues", "queue"),
+		rule("AnnotationService.ListQueues", http.MethodGet, v+"/queues", ""),
+		rule("AnnotationService.GetQueue", http.MethodGet, v+"/queues/{name}", ""),
+		rule("AnnotationService.DeleteQueue", http.MethodDelete, v+"/queues/{name}", ""),
+		rule("AnnotationService.AddItems", http.MethodPost, v+"/queues/{queue}/items", "*"),
+		rule("AnnotationService.NextItem", http.MethodPost, v+"/queues/{queue}:next", "*"),
+		rule("AnnotationService.SubmitAnnotation", http.MethodPost, v+"/queues/{queue}/annotations", "*"),
+		rule("AnnotationService.ListAnnotations", http.MethodGet, v+"/queues/{queue}/annotations", ""),
+		rule("AnnotationService.SummarizeQueue", http.MethodGet, v+"/queues/{queue}/stats", ""),
+		rule("GuardrailService.ApplyGuardrail", http.MethodPost, v+"/guardrails", "guardrail"),
+		rule("GuardrailService.ListGuardrails", http.MethodGet, v+"/guardrails", ""),
+		rule("GuardrailService.GetGuardrail", http.MethodGet, v+"/guardrails/{name}", ""),
+		rule("GuardrailService.DeleteGuardrail", http.MethodDelete, v+"/guardrails/{name}", ""),
+		rule("GuardrailService.Check", http.MethodPost, v+"/guardrails/{guardrail}:check", "*"),
 	}
 }
 
@@ -110,6 +140,8 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
+		evalsiv1alpha1connect.AnnotationServiceName,
+		evalsiv1alpha1connect.GuardrailServiceName,
 	}
 	services := make([]*vanguard.Service, 0, len(names))
 	for _, name := range names {

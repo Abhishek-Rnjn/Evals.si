@@ -7,6 +7,9 @@ import "evalsi/v1alpha1/evaluator.proto";
 // CatalogService tells clients what a server can evaluate with.
 service CatalogService {
   rpc ListEvaluators(ListEvaluatorsRequest) returns (ListEvaluatorsResponse);
+  // The worker variables and judges a project's requests may use (names and
+  // hosts only; values never leave the worker).
+  rpc ListCredentials(ListCredentialsRequest) returns (ListCredentialsResponse);
 }
 
 message ListEvaluatorsRequest {}
@@ -17,4 +20,27 @@ message ListEvaluatorsResponse {
   repeated string judges = 2;
   // Judge used when a request names none.
   string default_judge = 3;
+}
+
+message ListCredentialsRequest {
+  string project = 1;
+}
+
+message ListCredentialsResponse {
+  // Whether grants are checked; when false, any variable may be named.
+  bool enforced = 1;
+  repeated CredentialGrant grants = 2;
+  // Judges the project may use.
+  repeated string judges = 3;
+}
+
+// A worker variable the project may name.
+message CredentialGrant {
+  string env = 1;
+  // Hosts its value may be sent to; empty: any.
+  repeated string hosts = 2;
+  // Plain HTTP is allowed to those hosts, not only HTTPS.
+  bool allow_http = 3;
+  // Granted to every project ("*"), not only this one.
+  bool all_projects = 4;
 }

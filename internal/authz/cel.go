@@ -26,6 +26,7 @@ var celEnv = func() *cel.Env {
 		cel.Variable("request", dynMap),
 		cel.Variable("resource", dynMap),
 		cel.Variable("source", dynMap),
+		cel.Variable("mcp", dynMap),
 		cel.CrossTypeNumericComparisons(true),
 	)
 	if err != nil {
@@ -140,8 +141,12 @@ func vars(p *auth.Principal, req Request, roles []string) map[string]any {
 	if host, port, err := net.SplitHostPort(req.Source); err == nil {
 		source["ip"], source["port"] = host, port
 	}
+	mcp := map[string]any{}
+	for k, v := range req.MCP {
+		mcp[k] = v
+	}
 	return map[string]any{
-		"jwt": jwt, "apiKey": apiKey, "principal": principal, "resource": resource, "source": source,
+		"jwt": jwt, "apiKey": apiKey, "principal": principal, "resource": resource, "source": source, "mcp": mcp,
 		"request": map[string]any{
 			"action": req.Action, "method": req.Procedure, "protocol": req.Protocol, "headers": headers,
 		},

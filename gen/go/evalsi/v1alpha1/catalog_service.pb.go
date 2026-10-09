@@ -119,6 +119,184 @@ func (x *ListEvaluatorsResponse) GetDefaultJudge() string {
 	return ""
 }
 
+type ListCredentialsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCredentialsRequest) Reset() {
+	*x = ListCredentialsRequest{}
+	mi := &file_evalsi_v1alpha1_catalog_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCredentialsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCredentialsRequest) ProtoMessage() {}
+
+func (x *ListCredentialsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_catalog_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCredentialsRequest.ProtoReflect.Descriptor instead.
+func (*ListCredentialsRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_catalog_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListCredentialsRequest) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+type ListCredentialsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether grants are checked; when false, any variable may be named.
+	Enforced bool               `protobuf:"varint,1,opt,name=enforced,proto3" json:"enforced,omitempty"`
+	Grants   []*CredentialGrant `protobuf:"bytes,2,rep,name=grants,proto3" json:"grants,omitempty"`
+	// Judges the project may use.
+	Judges        []string `protobuf:"bytes,3,rep,name=judges,proto3" json:"judges,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCredentialsResponse) Reset() {
+	*x = ListCredentialsResponse{}
+	mi := &file_evalsi_v1alpha1_catalog_service_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCredentialsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCredentialsResponse) ProtoMessage() {}
+
+func (x *ListCredentialsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_catalog_service_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCredentialsResponse.ProtoReflect.Descriptor instead.
+func (*ListCredentialsResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_catalog_service_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListCredentialsResponse) GetEnforced() bool {
+	if x != nil {
+		return x.Enforced
+	}
+	return false
+}
+
+func (x *ListCredentialsResponse) GetGrants() []*CredentialGrant {
+	if x != nil {
+		return x.Grants
+	}
+	return nil
+}
+
+func (x *ListCredentialsResponse) GetJudges() []string {
+	if x != nil {
+		return x.Judges
+	}
+	return nil
+}
+
+// A worker variable the project may name.
+type CredentialGrant struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Env   string                 `protobuf:"bytes,1,opt,name=env,proto3" json:"env,omitempty"`
+	// Hosts its value may be sent to; empty: any.
+	Hosts []string `protobuf:"bytes,2,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	// Plain HTTP is allowed to those hosts, not only HTTPS.
+	AllowHttp bool `protobuf:"varint,3,opt,name=allow_http,json=allowHttp,proto3" json:"allow_http,omitempty"`
+	// Granted to every project ("*"), not only this one.
+	AllProjects   bool `protobuf:"varint,4,opt,name=all_projects,json=allProjects,proto3" json:"all_projects,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CredentialGrant) Reset() {
+	*x = CredentialGrant{}
+	mi := &file_evalsi_v1alpha1_catalog_service_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CredentialGrant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CredentialGrant) ProtoMessage() {}
+
+func (x *CredentialGrant) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_catalog_service_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CredentialGrant.ProtoReflect.Descriptor instead.
+func (*CredentialGrant) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_catalog_service_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CredentialGrant) GetEnv() string {
+	if x != nil {
+		return x.Env
+	}
+	return ""
+}
+
+func (x *CredentialGrant) GetHosts() []string {
+	if x != nil {
+		return x.Hosts
+	}
+	return nil
+}
+
+func (x *CredentialGrant) GetAllowHttp() bool {
+	if x != nil {
+		return x.AllowHttp
+	}
+	return false
+}
+
+func (x *CredentialGrant) GetAllProjects() bool {
+	if x != nil {
+		return x.AllProjects
+	}
+	return false
+}
+
 var File_evalsi_v1alpha1_catalog_service_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_catalog_service_proto_rawDesc = "" +
@@ -130,9 +308,22 @@ const file_evalsi_v1alpha1_catalog_service_proto_rawDesc = "" +
 	"evaluators\x18\x01 \x03(\v2\".evalsi.v1alpha1.EvaluatorManifestR\n" +
 	"evaluators\x12\x16\n" +
 	"\x06judges\x18\x02 \x03(\tR\x06judges\x12#\n" +
-	"\rdefault_judge\x18\x03 \x01(\tR\fdefaultJudge2s\n" +
+	"\rdefault_judge\x18\x03 \x01(\tR\fdefaultJudge\"2\n" +
+	"\x16ListCredentialsRequest\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\"\x87\x01\n" +
+	"\x17ListCredentialsResponse\x12\x1a\n" +
+	"\benforced\x18\x01 \x01(\bR\benforced\x128\n" +
+	"\x06grants\x18\x02 \x03(\v2 .evalsi.v1alpha1.CredentialGrantR\x06grants\x12\x16\n" +
+	"\x06judges\x18\x03 \x03(\tR\x06judges\"{\n" +
+	"\x0fCredentialGrant\x12\x10\n" +
+	"\x03env\x18\x01 \x01(\tR\x03env\x12\x14\n" +
+	"\x05hosts\x18\x02 \x03(\tR\x05hosts\x12\x1d\n" +
+	"\n" +
+	"allow_http\x18\x03 \x01(\bR\tallowHttp\x12!\n" +
+	"\fall_projects\x18\x04 \x01(\bR\vallProjects2\xd9\x01\n" +
 	"\x0eCatalogService\x12a\n" +
-	"\x0eListEvaluators\x12&.evalsi.v1alpha1.ListEvaluatorsRequest\x1a'.evalsi.v1alpha1.ListEvaluatorsResponseB\xd0\x01\n" +
+	"\x0eListEvaluators\x12&.evalsi.v1alpha1.ListEvaluatorsRequest\x1a'.evalsi.v1alpha1.ListEvaluatorsResponse\x12d\n" +
+	"\x0fListCredentials\x12'.evalsi.v1alpha1.ListCredentialsRequest\x1a(.evalsi.v1alpha1.ListCredentialsResponseB\xd0\x01\n" +
 	"\x13com.evalsi.v1alpha1B\x13CatalogServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
@@ -147,21 +338,27 @@ func file_evalsi_v1alpha1_catalog_service_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_catalog_service_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_catalog_service_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_evalsi_v1alpha1_catalog_service_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_evalsi_v1alpha1_catalog_service_proto_goTypes = []any{
-	(*ListEvaluatorsRequest)(nil),  // 0: evalsi.v1alpha1.ListEvaluatorsRequest
-	(*ListEvaluatorsResponse)(nil), // 1: evalsi.v1alpha1.ListEvaluatorsResponse
-	(*EvaluatorManifest)(nil),      // 2: evalsi.v1alpha1.EvaluatorManifest
+	(*ListEvaluatorsRequest)(nil),   // 0: evalsi.v1alpha1.ListEvaluatorsRequest
+	(*ListEvaluatorsResponse)(nil),  // 1: evalsi.v1alpha1.ListEvaluatorsResponse
+	(*ListCredentialsRequest)(nil),  // 2: evalsi.v1alpha1.ListCredentialsRequest
+	(*ListCredentialsResponse)(nil), // 3: evalsi.v1alpha1.ListCredentialsResponse
+	(*CredentialGrant)(nil),         // 4: evalsi.v1alpha1.CredentialGrant
+	(*EvaluatorManifest)(nil),       // 5: evalsi.v1alpha1.EvaluatorManifest
 }
 var file_evalsi_v1alpha1_catalog_service_proto_depIdxs = []int32{
-	2, // 0: evalsi.v1alpha1.ListEvaluatorsResponse.evaluators:type_name -> evalsi.v1alpha1.EvaluatorManifest
-	0, // 1: evalsi.v1alpha1.CatalogService.ListEvaluators:input_type -> evalsi.v1alpha1.ListEvaluatorsRequest
-	1, // 2: evalsi.v1alpha1.CatalogService.ListEvaluators:output_type -> evalsi.v1alpha1.ListEvaluatorsResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	5, // 0: evalsi.v1alpha1.ListEvaluatorsResponse.evaluators:type_name -> evalsi.v1alpha1.EvaluatorManifest
+	4, // 1: evalsi.v1alpha1.ListCredentialsResponse.grants:type_name -> evalsi.v1alpha1.CredentialGrant
+	0, // 2: evalsi.v1alpha1.CatalogService.ListEvaluators:input_type -> evalsi.v1alpha1.ListEvaluatorsRequest
+	2, // 3: evalsi.v1alpha1.CatalogService.ListCredentials:input_type -> evalsi.v1alpha1.ListCredentialsRequest
+	1, // 4: evalsi.v1alpha1.CatalogService.ListEvaluators:output_type -> evalsi.v1alpha1.ListEvaluatorsResponse
+	3, // 5: evalsi.v1alpha1.CatalogService.ListCredentials:output_type -> evalsi.v1alpha1.ListCredentialsResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_catalog_service_proto_init() }
@@ -176,7 +373,7 @@ func file_evalsi_v1alpha1_catalog_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_catalog_service_proto_rawDesc), len(file_evalsi_v1alpha1_catalog_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -6,7 +6,7 @@ Short records of decisions that shape the code. Each one says what was decided, 
 |---|----------|--------|
 | [0001](0001-first-users.md) | First users: agent builders, agent platform builders, LLM app developers | Accepted |
 | [0002](0002-go-core-python-runtime.md) | Go core, Python runtime | Accepted |
-| [0003](0003-no-web-ui-yet.md) | No web UI for now | Accepted |
+| [0003](0003-no-web-ui-yet.md) | No web UI for now | Accepted; revisited by 0014 (a read-only UI) |
 | [0004](0004-runs-in-client-environment.md) | Self-hosted in the client's environment; hosted multi-tenant later | Accepted |
 | [0005](0005-sandbox-isolation-ladder.md) | Sandbox isolation ladder: Firecracker, then bubblewrap or Landlock, then a hardened pod | Accepted, implemented |
 | [0006](0006-naming-and-namespaces.md) | Names: `evalsi`, `evalsid`, `evals.si`, `evalsi.v1alpha1` | Accepted |
@@ -17,5 +17,7 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0011](0011-agent-environments-and-benchmarks.md) | Agent environments and benchmark grading: upstream scoring, direct format import, Firecracker without a network device | Accepted, implemented |
 | [0012](0012-kubernetes-operator-and-packaging.md) | Kubernetes: the operator as an API client, one image, three charts, service-account tokens as OIDC | Accepted, implemented |
 | [0013](0013-rewards-and-checkpoint-evaluation.md) | Rewards from evaluators, composed in Python and Go with shared vectors; checkpoints served outside the operator | Accepted, implemented |
+| [0014](0014-mcp-guardrails-plugins-ui.md) | MCP locally and on evalsid; guardrails on agentgateway's protocols; Wasm plugins on wazero; a read-only web UI | Accepted, implemented |
+| [0015](0015-per-project-credentials.md) | Worker secrets named in specs are granted per project and destination host (HTTPS), judges scoped per project; refusals audited, admission checks, reload | Accepted, implemented |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

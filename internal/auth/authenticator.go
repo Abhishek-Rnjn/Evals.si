@@ -155,6 +155,21 @@ func modeOf(m string) string {
 	return m
 }
 
+// Issuers are the issuers of the bearer-token providers people sign in
+// with (kind user), for OAuth protected-resource metadata.
+func (a *Authenticator) Issuers() []string {
+	if a == nil || a.cfg.JWT == nil {
+		return nil
+	}
+	var out []string
+	for _, p := range a.cfg.JWT.Providers {
+		if p.Issuer != "" && p.Kubernetes == nil && (p.Kind == "" || p.Kind == KindUser) {
+			out = append(out, p.Issuer)
+		}
+	}
+	return out
+}
+
 // Authenticate checks the request's credential.
 func (a *Authenticator) Authenticate(r *http.Request) Result {
 	if !a.Enabled() {

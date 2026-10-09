@@ -218,6 +218,8 @@ class EvaluatorManifest(_message.Message):
     OUTPUTS_FIELD_NUMBER: _builtins.int
     PARAMS_SCHEMA_FIELD_NUMBER: _builtins.int
     SCHEDULING_FIELD_NUMBER: _builtins.int
+    TIER_FIELD_NUMBER: _builtins.int
+    RUNTIME_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """Namespaced name, for example "builtin/exact-match"."""
     version: _builtins.str
@@ -225,6 +227,12 @@ class EvaluatorManifest(_message.Message):
     description: _builtins.str
     pack: _builtins.str
     scope: Global___Scope.ValueType
+    tier: _builtins.str
+    """"native" (ships with Evals.si), "wrapped" (a shim over another
+    framework) or "community" (third-party, from a plugin index).
+    """
+    runtime: _builtins.str
+    """Where it runs: "python" (the worker) or "wasm" (sandboxed in evalsid)."""
     @_builtins.property
     def modalities(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """For example "text", "messages", "image"."""
@@ -252,10 +260,12 @@ class EvaluatorManifest(_message.Message):
         outputs: _abc.Iterable[Global___MetricSpec] | None = ...,
         params_schema: _struct_pb2.Struct | None = ...,
         scheduling: Global___Scheduling | None = ...,
+        tier: _builtins.str = ...,
+        runtime: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["params_schema", b"params_schema", "requires", b"requires", "scheduling", b"scheduling"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "modalities", b"modalities", "name", b"name", "outputs", b"outputs", "pack", b"pack", "params_schema", b"params_schema", "requires", b"requires", "scheduling", b"scheduling", "scope", b"scope", "version", b"version"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "modalities", b"modalities", "name", b"name", "outputs", b"outputs", "pack", b"pack", "params_schema", b"params_schema", "requires", b"requires", "runtime", b"runtime", "scheduling", b"scheduling", "scope", b"scope", "tier", b"tier", "version", b"version"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___EvaluatorManifest: _TypeAlias = EvaluatorManifest  # noqa: Y015

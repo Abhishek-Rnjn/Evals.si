@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
+	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
@@ -35,6 +38,21 @@ type Judge struct {
 	TimeoutS       float64  `json:"timeout_s,omitempty"`
 	// Client-side rate limit for this judge, enforced by the worker.
 	RequestsPerMinute float64 `json:"requests_per_minute,omitempty"`
+	// Projects that may use this judge ("*" for every project); empty: all.
+	// Its key and budget are the server's, so a judge can be kept to the
+	// projects that pay for it.
+	Projects []string `json:"projects,omitempty"`
+}
+
+// WorkerJudges is the judges as the Python worker sees them: settings the
+// server enforces itself, such as Projects, are left out.
+func (c Config) WorkerJudges() map[string]Judge {
+	out := make(map[string]Judge, len(c.Judges))
+	for name, j := range c.Judges {
+		j.Projects = nil
+		out[name] = j
+	}
+	return out
 }
 
 // Worker configures the Python evaluator worker that evalsid supervises.
@@ -220,6 +238,20 @@ type Config struct {
 	Authorization authz.AuthorizationConfig `json:"authorization"`
 	Audit         authz.AuditConfig         `json:"audit"`
 	Metrics       Metrics                   `json:"metrics"`
+	// The MCP endpoint (/mcp): on by default, behind the same authentication
+	// and authorization as every other route.
+	MCP mcp.Config `json:"mcp"`
+	// Wasm evaluator plugins, run sandboxed inside evalsid.
+	Wasm Wasm `json:"wasm"`
+	// The read-only web UI at /ui/.
+	UI UI `json:"ui"`
+	// Worker variables that requests may name (api_key_env, headers_env,
+	// env_from, evaluator params ending in _env), granted per project.
+	Credentials credentials.Config `json:"credentials"`
+
+	// Reload reads the configuration again from where it came from (set by
+	// LoadWith for a file); nil when there is nothing to reload.
+	Reload func() (Config, error) `json:"-"`
 }
 
 // Storage selects the databases. Without it, everything is in SQLite under
@@ -269,7 +301,33 @@ type Metrics struct {
 // AuthEnabled reports whether requests are authenticated and authorized.
 func (c Config) AuthEnabled() bool { return c.Auth.Enabled() }
 
+// CredentialSettings is what the credentials policy is made from: the
+// grants, each judge's projects, and whether authentication is on.
+func (c Config) CredentialSettings() credentials.Settings {
+	judges := map[string][]string{}
+	for name, j := range c.Judges {
+		judges[name] = j.Projects
+	}
+	return credentials.Settings{Credentials: c.Credentials, Judges: judges, AuthEnabled: c.AuthEnabled()}
+}
+
 // Default returns the configuration used when no file is given.
+// UI configures the read-only web UI.
+type UI struct {
+	Disabled bool `json:"disabled"`
+}
+
+// Wasm configures WebAssembly evaluator plugins (internal/wasmeval).
+type Wasm struct {
+	// Directories searched for evalsi-plugin.yaml manifests; default
+	// <data_dir>/plugins, where `evalsi plugins install --dir` puts them.
+	PluginDirs []string `json:"plugin_dirs"`
+	// Compiled modules are kept here between restarts; default
+	// <data_dir>/wasm-cache. "off" compiles on every start.
+	CacheDir string `json:"cache_dir"`
+	Disabled bool   `json:"disabled"`
+}
+
 func Default() Config {
 	return Config{
 		Listen: "127.0.0.1:8080",
@@ -307,6 +365,9 @@ func LoadWith(path string, overrides ...func(*Config)) (Config, error) {
 	}
 	for _, o := range overrides {
 		o(&cfg)
+	}
+	if path != "" {
+		cfg.Reload = func() (Config, error) { return LoadWith(path, overrides...) }
 	}
 	return cfg, cfg.Validate()
 }
@@ -359,6 +420,11 @@ func (c Config) Validate() error {
 			errs = append(errs, fmt.Errorf("judges.%s.base_url is required for openai-compatible", name))
 		}
 	}
+	for name, j := range c.Judges {
+		if slices.Contains(j.Projects, "") {
+			errs = append(errs, fmt.Errorf("judges.%s.projects has an empty name", name))
+		}
+	}
 	if c.DefaultJudge != "" {
 		if _, ok := c.Judges[c.DefaultJudge]; !ok {
 			errs = append(errs, fmt.Errorf("default_judge %q is not among judges", c.DefaultJudge))
@@ -371,6 +437,9 @@ func (c Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("data_dir is required"))
+	}
+	if err := c.Credentials.Validate(); err != nil {
+		errs = append(errs, err)
 	}
 	for name, d := range map[string]string{"runs.lease_ttl": c.Runs.LeaseTTL, "runs.adopt_interval": c.Runs.AdoptInterval} {
 		if d == "" {
@@ -410,6 +479,9 @@ func (c Config) Validate() error {
 		if err := sc.Validate(); err != nil {
 			errs = append(errs, fmt.Errorf("sinks[%d]: %w", i, err))
 		}
+	}
+	if err := c.MCP.Validate(); err != nil {
+		errs = append(errs, err)
 	}
 	if err := c.Sandbox.Validate(); err != nil {
 		errs = append(errs, fmt.Errorf("sandbox: %w", err))

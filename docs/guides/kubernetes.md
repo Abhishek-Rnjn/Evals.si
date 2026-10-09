@@ -46,7 +46,7 @@ helm install evalsi-sandboxd deploy/helm/evalsi-sandboxd -n evalsi
 
 The defaults are a working single-replica install on SQLite. Each chart's permissions are listed under [Permissions](#permissions); on a cluster where you are not cluster-admin, see [Installing without cluster-admin](#installing-without-cluster-admin). For production:
 
-- **Storage.** `storage.postgres.dsnSecret` (a Secret holding the DSN) for several API replicas; `storage.clickhouse` for traces at volume; `storage.s3` for datasets (`datasets_dir` becomes `s3://<bucket>/<prefix>`, with IRSA or a credentials Secret). `devPostgres.enabled` starts a throwaway PostgreSQL in the namespace, for trying replicas out.
+- **Storage.** `storage.postgres.dsnSecret` (a Secret holding the DSN) for several API replicas; `storage.clickhouse` for traces at volume; `storage.s3` for datasets (`datasets_dir` becomes `s3://<bucket>/<prefix>`, with IRSA or a credentials Secret). File datasets (`path:`, `swebench://`) need it: workers run in other pods and cannot read files in the server's. `devPostgres.enabled` starts a throwaway PostgreSQL in the namespace, for trying replicas out.
 - **NATS.** The chart runs one JetStream node. For HA, run a three-node NATS (for example the official chart) and set `nats.url` and `nats.streamReplicas: 3`.
 - **Providers.** Put API keys in a Secret and reference it from `server.envFrom` and `workers.envFrom`; judges go in `workers.config.judges`.
 - **Scaling.** `keda.enabled` adds a `ScaledObject` per pool on the backlog of its JetStream consumer (`pool-<pool>` on stream `EVALSI_WORK`); `workers.pools.<pool>` sets replicas, concurrency, resources and node selectors (a `gpu` pool, for example).
@@ -120,7 +120,7 @@ spec:
 
 The `EvalRun` and `OnlineEvalPolicy` schemas are generated from the API's messages, so `kubectl explain evalrun.spec.target` documents a field, and a wrong type (a string where `trials` wants a number) fails at the API server. Run files may use either `snake_case` or `camelCase` names, enums by name, and durations such as `10m`.
 
-Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun` and `OnlineEvalPolicy` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The `admin`, `edit` and `view` roles cover the resources through aggregation.
+Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun` and `OnlineEvalPolicy` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The webhook then asks evalsid whether it would accept the resource (`validate_only`): a variable the project has no [credential grant](identity.md#8-credentials-which-worker-secrets-a-project-may-use) for, a judge it may not use, or a spec the server refuses fails at `kubectl apply` too. When evalsid does not answer within 5 seconds, or the project does not exist yet (the operator creates it), the resource is admitted with a warning and its status reports the outcome. The `admin`, `edit` and `view` roles cover the resources through aggregation.
 
 ## Sandboxes on Kubernetes
 
@@ -133,7 +133,15 @@ Worker pods hold credentials (provider keys, the cluster's tokens), so sandboxes
 | `evalsi-sandboxd`, `mode: firecracker` | Firecracker | vm | KVM nodes and a guest kernel on them |
 | A `SandboxClass` with `ladder: [pod]` | hardened pod | namespaced; kernel with gVisor, vm with Kata | Nothing special: the pool creates a pod per sandbox |
 
-The **pod rung** creates one pod per sandbox from the task's image. `evalsi-guest` is copied in by an init container; the pod has no service-account token and no service links, runs with all capabilities dropped except the few package managers need, and a NetworkPolicy lets it talk only to its pool, which relays allowed egress through its logging proxy. It cannot snapshot, so environment setup runs once per trial.
+The **pod rung** creates one pod per sandbox from the task's image. `evalsi-guest` is copied in by an init container; the pod has no service-account token and no service links, runs with all capabilities dropped except the few package managers need, and a NetworkPolicy lets it talk only to its pool, which relays allowed egress through its logging proxy. It cannot snapshot, so environment setup runs once per trial. When the task image runs as a non-root user that cannot create the workdir, set the pod rung's `runAsUser` (with `capabilities: []`): the workdir is then a volume that user owns, seeded with the image's own.
+
+`mode: firecracker` needs `firecracker.defaultImage`, the image a microVM boots when a spec names none (sandboxd boots it at start to check the rung); the evalsi image carries the `firecracker` binary and `mkfs.ext4`. A SandboxClass's `firecracker` takes the same `defaultImage`.
+
+### Taints and service meshes
+
+On nodes that are all tainted, give every component its tolerations: `server`, `workers`, `operator`, `nats`, `devPostgres`, `sandbox.pool` and `sandbox.pool.pod` each take `tolerations` and `nodeSelector` (and the evalsi-sandboxd chart its own).
+
+Under Istio ambient with a waypoint, keep it off the connections it breaks: NATS speaks first, which a waypoint's proxy cannot carry, and a waypoint's external authorization may refuse the pool's calls to sandbox pods. Set `nats.serviceLabels`, `devPostgres.serviceLabels`, `sandbox.pool.pod.labels` (a SandboxClass's `pod.labels`), and the evalsi-sandboxd chart's `serviceLabels` and `podLabels` to `{istio.io/use-waypoint: none}`. Under mesh-wide STRICT mTLS the API server, which is outside the mesh, cannot reach the admission webhooks: a `PeerAuthentication` for the operator with port 9443 `PERMISSIVE` lets it in.
 
 ## Permissions
 

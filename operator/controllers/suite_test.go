@@ -41,6 +41,8 @@ type fakeAPI struct {
 	creates   []*evalsiv1alpha1.CreateRunRequest
 	cancelled []string
 	policies  map[string]*evalsiv1alpha1.OnlineEvalPolicy
+	// Validate-only requests (the admission webhook's checks).
+	validated []string
 	applied   []*evalsiv1alpha1.OnlineEvalPolicy
 	deleted   []string
 	// Runs whose spec has this judge stay running.
@@ -58,6 +60,14 @@ func (f *fakeAPI) CreateRun(_ context.Context, req *connect.Request[evalsiv1alph
 	f.token(req.Header())
 	if !f.projects[req.Msg.GetProject()] {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", req.Msg.GetProject()))
+	}
+	if req.Msg.GetValidateOnly() {
+		f.validated = append(f.validated, "run/"+req.Msg.GetName())
+		// As evalsid refuses a variable the project has no grant for.
+		if env := req.Msg.GetSpec().GetTarget().GetApiKeyEnv(); env == "DATABASE_URL" {
+			return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("spec.target.api_key_env names the worker variable %s, which project %q may not use", env, req.Msg.GetProject()))
+		}
+		return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{}), nil
 	}
 	f.creates = append(f.creates, req.Msg)
 	id := "run-" + string(rune('a'+len(f.runs)))
@@ -104,6 +114,10 @@ func (f *fakeAPI) ApplyPolicy(_ context.Context, req *connect.Request[evalsiv1al
 	p := req.Msg.GetPolicy()
 	if !f.projects[p.GetProject()] {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", p.GetProject()))
+	}
+	if req.Msg.GetValidateOnly() {
+		f.validated = append(f.validated, "policy/"+p.GetName())
+		return connect.NewResponse(&evalsiv1alpha1.ApplyPolicyResponse{Policy: p}), nil
 	}
 	f.policies[p.GetName()] = p
 	f.applied = append(f.applied, p)
@@ -206,7 +220,11 @@ func start(t *testing.T) *env {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	evalsiwebhook.Register(mgr.GetWebhookServer())
+	remote, err := NewAPI(APIConfig{URL: srv.URL, TokenFile: tokenFile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evalsiwebhook.Register(mgr.GetWebhookServer(), remote)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {

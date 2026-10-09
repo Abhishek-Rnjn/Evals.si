@@ -7,18 +7,20 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- end }}
 
-{{/* An image reference, moved to global.imageRegistry when set. */}}
+{{/* An image reference, moved to global.imageRegistry when set: a leading
+registry host is replaced, and a reference already under the registry is
+kept as it is. */}}
 {{- define "evalsi.ref" -}}
 {{- $ref := .ref -}}
-{{- $reg := .root.Values.global.imageRegistry -}}
-{{- if $reg -}}
+{{- $reg := trimSuffix "/" .root.Values.global.imageRegistry -}}
+{{- if and $reg (not (hasPrefix (printf "%s/" $reg) $ref)) -}}
 {{- $parts := splitList "/" $ref -}}
 {{- $first := first $parts -}}
 {{- if and (gt (len $parts) 1) (or (contains "." $first) (contains ":" $first) (eq $first "localhost")) -}}
 {{- $ref = join "/" (rest $parts) -}}
 {{- end -}}
 {{- $ref = trimPrefix "library/" $ref -}}
-{{- printf "%s/%s" (trimSuffix "/" $reg) $ref -}}
+{{- printf "%s/%s" $reg $ref -}}
 {{- else -}}
 {{- $ref -}}
 {{- end -}}

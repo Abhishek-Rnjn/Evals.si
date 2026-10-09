@@ -122,7 +122,7 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 		if p.GetProject() == "" {
 			p.Project = DefaultProject // stored before projects were enforced
 		}
-		c, err := compile(p, eval)
+		c, err := compile(ctx, p, eval)
 		if err != nil {
 			e.log.Error("skipping stored policy", "policy", p.GetName(), "err", err)
 			continue
@@ -147,7 +147,15 @@ func (e *Engine) SetLeader(leader bool) { e.follower.Store(!leader) }
 
 // Reload re-reads policies from the store (another replica changed them).
 // Unchanged policies keep their state; changed ones keep their counters.
-func (e *Engine) Reload(ctx context.Context) error {
+func (e *Engine) Reload(ctx context.Context) error { return e.reload(ctx, false) }
+
+// Recheck reloads every policy and compiles it again, unchanged ones too,
+// so changed credential grants or judge scopes apply: a policy that now
+// names what its project may not use is dropped (and logged) until the
+// grant returns or the policy changes.
+func (e *Engine) Recheck(ctx context.Context) error { return e.reload(ctx, true) }
+
+func (e *Engine) reload(ctx context.Context, force bool) error {
 	stored, err := e.store.Policies(ctx)
 	if err != nil {
 		return err
@@ -160,11 +168,11 @@ func (e *Engine) Reload(ctx context.Context) error {
 			p.Project = DefaultProject
 		}
 		old := e.policies[p.GetName()]
-		if old != nil && proto.Equal(old.c.policy, p) {
+		if !force && old != nil && proto.Equal(old.c.policy, p) {
 			next[p.GetName()] = old
 			continue
 		}
-		c, err := compile(p, e.eval)
+		c, err := compile(ctx, p, e.eval)
 		if err != nil {
 			e.log.Error("skipping stored policy", "policy", p.GetName(), "err", err)
 			continue
@@ -179,17 +187,34 @@ func (e *Engine) Reload(ctx context.Context) error {
 	return nil
 }
 
-// Apply validates, stores and activates a policy, replacing one with the same name.
-func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error {
+// Validate checks a policy as Apply would, without storing it.
+func (e *Engine) Validate(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error {
+	_, err := e.validate(ctx, p)
+	return err
+}
+
+func (e *Engine) validate(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) (*compiled, error) {
 	if p.GetProject() == "" {
 		p.Project = DefaultProject
 	}
-	c, err := compile(p, e.eval)
+	c, err := compile(ctx, p, e.eval)
+	if connect.CodeOf(err) == connect.CodePermissionDenied {
+		return nil, err
+	}
 	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if p.GetPromote().GetDataset() != "" && e.opts.DatasetsDir == "" {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("promotion needs datasets_dir in the server config"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("promotion needs datasets_dir in the server config"))
+	}
+	return c, nil
+}
+
+// Apply validates, stores and activates a policy, replacing one with the same name.
+func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error {
+	c, err := e.validate(ctx, p)
+	if err != nil {
+		return err
 	}
 	if err := e.store.PutPolicy(ctx, p); err != nil {
 		return err

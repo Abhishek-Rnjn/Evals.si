@@ -35,6 +35,10 @@ message CreateRunRequest {
   RunSpec spec = 3;
   // Labels for access rules. Callers can only set labels their roles allow.
   map<string, string> labels = 4;
+  // Check the request as creating it would (authorization, the spec,
+  // credential grants and judges) without storing or starting anything; the
+  // response has no run. Admission webhooks use it.
+  bool validate_only = 5;
 }
 
 message CreateRunResponse {

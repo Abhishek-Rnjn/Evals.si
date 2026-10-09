@@ -1,8 +1,8 @@
-# Leftovers from Phases 0 to 5
+# Leftovers from Phases 0 to 6
 
-These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Phase 6 scope (`evalsi mcp`, classic ML packs, the plugin index, Wasm evaluators, annotation queues, inline guardrails, a web UI) is not listed here; see §23. Each item names where it was recorded.
+These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
-Last updated: 2026-10-06, at the end of Phase 5.
+Last updated: 2026-10-07, at the end of Phase 6.
 
 ## Verified only with stand-ins (needs real infrastructure)
 
@@ -49,3 +49,18 @@ Last updated: 2026-10-06, at the end of Phase 5.
 | Operator-managed checkpoint serving | The operator does not start vLLM per checkpoint; the watcher serves checkpoints itself (vLLM process, LoRA hot-load, endpoint). | Decision 0013 |
 | Trainer hooks besides Hugging Face | Only `TrainerCallback` (Trainer, TRL). Other loops use `CheckpointRunner`, or the watcher with `--stop-file`; Lightning `.ckpt` files need converting before vLLM can serve them. | §12 |
 | Environment-spec compatibility | `TaskEnv` has its own `reset`/`step`; compatibility with OpenEnv and verifiers-style environments is not evaluated. | §12 |
+
+## Phase 6: MCP, classic ML and ecosystem
+
+| Item | Notes | Where recorded |
+|------|-------|----------------|
+| Guardrails against a live agentgateway | The prompt-guard webhook and ExtMcp protocols are implemented from agentgateway's source and tested against their wire formats; neither was run behind a real gateway. Masks on streamed responses appear not to take effect in agentgateway (blocks do). | §23 Phase 6 limits, guardrails guide |
+| A coding agent product over MCP in CI | The exit test drives `evalsi mcp` with our own MCP client, not with Claude Code, Cursor or another agent. | §23 Phase 6 limits |
+| Wasm plugins on Kubernetes | evalsid loads plugins from `wasm.plugin_dirs`; the Helm chart has no value to mount them (a volume, or an init container that runs `evalsi plugins install`). | Plugins guide |
+| Wasm evaluators with a judge or the sandbox | Wasm modules have no I/O by design; such evaluators stay Python plugins or images. | Decision 0014 |
+| Hosted Wasm plugins in the index | The index lists the native packs and the adapters; no Wasm plugin is published yet (the example builds from source). | Plugins guide |
+| Browser sign-in for the web UI | The UI takes a pasted API key or `evalsi auth token`; an OIDC login flow in the browser is not built. | Decision 0014 |
+| Annotating in the browser | The UI is read-only; annotators use `evalsi annotate start` or the API. | Decision 0014 |
+| A browser test of the UI in CI | Go tests cover serving, headers and text-only rendering; the pages were checked in Chromium by hand. | §23 Phase 6 limits |
+| Annotation claims under concurrent Postgres writers | Two annotators claiming the last slot at the same moment can over-claim an item, which costs at most one extra answer. | `internal/store/annotations.go` |
+

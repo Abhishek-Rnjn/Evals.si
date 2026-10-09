@@ -85,6 +85,16 @@ class EvaluatorSpec:
     outputs: tuple[MetricSpec, ...]
     params: Mapping[str, Any]
     pack: str = ""
+    # "native", "wrapped" or "community"; see EvaluatorManifest.tier.
+    tier: str = ""
+    # "python", or "wasm" for plugins run by evalsid.
+    runtime: str = "python"
+    # Params whose values name worker environment variables (secrets the
+    # evaluator reads), each mapped to the param holding the URL the value is
+    # sent to ("" when none). A server checks the named variables against the
+    # project's credential grants, and its worker refuses a call where any
+    # other param names one of its variables.
+    secrets: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def short_name(self) -> str:
@@ -182,11 +192,18 @@ def evaluator(
     requires: Requirements | None = None,
     outputs: list[MetricSpec] | None = None,
     pack: str = "",
+    secrets: Mapping[str, str] | None = None,
 ) -> Callable[[EvaluatorFn], EvaluatorDef]:
     """Turn a function into an evaluator.
 
     ``name`` is namespaced (``"acme/json-valid"``). If ``outputs`` is omitted
     the evaluator declares one numeric metric named after its short name.
+
+    ``secrets`` declares the params whose values name environment variables
+    the evaluator reads (``{"api_key_env": "url"}``: the param, and the param
+    holding where the value goes, or ``""``). Params ending in ``_env`` are
+    declared automatically, sent to ``url`` or ``base_url`` when the
+    evaluator has one.
     """
     if "/" not in name:
         raise EvaluatorConfigError(
@@ -202,6 +219,7 @@ def evaluator(
                 wants_ctx = True
             elif param.kind is inspect.Parameter.KEYWORD_ONLY:
                 params[param.name] = param.default
+        declared = _secret_params(name, params, secrets or {})
         short = name.rsplit("/", 1)[-1]
         spec = EvaluatorSpec(
             name=name,
@@ -212,7 +230,24 @@ def evaluator(
             outputs=tuple(outputs or [MetricSpec(name=short, type=ScoreType.NUMBER)]),
             params=params,
             pack=pack,
+            secrets=declared,
         )
         return EvaluatorDef(spec=spec, fn=fn, wants_ctx=wants_ctx)
 
     return wrap
+
+
+def _secret_params(
+    name: str, params: Mapping[str, Any], explicit: Mapping[str, str]
+) -> dict[str, str]:
+    dest = "url" if "url" in params else "base_url" if "base_url" in params else ""
+    out = {p: dest for p in params if p.endswith("_env")}
+    for param, sent_to in explicit.items():
+        if param not in params:
+            raise EvaluatorConfigError(f"{name}: secrets names {param!r}, which is not a param")
+        if sent_to and sent_to not in params:
+            raise EvaluatorConfigError(
+                f"{name}: secrets sends {param!r} to {sent_to!r}, which is not a param"
+            )
+        out[param] = sent_to
+    return out

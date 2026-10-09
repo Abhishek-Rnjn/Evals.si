@@ -447,7 +447,7 @@ func (d *firecrackerDriver) start(ctx context.Context, vm *fcVM, jailID string) 
 	}
 	var logs bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &logs, &logs
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	cmd.SysProcAttr = firecrackerProcAttr()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("starting firecracker: %w", err)
 	}

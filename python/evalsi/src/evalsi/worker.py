@@ -34,6 +34,7 @@ from evalsi.convert import (
     record_to_proto,
     result_to_proto,
     score_to_proto,
+    undeclared_secret,
     usage_to_proto,
 )
 from evalsi.datasets import DatasetError, split_uri
@@ -246,7 +247,10 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
     async def _bind(self, name: str, params: Any, context: Context) -> BoundEvaluator:
         try:
             definition = self.registry.resolve(name)
-            return definition.bind(coerce_params(definition.spec, from_struct(params)))
+            values = coerce_params(definition.spec, from_struct(params))
+            if problem := undeclared_secret(definition.spec, values):
+                raise EvaluatorConfigError(problem)
+            return definition.bind(values)
         except EvaluatorConfigError as exc:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(exc))
             raise  # unreachable: abort raises
@@ -287,7 +291,15 @@ def load_judges(path: str | Path | None) -> dict[str, JudgeConfig]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected an object mapping judge names to configs")
-    return {name: JudgeConfig(**fields) for name, fields in data.items()}
+    # Fields the server enforces itself (which projects may use a judge) mean
+    # nothing to the worker; tolerate them from a server that sends them.
+    return {
+        name: JudgeConfig(**{k: v for k, v in fields.items() if k not in _SERVER_JUDGE_FIELDS})
+        for name, fields in data.items()
+    }
+
+
+_SERVER_JUDGE_FIELDS = frozenset({"projects"})
 
 
 async def serve(

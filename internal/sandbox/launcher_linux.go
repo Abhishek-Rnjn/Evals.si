@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"unsafe"
 
@@ -108,12 +110,50 @@ func execWithLimits(spec *launchSpec, path string) error {
 	if err != nil {
 		return err
 	}
-	if err := setLimits(spec); err != nil {
-		return fmt.Errorf("resource limits: %w", err)
+	limits := rlimits(spec)
+	// The runtime has more address space mapped than a sandbox's memory
+	// limit (RLIMIT_AS) allows, so once the limits are set any mmap fails
+	// and the runtime aborts ("cannot allocate memory"). No Go code may run
+	// between setrlimit and execve: one P, held by this goroutine on its own
+	// thread, no GC, and raw syscalls only (an ordinary syscall lets the
+	// scheduler hand the P to another goroutine, which may allocate).
+	runtime.GOMAXPROCS(1)
+	runtime.LockOSThread()
+	debug.SetGCPercent(-1)
+	for i := range limits {
+		if _, _, errno := unix.RawSyscall6(unix.SYS_PRLIMIT64, 0, uintptr(limits[i].res),
+			uintptr(unsafe.Pointer(&limits[i].lim)), 0, 0, 0); errno != 0 {
+			return fmt.Errorf("resource limits: %w", errno)
+		}
 	}
 	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE,
 		uintptr(unsafe.Pointer(argv0)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envv[0])))
 	return errno
+}
+
+type rlimit struct {
+	res int
+	lim unix.Rlimit
+}
+
+// rlimits lists the limits to set, the address space last.
+func rlimits(spec *launchSpec) []rlimit {
+	var out []rlimit
+	for _, l := range []struct {
+		res int
+		v   uint64
+	}{
+		{unix.RLIMIT_CPU, spec.CPUSeconds},
+		{unix.RLIMIT_NPROC, nprocLimit(spec)},
+		{unix.RLIMIT_FSIZE, spec.MaxFile},
+		{unix.RLIMIT_AS, spec.MemoryBytes},
+	} {
+		if l.v != 0 {
+			out = append(out, rlimit{l.res, unix.Rlimit{Cur: l.v, Max: l.v}})
+		}
+	}
+	// No core dumps: they would land in the workspace and could hold secrets.
+	return append([]rlimit{{unix.RLIMIT_CORE, unix.Rlimit{}}}, out...)
 }
 
 // cStrings is a NULL-terminated array of C strings for execve.
@@ -134,30 +174,6 @@ func nprocLimit(spec *launchSpec) uint64 {
 		return 0
 	}
 	return spec.MaxProcs
-}
-
-func setLimits(spec *launchSpec) error {
-	set := func(res int, v uint64) error {
-		if v == 0 {
-			return nil
-		}
-		return unix.Setrlimit(res, &unix.Rlimit{Cur: v, Max: v})
-	}
-	for _, l := range []struct {
-		res int
-		v   uint64
-	}{
-		{unix.RLIMIT_AS, spec.MemoryBytes},
-		{unix.RLIMIT_CPU, spec.CPUSeconds},
-		{unix.RLIMIT_NPROC, nprocLimit(spec)},
-		{unix.RLIMIT_FSIZE, spec.MaxFile},
-	} {
-		if err := set(l.res, l.v); err != nil {
-			return err
-		}
-	}
-	// No core dumps: they would land in the workspace and could hold secrets.
-	return unix.Setrlimit(unix.RLIMIT_CORE, &unix.Rlimit{})
 }
 
 func applyLandlock(r *landlockRules) error {

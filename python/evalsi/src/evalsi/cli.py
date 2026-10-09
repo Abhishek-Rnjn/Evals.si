@@ -53,8 +53,13 @@ def _parser() -> argparse.ArgumentParser:
     _add_run(sub)
     _add_policy(sub)
     from evalsi.cli_analytics import add_analytics_commands
+    from evalsi.cli_annotate import add_annotate_commands
     from evalsi.cli_auth import add_auth_commands
+    from evalsi.cli_credentials import add_credentials_commands
     from evalsi.cli_flywheel import add_flywheel_commands
+    from evalsi.cli_guardrails import add_guardrail_commands
+    from evalsi.cli_mcp import add_mcp_command
+    from evalsi.cli_plugins import add_plugin_commands
     from evalsi.cli_rewards import add_report_command, add_rewards_commands
     from evalsi.cli_training import add_training_commands
 
@@ -64,6 +69,11 @@ def _parser() -> argparse.ArgumentParser:
     add_report_command(sub)
     add_training_commands(sub)
     add_analytics_commands(sub)
+    add_mcp_command(sub)
+    add_annotate_commands(sub)
+    add_guardrail_commands(sub)
+    add_plugin_commands(sub)
+    add_credentials_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
     cat.add_argument("--format", choices=["table", "json"], default="table")
@@ -367,11 +377,13 @@ def _cmd_catalog(args: argparse.Namespace) -> int:
                     {
                         "pack": p.name,
                         "description": p.description,
+                        "tier": p.tier or "community",
                         "on_by_default": p.on_by_default,
                         "evaluators": [
                             {
                                 "name": d.spec.name,
                                 "version": d.spec.version,
+                                "runtime": d.spec.runtime,
                                 "description": d.spec.description,
                                 "params": {
                                     k: None if v is _EMPTY else v for k, v in d.spec.params.items()
@@ -388,8 +400,9 @@ def _cmd_catalog(args: argparse.Namespace) -> int:
         )
         return 0
     for pack in packs:
-        default = " (on by default)" if pack.on_by_default else ""
-        print(f"{pack.name}{default}: {pack.description}")
+        default = ", on by default" if pack.on_by_default else ""
+        runtime = ", wasm" if pack.evaluators and pack.evaluators[0].spec.runtime == "wasm" else ""
+        print(f"{pack.name} ({pack.tier or 'community'}{runtime}{default}): {pack.description}")
         for d in pack.evaluators:
             params = ", ".join(k if v is _EMPTY else f"{k}={v!r}" for k, v in d.spec.params.items())
             print(f"  {d.spec.name}@{d.spec.version}  {d.spec.description}")
@@ -470,6 +483,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(result.table())
         _print_gates(gates)
     errors = result.errors()
+    if errors and len(errors) == len(result.results):
+        # Nothing was scored: a run without gates must not pass.
+        reason = errors[0].reason or "no reason given"
+        print(
+            f"\nerror: all {len(errors)} evaluations failed; the first: {reason}",
+            file=sys.stderr,
+        )
+        return 1
     if errors and not args.quiet:
         print(
             f"\n{len(errors)} evaluation(s) errored and are excluded from the metrics.",

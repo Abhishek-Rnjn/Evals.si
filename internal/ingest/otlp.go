@@ -99,8 +99,10 @@ func (r *Receiver) Register(mux *http.ServeMux) {
 }
 
 // accept assigns every resource's spans before buffering any, so a rejected
-// export adds nothing.
-func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTraceServiceRequest) error {
+// export adds nothing. Spans dropped for a trace over the span limit are
+// reported to the exporter as a partial success (when assembled here; a
+// cluster assembles them later, on another replica).
+func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTraceServiceRequest) (*collectortracepb.ExportTraceServiceResponse, error) {
 	type assigned struct {
 		rs      *tracepb.ResourceSpans
 		project string
@@ -110,31 +112,38 @@ func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTrace
 	for _, rs := range msg.GetResourceSpans() {
 		project, labels, err := r.assign(ctx, ToAttrs(rs.GetResource().GetAttributes()))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		all = append(all, assigned{rs, project, labels})
 	}
 	if r.forward != nil {
 		for _, a := range all {
 			if err := r.forward(ctx, a.rs, a.project, a.labels); err != nil {
-				return connect.NewError(connect.CodeUnavailable, err)
+				return nil, connect.NewError(connect.CodeUnavailable, err)
 			}
 		}
-		return nil
+		return &collectortracepb.ExportTraceServiceResponse{}, nil
 	}
 	var spans []Span
 	for _, a := range all {
 		spans = append(spans, SpansOfResource(a.rs, a.project, a.labels)...)
 	}
-	r.assembler.Add(spans)
-	return nil
+	resp := &collectortracepb.ExportTraceServiceResponse{}
+	if n := r.assembler.Add(spans); n > 0 {
+		resp.PartialSuccess = &collectortracepb.ExportTracePartialSuccess{
+			RejectedSpans: n,
+			ErrorMessage:  fmt.Sprintf("%d spans dropped: their traces exceed the server's span limit per trace", n),
+		}
+	}
+	return resp, nil
 }
 
 func (r *Receiver) export(ctx context.Context, req *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error) {
-	if err := r.accept(ctx, req.Msg); err != nil {
+	resp, err := r.accept(ctx, req.Msg)
+	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&collectortracepb.ExportTraceServiceResponse{}), nil
+	return connect.NewResponse(resp), nil
 }
 
 func (r *Receiver) serveHTTP(w http.ResponseWriter, req *http.Request) {
@@ -168,7 +177,8 @@ func (r *Receiver) serveHTTP(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "decoding OTLP: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := r.accept(req.Context(), msg); err != nil {
+	resp, err := r.accept(req.Context(), msg)
+	if err != nil {
 		status := http.StatusInternalServerError
 		var ce *connect.Error
 		if errors.As(err, &ce) {
@@ -177,7 +187,6 @@ func (r *Receiver) serveHTTP(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), status)
 		return
 	}
-	resp := &collectortracepb.ExportTraceServiceResponse{}
 	if mediaType == "application/json" {
 		w.Header().Set("Content-Type", "application/json")
 		out, _ := protojson.Marshal(resp)

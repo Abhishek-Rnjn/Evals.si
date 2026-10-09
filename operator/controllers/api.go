@@ -134,3 +134,18 @@ func hash(b []byte) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:8])
 }
+
+// CheckRun asks the API whether it would create this run (authorization, the
+// spec, credential grants and judges) without creating it.
+func (a *API) CheckRun(ctx context.Context, project, name string, s *evalsiv1alpha1.RunSpec, labels map[string]string) error {
+	_, err := a.Runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{
+		Name: name, Project: project, Spec: s, Labels: labels, ValidateOnly: true,
+	}))
+	return err
+}
+
+// CheckPolicy asks the API whether it would apply this policy.
+func (a *API) CheckPolicy(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error {
+	_, err := a.Monitor.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: p, ValidateOnly: true}))
+	return err
+}

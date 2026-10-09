@@ -40,6 +40,7 @@ func TestRESTRoutes(t *testing.T) {
 	}{
 		{"POST", "/v1alpha1/evaluate", `{"records": []}`, "EvaluationService/Evaluate", "", ""},
 		{"GET", "/v1alpha1/evaluators", "", "CatalogService/ListEvaluators", "", ""},
+		{"GET", "/v1alpha1/credentials?project=p", "", "CatalogService/ListCredentials", "project", "p"},
 		{"POST", "/v1alpha1/runs", `{"spec": {"name": "x"}}`, "RunService/CreateRun", "", ""},
 		{"GET", "/v1alpha1/runs?project=p&page_size=5", "", "RunService/ListRuns", "project", "p"},
 		{"GET", "/v1alpha1/runs/run-1", "", "RunService/GetRun", "id", "run-1"},

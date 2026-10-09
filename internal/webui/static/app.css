@@ -1,0 +1,100 @@
+:root {
+  --bg: #fbfbfa;
+  --surface: #ffffff;
+  --text: #1d1f23;
+  --muted: #5f6570;
+  --border: #e3e4e8;
+  --accent: #2f5bd3;
+  --good: #1f7a4a;
+  --bad: #b3261e;
+  --warn: #8a5a00;
+  --chip: #eef1f8;
+  --bar: #c9d4f2;
+  --on-accent: #ffffff;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b;
+    --surface: #1c1f24;
+    --text: #e6e7ea;
+    --muted: #9aa0ab;
+    --border: #2d3138;
+    --accent: #8aa8ff;
+    --good: #5cc28a;
+    --bad: #ff8a80;
+    --warn: #e0b45c;
+    --chip: #262b35;
+    --bar: #3a4a78;
+    --on-accent: #10172e;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.brand { font-weight: 650; color: var(--text); }
+nav { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+nav a { color: var(--muted); padding: 2px 0; border-bottom: 2px solid transparent; }
+nav a.active { color: var(--text); border-bottom-color: var(--accent); text-decoration: none; }
+.who { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); }
+main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+.foot { padding: 16px; color: var(--muted); font-size: 12px; text-align: center; }
+h1 { font-size: 20px; margin: 4px 0 12px; }
+h2 { font-size: 15px; margin: 22px 0 8px; }
+.sub { color: var(--muted); }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin: 10px 0;
+}
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: var(--surface); }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 550; font-size: 12px; white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+.chip {
+  display: inline-block; padding: 0 7px; border-radius: 10px; background: var(--chip);
+  font-size: 12px; margin: 0 4px 2px 0; white-space: nowrap;
+}
+.status-RUN_STATUS_SUCCEEDED, .pass { color: var(--good); }
+.status-RUN_STATUS_FAILED, .status-RUN_STATUS_ERROR, .fail { color: var(--bad); }
+.status-RUN_STATUS_RUNNING, .status-RUN_STATUS_PENDING { color: var(--warn); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.ci { display: inline-block; vertical-align: middle; }
+.ci rect.track { fill: var(--border); }
+.ci rect.range { fill: var(--bar); }
+.ci rect.mean { fill: var(--accent); }
+.error { color: var(--bad); white-space: pre-wrap; }
+.empty { color: var(--muted); padding: 10px 0; }
+form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+input, select, button {
+  font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+}
+button { cursor: pointer; }
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+details summary { cursor: pointer; color: var(--muted); }
+pre.content {
+  white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; padding: 6px 8px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px; max-height: 260px; overflow: auto;
+  font-family: var(--mono); font-size: 12px;
+}
+.signin { max-width: 520px; }
+.signin input { width: 100%; font-family: var(--mono); }
+@media (max-width: 640px) {
+  .who { margin-left: 0; width: 100%; }
+  main { padding: 12px; }
+}

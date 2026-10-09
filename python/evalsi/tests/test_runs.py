@@ -288,6 +288,33 @@ def test_cli_run_embedded_exit_codes(
     assert main(["run", "-f", str(path), "--quiet"]) == 3
 
 
+def test_cli_run_fails_when_nothing_scored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import dataclasses
+
+    import evalsi.run
+
+    monkeypatch.setattr("evalsi.run.create_target", lambda config: FakeTarget())
+    real = evalsi.run.execute
+
+    async def all_errored(*args: Any, **kwargs: Any) -> Any:
+        outcome = await real(*args, **kwargs)
+        outcome.result.results[:] = [
+            dataclasses.replace(r, outcome=Outcome.ERROR, scores=[], reason="sandbox unavailable")
+            for r in outcome.result.results
+        ]
+        return outcome
+
+    monkeypatch.setattr("evalsi.run.execute", all_errored)
+    spec = json.loads(json.dumps(SPEC))
+    del spec["spec"]["gates"]
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps(spec))
+    assert main(["run", "-f", str(path), "--quiet"]) == 1
+    assert "all 6 evaluations failed; the first: sandbox unavailable" in capsys.readouterr().err
+
+
 # --- the server client ---
 
 
@@ -348,3 +375,18 @@ def test_custom_registry_is_respected_by_execute(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("evalsi.run.create_target", lambda config: FakeTarget())
     outcome = asyncio.run(execute(parse_spec(spec), registry=registry))
     assert outcome.result.metric("always").mean == 1.0
+
+
+def test_api_key_env_none_sends_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from evalsi.targets import OpenAICompatibleTarget, TargetConfig, api_key
+
+    monkeypatch.setenv("OPENAI_API_KEY", "worker-secret")
+    monkeypatch.setenv("none", "not-a-key")
+    assert api_key("", "OPENAI_API_KEY") == "worker-secret"
+    assert api_key("none", "OPENAI_API_KEY") is None
+    cfg = TargetConfig(
+        connector="openai-compatible", model="m", base_url="http://x/v1", api_key_env="none"
+    )
+    assert "Authorization" not in OpenAICompatibleTarget(cfg)._headers
+    default = TargetConfig(connector="openai-compatible", model="m", base_url="http://x/v1")
+    assert OpenAICompatibleTarget(default)._headers["Authorization"] == "Bearer worker-secret"

@@ -180,11 +180,13 @@ rbac:
 
 | Role | Permissions |
 |---|---|
-| `viewer` | catalog, runs, policies and traces: read |
-| `runner` | viewer, plus evaluations and runs (create, cancel, resume) |
-| `editor` | runner, plus writing policies and promoting run results into datasets (`datasets.write`) |
+| `viewer` | catalog, runs, policies, traces, annotation queues and guardrails: read |
+| `runner` | viewer, plus evaluations, guardrail checks, and runs (create, cancel, resume) |
+| `editor` | runner, plus writing policies and guardrails, promoting run results into datasets (`datasets.write`), and setting up and answering annotation queues |
+| `annotator` | annotation queues: read and answer (`annotations.read`, `annotations.write`) |
 | `admin` | editor, plus the project's keys, roles, bindings and audit log |
 | `ingest` | `traces.write` only |
+| `guard` | `guardrails.check` only: a gateway's credential for [inline guardrails](guardrails.md) |
 | `owner` | everything, everywhere |
 
 `evalsi auth roles permissions` lists every permission. Custom roles can also be managed through the API (`evalsi auth roles create|update|delete`) and bound with `evalsi auth bindings create`.
@@ -230,6 +232,15 @@ authorization:
 5. Otherwise the request is denied.
 
 A rule that fails to evaluate (for example, a missing attribute) counts as not matched. So restrictions belong in `require` rules, which then deny.
+
+**MCP tools.** Calling a tool of the `/mcp` endpoint is the action `mcp.tools.call`, which any authenticated principal holds; rules restrict it per tool with `mcp.tool.name`, as agentgateway's `mcpAuthorization` does. Tools a principal may not call are left out of `tools/list`. Each tool still needs the permission of what it does (`evaluate` needs `evaluations.run`, `run` needs `runs.create`, and so on). Guard `require` rules on the action, since `mcp` is empty for other requests:
+
+```yaml
+authorization:
+  rules:
+    - deny: 'request.action == "mcp.tools.call" && mcp.tool.name == "run" && !("ci" in principal.groups)'
+    - require: 'request.action != "mcp.tools.call" || mcp.tool.name in ["list_evaluators", "evaluate", "get_run", "compare_runs"]'
+```
 
 Explain any decision offline:
 
@@ -327,7 +338,7 @@ Every hop can run over mutual TLS with certificates from your CA (cert-manager, 
 
 ## 7. Audit, metrics, external authorization
 
-- **Audit.** Mutating calls and every denied call are written to the audit log, with the deciding rule or role. Read it with `evalsi auth audit [--denied]`; it is kept for `audit.retention` (default 90 days). Export it to your log pipeline with an OTel sink and `audit: true`.
+- **Audit.** Mutating calls and every denied call are written to the audit log, with the deciding rule or role. When a role would grant the action but its condition fails, the reason names that role and condition. Refused grants (privilege escalation on a key, role or binding) are logged as `access.manage`, and rejected credentials as `auth.authenticate` with principal `anonymous`, at most 10 a second; `evalsi_unauthenticated_total` on `/metrics` counts all of them. Read it with `evalsi auth audit [--denied]`; it is kept for `audit.retention` (default 90 days). Export it to your log pipeline with an OTel sink and `audit: true`.
 - **Metrics.** `/metrics` on the main port needs `metrics.read` (owners). Or serve it unauthenticated on a loopback listener with `metrics: {listen: 127.0.0.1:9464}`.
 - **External authorization.** A central policy engine can decide too:
 
@@ -340,3 +351,59 @@ Every hop can run over mutual TLS with certificates from your CA (cert-manager, 
       timeout: 200ms     # timeouts and errors deny
       cache_ttl: 30s
   ```
+
+## 8. Credentials: which worker secrets a project may use
+
+Run specs, agents and evaluator params name secrets by variable, and the worker reads them from its own environment:
+
+- `target.api_key_env`;
+- an agent's `headers_env` or `api_key_env`, and a CLI agent's `env_from`;
+- an MCP server's `headers_env`;
+- evaluator params an evaluator declares as secrets, and any evaluator or external-harness param ending in `_env` (for example `builtin/reward-model`'s `api_key_env`).
+
+The worker sends each value to the URL the same spec names. Without a check, anyone who may create a run in any project could have the worker send any variable it holds (a database DSN, another team's key) to a host of their choosing. So variables are granted per project, and a grant can limit where its value may go:
+
+```yaml
+credentials:
+  grants:
+    - env: OPENAI_API_KEY
+      projects: ["*"]                     # every project
+      hosts: [api.openai.com]             # and only to OpenAI, over HTTPS
+    - env: SUPPORT_AZURE_KEY
+      projects: [support]
+      hosts: ["*.openai.azure.com"]       # any subdomain, not the domain itself
+    - env: LAB_VLLM_KEY
+      projects: [research]
+      hosts: [vllm.lab.internal]
+      allow_http: true                    # a model server without TLS on a trusted network
+    - env: SUPPORT_AGENT_TOKEN            # no hosts: any destination
+      projects: [support]
+judges:
+  claude:
+    provider: anthropic
+    model: claude-opus-5-5
+    projects: [support, research]         # only these projects may use this judge (default: all)
+```
+
+- **When it applies:** grant checks are on whenever authentication is enabled or any grant is listed. A request naming a variable its project has no grant for, or sending a host-limited one elsewhere, is refused with `permission_denied` before anything is stored or run. `credentials: {enforce: false}` turns grant checks off; that suits only a single-user server. Judge `projects` apply either way.
+- **Defaults count:** a target without `api_key_env` still sends the connector's default key (`OPENAI_API_KEY` for openai-compatible, `ANTHROPIC_API_KEY` for anthropic), so that default needs a grant too. A target that needs no key (a local model server) says `api_key_env: none`.
+- **Hosts and HTTPS:** hosts are matched against the host of the URL the value goes to: the target's `base_url` (`api.anthropic.com` for anthropic without one), the agent's or MCP server's `url`, or the param an evaluator declares as the destination (`url`/`base_url` beside an `_env` param). A host-limited value goes only over HTTPS, except to loopback or with `allow_http`. A host-limited variable named where no URL is given is refused.
+- **Sandboxes:** a CLI agent's `env_from` copies the value into a sandbox, whose traffic evalsid does not see request by request. Only grants without `hosts` can be used there; limit the sandbox's network instead (`environment.sandbox.network: allowlist`).
+- **Judges:** a judge with `projects` is open to those projects only, wherever a judge is used: evaluators that need one, the default judge, and a user simulator. Its key and budget are the server's, so this keeps a costly judge to the teams that pay for it.
+- **Where it is checked:** creating runs and shadow replays, `Evaluate` and `EvaluateStream`, reward scoring, online policies and guardrails (stored and inline). With Kubernetes, the operator's admission webhook asks evalsid the same question (`CreateRun`/`ApplyPolicy` with `validate_only`), so `kubectl apply` of an `EvalRun` or `OnlineEvalPolicy` naming an ungranted variable fails at once instead of in the resource's status. If evalsid cannot answer within 5 seconds, or the project does not exist yet, the resource is admitted with a warning and the controller reports the outcome.
+- **Audit and metrics:** every refusal is written to the audit log as action `credentials.use`, resource `env:NAME` or `judge:NAME`, with the caller and the reason (`evalsi auth audit --denied`), and counted in `evalsi_credential_denied_total{project,kind,name}` on `/metrics`. Each replica counts the requests it served, admission checks included, so sum the counter across replicas.
+- **What a project may use:** `evalsi credentials list --server URL --project P` (or `GET /v1alpha1/credentials?project=P`, or the web UI's catalog page) lists the grants that apply to a project (names and hosts, never values) and the judges it may use. It needs `runs.read` in the project.
+- **Changing grants:** evalsid reads the config file again every 15 seconds and on `SIGHUP`, and applies changed `credentials` and judge `projects` without a restart (other settings still need one). Requests are checked against the new grants at once; online policies are checked again, and one that names what its project may no longer use stops until the grant returns or the policy changes; guardrails are checked again on their next use. Runs already started keep running. In Kubernetes, `helm upgrade` with new `server.config.credentials` rolls the replicas onto the new config as usual; an `evalsi` ConfigMap edited in place reaches running replicas without a restart, within the kubelet's sync period. Fold such an edit back into your values afterwards: Helm 4 refuses the next `helm upgrade` over a field another manager changed (`conflict with "kubectl-replace"`) until it is run with `--force-conflicts`, which overwrites the edit.
+- **What it does not cover:** judges' own keys (`judges.*.api_key_env`) and sinks come from the server config, which is trusted. Grants scope variable names, not values: give each project that needs its own key its own variable.
+
+### Evaluators that read secrets
+
+An evaluator that reads a worker variable named by a param must declare that param, so evalsid can check it against the grants:
+
+```python
+@evaluator(name="acme/scored", version="1.0.0", secrets={"token_var": "endpoint"})
+def scored(record, *, endpoint: str, token_var: str = "") -> Score:
+    ...
+```
+
+`secrets` maps each such param to the param holding the URL its value is sent to (`""` when there is none, which a host-limited grant refuses). Params ending in `_env` are declared automatically, sent to `url` or `base_url` when the evaluator has one. The declaration travels in the manifest's params schema (`"x-evalsi-secret": {"sent_to": ...}`). As a backstop, the worker refuses any call in which an undeclared param's value is the name of one of its environment variables, so an evaluator cannot read a secret through a param it did not declare.

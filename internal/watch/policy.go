@@ -4,6 +4,7 @@
 package watch
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -117,7 +118,7 @@ type compiled struct {
 	window   time.Duration
 }
 
-func compile(p *evalsiv1alpha1.OnlineEvalPolicy, eng *evaluation.Service) (*compiled, error) {
+func compile(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy, eng *evaluation.Service) (*compiled, error) {
 	if !policyName.MatchString(p.GetName()) {
 		return nil, fmt.Errorf("policy name %q must be lowercase letters, digits, '.', '_' or '-'", p.GetName())
 	}
@@ -147,7 +148,7 @@ func compile(p *evalsiv1alpha1.OnlineEvalPolicy, eng *evaluation.Service) (*comp
 	}
 	names := map[string]bool{}
 	for i, st := range p.GetStages() {
-		insts, err := eng.Bind(st.GetEvaluators(), p.GetJudge())
+		insts, err := eng.BindFor(ctx, p.GetProject(), st.GetEvaluators(), p.GetJudge())
 		if err != nil {
 			return nil, fmt.Errorf("stages[%d]: %w", i, err)
 		}

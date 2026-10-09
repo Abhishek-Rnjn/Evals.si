@@ -454,8 +454,13 @@ type EvaluatorManifest struct {
 	Requires   *Requirements `protobuf:"bytes,7,opt,name=requires,proto3" json:"requires,omitempty"`
 	Outputs    []*MetricSpec `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`
 	// JSON Schema for the evaluator's params.
-	ParamsSchema  *structpb.Struct `protobuf:"bytes,9,opt,name=params_schema,json=paramsSchema,proto3" json:"params_schema,omitempty"`
-	Scheduling    *Scheduling      `protobuf:"bytes,10,opt,name=scheduling,proto3" json:"scheduling,omitempty"`
+	ParamsSchema *structpb.Struct `protobuf:"bytes,9,opt,name=params_schema,json=paramsSchema,proto3" json:"params_schema,omitempty"`
+	Scheduling   *Scheduling      `protobuf:"bytes,10,opt,name=scheduling,proto3" json:"scheduling,omitempty"`
+	// "native" (ships with Evals.si), "wrapped" (a shim over another
+	// framework) or "community" (third-party, from a plugin index).
+	Tier string `protobuf:"bytes,11,opt,name=tier,proto3" json:"tier,omitempty"`
+	// Where it runs: "python" (the worker) or "wasm" (sandboxed in evalsid).
+	Runtime       string `protobuf:"bytes,12,opt,name=runtime,proto3" json:"runtime,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -560,6 +565,20 @@ func (x *EvaluatorManifest) GetScheduling() *Scheduling {
 	return nil
 }
 
+func (x *EvaluatorManifest) GetTier() string {
+	if x != nil {
+		return x.Tier
+	}
+	return ""
+}
+
+func (x *EvaluatorManifest) GetRuntime() string {
+	if x != nil {
+		return x.Runtime
+	}
+	return ""
+}
+
 var File_evalsi_v1alpha1_evaluator_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_evaluator_proto_rawDesc = "" +
@@ -594,7 +613,7 @@ const file_evalsi_v1alpha1_evaluator_proto_rawDesc = "" +
 	"Scheduling\x12\x12\n" +
 	"\x04pool\x18\x01 \x01(\tR\x04pool\x12\x1c\n" +
 	"\tbatchable\x18\x02 \x01(\bR\tbatchable\x12\x1b\n" +
-	"\tmax_batch\x18\x03 \x01(\x05R\bmaxBatch\"\xb2\x03\n" +
+	"\tmax_batch\x18\x03 \x01(\x05R\bmaxBatch\"\xe0\x03\n" +
 	"\x11EvaluatorManifest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -610,7 +629,9 @@ const file_evalsi_v1alpha1_evaluator_proto_rawDesc = "" +
 	"\n" +
 	"scheduling\x18\n" +
 	" \x01(\v2\x1b.evalsi.v1alpha1.SchedulingR\n" +
-	"scheduling*}\n" +
+	"scheduling\x12\x12\n" +
+	"\x04tier\x18\v \x01(\tR\x04tier\x12\x18\n" +
+	"\aruntime\x18\f \x01(\tR\aruntime*}\n" +
 	"\x05Scope\x12\x15\n" +
 	"\x11SCOPE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

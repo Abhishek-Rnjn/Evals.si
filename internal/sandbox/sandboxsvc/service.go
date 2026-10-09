@@ -8,10 +8,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -302,7 +304,7 @@ func ServeTLS(ctx context.Context, m *sandbox.Manager, addr string, tlsCfg *tls.
 	p := new(http.Protocols)
 	p.SetHTTP1(true)
 	p.SetHTTP2(true)
-	srv := &http.Server{Handler: h, Protocols: p, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: h, Protocols: p, ReadHeaderTimeout: 10 * time.Second, ErrorLog: quietProbes}
 	go func() { _ = srv.Serve(ln) }()
 	var once sync.Once
 	stop = func() {
@@ -327,4 +329,17 @@ func peerID(c *x509.Certificate) string {
 		}
 	}
 	return c.Subject.CommonName
+}
+
+// quietProbes is the server's error log without the "TLS handshake error
+// ... EOF" a TCP readiness probe causes each time it connects and hangs up.
+var quietProbes = log.New(probeFilter{}, "", log.LstdFlags)
+
+type probeFilter struct{}
+
+func (probeFilter) Write(p []byte) (int, error) {
+	if line := string(p); strings.Contains(line, "TLS handshake error") && strings.HasSuffix(strings.TrimSpace(line), ": EOF") {
+		return len(p), nil
+	}
+	return os.Stderr.Write(p)
 }

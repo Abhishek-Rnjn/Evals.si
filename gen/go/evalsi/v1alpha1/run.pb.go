@@ -275,7 +275,9 @@ type Target struct {
 	Model     string `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
 	// Required for openai-compatible, for example http://localhost:8000/v1.
 	BaseUrl string `protobuf:"bytes,3,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
-	// Environment variable holding the API key, read by the worker.
+	// Environment variable holding the API key, read by the worker; empty: the
+	// connector's default (OPENAI_API_KEY, ANTHROPIC_API_KEY), "none": no key.
+	// On a server it must be granted to the run's project (credentials.grants).
 	ApiKeyEnv    string   `protobuf:"bytes,4,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`
 	SystemPrompt string   `protobuf:"bytes,5,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
 	MaxTokens    int32    `protobuf:"varint,6,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"`

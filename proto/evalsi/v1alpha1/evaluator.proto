@@ -77,4 +77,9 @@ message EvaluatorManifest {
   // JSON Schema for the evaluator's params.
   google.protobuf.Struct params_schema = 9;
   Scheduling scheduling = 10;
+  // "native" (ships with Evals.si), "wrapped" (a shim over another
+  // framework) or "community" (third-party, from a plugin index).
+  string tier = 11;
+  // Where it runs: "python" (the worker) or "wasm" (sandboxed in evalsid).
+  string runtime = 12;
 }

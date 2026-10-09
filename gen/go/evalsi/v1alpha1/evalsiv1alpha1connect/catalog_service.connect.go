@@ -36,11 +36,17 @@ const (
 	// CatalogServiceListEvaluatorsProcedure is the fully-qualified name of the CatalogService's
 	// ListEvaluators RPC.
 	CatalogServiceListEvaluatorsProcedure = "/evalsi.v1alpha1.CatalogService/ListEvaluators"
+	// CatalogServiceListCredentialsProcedure is the fully-qualified name of the CatalogService's
+	// ListCredentials RPC.
+	CatalogServiceListCredentialsProcedure = "/evalsi.v1alpha1.CatalogService/ListCredentials"
 )
 
 // CatalogServiceClient is a client for the evalsi.v1alpha1.CatalogService service.
 type CatalogServiceClient interface {
 	ListEvaluators(context.Context, *connect.Request[v1alpha1.ListEvaluatorsRequest]) (*connect.Response[v1alpha1.ListEvaluatorsResponse], error)
+	// The worker variables and judges a project's requests may use (names and
+	// hosts only; values never leave the worker).
+	ListCredentials(context.Context, *connect.Request[v1alpha1.ListCredentialsRequest]) (*connect.Response[v1alpha1.ListCredentialsResponse], error)
 }
 
 // NewCatalogServiceClient constructs a client for the evalsi.v1alpha1.CatalogService service. By
@@ -60,12 +66,19 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListEvaluators")),
 			connect.WithClientOptions(opts...),
 		),
+		listCredentials: connect.NewClient[v1alpha1.ListCredentialsRequest, v1alpha1.ListCredentialsResponse](
+			httpClient,
+			baseURL+CatalogServiceListCredentialsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListCredentials")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // catalogServiceClient implements CatalogServiceClient.
 type catalogServiceClient struct {
-	listEvaluators *connect.Client[v1alpha1.ListEvaluatorsRequest, v1alpha1.ListEvaluatorsResponse]
+	listEvaluators  *connect.Client[v1alpha1.ListEvaluatorsRequest, v1alpha1.ListEvaluatorsResponse]
+	listCredentials *connect.Client[v1alpha1.ListCredentialsRequest, v1alpha1.ListCredentialsResponse]
 }
 
 // ListEvaluators calls evalsi.v1alpha1.CatalogService.ListEvaluators.
@@ -73,9 +86,17 @@ func (c *catalogServiceClient) ListEvaluators(ctx context.Context, req *connect.
 	return c.listEvaluators.CallUnary(ctx, req)
 }
 
+// ListCredentials calls evalsi.v1alpha1.CatalogService.ListCredentials.
+func (c *catalogServiceClient) ListCredentials(ctx context.Context, req *connect.Request[v1alpha1.ListCredentialsRequest]) (*connect.Response[v1alpha1.ListCredentialsResponse], error) {
+	return c.listCredentials.CallUnary(ctx, req)
+}
+
 // CatalogServiceHandler is an implementation of the evalsi.v1alpha1.CatalogService service.
 type CatalogServiceHandler interface {
 	ListEvaluators(context.Context, *connect.Request[v1alpha1.ListEvaluatorsRequest]) (*connect.Response[v1alpha1.ListEvaluatorsResponse], error)
+	// The worker variables and judges a project's requests may use (names and
+	// hosts only; values never leave the worker).
+	ListCredentials(context.Context, *connect.Request[v1alpha1.ListCredentialsRequest]) (*connect.Response[v1alpha1.ListCredentialsResponse], error)
 }
 
 // NewCatalogServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -91,10 +112,18 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("ListEvaluators")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListCredentialsHandler := connect.NewUnaryHandler(
+		CatalogServiceListCredentialsProcedure,
+		svc.ListCredentials,
+		connect.WithSchema(catalogServiceMethods.ByName("ListCredentials")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/evalsi.v1alpha1.CatalogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CatalogServiceListEvaluatorsProcedure:
 			catalogServiceListEvaluatorsHandler.ServeHTTP(w, r)
+		case CatalogServiceListCredentialsProcedure:
+			catalogServiceListCredentialsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -106,4 +135,8 @@ type UnimplementedCatalogServiceHandler struct{}
 
 func (UnimplementedCatalogServiceHandler) ListEvaluators(context.Context, *connect.Request[v1alpha1.ListEvaluatorsRequest]) (*connect.Response[v1alpha1.ListEvaluatorsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.CatalogService.ListEvaluators is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListCredentials(context.Context, *connect.Request[v1alpha1.ListCredentialsRequest]) (*connect.Response[v1alpha1.ListCredentialsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.CatalogService.ListCredentials is not implemented"))
 }

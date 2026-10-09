@@ -373,6 +373,7 @@ G_EVAL = EvaluatorDef(
 
 PACK = Pack(
     name="deepeval",
+    tier="wrapped",
     description=f"DeepEval metrics ({UPSTREAM}) run through the Evals.si judge.",
     evaluators=[*(_metric_evaluator(m) for m in METRICS), G_EVAL],
 )

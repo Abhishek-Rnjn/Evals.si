@@ -50,6 +50,13 @@ var Permissions = []Permission{
 	{Name: "projects.manage", Description: "Create projects.", InstallWide: true, Audited: true},
 	{Name: "metrics.read", Description: "Read Prometheus metrics for the whole install.", InstallWide: true},
 	{Name: "datasets.write", Description: "Promote a run's results into a dataset of the project.", Audited: true},
+	{Name: "annotations.read", Description: "Read annotation queues, their annotations and statistics (which show the queued records)."},
+	{Name: "annotations.write", Description: "Annotate: take items from a queue and submit answers."},
+	{Name: "annotations.manage", Description: "Create and delete annotation queues and add items to them.", Audited: true},
+	{Name: "guardrails.read", Description: "Read the project's guardrails."},
+	{Name: "guardrails.write", Description: "Apply and delete guardrails, which decide what a gateway lets through.", Audited: true},
+	{Name: "guardrails.check", Description: "Check content against the project's guardrails (what a gateway's credential needs)."},
+	{Name: "mcp.tools.call", Description: "Call a tool of the MCP endpoint (rules can restrict tools by mcp.tool.name); each tool also needs the permission of what it does.", Public: true},
 }
 
 var permissionIndex = func() map[string]Permission {

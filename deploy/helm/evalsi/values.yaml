@@ -60,6 +60,9 @@ devPostgres:
   enabled: false
   image: postgres:17
   storage: 5Gi
+  nodeSelector: {}
+  tolerations: []
+  serviceLabels: {}       # e.g. istio.io/use-waypoint: none
 
 # NATS JetStream: the work queues, the span stream, events and leases' signals.
 nats:
@@ -72,6 +75,11 @@ nats:
   resources: {}
   # Stream replicas (3 on a three-node cluster).
   streamReplicas: 1
+  nodeSelector: {}
+  tolerations: []
+  # Extra Service labels. NATS speaks first, which a mesh waypoint breaks:
+  # under Istio ambient set istio.io/use-waypoint: none.
+  serviceLabels: {}
 
 auth:
   # Accept the cluster's service-account tokens (the operator, CI jobs,
@@ -163,6 +171,7 @@ sandbox:
       networkPolicyEnforced: false     # true when the CNI enforces NetworkPolicy
       nodeSelector: {}
       tolerations: []
+      labels: {}                       # extra labels, e.g. istio.io/use-waypoint: none
 
 operator:
   enabled: true
@@ -178,6 +187,8 @@ operator:
   webhooks: true
   createProjects: true
   resources: {}
+  nodeSelector: {}
+  tolerations: []
 
 tls:
   # Internal certificates (the API, sandbox pools, worker client

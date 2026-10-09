@@ -45,7 +45,7 @@ A CLI agent:
 
 - gets the instruction in place of `{instruction}` in its command, or on stdin;
 - has `install` commands run once, during setup;
-- receives only the environment variables named in `env_from` (its own model credentials);
+- receives only the environment variables named in `env_from`, a map from the name in the sandbox to the worker's variable (`env_from: {ANTHROPIC_API_KEY: AGENT_ANTHROPIC_KEY}`), for its own model credentials;
 - can reach only `allow_hosts`, through the egress proxy.
 
 Setup uses the environment's `setup_network`. When `install` needs a package index, set `environment: {setup_network: allow}` in the spec.
@@ -125,7 +125,7 @@ See [`examples/agents/benchmarks.yaml`](../../examples/agents/benchmarks.yaml). 
 
 ### SWE-bench
 
-The importer reads SWE-bench 5 instances, which carry their image, eval script, log parser and evaluation type. Put the dataset under the server's `datasets_dir`, either as a `.jsonl` file or as `<dir>/test.parquet`, which `swebench`'s loader reads. Then run [`examples/agents/swebench-verified.yaml`](../../examples/agents/swebench-verified.yaml).
+The importer reads SWE-bench 5 instances, which carry their image, eval script, log parser and evaluation type. Put the dataset under the server's `datasets_dir`, either as a `.jsonl` file or as `<dir>/test.parquet`, which `swebench`'s loader reads. On Kubernetes, `datasets_dir` must be `storage.s3`: workers run in other pods and cannot read a file in the server's. Then run [`examples/agents/swebench-verified.yaml`](../../examples/agents/swebench-verified.yaml).
 
 - The agent works in `/testbed`.
 - The checker resets the test files, applies the test patch, runs the tests, and applies the official FAIL_TO_PASS and PASS_TO_PASS rule.
@@ -216,6 +216,7 @@ sandbox:
     warm_pool: 2                          # booted VMs kept ready per image
     vcpus: 2
     memory_mb: 2048
+    default_image: python:3.13-slim       # required: booted when a spec names no image, and at start to check the rung
     # jailer: /usr/bin/jailer             # optional; needs evalsid to run as root
 ```
 
@@ -248,4 +249,4 @@ agents:
   trusted_python: ["my_company.harness:Harness"]
 ```
 
-References in the `evalsi_*` packages, which include every benchmark harness and parser above, are always allowed. Authorization rules see agent runs as `resource.agent` (`kind`, `harness`, `image`, `network`, `min_isolation`), and `resource.runs_code` is true for them. See the [identity guide](identity.md#4-global-rules).
+References in the `evalsi_*` packages, which include every benchmark harness and parser above, are always allowed. The secrets an agent run names (`headers_env`, `api_key_env`, `env_from`) must be granted to its project under `credentials.grants`; see the [identity guide](identity.md#8-credentials-which-worker-secrets-a-project-may-use). Authorization rules see agent runs as `resource.agent` (`kind`, `harness`, `image`, `network`, `min_isolation`), and `resource.runs_code` is true for them. See the [identity guide](identity.md#4-global-rules).

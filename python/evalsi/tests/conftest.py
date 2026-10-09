@@ -43,6 +43,8 @@ def _isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("EVALSI_CACHE_DIR", str(tmp_path / "cache"))
+    # No Wasm plugins from the developer's ~/.evalsi/plugins.
+    monkeypatch.setenv("EVALSI_PLUGIN_PATH", "")
 
 
 # A stand-in for `evalsid sandbox run` that runs the request unconfined in a
