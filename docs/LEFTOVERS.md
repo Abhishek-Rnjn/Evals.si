@@ -2,21 +2,34 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
-Last updated: 2026-10-07, at the end of Phase 6.
+Last updated: 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 ## Verified only with stand-ins (needs real infrastructure)
 
 | Item | Why it is open | Where recorded |
 |------|----------------|----------------|
-| Firecracker rung on a KVM host | CI and development hosts have no KVM. Tests use a stand-in `firecracker` (`internal/sandbox/testdata/fakefc`) that runs the real guest agent without isolation. | §23 Phase 3 limits |
-| `evalsi-sandboxd` with `mode: firecracker` on Kubernetes | Rendered and its config validated, never run. The sandbox-lease numbers in the load test are bubblewrap's. | §23 Phase 4 limits |
-| User-namespaced bubblewrap pools (`mode: bwrap`, `hostUsers: false`) | kind nodes are containers, so the kind job runs the pool privileged. | §23 Phase 4 limits |
+| Firecracker with the stock image and chart values | The rung itself is verified (see below), but that run used a patched ConfigMap and a derived image. The fixes that make the stock image and `firecracker.defaultImage` work (PR #12) have not been re-run on a KVM cluster. | [verification](verification/README.md) |
+| User-namespaced bubblewrap pools (`mode: bwrap`, `hostUsers: false`) | Fails on real clusters: on AKS (Ubuntu 24.04) with `RTM_NEWADDR: Operation not permitted`, and where containerd's overlayfs lacks idmap mounts. `mode: privileged` works on both. The failure modes are not documented yet. | [verification](verification/README.md) (VR-D15) |
+| Sandbox egress NetworkPolicy on Calico with Istio ambient | The operator's policy did not block a sandbox-labelled pod's egress on such a cluster; the cause is unknown. kind and the AKS cluster tested have no policy engine. | [verification](verification/README.md) |
+| Admission webhooks under mesh-wide STRICT mTLS | Documented (a PeerAuthentication with port 9443 PERMISSIVE); the chart does not render it. | [verification](verification/README.md) (VR-R2) |
+| PR #12 fixes on real clusters | The fixes for the verification findings have unit, chart and kind tests, but have not been re-run on AKS or the Istio cluster. | [verification](verification/README.md) |
 | KEDA scaling a live pool | Only the generated `ScaledObject`s are tested (envtest, chart tests). | §23 Phase 4 limits |
 | Several-node NATS (stream replicas 3) | Configuration only; tests use one node. | §23 Phase 4 limits |
-| 10k+ concurrent agent trials (§14 target) | Needs a cluster sized for it. | §23 Phase 4 load test |
-| Real SWE-bench Verified images | Several GB each; CI runs fixtures in the same format, graded by the same code. | §23 Phase 3 limits |
+| 10k+ concurrent agent trials (§14 target) | Needs a cluster sized for it. The in-cluster load test on the Istio cluster reached 1,220 Evaluate calls/s (p95 24 ms), 387k OTLP spans/s and a 1,000-record run at 3,985 records/s; concurrent agent trials were not load-tested. | §23 Phase 4 load test, [verification](verification/README.md) |
+| Real SWE-bench Verified images | Several GB each; CI runs fixtures in the same format, graded by the same code. The verification ran the fixtures on the pod, bubblewrap and Firecracker rungs with identical results, but no real task. | §23 Phase 3 limits |
 | cgroup v2 limits in an unprivileged container | Tested as root on CI's cgroup v2. In a pod, the cgroup mount is read-only unless the pod is privileged (as the bubblewrap pool is), so other deployments fall back to rlimits. | §13 implementation notes |
 | Kata Containers as the `vm` level on the owner's cluster (D13) | Supported as a pod `runtimeClassName`; not run on a cluster with Kata installed. | D13, decision 0007 |
+
+## Verified on real clusters (2026-10-09)
+
+These were verified only with stand-ins before the [verification run](verification/README.md), which used commit `c5a1de9`.
+
+| Item | Result |
+|------|--------|
+| Firecracker rung on a KVM host, `evalsi-sandboxd` with `mode: firecracker` | Code evaluation and the SWE-bench fixture ran in microVMs (`ISOLATION_LEVEL_VM`), with the same results as the pod and bubblewrap rungs |
+| HA: a replica that owns a run is killed | Another replica adopted the run; every result was stored once |
+| Namespace-only install under Pod Security `restricted` | Installed and ran code evaluations on kind, AKS and the Istio cluster (pod rung and Landlock). Agent runs on the pod rung passed on kind and AKS. On the Istio cluster they failed at the waypoint (VR-R1); pod labels to opt out now exist |
+| TRL GRPO with Evals.si rewards | Passed on CPU on kind and AKS |
 
 ## Deferred features
 

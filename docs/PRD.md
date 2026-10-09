@@ -41,18 +41,18 @@ Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls
 
 ## Current state
 
-The Kubernetes form factor and the push and embed doors exist today; the pull door and the release do not. Status is as of commit `d464381` on `main`.
+The Kubernetes form factor and the push and embed doors exist today; the pull door and the release do not. Status is as of `main` after PR #12. An end-to-end verification on kind, AKS and an Istio ambient cluster ([docs/verification/](verification/README.md)) passed most exit criteria, and PR #12 fixed most of its findings.
 
 | Capability | Status | Where it lives |
 | --- | --- | --- |
-| Helm install (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), namespace-only mode, air-gapped bundle | Built, tested on kind in CI | `deploy/helm/`, `deploy/airgap/` |
+| Helm install (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), namespace-only mode, air-gapped bundle | Built; tested on kind in CI, verified on AKS and an Istio ambient cluster | `deploy/helm/`, `deploy/airgap/` |
 | Operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator`, `SandboxClass` | Built | `operator/` |
 | gRPC, HTTP/JSON and REST API; durable, resumable runs | Built | `internal/server/`, `internal/runs/` |
 | OTLP trace ingest, online policies (CEL select, sampling, cascades, alerts) | Built | `internal/ingest/`, `internal/watch/` |
 | evalsi-collector (OTel Collector distribution with redaction) | Built | `deploy/collector/` |
 | Score write-back to MLflow, Langfuse, Phoenix, OTel | Built | `internal/sinks/` |
 | Evaluator packs (core, judge, text, RAG, safety, agent, code, RL, fine-tune, classic ML, monitoring) and framework adapters | Built | `python/evalsi/src/evalsi/packs/`, `python/adapters/` |
-| Agent runs in sandboxes (Firecracker, bubblewrap, Landlock, hardened pod) | Built; Firecracker only with a stand-in | `internal/sandbox/` |
+| Agent runs in sandboxes (Firecracker, bubblewrap, Landlock, hardened pod) | Built; all rungs verified on real clusters, Firecracker on a KVM cluster. `mode: bwrap` fails on some hosts (VR-D15) | `internal/sandbox/` |
 | In-process `evalsi.evaluate()`, RL rewards (TRL, verl, OpenRLHF), checkpoint evaluation | Built | `python/evalsi/src/evalsi/` |
 | OIDC, API keys, project RBAC, CEL rules, audit log | Built | `internal/auth/`, `internal/authz/` |
 | Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | Designed, not built | DESIGN.md "Path C" |
@@ -361,7 +361,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 1. **M1 Release, SDK client** (D1, D2, D4, E2, P4): signed `v0.1.0` chart and images published; `Client.evaluate()` returns scores identical to in-process; webhooks fire on run finish.
 2. **M2 agent-studio online** (A1, A2, A3, A7): Evals.si installs from its own chart beside the studio by following the integration guide; every deployed workflow is scored by a default policy; a failed gate blocks a deploy in a demo cluster. The Deep Agents and DeepSeek Harness demos (R1 to R5, R7 to R9) run in standalone mode and on kind, and the integration guide is published.
 3. **M3 Pull connectors** (S1, S2, S4 to S8): a `TraceSource` backfills 30 days from MLflow (OSS 3.x, Databricks, SageMaker, Azure ML), then from Langfuse and Phoenix, and tails with p95 lag under 2 min; scores appear in each store's own UI. Mapping profiles for the five first-cut agent frameworks pass their fixture tests. Deep Agents traces in MLflow are scored online (R6).
-4. **M4 Real-infra hardening** (D5, D7, D10): load test of 10k traces/min and 1k concurrent trials on EKS; KEDA, 3-node NATS and a Firecracker pool run live; upgrade from M1 to M4 with no downtime.
+4. **M4 Real-infra hardening** (D5, D7, D10): load test of 10k traces/min and 1k concurrent trials on EKS; KEDA and 3-node NATS run live (Firecracker is already verified on a KVM cluster); upgrade from M1 to M4 with no downtime.
 5. **M5 More sources, SDK** (S2 later stores, S3, P5, E3, E5): LangSmith and ClickHouse connectors, Kafka and S3 sources; `evalsi.log()`; PyTorch and Lightning checkpoint hooks.
 6. **GA with agent-studio:** all P0 requirements met, runbooks and SLO alerts shipped, one external pilot running for 4 weeks.
 
@@ -372,7 +372,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 | Source APIs (MLflow variants, Langfuse, Phoenix) change or rate-limit pulls | Pull lag, missed records | Version-pinned connectors with contract tests; back off on 429; prefer OTLP tee where the customer can |
 | Judge cost grows with production traffic | Surprise bills | Cascades and sampling on by default; per-project token quotas; no default judge |
 | Namespace-only installs get only the weakest sandbox rung | Code evaluators slower or unavailable | Pod rung by default; document Firecracker pool as an opt-in cluster add-on |
-| Firecracker, KEDA and multi-node NATS untested on real infra | Incidents at first customer scale | Run them on a staging EKS cluster before GA (M4) |
+| KEDA, multi-node NATS and sandbox egress NetworkPolicy under a mesh unverified on real infra | Incidents at first customer scale | Run them on a staging EKS cluster before GA (M4) |
 | agent-studio's MLflow traces differ from the shapes the mapping profiles expect | Agent evaluators skip records | Mapping layer (S4) plus a fixture set captured from real studio traces |
 
 **Open questions**

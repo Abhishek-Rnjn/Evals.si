@@ -26,12 +26,14 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 > - MCP for coding agents (`evalsi mcp` locally, `/mcp` on the server), classic ML and monitoring packs, human annotation queues, inline guardrails through agentgateway, Wasm evaluator plugins with a plugin index, and a read-only web UI;
 > - Kubernetes: an operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator` and `SandboxClass`, Helm charts, PostgreSQL/ClickHouse/S3 storage, NATS work queues with KEDA scaling, HA replicas, sandbox pools (bubblewrap, Firecracker, hardened pods), service-account identity and an air-gapped bundle.
 >
-> The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)).
+> The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)). It has also been verified on real clusters: AKS, and an Istio ambient cluster with STRICT mTLS and KVM nodes, where the Firecracker rung ran in microVMs. Most findings are fixed; the [verification report](docs/verification/README.md) lists what is still open.
+>
+> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix, a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents. The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
 >
 
 > New here? Start with the [end-to-end guide](docs/guides/end-to-end.md): every feature, the integrations, and copy-paste pull request workflows.
 
-> See the [architecture and implementation plan](docs/DESIGN.md), the [decision records](docs/decisions/README.md), the [open leftovers](docs/LEFTOVERS.md) and the [product requirements for customer Kubernetes integration](docs/PRD.md).
+> See the [architecture and implementation plan](docs/DESIGN.md), the [decision records](docs/decisions/README.md), the [open leftovers](docs/LEFTOVERS.md), the [product requirements for customer Kubernetes integration](docs/PRD.md) and the [verification report](docs/verification/README.md). Agents working on this repository should start with [AGENTS.md](AGENTS.md).
 
 
 ## Quickstart
