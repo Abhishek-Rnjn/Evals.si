@@ -1,13 +1,16 @@
 {{- $v := .Values }}
-{{- $ref := printf "%s:%s" $v.image.repository (default .Chart.AppVersion $v.image.tag) }}
-{{- if $v.global.imageRegistry }}
-{{- $ref = printf "%s/%s" (trimSuffix "/" $v.global.imageRegistry) (join "/" (rest (splitList "/" $ref))) }}
-{{- end }}
+{{- $ref := include "sandboxd.ref" (dict "root" . "ref" (printf "%s:%s" $v.image.repository (default .Chart.AppVersion $v.image.tag))) }}
 {{- $ladder := ternary (list "firecracker") (list "bwrap" "landlock") (eq $v.mode "firecracker") }}
 {{- $sandbox := dict "ladder" $ladder "min_isolation" $v.minIsolation "max_sandboxes" (int $v.maxSandboxes)
   "work_dir" "/var/lib/evalsi/sandboxes" "cache_dir" "/var/lib/evalsi/cache" }}
 {{- if eq $v.mode "firecracker" }}
-{{- $_ := set $sandbox "firecracker" (dict "kernel" "/opt/evalsi/vmlinux" "warm_pool" (int $v.firecracker.warmPool) "vcpus" (int $v.firecracker.vcpus) "memory_mb" (int $v.firecracker.memoryMB)) }}
+{{- if not $v.firecracker.defaultImage }}
+{{- fail "mode firecracker needs firecracker.defaultImage: the image a microVM boots when a spec names none (sandboxd boots it at start to check the rung)" }}
+{{- end }}
+{{- $fc := dict "kernel" "/opt/evalsi/vmlinux" "warm_pool" (int $v.firecracker.warmPool) "vcpus" (int $v.firecracker.vcpus) "memory_mb" (int $v.firecracker.memoryMB) }}
+{{- with $v.firecracker.defaultImage }}{{ $_ := set $fc "default_image" (include "sandboxd.ref" (dict "root" $ "ref" .)) }}{{ end }}
+{{- with $v.firecracker.diskMB }}{{ $_ := set $fc "disk_mb" (int .) }}{{ end }}
+{{- $_ := set $sandbox "firecracker" $fc }}
 {{- end }}
 {{- if not (has $v.mode (list "bwrap" "privileged" "firecracker")) }}
 {{- fail "mode must be bwrap, privileged or firecracker" }}
@@ -31,7 +34,13 @@ spec:
     matchLabels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: node-pool}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: node-pool, app.kubernetes.io/part-of: evalsi}
+      labels:
+        app.kubernetes.io/name: evalsi-sandboxd
+        app.kubernetes.io/instance: node-pool
+        app.kubernetes.io/part-of: evalsi
+        {{- with $v.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       annotations:
         checksum/config: {{ toYaml $sandbox | sha256sum }}
     spec:
@@ -107,7 +116,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: evalsi-sandboxd
-  labels: {app.kubernetes.io/part-of: evalsi}
+  labels:
+    app.kubernetes.io/part-of: evalsi
+    {{- with $v.serviceLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   selector: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: node-pool}
   {{- if $v.nodeLocal }}

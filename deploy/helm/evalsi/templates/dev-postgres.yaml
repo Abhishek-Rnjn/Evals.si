@@ -28,6 +28,12 @@ spec:
       labels: {app.kubernetes.io/name: evalsi-dev-postgres, app.kubernetes.io/part-of: evalsi}
     spec:
       securityContext: {runAsUser: 999, runAsGroup: 999, fsGroup: 999, runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      {{- with .Values.devPostgres.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.devPostgres.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: postgres
           image: {{ include "evalsi.ref" (dict "root" . "ref" .Values.devPostgres.image) }}
@@ -59,6 +65,9 @@ kind: Service
 metadata:
   name: evalsi-dev-postgres
   labels: {{- include "evalsi.labels" . | nindent 4 }}
+    {{- with .Values.devPostgres.serviceLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   selector: {app.kubernetes.io/name: evalsi-dev-postgres}
   ports: [{name: postgres, port: 5432, targetPort: postgres}]

@@ -20,6 +20,11 @@ firecracker:
   warmPool: 2
   vcpus: 2
   memoryMB: 2048
+  # Required: the OCI image a microVM boots when a spec names none (moved
+  # under global.imageRegistry like the others). sandboxd boots it at start.
+  defaultImage: ""
+  # Root disk size per microVM; 0: sandboxd's default.
+  diskMB: 0
 
 # The evalsi chart's sandbox certificate (server) and the clients pools
 # admit (its workers' certificate name).
@@ -30,5 +35,9 @@ allowClients: [evalsi-worker]
 # node that runs workers).
 nodeLocal: false
 resources: {}
+# Extra pod labels, e.g. to opt the pool out of a service mesh's waypoint
+# (istio.io/use-waypoint: none).
+podLabels: {}
+serviceLabels: {}
 nodeSelector: {}
 tolerations: []

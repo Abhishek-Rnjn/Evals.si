@@ -216,6 +216,7 @@ sandbox:
     warm_pool: 2                          # booted VMs kept ready per image
     vcpus: 2
     memory_mb: 2048
+    default_image: python:3.13-slim       # required: booted when a spec names no image, and at start to check the rung
     # jailer: /usr/bin/jailer             # optional; needs evalsid to run as root
 ```
 

@@ -133,7 +133,15 @@ Worker pods hold credentials (provider keys, the cluster's tokens), so sandboxes
 | `evalsi-sandboxd`, `mode: firecracker` | Firecracker | vm | KVM nodes and a guest kernel on them |
 | A `SandboxClass` with `ladder: [pod]` | hardened pod | namespaced; kernel with gVisor, vm with Kata | Nothing special: the pool creates a pod per sandbox |
 
-The **pod rung** creates one pod per sandbox from the task's image. `evalsi-guest` is copied in by an init container; the pod has no service-account token and no service links, runs with all capabilities dropped except the few package managers need, and a NetworkPolicy lets it talk only to its pool, which relays allowed egress through its logging proxy. It cannot snapshot, so environment setup runs once per trial.
+The **pod rung** creates one pod per sandbox from the task's image. `evalsi-guest` is copied in by an init container; the pod has no service-account token and no service links, runs with all capabilities dropped except the few package managers need, and a NetworkPolicy lets it talk only to its pool, which relays allowed egress through its logging proxy. It cannot snapshot, so environment setup runs once per trial. When the task image runs as a non-root user that cannot create the workdir, set the pod rung's `runAsUser` (with `capabilities: []`): the workdir is then a volume that user owns, seeded with the image's own.
+
+`mode: firecracker` needs `firecracker.defaultImage`, the image a microVM boots when a spec names none (sandboxd boots it at start to check the rung); the evalsi image carries the `firecracker` binary and `mkfs.ext4`. A SandboxClass's `firecracker` takes the same `defaultImage`.
+
+### Taints and service meshes
+
+On nodes that are all tainted, give every component its tolerations: `server`, `workers`, `operator`, `nats`, `devPostgres`, `sandbox.pool` and `sandbox.pool.pod` each take `tolerations` and `nodeSelector` (and the evalsi-sandboxd chart its own).
+
+Under Istio ambient with a waypoint, keep it off the connections it breaks: NATS speaks first, which a waypoint's proxy cannot carry, and a waypoint's external authorization may refuse the pool's calls to sandbox pods. Set `nats.serviceLabels`, `devPostgres.serviceLabels`, `sandbox.pool.pod.labels` (a SandboxClass's `pod.labels`), and the evalsi-sandboxd chart's `serviceLabels` and `podLabels` to `{istio.io/use-waypoint: none}`. Under mesh-wide STRICT mTLS the API server, which is outside the mesh, cannot reach the admission webhooks: a `PeerAuthentication` for the operator with port 9443 `PERMISSIVE` lets it in.
 
 ## Permissions
 

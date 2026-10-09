@@ -280,6 +280,10 @@ type PodRung struct {
 	NetworkPolicyEnforced bool `json:"networkPolicyEnforced,omitempty"`
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// Labels added to sandbox pods, e.g. istio.io/use-waypoint: none to keep
+	// a mesh waypoint off the pool's calls to them.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 type FirecrackerRung struct {
@@ -291,6 +295,12 @@ type FirecrackerRung struct {
 	VCPUs int32 `json:"vcpus,omitempty"`
 	// +optional
 	MemoryMB int32 `json:"memoryMB,omitempty"`
+	// The image a microVM boots when a spec names none; required, since the
+	// pool boots it at start to check the rung.
+	DefaultImage string `json:"defaultImage"`
+	// Root disk size per microVM in MiB; default: sandboxd's.
+	// +optional
+	DiskMB int32 `json:"diskMB,omitempty"`
 }
 
 type SandboxClassStatus struct {
