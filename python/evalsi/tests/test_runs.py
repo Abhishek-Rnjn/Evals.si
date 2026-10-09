@@ -288,6 +288,33 @@ def test_cli_run_embedded_exit_codes(
     assert main(["run", "-f", str(path), "--quiet"]) == 3
 
 
+def test_cli_run_fails_when_nothing_scored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import dataclasses
+
+    import evalsi.run
+
+    monkeypatch.setattr("evalsi.run.create_target", lambda config: FakeTarget())
+    real = evalsi.run.execute
+
+    async def all_errored(*args: Any, **kwargs: Any) -> Any:
+        outcome = await real(*args, **kwargs)
+        outcome.result.results[:] = [
+            dataclasses.replace(r, outcome=Outcome.ERROR, scores=[], reason="sandbox unavailable")
+            for r in outcome.result.results
+        ]
+        return outcome
+
+    monkeypatch.setattr("evalsi.run.execute", all_errored)
+    spec = json.loads(json.dumps(SPEC))
+    del spec["spec"]["gates"]
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps(spec))
+    assert main(["run", "-f", str(path), "--quiet"]) == 1
+    assert "all 6 evaluations failed; the first: sandbox unavailable" in capsys.readouterr().err
+
+
 # --- the server client ---
 
 

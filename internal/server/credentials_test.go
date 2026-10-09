@@ -249,6 +249,18 @@ func TestValidateOnly(t *testing.T) {
 	if _, err := runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: bad, ValidateOnly: true})); codeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("validate only, ungranted: %v", err)
 	}
+	// Admission checks count like any other refusal (per replica: sum them).
+	req, _ := http.NewRequest(http.MethodGet, s.url+"/metrics", nil)
+	req.Header.Set("Authorization", "Bearer "+s.keys["owner"])
+	if resp, err := s.http.Do(req); err != nil {
+		t.Fatal(err)
+	} else {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if !strings.Contains(string(body), `evalsi_credential_denied_total{project="support",kind="env",name="DATABASE_URL"} 1`) {
+			t.Errorf("validate-only refusal not counted:\n%s", body)
+		}
+	}
 	mon := evalsiv1alpha1connect.NewMonitorServiceClient(s.http, s.url, as(s.keys["editor"]))
 	policy := &evalsiv1alpha1.OnlineEvalPolicy{Name: "dry", Project: "support", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "exact-match"}}}}}
 	if _, err := mon.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy, ValidateOnly: true})); err != nil {

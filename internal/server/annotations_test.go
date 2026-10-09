@@ -193,6 +193,10 @@ func TestAnnotationQueues(t *testing.T) {
 	if byName["quality"].GetSummary().GetMean() != 4.5 {
 		t.Errorf("quality: %v", byName["quality"])
 	}
+	// Its interval stays on the question's 1-5 scale.
+	if ci := byName["quality"].GetSummary().GetCi(); ci == nil || ci.GetLow() < 1 || ci.GetHigh() > 5 {
+		t.Errorf("quality interval off the scale: %v", ci)
+	}
 	if byName["tone"].GetLabelCounts()["polite"] != 8 {
 		t.Errorf("tone: %v", byName["tone"])
 	}

@@ -838,3 +838,17 @@ func TestMatchRecordsWithoutRecordScores(t *testing.T) {
 		t.Errorf("condition: %d %v", len(none), err)
 	}
 }
+
+func TestAllErroredFailsTheRun(t *testing.T) {
+	errored := &evalsiv1alpha1.EvaluationResult{Outcome: evalsiv1alpha1.Outcome_OUTCOME_ERROR, Reason: "sandbox unavailable"}
+	scored := &evalsiv1alpha1.EvaluationResult{Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}
+	if err := allErrored([]*evalsiv1alpha1.EvaluationResult{errored, errored}); err == nil || !strings.Contains(err.Error(), "all 2 evaluations failed; the first: sandbox unavailable") {
+		t.Errorf("every result errored: %v", err)
+	}
+	if err := allErrored([]*evalsiv1alpha1.EvaluationResult{errored, scored}); err != nil {
+		t.Errorf("one scored: %v", err)
+	}
+	if err := allErrored(nil); err != nil {
+		t.Errorf("no results: %v", err)
+	}
+}

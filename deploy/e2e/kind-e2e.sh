@@ -77,7 +77,7 @@ results() {
   local pf=$!
   sleep 3
   curl -sk -X POST https://127.0.0.1:18080/evalsi.v1alpha1.RunService/ListRunResults \
-    -H "Authorization: Bearer $token" -H 'content-type: application/json' -d "{\"id\":\"$run\"}" |
+    -H "Authorization: Bearer $token" -H 'content-type: application/json' -d "{\"runId\":\"$run\"}" |
     python3 -c 'import json, sys
 for r in json.load(sys.stdin).get("results", []):
     print(r.get("recordId"), r.get("evaluator"), r.get("outcome"), r.get("reason", "")[:400])' || true

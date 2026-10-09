@@ -72,8 +72,9 @@ func NewAssembler(opts AssemblerOptions, emit func(Trace)) *Assembler {
 	return &Assembler{opts: opts, emit: emit, now: time.Now, traces: map[string]*pending{}}
 }
 
-// Add buffers spans.
-func (a *Assembler) Add(spans []Span) {
+// Add buffers spans and returns how many it dropped for a trace already at
+// MaxSpans.
+func (a *Assembler) Add(spans []Span) (dropped int64) {
 	now := a.now()
 	var evicted []Trace
 	a.mu.Lock()
@@ -95,6 +96,7 @@ func (a *Assembler) Add(spans []Span) {
 		p.last = now
 		if len(p.spans) >= a.opts.MaxSpans {
 			a.dropped++
+			dropped++
 			continue
 		}
 		p.spans = append(p.spans, s)
@@ -106,6 +108,7 @@ func (a *Assembler) Add(spans []Span) {
 	for _, t := range evicted {
 		a.emit(t)
 	}
+	return dropped
 }
 
 func (a *Assembler) evictOldestLocked() (Trace, bool) {

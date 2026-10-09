@@ -27,8 +27,8 @@ const Usage = `usage: evalsid wasm <command>
 
   check MANIFEST                  verify and compile a plugin, list its evaluators
   pin MANIFEST                    write the module's sha256 into the manifest
-  run MANIFEST EVALUATOR          score records (JSON lines on stdin) and print results
-      [--params JSON]
+  run MANIFEST EVALUATOR [--params JSON]
+                                  score records (JSON lines on stdin) and print results
   serve                           JSON-lines service for the Python SDK (stdin/stdout)
 `
 
@@ -90,11 +90,24 @@ func Main(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io
 		fs := flag.NewFlagSet("wasm run", flag.ContinueOnError)
 		fs.SetOutput(stderr)
 		params := fs.String("params", "{}", "the evaluator's params as a JSON object")
-		if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 2 {
+		// Flags may come before, between or after MANIFEST and EVALUATOR.
+		var pos []string
+		rest := args[1:]
+		for {
+			if err := fs.Parse(rest); err != nil {
+				fmt.Fprint(stderr, Usage)
+				return 2
+			}
+			if fs.NArg() == 0 {
+				break
+			}
+			pos, rest = append(pos, fs.Arg(0)), fs.Args()[1:]
+		}
+		if len(pos) != 2 {
 			fmt.Fprint(stderr, Usage)
 			return 2
 		}
-		return runRecords(ctx, fs.Arg(0), fs.Arg(1), *params, stdin, stdout, stderr)
+		return runRecords(ctx, pos[0], pos[1], *params, stdin, stdout, stderr)
 	case "serve":
 		if err := Serve(ctx, stdin, stdout); err != nil {
 			return fail(err)

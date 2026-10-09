@@ -908,7 +908,22 @@ func (ex *execution) finalize(ctx context.Context) error {
 	}
 	ex.run.Summaries = summaries
 	ex.run.Gates = CheckGates(ex.spec.GetGates(), summaries)
-	return nil
+	return allErrored(results)
+}
+
+// allErrored fails a run in which no evaluation produced an outcome: with
+// every result an error (an unreachable sandbox, a bad key), its summaries
+// are empty and a run without gates would otherwise look like a success.
+func allErrored(results []*evalsiv1alpha1.EvaluationResult) error {
+	if len(results) == 0 {
+		return nil
+	}
+	for _, r := range results {
+		if r.GetOutcome() != evalsiv1alpha1.Outcome_OUTCOME_ERROR {
+			return nil
+		}
+	}
+	return fmt.Errorf("all %d evaluations failed; the first: %s", len(results), results[0].GetReason())
 }
 
 // CheckGates mirrors check_gates in the Python SDK.
