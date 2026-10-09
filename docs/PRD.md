@@ -223,14 +223,14 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Gap |
-| S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Gap |
+| S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
 | S3 | Connectors for streams and logs: Kafka, AWS Kinesis, GCP Pub/Sub, S3/GCS prefix watcher; Loki and CloudWatch Logs via the evalsi-collector as recipes | P2 (after first cut) | Gap |
-| S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Gap |
-| S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Gap |
-| S6 | Pulled records reuse `OnlineEvalPolicy` (selectors, sampling, cascades, alerts, promotion) | P0 | Gap (wire into `internal/watch`) |
-| S7 | Credentials for sources from Kubernetes Secrets or the existing per-project credential store, never in the CRD | P0 | Partly (credential store exists) |
-| S8 | Status on the resource: watermark age, records/s, errors, last write-back | P0 | Gap |
+| S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S6 | Pulled records reuse `OnlineEvalPolicy` (selectors, sampling, cascades, alerts, promotion) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S7 | Credentials for sources from Kubernetes Secrets or the existing per-project credential store, never in the CRD | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)); the credential store exists |
+| S8 | Status on the resource: watermark age, records/s, errors, last write-back | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
 | S9 | Scheduled pull runs (cron) that evaluate a query window as a batch run with a report | P1 | Gap |
 
 ### Embed: local scripts, notebooks and training loops

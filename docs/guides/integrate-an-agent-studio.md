@@ -7,7 +7,7 @@ Evals.si has three doors, and a studio can use any mix:
 | Door | The studio does | Section |
 |---|---|---|
 | Push | exports OpenTelemetry traces, or calls the API from its deploy pipeline | [2](#2-connect-traces), [3](#3-gate-deploys) |
-| Pull | already stores traces in MLflow, Langfuse or Phoenix (connectors are [planned](../PRD.md)) | [2](#2-connect-traces) |
+| Pull | already stores traces in MLflow, Langfuse or Phoenix (connectors are [designed](../decisions/0016-trace-source-connectors.md), not built) | [2](#2-connect-traces) |
 | Embed | calls the SDK, including from a training loop | [3](#3-gate-deploys) |
 
 ## 1. Install beside the studio
@@ -54,7 +54,7 @@ The chart's certificate comes from its internal CA (`evalsi-server-tls`, `ca.crt
 
 What a trace needs: an MLflow LangChain/LangGraph trace (what Deep Agents emits with `mlflow.langchain.autolog()` and MLflow's OTLP exporter) or any GenAI-convention trace is read into a trajectory: model calls with their messages and token counts, tool calls with arguments and results, and errors. The demo's recorded export ([internal/ingest/testdata](../../internal/ingest/testdata)) is a test of exactly that. Agents that are CLIs, like dsh, don't need tracing: their `--json` run events are the trajectory (`output_format: dsh-json`).
 
-**Pull.** If the studio already keeps traces in MLflow, Langfuse or Phoenix, trace-source connectors will read them without a second exporter (requirement A4 in the [PRD](../PRD.md)). They are designed and not built; until then, add Evals.si as a second OTLP exporter.
+**Pull.** If the studio already keeps traces in MLflow, Langfuse or Phoenix, trace-source connectors will read them without a second exporter (requirement A4 in the [PRD](../PRD.md)). They are designed ([decision 0016](../decisions/0016-trace-source-connectors.md)) and not built; until then, add Evals.si as a second OTLP exporter.
 
 Then say what to score and how often, with a policy per environment:
 
