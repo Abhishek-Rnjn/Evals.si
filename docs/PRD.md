@@ -22,7 +22,7 @@ Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls
 | --- | --- | --- |
 | LangGraph / LangChain | Yes | OpenInference, LangSmith OTel export |
 | OpenAI Agents SDK | Yes | OpenInference, native tracing processor |
-| CrewAI (and agent-studio-standalone) | Yes | OpenInference, OpenLLMetry |
+| CrewAI (and agent-studio-standalone) | Yes | MLflow autolog, OpenInference, OpenLLMetry |
 | Claude Agent SDK | Yes | OTel GenAI conventions |
 | LlamaIndex | Yes | OpenInference |
 | AutoGen, Pydantic AI, Google ADK, Semantic Kernel | Later (generic path works today) | OTel GenAI conventions |
@@ -32,7 +32,7 @@ Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls
 
 | Trace store | First cut (pull and write-back) | Write-back as |
 | --- | --- | --- |
-| MLflow Tracing | Yes | MLflow assessments |
+| MLflow Tracing (OSS 3.x, Databricks, SageMaker, Azure ML) | Yes | MLflow assessments |
 | Langfuse | Yes | Langfuse scores |
 | Arize Phoenix | Yes | Phoenix span annotations |
 | LangSmith, ClickHouse, Tempo/Jaeger query | Later | Feedback, table rows, none |
@@ -65,12 +65,14 @@ The Kubernetes form factor and the push and embed doors exist today; the pull do
 
 agent-studio-standalone is the first application integrated, and every requirement below is ranked by what it needs. It is our own agent-builder application, run on Kubernetes outside any managed platform. Builders design multi-agent workflows (agents, tasks, tools, MCP servers, LLM configs), test them, and deploy each workflow as its own service.
 
-**Assumptions to confirm** (no memory or repository for agent-studio-standalone was available while drafting):
+**Confirmed facts** (from the product owner, 9 October 2026):
 
-- Workflows run on CrewAI-style orchestration and call OpenAI-compatible or Bedrock or Anthropic models.
-- Each deployed workflow is a Deployment in the same cluster, emitting OpenTelemetry/OpenInference spans to a Phoenix (or similar) collector.
-- The studio has a UI where builders test a workflow and see its traces.
-- The cluster may be air-gapped and run under strict namespace-scoped RBAC.
+- Workflows trace to MLflow Tracing (open-source MLflow 3.x, Databricks, or a cloud-managed MLflow).
+- Each install is single-tenant: one studio per customer, so one Evals.si project per studio install.
+- Evals.si ships as its own independent Helm chart, installed beside the studio the way agent-sandbox is, with an integration guide. It is not a subchart.
+- Agents built in the studio are evaluated however they can be called: HTTP or gRPC, A2A, or in-process Python once workflows are published as PyPI packages.
+- There is no default judge model; the customer configures one.
+- Still assumed: the cluster may be air-gapped and run under strict namespace-scoped RBAC.
 
 **What it needs from Evals.si:**
 
@@ -79,10 +81,55 @@ agent-studio-standalone is the first application integrated, and every requireme
 | A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 |
 | A2 | Evaluate a workflow on a test set from the studio's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 |
 | A3 | Show scores inside the studio UI, per workflow and per execution, linked to the trace | API + write-back | P0 |
-| A4 | Read traces already stored in its Phoenix instance, including history from before Evals.si was installed | Pull | P1 |
+| A4 | Read traces already stored in its MLflow tracking server, including history from before Evals.si was installed | Pull | P1 |
 | A5 | Turn failing production executions into regression datasets, and replay a new workflow version against them | Push + Run API | P1 |
 | A6 | Inline guardrails on tool calls and model calls, in audit mode first | Guardrails | P2 |
-| A7 | Ship Evals.si inside the agent-studio-standalone Helm chart as an optional dependency | Deploy | P0 |
+| A7 | Install Evals.si from its own chart beside agent-studio-standalone, with an integration guide | Deploy | P0 |
+
+## Reference demos: Deep Agents and DeepSeek Harness as the studio
+
+Until agent-studio-standalone is available for testing, two open-source agent runtimes stand in for the studio. Evals.si evaluates agents built on each, in standalone and Kubernetes mode, and these demos are the basis for the docs and the integration guide. [Deep Agents](https://github.com/langchain-ai/deepagents) (LangChain, MIT, built on LangGraph) is the main walkthrough: it is an agent-loop framework like the studio's and covers every integration path. [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`, MIT, developer preview) is the second example, an agent loop that is not written in Python.
+
+**Entry points the demos use** (checked against each repository, 9 October 2026):
+
+| Runtime | Entry point | Evals.si use |
+| --- | --- | --- |
+| Deep Agents | `deepagents` SDK on PyPI | In-process target: a deep agent built in Python, like a PyPI-packaged studio workflow |
+| Deep Agents | The same agent behind a small HTTP wrapper shipped with the demo | HTTP target, the way a deployed studio workflow is called |
+| Deep Agents | `dcode` (Deep Agents Code) headless mode | CLI coding agent inside each task's sandbox |
+| Deep Agents | `deepagents-acp` | ACP target |
+| Deep Agents | MLflow LangChain autolog | Traces land in MLflow and are scored through the MLflow pull connector or an OTLP tee, as with agent-studio |
+| DeepSeek Harness | `dsh --profile headless --json "<task>"` | CLI coding agent in the sandbox; its newline-delimited run events become the trajectory |
+| DeepSeek Harness | `dsh --profile acp`, Python SDK | ACP and in-process targets |
+| DeepSeek Harness | `dsh web` | Plays the studio UI in the Kubernetes demo |
+
+dsh's OpenTelemetry plugin exports product analytics only, not session traces. Online scoring of live dsh sessions therefore needs a small dsh plugin that exports sessions as OTel GenAI spans (R6).
+
+**Models.** Both agents run on Anthropic models or any OpenAI-compatible endpoint, chosen by environment. CI uses a deterministic mock model, so it needs no key. The judge for rubric-graded tasks is configured separately, as in every install.
+
+**Task suites**
+
+| Suite | What the agent does | How it is graded |
+| --- | --- | --- |
+| Small repo fixes | `examples/agents/fix-calc` plus about 10 SWE-bench-style fixtures | Task tests on the end state (`task-success`, pass@k, pass^k), `code-quality` on the diff, `policy-violations`, tool errors, loops, cost |
+| Terminal-Bench 2 via Harbor | Terminal tasks through Evals.si's `harbor://` adapter. Deep Agents' own eval suite runs Terminal-Bench 2.0 through Harbor, so results can be compared with theirs | The benchmark's own checker, plus trajectory evaluators |
+| Deep research | A question that needs search, notes and a written report, the core Deep Agents use case | `llm-judge` with a research rubric, citation accuracy, step budget, cost |
+
+**Runs on any cluster.** The Kubernetes demo uses only standard resources and the Evals.si charts, with no cloud-specific services, so it runs unchanged on any conformant cluster. kind is the reference, locally and in CI. Storage class, ingress, image registry and node placement are chart values, not assumptions.
+
+| ID | Requirement | Priority |
+| --- | --- | --- |
+| R1 | Demo images: `evalsi-demo-deepagents` (Python, pinned `deepagents` and `deepagents-code`, HTTP wrapper) and `evalsi-demo-dsh` (Node 22, dsh pinned to a commit); model provider and key from environment | P0 |
+| R2 | Trajectory mapping for both: Deep Agents traces (LangGraph spans through MLflow or OTel) and dsh `--json` run events, tested against recorded fixtures | P0 |
+| R3 | Run specs under `examples/demo/`, one per agent and suite, identical in standalone and Kubernetes mode | P0 |
+| R4 | Standalone walkthrough: `evalsi run -f ...` embedded, then `--server` against `evalsid serve`, on the bubblewrap rung; report and `/ui/` | P0 |
+| R5 | Kubernetes walkthrough: the Evals.si charts and a sandbox pool, an MLflow server, the Deep Agents HTTP service and `dsh web` as studio stand-ins, and `kubectl apply` of the `EvalRun`s; scores in `/ui/` and in MLflow | P0 |
+| R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 |
+| R7 | CI: the kind e2e job runs the small-repo-fix suite for both agents against a mock model | P0 |
+| R8 | Portability: chart values for storage class, ingress, image registry and node placement; no cloud-specific dependency | P0 |
+| R9 | Integration guide `docs/guides/integrate-an-agent-studio.md`, built on these demos and covering the steps agent-studio-standalone will follow: install, connect traces, gate deploys, read scores | P0 |
+
+Both runtimes change quickly, and dsh warns of breaking changes, so the demos pin versions and the CI job (R7) catches drift when a pin moves.
 
 ## Goals, non-goals and success metrics
 
@@ -122,17 +169,17 @@ agent-studio-standalone is the first application integrated, and every requireme
 | Researcher in a training loop | Scores and rewards inside a PyTorch loop, local or against the cluster | `evalsi.evaluate()`, `Client.evaluate()`, rewards |
 | Data or SRE owner of an existing trace store | Scores on traces they already keep, written back where they look | `TraceSource` CRD, sinks |
 
-**Journey 1: install with agent-studio-standalone (A7).** The platform engineer runs `helm install agent-studio --set evalsi.enabled=true`. The studio chart pulls in the `evalsi` subchart, creates a project per studio tenant, mints an ingest key and a runner key as Kubernetes Secrets, and points the studio's OTel exporter at both its own collector and evalsid.
+**Journey 1: install beside agent-studio-standalone (A7).** The platform engineer installs the `evalsi` chart in its own namespace, as they would agent-sandbox, then follows the integration guide. A bootstrap job creates one project for the studio install and writes an ingest key and a runner key to Kubernetes Secrets. The studio's traces reach Evals.si either through a second OTLP exporter or through a `TraceSource` that pulls from its MLflow server.
 
 1. Evals.si starts in namespace-only mode, with a Landlock or pod sandbox rung.
 2. A default `OnlineEvalPolicy` per workflow scores task success, tool errors, loops, cost and PII.
 3. The studio reads scores over the REST API and shows them per execution.
 
-**Journey 2: gate a deploy (A2).** The builder clicks Deploy. The studio creates an `EvalRun` from the workflow's test set with gates (for example `task-success >= 0.8`). The run executes the workflow through its A2A or HTTP endpoint in a sandbox. A failed gate blocks the deploy and links the report.
+**Journey 2: gate a deploy (A2).** The builder clicks Deploy. The studio creates an `EvalRun` from the workflow's test set with gates (for example `task-success >= 0.8`). The run executes the workflow over HTTP, gRPC or A2A, or in-process from its PyPI package inside a sandbox. A failed gate blocks the deploy and links the report.
 
 **Journey 3: production to regression (A5).** A policy promotes traces with `task-success < 1` into a dataset. The next deploy's gate run includes that dataset, and shadow replay compares the new version against recorded behavior.
 
-**Journey 4: subscribe to an existing store (A4).** The SRE applies a `TraceSource` pointing at the studio's Phoenix. Evals.si backfills 30 days, then polls every 30 s, scores with the same policies, and writes scores back as Phoenix annotations.
+**Journey 4: subscribe to an existing store (A4).** The SRE applies a `TraceSource` pointing at the studio's MLflow tracking server. Evals.si backfills 30 days, then polls every 30 s, scores with the same policies, and writes scores back as MLflow assessments.
 
 **Journey 5: training loop.** A researcher calls `evalsi.Client(server).evaluate(records, ["llm-judge"])` every N steps, or uses `reward_funcs` from the cluster's Reward Service in GRPO.
 
@@ -143,7 +190,7 @@ Evals.si must install, run and upgrade like any well-behaved cluster service; mo
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
 | D1 | Install from a versioned OCI Helm chart (`oci://ghcr.io/.../evalsi`) with signed images (cosign keyless) and an SBOM | P0 | Gap: no release cut, images unsigned |
-| D2 | Usable as a Helm subchart: all names prefixed by release, every external dependency (Postgres, NATS, S3, ClickHouse) either bundled or pointed at an existing one | P0 | Partly: verify subchart naming and `global` values |
+| D2 | Installs as an independent chart beside others (agent-studio-standalone, agent-sandbox): all names prefixed by release, every external dependency (Postgres, NATS, S3, ClickHouse) either bundled or pointed at an existing one | P0 | Partly: verify release-prefixed naming and `global` values |
 | D3 | Namespace-only install with Pod Security `restricted`, no cluster-scoped objects | P0 | Built (`values-namespaced.yaml`) |
 | D4 | Bootstrap job that creates projects, API keys and default policies from Helm values and writes keys to Secrets | P0 | Gap |
 | D5 | Horizontal scale: API replicas, KEDA-scaled worker pools per evaluator image, sandbox pools | P0 | Built; KEDA untested on a live pool |
@@ -167,7 +214,7 @@ All three modes feed the same evaluator catalog and policy engine, so a record g
 | P3 | Run API: create, watch, cancel, resume, compare, with gates and budgets | P0 | Built |
 | P4 | Webhook callback when a run or a scored trace finishes, signed with HMAC | P0 | Gap (only policy alerts have webhooks) |
 | P5 | `evalsi.log(input, output, trace_id, metadata)` SDK call for apps without OTel, batched and async | P1 | Gap (DESIGN Path E) |
-| P6 | Bulk upload: POST a JSONL or Parquet file, or reference an S3 object, as a dataset | P1 | Partly (datasets from S3 exist; upload endpoint to verify) |
+| P6 | Bulk upload: POST a JSONL or Parquet file, or reference an S3 object, as a dataset | P1 | Gap (datasets from S3 exist; the REST API has no upload endpoint) |
 | P7 | Idempotency key on every write, so retries from customer pipelines never double-score | P1 | Gap |
 
 ### Pull: we subscribe to customer data sources
@@ -177,7 +224,7 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
 | S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Gap |
-| S2 | Connectors for the first-cut trace stores: MLflow Tracing, Langfuse, Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Gap |
+| S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Gap |
 | S3 | Connectors for streams and logs: Kafka, AWS Kinesis, GCP Pub/Sub, S3/GCS prefix watcher; Loki and CloudWatch Logs via the evalsi-collector as recipes | P2 (after first cut) | Gap |
 | S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Gap |
 | S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Gap |
@@ -239,20 +286,21 @@ Available as a CRD and as `POST /v1alpha1/sources`. The connector manager runs u
 ```yaml
 apiVersion: evals.si/v1alpha1
 kind: TraceSource
-metadata: {name: studio-phoenix, namespace: agent-studio}
+metadata: {name: studio-mlflow, namespace: evalsi}
 spec:
-  project: studio-tenant-a
-  connector: phoenix            # first cut: mlflow | langfuse | phoenix
-  endpoint: http://phoenix.agent-studio:6006
-  credentialsSecretRef: {name: phoenix-api-key}
+  project: agent-studio
+  connector: mlflow             # first cut: mlflow | langfuse | phoenix
+  endpoint: http://mlflow.agent-studio:5000
+  experimentIds: ["1"]
+  credentialsSecretRef: {name: mlflow-token}
   backfill: {since: 720h}
   poll: {interval: 30s, maxRecordsPerSecond: 200}
-  mapping:                      # CEL over the source record
-    input: 'span.attributes["input.value"]'
-    output: 'span.attributes["output.value"]'
-    metadata: {workflow: 'resource.attributes["agent_studio.workflow_id"]'}
-  policies: [support-agent-quality]
-  writeBack: {enabled: true, as: annotation}
+  mapping:                      # CEL over the source trace
+    input: 'trace.request'
+    output: 'trace.response'
+    metadata: {workflow: 'trace.tags["agent_studio.workflow_id"]'}
+  policies: [studio-agent-quality]
+  writeBack: {enabled: true, as: assessment}
 status:
   watermark: "2026-10-09T12:00:00Z"
   lagSeconds: 41
@@ -272,17 +320,17 @@ status:
 
 ### agent-studio-standalone integration contract
 
-- **Helm:** `evalsi` as an optional dependency (`evalsi.enabled`), values for project bootstrap, default policies and judge.
-- **Tracing:** the studio adds evalsid as a second OTLP exporter and sets `evalsi.label.workflow`, `evalsi.label.version` and `evalsi.label.tenant` resource attributes.
-- **Deploy gate:** the studio creates an `EvalRun` with `target: {connector: a2a | http, url: <workflow service>}` and waits on the run-finished webhook.
-- **UI:** the studio reads `/v1alpha1/scores` and links each score to `/ui/` for the full report.
+- **Helm:** Evals.si is an independent chart installed beside the studio, like agent-sandbox. The integration guide gives the values for project bootstrap, default policies and the customer's judge.
+- **Tracing:** the studio already traces to MLflow. Either add evalsid as a second OTLP exporter, or apply a `TraceSource` with `connector: mlflow`. Label traces with `evalsi.label.workflow` and `evalsi.label.version`.
+- **Deploy gate:** the studio creates an `EvalRun` whose target is the workflow over HTTP, gRPC or A2A, or its PyPI package run in-process in a sandbox, and waits on the run-finished webhook.
+- **UI:** the studio reads `/v1alpha1/scores` and links each score to `/ui/` for the full report. Scores also appear in MLflow as assessments.
 
 ## Security, tenancy and operations
 
 No customer data leaves the cluster unless the customer configures a judge or sink that sends it out. The existing identity and sandbox model covers most of this. New work is for pull connectors and the agent-studio tenant mapping.
 
 - **Identity.** API keys, OIDC (including Kubernetes service-account tokens) and mTLS between components, as built. agent-studio-standalone authenticates with its pod's projected service-account token; no static key is required.
-- **Tenancy.** One Evals.si project per agent-studio tenant or workspace. Ingest keys are bound to one project, so a workflow cannot inject traces into another tenant's policies. Per-project quotas cover runs, judge tokens and pull-source throughput (new).
+- **Tenancy.** agent-studio-standalone is single-tenant, so it uses one Evals.si project per studio install; other customers can use several projects. Ingest keys are bound to one project, so a workflow cannot inject traces into another tenant's policies. Per-project quotas cover runs, judge tokens and pull-source throughput (new).
 - **Pull connector egress.** Each `TraceSource` declares its endpoint; a NetworkPolicy generated by the operator allows only that egress. Source credentials are read from Secrets at use time and never logged or returned by the API.
 - **Data handling.** Redaction rules apply on ingest and on pull, before storage and before any judge call. Retention per project for traces, records and results, with a hard-delete API for data-subject requests.
 - **Sandboxing.** Untrusted evaluator code and agent tasks run on the strongest available rung, failing closed. In the namespace-only agent-studio install, that is the pod or Landlock rung.
@@ -311,8 +359,8 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 **Exit criteria per milestone**
 
 1. **M1 Release, SDK client** (D1, D2, D4, E2, P4): signed `v0.1.0` chart and images published; `Client.evaluate()` returns scores identical to in-process; webhooks fire on run finish.
-2. **M2 agent-studio online** (A1, A2, A3, A7): studio chart installs Evals.si as a subchart; every deployed workflow is scored by a default policy; a failed gate blocks a deploy in a demo cluster.
-3. **M3 Pull connectors** (S1, S2, S4 to S8): a `TraceSource` backfills 30 days from each of MLflow, Langfuse and Phoenix and tails with p95 lag under 2 min; scores appear in each store's own UI. Mapping profiles for the five first-cut agent frameworks pass their fixture tests.
+2. **M2 agent-studio online** (A1, A2, A3, A7): Evals.si installs from its own chart beside the studio by following the integration guide; every deployed workflow is scored by a default policy; a failed gate blocks a deploy in a demo cluster. The Deep Agents and DeepSeek Harness demos (R1 to R5, R7 to R9) run in standalone mode and on kind, and the integration guide is published.
+3. **M3 Pull connectors** (S1, S2, S4 to S8): a `TraceSource` backfills 30 days from MLflow (OSS 3.x, Databricks, SageMaker, Azure ML), then from Langfuse and Phoenix, and tails with p95 lag under 2 min; scores appear in each store's own UI. Mapping profiles for the five first-cut agent frameworks pass their fixture tests. Deep Agents traces in MLflow are scored online (R6).
 4. **M4 Real-infra hardening** (D5, D7, D10): load test of 10k traces/min and 1k concurrent trials on EKS; KEDA, 3-node NATS and a Firecracker pool run live; upgrade from M1 to M4 with no downtime.
 5. **M5 More sources, SDK** (S2 later stores, S3, P5, E3, E5): LangSmith and ClickHouse connectors, Kafka and S3 sources; `evalsi.log()`; PyTorch and Lightning checkpoint hooks.
 6. **GA with agent-studio:** all P0 requirements met, runbooks and SLO alerts shipped, one external pilot running for 4 weeks.
@@ -321,17 +369,18 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Source APIs (Phoenix, Langfuse, LangSmith) change or rate-limit pulls | Pull lag, missed records | Version-pinned connectors with contract tests; back off on 429; prefer OTLP tee where the customer can |
+| Source APIs (MLflow variants, Langfuse, Phoenix) change or rate-limit pulls | Pull lag, missed records | Version-pinned connectors with contract tests; back off on 429; prefer OTLP tee where the customer can |
 | Judge cost grows with production traffic | Surprise bills | Cascades and sampling on by default; per-project token quotas; no default judge |
 | Namespace-only installs get only the weakest sandbox rung | Code evaluators slower or unavailable | Pod rung by default; document Firecracker pool as an opt-in cluster add-on |
 | Firecracker, KEDA and multi-node NATS untested on real infra | Incidents at first customer scale | Run them on a staging EKS cluster before GA (M4) |
-| Agent-studio trace shape differs from OpenInference conventions | Agent evaluators skip records | Mapping layer (S4) plus a fixture set captured from real studio traces |
+| agent-studio's MLflow traces differ from the shapes the mapping profiles expect | Agent evaluators skip records | Mapping layer (S4) plus a fixture set captured from real studio traces |
 
 **Open questions**
 
-- [ ] What is agent-studio-standalone's trace backend and span convention today (Phoenix + OpenInference assumed)?
-- [ ] How are agent-studio tenants modeled: one namespace per tenant, or shared namespace with workspace IDs?
-- [ ] Does agent-studio-standalone expose each workflow over A2A, HTTP or only through its own runner (decides how gate runs invoke it)?
-- [ ] Which judge model will customers allow by default: in-cluster vLLM, Bedrock, or Anthropic?
-- [ ] Should Evals.si ship as a subchart of agent-studio-standalone, or as a separate release the studio discovers?
+- [x] Trace backend: MLflow Tracing.
+- [x] Tenancy: single tenant.
+- [x] Workflow invocation: HTTP, gRPC, A2A, or in-process from PyPI.
+- [x] Default judge: none; the customer configures one.
+- [x] Packaging: an independent chart plus an integration guide.
+- [ ] Access to the agent-studio-standalone repo for the real-cluster test and trace fixtures (planned for that test).
 - [ ] Kafka and log sources: built-in connectors, or collector recipes only for v1?
