@@ -21,7 +21,7 @@ import pytest
 from evalsi.runspec import load_spec
 
 DEMO = Path(__file__).resolve().parents[3] / "examples" / "demo"
-SPECS = sorted(DEMO.glob("*.yaml"))
+SPECS = sorted(p for agent in ("deepagents", "dsh") for p in DEMO.glob(f"{agent}-*.yaml"))
 
 
 def test_there_is_a_spec_per_agent_and_suite() -> None:

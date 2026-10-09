@@ -28,7 +28,7 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 >
 > The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)). It has also been verified on real clusters: AKS, and an Istio ambient cluster with STRICT mTLS and KVM nodes, where the Firecracker rung ran in microVMs. Most findings are fixed; the [verification report](docs/verification/README.md) lists what is still open.
 >
-> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix, a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents. The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
+> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix, a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents (built: [`examples/demo`](examples/demo/README.md), and the [integration guide](docs/guides/integrate-an-agent-studio.md)). The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
 >
 
 > New here? Start with the [end-to-end guide](docs/guides/end-to-end.md): every feature, the integrations, and copy-paste pull request workflows.
