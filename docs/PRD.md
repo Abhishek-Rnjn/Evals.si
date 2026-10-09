@@ -307,6 +307,8 @@ status:
   recordsPerSecond: 37
 ```
 
+[Decision 0016](decisions/0016-trace-source-connectors.md) revises this shape: `credentials` (a variable or mounted file, never a Secret reference), `profile` plus `overrides` instead of `mapping`, `maxTraceDuration` instead of a single lookback, an `auth` block, and no per-source NetworkPolicy.
+
 ### New and changed API surface
 
 | Surface | Change |
