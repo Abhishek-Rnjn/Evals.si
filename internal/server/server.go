@@ -46,6 +46,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
+	"github.com/abhishek-rnjn/evals.si/internal/webhooks"
 	"github.com/abhishek-rnjn/evals.si/internal/webui"
 )
 
@@ -153,6 +154,10 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	}
 	auditor := authz.NewAuditor(st, exports.Audit, log)
 	creds.OnDenied(func(ctx context.Context, d credentials.Denial) { auditDenial(ctx, auditor, d) })
+	hooks := webhooks.New(st, webhooks.Options{
+		Logger: log, MaxAttempts: cfg.Webhooks.MaxAttempts,
+		Timeout: optDuration(cfg.Webhooks.Timeout), Retention: optDuration(cfg.Webhooks.Retention),
+	})
 	var watcher *watch.Engine // created below; runs read its policies' score names
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
 		DatasetsDir:   cfg.DatasetsDir,
@@ -161,7 +166,10 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		Evaluate:      cfg.Evaluate,
 		Agents:        cfg.Agents,
 		Logger:        log,
-		OnFinished:    exports.Run,
+		OnFinished: func(run *evalsiv1alpha1.Run) {
+			exports.Run(run)
+			hooks.RunFinished(run)
+		},
 		Cluster:       runCluster(cl),
 		LeaseTTL:      optDuration(cfg.Runs.LeaseTTL),
 		AdoptInterval: optDuration(cfg.Runs.AdoptInterval),
@@ -231,7 +239,8 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		wg.Add(1)
 		go func() { defer wg.Done(); leadPolicyEngine(bg, st, cl, assembler, watcher, log) }()
 	}
-	wg.Add(4)
+	wg.Add(5)
+	go func() { defer wg.Done(); hooks.Run(bg) }()
 	go func() { defer wg.Done(); assembler.Run(stopAssembler, 250*time.Millisecond) }()
 	go func() { defer wg.Done(); watcher.Run(bg) }()
 	go func() { defer wg.Done(); retain(bg, st, config.Duration(cfg.Traces.Retention), log) }()
@@ -253,7 +262,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		rewardSvc.UseSharedCache(st, log)
 		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
 	}
-	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, mcp: cfg.MCP, ui: cfg.UI, log: log}
+	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, webhooks: hooks, mcp: cfg.MCP, ui: cfg.UI, log: log}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -406,6 +415,7 @@ type deps struct {
 	authn     *auth.Authenticator
 	gate      *gate
 	authSvc   *authz.Service
+	webhooks  *webhooks.Service
 	// In a cluster, received spans go to the span stream.
 	forward ingest.Forward
 	mcp     mcp.Config
@@ -457,6 +467,9 @@ func Handler(d deps) http.Handler {
 			return evalsiv1alpha1connect.NewAnnotationServiceHandler(annotate.New(d.store, d.runs), gated)
 		},
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewGuardrailServiceHandler(guard, gated) },
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewWebhookServiceHandler(d.webhooks, gated)
+		},
 	} {
 		path, handler := h()
 		mux.Handle(path, handler)
@@ -474,7 +487,7 @@ func Handler(d deps) http.Handler {
 	// (LLM traffic) and the ExtMcp processor service (MCP traffic, gRPC).
 	mux.Handle("POST /guardrails/{project}/{guardrail}/{phase}", guard.Webhook(d.gate.authorizeGuardrail))
 	mux.Handle(ext_mcpconnect.NewExtMcpHandler(guard.ExtMcp(), gated))
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.svc.Credentials().WriteMetrics, d.gate.WriteMetrics)))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.webhooks.WriteMetrics, d.svc.Credentials().WriteMetrics, d.gate.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
@@ -485,6 +498,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,
+		evalsiv1alpha1connect.WebhookServiceName,
 	}
 	// Health reports liveness only and stays open, like /healthz.
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))

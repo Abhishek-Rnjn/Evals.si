@@ -363,6 +363,37 @@ class Client:
         body = {"project": project, "queue": queue, "pageSize": page_size, "pageToken": page_token}
         return self.annotation_call("ListAnnotations", body)
 
+    # --- webhooks ---
+
+    def apply_webhook(self, webhook: dict[str, Any]) -> dict[str, Any]:
+        """Create or replace a webhook. A new one comes back with its generated ``secret`` once."""
+        out: dict[str, Any] = self.call("WebhookService", "ApplyWebhook", {"webhook": webhook})[
+            "webhook"
+        ]
+        return out
+
+    def list_webhooks(self, project: str = "") -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = self.call(
+            "WebhookService", "ListWebhooks", {"project": project}
+        ).get("webhooks", [])
+        return out
+
+    def delete_webhook(self, name: str, project: str = "") -> None:
+        self.call("WebhookService", "DeleteWebhook", {"project": project, "name": name})
+
+    def test_webhook(self, name: str, project: str = "") -> dict[str, Any]:
+        """Send a ping now: ``{"delivered": ..., "statusCode": ..., "error": ...}``."""
+        return self.call("WebhookService", "TestWebhook", {"project": project, "name": name})
+
+    def list_webhook_deliveries(
+        self, name: str, *, project: str = "", limit: int = 50
+    ) -> list[dict[str, Any]]:
+        body = {"project": project, "name": name, "limit": limit}
+        out: list[dict[str, Any]] = self.call("WebhookService", "ListWebhookDeliveries", body).get(
+            "deliveries", []
+        )
+        return out
+
     # --- guardrails ---
 
     def apply_guardrail(self, guardrail: dict[str, Any]) -> dict[str, Any]:

@@ -141,3 +141,8 @@ func QueueResource(name string, labels map[string]string) map[string]any {
 func GuardrailResource(name string, labels map[string]string) map[string]any {
 	return map[string]any{"guardrail": map[string]any{"name": name}, "labels": StringMap(labels)}
 }
+
+// WebhookResource describes a webhook (resource.webhook, resource.labels).
+func WebhookResource(name string, labels map[string]string) map[string]any {
+	return map[string]any{"webhook": map[string]any{"name": name}, "labels": StringMap(labels)}
+}

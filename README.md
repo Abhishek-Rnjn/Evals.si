@@ -391,6 +391,8 @@ evalsi guardrails check support-chat --project support --text "key AKIAIOSFODNN7
 
 See the [guardrails guide](docs/guides/guardrails.md).
 
+A project can also subscribe an HTTP endpoint to run results: signed webhooks fire when a run finishes or fails a gate, with retries that survive a restart. See the [webhooks guide](docs/guides/webhooks.md).
+
 ### Human annotation
 
 Annotation queues put records in front of people, with a rubric of pass/fail, score, label and text questions. The records can be a run's results (filtered with CEL) or a dataset. evalsid summarizes the answers with intervals, measures agreement between annotators (Krippendorff's alpha), and compares the answers with the run's own metric (accuracy, Cohen's kappa, Pearson), which is how a judge gets calibrated. The `annotator` role can answer but cannot run anything.

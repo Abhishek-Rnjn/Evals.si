@@ -279,6 +279,29 @@ func (g *gate) accessRules() map[string]accessRule {
 			m := msg.(*evalsiv1alpha1.GetGuardrailRequest)
 			return g.guardrailTarget(ctx, m.GetProject(), m.GetName())
 		}},
+		evalsiv1alpha1connect.WebhookServiceApplyWebhookProcedure: {action: "webhooks.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			w := msg.(*evalsiv1alpha1.ApplyWebhookRequest).GetWebhook()
+			return g.applyWebhookTargets(ctx, w.GetProject(), w.GetName(), w.GetLabels())
+		}},
+		evalsiv1alpha1connect.WebhookServiceDeleteWebhookProcedure: {action: "webhooks.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.DeleteWebhookRequest)
+			return g.webhookTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		// Testing sends a request from the server, as applying a webhook does.
+		evalsiv1alpha1connect.WebhookServiceTestWebhookProcedure: {action: "webhooks.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.TestWebhookRequest)
+			return g.webhookTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		// The service checks each webhook (its name and labels).
+		evalsiv1alpha1connect.WebhookServiceListWebhooksProcedure: {action: "webhooks.read", filtered: true},
+		evalsiv1alpha1connect.WebhookServiceGetWebhookProcedure: {action: "webhooks.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.GetWebhookRequest)
+			return g.webhookTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		evalsiv1alpha1connect.WebhookServiceListWebhookDeliveriesProcedure: {action: "webhooks.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.ListWebhookDeliveriesRequest)
+			return g.webhookTarget(ctx, m.GetProject(), m.GetName())
+		}},
 		evalsiv1alpha1connect.GuardrailServiceCheckProcedure: {action: "guardrails.check", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.CheckRequest)
 			if m.GetInline() == nil {
@@ -328,6 +351,40 @@ func (g *gate) applyGuardrailTargets(ctx context.Context, project, name string, 
 	ts := []target{{project: project, resource: authz.GuardrailResource(name, labels), name: "guardrail/" + name}}
 	if gr, err := g.store.GetGuardrail(ctx, project, name); err == nil {
 		ts = append(ts, target{project: project, resource: authz.GuardrailResource(name, gr.GetLabels()), name: "guardrail/" + name})
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return ts, nil
+}
+
+// webhookTarget is an existing webhook: its project, with its name and stored
+// labels for rules. A missing webhook is checked by name only; the service
+// then reports it missing.
+func (g *gate) webhookTarget(ctx context.Context, project, name string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	var labels map[string]string
+	if w, err := g.store.GetWebhook(ctx, project, name); err == nil {
+		labels = w.GetLabels()
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.WebhookResource(name, labels), name: "webhook/" + name}}, nil
+}
+
+// applyWebhookTargets checks the webhook as submitted and, when it replaces
+// one, as stored, so a rule protecting a labelled webhook cannot be
+// sidestepped by applying it without the label.
+func (g *gate) applyWebhookTargets(ctx context.Context, project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	ts := []target{{project: project, resource: authz.WebhookResource(name, labels), name: "webhook/" + name}}
+	if w, err := g.store.GetWebhook(ctx, project, name); err == nil {
+		ts = append(ts, target{project: project, resource: authz.WebhookResource(name, w.GetLabels()), name: "webhook/" + name})
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}

@@ -64,6 +64,12 @@ import (
 //	GET    /v1alpha1/guardrails/{name}         GuardrailService.GetGuardrail (?project=)
 //	DELETE /v1alpha1/guardrails/{name}         GuardrailService.DeleteGuardrail (?project=)
 //	POST   /v1alpha1/guardrails/{guardrail}:check GuardrailService.Check
+//	POST   /v1alpha1/webhooks                  WebhookService.ApplyWebhook (body: the webhook)
+//	GET    /v1alpha1/webhooks                  WebhookService.ListWebhooks (?project=)
+//	GET    /v1alpha1/webhooks/{name}           WebhookService.GetWebhook (?project=)
+//	DELETE /v1alpha1/webhooks/{name}           WebhookService.DeleteWebhook (?project=)
+//	POST   /v1alpha1/webhooks/{name}:test      WebhookService.TestWebhook
+//	GET    /v1alpha1/webhooks/{name}/deliveries WebhookService.ListWebhookDeliveries (?project=&limit=)
 func restRules() []*annotations.HttpRule {
 	rule := func(method, verb, path, body string) *annotations.HttpRule {
 		r := &annotations.HttpRule{Selector: "evalsi.v1alpha1." + method, Body: body}
@@ -127,6 +133,12 @@ func restRules() []*annotations.HttpRule {
 		rule("GuardrailService.GetGuardrail", http.MethodGet, v+"/guardrails/{name}", ""),
 		rule("GuardrailService.DeleteGuardrail", http.MethodDelete, v+"/guardrails/{name}", ""),
 		rule("GuardrailService.Check", http.MethodPost, v+"/guardrails/{guardrail}:check", "*"),
+		rule("WebhookService.ApplyWebhook", http.MethodPost, v+"/webhooks", "webhook"),
+		rule("WebhookService.ListWebhooks", http.MethodGet, v+"/webhooks", ""),
+		rule("WebhookService.GetWebhook", http.MethodGet, v+"/webhooks/{name}", ""),
+		rule("WebhookService.DeleteWebhook", http.MethodDelete, v+"/webhooks/{name}", ""),
+		rule("WebhookService.TestWebhook", http.MethodPost, v+"/webhooks/{name}:test", "*"),
+		rule("WebhookService.ListWebhookDeliveries", http.MethodGet, v+"/webhooks/{name}/deliveries", ""),
 	}
 }
 
@@ -142,6 +154,7 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,
+		evalsiv1alpha1connect.WebhookServiceName,
 	}
 	services := make([]*vanguard.Service, 0, len(names))
 	for _, name := range names {
