@@ -1,0 +1,85 @@
+{{- if .Values.dshWeb.enabled }}
+{{- $fn := include "demo.fullname" . -}}
+{{- $d := .Values.dshWeb }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fn }}-dsh-web
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $fn }}-dsh-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-dsh-web}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $fn }}-dsh-web
+        app.kubernetes.io/part-of: evalsi-demo
+        {{- with include "demo.podLabels" (dict "root" . "local" $d) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      {{- include "demo.scheduling" (dict "root" . "local" $d) | nindent 6 }}
+      containers:
+        - name: dsh
+          image: {{ include "demo.image" (dict "root" . "ref" $d.image) }}
+          imagePullPolicy: {{ $d.pullPolicy }}
+          # dsh web binds one concrete address, so it gets the pod's; the UI is
+          # reached through the Service or kubectl port-forward, and prints its
+          # sign-in URL (with a token) in its log. The image's entrypoint points
+          # dsh at the model first.
+          args:
+            - dsh
+            - --profile
+            - web
+            - --no-open
+            - --host
+            - $(POD_IP)
+            - --port
+            - "8080"
+            - --trusted-host
+            - {{ $fn }}-dsh-web
+            - --trusted-host
+            - {{ printf "%s-dsh-web.%s.svc" $fn .Release.Namespace }}
+            - --trusted-host
+            - localhost
+          ports: [{name: http, containerPort: 8080}]
+          env:
+            - name: POD_IP
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+            - {name: DEMO_BASE_URL, value: {{ include "demo.modelURL" . | quote }}}
+            - {name: DEMO_MODEL, value: {{ .Values.agents.model.name | quote }}}
+            - {name: HOME, value: /home/demo}
+            - {name: NODE_OPTIONS, value: --disable-wasm-trap-handler}
+            - name: DEMO_API_KEY
+              valueFrom: {secretKeyRef: {name: {{ .Values.agents.model.apiKeySecret.name }}, key: {{ .Values.agents.model.apiKeySecret.key }}}}
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          resources: {{- toYaml $d.resources | nindent 12 }}
+          volumeMounts:
+            - {name: home, mountPath: /home/demo}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: home
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-dsh-web
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    {{- with include "demo.serviceLabels" (dict "root" . "local" $d) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+spec:
+  selector: {app.kubernetes.io/name: {{ $fn }}-dsh-web}
+  ports: [{name: http, port: 8080, targetPort: http}]
+{{- end }}

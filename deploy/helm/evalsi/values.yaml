@@ -1,3 +1,9 @@
+# Names this chart creates start with the release's name (a release named
+# for evalsi, such as "evalsi", is used as it is; any other gets "-evalsi"
+# after it). Set this to choose the prefix. The evalsi-crds chart's
+# evalsiFullname must match it.
+fullnameOverride: ""
+
 # The evalsi image (evalsid, the Python worker, evalsi-guest, the operator).
 image:
   repository: ghcr.io/abhishek-rnjn/evalsi
@@ -63,6 +69,29 @@ devPostgres:
   nodeSelector: {}
   tolerations: []
   serviceLabels: {}       # e.g. istio.io/use-waypoint: none
+
+# A throwaway S3-compatible store (MinIO) in the namespace, for trials without
+# a cloud's. When on, storage.s3 is filled in for you (bucket: storage.s3.bucket,
+# default evalsi). Not for production: no backups, no HA.
+devMinio:
+  enabled: false
+  image: bitnamilegacy/minio:2025.7.23
+  storage: 5Gi
+  storageClassName: ""
+  nodeSelector: {}
+  tolerations: []
+  serviceLabels: {}
+
+# A throwaway ClickHouse in the namespace, for trace storage in trials. When on,
+# storage.clickhouse is filled in for you. Not for production: no backups, no HA.
+devClickhouse:
+  enabled: false
+  image: clickhouse/clickhouse-server:25.8
+  storage: 5Gi
+  storageClassName: ""
+  nodeSelector: {}
+  tolerations: []
+  serviceLabels: {}
 
 # NATS JetStream: the work queues, the span stream, events and leases' signals.
 nats:
@@ -186,9 +215,48 @@ operator:
   # and certificate).
   webhooks: true
   createProjects: true
+  istio:
+    # Render a PeerAuthentication that lets the API server reach the admission
+    # webhooks (port 9443 PERMISSIVE) under mesh-wide STRICT mTLS. Off by
+    # default: it needs Istio's CRDs.
+    peerAuthentication: false
   resources: {}
   nodeSelector: {}
   tolerations: []
+
+# The first state of the install, made by a Job after every install and
+# upgrade (a Helm hook), from these values: projects, API keys (kept in
+# Secrets), default online policies, webhooks, and the credential grants that
+# say which worker variables each project's specs may name. Safe to run again.
+# The Job signs in with its service account, which the chart makes an owner,
+# so auth.kubernetes must be on (the default).
+bootstrap:
+  enabled: false
+  projects: []
+  #  - {name: studio, description: agent-studio-standalone}
+  # Keys are shown once, so each is written to a Secret in this namespace
+  # (secret.key defaults to api_key). A key whose Secret is gone is replaced by
+  # <name>-r2, -r3...; its old value is revoked. Roles cannot change on an
+  # existing key: rename it to replace it.
+  apiKeys: []
+  #  - name: studio-ingest
+  #    roles: {studio: [ingest]}
+  #    secret: {name: studio-evalsi-ingest-key}
+  # OnlineEvalPolicy documents, in their JSON field names.
+  policies: []
+  # Webhooks (see docs/guides/webhooks.md). secret.name keeps the generated HMAC secret.
+  webhooks: []
+  #  - {name: studio, project: studio, url: "http://studio.studio.svc/hooks/evalsi", events: [run.finished, run.gate_failed], secret: {name: studio-evalsi-webhook}}
+  # Written into the server's credentials.grants (reloaded without a restart).
+  credentialGrants: []
+  #  - {env: ANTHROPIC_API_KEY, projects: [studio], hosts: [api.anthropic.com]}
+  waitTimeout: 10m              # how long to wait for the server to answer
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  podLabels: {}                 # e.g. istio.io/dataplane-mode: none
 
 tls:
   # Internal certificates (the API, sandbox pools, worker client

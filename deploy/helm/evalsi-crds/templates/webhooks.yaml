@@ -1,20 +1,22 @@
 {{- if .Values.webhooks.enabled }}
 {{- $ns := .Values.operator.namespace }}
-{{- $svc := "evalsi-operator-webhook" }}
+{{- $fn := include "crds.fullname" . }}
+{{- $op := .Values.operator.fullname }}
+{{- $svc := printf "%s-operator-webhook" $op }}
 {{- $dns := list (printf "%s.%s.svc" $svc $ns) (printf "%s.%s.svc.cluster.local" $svc $ns) }}
 {{- $caBundle := "" }}
 {{- if .Values.webhooks.certManager.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: evalsi-operator-webhook
+  name: {{ $svc }}
   namespace: {{ $ns }}
 spec:
-  secretName: evalsi-operator-webhook-tls
+  secretName: {{ $svc }}-tls
   dnsNames: {{- toYaml $dns | nindent 4 }}
   issuerRef: {{- toYaml .Values.webhooks.certManager.issuerRef | nindent 4 }}
 {{- else }}
-{{- $old := lookup "v1" "Secret" $ns "evalsi-operator-webhook-tls" }}
+{{- $old := lookup "v1" "Secret" $ns (printf "%s-tls" $svc) }}
 {{- $crt := "" }}{{- $key := "" }}
 {{- if $old }}
 {{- $crt = index $old.data "tls.crt" }}{{ $key = index $old.data "tls.key" }}{{ $caBundle = index $old.data "ca.crt" }}
@@ -26,7 +28,7 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: evalsi-operator-webhook-tls
+  name: {{ $svc }}-tls
   namespace: {{ $ns }}
 type: kubernetes.io/tls
 data:
@@ -39,10 +41,10 @@ data:
 apiVersion: admissionregistration.k8s.io/v1
 kind: {{ $kind }}WebhookConfiguration
 metadata:
-  name: evalsi-{{ lower $kind }}
+  name: {{ $fn }}-{{ lower $kind }}
   {{- if $.Values.webhooks.certManager.enabled }}
   annotations:
-    cert-manager.io/inject-ca-from: {{ $ns }}/evalsi-operator-webhook
+    cert-manager.io/inject-ca-from: {{ $ns }}/{{ $svc }}
   {{- end }}
 webhooks:
   - name: {{ ternary "mutate" "validate" (eq $kind "Mutating") }}.evals.si

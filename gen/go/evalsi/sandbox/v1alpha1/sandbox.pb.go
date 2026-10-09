@@ -174,11 +174,14 @@ func (*ProbeRequest) Descriptor() ([]byte, []int) {
 }
 
 type RungStatus struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Driver        string                  `protobuf:"bytes,1,opt,name=driver,proto3" json:"driver,omitempty"`
-	Level         v1alpha1.IsolationLevel `protobuf:"varint,2,opt,name=level,proto3,enum=evalsi.v1alpha1.IsolationLevel" json:"level,omitempty"`
-	Available     bool                    `protobuf:"varint,3,opt,name=available,proto3" json:"available,omitempty"`
-	Reason        string                  `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	state     protoimpl.MessageState  `protogen:"open.v1"`
+	Driver    string                  `protobuf:"bytes,1,opt,name=driver,proto3" json:"driver,omitempty"`
+	Level     v1alpha1.IsolationLevel `protobuf:"varint,2,opt,name=level,proto3,enum=evalsi.v1alpha1.IsolationLevel" json:"level,omitempty"`
+	Available bool                    `protobuf:"varint,3,opt,name=available,proto3" json:"available,omitempty"`
+	Reason    string                  `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Set when the rung works but something it claims is not enforced here,
+	// e.g. a declared NetworkPolicy that a canary connection got through.
+	Warning       string `protobuf:"bytes,5,opt,name=warning,proto3" json:"warning,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -237,6 +240,13 @@ func (x *RungStatus) GetAvailable() bool {
 func (x *RungStatus) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *RungStatus) GetWarning() string {
+	if x != nil {
+		return x.Warning
 	}
 	return ""
 }
@@ -1747,13 +1757,14 @@ var File_evalsi_sandbox_v1alpha1_sandbox_proto protoreflect.FileDescriptor
 const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\n" +
 	"%evalsi/sandbox/v1alpha1/sandbox.proto\x12\x17evalsi.sandbox.v1alpha1\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x0e\n" +
-	"\fProbeRequest\"\x91\x01\n" +
+	"\fProbeRequest\"\xab\x01\n" +
 	"\n" +
 	"RungStatus\x12\x16\n" +
 	"\x06driver\x18\x01 \x01(\tR\x06driver\x125\n" +
 	"\x05level\x18\x02 \x01(\x0e2\x1f.evalsi.v1alpha1.IsolationLevelR\x05level\x12\x1c\n" +
 	"\tavailable\x18\x03 \x01(\bR\tavailable\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"J\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x18\n" +
+	"\awarning\x18\x05 \x01(\tR\awarning\"J\n" +
 	"\rProbeResponse\x129\n" +
 	"\x05rungs\x18\x01 \x03(\v2#.evalsi.sandbox.v1alpha1.RungStatusR\x05rungs\"_\n" +
 	"\rNetworkPolicy\x128\n" +

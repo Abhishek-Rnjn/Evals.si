@@ -1,0 +1,15 @@
+# Only templates, values and the files the templates read ship in the chart.
+.git
+*.yaml.bak
+terminal-bench-2/
+deepagents/*.py
+deepagents/Dockerfile
+deepagents/requirements.txt
+deepagents/dcode-demo.sh
+dsh/
+fixtures/*.py
+mock-model/*.md
+/dsh-*.yaml
+/deepagents-*.yaml
+/evalsi.yaml
+/README.md

@@ -321,3 +321,52 @@ func TestPodRungRestricted(t *testing.T) {
 		t.Error("a non-root pod got a read-only root it did not ask for")
 	}
 }
+
+// A NetworkPolicy declared enforced is checked with a canary connection from
+// a live pod: when it gets through, the probe warns and isolation is partial.
+func TestPodRungNetworkPolicyCanary(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		listen   bool
+		wantWarn bool
+		wantEnf  string
+	}{
+		{"canary blocked", false, false, "full"},
+		{"canary gets through", true, true, "partial"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m, _ := podRung(t)
+			sb := m.Sandbox()
+			sb.cfg.Pod.NetworkPolicyEnforced = true
+			podGuestBin = buildHelpers(t)["guest"]
+			t.Cleanup(func() { podGuestBin = podGuestDir + "/evalsi-guest" })
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			host, port, _ := net.SplitHostPort(ln.Addr().String())
+			if !c.listen {
+				ln.Close()
+			} else {
+				defer ln.Close()
+			}
+			t.Setenv("KUBERNETES_SERVICE_HOST", host)
+			t.Setenv("KUBERNETES_SERVICE_PORT", port)
+			st := sb.Probe(context.Background())
+			if len(st) != 1 || !st[0].Available {
+				t.Fatalf("%+v", st)
+			}
+			if (st[0].Warning != "") != c.wantWarn {
+				t.Fatalf("warning = %q, want warning: %v", st[0].Warning, c.wantWarn)
+			}
+			s, err := sb.Open(context.Background(), &Spec{Image: "python:3.13-slim"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			if got := s.Isolation().Enforcement; got != c.wantEnf {
+				t.Fatalf("enforcement = %q, want %q", got, c.wantEnf)
+			}
+		})
+	}
+}

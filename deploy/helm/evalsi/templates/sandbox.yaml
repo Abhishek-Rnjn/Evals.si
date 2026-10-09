@@ -1,17 +1,18 @@
 {{- if .Values.sandbox.podRung.enabled }}
+{{- $fn := include "evalsi.fullname" $ -}}
 {{- $ns := .Release.Namespace }}
 # Sandbox pools that use the pod rung run as this account: they create one
 # pod per sandbox here, and nothing else.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: evalsi-sandboxd
+  name: {{ $fn }}-sandboxd
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: evalsi-sandboxd
+  name: {{ $fn }}-sandboxd
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
@@ -21,11 +22,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: evalsi-sandboxd
+  name: {{ $fn }}-sandboxd
   labels: {{- include "evalsi.labels" . | nindent 4 }}
-roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: evalsi-sandboxd}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $fn }}-sandboxd}
 subjects:
-  - {kind: ServiceAccount, name: evalsi-sandboxd, namespace: {{ $ns }}}
+  - {kind: ServiceAccount, name: {{ $fn }}-sandboxd, namespace: {{ $ns }}}
 {{- if .Values.sandbox.podRung.networkPolicy }}
 ---
 # Sandbox pods talk to their pool and nothing else: the pool reaches their
@@ -33,7 +34,7 @@ subjects:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: evalsi-sandbox-pods
+  name: {{ $fn }}-sandbox-pods
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 spec:
   podSelector:

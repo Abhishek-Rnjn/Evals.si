@@ -1,0 +1,147 @@
+{{- if .Values.bootstrap.enabled }}
+{{- $fn := include "evalsi.fullname" $ -}}
+{{- $v := .Values }}
+{{- $ns := .Release.Namespace }}
+{{- $b := $v.bootstrap }}
+{{- if not $v.auth.kubernetes.enabled }}{{ fail "bootstrap.enabled signs in with a service-account token: auth.kubernetes.enabled must be on" }}{{ end }}
+{{- /* Everything here is a hook, made after the rest of the release and
+removed once the Job has succeeded (a failed Job stays for its logs). Hooks,
+not plain resources, so an upgrade runs the Job again. */ -}}
+{{- $hook := "helm.sh/hook: post-install,post-upgrade" }}
+{{- $policy := "helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded" }}
+{{- $secretNames := list }}
+{{- range $b.apiKeys }}{{ $secretNames = append $secretNames .secret.name }}{{ end }}
+{{- range $b.webhooks }}{{ with .secret }}{{ with .name }}{{ $secretNames = append $secretNames . }}{{ end }}{{ end }}{{ end }}
+{{- $cfg := dict }}
+{{- with $b.projects }}{{ $_ := set $cfg "projects" . }}{{ end }}
+{{- with $b.apiKeys }}{{ $_ := set $cfg "api_keys" . }}{{ end }}
+{{- with $b.policies }}{{ $_ := set $cfg "policies" . }}{{ end }}
+{{- with $b.webhooks }}{{ $_ := set $cfg "webhooks" . }}{{ end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fn }}-bootstrap
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+  annotations:
+    {{ $hook }}
+    helm.sh/hook-weight: "-10"
+    {{ $policy }}
+{{- if $secretNames }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $fn }}-bootstrap
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+  annotations:
+    {{ $hook }}
+    helm.sh/hook-weight: "-10"
+    {{ $policy }}
+rules:
+  # Creating cannot be limited to names; reading and replacing can.
+  - {apiGroups: [""], resources: [secrets], verbs: [create]}
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: {{- toYaml ($secretNames | uniq) | nindent 6 }}
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $fn }}-bootstrap
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+  annotations:
+    {{ $hook }}
+    helm.sh/hook-weight: "-10"
+    {{ $policy }}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ $fn }}-bootstrap}
+subjects:
+  - {kind: ServiceAccount, name: {{ $fn }}-bootstrap, namespace: {{ $ns }}}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fn }}-bootstrap
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+  annotations:
+    {{ $hook }}
+    helm.sh/hook-weight: "-10"
+    {{ $policy }}
+data:
+  bootstrap.json: |
+    {{- toPrettyJson $cfg | nindent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fn }}-bootstrap
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $fn }}-bootstrap
+  annotations:
+    {{ $hook }}
+    helm.sh/hook-weight: "0"
+    {{ $policy }}
+spec:
+  backoffLimit: {{ $b.backoffLimit }}
+  activeDeadlineSeconds: {{ $b.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $fn }}-bootstrap
+        app.kubernetes.io/part-of: evalsi
+        {{- with $b.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $fn }}-bootstrap
+      # It writes Secrets through the Kubernetes API with this token; the
+      # one evalsid takes is projected below.
+      automountServiceAccountToken: true
+      securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
+      {{- with $b.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $b.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $v.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bootstrap
+          image: {{ include "evalsi.image" . }}
+          imagePullPolicy: {{ $v.image.pullPolicy }}
+          command: [evalsi-operator]
+          args:
+            - bootstrap
+            - --config=/etc/evalsi/bootstrap/bootstrap.json
+            - --evalsid-url={{ include "evalsi.serverURL" . }}
+            {{- if $v.server.tls }}
+            - --ca-file=/etc/evalsi/server-tls/ca.crt
+            {{- end }}
+            - --token-file=/var/run/secrets/evals.si/token
+            - --namespace={{ $ns }}
+            - --wait={{ $b.waitTimeout }}
+          securityContext: {{- include "evalsi.restricted" . | nindent 12 }}
+          resources: {{- toYaml $b.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/evalsi/bootstrap, readOnly: true}
+            - {name: token, mountPath: /var/run/secrets/evals.si, readOnly: true}
+            {{- if $v.server.tls }}
+            - {name: server-tls, mountPath: /etc/evalsi/server-tls, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: config
+          configMap: {name: {{ $fn }}-bootstrap}
+        - name: token
+          projected:
+            sources:
+              - serviceAccountToken: {audience: {{ $v.auth.kubernetes.audience }}, expirationSeconds: 3600, path: token}
+        {{- if $v.server.tls }}
+        - name: server-tls
+          secret: {secretName: {{ $fn }}-server-tls, items: [{key: ca.crt, path: ca.crt}]}
+        {{- end }}
+{{- end }}

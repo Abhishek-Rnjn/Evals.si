@@ -42,28 +42,46 @@ type object struct {
 	Kind     string `json:"kind"`
 	Rules    []rule `json:"rules"`
 	Metadata struct {
-		Name      string            `json:"name"`
-		Namespace string            `json:"namespace"`
-		Labels    map[string]string `json:"labels"`
+		Name        string            `json:"name"`
+		Namespace   string            `json:"namespace"`
+		Labels      map[string]string `json:"labels"`
+		Annotations map[string]string `json:"annotations"`
 	} `json:"metadata"`
 	Data map[string]string `json:"data"`
 	Spec map[string]any    `json:"spec"`
 }
 
 type rule struct {
-	APIGroups []string `json:"apiGroups"`
-	Resources []string `json:"resources"`
-	Verbs     []string `json:"verbs"`
+	APIGroups     []string `json:"apiGroups"`
+	Resources     []string `json:"resources"`
+	ResourceNames []string `json:"resourceNames"`
+	Verbs         []string `json:"verbs"`
 }
 
 // render runs helm template with --set values, and -f for those that end
 // in .yaml (relative to the chart).
 func render(t *testing.T, chart string, set ...string) []object {
 	t.Helper()
-	args := []string{"template", "t", filepath.Join(charts, chart), "-n", "evalsi", "--kube-version", "1.34.0"}
+	// Releases are named as the docs name them, so names stay evalsi-*.
+	return renderAs(t, chart, chart, set...)
+}
+
+// renderAs is render for a release of another name.
+func renderAs(t *testing.T, release, chart string, set ...string) []object {
+	t.Helper()
+	return renderDir(t, release, filepath.Join(charts, chart), set...)
+}
+
+// renderDir renders the chart in dir. Values ending in .yaml are files, relative to dir.
+func renderDir(t *testing.T, release, dir string, set ...string) []object {
+	t.Helper()
+	args := []string{"template", release, dir, "-n", "evalsi", "--kube-version", "1.34.0"}
 	for _, s := range set {
 		if strings.HasSuffix(s, ".yaml") {
-			args = append(args, "-f", filepath.Join(charts, chart, s))
+			if !filepath.IsAbs(s) {
+				s = filepath.Join(dir, s)
+			}
+			args = append(args, "-f", s)
 		} else {
 			args = append(args, "--set", s)
 		}
@@ -210,6 +228,30 @@ func TestEvalsiChartSchedulingAndLabels(t *testing.T) {
 	if !strings.Contains(pool, "istio.io/use-waypoint: none") || !strings.Contains(pool, "evals.si/sandbox-pool: evalsi-sandbox-pool") {
 		t.Errorf("sandbox pod labels: %s", pool)
 	}
+}
+
+func TestOperatorPeerAuthentication(t *testing.T) {
+	for _, o := range find2(render(t, "evalsi"), "PeerAuthentication") {
+		t.Errorf("PeerAuthentication rendered by default: %s", o.Metadata.Name)
+	}
+	pa := find(t, render(t, "evalsi", "operator.istio.peerAuthentication=true"), "PeerAuthentication", "evalsi-operator-webhook")
+	if y := toYAML(t, pa.Spec); !strings.Contains(y, `"9443":`) || !strings.Contains(y, "mode: PERMISSIVE") {
+		t.Errorf("port 9443 is not PERMISSIVE: %s", y)
+	}
+	for _, o := range find2(render(t, "evalsi", "operator.istio.peerAuthentication=true", "operator.webhooks=false"), "PeerAuthentication") {
+		t.Errorf("PeerAuthentication rendered without webhooks: %s", o.Metadata.Name)
+	}
+}
+
+// find2 returns every object of a kind.
+func find2(objs []object, kind string) []object {
+	var out []object
+	for _, o := range objs {
+		if o.Kind == kind {
+			out = append(out, o)
+		}
+	}
+	return out
 }
 
 func TestSandboxdChart(t *testing.T) {

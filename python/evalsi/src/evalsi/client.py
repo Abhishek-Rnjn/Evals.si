@@ -11,12 +11,18 @@ cached by ``evalsi login``); see :mod:`evalsi.auth`.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import struct
-from collections.abc import Iterator
-from typing import Any
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
+if TYPE_CHECKING:
+    from evalsi.results import EvalResult, MetricSummary
+    from evalsi.types import EvaluationResult, Record
 
 END_STREAM = 0x02
 
@@ -56,11 +62,19 @@ class Client:
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    def call(self, service: str, method: str, body: dict[str, Any]) -> dict[str, Any]:
+    def call(
+        self,
+        service: str,
+        method: str,
+        body: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         response = self._http.post(
             f"{self.base_url}/evalsi.v1alpha1.{service}/{method}",
             json=body,
             headers={"Connect-Protocol-Version": "1"},
+            timeout=httpx.USE_CLIENT_DEFAULT if timeout is None else timeout,
         )
         if response.status_code != 200:
             raise _error(response.json() if response.content else {}, response.status_code)
@@ -98,6 +112,117 @@ class Client:
                             raise _error(message["error"], 200)
                         return
                     yield message
+
+    # --- evaluation ---
+
+    def evaluate(
+        self,
+        data: str | Path | Iterable[Mapping[str, Any] | Record],
+        evaluators: Sequence[str | Mapping[str, Any]],
+        *,
+        mapping: Mapping[str, str] | None = None,
+        limit: int | None = None,
+        params: Mapping[str, Mapping[str, Any]] | None = None,
+        judge: str = "",
+        project: str = "",
+        confidence: float = 0.95,
+        cluster_by: str | None = None,
+        ci_method: str = "auto",
+        timeout: float | None = 600.0,
+    ) -> EvalResult:
+        """Score records on the cluster; the same result as in-process ``evalsi.evaluate()``.
+
+        ``data`` and ``evaluators`` are as for :func:`evalsi.evaluate`, except that
+        evaluators run on the server, so they are references (``"exact-match"``,
+        ``{"ref": ..., "params": ..., "name": ...}``) to ones it has. ``judge`` names
+        a judge configured on the server; there is no default. Scores, outcomes and
+        intervals are computed by the server's own code, with the same evaluators.
+        """
+        from google.protobuf import json_format
+
+        from evalsi.convert import record_to_proto
+        from evalsi.v1alpha1 import evaluation_service_pb2 as pb
+
+        records, refs = _prepare_evaluation(data, evaluators, mapping, limit, params)
+        request = pb.EvaluateRequest(
+            project=project,
+            records=[record_to_proto(r) for r in records],
+            evaluators=refs,
+            judge=judge,
+            summary=_summary_options(confidence, cluster_by, ci_method),
+        )
+        body = json_format.MessageToDict(request)
+        reply = self.call("EvaluationService", "Evaluate", body, timeout=timeout)
+        response = json_format.ParseDict(reply, pb.EvaluateResponse(), ignore_unknown_fields=True)
+        return _assemble(
+            self.base_url,
+            records,
+            refs,
+            list(response.results),
+            list(response.summaries),
+            confidence=confidence,
+            cluster_by=cluster_by,
+            ci_method=ci_method,
+        )
+
+    async def evaluate_async(
+        self,
+        data: str | Path | Iterable[Mapping[str, Any] | Record],
+        evaluators: Sequence[str | Mapping[str, Any]],
+        **options: Any,
+    ) -> EvalResult:
+        """:meth:`evaluate` without blocking the event loop."""
+        return await asyncio.to_thread(self.evaluate, data, evaluators, **options)
+
+    def evaluate_stream(
+        self,
+        data: str | Path | Iterable[Mapping[str, Any] | Record],
+        evaluators: Sequence[str | Mapping[str, Any]],
+        *,
+        mapping: Mapping[str, str] | None = None,
+        limit: int | None = None,
+        params: Mapping[str, Mapping[str, Any]] | None = None,
+        judge: str = "",
+        project: str = "",
+        confidence: float = 0.95,
+        cluster_by: str | None = None,
+        ci_method: str = "auto",
+        timeout: float | None = None,
+    ) -> EvaluationStream:
+        """Score records as they arrive: iterate for results as they finish.
+
+        Streaming is bidirectional, which the server speaks over gRPC, so this
+        needs ``grpcio`` (``pip install 'evalsi[grpc]'``). After the iteration
+        ends, :attr:`EvaluationStream.summaries` holds the summaries, and
+        :meth:`EvaluationStream.collect` the same :class:`~evalsi.EvalResult` that
+        :meth:`evaluate` returns.
+        """
+        from evalsi.convert import record_to_proto
+        from evalsi.v1alpha1 import evaluation_service_pb2 as pb
+
+        records, refs = _prepare_evaluation(data, evaluators, mapping, limit, params)
+        config = pb.EvaluateStreamConfig(
+            project=project,
+            evaluators=refs,
+            judge=judge,
+            summary=_summary_options(confidence, cluster_by, ci_method),
+        )
+
+        def requests() -> Iterator[Any]:
+            yield pb.EvaluateStreamRequest(config=config)
+            for record in records:
+                yield pb.EvaluateStreamRequest(record=record_to_proto(record))
+
+        return EvaluationStream(
+            self,
+            requests(),
+            records,
+            refs,
+            timeout=timeout,
+            confidence=confidence,
+            cluster_by=cluster_by,
+            ci_method=ci_method,
+        )
 
     # --- runs ---
 
@@ -238,6 +363,37 @@ class Client:
         body = {"project": project, "queue": queue, "pageSize": page_size, "pageToken": page_token}
         return self.annotation_call("ListAnnotations", body)
 
+    # --- webhooks ---
+
+    def apply_webhook(self, webhook: dict[str, Any]) -> dict[str, Any]:
+        """Create or replace a webhook. A new one comes back with its generated ``secret`` once."""
+        out: dict[str, Any] = self.call("WebhookService", "ApplyWebhook", {"webhook": webhook})[
+            "webhook"
+        ]
+        return out
+
+    def list_webhooks(self, project: str = "") -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = self.call(
+            "WebhookService", "ListWebhooks", {"project": project}
+        ).get("webhooks", [])
+        return out
+
+    def delete_webhook(self, name: str, project: str = "") -> None:
+        self.call("WebhookService", "DeleteWebhook", {"project": project, "name": name})
+
+    def test_webhook(self, name: str, project: str = "") -> dict[str, Any]:
+        """Send a ping now: ``{"delivered": ..., "statusCode": ..., "error": ...}``."""
+        return self.call("WebhookService", "TestWebhook", {"project": project, "name": name})
+
+    def list_webhook_deliveries(
+        self, name: str, *, project: str = "", limit: int = 50
+    ) -> list[dict[str, Any]]:
+        body = {"project": project, "name": name, "limit": limit}
+        out: list[dict[str, Any]] = self.call("WebhookService", "ListWebhookDeliveries", body).get(
+            "deliveries", []
+        )
+        return out
+
     # --- guardrails ---
 
     def apply_guardrail(self, guardrail: dict[str, Any]) -> dict[str, Any]:
@@ -296,3 +452,221 @@ class Client:
 
 def _error(body: dict[str, Any], status: int) -> ServerError:
     return ServerError(str(body.get("code", f"http_{status}")), str(body.get("message", "")))
+
+
+class EvaluationStream:
+    """The results of :meth:`Client.evaluate_stream`, in the order they finish."""
+
+    def __init__(
+        self,
+        client: Client,
+        requests: Iterator[Any],
+        records: list[Record],
+        refs: list[Any],
+        *,
+        timeout: float | None,
+        confidence: float,
+        cluster_by: str | None,
+        ci_method: str,
+    ) -> None:
+        self._client = client
+        self._requests = requests
+        self._records = records
+        self._refs = refs
+        self._timeout = timeout
+        self.confidence, self.cluster_by, self.ci_method = confidence, cluster_by, ci_method
+        self.results: list[EvaluationResult] = []
+        self.summaries: list[MetricSummary] = []
+        self._started = False
+
+    def __iter__(self) -> Iterator[EvaluationResult]:
+        if self._started:
+            yield from self.results
+            return
+        self._started = True
+        import grpc
+
+        from evalsi.convert import result_from_proto, summary_from_proto
+        from evalsi.v1alpha1 import evaluation_service_pb2_grpc as stubs
+
+        channel = _grpc_channel(self._client.base_url)
+        try:
+            call = stubs.EvaluationServiceStub(channel).EvaluateStream(
+                self._requests,
+                metadata=tuple((k.lower(), v) for k, v in self._client.auth.headers().items()),
+                timeout=self._timeout,
+            )
+            for message in call:
+                kind = message.WhichOneof("message")
+                if kind == "result":
+                    result = result_from_proto(message.result)
+                    self.results.append(result)
+                    yield result
+                elif kind == "summaries":
+                    self.summaries = [summary_from_proto(m) for m in message.summaries.summaries]
+        except grpc.RpcError as exc:
+            code = exc.code().name.lower() if hasattr(exc, "code") else "unknown"
+            detail = exc.details() if hasattr(exc, "details") else str(exc)
+            raise ServerError(code, str(detail)) from exc
+        finally:
+            channel.close()
+
+    def collect(self) -> EvalResult:
+        """Drain the stream and return the whole :class:`~evalsi.EvalResult`."""
+        for _ in self:
+            pass
+        return _assemble_streamed(self._client.base_url, self._records, self._refs, self)
+
+
+def _grpc_channel(base_url: str) -> Any:
+    import grpc
+
+    parsed = httpx.URL(base_url)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    target = f"{parsed.host}:{port}"
+    if parsed.scheme == "https":
+        return grpc.secure_channel(target, grpc.ssl_channel_credentials())
+    return grpc.insecure_channel(target)
+
+
+def _summary_options(confidence: float, cluster_by: str | None, ci_method: str) -> Any:
+    from evalsi.v1alpha1 import evaluation_service_pb2 as pb
+
+    if not 0 < confidence < 1:
+        raise ValueError("confidence must be between 0 and 1")
+    methods = {"auto": pb.CI_METHOD_AUTO, "bootstrap": pb.CI_METHOD_BOOTSTRAP}
+    if ci_method not in methods:
+        raise ValueError(f"ci_method must be one of {sorted(methods)}, not {ci_method!r}")
+    return pb.SummaryOptions(
+        confidence_level=confidence, cluster_by=cluster_by or "", ci_method=methods[ci_method]
+    )
+
+
+def _prepare_evaluation(
+    data: str | Path | Iterable[Mapping[str, Any] | Record],
+    evaluators: Sequence[str | Mapping[str, Any]],
+    mapping: Mapping[str, str] | None,
+    limit: int | None,
+    params: Mapping[str, Mapping[str, Any]] | None,
+) -> tuple[list[Record], list[Any]]:
+    from evalsi.convert import to_struct
+    from evalsi.datasets import load_records
+    from evalsi.evaluator import EvaluatorConfigError
+    from evalsi.v1alpha1 import evaluator_pb2
+
+    params = params or {}
+    refs = []
+    for item in evaluators:
+        if isinstance(item, str):
+            entry: dict[str, Any] = {"ref": item}
+        elif isinstance(item, Mapping) and "ref" in item:
+            entry = dict(item)
+        else:
+            raise EvaluatorConfigError(
+                f"{item!r}: evaluators run on the server, so name one it has "
+                "(a reference string, or a mapping with 'ref', 'params' and 'name')"
+            )
+        ref, alias = str(entry["ref"]), str(entry.get("name", ""))
+        short = ref.rsplit("/", 1)[-1].split("@", 1)[0]
+        merged = {**dict(entry.get("params") or {}), **params.get(alias or short, {})}
+        refs.append(evaluator_pb2.EvaluatorRef(ref=ref, name=alias, params=to_struct(merged)))
+    return load_records(data, mapping=mapping, limit=limit), refs
+
+
+def _instance_names(refs: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {"name": r.name or r.ref.rsplit("/", 1)[-1].split("@", 1)[0], "ref": r.ref} for r in refs
+    ]
+
+
+def _manifest(
+    base_url: str,
+    records: list[Record],
+    refs: list[Any],
+    *,
+    confidence: float,
+    cluster_by: str | None,
+    ci_method: str,
+) -> dict[str, Any]:
+    from datetime import UTC, datetime
+
+    from evalsi._version import __version__
+    from evalsi.datasets import records_hash
+
+    now = datetime.now(UTC).isoformat()
+    return {
+        "evalsi_version": __version__,
+        "api_version": "evalsi.v1alpha1",
+        "server": base_url,
+        "started_at": now,
+        "finished_at": now,
+        "dataset": {
+            "source": "<in-memory>",
+            "records": len(records),
+            "sha256": records_hash(records),
+        },
+        "evaluators": _instance_names(refs),
+        "summary": {
+            "confidence_level": confidence,
+            "cluster_by": cluster_by,
+            "ci_method": ci_method,
+        },
+    }
+
+
+def _assemble(
+    base_url: str,
+    records: list[Record],
+    refs: list[Any],
+    results: list[Any],
+    summaries: list[Any],
+    *,
+    confidence: float,
+    cluster_by: str | None,
+    ci_method: str,
+) -> EvalResult:
+    from evalsi.convert import result_from_proto, summary_from_proto
+    from evalsi.results import EvalResult
+
+    return EvalResult(
+        records=records,
+        results=[result_from_proto(r) for r in results],
+        summaries=[summary_from_proto(s) for s in summaries],
+        manifest=_manifest(
+            base_url,
+            records,
+            refs,
+            confidence=confidence,
+            cluster_by=cluster_by,
+            ci_method=ci_method,
+        ),
+    )
+
+
+def _assemble_streamed(
+    base_url: str, records: list[Record], refs: list[Any], stream: EvaluationStream
+) -> EvalResult:
+    from evalsi.results import EvalResult
+
+    order = {r.id: i for i, r in enumerate(records)}
+    names = [i["name"] for i in _instance_names(refs)]
+    results = sorted(
+        stream.results,
+        key=lambda r: (
+            order.get(r.record_id, len(order)),
+            names.index(r.evaluator) if r.evaluator in names else len(names),
+        ),
+    )
+    return EvalResult(
+        records=records,
+        results=results,
+        summaries=stream.summaries,
+        manifest=_manifest(
+            base_url,
+            records,
+            refs,
+            confidence=stream.confidence,
+            cluster_by=stream.cluster_by,
+            ci_method=stream.ci_method,
+        ),
+    )

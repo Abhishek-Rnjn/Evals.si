@@ -28,7 +28,7 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 >
 > The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)). It has also been verified on real clusters: AKS, and an Istio ambient cluster with STRICT mTLS and KVM nodes, where the Firecracker rung ran in microVMs. Most findings are fixed; the [verification report](docs/verification/README.md) lists what is still open.
 >
-> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix, a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents. The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
+> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix, a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents (built: [`examples/demo`](examples/demo/README.md), and the [integration guide](docs/guides/integrate-an-agent-studio.md)). The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
 >
 
 > New here? Start with the [end-to-end guide](docs/guides/end-to-end.md): every feature, the integrations, and copy-paste pull request workflows.
@@ -130,6 +130,21 @@ grpcurl -plaintext localhost:8080 evalsi.v1alpha1.CatalogService/ListEvaluators
 ```
 
 Large jobs use `EvaluationService/EvaluateStream`: send a config message, then records, and receive results as they finish, followed by the summaries. Intervals match the embedded library exactly, bootstrap included. `GET /healthz` reports whether the worker is up.
+
+From Python, `Client.evaluate()` runs the same call and returns the same `EvalResult` as in-process `evalsi.evaluate()`, with the server's scores and intervals (a parity test checks this against a real `evalsid`):
+
+```python
+from evalsi.client import Client
+
+with Client("http://localhost:8080") as client:                # API key from EVALSI_API_KEY
+    result = client.evaluate("qa.jsonl", ["exact-match", "numeric-match"])
+    print(result.table())
+    # result = await client.evaluate_async(...)                  # without blocking the event loop
+    for r in client.evaluate_stream("qa.jsonl", ["exact-match"]):  # results as they finish
+        print(r.record_id, r.outcome)                            # needs: pip install 'evalsi[grpc]'
+```
+
+Evaluators run on the server, so name ones it has; a judge evaluator needs `judge="<name of a server judge>"`.
 
 The same services answer plain REST under `/v1alpha1`, for example:
 
@@ -375,6 +390,8 @@ evalsi guardrails check support-chat --project support --text "key AKIAIOSFODNN7
 ```
 
 See the [guardrails guide](docs/guides/guardrails.md).
+
+A project can also subscribe an HTTP endpoint to run results: signed webhooks fire when a run finishes or fails a gate, with retries that survive a restart. See the [webhooks guide](docs/guides/webhooks.md).
 
 ### Human annotation
 

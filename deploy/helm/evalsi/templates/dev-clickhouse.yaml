@@ -1,0 +1,105 @@
+{{- if .Values.devClickhouse.enabled }}
+{{- $fn := include "evalsi.fullname" $ -}}
+{{- $old := lookup "v1" "Secret" .Release.Namespace (printf "%s-dev-clickhouse" $fn) }}
+{{- $password := randAlphaNum 24 }}
+{{- if $old }}{{ $password = index $old.data "password" | b64dec }}{{ end }}
+# Not for production: one node, no backups. ClickHouse for trace storage, for
+# trials of a cluster install without one.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $fn }}-dev-clickhouse
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+stringData:
+  password: {{ $password | quote }}
+  # The user is configured here rather than by the image's entrypoint, which
+  # writes under /etc and so needs root. The default user is removed.
+  users.xml: |
+    <clickhouse>
+      <users>
+        <default remove="remove"/>
+        <evalsi>
+          <password>{{ $password }}</password>
+          <networks><ip>::/0</ip></networks>
+          <profile>default</profile>
+          <quota>default</quota>
+          <access_management>1</access_management>
+        </evalsi>
+      </users>
+    </clickhouse>
+  logger.xml: |
+    <clickhouse>
+      <logger>
+        <console>1</console>
+        <log remove="remove"/>
+        <errorlog remove="remove"/>
+      </logger>
+    </clickhouse>
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fn }}-dev-clickhouse
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $fn }}-dev-clickhouse
+spec:
+  serviceName: {{ $fn }}-dev-clickhouse
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-dev-clickhouse}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: {{ $fn }}-dev-clickhouse, app.kubernetes.io/part-of: evalsi}
+    spec:
+      securityContext: {runAsUser: 101, runAsGroup: 101, fsGroup: 101, runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      {{- with .Values.devClickhouse.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.devClickhouse.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: clickhouse
+          image: {{ include "evalsi.ref" (dict "root" . "ref" .Values.devClickhouse.image) }}
+          env:
+            - {name: CLICKHOUSE_DB, value: {{ .Values.storage.clickhouse.database | quote }}}
+            - {name: CLICKHOUSE_SKIP_USER_SETUP, value: "1"}
+          ports: [{name: http, containerPort: 8123}]
+          readinessProbe:
+            httpGet: {path: /ping, port: http}
+            periodSeconds: 3
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/clickhouse}
+            - {name: log, mountPath: /var/log/clickhouse-server}
+            - {name: tmp, mountPath: /tmp}
+            - {name: config, mountPath: /etc/clickhouse-server/users.d/evalsi.xml, subPath: users.xml, readOnly: true}
+            - {name: config, mountPath: /etc/clickhouse-server/config.d/logger.xml, subPath: logger.xml, readOnly: true}
+      volumes:
+        - name: log
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: config
+          secret: {secretName: {{ $fn }}-dev-clickhouse}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.devClickhouse.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources: {requests: {storage: {{ .Values.devClickhouse.storage }}}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-dev-clickhouse
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+    {{- with .Values.devClickhouse.serviceLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector: {app.kubernetes.io/name: {{ $fn }}-dev-clickhouse}
+  ports: [{name: http, port: 8123, targetPort: http}]
+{{- end }}

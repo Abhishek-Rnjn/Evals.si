@@ -1,0 +1,69 @@
+[
+  {
+    "match": "calc.py has a bug",
+    "command": "sed -i '/def mul/,$ s/return a + b/return a * b/' calc.py && sed -i 's/return a - b/return a + b/' calc.py"
+  },
+  {
+    "match": "retrieval-augmented generation",
+    "tool": "search_docs",
+    "arguments": {
+      "query": "retrieval-augmented generation evaluation"
+    },
+    "answer": "# Findings\n\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\n\n## Sources\n[1] rag-overview\n[2] rag-evaluation\n"
+  },
+  {
+    "match": "calc.py has a bug: add(2, 3) returns -1, and mul(2, 3) retur",
+    "command": "sed -i '/def mul/,$ s/return a + b/return a * b/' calc.py && sed -i 's/return a - b/return a + b/' calc.py",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "mathx.range_sum(1, 4) should be 10 (1+2+3+4, both ends inclu",
+    "command": "sed -i 's/range(lo, hi)/range(lo, hi + 1)/' mathx.py",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "textutil.slugify('  Hello, World!  ') returns 'hello-world-'",
+    "command": "sed -i 's/return re.sub(r\"\\[^a-z0-9\\]+\", \"-\", text.lower())/return re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")/' textutil.py",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "timeparse.parse_duration('1h30m') should be 5400 seconds but",
+    "command": "python3 - <<'PY'\nimport re\ns = open('timeparse.py').read()\ns = s.replace('    if hours:\\n        return hours * UNITS[\"h\"]\\n    return minutes', '    return hours * UNITS[\"h\"] + minutes')\nopen('timeparse.py', 'w').write(s)\nPY",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "listutil.dedupe([3, 1, 3, 2, 1]) should keep the first occur",
+    "command": "sed -i 's/return list(set(items))/return list(dict.fromkeys(items))/' listutil.py",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "Popping from an empty stack.Stack should raise stack.EmptySt",
+    "command": "python3 - <<'PY'\ns = open('stack.py').read()\ns = 'class EmptyStackError(Exception):\\n    pass\\n\\n\\n' + s\ns = s.replace('        return self._items.pop()', '        if not self._items:\\n            raise EmptyStackError()\\n        return self._items.pop()')\nopen('stack.py', 'w').write(s)\nPY",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "stats.median([1, 2, 3, 4]) should be 2.5 (the mean of the tw",
+    "command": "python3 - <<'PY'\ns = open('stats.py').read()\ns = s.replace('    return ordered[len(ordered) // 2]', '    mid = len(ordered) // 2\\n    if len(ordered) % 2:\\n        return ordered[mid]\\n    return (ordered[mid - 1] + ordered[mid]) / 2')\nopen('stats.py', 'w').write(s)\nPY",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "wordcount.count_words('The the THE cat') should return {'the",
+    "command": "sed -i 's/for word in text.split():/for word in text.lower().split():/' wordcount.py",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "text.is_palindrome('A man, a plan, a canal: Panama') should ",
+    "command": "python3 - <<'PY'\ns = open('text.py').read()\ns = s.replace('    return s == s[::-1]', '    kept = [c.lower() for c in s if c.isalnum()]\\n    return kept == kept[::-1]')\nopen('text.py', 'w').write(s)\nPY",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "batching.chunk([1, 2, 3, 4, 5], 2) should be [[1, 2], [3, 4]",
+    "command": "sed -i 's/range(0, len(items) - size + 1, size)/range(0, len(items), size)/' batching.py",
+    "suite": "small-repo-fixes"
+  },
+  {
+    "match": "config.merge({'a': {'x': 1, 'y': 2}}, {'a': {'y': 3}}) shoul",
+    "command": "python3 - <<'PY'\ns = open('config.py').read()\ns = s.replace('    out.update(override)', '    for key, value in override.items():\\n        if isinstance(value, dict) and isinstance(out.get(key), dict):\\n            out[key] = merge(out[key], value)\\n        else:\\n            out[key] = value')\nopen('config.py', 'w').write(s)\nPY",
+    "suite": "small-repo-fixes"
+  }
+]

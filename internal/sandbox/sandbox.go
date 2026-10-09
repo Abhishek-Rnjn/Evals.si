@@ -232,6 +232,8 @@ type Sandbox struct {
 
 	mu     sync.Mutex
 	probes map[string]error
+	// warnings are what a verifier found wrong with a working rung.
+	warnings map[string]string
 }
 
 var rungNames = []string{"firecracker", "bwrap", "landlock"}
@@ -309,7 +311,7 @@ func New(cfg Config) (*Sandbox, error) {
 			return nil, fmt.Errorf("sandbox.work_dir: %w", err)
 		}
 	}
-	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}, images: newImageStore(filepath.Join(cfg.CacheDir, "images"))}
+	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}, warnings: map[string]string{}, images: newImageStore(filepath.Join(cfg.CacheDir, "images"))}
 	if cfg.ImageSignatures != nil {
 		v, err := newSignatureVerifier(cfg.ImageSignatures)
 		if err != nil {
@@ -354,6 +356,9 @@ type RungStatus struct {
 	Level     string `json:"level"`
 	Available bool   `json:"available"`
 	Reason    string `json:"reason,omitempty"`
+	// Warning says what the rung claims but this host or cluster does not
+	// enforce; the rung still works.
+	Warning string `json:"warning,omitempty"`
 }
 
 // Probe reports which rungs work here, running each one's functional probe.
@@ -365,6 +370,9 @@ func (s *Sandbox) Probe(ctx context.Context) []RungStatus {
 		if err != nil {
 			st.Reason = err.Error()
 		}
+		s.mu.Lock()
+		st.Warning = s.warnings[d.name()]
+		s.mu.Unlock()
 		out = append(out, st)
 	}
 	return out
@@ -404,7 +412,20 @@ func (s *Sandbox) probeRun(ctx context.Context, d driver) error {
 	if res.Outcome != OutcomeExit || res.ExitCode != 0 {
 		return fmt.Errorf("probe failed (%s, exit %d): %s", res.Outcome, res.ExitCode, firstLine(stderr.String()+res.Error))
 	}
+	if v, ok := d.(verifier); ok {
+		if w := v.verify(ctx, b); w != "" {
+			s.warnings[d.name()] = w
+		}
+	}
 	return nil
+}
+
+// verifier is implemented by rungs whose isolation depends on something
+// outside the process (the cluster's CNI): verify checks it against a live
+// sandbox and returns what is not enforced, or "". probeRun runs it with s.mu
+// held.
+type verifier interface {
+	verify(ctx context.Context, b backend) string
 }
 
 // pick returns the strongest working rung that meets both the spec's and the

@@ -274,6 +274,11 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 		return loc.Join(clean).String(), nil
 	}
 	root, err := filepath.EvalSymlinks(m.opts.DatasetsDir)
+	if err == nil {
+		// A relative datasets_dir (./datasets) is relative to where evalsid
+		// started; the worker wants absolute paths.
+		root, err = filepath.Abs(root)
+	}
 	if err != nil {
 		return "", fmt.Errorf("datasets_dir: %w", err)
 	}

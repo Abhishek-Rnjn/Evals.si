@@ -1,0 +1,38 @@
+# Deep Agents Code (dcode) fixing small repositories: 11 SWE-bench-style tasks
+# graded by hidden tests. dcode runs headless inside each task's sandbox.
+#
+# The same file runs embedded, on a server, and (kubectl apply) on Kubernetes;
+# see README.md. dcode prints only its final message, so the trajectory is one
+# step; the HTTP spec (deepagents-deep-research.yaml) shows the full trajectory.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: deepagents-small-repo-fixes
+  labels: {evals.si/project: demo}
+spec:
+  target:
+    agent:
+      cli:
+        command: [dcode-demo, "{instruction}"]
+        # The model's key is the worker's DEMO_API_KEY, passed in as OPENAI_API_KEY.
+        env_from: {OPENAI_API_KEY: DEMO_API_KEY}
+        allow_hosts: ["evalsi-demo-model:8000"]
+        timeout: 10m
+  dataset:
+    path: fixtures/small-repo-fixes.jsonl
+  environment:
+    # The image carries dcode. Omit it to use the host's own tools (dcode installed under /usr).
+    image: ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0
+    env:
+      OPENAI_BASE_URL: http://evalsi-demo-model:8000/v1
+      DEMO_MODEL: openai:mock
+      PYTHONDONTWRITEBYTECODE: "1"
+      HOME: /tmp/agent-home      # dcode keeps its state under HOME, which the sandbox does not set
+    sandbox: {min_isolation: namespaced, network: deny, memory_mb: 2048}
+  evaluators:
+    - ref: task-success
+    - ref: policy-violations
+    - ref: agent-efficiency
+  trials: 3
+  gates:
+    - {metric: task-success.pass^3, min: 0.8}

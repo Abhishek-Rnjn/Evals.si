@@ -136,7 +136,7 @@ func stepType(a Attrs) evalsiv1alpha1.StepType {
 	case "embeddings":
 		return evalsiv1alpha1.StepType_STEP_TYPE_EMBEDDING
 	}
-	switch strings.ToUpper(a.str("openinference.span.kind", "mlflow.spanType")) {
+	switch strings.ToUpper(a.mlflowStr("openinference.span.kind", "mlflow.spanType")) {
 	case "LLM", "CHAT_MODEL":
 		return evalsiv1alpha1.StepType_STEP_TYPE_LLM
 	case "TOOL":
@@ -277,6 +277,13 @@ func spanIO(a Attrs, events []*tracepb.Span_Event) (in, out *evalsiv1alpha1.Cont
 	if out == nil {
 		out = messagesContent(indexedMessages(a, "llm.output_messages", "message.role", "message.content"))
 	}
+	// MLflow (LangChain, LangGraph, Deep Agents): chat messages, else raw JSON.
+	if in == nil {
+		in = messagesContent(mlflowMessages(a.str("mlflow.spanInputs")))
+	}
+	if out == nil {
+		out = messagesContent(mlflowMessages(a.str("mlflow.spanOutputs")))
+	}
 	if in == nil {
 		in = contentOf(a.str("gen_ai.tool.call.arguments", "input.value", "mlflow.spanInputs", "gen_ai.prompt"))
 	}
@@ -321,6 +328,9 @@ func ToStep(s Span) *evalsiv1alpha1.Step {
 	}
 	if end, start := sp.GetEndTimeUnixNano(), sp.GetStartTimeUnixNano(); end > start {
 		usage.Latency = durationpb.New(unixNano(end).Sub(unixNano(start)))
+	}
+	if mi, mo := a.mlflowTokens(); usage.InputTokens == nil && usage.OutputTokens == nil {
+		usage.InputTokens, usage.OutputTokens = mi, mo
 	}
 	step.Usage = usage
 	if sp.GetStatus().GetCode() == tracepb.Status_STATUS_CODE_ERROR {
@@ -422,7 +432,7 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 					usage.OutputTokens = proto.Int64(usage.GetOutputTokens() + u.GetOutputTokens())
 				}
 			}
-			if m := a.str("gen_ai.response.model", "gen_ai.request.model", "llm.model_name"); m != "" && !seenModel[m] {
+			if m := a.mlflowStr("gen_ai.response.model", "gen_ai.request.model", "llm.model_name", "mlflow.llm.model"); m != "" && !seenModel[m] {
 				seenModel[m] = true
 				info.Models = append(info.Models, m)
 			}

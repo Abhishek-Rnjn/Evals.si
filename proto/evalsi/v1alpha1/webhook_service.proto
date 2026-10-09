@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+// WebhookService delivers events to HTTP endpoints, signed with HMAC.
+//
+// A delivery is a POST of a JSON body. Its headers are:
+//
+//   Evalsi-Event:      the event type, for example "run.finished"
+//   Evalsi-Delivery:   the delivery's ID; the same on every retry
+//   Evalsi-Signature:  "t=<unix seconds>,v1=<hex>", where <hex> is
+//                      HMAC-SHA256(secret, "<t>.<body>")
+//
+// The timestamp is fresh on each attempt, so a receiver can reject stale
+// deliveries. Any 2xx response is a success. Anything else (or no answer)
+// is retried with growing delays, up to the server's attempt limit.
+service WebhookService {
+  // Creates or replaces a webhook. The response carries a generated secret
+  // once; no other call returns it.
+  rpc ApplyWebhook(ApplyWebhookRequest) returns (ApplyWebhookResponse);
+  rpc ListWebhooks(ListWebhooksRequest) returns (ListWebhooksResponse);
+  rpc GetWebhook(GetWebhookRequest) returns (GetWebhookResponse);
+  rpc DeleteWebhook(DeleteWebhookRequest) returns (DeleteWebhookResponse);
+  // Sends a "ping" event now and reports what the endpoint answered. It is
+  // not retried and not recorded as a delivery.
+  rpc TestWebhook(TestWebhookRequest) returns (TestWebhookResponse);
+  // The latest deliveries of a webhook, newest first.
+  rpc ListWebhookDeliveries(ListWebhookDeliveriesRequest) returns (ListWebhookDeliveriesResponse);
+}
+
+enum WebhookEvent {
+  WEBHOOK_EVENT_UNSPECIFIED = 0;
+  // A run reached a final status (succeeded, failed, error or cancelled).
+  // "run.finished".
+  WEBHOOK_EVENT_RUN_FINISHED = 1;
+  // A run finished with at least one failed gate (status FAILED), so a
+  // pipeline can stop on it. "run.gate_failed".
+  WEBHOOK_EVENT_RUN_GATE_FAILED = 2;
+}
+
+message Webhook {
+  // Lowercase letters, digits, '.', '_' or '-'.
+  string name = 1;
+  string project = 2;
+  // An http or https URL. The server dials it from where it runs, so a
+  // cluster's own services are reachable by their in-cluster names.
+  string url = 3;
+  // Events to deliver; empty means all.
+  repeated WebhookEvent events = 4;
+  // The HMAC key. On apply: set it, or leave it empty to keep the stored
+  // one (a new webhook then gets a generated secret). Never returned by
+  // list or get; see secret_set.
+  string secret = 5;
+  bool secret_set = 6;
+  // Stored and kept, but nothing is delivered.
+  bool disabled = 7;
+  // Labels for access rules.
+  map<string, string> labels = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  string updated_by = 10;
+}
+
+message ApplyWebhookRequest {
+  Webhook webhook = 1;
+}
+
+message ApplyWebhookResponse {
+  // Carries secret only when the server generated it for this call.
+  Webhook webhook = 1;
+}
+
+message ListWebhooksRequest {
+  string project = 1;
+}
+
+message ListWebhooksResponse {
+  repeated Webhook webhooks = 1;
+}
+
+message GetWebhookRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message GetWebhookResponse {
+  Webhook webhook = 1;
+}
+
+message DeleteWebhookRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message DeleteWebhookResponse {}
+
+message TestWebhookRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message TestWebhookResponse {
+  bool delivered = 1;
+  // The endpoint's HTTP status; 0 when it did not answer.
+  int32 status_code = 2;
+  string error = 3;
+}
+
+enum DeliveryState {
+  DELIVERY_STATE_UNSPECIFIED = 0;
+  // Waiting for its next attempt.
+  DELIVERY_STATE_PENDING = 1;
+  DELIVERY_STATE_DELIVERED = 2;
+  // Out of attempts.
+  DELIVERY_STATE_FAILED = 3;
+}
+
+message WebhookDelivery {
+  string id = 1;
+  string webhook = 2;
+  string project = 3;
+  // "run.finished" or "run.gate_failed".
+  string event = 4;
+  string run_id = 5;
+  DeliveryState state = 6;
+  int32 attempts = 7;
+  // The last attempt's HTTP status (0: no answer) and error.
+  int32 status_code = 8;
+  string error = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp next_attempt_at = 11;
+  google.protobuf.Timestamp delivered_at = 12;
+}
+
+message ListWebhookDeliveriesRequest {
+  string project = 1;
+  string name = 2;
+  // At most 200; default 50.
+  int32 limit = 3;
+}
+
+message ListWebhookDeliveriesResponse {
+  repeated WebhookDelivery deliveries = 1;
+}

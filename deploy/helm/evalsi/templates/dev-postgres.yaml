@@ -1,31 +1,32 @@
 {{- if .Values.devPostgres.enabled }}
-{{- $old := lookup "v1" "Secret" .Release.Namespace "evalsi-dev-postgres" }}
+{{- $fn := include "evalsi.fullname" $ -}}
+{{- $old := lookup "v1" "Secret" .Release.Namespace (printf "%s-dev-postgres" $fn) }}
 {{- $password := randAlphaNum 24 }}
 {{- if $old }}{{ $password = index $old.data "password" | b64dec }}{{ end }}
 # Not for production: one node, no backups.
 apiVersion: v1
 kind: Secret
 metadata:
-  name: evalsi-dev-postgres
+  name: {{ $fn }}-dev-postgres
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 stringData:
   password: {{ $password | quote }}
-  dsn: {{ printf "postgres://evalsi:%s@evalsi-dev-postgres.%s.svc:5432/evalsi?sslmode=disable" $password .Release.Namespace | quote }}
+  dsn: {{ printf "postgres://evalsi:%s@%s-dev-postgres.%s.svc:5432/evalsi?sslmode=disable" $password $fn .Release.Namespace | quote }}
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: evalsi-dev-postgres
+  name: {{ $fn }}-dev-postgres
   labels: {{- include "evalsi.labels" . | nindent 4 }}
-    app.kubernetes.io/name: evalsi-dev-postgres
+    app.kubernetes.io/name: {{ $fn }}-dev-postgres
 spec:
-  serviceName: evalsi-dev-postgres
+  serviceName: {{ $fn }}-dev-postgres
   replicas: 1
   selector:
-    matchLabels: {app.kubernetes.io/name: evalsi-dev-postgres}
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-dev-postgres}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: evalsi-dev-postgres, app.kubernetes.io/part-of: evalsi}
+      labels: {app.kubernetes.io/name: {{ $fn }}-dev-postgres, app.kubernetes.io/part-of: evalsi}
     spec:
       securityContext: {runAsUser: 999, runAsGroup: 999, fsGroup: 999, runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
       {{- with .Values.devPostgres.nodeSelector }}
@@ -41,7 +42,7 @@ spec:
             - {name: POSTGRES_USER, value: evalsi}
             - {name: POSTGRES_DB, value: evalsi}
             - name: POSTGRES_PASSWORD
-              valueFrom: {secretKeyRef: {name: evalsi-dev-postgres, key: password}}
+              valueFrom: {secretKeyRef: {name: {{ $fn }}-dev-postgres, key: password}}
             - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
           ports: [{name: postgres, containerPort: 5432}]
           readinessProbe:
@@ -63,12 +64,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: evalsi-dev-postgres
+  name: {{ $fn }}-dev-postgres
   labels: {{- include "evalsi.labels" . | nindent 4 }}
     {{- with .Values.devPostgres.serviceLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
-  selector: {app.kubernetes.io/name: evalsi-dev-postgres}
+  selector: {app.kubernetes.io/name: {{ $fn }}-dev-postgres}
   ports: [{name: postgres, port: 5432, targetPort: postgres}]
 {{- end }}

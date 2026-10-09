@@ -1,6 +1,15 @@
+# Names of the cluster-scoped objects start with the release's name without a
+# trailing "-crds" ("evalsi-crds" gives "evalsi"; a release not named for evalsi
+# gets "-evalsi" after it). Set this to choose the prefix.
+fullnameOverride: ""
+
 # Where the evalsi chart (and its operator) is installed.
 operator:
   namespace: evalsi
+  # The evalsi release's full name: its operator is "<this>-operator". A release
+  # named evalsi has the full name evalsi; any other release "<name>-evalsi"
+  # (or the evalsi chart's fullnameOverride).
+  fullname: evalsi
   # Let the operator reconcile SandboxClasses (cluster-scoped), with the
   # evalsi chart's operator.sandboxClasses. The only grant this needs is on
   # SandboxClasses themselves, but it is a ClusterRoleBinding, so it is

@@ -5,6 +5,7 @@ and on Landlock it needs no privilege and no cluster-scoped object, so a
 namespace admin can run it under Pod Security "restricted" (a SandboxClass
 does the same through the operator).
 */ -}}
+{{- $fn := include "evalsi.fullname" $ -}}
 {{- with .Values.sandbox.pool }}{{ if .enabled }}
 {{- $v := $.Values }}
 {{- $ns := $.Release.Namespace }}
@@ -23,7 +24,7 @@ does the same through the operator).
 {{- with .maxSandboxes }}{{ $_ := set $cfg "max_sandboxes" (int .) }}{{ end }}
 {{- if $usesPods }}
 {{- $p := .pod }}
-{{- $pod := dict "namespace" $ns "guest_image" (include "evalsi.image" $) "network_policy_enforced" $p.networkPolicyEnforced "labels" (merge (dict "evals.si/sandbox-pool" "evalsi-sandbox-pool") ($p.labels | default dict)) }}
+{{- $pod := dict "namespace" $ns "guest_image" (include "evalsi.image" $) "network_policy_enforced" $p.networkPolicyEnforced "labels" (merge (dict "evals.si/sandbox-pool" (printf "%s-sandbox-pool" $fn)) ($p.labels | default dict)) }}
 {{- with $p.defaultImage }}{{ $_ := set $pod "default_image" (include "evalsi.ref" (dict "root" $ "ref" .)) }}{{ end }}
 {{- if not (kindIs "invalid" $p.runAsUser) }}{{ $_ := set $pod "run_as_user" (int64 $p.runAsUser) }}{{ end }}
 {{- if not (kindIs "invalid" $p.capabilities) }}{{ $_ := set $pod "capabilities" $p.capabilities }}{{ end }}
@@ -40,7 +41,7 @@ does the same through the operator).
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: evalsi-sandbox-pool
+  name: {{ $fn }}-sandbox-pool
   labels: {{- include "evalsi.labels" $ | nindent 4 }}
 data:
   evalsi.yaml: |
@@ -49,25 +50,25 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: evalsi-sandbox-pool
+  name: {{ $fn }}-sandbox-pool
   labels: {{- include "evalsi.labels" $ | nindent 4 }}
     app.kubernetes.io/name: evalsi-sandboxd
-    app.kubernetes.io/instance: evalsi-sandbox-pool
+    app.kubernetes.io/instance: {{ $fn }}-sandbox-pool
 spec:
   replicas: {{ .replicas }}
   selector:
-    matchLabels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: evalsi-sandbox-pool}
+    matchLabels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: {{ $fn }}-sandbox-pool}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: evalsi-sandbox-pool, app.kubernetes.io/part-of: evalsi}
+      labels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: {{ $fn }}-sandbox-pool, app.kubernetes.io/part-of: evalsi}
       annotations:
         checksum/config: {{ $rendered | sha256sum }}
     spec:
       {{- if $usesPods }}
       # It creates the sandbox pods: the only Kubernetes API access it has.
-      serviceAccountName: evalsi-sandboxd
+      serviceAccountName: {{ $fn }}-sandboxd
       {{- else }}
-      serviceAccountName: evalsi-worker
+      serviceAccountName: {{ $fn }}-worker
       automountServiceAccountToken: false
       {{- end }}
       securityContext: {{- include "evalsi.podSecurity" $ | nindent 8 }}
@@ -87,7 +88,7 @@ spec:
             - --tls-cert=/etc/evalsi/tls/tls.crt
             - --tls-key=/etc/evalsi/tls/tls.key
             - --client-ca=/etc/evalsi/tls/ca.crt
-            - --allow-client=evalsi-worker
+            - --allow-client={{ $fn }}-worker
           env:
             - name: POD_IP
               valueFrom: {fieldRef: {fieldPath: status.podIP}}
@@ -105,9 +106,9 @@ spec:
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: config
-          configMap: {name: evalsi-sandbox-pool}
+          configMap: {name: {{ $fn }}-sandbox-pool}
         - name: tls
-          secret: {secretName: evalsi-sandbox-tls}
+          secret: {secretName: {{ $fn }}-sandbox-tls}
         - name: state
           emptyDir: {}
         - name: tmp
@@ -122,10 +123,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: evalsi-sandbox-pool
+  name: {{ $fn }}-sandbox-pool
   labels: {{- include "evalsi.labels" $ | nindent 4 }}
 spec:
-  selector: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: evalsi-sandbox-pool}
+  selector: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: {{ $fn }}-sandbox-pool}
   ports:
     - {name: sandbox, port: 7443, targetPort: sandbox}
 {{- end }}{{ end }}

@@ -56,6 +56,8 @@ var Permissions = []Permission{
 	{Name: "guardrails.read", Description: "Read the project's guardrails."},
 	{Name: "guardrails.write", Description: "Apply and delete guardrails, which decide what a gateway lets through.", Audited: true},
 	{Name: "guardrails.check", Description: "Check content against the project's guardrails (what a gateway's credential needs)."},
+	{Name: "webhooks.read", Description: "Read the project's webhooks (not their secrets) and their deliveries."},
+	{Name: "webhooks.write", Description: "Apply, delete and test webhooks, which make the server send run results to a URL.", Audited: true},
 	{Name: "mcp.tools.call", Description: "Call a tool of the MCP endpoint (rules can restrict tools by mcp.tool.name); each tool also needs the permission of what it does.", Public: true},
 }
 

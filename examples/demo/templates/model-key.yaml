@@ -1,0 +1,12 @@
+{{- if .Values.agents.model.apiKey }}
+# The key the agents use for the model, read by Evals.si's workers as
+# DEMO_API_KEY (overlays/evalsi-demo.yaml wires that) and by the Deep Agents
+# service. The mock ignores it. For a real key, create the Secret yourself.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.agents.model.apiKeySecret.name }}
+  labels: {{- include "demo.labels" . | nindent 4 }}
+stringData:
+  {{ .Values.agents.model.apiKeySecret.key }}: {{ .Values.agents.model.apiKey | quote }}
+{{- end }}

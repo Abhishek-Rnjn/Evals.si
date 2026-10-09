@@ -1,0 +1,67 @@
+{{- if .Values.deepagents.enabled }}
+{{- $fn := include "demo.fullname" . -}}
+{{- $d := .Values.deepagents }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fn }}-deepagents
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $fn }}-deepagents
+spec:
+  replicas: {{ $d.replicas }}
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-deepagents}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $fn }}-deepagents
+        app.kubernetes.io/part-of: evalsi-demo
+        {{- with include "demo.podLabels" (dict "root" . "local" $d) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      {{- include "demo.scheduling" (dict "root" . "local" $d) | nindent 6 }}
+      containers:
+        - name: deepagents
+          image: {{ include "demo.image" (dict "root" . "ref" $d.image) }}
+          imagePullPolicy: {{ $d.pullPolicy }}
+          ports: [{name: http, containerPort: 8080}]
+          env:
+            - {name: DEMO_MODEL, value: {{ printf "openai:%s" .Values.agents.model.name | quote }}}
+            - {name: OPENAI_BASE_URL, value: {{ include "demo.modelURL" . | quote }}}
+            - name: OPENAI_API_KEY
+              valueFrom: {secretKeyRef: {name: {{ .Values.agents.model.apiKeySecret.name }}, key: {{ .Values.agents.model.apiKeySecret.key }}}}
+            - {name: OTEL_SERVICE_NAME, value: evalsi-demo-deepagents}
+            - {name: HOME, value: /tmp/home}
+            {{- if .Values.mlflow.enabled }}
+            - {name: MLFLOW_TRACKING_URI, value: {{ printf "http://%s-mlflow:5000" $fn | quote }}}
+            {{- end }}
+            {{- with $d.otlp.endpoint }}
+            - {name: MLFLOW_ENABLE_OTLP_EXPORTER, value: "true"}
+            - {name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, value: {{ printf "%s/v1/traces" (trimSuffix "/" .) | quote }}}
+            - {name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, value: http/protobuf}
+            {{- end }}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          securityContext: {{- include "demo.restricted" . | nindent 12 }}
+          resources: {{- toYaml $d.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-deepagents
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    {{- with include "demo.serviceLabels" (dict "root" . "local" $d) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+spec:
+  selector: {app.kubernetes.io/name: {{ $fn }}-deepagents}
+  ports: [{name: http, port: 8080, targetPort: http}]
+{{- end }}

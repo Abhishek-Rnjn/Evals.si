@@ -117,17 +117,17 @@ dsh's OpenTelemetry plugin exports product analytics only, not session traces. O
 
 **Runs on any cluster.** The Kubernetes demo uses only standard resources and the Evals.si charts, with no cloud-specific services, so it runs unchanged on any conformant cluster. kind is the reference, locally and in CI. Storage class, ingress, image registry and node placement are chart values, not assumptions.
 
-| ID | Requirement | Priority |
-| --- | --- | --- |
-| R1 | Demo images: `evalsi-demo-deepagents` (Python, pinned `deepagents` and `deepagents-code`, HTTP wrapper) and `evalsi-demo-dsh` (Node 22, dsh pinned to a commit); model provider and key from environment | P0 |
-| R2 | Trajectory mapping for both: Deep Agents traces (LangGraph spans through MLflow or OTel) and dsh `--json` run events, tested against recorded fixtures | P0 |
-| R3 | Run specs under `examples/demo/`, one per agent and suite, identical in standalone and Kubernetes mode | P0 |
-| R4 | Standalone walkthrough: `evalsi run -f ...` embedded, then `--server` against `evalsid serve`, on the bubblewrap rung; report and `/ui/` | P0 |
-| R5 | Kubernetes walkthrough: the Evals.si charts and a sandbox pool, an MLflow server, the Deep Agents HTTP service and `dsh web` as studio stand-ins, and `kubectl apply` of the `EvalRun`s; scores in `/ui/` and in MLflow | P0 |
-| R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 |
-| R7 | CI: the kind e2e job runs the small-repo-fix suite for both agents against a mock model | P0 |
-| R8 | Portability: chart values for storage class, ingress, image registry and node placement; no cloud-specific dependency | P0 |
-| R9 | Integration guide `docs/guides/integrate-an-agent-studio.md`, built on these demos and covering the steps agent-studio-standalone will follow: install, connect traces, gate deploys, read scores | P0 |
+| ID | Requirement | Priority | Status |
+| --- | --- | --- | --- |
+| R1 | Demo images: `evalsi-demo-deepagents` (Python, pinned `deepagents` and `deepagents-code`, HTTP wrapper) and `evalsi-demo-dsh` (Node 22, dsh pinned to a commit); model provider and key from environment | P0 | Built; images build in CI only (not run in the session that wrote them: no Docker) |
+| R2 | Trajectory mapping for both: Deep Agents traces (LangGraph spans through MLflow or OTel) and dsh `--json` run events, tested against recorded fixtures | P0 | Built; dsh run events and the Deep Agents MLflow export are tested against recorded fixtures |
+| R3 | Run specs under `examples/demo/`, one per agent and suite, identical in standalone and Kubernetes mode | P0 | Built; six specs, loaded and checked by tests |
+| R4 | Standalone walkthrough: `evalsi run -f ...` embedded, then `--server` against `evalsid serve`, on the bubblewrap rung; report and `/ui/` | P0 | Built; walkthrough in `examples/demo/README.md`, run end to end with the mock model |
+| R5 | Kubernetes walkthrough: the Evals.si charts and a sandbox pool, an MLflow server, the Deep Agents HTTP service and `dsh web` as studio stand-ins, and `kubectl apply` of the `EvalRun`s; scores in `/ui/` and in MLflow | P0 | Built; chart and overlays are chart-tested. Run on a cluster by the kind e2e step, which has not run yet |
+| R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 | Gap |
+| R7 | CI: the kind e2e job runs the small-repo-fix suite for both agents against a mock model | P0 | Built; `deploy/e2e/kind-e2e.sh` step, not yet run on CI |
+| R8 | Portability: chart values for storage class, ingress, image registry and node placement; no cloud-specific dependency | P0 | Built; placement values on every pod and Service, overlays for kind, tainted nodes and Istio ambient, chart-tested |
+| R9 | Integration guide `docs/guides/integrate-an-agent-studio.md`, built on these demos and covering the steps agent-studio-standalone will follow: install, connect traces, gate deploys, read scores | P0 | Built |
 
 Both runtimes change quickly, and dsh warns of breaking changes, so the demos pin versions and the CI job (R7) catches drift when a pin moves.
 
@@ -189,10 +189,10 @@ Evals.si must install, run and upgrade like any well-behaved cluster service; mo
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| D1 | Install from a versioned OCI Helm chart (`oci://ghcr.io/.../evalsi`) with signed images (cosign keyless) and an SBOM | P0 | Gap: no release cut, images unsigned |
-| D2 | Installs as an independent chart beside others (agent-studio-standalone, agent-sandbox): all names prefixed by release, every external dependency (Postgres, NATS, S3, ClickHouse) either bundled or pointed at an existing one | P0 | Partly: verify release-prefixed naming and `global` values |
+| D1 | Install from a versioned OCI Helm chart (`oci://ghcr.io/.../evalsi`) with signed images (cosign keyless) and an SBOM | P0 | Workflow built, no tag cut: `release.yml` signs the images and the OCI charts keyless, attaches BuildKit provenance and an SBOM, attests an SPDX SBOM; `scripts/verify-release.sh` verifies them ([guide](guides/kubernetes.md#installing-a-release-and-verifying-it)). Never run: the first tag is the test |
+| D2 | Installs as an independent chart beside others (agent-studio-standalone, agent-sandbox): all names prefixed by release, every external dependency (Postgres, NATS, S3, ClickHouse) either bundled or pointed at an existing one | P0 | Built: names carry the release's name (chart tests render two releases and check the parts refer to each other); `devPostgres`, `devMinio`, `devClickhouse` or existing ones; `global.imageRegistry` ([guide](guides/kubernetes.md#names-and-installing-beside-other-charts)). Bundled MinIO and ClickHouse are not yet run in a cluster |
 | D3 | Namespace-only install with Pod Security `restricted`, no cluster-scoped objects | P0 | Built (`values-namespaced.yaml`) |
-| D4 | Bootstrap job that creates projects, API keys and default policies from Helm values and writes keys to Secrets | P0 | Gap |
+| D4 | Bootstrap job that creates projects, API keys and default policies from Helm values and writes keys to Secrets | P0 | Built: `bootstrap.*` values run `evalsi-operator bootstrap` as a post-install and post-upgrade Job ([guide](guides/kubernetes.md#first-state-from-values-the-bootstrap-job)); idempotent; the kind job checks a key survives an upgrade (not run here, no Docker) |
 | D5 | Horizontal scale: API replicas, KEDA-scaled worker pools per evaluator image, sandbox pools | P0 | Built; KEDA untested on a live pool |
 | D6 | Health, readiness, `/metrics`, Grafana dashboard, structured logs, OTel self-tracing | P0 | Built |
 | D7 | Zero-downtime upgrade with forward-only DB migrations and a documented N-1 compatibility rule | P1 | Gap: policy not written |
@@ -212,7 +212,7 @@ All three modes feed the same evaluator catalog and policy engine, so a record g
 | P1 | OTLP gRPC and HTTP ingest of GenAI, OpenInference and OpenLLMetry spans, project assigned from the ingest credential | P0 | Built |
 | P2 | On-demand `Evaluate` and `EvaluateStream` for records sent in the request | P0 | Built |
 | P3 | Run API: create, watch, cancel, resume, compare, with gates and budgets | P0 | Built |
-| P4 | Webhook callback when a run or a scored trace finishes, signed with HMAC | P0 | Gap (only policy alerts have webhooks) |
+| P4 | Webhook callback when a run or a scored trace finishes, signed with HMAC | P0 | Built for runs (`run.finished`, `run.gate_failed`; `POST /v1alpha1/webhooks`, [guide](guides/webhooks.md)). Scored traces: policy alerts keep their own webhooks; a per-trace event is not built |
 | P5 | `evalsi.log(input, output, trace_id, metadata)` SDK call for apps without OTel, batched and async | P1 | Gap (DESIGN Path E) |
 | P6 | Bulk upload: POST a JSONL or Parquet file, or reference an S3 object, as a dataset | P1 | Gap (datasets from S3 exist; the REST API has no upload endpoint) |
 | P7 | Idempotency key on every write, so retries from customer pipelines never double-score | P1 | Gap |
@@ -223,14 +223,14 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Gap |
-| S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Gap |
+| S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
 | S3 | Connectors for streams and logs: Kafka, AWS Kinesis, GCP Pub/Sub, S3/GCS prefix watcher; Loki and CloudWatch Logs via the evalsi-collector as recipes | P2 (after first cut) | Gap |
-| S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Gap |
-| S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Gap |
-| S6 | Pulled records reuse `OnlineEvalPolicy` (selectors, sampling, cascades, alerts, promotion) | P0 | Gap (wire into `internal/watch`) |
-| S7 | Credentials for sources from Kubernetes Secrets or the existing per-project credential store, never in the CRD | P0 | Partly (credential store exists) |
-| S8 | Status on the resource: watermark age, records/s, errors, last write-back | P0 | Gap |
+| S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S6 | Pulled records reuse `OnlineEvalPolicy` (selectors, sampling, cascades, alerts, promotion) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S7 | Credentials for sources from Kubernetes Secrets or the existing per-project credential store, never in the CRD | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)); the credential store exists |
+| S8 | Status on the resource: watermark age, records/s, errors, last write-back | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
 | S9 | Scheduled pull runs (cron) that evaluate a query window as a batch run with a report | P1 | Gap |
 
 ### Embed: local scripts, notebooks and training loops
@@ -238,7 +238,7 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
 | E1 | In-process `evalsi.evaluate()` and `aevaluate()` with every built-in pack, no server | P0 | Built |
-| E2 | `Client.evaluate(records, evaluators, params)` and `Client.evaluate_stream()` that run on the cluster and return the same `EvaluationResult` type as E1 | P0 | Gap |
+| E2 | `Client.evaluate(records, evaluators, params)` and `Client.evaluate_stream()` that run on the cluster and return the same `EvaluationResult` type as E1 | P0 | Built: `Client.evaluate()`, `evaluate_async()`, `evaluate_stream()` (gRPC; `evalsi[grpc]`), with a parity test against a real `evalsid` |
 | E3 | Tensor-friendly batching: accept lists of dicts, pandas, or Hugging Face datasets; non-blocking futures so a training step never waits | P1 | Gap |
 | E4 | RL rewards from the cluster Reward Service (TRL, verl, OpenRLHF) | P0 | Built |
 | E5 | Checkpoint evaluation hooks for plain PyTorch and Lightning (not only Hugging Face `TrainerCallback`) | P1 | Gap (LEFTOVERS) |
@@ -306,6 +306,8 @@ status:
   lagSeconds: 41
   recordsPerSecond: 37
 ```
+
+[Decision 0016](decisions/0016-trace-source-connectors.md) revises this shape: `credentials` (a variable or mounted file, never a Secret reference), `profile` plus `overrides` instead of `mapping`, `maxTraceDuration` instead of a single lookback, an `auth` block, and no per-source NetworkPolicy.
 
 ### New and changed API surface
 

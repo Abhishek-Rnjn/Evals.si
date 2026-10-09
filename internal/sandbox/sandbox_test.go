@@ -250,3 +250,21 @@ func TestWorkDirIsCreated(t *testing.T) {
 		t.Fatalf("%+v", res)
 	}
 }
+
+func TestBwrapFailureNamesTheFallback(t *testing.T) {
+	for _, c := range []struct{ stderr, want string }{
+		{"bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted\n", "mode: privileged"},
+		{"bwrap: Can't mount overlay: idmap not supported\n", "ladder: [pod]"},
+	} {
+		res := &ExecResult{Outcome: OutcomeExit, ExitCode: 1}
+		classify("bwrap", res, c.stderr)
+		if res.Outcome != OutcomeRunnerFailure || !strings.Contains(res.Error, c.want) {
+			t.Errorf("%q: %s %q", c.stderr, res.Outcome, res.Error)
+		}
+	}
+	res := &ExecResult{Outcome: OutcomeExit, ExitCode: 1}
+	classify("bwrap", res, "bwrap: setting up uid map: Permission denied\n")
+	if strings.Contains(res.Error, "mode: privileged") {
+		t.Errorf("unrelated failure got a hint: %q", res.Error)
+	}
+}

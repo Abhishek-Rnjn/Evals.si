@@ -46,15 +46,83 @@ helm install evalsi-sandboxd deploy/helm/evalsi-sandboxd -n evalsi
 
 The defaults are a working single-replica install on SQLite. Each chart's permissions are listed under [Permissions](#permissions); on a cluster where you are not cluster-admin, see [Installing without cluster-admin](#installing-without-cluster-admin). For production:
 
-- **Storage.** `storage.postgres.dsnSecret` (a Secret holding the DSN) for several API replicas; `storage.clickhouse` for traces at volume; `storage.s3` for datasets (`datasets_dir` becomes `s3://<bucket>/<prefix>`, with IRSA or a credentials Secret). File datasets (`path:`, `swebench://`) need it: workers run in other pods and cannot read files in the server's. `devPostgres.enabled` starts a throwaway PostgreSQL in the namespace, for trying replicas out.
+- **Storage.** `storage.postgres.dsnSecret` (a Secret holding the DSN) for several API replicas; `storage.clickhouse` for traces at volume; `storage.s3` for datasets (`datasets_dir` becomes `s3://<bucket>/<prefix>`, with IRSA or a credentials Secret). File datasets (`path:`, `swebench://`) need it: workers run in other pods and cannot read files in the server's. Upload files with `evalsid datasets put --config evalsi.yaml FILE...` (it copies into `datasets_dir`, local or S3, reading S3 credentials from the variables the config names in `access_key_env` and `secret_key_env`). `devPostgres.enabled` starts a throwaway PostgreSQL in the namespace, for trying replicas out.
 - **NATS.** The chart runs one JetStream node. For HA, run a three-node NATS (for example the official chart) and set `nats.url` and `nats.streamReplicas: 3`.
 - **Providers.** Put API keys in a Secret and reference it from `server.envFrom` and `workers.envFrom`; judges go in `workers.config.judges`.
 - **Scaling.** `keda.enabled` adds a `ScaledObject` per pool on the backlog of its JetStream consumer (`pool-<pool>` on stream `EVALSI_WORK`); `workers.pools.<pool>` sets replicas, concurrency, resources and node selectors (a `gpu` pool, for example).
 - **Certificates.** The chart makes an internal CA, kept across upgrades, for the API, the sandbox pools and the workers' client certificates. `tls.certManager.enabled` issues them from cert-manager instead.
 
+### Names, and installing beside other charts
+
+Every name a chart creates starts with its release's name, so releases can share a namespace, and the chart can sit beside others (agent-studio-standalone, agent-sandbox). The `evalsi` chart builds the name this way: a release named for evalsi (such as `evalsi`) is used as it is, and any other release gets `-evalsi` after it, so release `team-a` creates `team-a-evalsi` (the API Service), `team-a-evalsi-operator`, `team-a-evalsi-worker-cpu` and so on. `fullnameOverride` sets the prefix. The default release name `evalsi` keeps the short names used throughout these guides.
+
+The other two charts follow the same rule and refer to the evalsi release by value:
+
+| Chart | Its own names | Names it must match in the evalsi release |
+|---|---|---|
+| `evalsi-crds` | The release name without a trailing `-crds`, prefixed the same way (`evalsi-crds` gives `evalsi-operator`, `evalsi-validating`...); `fullnameOverride` sets it | `operator.fullname`: the evalsi release's full name, for the operator's service account and its webhook Service and certificate |
+| `evalsi-sandboxd` | `<release>-sandboxd` (`evalsi-sandboxd` as it is) | `tlsSecret: <fullname>-sandbox-tls` and `allowClients: [<fullname>-worker]` |
+
+For release `team-a`: `helm install team-a-crds deploy/helm/evalsi-crds --set operator.namespace=team-a --set operator.fullname=team-a-evalsi`, then `helm install team-a deploy/helm/evalsi -n team-a`. Install `evalsi-crds` once per evalsi install (its cluster-scoped names carry the prefix, so they do not collide).
+
+Each dependency is either bundled or one you point at:
+
+| Dependency | Bundled (trials only: no backups, no HA) | Existing |
+|---|---|---|
+| PostgreSQL | `devPostgres.enabled` | `storage.postgres.dsnSecret` |
+| NATS JetStream | one node, on by default | `nats.url` (and `nats.streamReplicas`) |
+| S3 | `devMinio.enabled` (a MinIO; `storage.s3.bucket` names the bucket, default `evalsi`) | `storage.s3` (endpoint, bucket, `credentialsSecret` or IRSA) |
+| ClickHouse | `devClickhouse.enabled` | `storage.clickhouse` |
+
+The bundled MinIO and ClickHouse run non-root with the images CI uses for its own tests. They have been rendered and checked by the chart tests, but not yet run in a cluster by this repository's CI.
+
+### First state from values (the bootstrap Job)
+
+`bootstrap.enabled` runs a Job after every `helm install` and `helm upgrade` (a Helm hook) that makes what the values list, so an install comes up with its projects, keys and defaults already in place:
+
+```yaml
+bootstrap:
+  enabled: true
+  projects:
+    - {name: studio, description: agent-studio-standalone}
+  apiKeys:                               # shown once, so each is written to a Secret
+    - name: studio-ingest
+      roles: {studio: [ingest]}
+      secret: {name: studio-evalsi-ingest-key}   # key: api_key
+    - name: studio-ci
+      roles: {studio: [runner]}
+      ttl: 2160h
+      secret: {name: studio-evalsi-ci-key}
+  policies:                              # OnlineEvalPolicy documents
+    - {name: studio-quality, project: studio, ...}
+  webhooks:                              # see the webhooks guide
+    - {name: studio, project: studio, url: "http://studio.studio.svc/hooks/evalsi",
+       events: [run.finished, run.gate_failed], secret: {name: studio-evalsi-webhook}}
+  credentialGrants:                      # which worker variables each project's specs may name
+    - {env: ANTHROPIC_API_KEY, projects: [studio], hosts: [api.anthropic.com]}
+```
+
+It is safe to run again. Existing projects, keys and policies are left alone, and a key's Secret is written once and then kept, so an upgrade never rotates a key. A key whose Secret was deleted is replaced: the old key is revoked and a new one is created as `<name>-r2` (then `-r3`...; revoked names stay taken), and the Secret records which key it holds. Roles cannot change on an existing key: rename it in the values to replace it (the Job logs a warning when they differ). A webhook's HMAC secret is generated by the Job and kept the same way.
+
+`credentialGrants` are not created by the Job: the chart writes them into the server's `credentials.grants`, which evalsid reloads without a restart (see [identity](identity.md#8-credentials-which-worker-secrets-a-project-may-use)).
+
+The Job signs in with its own service account's token, projected for the install's audience, and the chart makes that account an owner (creating projects is install-wide), so `auth.kubernetes.enabled` must be on. Its Role may create Secrets and read and replace only the ones the values name. It waits up to `bootstrap.waitTimeout` for the server to answer, and fails at once if the server refuses its credential. It takes tolerations, a node selector, pod labels, resources and the image registry like every other pod the chart adds. It works with Helm 3 and 4: it is a hook, so nothing in it is part of the release's server-side apply.
+
 ### High availability
 
 Every `evalsid` replica serves the API and OTLP ingest. The run scheduler and the policy engine run on one replica at a time, under database leases: when a replica stops, another adopts its runs (resuming them, never double-counting) and takes over the policy engine. Workers pull from the work queues, so a worker that dies mid-task loses nothing: its task is redelivered after the ack wait. The operator runs with leader election when it has more than one replica.
+
+### Installing a release, and verifying it
+
+A tagged release publishes the images (`ghcr.io/<owner>/evalsi`, `evalsi-collector`) and the three charts as OCI artifacts, all signed with [cosign](https://docs.sigstore.dev/) keyless (the release workflow's GitHub identity, recorded in the Rekor log; no key to trust or rotate). The images carry BuildKit provenance and an SBOM, and an SPDX SBOM is attested with cosign and attached to the release.
+
+```bash
+scripts/verify-release.sh 0.5.0                 # cosign verify, for every image and chart
+helm install evalsi-crds oci://ghcr.io/<owner>/charts/evalsi-crds --version 0.5.0 --set operator.namespace=evalsi
+helm install evalsi oci://ghcr.io/<owner>/charts/evalsi --version 0.5.0 -n evalsi
+```
+
+The script checks that each artifact was signed by `.github/workflows/release.yml` of this repository at the tag you name. To enforce it in the cluster, point a policy controller (Kyverno, Sigstore policy-controller) at the same identity and issuer (`https://token.actions.githubusercontent.com`).
 
 ### Air-gapped installs
 
@@ -135,13 +203,24 @@ Worker pods hold credentials (provider keys, the cluster's tokens), so sandboxes
 
 The **pod rung** creates one pod per sandbox from the task's image. `evalsi-guest` is copied in by an init container; the pod has no service-account token and no service links, runs with all capabilities dropped except the few package managers need, and a NetworkPolicy lets it talk only to its pool, which relays allowed egress through its logging proxy. It cannot snapshot, so environment setup runs once per trial. When the task image runs as a non-root user that cannot create the workdir, set the pod rung's `runAsUser` (with `capabilities: []`): the workdir is then a volume that user owns, seeded with the image's own.
 
+### When bubblewrap pools fail, and when NetworkPolicy is not enforced
+
+`mode: bwrap` runs bubblewrap in a pod user namespace. Two real clusters could not:
+
+- **Ubuntu 24.04 nodes (AKS).** The host restricts what an unprivileged user namespace may configure, and bubblewrap fails with `loopback: Failed RTM_NEWADDR: Operation not permitted`.
+- **Nodes whose overlayfs lacks idmapped mounts.** Pod user namespaces (`hostUsers: false`) need them.
+
+Both fail the rung's probe, and the error names the way out: run the pool with `mode: privileged` (bubblewrap in a privileged pod, which needs a namespace that allows it), or use the pod rung (`ladder: [pod]`), which needs neither. `evalsid sandbox probe` shows the reason.
+
+The pod rung's network isolation has two layers: the pool's logging egress proxy, and a NetworkPolicy that admits only the pool. `networkPolicyEnforced` declares that the CNI enforces the policy, which makes isolation report `full`. Evals.si does not trust the declaration: when the probe runs, a canary pod tries to connect to the Kubernetes API, which the policy forbids. If the connection gets through, the probe prints a `warning`, and sandboxes report `partial` with the reason in their isolation notes. This was seen on Calico with Istio ambient (the policy did not stop a labelled pod's egress); the cause there is not established, and a mesh that redirects a pod's traffic through its own proxy is the suspect. On such a cluster, rely on the egress proxy only, or use `mode: firecracker`.
+
 `mode: firecracker` needs `firecracker.defaultImage`, the image a microVM boots when a spec names none (sandboxd boots it at start to check the rung); the evalsi image carries the `firecracker` binary and `mkfs.ext4`. A SandboxClass's `firecracker` takes the same `defaultImage`.
 
 ### Taints and service meshes
 
 On nodes that are all tainted, give every component its tolerations: `server`, `workers`, `operator`, `nats`, `devPostgres`, `sandbox.pool` and `sandbox.pool.pod` each take `tolerations` and `nodeSelector` (and the evalsi-sandboxd chart its own).
 
-Under Istio ambient with a waypoint, keep it off the connections it breaks: NATS speaks first, which a waypoint's proxy cannot carry, and a waypoint's external authorization may refuse the pool's calls to sandbox pods. Set `nats.serviceLabels`, `devPostgres.serviceLabels`, `sandbox.pool.pod.labels` (a SandboxClass's `pod.labels`), and the evalsi-sandboxd chart's `serviceLabels` and `podLabels` to `{istio.io/use-waypoint: none}`. Under mesh-wide STRICT mTLS the API server, which is outside the mesh, cannot reach the admission webhooks: a `PeerAuthentication` for the operator with port 9443 `PERMISSIVE` lets it in.
+Under Istio ambient with a waypoint, keep it off the connections it breaks: NATS speaks first, which a waypoint's proxy cannot carry, and a waypoint's external authorization may refuse the pool's calls to sandbox pods. Set `nats.serviceLabels`, `devPostgres.serviceLabels`, `sandbox.pool.pod.labels` (a SandboxClass's `pod.labels`), and the evalsi-sandboxd chart's `serviceLabels` and `podLabels` to `{istio.io/use-waypoint: none}`. Under mesh-wide STRICT mTLS the API server, which is outside the mesh, cannot reach the admission webhooks: set `operator.istio.peerAuthentication: true` and the chart renders a `PeerAuthentication` for the operator with port 9443 `PERMISSIVE` (off by default, since it needs Istio's CRDs).
 
 ## Permissions
 

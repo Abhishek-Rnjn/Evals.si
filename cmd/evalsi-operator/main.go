@@ -33,6 +33,13 @@ func (l *list) String() string     { return strings.Join(*l, ",") }
 func (l *list) Set(v string) error { *l = append(*l, v); return nil }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "bootstrap" {
+		if err := runBootstrap(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "evalsi-operator bootstrap: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "evalsi-operator: %v\n", err)
 		os.Exit(1)
@@ -50,6 +57,7 @@ func run() error {
 		tlsSecret     = "evalsi-sandbox-tls"
 		sandboxSA     = "evalsi-sandboxd"
 		workerConfig  = "evalsi-worker"
+		namePrefix    = "evalsi"
 		natsMonitor   string
 		poll          = 5 * time.Second
 		statsInterval = 30 * time.Second
@@ -75,6 +83,7 @@ func run() error {
 	flag.Var(&allowClients, "sandbox-allow-client", "a client allowed into sandbox pools (repeatable)")
 	flag.StringVar(&sandboxSA, "sandbox-service-account", sandboxSA, "service account of sandbox pools")
 	flag.StringVar(&workerConfig, "worker-config-map", workerConfig, "default ConfigMap with the workers' evalsi.yaml")
+	flag.StringVar(&namePrefix, "name-prefix", namePrefix, "start the names of what the operator creates, and its leader election lease, with this")
 	flag.StringVar(&natsMonitor, "nats-monitoring-endpoint", "", "NATS monitoring host:port, for KEDA scaling")
 	flag.DurationVar(&poll, "poll-interval", poll, "how often running runs are polled")
 	flag.DurationVar(&statsInterval, "stats-interval", statsInterval, "how often policy counters are refreshed")
@@ -109,7 +118,7 @@ func run() error {
 		Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress:  healthAddr,
 		LeaderElection:          leaderElect,
-		LeaderElectionID:        "evalsi-operator.evals.si",
+		LeaderElectionID:        namePrefix + "-operator.evals.si",
 		LeaderElectionNamespace: namespace,
 	}
 	if len(watchNS) > 0 {
@@ -128,7 +137,7 @@ func run() error {
 	if err := controllers.Setup(mgr, controllers.Config{
 		Enabled: strings.Split(enabled, ","), API: api, PollInterval: poll, StatsInterval: statsInterval,
 		Namespace: namespace, Image: image, SandboxTLSSecret: tlsSecret, SandboxAllowClients: allowClients,
-		SandboxServiceAccount: sandboxSA, WorkerConfigMap: workerConfig, NATSMonitoringEndpoint: natsMonitor,
+		SandboxServiceAccount: sandboxSA, WorkerConfigMap: workerConfig, NATSMonitoringEndpoint: natsMonitor, NamePrefix: namePrefix,
 	}); err != nil {
 		return err
 	}

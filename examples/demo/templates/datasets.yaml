@@ -1,0 +1,65 @@
+{{- if .Values.datasets.enabled }}
+{{- $fn := include "demo.fullname" . -}}
+{{- $d := .Values.datasets }}
+# The suites' datasets, uploaded to Evals.si's datasets_dir (S3 on Kubernetes:
+# the server's pod and the workers' cannot read a local file).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fn }}-datasets
+  labels: {{- include "demo.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+data:
+  {{- range $path, $_ := .Files.Glob "fixtures/*.jsonl" }}
+  {{ base $path }}: |
+    {{- $.Files.Get $path | nindent 4 }}
+  {{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fn }}-datasets
+  labels: {{- include "demo.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $fn }}-datasets
+        app.kubernetes.io/part-of: evalsi-demo
+        {{- with include "demo.podLabels" (dict "root" . "local" $d) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      {{- include "demo.scheduling" (dict "root" . "local" $d) | nindent 6 }}
+      containers:
+        - name: put
+          image: {{ include "demo.image" (dict "root" . "ref" $d.image) }}
+          # The datasets go to fixtures/<name> under datasets_dir, where the run specs look.
+          command: [sh, -c, 'cd /datasets && exec evalsid datasets put --config /etc/evalsi/evalsi.yaml --dir /datasets fixtures/*.jsonl']
+          env:
+            - name: EVALSI_S3_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: {{ $d.s3CredentialsSecret }}, key: access_key}}
+            - name: EVALSI_S3_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: {{ $d.s3CredentialsSecret }}, key: secret_key}}
+          securityContext: {{- include "demo.restricted" . | nindent 12 }}
+          resources: {{- toYaml $d.resources | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/evalsi, readOnly: true}
+            - {name: datasets, mountPath: /datasets/fixtures, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: {{ $d.configMap }}}
+        - name: datasets
+          configMap: {name: {{ $fn }}-datasets}
+{{- end }}

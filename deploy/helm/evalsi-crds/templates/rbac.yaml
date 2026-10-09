@@ -1,9 +1,10 @@
 {{- $ns := .Values.operator.namespace }}
+{{- $fn := include "crds.fullname" . }}
 {{- if or .Values.operator.sandboxClasses .Values.operator.allNamespaces }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: evalsi-operator
+  name: {{ $fn }}-operator
 rules:
   {{- if .Values.operator.sandboxClasses }}
   - apiGroups: [evals.si]
@@ -31,10 +32,10 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: evalsi-operator
-roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: evalsi-operator}
+  name: {{ $fn }}-operator
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ $fn }}-operator}
 subjects:
-  - {kind: ServiceAccount, name: evalsi-operator, namespace: {{ $ns }}}
+  - {kind: ServiceAccount, name: {{ .Values.operator.fullname }}-operator, namespace: {{ $ns }}}
 {{- end }}
 ---
 # Who may use evals.si resources: aggregated into the built-in roles, so
@@ -42,7 +43,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: evalsi-edit
+  name: {{ $fn }}-edit
   labels:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
@@ -54,7 +55,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: evalsi-view
+  name: {{ $fn }}-view
   labels:
     rbac.authorization.k8s.io/aggregate-to-view: "true"
 rules:

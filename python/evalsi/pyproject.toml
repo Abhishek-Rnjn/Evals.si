@@ -27,6 +27,8 @@ math = ["sympy>=1.13"]
 analytics = ["duckdb>=1.1"]
 # The worker that serves evaluators to the evalsid server over gRPC.
 server = ["grpcio>=1.84", "grpcio-health-checking>=1.84"]
+# The streaming client (Client.evaluate_stream).
+grpc = ["grpcio>=1.84"]
 
 [project.scripts]
 evalsi = "evalsi.cli:main"

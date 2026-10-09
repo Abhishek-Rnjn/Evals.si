@@ -31,6 +31,9 @@ images=(
   "$repo:$tag"
   "$(sed -n 's/^  image: \(nats:.*\)/\1/p' "$root/deploy/helm/evalsi/values.yaml")"
   "$(sed -n 's/^  image: \(postgres:.*\)/\1/p' "$root/deploy/helm/evalsi/values.yaml")"
+  # The trial bundles devMinio and devClickhouse.
+  "$(sed -n 's/^  image: \(bitnamilegacy\/minio:.*\)/\1/p' "$root/deploy/helm/evalsi/values.yaml")"
+  "$(sed -n 's/^  image: \(clickhouse\/clickhouse-server:.*\)/\1/p' "$root/deploy/helm/evalsi/values.yaml")"
   # The pod rung's default sandbox image.
   "python:3.13-slim"
 )

@@ -81,6 +81,11 @@ message CLIAgent {
   // Hosts the agent may reach (its model API), through the egress proxy.
   repeated string allow_hosts = 4;
   google.protobuf.Duration timeout = 5;
+  // How to read the program's standard output. Empty: the output is the
+  // answer, and the run has one step. "dsh-json": newline-delimited run events
+  // from `dsh --profile headless --json`, read as model calls, tool calls and
+  // the final answer.
+  string output_format = 6;
 }
 
 // Harness drives the agent through a task.

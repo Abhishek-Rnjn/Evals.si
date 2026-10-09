@@ -39,14 +39,15 @@ A run spec becomes an agent run when it has `target.agent` or `harness`. To run 
 | MCP | `mcp: {url, tool, argument}` | the agent is a tool on an MCP server; each message is one call |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses`; later turns continue with `previous_response_id` |
 | HTTP | `http: {url, method, body_template, output_path, messages_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`); the answer at `output_path`, its steps at `messages_path` |
-| CLI | `cli: {command, install, env_from, allow_hosts, timeout}` | runs **inside the task's sandbox**, in its workdir |
+| CLI | `cli: {command, install, env_from, allow_hosts, timeout, output_format}` | runs **inside the task's sandbox**, in its workdir |
 
 A CLI agent:
 
 - gets the instruction in place of `{instruction}` in its command, or on stdin;
 - has `install` commands run once, during setup;
 - receives only the environment variables named in `env_from`, a map from the name in the sandbox to the worker's variable (`env_from: {ANTHROPIC_API_KEY: AGENT_ANTHROPIC_KEY}`), for its own model credentials;
-- can reach only `allow_hosts`, through the egress proxy.
+- can reach only `allow_hosts`, through the egress proxy (name the port too: `host:8000`);
+- has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events into model-call and tool-call steps with token counts. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
 
 Setup uses the environment's `setup_network`. When `install` needs a package index, set `environment: {setup_network: allow}` in the spec.
 

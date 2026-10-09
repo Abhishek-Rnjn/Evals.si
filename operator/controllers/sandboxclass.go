@@ -40,6 +40,9 @@ type SandboxClassReconciler struct {
 	// The pool's service account; the pod rung needs one that may manage
 	// pods in the sandbox namespace.
 	ServiceAccount string
+	// Names of the Deployments and Services it makes start with this
+	// (default "evalsi").
+	NamePrefix string
 }
 
 // +kubebuilder:rbac:groups=evals.si,resources=sandboxclasses,verbs=get;list;watch;update;patch
@@ -51,7 +54,7 @@ func (r *SandboxClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err := r.Get(ctx, req.NamespacedName, sc); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	name := "evalsi-sandbox-" + sc.Name
+	name := childName(r.NamePrefix, "sandbox", sc.Name)
 	labels := map[string]string{"app.kubernetes.io/name": "evalsi-sandboxd", "app.kubernetes.io/instance": sc.Name, "app.kubernetes.io/managed-by": "evalsi-operator"}
 	cfg := r.sandboxConfig(sc)
 	rendered, err := yaml.Marshal(map[string]any{"sandbox": cfg})

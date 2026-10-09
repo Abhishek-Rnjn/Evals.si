@@ -92,10 +92,15 @@ class RungStatus(_message.Message):
     LEVEL_FIELD_NUMBER: _builtins.int
     AVAILABLE_FIELD_NUMBER: _builtins.int
     REASON_FIELD_NUMBER: _builtins.int
+    WARNING_FIELD_NUMBER: _builtins.int
     driver: _builtins.str
     level: _record_pb2.IsolationLevel.ValueType
     available: _builtins.bool
     reason: _builtins.str
+    warning: _builtins.str
+    """Set when the rung works but something it claims is not enforced here,
+    e.g. a declared NetworkPolicy that a canary connection got through.
+    """
     def __init__(
         self,
         *,
@@ -103,8 +108,9 @@ class RungStatus(_message.Message):
         level: _record_pb2.IsolationLevel.ValueType = ...,
         available: _builtins.bool = ...,
         reason: _builtins.str = ...,
+        warning: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["available", b"available", "driver", b"driver", "level", b"level", "reason", b"reason"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["available", b"available", "driver", b"driver", "level", b"level", "reason", b"reason", "warning", b"warning"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RungStatus: _TypeAlias = RungStatus  # noqa: Y015

@@ -1,3 +1,4 @@
+{{- $fn := include "evalsi.fullname" $ -}}
 {{- $ns := .Release.Namespace -}}
 {{- $v := .Values -}}
 {{- if and (gt (int $v.server.replicas) 1) (not $v.storage.postgres.dsnSecret.name) (not $v.devPostgres.enabled) }}
@@ -10,14 +11,15 @@
 {{- if or $v.storage.postgres.dsnSecret.name $v.devPostgres.enabled }}
 {{- $_ := set $storage "postgres" (dict "dsn_env" "EVALSI_POSTGRES_DSN") }}
 {{- end }}
-{{- with $v.storage.clickhouse }}{{ if .url }}
+{{- $st := include "evalsi.storage" . | fromJson }}
+{{- with $st.clickhouse }}{{ if .url }}
 {{- $ch := dict "url" .url "database" .database }}
 {{- if .user }}{{ $_ := set $ch "user" .user }}{{ end }}
 {{- if .passwordSecret.name }}{{ $_ := set $ch "password_env" "EVALSI_CLICKHOUSE_PASSWORD" }}{{ end }}
 {{- $_ := set $storage "clickhouse" $ch }}
 {{- end }}{{ end }}
 {{- $datasets := "/var/lib/evalsi/datasets" }}
-{{- with $v.storage.s3 }}{{ if .bucket }}
+{{- with $st.s3 }}{{ if .bucket }}
 {{- $s3 := dict "insecure" .insecure "path_style" .pathStyle }}
 {{- if .endpoint }}{{ $_ := set $s3 "endpoint" .endpoint }}{{ end }}
 {{- if .region }}{{ $_ := set $s3 "region" .region }}{{ end }}
@@ -47,7 +49,11 @@
 {{- end }}
 {{- $auth = mergeOverwrite $auth (deepCopy $v.auth.config) }}
 
-{{- $owners := list (printf "user:kubernetes/system:serviceaccount:%s:evalsi-operator" $ns) }}
+{{- $owners := list (printf "user:kubernetes/system:serviceaccount:%s:%s-operator" $ns $fn) }}
+{{- if $v.bootstrap.enabled }}
+{{- if not $v.auth.kubernetes.enabled }}{{ fail "bootstrap.enabled signs in with a service-account token: auth.kubernetes.enabled must be on" }}{{ end }}
+{{- $owners = append $owners (printf "user:kubernetes/system:serviceaccount:%s:%s-bootstrap" $ns $fn) }}
+{{- end }}
 {{- $rbac := dict "owners" (concat $owners $v.rbac.owners) }}
 {{- with $v.rbac.projects }}{{ $_ := set $rbac "projects" . }}{{ end }}
 {{- with $v.rbac.roles }}{{ $_ := set $rbac "roles" . }}{{ end }}
@@ -64,12 +70,13 @@
 {{- if $v.server.otlp.enabled }}
 {{- $_ := set $server "otlp" (dict "grpc_listen" "0.0.0.0:4317" "http_listen" "0.0.0.0:4318") }}
 {{- end }}
+{{- with $v.bootstrap.credentialGrants }}{{ $_ := set $server "credentials" (dict "grants" .) }}{{ end }}
 {{- $server = mergeOverwrite $server (deepCopy $v.server.config) }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: evalsi
+  name: {{ $fn }}
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 data:
   evalsi.yaml: |
@@ -94,7 +101,7 @@ data:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: evalsi-worker
+  name: {{ $fn }}-worker
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 data:
   evalsi.yaml: |

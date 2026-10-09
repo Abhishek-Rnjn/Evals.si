@@ -1,9 +1,11 @@
+{{- $fn := include "evalsi.fullname" $ -}}
 {{- $v := .Values }}
+{{- $st := include "evalsi.storage" . | fromJson }}
 {{- $sandboxAddress := include "evalsi.sandboxAddress" . }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: evalsi-worker
+  name: {{ $fn }}-worker
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 automountServiceAccountToken: false
 {{- range $pool, $p := $v.workers.pools }}
@@ -11,23 +13,23 @@ automountServiceAccountToken: false
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: evalsi-worker-{{ $pool }}
+  name: {{ $fn }}-worker-{{ $pool }}
   labels: {{- include "evalsi.labels" $ | nindent 4 }}
-    app.kubernetes.io/name: evalsi-worker
+    app.kubernetes.io/name: {{ $fn }}-worker
     evals.si/pool: {{ $pool }}
 spec:
   {{- if not $v.keda.enabled }}
   replicas: {{ $p.replicas }}
   {{- end }}
   selector:
-    matchLabels: {app.kubernetes.io/name: evalsi-worker, evals.si/pool: {{ $pool }}}
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-worker, evals.si/pool: {{ $pool }}}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: evalsi-worker, app.kubernetes.io/part-of: evalsi, evals.si/pool: {{ $pool }}}
+      labels: {app.kubernetes.io/name: {{ $fn }}-worker, app.kubernetes.io/part-of: evalsi, evals.si/pool: {{ $pool }}}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/config.yaml") $ | sha256sum }}
     spec:
-      serviceAccountName: evalsi-worker
+      serviceAccountName: {{ $fn }}-worker
       securityContext: {{- include "evalsi.podSecurity" $ | nindent 8 }}
       {{- with $v.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
@@ -46,11 +48,11 @@ spec:
           imagePullPolicy: {{ $v.image.pullPolicy }}
           args: [worker, --config, /etc/evalsi/evalsi.yaml, --pools, {{ $pool }}, --concurrency, {{ $p.concurrency | quote }}]
           env:
-            {{- if $v.storage.s3.credentialsSecret }}
+            {{- if $st.s3.credentialsSecret }}
             - name: EVALSI_S3_ACCESS_KEY
-              valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: access_key}}
+              valueFrom: {secretKeyRef: {name: {{ $st.s3.credentialsSecret }}, key: access_key}}
             - name: EVALSI_S3_SECRET_KEY
-              valueFrom: {secretKeyRef: {name: {{ $v.storage.s3.credentialsSecret }}, key: secret_key}}
+              valueFrom: {secretKeyRef: {name: {{ $st.s3.credentialsSecret }}, key: secret_key}}
             {{- end }}
             {{- with $v.workers.env }}{{ toYaml . | nindent 12 }}{{ end }}
           {{- with $v.workers.envFrom }}
@@ -67,10 +69,10 @@ spec:
             - {name: tmp, mountPath: /tmp}
       volumes:
         - name: config
-          configMap: {name: evalsi-worker}
+          configMap: {name: {{ $fn }}-worker}
         {{- if $sandboxAddress }}
         - name: worker-tls
-          secret: {secretName: evalsi-worker-tls}
+          secret: {secretName: {{ $fn }}-worker-tls}
         {{- end }}
         - name: home
           emptyDir: {}
@@ -88,17 +90,17 @@ spec:
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: evalsi-worker-{{ $pool }}
+  name: {{ $fn }}-worker-{{ $pool }}
   labels: {{- include "evalsi.labels" $ | nindent 4 }}
 spec:
-  scaleTargetRef: {name: evalsi-worker-{{ $pool }}}
+  scaleTargetRef: {name: {{ $fn }}-worker-{{ $pool }}}
   minReplicaCount: {{ $p.minReplicas | default $v.keda.minReplicas }}
   maxReplicaCount: {{ $p.maxReplicas | default $v.keda.maxReplicas }}
   pollingInterval: {{ $v.keda.pollingInterval }}
   triggers:
     - type: nats-jetstream
       metadata:
-        natsServerMonitoringEndpoint: {{ printf "evalsi-nats.%s.svc:8222" $.Release.Namespace | quote }}
+        natsServerMonitoringEndpoint: {{ printf "%s-nats.%s.svc:8222" $fn $.Release.Namespace | quote }}
         account: "$G"
         stream: EVALSI_WORK
         consumer: pool-{{ $pool }}

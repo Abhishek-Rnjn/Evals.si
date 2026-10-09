@@ -43,11 +43,11 @@ The report's finding IDs clash with the PRD's own D1–D11, so other documents r
 | VR-D12 annotation interval off scale | Fixed (`8cf4c81`) |
 | VR-D13 TLS EOF log per probe | Fixed (`8cf4c81`) |
 | VR-D14 OTLP drops look like success | Fixed (`8cf4c81`): partial success |
-| VR-D15 `mode: bwrap` fails on Ubuntu 24.04 (`RTM_NEWADDR`) | **Open**; `mode: privileged` works |
+| VR-D15 `mode: bwrap` fails on Ubuntu 24.04 (`RTM_NEWADDR`) | Mitigated: the error names `mode: privileged` and the pod rung, and the [Kubernetes guide](../guides/kubernetes.md#when-bubblewrap-pools-fail-and-when-networkpolicy-is-not-enforced) documents it. The failure itself is the host's |
 | VR-R1 Istio waypoint breaks NATS and pod-rung calls | Chart values and docs (`967fdd9`): `serviceLabels`, pod `labels` |
-| VR-R2 STRICT mTLS blocks admission webhooks | Documented (a PeerAuthentication on port 9443); the chart does not render it. **Open** |
-| bwrap fails where overlayfs lacks idmap mounts (AWC) | **Open**; undocumented |
-| Sandbox egress NetworkPolicy not enforced on Calico + Istio ambient (AWC) | **Open**; cause unknown |
+| VR-R2 STRICT mTLS blocks admission webhooks | Fixed: `operator.istio.peerAuthentication` renders it (off by default); chart-tested, not re-run on a mesh cluster |
+| bwrap fails where overlayfs lacks idmap mounts (AWC) | Mitigated: same hint and guide section as VR-D15 |
+| Sandbox egress NetworkPolicy not enforced on Calico + Istio ambient (AWC) | Cause still unknown (not our selectors: the policy selects the label the pods carry). Fixed so it is never claimed falsely: the probe runs a canary connection from a sandbox pod and warns, and isolation reports `partial`, when a declared policy is not enforced. Needs a re-run on the mesh cluster ([RECHECK.md](RECHECK.md)) |
 
 ## Never verified on a real cluster
 

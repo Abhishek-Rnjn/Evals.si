@@ -197,6 +197,20 @@ var denialSignatures = []string{
 	"evalsi egress denied",
 }
 
+// bwrapHint names the fallback for the bubblewrap failures seen on real
+// clusters: Ubuntu 24.04 restricts unprivileged user namespaces from
+// configuring the network (RTM_NEWADDR), and a pod user namespace needs an
+// overlayfs that supports idmapped mounts.
+func bwrapHint(msg string) string {
+	switch {
+	case strings.Contains(msg, "RTM_NEWADDR"), strings.Contains(msg, "loopback"):
+		return " (the host restricts unprivileged user namespaces, as Ubuntu 24.04 does; run the pool with mode: privileged, or use the pod rung, ladder: [pod])"
+	case strings.Contains(msg, "idmap"), strings.Contains(msg, "mount_setattr"), strings.Contains(msg, "overlay"):
+		return " (the node's overlayfs lacks idmapped mounts, which pod user namespaces need; run the pool with mode: privileged, or use the pod rung, ladder: [pod])"
+	}
+	return ""
+}
+
 // classify separates runner failures (infrastructure) from the command's
 // own outcomes, and recognizes policy denials.
 func classify(driver string, res *ExecResult, stderr string) {
@@ -213,7 +227,7 @@ func classify(driver string, res *ExecResult, stderr string) {
 		res.ExitCode = exitNotFound
 		return
 	case driver == "bwrap" && res.ExitCode == 1 && strings.HasPrefix(first, "bwrap: "):
-		res.Outcome, res.Error = OutcomeRunnerFailure, first
+		res.Outcome, res.Error = OutcomeRunnerFailure, first+bwrapHint(first)
 		return
 	}
 	if res.ExitCode == 0 {

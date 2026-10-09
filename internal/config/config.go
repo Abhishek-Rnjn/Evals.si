@@ -113,6 +113,18 @@ type Rewards struct {
 	SharedCacheTTL string `json:"shared_cache_ttl,omitempty"`
 }
 
+// Webhooks tunes delivery of the events projects subscribe to through the
+// WebhookService.
+type Webhooks struct {
+	// Attempts per delivery before it is marked failed (default 6, spread
+	// over about 80 minutes).
+	MaxAttempts int `json:"max_attempts,omitempty"`
+	// How long to wait for an endpoint to answer (default 10s).
+	Timeout string `json:"timeout,omitempty"`
+	// How long finished deliveries are kept for inspection (default 168h).
+	Retention string `json:"retention,omitempty"`
+}
+
 // Quotas limit what each project may use (§17 "Tenancy"). Zero means
 // unlimited. Default applies to every project; Projects overrides it per
 // project, field by field (a zero there inherits the default).
@@ -229,6 +241,8 @@ type Config struct {
 	Agents Agents `json:"agents"`
 	// Where finished runs and online scores are exported (MLflow, OTel).
 	Sinks []sinks.Config `json:"sinks"`
+	// Signed HTTP callbacks when runs finish.
+	Webhooks Webhooks `json:"webhooks"`
 	// Authentication: JWT providers, API keys, TLS. Required on a
 	// non-loopback listen address; `auth: {mode: none}` opts out explicitly.
 	Auth *auth.Config `json:"auth,omitempty"`
@@ -478,6 +492,17 @@ func (c Config) Validate() error {
 	for i, sc := range c.Sinks {
 		if err := sc.Validate(); err != nil {
 			errs = append(errs, fmt.Errorf("sinks[%d]: %w", i, err))
+		}
+	}
+	if c.Webhooks.MaxAttempts < 0 {
+		errs = append(errs, errors.New("webhooks.max_attempts must not be negative"))
+	}
+	for field, v := range map[string]string{"timeout": c.Webhooks.Timeout, "retention": c.Webhooks.Retention} {
+		if v == "" {
+			continue
+		}
+		if d, err := time.ParseDuration(v); err != nil || d <= 0 {
+			errs = append(errs, fmt.Errorf("webhooks.%s must be a positive duration, such as 10s", field))
 		}
 	}
 	if err := c.MCP.Validate(); err != nil {

@@ -1,0 +1,63 @@
+{{- if .Values.model.enabled }}
+{{- $fn := include "demo.fullname" . -}}
+{{- $m := .Values.model }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fn }}-model
+  labels: {{- include "demo.labels" . | nindent 4 }}
+data:
+  server.py: |
+    {{- .Files.Get "mock-model/server.py" | nindent 4 }}
+  solutions.json: |
+    {{- .Files.Get "mock-model/solutions.json" | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fn }}-model
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $fn }}-model
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-model}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $fn }}-model
+        app.kubernetes.io/part-of: evalsi-demo
+        {{- with include "demo.podLabels" (dict "root" . "local" $m) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      {{- include "demo.scheduling" (dict "root" . "local" $m) | nindent 6 }}
+      containers:
+        - name: model
+          image: {{ include "demo.image" (dict "root" . "ref" $m.image) }}
+          args: [python3, /app/server.py, --host, 0.0.0.0, --port, "8000", --solutions, /app/solutions.json]
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 3
+          securityContext: {{- include "demo.restricted" . | nindent 12 }}
+          resources: {{- toYaml $m.resources | nindent 12 }}
+          volumeMounts:
+            - {name: app, mountPath: /app, readOnly: true}
+      volumes:
+        - name: app
+          configMap: {name: {{ $fn }}-model}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-model
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    {{- with include "demo.serviceLabels" (dict "root" . "local" $m) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+spec:
+  selector: {app.kubernetes.io/name: {{ $fn }}-model}
+  ports: [{name: http, port: 8000, targetPort: http}]
+{{- end }}
