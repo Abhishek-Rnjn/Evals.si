@@ -1,0 +1,34 @@
+# Every node tainted dedicated=evalsi:NoSchedule (and labelled the same), and
+# images from an internal registry. Each pod either chart adds takes these.
+#
+#   helm install evalsi deploy/helm/evalsi -n evalsi -f examples/demo/overlays/evalsi-demo.yaml -f examples/demo/overlays/tainted-nodes.yaml
+#   helm install evalsi-demo examples/demo -n evalsi -f examples/demo/overlays/tainted-nodes.yaml
+#
+# Change the taint and label to yours; the registry to where the images were
+# pushed (the images keep their paths).
+
+# --- the demo chart: one setting for all its pods ---
+tolerations:
+  - {key: dedicated, operator: Equal, value: evalsi, effect: NoSchedule}
+nodeSelector:
+  dedicated: evalsi
+imageRegistry: registry.example.com/mirror
+
+# --- the evalsi chart: each component ---
+global:
+  imageRegistry: registry.example.com/mirror
+server: &placement
+  tolerations:
+    - {key: dedicated, operator: Equal, value: evalsi, effect: NoSchedule}
+  nodeSelector:
+    dedicated: evalsi
+workers: *placement
+operator: *placement
+nats: *placement
+devPostgres: *placement
+devMinio: *placement
+bootstrap: *placement
+sandbox:
+  pool:
+    <<: *placement
+    pod: *placement          # the sandbox pods themselves

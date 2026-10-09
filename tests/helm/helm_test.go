@@ -69,10 +69,19 @@ func render(t *testing.T, chart string, set ...string) []object {
 // renderAs is render for a release of another name.
 func renderAs(t *testing.T, release, chart string, set ...string) []object {
 	t.Helper()
-	args := []string{"template", release, filepath.Join(charts, chart), "-n", "evalsi", "--kube-version", "1.34.0"}
+	return renderDir(t, release, filepath.Join(charts, chart), set...)
+}
+
+// renderDir renders the chart in dir. Values ending in .yaml are files, relative to dir.
+func renderDir(t *testing.T, release, dir string, set ...string) []object {
+	t.Helper()
+	args := []string{"template", release, dir, "-n", "evalsi", "--kube-version", "1.34.0"}
 	for _, s := range set {
 		if strings.HasSuffix(s, ".yaml") {
-			args = append(args, "-f", filepath.Join(charts, chart, s))
+			if !filepath.IsAbs(s) {
+				s = filepath.Join(dir, s)
+			}
+			args = append(args, "-f", s)
 		} else {
 			args = append(args, "--set", s)
 		}

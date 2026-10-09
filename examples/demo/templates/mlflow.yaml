@@ -1,0 +1,87 @@
+{{- if .Values.mlflow.enabled }}
+{{- $fn := include "demo.fullname" . -}}
+{{- $m := .Values.mlflow }}
+{{- $svc := printf "%s-mlflow" $fn }}
+{{- $ns := .Release.Namespace }}
+{{- $hosts := concat (list $svc (printf "%s:5000" $svc) (printf "%s.%s" $svc $ns) (printf "%s.%s:5000" $svc $ns) (printf "%s.%s.svc" $svc $ns) (printf "%s.%s.svc:5000" $svc $ns) (printf "%s.%s.svc.cluster.local" $svc $ns) (printf "%s.%s.svc.cluster.local:5000" $svc $ns) "localhost" "localhost:5000" "127.0.0.1" "127.0.0.1:5000") $m.allowedHosts }}
+{{- if $m.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $svc }}
+  labels: {{- include "demo.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with $m.persistence.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources: {requests: {storage: {{ $m.persistence.size }}}}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $svc }}
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    app.kubernetes.io/name: {{ $svc }}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}      # one writer to the SQLite store
+  selector:
+    matchLabels: {app.kubernetes.io/name: {{ $svc }}}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $svc }}
+        app.kubernetes.io/part-of: evalsi-demo
+        {{- with include "demo.podLabels" (dict "root" . "local" $m) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      {{- include "demo.scheduling" (dict "root" . "local" $m) | nindent 6 }}
+      containers:
+        - name: mlflow
+          image: {{ include "demo.image" (dict "root" . "ref" $m.image) }}
+          command: [mlflow, server]
+          args:
+            - --host=0.0.0.0
+            - --port=5000
+            - --backend-store-uri=sqlite:////mlflow/mlflow.db
+            - --artifacts-destination=/mlflow/artifacts
+            - --serve-artifacts
+            - --allowed-hosts={{ join "," $hosts }}
+          env:
+            - {name: HOME, value: /tmp}
+            - {name: MLFLOW_DISABLE_AGENT_HINT, value: "1"}
+          ports: [{name: http, containerPort: 5000}]
+          readinessProbe:
+            httpGet: {path: /health, port: http, httpHeaders: [{name: Host, value: localhost}]}
+            periodSeconds: 5
+          securityContext: {{- include "demo.restricted" . | nindent 12 }}
+          resources: {{- toYaml $m.resources | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /mlflow}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          {{- if $m.persistence.enabled }}
+          persistentVolumeClaim: {claimName: {{ $svc }}}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svc }}
+  labels: {{- include "demo.labels" . | nindent 4 }}
+    {{- with include "demo.serviceLabels" (dict "root" . "local" $m) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+spec:
+  selector: {app.kubernetes.io/name: {{ $svc }}}
+  ports: [{name: http, port: 5000, targetPort: http}]
+{{- end }}
