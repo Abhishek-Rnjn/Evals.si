@@ -16,6 +16,12 @@ spec:
       labels: {app.kubernetes.io/name: evalsi-nats, app.kubernetes.io/part-of: evalsi}
     spec:
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
+      {{- with .Values.nats.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nats.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: nats
           image: {{ include "evalsi.ref" (dict "root" . "ref" $v.nats.image) }}
@@ -44,6 +50,9 @@ kind: Service
 metadata:
   name: evalsi-nats
   labels: {{- include "evalsi.labels" . | nindent 4 }}
+    {{- with .Values.nats.serviceLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   selector: {app.kubernetes.io/name: evalsi-nats}
   ports:

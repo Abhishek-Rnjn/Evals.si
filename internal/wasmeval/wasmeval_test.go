@@ -227,6 +227,18 @@ func TestWorker(t *testing.T) {
 	if err := Serve(ctx, strings.NewReader(req), &out); err != nil {
 		t.Fatal(err)
 	}
+	// `evalsid wasm run`, with --params before or after the arguments.
+	for _, args := range [][]string{
+		{"run", "--params", `{"max_words":1}`, path, "example/word-limit"},
+		{"run", path, "example/word-limit", "--params", `{"max_words":1}`},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := Main(ctx, args, strings.NewReader(`{"id":"r","output":{"text":"a b"}}`+"\n"), &stdout, &stderr); code != 0 ||
+			!strings.Contains(stdout.String(), "the limit is 1") {
+			t.Errorf("%v: exit %d\n%s%s", args, code, stdout.String(), stderr.String())
+		}
+	}
+
 	got := out.String()
 	for _, want := range []string{`"id":1,"response":{"results":[{"recordId":"r"`, `"explanation":"2 words; the limit is 1"`, `"id":2,"response":{"evaluators":[`, `"id":3,"error":`} {
 		if !strings.Contains(strings.ReplaceAll(got, " ", ""), strings.ReplaceAll(want, " ", "")) {

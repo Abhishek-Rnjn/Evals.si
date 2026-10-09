@@ -8,4 +8,6 @@ spec:
   minIsolation: namespaced
   pod:
     defaultImage: airgap.invalid/python:3.13-slim
-    networkPolicyEnforced: true
+    # kind's default CNI (kindnet) does not enforce NetworkPolicy, so the
+    # isolation report must not claim it; set true where the CNI does.
+    networkPolicyEnforced: false

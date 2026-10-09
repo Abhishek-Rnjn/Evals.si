@@ -60,6 +60,12 @@ spec:
     spec:
       serviceAccountName: evalsi-operator
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with $v.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}

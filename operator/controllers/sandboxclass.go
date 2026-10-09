@@ -128,9 +128,15 @@ func (r *SandboxClassReconciler) sandboxConfig(sc *v1.SandboxClass) sandbox.Conf
 			NodeSelector: p.NodeSelector, NetworkPolicyEnforced: p.NetworkPolicyEnforced,
 			Labels: map[string]string{"evals.si/sandbox-class": sc.Name},
 		}
+		for k, v := range p.Labels {
+			if _, set := cfg.Pod.Labels[k]; !set {
+				cfg.Pod.Labels[k] = v
+			}
+		}
 	}
 	if f := s.Firecracker; f != nil {
-		cfg.Firecracker = &sandbox.FirecrackerConfig{Kernel: f.Kernel, WarmPool: int(f.WarmPool), VCPUs: int(f.VCPUs), MemoryMB: int(f.MemoryMB)}
+		cfg.Firecracker = &sandbox.FirecrackerConfig{Kernel: f.Kernel, WarmPool: int(f.WarmPool), VCPUs: int(f.VCPUs), MemoryMB: int(f.MemoryMB),
+			DefaultImage: f.DefaultImage, DiskMB: int(f.DiskMB)}
 	}
 	return cfg
 }

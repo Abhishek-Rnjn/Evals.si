@@ -97,6 +97,8 @@ jobs:
           sudo EVALSI_REQUIRE_CGROUP=1 EVALSI_REQUIRE_SANDBOX=1 "$RUNNER_TEMP/sandbox.test" -test.run Cgroup -test.v
       - name: Static binaries
         run: make build
+      - name: evalsid and the operator build on macOS
+        run: GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/evalsid ./cmd/evalsi-operator
 
   python:
     runs-on: ubuntu-latest

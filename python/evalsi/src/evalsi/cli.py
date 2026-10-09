@@ -483,6 +483,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(result.table())
         _print_gates(gates)
     errors = result.errors()
+    if errors and len(errors) == len(result.results):
+        # Nothing was scored: a run without gates must not pass.
+        reason = errors[0].reason or "no reason given"
+        print(
+            f"\nerror: all {len(errors)} evaluations failed; the first: {reason}",
+            file=sys.stderr,
+        )
+        return 1
     if errors and not args.quiet:
         print(
             f"\n{len(errors)} evaluation(s) errored and are excluded from the metrics.",

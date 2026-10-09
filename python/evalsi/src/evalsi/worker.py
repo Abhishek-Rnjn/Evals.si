@@ -291,7 +291,15 @@ def load_judges(path: str | Path | None) -> dict[str, JudgeConfig]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected an object mapping judge names to configs")
-    return {name: JudgeConfig(**fields) for name, fields in data.items()}
+    # Fields the server enforces itself (which projects may use a judge) mean
+    # nothing to the worker; tolerate them from a server that sends them.
+    return {
+        name: JudgeConfig(**{k: v for k, v in fields.items() if k not in _SERVER_JUDGE_FIELDS})
+        for name, fields in data.items()
+    }
+
+
+_SERVER_JUDGE_FIELDS = frozenset({"projects"})
 
 
 async def serve(

@@ -54,6 +54,15 @@ spec:
             properties:
               firecracker:
                 properties:
+                  defaultImage:
+                    description: |-
+                      The image a microVM boots when a spec names none; required, since the
+                      pool boots it at start to check the rung.
+                    type: string
+                  diskMB:
+                    description: 'Root disk size per microVM in MiB; default: sandboxd''s.'
+                    format: int32
+                    type: integer
                   kernel:
                     description: Path of the guest kernel on the node.
                     type: string
@@ -67,6 +76,7 @@ spec:
                     format: int32
                     type: integer
                 required:
+                - defaultImage
                 - kernel
                 type: object
               ladder:
@@ -99,6 +109,13 @@ spec:
                     type: string
                   defaultImage:
                     type: string
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Labels added to sandbox pods, e.g. istio.io/use-waypoint: none to keep
+                      a mesh waypoint off the pool's calls to them.
+                    type: object
                   level:
                     description: The level the runtime class gives (kernel for gVisor,
                       vm for Kata).

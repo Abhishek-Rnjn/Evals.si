@@ -309,3 +309,27 @@ func TestReceiverTransports(t *testing.T) {
 		}
 	}
 }
+
+// Spans over a trace's limit are reported back as a partial success, so an
+// exporter sees what was not kept.
+func TestReceiverReportsDroppedSpans(t *testing.T) {
+	c := &collected{}
+	a := NewAssembler(AssemblerOptions{MaxSpans: 3}, c.emit)
+	mux := http.NewServeMux()
+	NewReceiver(a, nil).Register(mux)
+	srv := httptest.NewUnstartedServer(mux)
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+	client := connect.NewClient[collectortracepb.ExportTraceServiceRequest, collectortracepb.ExportTraceServiceResponse](
+		srv.Client(), srv.URL+TraceExportProcedure, connect.WithGRPC())
+	req := &collectortracepb.ExportTraceServiceRequest{ResourceSpans: agentTrace()}
+	resp, err := client.CallUnary(context.Background(), connect.NewRequest(req))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps := resp.Msg.GetPartialSuccess()
+	if ps.GetRejectedSpans() != 1 || !strings.Contains(ps.GetErrorMessage(), "span limit") {
+		t.Errorf("partial success = %v; want 1 of the 4 spans rejected", ps)
+	}
+}

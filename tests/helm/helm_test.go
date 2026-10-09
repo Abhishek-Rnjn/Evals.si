@@ -42,8 +42,9 @@ type object struct {
 	Kind     string `json:"kind"`
 	Rules    []rule `json:"rules"`
 	Metadata struct {
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
+		Name      string            `json:"name"`
+		Namespace string            `json:"namespace"`
+		Labels    map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Data map[string]string `json:"data"`
 	Spec map[string]any    `json:"spec"`
@@ -180,12 +181,51 @@ func TestEvalsiChart(t *testing.T) {
 	}
 }
 
+// Clusters whose nodes are all tainted, behind a service mesh, with images
+// mirrored under one registry path.
+func TestEvalsiChartSchedulingAndLabels(t *testing.T) {
+	objs := render(t, "evalsi",
+		"global.imageRegistry=mirror.example.com/team", "devPostgres.enabled=true",
+		"workers.pools.cpu.image=mirror.example.com/team/evalsi-custom:1",
+		"sandbox.pool.enabled=true", "sandbox.podRung.enabled=true",
+		`sandbox.pool.pod.labels.istio\.io/use-waypoint=none`,
+		`nats.serviceLabels.istio\.io/use-waypoint=none`, `devPostgres.serviceLabels.istio\.io/use-waypoint=none`,
+		"operator.tolerations[0].key=dedicated", "operator.tolerations[0].operator=Exists",
+		"nats.tolerations[0].key=dedicated", "nats.tolerations[0].operator=Exists",
+		"devPostgres.tolerations[0].key=dedicated", "devPostgres.tolerations[0].operator=Exists")
+	for _, o := range []struct{ kind, name string }{{"Deployment", "evalsi-operator"}, {"StatefulSet", "evalsi-nats"}, {"StatefulSet", "evalsi-dev-postgres"}} {
+		if spec := toYAML(t, find(t, objs, o.kind, o.name).Spec); !strings.Contains(spec, "key: dedicated") {
+			t.Errorf("%s has no toleration: %s", o.name, spec)
+		}
+	}
+	for _, name := range []string{"evalsi-nats", "evalsi-dev-postgres"} {
+		if l := find(t, objs, "Service", name).Metadata.Labels; l["istio.io/use-waypoint"] != "none" {
+			t.Errorf("Service %s labels %v", name, l)
+		}
+	}
+	if cpu := toYAML(t, find(t, objs, "Deployment", "evalsi-worker-cpu").Spec); !strings.Contains(cpu, "image: mirror.example.com/team/evalsi-custom:1") {
+		t.Errorf("an image already under the registry was moved again: %s", cpu)
+	}
+	pool := find(t, objs, "ConfigMap", "evalsi-sandbox-pool").Data["evalsi.yaml"]
+	if !strings.Contains(pool, "istio.io/use-waypoint: none") || !strings.Contains(pool, "evals.si/sandbox-pool: evalsi-sandbox-pool") {
+		t.Errorf("sandbox pod labels: %s", pool)
+	}
+}
+
 func TestSandboxdChart(t *testing.T) {
 	for _, mode := range []string{"bwrap", "privileged", "firecracker"} {
-		objs := render(t, "evalsi-sandboxd", "mode="+mode)
+		set := []string{"mode=" + mode, "global.imageRegistry=registry.internal:5000/mirror"}
+		if mode == "firecracker" {
+			set = append(set, "firecracker.defaultImage=python:3.13-slim")
+		}
+		objs := render(t, "evalsi-sandboxd", set...)
 		cfg := load(t, find(t, objs, "ConfigMap", "evalsi-sandboxd"))
-		if mode == "firecracker" && (cfg.Sandbox.Firecracker == nil || cfg.Sandbox.Ladder[0] != "firecracker") {
+		if mode == "firecracker" && (cfg.Sandbox.Firecracker == nil || cfg.Sandbox.Ladder[0] != "firecracker" ||
+			cfg.Sandbox.Firecracker.DefaultImage != "registry.internal:5000/mirror/python:3.13-slim") {
 			t.Errorf("%s: %+v", mode, cfg.Sandbox)
+		}
+		if ds := toYAML(t, find(t, objs, "DaemonSet", "evalsi-sandboxd").Spec); !strings.Contains(ds, "image: registry.internal:5000/mirror/abhishek-rnjn/evalsi:") {
+			t.Errorf("%s: image not under the registry: %s", mode, ds)
 		}
 		// These pools need privileges: the restricted check must say so.
 		if v := restrictedViolations(t, find(t, objs, "DaemonSet", "evalsi-sandboxd")); len(v) == 0 {

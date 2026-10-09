@@ -509,6 +509,12 @@ func questionStats(qu *evalsiv1alpha1.Question, items []*evalsiv1alpha1.Annotati
 			}
 			if iv, ok, _ := stats.ForMetric(itemValues, proportion, level, nil, ""); ok {
 				sum.Ci = &evalsiv1alpha1.ConfidenceInterval{Low: iv.Low, High: iv.High, Level: iv.Level, Method: iv.Method}
+				// A score's mean cannot leave the question's scale; a t
+				// interval on few items can.
+				if !proportion && qu.GetMax() > qu.GetMin() {
+					sum.Ci.Low = max(sum.Ci.Low, qu.GetMin())
+					sum.Ci.High = min(sum.Ci.High, qu.GetMax())
+				}
 			}
 		}
 		out.Summary = sum

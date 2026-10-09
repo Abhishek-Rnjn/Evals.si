@@ -35,6 +35,11 @@ type guestConn struct {
 
 func (vm *guestConn) mkdir(ctx context.Context, p string) error {
 	if _, err := vm.guest.WriteFiles(ctx, connect.NewRequest(&guestv1alpha1.WriteFilesRequest{Dirs: []string{p}})); err != nil {
+		if vm.driver == "pod" && strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+			// The image runs as a user that cannot create the workdir. With
+			// run_as_user set, the workdir is a volume that user owns.
+			return fmt.Errorf("creating the workdir %s: %w (the image's user cannot create it: set the pod rung's run_as_user, or a SandboxClass's pod.runAsUser, to a non-zero user with capabilities [], or use an image where it exists and is writable)", p, err)
+		}
 		return fmt.Errorf("creating the workdir %s: %w", p, err)
 	}
 	return nil

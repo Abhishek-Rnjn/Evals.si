@@ -23,7 +23,7 @@ does the same through the operator).
 {{- with .maxSandboxes }}{{ $_ := set $cfg "max_sandboxes" (int .) }}{{ end }}
 {{- if $usesPods }}
 {{- $p := .pod }}
-{{- $pod := dict "namespace" $ns "guest_image" (include "evalsi.image" $) "network_policy_enforced" $p.networkPolicyEnforced "labels" (dict "evals.si/sandbox-pool" "evalsi-sandbox-pool") }}
+{{- $pod := dict "namespace" $ns "guest_image" (include "evalsi.image" $) "network_policy_enforced" $p.networkPolicyEnforced "labels" (merge (dict "evals.si/sandbox-pool" "evalsi-sandbox-pool") ($p.labels | default dict)) }}
 {{- with $p.defaultImage }}{{ $_ := set $pod "default_image" (include "evalsi.ref" (dict "root" $ "ref" .)) }}{{ end }}
 {{- if not (kindIs "invalid" $p.runAsUser) }}{{ $_ := set $pod "run_as_user" (int64 $p.runAsUser) }}{{ end }}
 {{- if not (kindIs "invalid" $p.capabilities) }}{{ $_ := set $pod "capabilities" $p.capabilities }}{{ end }}

@@ -229,6 +229,17 @@ def test_reduce_runs_dataset_scope_evaluators(tmp_path: Path) -> None:
     assert score_from_proto(response.scores[0]).number == 4
 
 
+def test_load_judges_ignores_server_fields(tmp_path: Path) -> None:
+    # judges.<name>.projects is enforced by the server; a worker given it must
+    # still start (it used to fail every worker with an unexpected keyword).
+    judges_file = tmp_path / "judges.json"
+    judges_file.write_text(
+        '{"j": {"provider": "openai-compatible", "model": "m", "base_url": "http://x/v1",'
+        ' "projects": ["e2e"]}}'
+    )
+    assert load_judges(judges_file)["j"].model == "m"
+
+
 def test_serve_reports_healthy_and_loads_judges(tmp_path: Path) -> None:
     judges_file = tmp_path / "judges.json"
     judges_file.write_text(

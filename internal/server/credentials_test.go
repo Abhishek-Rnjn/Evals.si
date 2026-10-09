@@ -249,6 +249,18 @@ func TestValidateOnly(t *testing.T) {
 	if _, err := runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: bad, ValidateOnly: true})); codeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("validate only, ungranted: %v", err)
 	}
+	// Admission checks count like any other refusal (per replica: sum them).
+	req, _ := http.NewRequest(http.MethodGet, s.url+"/metrics", nil)
+	req.Header.Set("Authorization", "Bearer "+s.keys["owner"])
+	if resp, err := s.http.Do(req); err != nil {
+		t.Fatal(err)
+	} else {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if !strings.Contains(string(body), `evalsi_credential_denied_total{project="support",kind="env",name="DATABASE_URL"} 1`) {
+			t.Errorf("validate-only refusal not counted:\n%s", body)
+		}
+	}
 	mon := evalsiv1alpha1connect.NewMonitorServiceClient(s.http, s.url, as(s.keys["editor"]))
 	policy := &evalsiv1alpha1.OnlineEvalPolicy{Name: "dry", Project: "support", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "exact-match"}}}}}
 	if _, err := mon.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy, ValidateOnly: true})); err != nil {
@@ -325,5 +337,43 @@ func TestCredentialsReload(t *testing.T) {
 			t.Fatalf("the guardrail still runs after the grant was withdrawn: %v", check())
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// Refusals the enforcement point did not make itself (a privilege
+// escalation found by AuthService) and rejected credentials are audited too.
+func TestEscalationAndUnauthenticatedAreAudited(t *testing.T) {
+	s := startAuthServer(t, nil)
+	ctx := context.Background()
+	keyAdmin := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["key-admin"]))
+	_, err := keyAdmin.CreateAPIKey(ctx, connect.NewRequest(&evalsiv1alpha1.CreateAPIKeyRequest{
+		Name:  "sneaky",
+		Roles: map[string]*evalsiv1alpha1.RoleList{"support": {Roles: []string{"runner"}}},
+	}))
+	if codeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "privilege escalation") {
+		t.Fatalf("escalation: %v", err)
+	}
+	anon := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as("not-a-key"))
+	if _, err := anon.ListRuns(ctx, connect.NewRequest(&evalsiv1alpha1.ListRunsRequest{Project: "support"})); codeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("bad key: %v", err)
+	}
+
+	owner := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["owner"]))
+	events, err := owner.ListAuditEvents(ctx, connect.NewRequest(&evalsiv1alpha1.ListAuditEventsRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var escalation, unauth bool
+	for _, ev := range events.Msg.GetEvents() {
+		switch {
+		case ev.GetResource() == "apikey/sneaky" && !ev.GetAllowed() && ev.GetPrincipal() == "key:key-admin" &&
+			strings.Contains(ev.GetReason(), "privilege escalation"):
+			escalation = true
+		case ev.GetAction() == "auth.authenticate" && !ev.GetAllowed() && strings.HasSuffix(ev.GetProcedure(), "/ListRuns"):
+			unauth = true
+		}
+	}
+	if !escalation || !unauth {
+		t.Errorf("escalation audited %v, unauthenticated audited %v; events: %v", escalation, unauth, events.Msg.GetEvents())
 	}
 }

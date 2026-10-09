@@ -33,11 +33,30 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --all-packages --no-editable \
       --extra server --extra anthropic --extra jsonschema
 
+# Firecracker for evalsi-sandboxd's microVM rung (mode: firecracker).
+FROM ${PYTHON_IMAGE} AS firecracker
+ARG FIRECRACKER_VERSION=v1.17.0
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+RUN set -eu; \
+    case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+      amd64) arch=x86_64; sum=06094a1108ae9e82aa4c23a775aa92758f53f1175d422270d9d6162cb9ade558 ;; \
+      arm64) arch=aarch64; sum=e351ebe4f7a16b5873bbd51005d2e6767103cff4d5ebc829df2d3f95a93e2256 ;; \
+      *) echo "no firecracker build for ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    v=${FIRECRACKER_VERSION}; \
+    curl -fsSL -o /tmp/fc.tgz "https://github.com/firecracker-microvm/firecracker/releases/download/$v/firecracker-$v-$arch.tgz"; \
+    echo "$sum  /tmp/fc.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/fc.tgz -C /tmp; \
+    install -m 0755 "/tmp/release-$v-$arch/firecracker-$v-$arch" /out-firecracker
+
 FROM ${PYTHON_IMAGE}
-# bubblewrap for the namespaced rung; git for agent diffs.
+# bubblewrap for the namespaced rung; git for agent diffs; e2fsprogs
+# (mkfs.ext4) and firecracker for the microVM rung.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends bubblewrap ca-certificates git \
+ && apt-get install -y --no-install-recommends bubblewrap ca-certificates e2fsprogs git \
  && rm -rf /var/lib/apt/lists/*
+COPY --from=firecracker /out-firecracker /usr/local/bin/firecracker
 COPY --from=python /opt/evalsi/venv /opt/evalsi/venv
 COPY --from=go /out/ /usr/local/bin/
 # Non-root by default (the server, workers and the operator run as this

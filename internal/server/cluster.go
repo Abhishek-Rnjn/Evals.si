@@ -81,7 +81,7 @@ func startPython(ctx context.Context, cfg config.Config, workerEnv []string, log
 	proc, err := pluginhost.Start(ctx, pluginhost.Options{
 		Env:          workerEnv,
 		Command:      cfg.Worker.Command,
-		Judges:       cfg.Judges,
+		Judges:       cfg.WorkerJudges(),
 		NoCache:      cfg.Worker.NoCache,
 		StartTimeout: cfg.StartTimeout(),
 		Output:       output,

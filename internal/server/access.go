@@ -6,11 +6,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
+	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	extmcp "github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp"
@@ -69,13 +72,18 @@ type gate struct {
 	runsCode authz.RunsCode
 	log      *slog.Logger
 	rules    map[string]accessRule
+	// unauthAudit bounds how many rejected credentials are audited, so a
+	// scanner cannot flood the audit log; the rest are only counted.
+	unauthAudit *rate.Limiter
+	unauthTotal atomic.Int64
 }
 
 func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, log *slog.Logger) *gate {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	g := &gate{engine: engine, auditor: auditor, store: st, watcher: watcher, authSvc: authSvc, runsCode: runsCode, log: log}
+	g := &gate{engine: engine, auditor: auditor, store: st, watcher: watcher, authSvc: authSvc, runsCode: runsCode, log: log,
+		unauthAudit: rate.NewLimiter(10, 50)}
 	g.rules = g.accessRules()
 	return g
 }
@@ -545,6 +553,13 @@ func unauthenticated(err error, protocol string) error {
 func (g *gate) authenticate(ctx context.Context, procedure, protocol, source string, header http.Header) (context.Context, *authz.Checker, error) {
 	res := auth.FromContext(ctx)
 	if res.Err != nil {
+		g.unauthTotal.Add(1)
+		if g.unauthAudit.Allow() {
+			g.auditor.Record(ctx, &evalsiv1alpha1.AuditEvent{
+				Principal: "anonymous", Action: "auth.authenticate", Allowed: false, Reason: res.Err.Error(),
+				Procedure: procedure, Source: source, RequestId: requestID(header),
+			})
+		}
 		return ctx, nil, unauthenticated(res.Err, protocol)
 	}
 	header = header.Clone()
@@ -801,4 +816,11 @@ func (g *gate) assignTrace(ctx context.Context, res ingest.Attrs) (string, map[s
 		return "", nil, permissionDenied("traces.write", t)
 	}
 	return project, labels, nil
+}
+
+// WriteMetrics writes how many calls were rejected for a missing or invalid
+// credential; at most 10 a second of them are also audited.
+func (g *gate) WriteMetrics(w io.Writer) {
+	const name = "evalsi_unauthenticated_total"
+	fmt.Fprintf(w, "# HELP %s Calls rejected for a missing or invalid credential.\n# TYPE %s counter\n%s %d\n", name, name, name, g.unauthTotal.Load())
 }
