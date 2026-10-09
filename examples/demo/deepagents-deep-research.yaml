@@ -1,0 +1,46 @@
+# The Deep Agents demo agent as a deployed service, asked research questions.
+# It is called over HTTP the way a studio workflow is, and the report is graded
+# by a judge against a rubric, plus citation accuracy against the documents the
+# question should draw on and the cost of getting there.
+#
+# This suite needs a judge: nothing here picks a model for you. Embedded, pass
+# --judge-provider/--judge-model (or EVALSI_JUDGE_*); on a server, name one with
+# `judge:` or use its default judge. The mock model cannot grade, so CI does not
+# run this suite.
+#
+# The service is reached as evalsi-demo-deepagents:8080 in every mode: the
+# Kubernetes Service has that name, and standalone you map it to the process
+# (README.md).
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: deepagents-deep-research
+  labels: {evals.si/project: demo}
+spec:
+  target:
+    agent:
+      http:
+        url: http://evalsi-demo-deepagents:8080/invoke
+        body_template: '{"input": {{input}}}'
+        output_path: output
+        messages_path: messages
+        timeout: 5m
+  dataset:
+    path: fixtures/deep-research.jsonl
+  evaluators:
+    - ref: llm-judge
+      name: report-quality
+      params:
+        rubric: >-
+          The report answers the question using only the documents the agent
+          retrieved, covers the key points of the reference answer, is
+          organized, and cites its sources as [n] with a list of sources.
+    - ref: citation-accuracy       # every [n] points at a document that exists
+    - ref: tool-errors
+    - ref: loop-detection
+    - ref: step-budget
+      params: {max_steps: 12}
+  trials: 2
+  gates:
+    - {metric: report-quality, min: 0.6}
+    - {metric: citation-accuracy, min: 0.9}

@@ -1,0 +1,93 @@
+# DeepSeek Harness (dsh) on Terminal-Bench 2, read through the harbor:// adapter
+# (no Docker daemon and no Harbor install). Each task's own image is the
+# sandbox, so dsh is installed into it first; the benchmark's checker grades the
+# end state. Results can be set beside Deep Agents' own Terminal-Bench 2.0 runs.
+#
+# Get the tasks (89 tasks, all of which import):
+#   git clone --depth 1 https://github.com/laude-institute/terminal-bench-2 terminal-bench-2
+#
+# This needs a real model (the mock does not solve these): set DEMO_BASE_URL,
+# DEMO_MODEL and the worker's DEMO_API_KEY below, and pick tasks. dsh needs
+# Node 22, installed from nodejs.org when the image has none, which needs curl
+# and xz in the image; tasks without them are not runnable as written.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: dsh-terminal-bench
+  labels: {evals.si/project: demo}
+spec:
+  target:
+    agent:
+      cli:
+        command: [dsh-demo-configure, dsh, --profile, headless, --json, "{instruction}"]
+        output_format: dsh-json
+        env_from: {DEMO_API_KEY: DEMO_API_KEY}
+        install:
+          # Node 22, unless the image has it.
+          - >-
+            command -v node >/dev/null || curl -fsSL https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-x64.tar.xz
+            | tar -xJ -C /usr/local --strip-components=1
+          - npm install -g @deepseek-ai/dsh@0.2.1-alpha.2
+          # examples/demo/dsh/configure.sh, which points dsh at the model.
+          - |
+            cat > /usr/local/bin/dsh-demo-configure <<'CONFIGURE'
+            #!/bin/sh
+            # Points dsh at the model named by the environment, then runs the command.
+            #
+            #   DEMO_PROVIDER_API  openai-completions (default), openai-responses or anthropic-messages
+            #   DEMO_BASE_URL      the endpoint, e.g. http://mock-model:8000/v1 (required)
+            #   DEMO_MODEL         the model id (default: mock)
+            #   DEMO_API_KEY_ENV   the name of the variable holding the key (default: DEMO_API_KEY)
+            #
+            # The key itself stays in its variable: dsh reads it from there (apiKeyEnv), so
+            # nothing secret is written to disk. Every profile dsh is run with gets the
+            # same provider and default model.
+            set -eu
+
+            : "${DEMO_BASE_URL:?set DEMO_BASE_URL to the model endpoint}"
+            api="${DEMO_PROVIDER_API:-openai-completions}"
+            model="${DEMO_MODEL:-mock}"
+            keyenv="${DEMO_API_KEY_ENV:-DEMO_API_KEY}"
+            home="${DSH_HOME:-$HOME/.dsh}"
+
+            for profile in headless web tui; do
+              dir="$home/profiles/$profile"
+              mkdir -p "$dir"
+              cat > "$dir/cordis.patch.yml" <<YAML
+            - id: llm-pi-ai
+              config:
+                providers:
+                  demo:
+                    apiKeyEnv: $keyenv
+                    api: $api
+                    baseURL: $DEMO_BASE_URL
+                    models:
+                      - id: $model
+            - id: agent-default-model
+              config:
+                provider: demo
+                model: $model
+            YAML
+            done
+            exec "$@"
+            CONFIGURE
+            chmod +x /usr/local/bin/dsh-demo-configure
+        allow_hosts: ["api.example.com:443"]    # your model's host
+        timeout: 30m
+  dataset:
+    uri: "harbor://terminal-bench-2?tasks=fix-git,log-summary-date-ranges,openssl-selfsigned-cert"
+  environment:
+    setup_network: allow
+    env:
+      NODE_OPTIONS: --disable-wasm-trap-handler
+      HOME: /tmp/agent-home
+      DEMO_BASE_URL: https://api.example.com/v1
+      DEMO_MODEL: your-model
+    sandbox: {memory_mb: 4096}
+  evaluators:
+    - ref: task-success
+    - ref: policy-violations
+    - ref: tool-errors
+    - ref: loop-detection
+    - ref: agent-efficiency
+  trials: 2

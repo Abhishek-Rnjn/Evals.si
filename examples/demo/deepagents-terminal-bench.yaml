@@ -1,0 +1,78 @@
+# Deep Agents Code (dcode) on Terminal-Bench 2, read through the harbor://
+# adapter (no Docker daemon and no Harbor install). Each task's own image is the
+# sandbox, so dcode is installed into it first; the benchmark's checker grades
+# the end state. Deep Agents' own eval suite runs Terminal-Bench 2.0 through
+# Harbor, so results can be compared with theirs.
+#
+# Get the tasks (89 tasks, all of which import):
+#   git clone --depth 1 https://github.com/laude-institute/terminal-bench-2 terminal-bench-2
+#
+# This needs a real model (the mock does not solve these): set the model's
+# host in allow_hosts, OPENAI_BASE_URL and DEMO_MODEL below, and the worker's
+# DEMO_API_KEY. dcode is installed with pip, so a task's image needs Python 3.11+
+# with pip; pick tasks that have it.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: deepagents-terminal-bench
+  labels: {evals.si/project: demo}
+spec:
+  target:
+    agent:
+      cli:
+        command: [dcode-demo, "{instruction}"]
+        env_from: {OPENAI_API_KEY: DEMO_API_KEY}
+        install:
+          - pip install -q deepagents-code==0.1.83 deepagents==0.7.23 langchain-openai==1.7.0
+          # examples/demo/deepagents/dcode-demo.sh.
+          - |
+            cat > /usr/local/bin/dcode-demo <<'WRAPPER'
+            #!/bin/sh
+            # Runs Deep Agents Code (dcode) headless on one task: dcode-demo "<instruction>".
+            #
+            #   DEMO_MODEL         "provider:model" (default openai:mock)
+            #   DEMO_MODEL_PARAMS  extra model arguments as JSON; for an OpenAI-compatible
+            #                      server that speaks chat completions, not the Responses
+            #                      API, the default switches the Responses API off
+            #
+            # Shell is allowed (-S all) because the sandbox, not dcode, is the boundary;
+            # MCP servers, the JS interpreter, tracing to LangSmith, update checks and the
+            # LangGraph CLI's analytics are off.
+            set -eu
+            : "${1:?usage: dcode-demo INSTRUCTION}"
+            params="${DEMO_MODEL_PARAMS:-}"
+            if [ -z "$params" ]; then
+              params='{"use_responses_api": false}'
+            fi
+            export DEEPAGENTS_CODE_NO_UPDATE_CHECK=1 DEEPAGENTS_CODE_AUTO_UPDATE=0 LANGGRAPH_CLI_NO_ANALYTICS=1
+            # The same switches in its config file, which some of its startup paths read instead.
+            mkdir -p "${HOME:?HOME must be set}/.deepagents"
+            if [ ! -e "$HOME/.deepagents/config.toml" ]; then
+              cat > "$HOME/.deepagents/config.toml" <<'TOML'
+            [update]
+            check = false
+            auto_update = false
+
+            [warnings]
+            suppress = ["tavily"]
+            TOML
+            fi
+            exec dcode -n "$1" -S all -q --no-mcp --no-tracing --no-interpreter -M "${DEMO_MODEL:-openai:mock}" --model-params "$params"
+            WRAPPER
+            chmod +x /usr/local/bin/dcode-demo
+        allow_hosts: ["api.example.com:443"]    # your model's host
+        timeout: 30m
+  dataset:
+    uri: "harbor://terminal-bench-2?tasks=fix-git,log-summary-date-ranges,openssl-selfsigned-cert"
+  environment:
+    setup_network: allow
+    env:
+      OPENAI_BASE_URL: https://api.example.com/v1
+      DEMO_MODEL: openai:your-model
+      HOME: /tmp/agent-home
+    sandbox: {memory_mb: 4096}
+  evaluators:
+    - ref: task-success
+    - ref: policy-violations
+    - ref: agent-efficiency
+  trials: 2

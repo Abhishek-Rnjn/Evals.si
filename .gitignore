@@ -20,3 +20,5 @@ build/
 
 # Server data directories (examples use .evalsi and .evalsi-auth-demo)
 .evalsi*/
+examples/demo/terminal-bench-2/
+examples/demo/_local-*.yaml
