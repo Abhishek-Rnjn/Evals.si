@@ -15,6 +15,8 @@ from typing import Any
 from google.protobuf import duration_pb2, json_format, struct_pb2
 
 from evalsi.evaluator import EvaluatorSpec, Scope, ScoreType
+from evalsi.results import MetricSummary
+from evalsi.stats import Interval
 from evalsi.types import (
     Content,
     EvaluationResult,
@@ -333,6 +335,32 @@ def result_from_proto(msg: score_pb2.EvaluationResult) -> EvaluationResult:
         reason=msg.reason,
         duration_ms=msg.duration.ToNanoseconds() / 1e6,
         trial=msg.trial,
+    )
+
+
+_KINDS_BACK = {
+    score_pb2.METRIC_KIND_NUMBER: "number",
+    score_pb2.METRIC_KIND_PROPORTION: "proportion",
+    score_pb2.METRIC_KIND_LABEL: "label",
+}
+
+
+def summary_from_proto(msg: score_pb2.MetricSummary) -> MetricSummary:
+    """A server-computed metric summary, as the in-process runner would report it."""
+    return MetricSummary(
+        metric=msg.metric,
+        evaluator=msg.evaluator,
+        kind=_KINDS_BACK.get(msg.kind, "number"),
+        n=msg.n,
+        mean=msg.mean if msg.HasField("mean") else None,
+        std=msg.std if msg.HasField("std") else None,
+        ci=Interval(msg.ci.low, msg.ci.high, msg.ci.level, msg.ci.method)
+        if msg.HasField("ci")
+        else None,
+        skipped=msg.skipped,
+        errors=msg.errors,
+        labels=dict(msg.labels),
+        clusters=msg.clusters if msg.HasField("clusters") else None,
     )
 
 

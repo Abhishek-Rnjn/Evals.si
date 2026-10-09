@@ -131,6 +131,21 @@ grpcurl -plaintext localhost:8080 evalsi.v1alpha1.CatalogService/ListEvaluators
 
 Large jobs use `EvaluationService/EvaluateStream`: send a config message, then records, and receive results as they finish, followed by the summaries. Intervals match the embedded library exactly, bootstrap included. `GET /healthz` reports whether the worker is up.
 
+From Python, `Client.evaluate()` runs the same call and returns the same `EvalResult` as in-process `evalsi.evaluate()`, with the server's scores and intervals (a parity test checks this against a real `evalsid`):
+
+```python
+from evalsi.client import Client
+
+with Client("http://localhost:8080") as client:                # API key from EVALSI_API_KEY
+    result = client.evaluate("qa.jsonl", ["exact-match", "numeric-match"])
+    print(result.table())
+    # result = await client.evaluate_async(...)                  # without blocking the event loop
+    for r in client.evaluate_stream("qa.jsonl", ["exact-match"]):  # results as they finish
+        print(r.record_id, r.outcome)                            # needs: pip install 'evalsi[grpc]'
+```
+
+Evaluators run on the server, so name ones it has; a judge evaluator needs `judge="<name of a server judge>"`.
+
 The same services answer plain REST under `/v1alpha1`, for example:
 
 - `POST /v1alpha1/evaluate`

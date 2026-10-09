@@ -238,7 +238,7 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
 | E1 | In-process `evalsi.evaluate()` and `aevaluate()` with every built-in pack, no server | P0 | Built |
-| E2 | `Client.evaluate(records, evaluators, params)` and `Client.evaluate_stream()` that run on the cluster and return the same `EvaluationResult` type as E1 | P0 | Gap |
+| E2 | `Client.evaluate(records, evaluators, params)` and `Client.evaluate_stream()` that run on the cluster and return the same `EvaluationResult` type as E1 | P0 | Built: `Client.evaluate()`, `evaluate_async()`, `evaluate_stream()` (gRPC; `evalsi[grpc]`), with a parity test against a real `evalsid` |
 | E3 | Tensor-friendly batching: accept lists of dicts, pandas, or Hugging Face datasets; non-blocking futures so a training step never waits | P1 | Gap |
 | E4 | RL rewards from the cluster Reward Service (TRL, verl, OpenRLHF) | P0 | Built |
 | E5 | Checkpoint evaluation hooks for plain PyTorch and Lightning (not only Hugging Face `TrainerCallback`) | P1 | Gap (LEFTOVERS) |
