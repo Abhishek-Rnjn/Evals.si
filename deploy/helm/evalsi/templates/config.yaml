@@ -50,6 +50,10 @@
 {{- $auth = mergeOverwrite $auth (deepCopy $v.auth.config) }}
 
 {{- $owners := list (printf "user:kubernetes/system:serviceaccount:%s:%s-operator" $ns $fn) }}
+{{- if $v.bootstrap.enabled }}
+{{- if not $v.auth.kubernetes.enabled }}{{ fail "bootstrap.enabled signs in with a service-account token: auth.kubernetes.enabled must be on" }}{{ end }}
+{{- $owners = append $owners (printf "user:kubernetes/system:serviceaccount:%s:%s-bootstrap" $ns $fn) }}
+{{- end }}
 {{- $rbac := dict "owners" (concat $owners $v.rbac.owners) }}
 {{- with $v.rbac.projects }}{{ $_ := set $rbac "projects" . }}{{ end }}
 {{- with $v.rbac.roles }}{{ $_ := set $rbac "roles" . }}{{ end }}
@@ -66,6 +70,7 @@
 {{- if $v.server.otlp.enabled }}
 {{- $_ := set $server "otlp" (dict "grpc_listen" "0.0.0.0:4317" "http_listen" "0.0.0.0:4318") }}
 {{- end }}
+{{- with $v.bootstrap.credentialGrants }}{{ $_ := set $server "credentials" (dict "grants" .) }}{{ end }}
 {{- $server = mergeOverwrite $server (deepCopy $v.server.config) }}
 ---
 apiVersion: v1

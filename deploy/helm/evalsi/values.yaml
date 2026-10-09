@@ -224,6 +224,40 @@ operator:
   nodeSelector: {}
   tolerations: []
 
+# The first state of the install, made by a Job after every install and
+# upgrade (a Helm hook), from these values: projects, API keys (kept in
+# Secrets), default online policies, webhooks, and the credential grants that
+# say which worker variables each project's specs may name. Safe to run again.
+# The Job signs in with its service account, which the chart makes an owner,
+# so auth.kubernetes must be on (the default).
+bootstrap:
+  enabled: false
+  projects: []
+  #  - {name: studio, description: agent-studio-standalone}
+  # Keys are shown once, so each is written to a Secret in this namespace
+  # (secret.key defaults to api_key). A key whose Secret is gone is replaced by
+  # <name>-r2, -r3...; its old value is revoked. Roles cannot change on an
+  # existing key: rename it to replace it.
+  apiKeys: []
+  #  - name: studio-ingest
+  #    roles: {studio: [ingest]}
+  #    secret: {name: studio-evalsi-ingest-key}
+  # OnlineEvalPolicy documents, in their JSON field names.
+  policies: []
+  # Webhooks (see docs/guides/webhooks.md). secret.name keeps the generated HMAC secret.
+  webhooks: []
+  #  - {name: studio, project: studio, url: "http://studio.studio.svc/hooks/evalsi", events: [run.finished, run.gate_failed], secret: {name: studio-evalsi-webhook}}
+  # Written into the server's credentials.grants (reloaded without a restart).
+  credentialGrants: []
+  #  - {env: ANTHROPIC_API_KEY, projects: [studio], hosts: [api.anthropic.com]}
+  waitTimeout: 10m              # how long to wait for the server to answer
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  podLabels: {}                 # e.g. istio.io/dataplane-mode: none
+
 tls:
   # Internal certificates (the API, sandbox pools, worker client
   # certificates) from cert-manager instead of the chart's own CA.

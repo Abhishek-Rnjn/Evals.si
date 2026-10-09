@@ -29,6 +29,8 @@ type API struct {
 	Runs    evalsiv1alpha1connect.RunServiceClient
 	Monitor evalsiv1alpha1connect.MonitorServiceClient
 	Auth    evalsiv1alpha1connect.AuthServiceClient
+	// Webhooks is used by `evalsi-operator bootstrap`.
+	Webhooks evalsiv1alpha1connect.WebhookServiceClient
 	// Create a resource's project when the server does not know it (the
 	// namespace, usually), instead of failing the resource.
 	CreateProjects bool
@@ -95,9 +97,10 @@ func NewAPI(cfg APIConfig) (*API, error) {
 	base := strings.TrimSuffix(cfg.URL, "/")
 	opts := connect.WithInterceptors(auth)
 	return &API{
-		Runs:    evalsiv1alpha1connect.NewRunServiceClient(client, base, opts),
-		Monitor: evalsiv1alpha1connect.NewMonitorServiceClient(client, base, opts),
-		Auth:    evalsiv1alpha1connect.NewAuthServiceClient(client, base, opts),
+		Runs:     evalsiv1alpha1connect.NewRunServiceClient(client, base, opts),
+		Monitor:  evalsiv1alpha1connect.NewMonitorServiceClient(client, base, opts),
+		Auth:     evalsiv1alpha1connect.NewAuthServiceClient(client, base, opts),
+		Webhooks: evalsiv1alpha1connect.NewWebhookServiceClient(client, base, opts),
 
 		CreateProjects: cfg.CreateProjects,
 	}, nil

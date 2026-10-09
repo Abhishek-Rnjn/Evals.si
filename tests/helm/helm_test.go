@@ -42,18 +42,20 @@ type object struct {
 	Kind     string `json:"kind"`
 	Rules    []rule `json:"rules"`
 	Metadata struct {
-		Name      string            `json:"name"`
-		Namespace string            `json:"namespace"`
-		Labels    map[string]string `json:"labels"`
+		Name        string            `json:"name"`
+		Namespace   string            `json:"namespace"`
+		Labels      map[string]string `json:"labels"`
+		Annotations map[string]string `json:"annotations"`
 	} `json:"metadata"`
 	Data map[string]string `json:"data"`
 	Spec map[string]any    `json:"spec"`
 }
 
 type rule struct {
-	APIGroups []string `json:"apiGroups"`
-	Resources []string `json:"resources"`
-	Verbs     []string `json:"verbs"`
+	APIGroups     []string `json:"apiGroups"`
+	Resources     []string `json:"resources"`
+	ResourceNames []string `json:"resourceNames"`
+	Verbs         []string `json:"verbs"`
 }
 
 // render runs helm template with --set values, and -f for those that end

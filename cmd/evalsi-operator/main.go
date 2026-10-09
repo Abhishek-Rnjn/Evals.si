@@ -33,6 +33,13 @@ func (l *list) String() string     { return strings.Join(*l, ",") }
 func (l *list) Set(v string) error { *l = append(*l, v); return nil }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "bootstrap" {
+		if err := runBootstrap(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "evalsi-operator bootstrap: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "evalsi-operator: %v\n", err)
 		os.Exit(1)

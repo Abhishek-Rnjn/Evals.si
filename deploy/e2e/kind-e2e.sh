@@ -7,7 +7,8 @@
 #     install: two API replicas on PostgreSQL, NATS, workers per pool, the
 #     operator and its webhooks, and evalsi-sandboxd (bubblewrap);
 #  3. checks `kubectl apply` gives what `evalsi run -f` gives, the webhooks
-#     (validation, the recorded creator), a policy, code evaluation on the
+#     (validation, the recorded creator), a policy, the bootstrap Job (a project
+#     and an API key from values, kept in a Secret across upgrades), code evaluation on the
 #     bubblewrap pool, and an agent run on the pod rung (a SandboxClass);
 #  4. installs again, namespace-only, as a user who is only admin of a
 #     namespace that enforces Pod Security "restricted": no CRDs, no
@@ -174,6 +175,28 @@ fi
 step "an online policy"
 kubectl apply -n "$ns" -f "$here/policy.yaml"
 kubectl wait onlineevalpolicy/e2e-latency -n "$ns" --for=condition=Synced --timeout=2m
+
+step "bootstrap: a project and an API key from values, kept in a Secret"
+bootstrap_values=(--set bootstrap.enabled=true
+  --set bootstrap.projects[0].name=boot
+  --set bootstrap.apiKeys[0].name=boot-reader --set bootstrap.apiKeys[0].roles.boot[0]=viewer --set bootstrap.apiKeys[0].secret.name=boot-reader-key)
+chart="$(ls "$work"/bundle/charts/evalsi-[0-9]*.tgz)"
+helm upgrade evalsi "$chart" -n "$ns" --reuse-values "${bootstrap_values[@]}" --wait --timeout 5m
+key="$(kubectl get secret boot-reader-key -n "$ns" -o jsonpath='{.data.api_key}' | base64 -d)"
+[ -n "$key" ] || { echo "the bootstrap Job wrote no key" >&2; exit 1; }
+kubectl port-forward -n "$ns" svc/evalsi 18081:8080 >/dev/null 2>&1 &
+pf=$!
+sleep 3
+curl -sk -X POST https://127.0.0.1:18081/evalsi.v1alpha1.AuthService/WhoAmI -H "Authorization: Bearer $key" \
+  -H 'content-type: application/json' -d '{}' | tee "$work/whoami.json"
+grep -q boot-reader "$work/whoami.json" || { echo "the bootstrap key does not sign in" >&2; exit 1; }
+# Upgrading again must not make a second key or change the Secret.
+helm upgrade evalsi "$chart" -n "$ns" --reuse-values "${bootstrap_values[@]}" --wait --timeout 5m
+again="$(kubectl get secret boot-reader-key -n "$ns" -o jsonpath='{.data.api_key}' | base64 -d)"
+[ "$again" = "$key" ] || { echo "the key changed on upgrade" >&2; exit 1; }
+curl -sk -X POST https://127.0.0.1:18081/evalsi.v1alpha1.AuthService/WhoAmI -H "Authorization: Bearer $key" \
+  -H 'content-type: application/json' -d '{}' | grep -q boot-reader
+kill "$pf" 2>/dev/null || true
 
 step "code evaluation on the bubblewrap pool"
 kubectl apply -n "$ns" -f "$here/sandbox-run.yaml"
