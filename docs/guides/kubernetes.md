@@ -112,6 +112,18 @@ The Job signs in with its own service account's token, projected for the install
 
 Every `evalsid` replica serves the API and OTLP ingest. The run scheduler and the policy engine run on one replica at a time, under database leases: when a replica stops, another adopts its runs (resuming them, never double-counting) and takes over the policy engine. Workers pull from the work queues, so a worker that dies mid-task loses nothing: its task is redelivered after the ack wait. The operator runs with leader election when it has more than one replica.
 
+### Installing a release, and verifying it
+
+A tagged release publishes the images (`ghcr.io/<owner>/evalsi`, `evalsi-collector`) and the three charts as OCI artifacts, all signed with [cosign](https://docs.sigstore.dev/) keyless (the release workflow's GitHub identity, recorded in the Rekor log; no key to trust or rotate). The images carry BuildKit provenance and an SBOM, and an SPDX SBOM is attested with cosign and attached to the release.
+
+```bash
+scripts/verify-release.sh 0.5.0                 # cosign verify, for every image and chart
+helm install evalsi-crds oci://ghcr.io/<owner>/charts/evalsi-crds --version 0.5.0 --set operator.namespace=evalsi
+helm install evalsi oci://ghcr.io/<owner>/charts/evalsi --version 0.5.0 -n evalsi
+```
+
+The script checks that each artifact was signed by `.github/workflows/release.yml` of this repository at the tag you name. To enforce it in the cluster, point a policy controller (Kyverno, Sigstore policy-controller) at the same identity and issuer (`https://token.actions.githubusercontent.com`).
+
 ### Air-gapped installs
 
 On a connected machine, bundle the images and charts (and, with `--with-cli`, wheels for the CLI):
