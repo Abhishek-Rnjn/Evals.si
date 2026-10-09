@@ -1,0 +1,21 @@
+{
+    "assessment": {
+        "assessment_id": "a-4a57e1390bab4fd486f444b5e47385f2",
+        "assessment_name": "task-success",
+        "trace_id": "tr-f864e522377586ed0a722b8a01c9a611",
+        "source": {
+            "source_type": "CODE",
+            "source_id": "evalsi/studio-agents"
+        },
+        "create_time": "2026-10-09T17:40:50.983Z",
+        "last_update_time": "2026-10-09T17:40:50.983Z",
+        "feedback": {
+            "value": 1.0
+        },
+        "rationale": "all tests pass",
+        "metadata": {
+            "evalsi.policy": "studio-agents"
+        },
+        "valid": true
+    }
+}

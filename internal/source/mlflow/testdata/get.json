@@ -1,0 +1,288 @@
+{
+    "trace": {
+        "trace_info": {
+            "trace_id": "tr-f864e522377586ed0a722b8a01c9a611",
+            "trace_location": {
+                "type": "MLFLOW_EXPERIMENT",
+                "mlflow_experiment": {
+                    "experiment_id": "1"
+                }
+            },
+            "request_time": "2026-10-09T17:40:31.612Z",
+            "execution_duration": "0.196s",
+            "state": "OK",
+            "trace_metadata": {
+                "mlflow.source.type": "LOCAL",
+                "mlflow.source.git.repoURL": "",
+                "mlflow.source.git.branch": "",
+                "mlflow.traceOutputs": "\"4\"",
+                "mlflow.source.git.commit": "",
+                "mlflow.trace.sizeStats": "{\"total_size_bytes\": 2575, \"num_spans\": 3, \"max\": 725, \"p25\": 523, \"p50\": 542, \"p75\": 633}",
+                "mlflow.user": "root",
+                "mlflow.trace.infoFinalized": "true",
+                "mlflow.traceInputs": "{\"q\": \"What is 2+2?\"}",
+                "mlflow.source.name": "agent.py",
+                "mlflow.trace.sizeBytes": "2575",
+                "mlflow.trace.tokenUsage": "{\"input_tokens\": 5, \"output_tokens\": 1, \"total_tokens\": 6}",
+                "mlflow.trace_schema.version": "3"
+            },
+            "tags": {
+                "mlflow.trace.spansLocation": "TRACKING_STORE",
+                "mlflow.artifactLocation": "mlflow-artifacts:/1/traces/tr-f864e522377586ed0a722b8a01c9a611/artifacts",
+                "mlflow.traceName": "agent"
+            },
+            "request_preview": "{\"q\": \"What is 2+2?\"}",
+            "response_preview": "\"4\""
+        },
+        "spans": [
+            {
+                "trace_id": "+GTlIjd1hu0KciuKAcmmEQ==",
+                "span_id": "2WjgdVnrbes=",
+                "name": "agent",
+                "start_time_unix_nano": 1791567631612729949,
+                "end_time_unix_nano": 1791567631808731111,
+                "attributes": [
+                    {
+                        "key": "mlflow.traceRequestId",
+                        "value": {
+                            "string_value": "tr-f864e522377586ed0a722b8a01c9a611"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanType",
+                        "value": {
+                            "string_value": "AGENT"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanFunctionName",
+                        "value": {
+                            "string_value": "agent"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanInputs",
+                        "value": {
+                            "kvlist_value": {
+                                "values": [
+                                    {
+                                        "key": "q",
+                                        "value": {
+                                            "string_value": "What is 2+2?"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanOutputs",
+                        "value": {
+                            "string_value": "4"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanLogLevel",
+                        "value": {
+                            "int_value": 20
+                        }
+                    }
+                ],
+                "status": {
+                    "code": "STATUS_CODE_OK"
+                }
+            },
+            {
+                "trace_id": "+GTlIjd1hu0KciuKAcmmEQ==",
+                "span_id": "xcZy7sazwqg=",
+                "parent_span_id": "2WjgdVnrbes=",
+                "name": "llm",
+                "start_time_unix_nano": 1791567631808036466,
+                "end_time_unix_nano": 1791567631808346369,
+                "attributes": [
+                    {
+                        "key": "mlflow.traceRequestId",
+                        "value": {
+                            "string_value": "tr-f864e522377586ed0a722b8a01c9a611"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanType",
+                        "value": {
+                            "string_value": "CHAT_MODEL"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanInputs",
+                        "value": {
+                            "kvlist_value": {
+                                "values": [
+                                    {
+                                        "key": "messages",
+                                        "value": {
+                                            "array_value": {
+                                                "values": [
+                                                    {
+                                                        "kvlist_value": {
+                                                            "values": [
+                                                                {
+                                                                    "key": "role",
+                                                                    "value": {
+                                                                        "string_value": "user"
+                                                                    }
+                                                                },
+                                                                {
+                                                                    "key": "content",
+                                                                    "value": {
+                                                                        "string_value": "What is 2+2?"
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanOutputs",
+                        "value": {
+                            "kvlist_value": {
+                                "values": [
+                                    {
+                                        "key": "choices",
+                                        "value": {
+                                            "array_value": {
+                                                "values": [
+                                                    {
+                                                        "kvlist_value": {
+                                                            "values": [
+                                                                {
+                                                                    "key": "message",
+                                                                    "value": {
+                                                                        "kvlist_value": {
+                                                                            "values": [
+                                                                                {
+                                                                                    "key": "role",
+                                                                                    "value": {
+                                                                                        "string_value": "assistant"
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    "key": "content",
+                                                                                    "value": {
+                                                                                        "string_value": "4"
+                                                                                    }
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    }
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "key": "mlflow.chat.tokenUsage",
+                        "value": {
+                            "kvlist_value": {
+                                "values": [
+                                    {
+                                        "key": "input_tokens",
+                                        "value": {
+                                            "int_value": 5
+                                        }
+                                    },
+                                    {
+                                        "key": "output_tokens",
+                                        "value": {
+                                            "int_value": 1
+                                        }
+                                    },
+                                    {
+                                        "key": "total_tokens",
+                                        "value": {
+                                            "int_value": 6
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanLogLevel",
+                        "value": {
+                            "int_value": 20
+                        }
+                    }
+                ],
+                "status": {
+                    "code": "STATUS_CODE_OK"
+                }
+            },
+            {
+                "trace_id": "+GTlIjd1hu0KciuKAcmmEQ==",
+                "span_id": "NMFKO9qkMcM=",
+                "parent_span_id": "2WjgdVnrbes=",
+                "name": "calc",
+                "start_time_unix_nano": 1791567631808496661,
+                "end_time_unix_nano": 1791567631808647993,
+                "attributes": [
+                    {
+                        "key": "mlflow.traceRequestId",
+                        "value": {
+                            "string_value": "tr-f864e522377586ed0a722b8a01c9a611"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanType",
+                        "value": {
+                            "string_value": "TOOL"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanInputs",
+                        "value": {
+                            "kvlist_value": {
+                                "values": [
+                                    {
+                                        "key": "expr",
+                                        "value": {
+                                            "string_value": "2+2"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanOutputs",
+                        "value": {
+                            "string_value": "4"
+                        }
+                    },
+                    {
+                        "key": "mlflow.spanLogLevel",
+                        "value": {
+                            "int_value": 20
+                        }
+                    }
+                ],
+                "status": {
+                    "code": "STATUS_CODE_OK"
+                }
+            }
+        ]
+    }
+}

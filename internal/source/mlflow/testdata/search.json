@@ -1,0 +1,38 @@
+{
+    "traces": [
+        {
+            "trace_id": "tr-f864e522377586ed0a722b8a01c9a611",
+            "trace_location": {
+                "type": "MLFLOW_EXPERIMENT",
+                "mlflow_experiment": {
+                    "experiment_id": "1"
+                }
+            },
+            "request_time": "2026-10-09T17:40:31.612Z",
+            "execution_duration": "0.196s",
+            "state": "OK",
+            "trace_metadata": {
+                "mlflow.trace.infoFinalized": "true",
+                "mlflow.user": "root",
+                "mlflow.trace.sizeStats": "{\"total_size_bytes\": 2575, \"num_spans\": 3, \"max\": 725, \"p25\": 523, \"p50\": 542, \"p75\": 633}",
+                "mlflow.traceOutputs": "\"4\"",
+                "mlflow.source.git.commit": "",
+                "mlflow.source.git.branch": "",
+                "mlflow.source.git.repoURL": "",
+                "mlflow.source.type": "LOCAL",
+                "mlflow.traceInputs": "{\"q\": \"What is 2+2?\"}",
+                "mlflow.source.name": "agent.py",
+                "mlflow.trace.sizeBytes": "2575",
+                "mlflow.trace.tokenUsage": "{\"input_tokens\": 5, \"output_tokens\": 1, \"total_tokens\": 6}",
+                "mlflow.trace_schema.version": "3"
+            },
+            "tags": {
+                "mlflow.trace.spansLocation": "TRACKING_STORE",
+                "mlflow.traceName": "agent",
+                "mlflow.artifactLocation": "mlflow-artifacts:/1/traces/tr-f864e522377586ed0a722b8a01c9a611/artifacts"
+            },
+            "request_preview": "{\"q\": \"What is 2+2?\"}",
+            "response_preview": "\"4\""
+        }
+    ]
+}

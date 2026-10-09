@@ -1,6 +1,6 @@
 # 0016. Trace-source connectors pull from MLflow, Langfuse and Phoenix
 
-- **Status:** Proposed, 2026-10-09. Design only: nothing here is built (PRD S1 to S8, milestone M3).
+- **Status:** Accepted, 2026-10-09; implemented in steps under milestone M3 (PRD S1 to S8). Where the code differs from this record, the code and a note here win.
 
 ## Context
 
@@ -20,7 +20,7 @@ Facts below come from the pinned sources listed at the end. Where a source does 
 
 ### 1. The resource and the API
 
-1. **`TraceSource`** is a new message in `proto/evalsi/v1alpha1/source_service.proto`, a CRD (the operator syncs it to the API as it does `OnlineEvalPolicy`), and a `SourceService` with REST under `/v1alpha1/sources`: create (with `validate_only`, as in 0015 item 10), get, list, delete, `:pause`, `:resume`, `:backfill`. The PRD's example is the shape, with these changes:
+1. **`TraceSource`** is a new message in `proto/evalsi/v1alpha1/source_service.proto`, a CRD (the operator syncs it to the API as it does `OnlineEvalPolicy`), and a `SourceService` with REST under `/v1alpha1/sources`: apply (create or replace, with `validate_only`, as in 0015 item 10 and like webhooks and policies), get, list, delete, `:pause`, `:resume`, `:backfill`. The PRD's example is the shape, with these changes:
    - `credentials` replaces `credentialsSecretRef`. It names a variable or a mounted file, never a value (item 22).
    - `mapping` becomes `profile` plus `overrides` (items 19 and 20).
    - `variant` is added for MLflow (item 7).
@@ -91,7 +91,7 @@ Facts below come from the pinned sources listed at the end. Where a source does 
 16. **Incremental exporters.** A trace that a store reports as `IN_PROGRESS` is deferred, counted in `status.deferred`, and held back from the watermark, which does not pass the start of the oldest deferred trace. After `maxInProgressAge` (default 1 hour) it is emitted as it is, marked incomplete, so one stuck trace cannot freeze a source. This is an addition for exporters that log incrementally, not what makes completion safe.
 17. **At least once, with a durable commit.**
    - *The problem.* `IngestBatch` returns nothing. It logs a failed store write and counts it, and it **drops** a trace when the evaluation queue is full. Both are right for a live OTLP stream and wrong for a watermark: the manager would advance past traces that were never stored or never scored.
-   - *The change.* Add `IngestBatchContext(ctx, traces) error`, which returns the store error and, instead of dropping, waits for queue space (bounded by ctx and by the source's rate limit). `IngestBatch` calls it and keeps its present behaviour for OTLP.
+   - *The change.* Add `IngestBatchContext(ctx, traces) error` (built), which returns the store error and, instead of dropping, waits for queue space (bounded by ctx and by the source's rate limit). `IngestBatch` calls it and keeps its present behaviour for OTLP.
    - *The commit.* The manager advances the stored watermark (`source_state`) only after the call returns nil. That means the trace is **stored and queued**, not scored: a crash after enqueue and before evaluation leaves it stored and in `source_seen`, and it is not scored. Delivery to the store is at least once; scoring is at most once per crash, and `source_seen` has a `scored` flag the manager sets when the engine reports the policies done, so a restart re-queues stored traces without it. Dedup uses `source_seen(source, trace_id, digest, scored)`, pruned past `watermark - maxTraceDuration`, so re-reads do not rescore. A crash between ingest and commit re-delivers, and the `(project, trace_id)` upsert makes the store write harmless.
    - *Rescoring.* A trace already scored is not scored again unless its content changed (a digest in `source_seen`), as late spans can change a trajectory.
 18. **Backfill** is the same loop with `Since = now - backfill.since` and a higher rate cap, paged oldest first; `:backfill` restarts it from a given time. The `poll.maxRecordsPerSecond` cap applies to both, and a per-project quota (existing `internal/store/quota.go` counters) bounds a project's pull throughput.
@@ -137,3 +137,7 @@ Facts below come from the pinned sources listed at the end. Where a source does 
 - Databricks: [Tracing FAQ](https://learn.microsoft.com/en-us/azure/databricks/mlflow3/genai/tracing/faq) (quotas, 1,000 recent traces, pagination), [Programmatic access to traces](https://docs.databricks.com/aws/en/mlflow3/genai/tracing/observe-with-traces/query-via-sdk) (`locations`, SQL warehouse).
 - SageMaker: [aws/sagemaker-mlflow](https://github.com/aws/sagemaker-mlflow) (SigV4, `service_name` is a constructor argument; its value is not read from the plugin here), [MLflow tracking servers](https://docs.aws.amazon.com/sagemaker/latest/dg/mlflow-create-tracking-server.html).
 - Azure ML: [Configure MLflow for Azure Machine Learning](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-use-mlflow-configure-tracking).
+
+## Verified against MLflow 3.17.0
+
+Recorded from a real server (`internal/source/mlflow/testdata`): span and trace IDs inside `get` and `batchGet` are **base64** (protobuf JSON), the trace-level ID is `tr-<hex>` (the OTLP trace ID is that hex), span attributes are decoded OTLP `AnyValue` JSON (`mlflow.spanInputs` is a `kvlist_value`, not a JSON string), `search` returns each trace's `assessments`, `PATCH .../assessments/{id}` with an `update_mask` updates a feedback value in place, and a search with no match returns `{}`. This settles item 21.
