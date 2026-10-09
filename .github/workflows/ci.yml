@@ -3,7 +3,10 @@ name: ci
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+  # Also how to run the heavy jobs below on a branch: Actions > ci > Run workflow.
   workflow_dispatch:
 
 permissions:
@@ -16,6 +19,7 @@ concurrency:
 jobs:
   proto:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -37,6 +41,7 @@ jobs:
 
   go:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # The Kubernetes storage backends, which the store and objstore tests
     # also run against.
     services:
@@ -102,10 +107,12 @@ jobs:
 
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13"]
+        # One version on pull requests; the full range on main.
+        python: ${{ fromJSON(github.event_name == 'pull_request' && '["3.12"]' || '["3.11","3.12","3.13"]') }}
     env:
       UV_PYTHON: ${{ matrix.python }}
     defaults:
@@ -127,6 +134,7 @@ jobs:
     # dependency conflicts never reach the SDK or each other. Contract tests run
     # the real upstream package with a scripted judge or target, offline.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -144,7 +152,11 @@ jobs:
   taubench:
     # tau2-bench needs Python 3.12 (its .python-version) and its data
     # directory, which is not part of the package: fetched at the pinned commit.
+    # Heavy: runs on main and on demand (workflow_dispatch), not on every pull
+    # request push, to save runner minutes.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: python/adapters/taubench
@@ -168,6 +180,7 @@ jobs:
   e2e:
     # evalsid against a real Python worker, plus the Python codegen check.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17
@@ -229,6 +242,9 @@ jobs:
     # Phase 5's exit criterion at CPU scale: TRL GRPO trains a tiny model
     # with Evals.si code rewards run in the real sandbox, and the
     # TrainerCallback evaluates every checkpoint.
+    # Heavy: runs on main and on demand (workflow_dispatch), not on every pull
+    # request push, to save runner minutes.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -256,6 +272,7 @@ jobs:
     # The release archive builds (static Go binaries and a static
     # bubblewrap) and runs, so a tag cannot find it broken.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -276,6 +293,9 @@ jobs:
     # the bundle (two API replicas on PostgreSQL, NATS, workers, the operator,
     # evalsi-sandboxd), kubectl-apply parity with `evalsi run -f`, the
     # webhooks, and the bubblewrap and pod sandbox rungs.
+    # Heavy: runs on main and on demand (workflow_dispatch), not on every pull
+    # request push, to save runner minutes.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

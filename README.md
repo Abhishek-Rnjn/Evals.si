@@ -28,7 +28,11 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 >
 > The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)).
 >
+
+> New here? Start with the [end-to-end guide](docs/guides/end-to-end.md): every feature, the integrations, and copy-paste pull request workflows.
+
 > See the [architecture and implementation plan](docs/DESIGN.md), the [decision records](docs/decisions/README.md), the [open leftovers](docs/LEFTOVERS.md) and the [product requirements for customer Kubernetes integration](docs/PRD.md).
+
 
 ## Quickstart
 
