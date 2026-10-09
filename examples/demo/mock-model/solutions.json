@@ -1,0 +1,5 @@
+[
+  {"match": "calc.py has a bug", "command": "sed -i '/def mul/,$ s/return a + b/return a * b/' calc.py && sed -i 's/return a - b/return a + b/' calc.py"},
+  {"match": "retrieval-augmented generation", "tool": "search_docs", "arguments": {"query": "retrieval-augmented generation evaluation"},
+   "answer": "# Findings\n\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\n\n## Sources\n[1] rag-overview\n[2] rag-evaluation\n"}
+]
