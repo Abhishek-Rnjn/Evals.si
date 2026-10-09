@@ -34,21 +34,23 @@ def text_of(content: Any) -> str:
     return ""
 
 
-def shell_tool(tools: list[dict[str, Any]]) -> tuple[str, str] | None:
-    """The (tool name, argument name) of a tool that runs a command."""
-    found: list[tuple[str, str]] = []
+def shell_tool(tools: list[dict[str, Any]]) -> tuple[str, str, list[str]] | None:
+    """The (tool name, argument name, other required arguments) of a tool that runs a command."""
+    found: list[tuple[str, str, list[str]]] = []
     for t in tools:
         fn = t.get("function", t)
         name = fn.get("name", "")
-        props = (fn.get("parameters") or fn.get("input_schema") or {}).get("properties", {})
+        schema = fn.get("parameters") or fn.get("input_schema") or {}
+        props = schema.get("properties", {})
         for arg in ("command", "cmd"):
             if arg in props:
-                found.append((name, arg))
+                extra = [r for r in schema.get("required", []) if r != arg]
+                found.append((name, arg, extra))
                 break
     for want in SHELL_NAMES:
-        for name, arg in found:
+        for name, arg, extra in found:
             if name == want:
-                return name, arg
+                return name, arg, extra
     return found[0] if found else None
 
 
@@ -68,7 +70,8 @@ class Script:
         if solution and "command" in solution:
             shell = shell_tool(tools)
             if shell:
-                call = (shell[0], {shell[1]: solution["command"]})
+                # Other required arguments (a description, say) get a short text.
+                call = (shell[0], {**{r: "apply the fix" for r in shell[2]}, shell[1]: solution["command"]})
         elif solution and "tool" in solution:
             names = {(t.get("function", t)).get("name") for t in tools}
             if solution["tool"] in names:

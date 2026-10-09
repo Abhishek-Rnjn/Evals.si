@@ -476,8 +476,13 @@ type CLIAgent struct {
 	// the agent's own model credentials. Nothing else is passed in.
 	EnvFrom map[string]string `protobuf:"bytes,3,rep,name=env_from,json=envFrom,proto3" json:"env_from,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Hosts the agent may reach (its model API), through the egress proxy.
-	AllowHosts    []string             `protobuf:"bytes,4,rep,name=allow_hosts,json=allowHosts,proto3" json:"allow_hosts,omitempty"`
-	Timeout       *durationpb.Duration `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	AllowHosts []string             `protobuf:"bytes,4,rep,name=allow_hosts,json=allowHosts,proto3" json:"allow_hosts,omitempty"`
+	Timeout    *durationpb.Duration `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// How to read the program's standard output. Empty: the output is the
+	// answer, and the run has one step. "dsh-json": newline-delimited run events
+	// from `dsh --profile headless --json`, read as model calls, tool calls and
+	// the final answer.
+	OutputFormat  string `protobuf:"bytes,6,opt,name=output_format,json=outputFormat,proto3" json:"output_format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -545,6 +550,13 @@ func (x *CLIAgent) GetTimeout() *durationpb.Duration {
 		return x.Timeout
 	}
 	return nil
+}
+
+func (x *CLIAgent) GetOutputFormat() string {
+	if x != nil {
+		return x.OutputFormat
+	}
+	return ""
 }
 
 // Harness drives the agent through a task.
@@ -1832,14 +1844,15 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\atimeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\atimeout\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x02\n" +
 	"\bCLIAgent\x12\x18\n" +
 	"\acommand\x18\x01 \x03(\tR\acommand\x12\x18\n" +
 	"\ainstall\x18\x02 \x03(\tR\ainstall\x12A\n" +
 	"\benv_from\x18\x03 \x03(\v2&.evalsi.v1alpha1.CLIAgent.EnvFromEntryR\aenvFrom\x12\x1f\n" +
 	"\vallow_hosts\x18\x04 \x03(\tR\n" +
 	"allowHosts\x123\n" +
-	"\atimeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x1a:\n" +
+	"\atimeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12#\n" +
+	"\routput_format\x18\x06 \x01(\tR\foutputFormat\x1a:\n" +
 	"\fEnvFromEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x01\n" +

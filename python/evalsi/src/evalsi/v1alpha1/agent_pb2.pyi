@@ -295,6 +295,13 @@ class CLIAgent(_message.Message):
     ENV_FROM_FIELD_NUMBER: _builtins.int
     ALLOW_HOSTS_FIELD_NUMBER: _builtins.int
     TIMEOUT_FIELD_NUMBER: _builtins.int
+    OUTPUT_FORMAT_FIELD_NUMBER: _builtins.int
+    output_format: _builtins.str
+    """How to read the program's standard output. Empty: the output is the
+    answer, and the run has one step. "dsh-json": newline-delimited run events
+    from `dsh --profile headless --json`, read as model calls, tool calls and
+    the final answer.
+    """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
     @_builtins.property
@@ -321,10 +328,11 @@ class CLIAgent(_message.Message):
         env_from: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         allow_hosts: _abc.Iterable[_builtins.str] | None = ...,
         timeout: _duration_pb2.Duration | None = ...,
+        output_format: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["allow_hosts", b"allow_hosts", "command", b"command", "env_from", b"env_from", "install", b"install", "timeout", b"timeout"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["allow_hosts", b"allow_hosts", "command", b"command", "env_from", b"env_from", "install", b"install", "output_format", b"output_format", "timeout", b"timeout"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CLIAgent: _TypeAlias = CLIAgent  # noqa: Y015

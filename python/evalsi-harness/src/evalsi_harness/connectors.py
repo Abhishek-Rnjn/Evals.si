@@ -28,6 +28,7 @@ from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness.environment import TaskEnvironment
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
+from evalsi_harness.formats import parse_output
 from evalsi_harness.task import Task, TaskError
 
 DEFAULT_TIMEOUT_S = 600.0
@@ -454,22 +455,36 @@ class CLIConnector:
             error = f"timed out after {_timeout(self.cfg):g}s"
         elif result.exit_code != 0:
             error = f"exit {result.exit_code}: {result.stderr.strip()[-500:]}"
-        step = Step(
-            type="agent",
-            name=self.name,
-            input=Content(text=shlex.join(argv) if placed else text),
-            output=Content(text=output),
-            error=error,
-            span_id=span_id(),
-            duration_ms=result.duration_ms or None,
-            attributes={
-                "evalsi.agent.exit_code": result.exit_code,
-                "evalsi.agent.outcome": result.outcome,
-            },
+        steps: list[Step] = []
+        usage = Usage()
+        try:
+            parsed = parse_output(self.cfg.output_format, result.stdout)
+        except ValueError as exc:
+            raise TaskError(f"cli agent: {exc}") from exc
+        if parsed is not None:
+            # The agent reported its run: its steps are the trajectory, and the
+            # raw event stream is not repeated as the answer.
+            output, steps, usage = parsed.answer, parsed.steps, parsed.usage
+            error = error or parsed.error
+        steps.append(
+            Step(
+                type="agent",
+                name=self.name,
+                input=Content(text=shlex.join(argv) if placed else text),
+                output=Content(text=output),
+                error=error,
+                span_id=span_id(),
+                duration_ms=result.duration_ms or None,
+                attributes={
+                    "evalsi.agent.exit_code": result.exit_code,
+                    "evalsi.agent.outcome": result.outcome,
+                },
+            )
         )
         return AgentReply(
             output,
-            steps=[step],
+            steps=steps,
+            usage=usage,
             finished=True,
             extra={"exit_code": result.exit_code, "cli_outcome": result.outcome},
         )
