@@ -1,0 +1,16 @@
+# evalsid for the standalone demo walkthrough (README.md): the datasets are the
+# files under this directory, and the sandbox is bubblewrap, falling back to
+# Landlock where bubblewrap is not installed (agent runs refuse Landlock).
+#
+#   export DEMO_API_KEY=anything          # the mock model ignores it
+#   cd examples/demo && evalsi serve --config evalsi.yaml
+listen: 127.0.0.1:8081            # 8080 is the Deep Agents service's
+data_dir: .evalsi-demo
+datasets_dir: .                 # run it from this directory
+# Judges are configured by you; the suites that need one say so. For example:
+# judges:
+#   claude: {provider: anthropic, model: claude-opus-5-5}
+# default_judge: claude
+sandbox:
+  ladder: [bwrap, landlock]
+  min_isolation: namespaced

@@ -499,11 +499,38 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0 if outcome.passed else EXIT_GATES_FAILED
 
 
+def summary_from_json(s: dict[str, Any]) -> Any:
+    """A metric summary as the server's JSON gives it. Proto3 JSON leaves out
+    zeros, so an interval from 0 has no ``low`` and a mean of 0 has no ``mean``."""
+    from evalsi.results import MetricSummary
+    from evalsi.stats import Interval
+
+    ci = s.get("ci")
+    return MetricSummary(
+        metric=s["metric"],
+        evaluator=s.get("evaluator", ""),
+        kind=str(s.get("kind", "")).removeprefix("METRIC_KIND_").lower(),
+        n=int(s.get("n", 0)),
+        mean=s.get("mean", 0.0) if int(s.get("n", 0)) else s.get("mean"),
+        std=s.get("std"),
+        ci=Interval(
+            float(ci.get("low", 0.0)),
+            float(ci.get("high", 0.0)),
+            float(ci.get("level", 0.0)),
+            str(ci.get("method", "")),
+        )
+        if ci
+        else None,
+        skipped=int(s.get("skipped", 0)),
+        errors=int(s.get("errors", 0)),
+        labels={k: int(v) for k, v in s.get("labels", {}).items()},
+    )
+
+
 def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
     from evalsi.client import ServerError
-    from evalsi.results import EvalResult, MetricSummary
+    from evalsi.results import EvalResult
     from evalsi.runspec import spec_to_dict
-    from evalsi.stats import Interval
 
     with server_client(args) as client:
         try:
@@ -537,23 +564,7 @@ def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
     if args.format == "json":
         print(json.dumps(run, indent=2))
     else:
-        summaries = []
-        for s in run.get("summaries", []):
-            ci = s.get("ci")
-            summaries.append(
-                MetricSummary(
-                    metric=s["metric"],
-                    evaluator=s.get("evaluator", ""),
-                    kind=str(s.get("kind", "")).removeprefix("METRIC_KIND_").lower(),
-                    n=int(s.get("n", 0)),
-                    mean=s.get("mean"),
-                    std=s.get("std"),
-                    ci=Interval(ci["low"], ci["high"], ci["level"], ci["method"]) if ci else None,
-                    skipped=int(s.get("skipped", 0)),
-                    errors=int(s.get("errors", 0)),
-                    labels={k: int(v) for k, v in s.get("labels", {}).items()},
-                )
-            )
+        summaries = [summary_from_json(s) for s in run.get("summaries", [])]
         print(f"run {run['id']}: {status.removeprefix('RUN_STATUS_').lower()}\n")
         print(EvalResult(records=[], results=[], summaries=summaries, manifest={}).table())
         _print_gates(
