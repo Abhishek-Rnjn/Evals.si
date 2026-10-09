@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -498,6 +499,9 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 		var fresh []Info
 		var lastStart time.Time
 		for _, in := range res.Infos {
+			if in.Started.Before(since) {
+				continue // the store ignored the filter; its dedup record may already be pruned
+			}
 			if in.InProgress && cycleStart.Sub(in.Started) < maxProgress {
 				deferred++
 				if earliestDeferred.IsZero() || in.Started.Before(earliestDeferred) {
@@ -734,4 +738,67 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	}
+}
+
+// WriteMetrics writes per-source gauges and counters from the stored state, so
+// every replica reports them, not only the one pulling. The watermark age is
+// the pull lag the operations runbook alerts on.
+func (m *Manager) WriteMetrics(w io.Writer) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sources, err := m.st.ListSources(ctx, "")
+	if err != nil {
+		return
+	}
+	now := m.opts.Now()
+	type row struct {
+		project, name string
+		st            store.SourceState
+	}
+	var rows []row
+	for _, s := range sources {
+		st, err := m.st.SourceState(ctx, s.GetProject(), s.GetName())
+		if err != nil {
+			return
+		}
+		rows = append(rows, row{s.GetProject(), s.GetName(), st})
+	}
+	gauge := func(name, help string, value func(row) (float64, bool)) {
+		fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s gauge\n", name, help, name)
+		for _, r := range rows {
+			if v, ok := value(r); ok {
+				fmt.Fprintf(w, "%s{project=%q,source=%q} %g\n", name, r.project, r.name, v)
+			}
+		}
+	}
+	counter := func(name, help string, value func(row) float64) {
+		fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s counter\n", name, help, name)
+		for _, r := range rows {
+			fmt.Fprintf(w, "%s{project=%q,source=%q} %g\n", name, r.project, r.name, value(r))
+		}
+	}
+	gauge("evalsi_source_lag_seconds", "Seconds since the source's last complete pull began.", func(r row) (float64, bool) {
+		if r.st.LastPullAt.IsZero() {
+			return 0, false
+		}
+		return max(0, now.Sub(r.st.LastPullAt).Seconds()), true
+	})
+	gauge("evalsi_source_watermark_age_seconds", "Age of the source's watermark: every trace that started before it has been handled.", func(r row) (float64, bool) {
+		if r.st.Watermark.IsZero() {
+			return 0, false
+		}
+		return max(0, now.Sub(r.st.Watermark).Seconds()), true
+	})
+	gauge("evalsi_source_deferred_traces", "Traces held back because the store reports them in progress.", func(r row) (float64, bool) {
+		return float64(r.st.Deferred), true
+	})
+	gauge("evalsi_source_failing", "1 while the source's last pull failed.", func(r row) (float64, bool) {
+		if r.st.LastError != "" && r.st.LastErrorAt.After(r.st.LastPullAt) {
+			return 1, true
+		}
+		return 0, true
+	})
+	counter("evalsi_source_traces_pulled_total", "Traces pulled from the source and handed to the policy engine.", func(r row) float64 { return float64(r.st.Pulled) })
+	counter("evalsi_source_scores_written_total", "Scores written back to the source.", func(r row) float64 { return float64(r.st.Scored) })
+	fmt.Fprintf(w, "# HELP evalsi_source_scores_dropped_total Scores not written back because the write-back queue was full.\n# TYPE evalsi_source_scores_dropped_total counter\nevalsi_source_scores_dropped_total %d\n", m.ScoresDropped.Load())
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"time"
@@ -271,3 +272,6 @@ func (s *Service) BackfillSource(ctx context.Context, req *connect.Request[evals
 	}
 	return connect.NewResponse(&evalsiv1alpha1.BackfillSourceResponse{Source: out}), nil
 }
+
+// WriteMetrics writes the sources' metrics (the manager's, from stored state).
+func (s *Service) WriteMetrics(w io.Writer) { s.mgr.WriteMetrics(w) }

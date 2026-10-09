@@ -298,6 +298,32 @@ func (g *gate) accessRules() map[string]accessRule {
 			m := msg.(*evalsiv1alpha1.GetWebhookRequest)
 			return g.webhookTarget(ctx, m.GetProject(), m.GetName())
 		}},
+		evalsiv1alpha1connect.SourceServiceApplySourceProcedure: {action: "sources.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			src := msg.(*evalsiv1alpha1.ApplySourceRequest).GetSource()
+			return g.applySourceTargets(ctx, src.GetProject(), src.GetName(), src.GetLabels())
+		}},
+		evalsiv1alpha1connect.SourceServiceDeleteSourceProcedure: {action: "sources.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.DeleteSourceRequest)
+			return g.sourceTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		evalsiv1alpha1connect.SourceServicePauseSourceProcedure: {action: "sources.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.PauseSourceRequest)
+			return g.sourceTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		evalsiv1alpha1connect.SourceServiceResumeSourceProcedure: {action: "sources.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.ResumeSourceRequest)
+			return g.sourceTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		evalsiv1alpha1connect.SourceServiceBackfillSourceProcedure: {action: "sources.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.BackfillSourceRequest)
+			return g.sourceTarget(ctx, m.GetProject(), m.GetName())
+		}},
+		// The service checks each source (its name and labels).
+		evalsiv1alpha1connect.SourceServiceListSourcesProcedure: {action: "sources.read", filtered: true},
+		evalsiv1alpha1connect.SourceServiceGetSourceProcedure: {action: "sources.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.GetSourceRequest)
+			return g.sourceTarget(ctx, m.GetProject(), m.GetName())
+		}},
 		evalsiv1alpha1connect.WebhookServiceListWebhookDeliveriesProcedure: {action: "webhooks.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.ListWebhookDeliveriesRequest)
 			return g.webhookTarget(ctx, m.GetProject(), m.GetName())
@@ -372,6 +398,40 @@ func (g *gate) webhookTarget(ctx context.Context, project, name string) ([]targe
 		return nil, err
 	}
 	return []target{{project: project, resource: authz.WebhookResource(name, labels), name: "webhook/" + name}}, nil
+}
+
+// sourceTarget is an existing trace source: its project, with its name and
+// stored labels for rules. A missing source is checked by name only; the
+// service then reports it missing.
+func (g *gate) sourceTarget(ctx context.Context, project, name string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	var labels map[string]string
+	if s, err := g.store.GetSource(ctx, project, name); err == nil {
+		labels = s.GetLabels()
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return []target{{project: project, resource: authz.SourceResource(name, labels), name: "source/" + name}}, nil
+}
+
+// applySourceTargets checks the source as submitted and, when it replaces
+// one, as stored, so a rule protecting a labelled source cannot be sidestepped
+// by applying it without the label.
+func (g *gate) applySourceTargets(ctx context.Context, project, name string, labels map[string]string) ([]target, error) {
+	project, err := g.project(project)
+	if err != nil {
+		return nil, err
+	}
+	ts := []target{{project: project, resource: authz.SourceResource(name, labels), name: "source/" + name}}
+	if s, err := g.store.GetSource(ctx, project, name); err == nil {
+		ts = append(ts, target{project: project, resource: authz.SourceResource(name, s.GetLabels()), name: "source/" + name})
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	return ts, nil
 }
 
 // applyWebhookTargets checks the webhook as submitted and, when it replaces
