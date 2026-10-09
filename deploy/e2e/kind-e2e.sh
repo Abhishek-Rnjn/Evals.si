@@ -239,7 +239,20 @@ want() {
   local got
   got="$(metric "$1" "$2")"
   python3 -c 'import sys; sys.exit(abs(float(sys.argv[1]) - float(sys.argv[2])) > 1e-9)' "$got" "$3" ||
-    { echo "$2 mean $got, want $3" >&2; cat "$1" >&2; exit 1; }
+    { echo "$2 mean $got, want $3" >&2; cat "$1" >&2; ns2_results "$1"; exit 1; }
+}
+# ns2_results prints each result of a run (the server's JSON) with its
+# outcome and reason, and the sandbox pool's log, to show why one failed.
+ns2_results() {
+  local run
+  run="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$1")"
+  curl -s --cacert "$work/ns2-ca.crt" -X POST https://localhost:18443/evalsi.v1alpha1.RunService/ListRunResults \
+    -H "Authorization: Bearer $(kubectl create token ci -n "$ns2" --audience evals.si)" \
+    -H 'content-type: application/json' -d "{\"runId\":\"$run\"}" |
+    python3 -c 'import json, sys
+for r in json.load(sys.stdin).get("results", []):
+    print(r.get("recordId"), r.get("evaluator"), r.get("outcome"), r.get("reason", "")[:1000])' >&2 || true
+  kubectl logs -n "$ns2" deploy/evalsi-sandbox-pool --tail=50 >&2 || true
 }
 
 step "namespace-only: code evaluation on the pod rung"
