@@ -34,6 +34,7 @@ commands:
   auth new-key     generate an API key and the hash to put in config
   auth hash-key    hash an API key read from stdin
   wasm             check, pin, run and serve Wasm evaluator plugins (evalsid wasm -h)
+  datasets put     copy files into the server's datasets_dir, local or S3
 `
 
 func main() {
@@ -61,6 +62,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return authMain(ctx, args[1:], os.Stdin, stdout, stderr)
 	case "wasm":
 		return wasmeval.Main(ctx, args[1:], os.Stdin, stdout, stderr)
+	case "datasets":
+		return datasetsMain(ctx, args[1:], stdout, stderr)
 	case "sandbox-exec":
 		// Internal: the launcher that confines itself, then executes the command.
 		return sandbox.Launch(stderr)
