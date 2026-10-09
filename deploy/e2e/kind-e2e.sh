@@ -10,6 +10,8 @@
 #     (validation, the recorded creator), a policy, the bootstrap Job (a project
 #     and an API key from values, kept in a Secret across upgrades), code evaluation on the
 #     bubblewrap pool, and an agent run on the pod rung (a SandboxClass);
+#     the reference demos (examples/demo): both agents fix the small-repo suite
+#     against the mock model on the pod rung, and the scores reach MLflow;
 #  4. installs again, namespace-only, as a user who is only admin of a
 #     namespace that enforces Pod Security "restricted": no CRDs, no
 #     cluster-scoped object, sandboxes from the chart's own pool. Code
@@ -220,6 +222,39 @@ sort -u "$work/sandbox-pods.txt"
 [ -s "$work/sandbox-pods.txt" ] || { echo "no sandbox pods were created" >&2; exit 1; }
 left="$(kubectl get pods -n "$ns" -l evals.si/sandbox=true -o name | wc -l)"
 echo "sandbox pods left after the run: $left"
+
+step "the reference demos: the small-repo-fix suite, for both agents, against the mock model"
+# The studio stand-ins (examples/demo) on the same cluster: a mock model, the Deep
+# Agents service, dsh's web UI and an MLflow server, with a project, a model key
+# grant, S3 for the datasets and an MLflow sink on Evals.si. The suite runs through
+# `kubectl apply` on the pod rung, one run per agent.
+demo="$root/examples/demo"
+docker build -q -t ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 "$demo/dsh"
+docker build -q -t ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0 "$demo/deepagents"
+kind load docker-image --name "$cluster" ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0
+docker rmi -f ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0 >/dev/null || true
+docker builder prune -af >/dev/null || true
+# The workers need the model key's Secret before they restart with the grant.
+kubectl create secret generic evalsi-demo-model-key -n "$ns" --from-literal=key=mock
+evalsi_image="$(kubectl get deploy evalsi -n "$ns" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+helm upgrade evalsi "$chart" -n "$ns" --reuse-values -f "$demo/overlays/evalsi-demo.yaml" --wait --timeout 10m
+helm install evalsi-demo "$demo" -n "$ns" -f "$demo/overlays/kind.yaml" --set datasets.image="$evalsi_image" --wait --timeout 10m
+kubectl get pods -n "$ns" -l app.kubernetes.io/part-of=evalsi-demo -o wide
+
+kubectl apply -n "$ns" -f "$demo/dsh-small-repo-fixes.yaml" -f "$demo/deepagents-small-repo-fixes.yaml"
+for run in dsh-small-repo-fixes deepagents-small-repo-fixes; do
+  phase "$run" Succeeded 1500 || { results "$run" >&2; exit 1; }
+  expect "$run" task-success 1
+done
+
+step "the demo's scores reached MLflow"
+kubectl port-forward -n "$ns" svc/evalsi-demo-mlflow 15000:5000 >/dev/null 2>&1 &
+pf=$!
+sleep 3
+curl -s -X POST http://127.0.0.1:15000/api/2.0/mlflow/experiments/search -H 'content-type: application/json' \
+  -d '{"filter":"name = '"'"'evalsi-demo'"'"'"}' | tee "$work/mlflow-experiments.json"
+grep -q evalsi-demo "$work/mlflow-experiments.json" || { echo "no MLflow experiment from the sink" >&2; exit 1; }
+kill "$pf" 2>/dev/null || true
 
 step "deleting an EvalRun"
 kubectl delete evalrun parity -n "$ns" --wait --timeout=1m

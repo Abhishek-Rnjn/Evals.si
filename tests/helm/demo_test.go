@@ -120,7 +120,7 @@ func TestDemoOverlays(t *testing.T) {
 	demoValues := overlays + "evalsi-demo.yaml"
 	for _, shape := range []string{"kind", "tainted-nodes", "istio-ambient"} {
 		t.Run(shape, func(t *testing.T) {
-			main := renderDir(t, "evalsi", charts+"/evalsi", demoValues, overlays+shape+".yaml")
+			main := renderDir(t, "evalsi", charts+"/evalsi", demoValues, overlays+"pod-pool.yaml", overlays+shape+".yaml")
 			dm := renderDir(t, "evalsi-demo", demoChart, overlays+shape+".yaml")
 			switch shape {
 			case "tainted-nodes":

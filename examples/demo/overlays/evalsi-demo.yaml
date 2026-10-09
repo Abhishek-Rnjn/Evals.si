@@ -5,7 +5,7 @@
 #
 # S3 for the datasets (a Kubernetes install cannot read files on the server's
 # disk), a project for the demos and the grant that lets its runs name the
-# model's key, MLflow as a sink, and a sandbox pool on the pod rung.
+# model's key and MLflow as a sink. A cluster without a sandbox pool also needs pod-pool.yaml.
 devPostgres:
   enabled: true
 devMinio:
@@ -36,10 +36,3 @@ server:
   config:
     sinks:
       - mlflow: {tracking_uri: "http://evalsi-demo-mlflow:5000", experiment: evalsi-demo}
-
-# A namespace-only install has no user-namespaced pools, so agent runs go on the
-# pod rung: a hardened pod per sandbox (they refuse Landlock by design).
-sandbox:
-  pool:
-    enabled: true
-    ladder: [pod]
