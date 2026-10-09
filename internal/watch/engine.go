@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -54,6 +55,8 @@ type Options struct {
 type item struct {
 	record *evalsiv1alpha1.Record
 	info   ingest.TraceInfo
+	// When set, only these policies score the trace (a trace source's list).
+	only []string
 }
 
 type point struct {
@@ -237,8 +240,23 @@ func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) 
 func (e *Engine) Ingest(t ingest.Trace) { e.IngestBatch([]ingest.Trace{t}) }
 
 // IngestBatch stores traces in one write, then queues them for policy
-// evaluation, so a trace's scores never arrive before the trace.
+// evaluation, so a trace's scores never arrive before the trace. It is for
+// live streams: a store failure is logged and counted, and a trace is dropped
+// when the evaluation queue is full.
 func (e *Engine) IngestBatch(traces []ingest.Trace) {
+	_ = e.ingest(context.Background(), traces, nil, false)
+}
+
+// IngestBatchContext is IngestBatch for callers that must know the traces are
+// safe: it returns the store error (queuing nothing) and, instead of dropping
+// when the queue is full, waits for room until ctx is done. A trace source
+// advances its watermark only after this returns nil. Only the named policies
+// score the traces; none named means every policy that selects them.
+func (e *Engine) IngestBatchContext(ctx context.Context, traces []ingest.Trace, policies []string) error {
+	return e.ingest(ctx, traces, policies, true)
+}
+
+func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []string, durable bool) error {
 	writes := make([]store.TraceWrite, 0, len(traces))
 	items := make([]item, 0, len(traces))
 	for _, t := range traces {
@@ -256,20 +274,32 @@ func (e *Engine) IngestBatch(traces []ingest.Trace) {
 			summary.StartTime = steps[0].GetStartTime()
 		}
 		writes = append(writes, store.TraceWrite{Summary: summary, Record: record})
-		items = append(items, item{record: record, info: info})
+		items = append(items, item{record: record, info: info, only: only})
 	}
 	e.TracesIngested.Add(int64(len(traces)))
-	if err := e.store.PutTraces(context.Background(), writes); err != nil {
+	if err := e.store.PutTraces(ctx, writes); err != nil {
 		e.StoreErrors.Add(int64(len(writes)))
 		e.log.Error("storing traces", "traces", len(writes), "err", err)
-	}
-	for _, it := range items {
-		select {
-		case e.queue <- it:
-		default:
-			e.TracesDropped.Add(1)
+		if durable {
+			return fmt.Errorf("storing traces: %w", err)
 		}
 	}
+	for _, it := range items {
+		if !durable {
+			select {
+			case e.queue <- it:
+			default:
+				e.TracesDropped.Add(1)
+			}
+			continue
+		}
+		select {
+		case e.queue <- it:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 // Enqueue hands a trace to the writer, which stores traces in batches; it
@@ -400,6 +430,9 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 	for _, it := range batch {
 		if it.info.Project != c.policy.GetProject() {
 			continue // policies only see their own project's traces
+		}
+		if len(it.only) > 0 && !slices.Contains(it.only, c.policy.GetName()) {
+			continue
 		}
 		seen++
 		vars := activation(it.info, nil)
