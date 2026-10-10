@@ -548,6 +548,9 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 				in := byID[id]
 				marks = append(marks, store.SeenTrace{TraceID: id, Digest: in.Digest, Started: in.Started})
 			}
+			if err := r.alive(ctx); err != nil {
+				return err
+			}
 			if err := r.m.st.MarkSeen(ctx, project, name, marks); err != nil {
 				return err
 			}
@@ -591,6 +594,9 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 // cycle began (the service moved the watermark back): then this cycle's view
 // is stale and it ends, leaving the next to start from the new watermark.
 func (r *runner) commit(ctx context.Context, st store.SourceState, startedBackfill time.Time) error {
+	if err := r.alive(ctx); err != nil {
+		return err
+	}
 	cur, err := r.m.st.SourceState(ctx, r.src.GetProject(), r.src.GetName())
 	if err != nil {
 		return err
@@ -601,6 +607,18 @@ func (r *runner) commit(ctx context.Context, st store.SourceState, startedBackfi
 	// Counters the write-back path advances meanwhile are kept.
 	st.Scored, st.LastWriteAt = cur.Scored, cur.LastWriteAt
 	return r.m.st.PutSourceState(ctx, r.src.GetProject(), r.src.GetName(), st)
+}
+
+// alive ends the cycle when the source was deleted under it, so its state
+// is not written again (a source applied later under the same name would
+// otherwise resume the old watermark).
+func (r *runner) alive(ctx context.Context) error {
+	if _, err := r.m.st.GetSource(ctx, r.src.GetProject(), r.src.GetName()); errors.Is(err, store.ErrNotFound) {
+		return errSuperseded
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
 
 // errSuperseded ends a cycle whose state was reset under it; it is not a failure.

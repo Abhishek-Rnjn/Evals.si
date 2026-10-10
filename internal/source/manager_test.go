@@ -562,3 +562,23 @@ func TestPulledTracesCarryTheOverrides(t *testing.T) {
 		t.Fatalf("overrides not applied: %v", got)
 	}
 }
+
+// A source deleted while its cycle runs leaves nothing behind for a source
+// applied later under the same name.
+func TestDeleteDuringACycleLeavesNoState(t *testing.T) {
+	h := newHarness(t, nil)
+	_ = h.cycle(t)
+	h.now = epoch.Add(2 * time.Hour)
+	h.fs.set(info("tr-a", epoch.Add(time.Hour)))
+	ctx := context.Background()
+	h.ing.onCall = func(int) { _ = h.st.DeleteSource(ctx, "p", "studio") }
+	if err := h.cycle(t); !errors.Is(err, errSuperseded) {
+		t.Fatalf("got %v", err)
+	}
+	if st, _ := h.st.SourceState(ctx, "p", "studio"); !st.Watermark.IsZero() || st.Pulled != 0 {
+		t.Fatalf("state written after the delete: %+v", st)
+	}
+	if seen, _ := h.st.SeenTraces(ctx, "p", "studio", []string{"tr-a"}); len(seen) != 0 {
+		t.Fatal("seen traces written after the delete")
+	}
+}

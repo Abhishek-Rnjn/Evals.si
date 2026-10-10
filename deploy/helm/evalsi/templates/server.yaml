@@ -86,8 +86,8 @@ spec:
             {{- if and $v.auth.kubernetes.enabled $v.auth.kubernetes.jwksConfigMap }}
             - {name: jwks, mountPath: /etc/evalsi/jwks, readOnly: true}
             {{- end }}
-            {{- range $v.sources.secrets }}
-            - {name: source-{{ . }}, mountPath: /etc/evalsi/sources/{{ . }}, readOnly: true}
+            {{- range $i, $s := $v.sources.secrets }}
+            - {name: source-secret-{{ $i }}, mountPath: /etc/evalsi/sources/{{ $s }}, readOnly: true}
             {{- end }}
       volumes:
         {{- if and $v.auth.kubernetes.enabled $v.auth.kubernetes.jwksConfigMap }}
@@ -110,9 +110,10 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
-        {{- range $v.sources.secrets }}
-        - name: source-{{ . }}
-          secret: {secretName: {{ . }}}
+        {{- range $i, $s := $v.sources.secrets }}
+        {{- /* By index: a Secret name may contain dots, a volume name may not. */}}
+        - name: source-secret-{{ $i }}
+          secret: {secretName: {{ $s }}}
         {{- end }}
       {{- with $v.server.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}

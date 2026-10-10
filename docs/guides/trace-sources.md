@@ -24,7 +24,7 @@ The server makes the requests, from where it runs. So a project admin cannot poi
     allow_hosts: [mlflow.studio.svc.cluster.local, "*.corp.example.com"]
   ```
 
-  On Kubernetes this is the chart value `sources.allowHosts`.
+  On Kubernetes this is the chart value `sources.allowHosts`. The check is on where each request really goes, not only on the URL: a public name that resolves to a private or metadata address is refused, a redirect to one is refused at the hop, and the server dials the address it checked.
 
 - **The credential**, if the store needs one, is named, never written in the source. It is either a variable of the server (`credentials: {env: STUDIO_MLFLOW_TOKEN}`) or a file mounted from a Secret (`credentials: {file: mlflow-token/token}`). Either one must be [granted](identity.md#8-credentials-which-worker-secrets-a-project-may-use) to the project, and can be limited to the store's host:
 
@@ -80,6 +80,8 @@ spec:
     - evaluators: [{ref: tool-errors}, {ref: loop-detection}]
   window: 1h
 ```
+
+Write-back replaces the MLflow, Langfuse and Phoenix [sinks'](../../examples/server/evalsi.yaml) `trace_feedback` for the traces a source reads: do not turn on both for the same store, or each score is written twice. `trace_feedback` stays the way to write back traces that reach Evals.si over OTLP.
 
 Trace tags (MLflow) and attributes or metadata (Phoenix, Langfuse) named `evalsi.label.<key>` become labels, so a studio that tags its traces `evalsi.label.workflow` can select per workflow.
 

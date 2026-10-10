@@ -218,7 +218,10 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	sourceMgr = source.New(st, watcher, source.Options{
 		Factories: map[string]source.Factory{"mlflow": mlflow.Factory, "phoenix": phoenix.Factory, "langfuse": langfuse.Factory},
 		Resolve:   source.NewResolver(creds, cfg.Sources.Dir),
-		Logger:    log, MaxRate: cfg.Sources.MaxRecordsPerSecond,
+		// Every request a source makes, redirects included, is checked
+		// against internal addresses, not only the URL it names.
+		HTTP:   source.NewGuard(cfg.Sources.AllowHosts).Client(time.Minute),
+		Logger: log, MaxRate: cfg.Sources.MaxRecordsPerSecond,
 	})
 	for i, raw := range cfg.Policies {
 		p := &evalsiv1alpha1.OnlineEvalPolicy{}

@@ -9,7 +9,7 @@ import (
 // config, the opt-in egress policy and the lag alerts.
 func TestSourcesValues(t *testing.T) {
 	objs := render(t, "evalsi",
-		"sources.secrets[0]=mlflow-token", "sources.allowHosts[0]=mlflow.studio.svc.cluster.local",
+		"sources.secrets[0]=mlflow-token", "sources.secrets[1]=langfuse.keys", "sources.allowHosts[0]=mlflow.studio.svc.cluster.local",
 		"sources.maxRecordsPerSecond=50",
 	)
 	cfg := find(t, objs, "ConfigMap", "evalsi").Data["evalsi.yaml"]
@@ -19,7 +19,12 @@ func TestSourcesValues(t *testing.T) {
 		}
 	}
 	dep := podSpec(t, find(t, objs, "Deployment", "evalsi"))
-	for _, want := range []string{"mountPath: /etc/evalsi/sources/mlflow-token", "secretName: mlflow-token"} {
+	for _, want := range []string{
+		"mountPath: /etc/evalsi/sources/mlflow-token", "secretName: mlflow-token",
+		"mountPath: /etc/evalsi/sources/langfuse.keys", "secretName: langfuse.keys",
+		// Volume names are DNS labels: by index, as a Secret name may have dots.
+		"name: source-secret-0", "name: source-secret-1",
+	} {
 		if !strings.Contains(dep, want) {
 			t.Errorf("server pod lacks %q", want)
 		}
