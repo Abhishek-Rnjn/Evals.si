@@ -792,7 +792,7 @@ func (g *gate) datasetTargets(ctx context.Context, project string, src *evalsiv1
 	switch s := src.GetSource().(type) {
 	case *evalsiv1alpha1.DatasetSource_Traces:
 		return []target{{project: project, name: "traces/" + project, action: "traces.read",
-			resource: map[string]any{"traces": map[string]any{"service": s.Traces.GetService(), "policy": s.Traces.GetPolicy()}}}}, nil
+			resource: authz.TraceQueryResource(s.Traces.GetService(), s.Traces.GetPolicy())}}, nil
 	case *evalsiv1alpha1.DatasetSource_Run:
 		ts, err := g.runTargets(ctx, s.Run.GetRunId())
 		for i := range ts {

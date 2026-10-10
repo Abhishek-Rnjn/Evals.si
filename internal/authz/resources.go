@@ -127,6 +127,19 @@ func TraceResource(t *evalsiv1alpha1.TraceSummary) map[string]any {
 	}
 }
 
+// TraceQueryResource describes a query over a project's traces (a run's
+// trace dataset) with the attributes a trace read has, so a rule such as
+// resource.service == "public" decides both alike. Each trace the query
+// returns is then checked with TraceResource.
+func TraceQueryResource(service, policy string) map[string]any {
+	return map[string]any{
+		"service": service,
+		"trace":   map[string]any{"id": "", "service": service, "name": ""},
+		"labels":  StringMap(nil),
+		"traces":  map[string]any{"service": service, "policy": policy},
+	}
+}
+
 // IngestResource describes an OTLP resource being ingested.
 func IngestResource(service string, labels map[string]string) map[string]any {
 	return map[string]any{"service": service, "labels": StringMap(labels)}

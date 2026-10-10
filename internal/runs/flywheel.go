@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -40,6 +41,10 @@ func (m *Manager) traceRecords(ctx context.Context, q *evalsiv1alpha1.TraceQuery
 	}
 	var out []*evalsiv1alpha1.Record
 	for _, t := range stored {
+		// Only traces the caller may read, by the same rules as reading them.
+		if !authz.Can(ctx, "traces.read", project, authz.TraceResource(t.Summary)) {
+			continue
+		}
 		var scores map[string]float64
 		if q.GetPolicy() != "" && m.opts.TraceScores != nil {
 			scores = m.opts.TraceScores(q.GetPolicy(), t.Results)
