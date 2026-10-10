@@ -15,6 +15,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from evalsi.results import record_trial, result_metric
 from evalsi.types import Content
 
 
@@ -95,7 +96,11 @@ def build(
             }
         )
     report.gates = [dict(g) for g in gates]
-    by_id = {str(r.get("id", "")): r for r in records}
+    # A run's outputs are one record per trial (provenance.run.trial);
+    # dataset records are the same in every trial.
+    by_key: dict[tuple[str, int | None], Mapping[str, Any]] = {}
+    for r in records:
+        by_key[(str(r.get("id", "")), record_trial(r))] = r
     higher = {s["metric"]: s["higher_is_better"] for s in report.summaries}
     per_metric: dict[str, list[Example]] = {}
     for r in results:
@@ -112,18 +117,21 @@ def build(
             continue
         if outcome != "scored":
             continue
-        rec = by_id.get(rid, {})
+        trial = int(r.get("trial", 0) or 0)
+        # The output this result graded: its own trial's, else the dataset's.
+        rec = by_key.get((rid, trial)) or by_key.get((rid, None)) or {}
         evaluator = str(r.get("evaluator", ""))
+        ref = str(r.get("evaluator_ref", r.get("evaluatorRef", "")))
         for score in r.get("scores") or []:
             name = str(score.get("name", ""))
-            metric = evaluator if not name or name == evaluator else f"{evaluator}.{name}"
+            metric = result_metric(evaluator, ref, name)
             if metric not in higher and evaluator in higher:
                 metric = evaluator
             value, label = _score_value(score)
             per_metric.setdefault(metric, []).append(
                 Example(
                     record_id=rid,
-                    trial=int(r.get("trial", 0) or 0),
+                    trial=trial,
                     value=value,
                     label=label,
                     explanation=str(score.get("explanation", "")),
@@ -136,19 +144,17 @@ def build(
         scored = [e for e in items if e.value is not None]
         reverse = higher.get(metric) is False
         scored.sort(key=lambda e: -(e.value or 0.0) if reverse else (e.value or 0.0))
-        worst = [e for e in scored if not _is_best(e, metric, higher)][:examples]
+        worst = [e for e in scored if not _is_pass(e)][:examples]
         if worst:
             report.worst[metric] = worst
     return report
 
 
-def _is_best(e: Example, metric: str, higher: Mapping[str, Any]) -> bool:
-    """A pass, or a perfect score in [0, 1], is not worth showing as a failure."""
-    if e.label == "pass":
-        return True
-    if higher.get(metric) is not False and e.value == 1.0:
-        return True
-    return higher.get(metric) is False and e.value == 0.0
+def _is_pass(e: Example) -> bool:
+    """A pass is not worth showing as a failure. Numeric scores are always
+    candidates, worst first: a report does not know a metric's scale (1 is
+    perfect in [0, 1] and the worst on 1 to 5)."""
+    return e.label == "pass"
 
 
 def from_results_file(data: Mapping[str, Any], examples: int = 5) -> Report:

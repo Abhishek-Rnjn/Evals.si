@@ -162,7 +162,8 @@ async def execute(
         target = create_target(target_config(spec.target))
     target_usage, judge_usage = Usage(), Usage()
     results: list[EvaluationResult] = []
-    all_outputs: list[Record] = []
+    # Each output with the trial that produced it.
+    all_outputs: list[tuple[int, Record]] = []
     started = datetime.now(UTC)
     try:
         for trial in range(trials):
@@ -203,7 +204,7 @@ async def execute(
                     f"over the budget of {spec.budget.max_judge_tokens}"
                 )
             results += trial_results
-            all_outputs += outputs
+            all_outputs += [(trial, r) for r in outputs]
     finally:
         if target is not None:
             await target.aclose()
@@ -237,7 +238,11 @@ async def execute(
         "trials": trials,
     }
     result = EvalResult(
-        records=all_outputs or records, results=results, summaries=summaries, manifest=manifest
+        records=[r for _, r in all_outputs] or records,
+        results=results,
+        summaries=summaries,
+        manifest=manifest,
+        record_trials=[t for t, _ in all_outputs],
     )
     return RunResult(
         result=result,
