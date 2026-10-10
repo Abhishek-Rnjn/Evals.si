@@ -29,6 +29,7 @@ type API struct {
 	Runs    evalsiv1alpha1connect.RunServiceClient
 	Monitor evalsiv1alpha1connect.MonitorServiceClient
 	Auth    evalsiv1alpha1connect.AuthServiceClient
+	Sources evalsiv1alpha1connect.SourceServiceClient
 	// Webhooks is used by `evalsi-operator bootstrap`.
 	Webhooks evalsiv1alpha1connect.WebhookServiceClient
 	// Create a resource's project when the server does not know it (the
@@ -101,6 +102,7 @@ func NewAPI(cfg APIConfig) (*API, error) {
 		Monitor:  evalsiv1alpha1connect.NewMonitorServiceClient(client, base, opts),
 		Auth:     evalsiv1alpha1connect.NewAuthServiceClient(client, base, opts),
 		Webhooks: evalsiv1alpha1connect.NewWebhookServiceClient(client, base, opts),
+		Sources:  evalsiv1alpha1connect.NewSourceServiceClient(client, base, opts),
 
 		CreateProjects: cfg.CreateProjects,
 	}, nil
@@ -144,6 +146,13 @@ func (a *API) CheckRun(ctx context.Context, project, name string, s *evalsiv1alp
 	_, err := a.Runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{
 		Name: name, Project: project, Spec: s, Labels: labels, ValidateOnly: true,
 	}))
+	return err
+}
+
+// CheckSource asks the API whether it would apply this trace source (its
+// endpoint and credential grants included).
+func (a *API) CheckSource(ctx context.Context, s *evalsiv1alpha1.TraceSource) error {
+	_, err := a.Sources.ApplySource(ctx, connect.NewRequest(&evalsiv1alpha1.ApplySourceRequest{Source: s, ValidateOnly: true}))
 	return err
 }
 

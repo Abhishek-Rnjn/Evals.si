@@ -224,6 +224,57 @@ func TestOperator(t *testing.T) {
 		})
 	})
 
+	t.Run("TraceSource", func(t *testing.T) {
+		obj := example(t, "sources/studio-mlflow.yaml", "team-a")
+		if err := alice.Create(ctx, obj); err != nil {
+			t.Fatal(err)
+		}
+		s := &v1.TraceSource{}
+		key := client.ObjectKey{Namespace: "team-a", Name: "studio-mlflow"}
+		eventually(t, "the source's status", func() bool {
+			return e.admin.Get(ctx, key, s) == nil && s.Status.Pulled == 7
+		})
+		e.api.mu.Lock()
+		got := e.api.sources["support/studio-mlflow"]
+		validated := slices.Contains(e.api.validated, "source/studio-mlflow")
+		e.api.mu.Unlock()
+		if got.GetConnector() != "mlflow" || got.GetBackfill().GetSince().AsDuration().Hours() != 720 || got.GetCredentials().GetFile() != "mlflow-token/token" || !got.GetWriteBack().GetEnabled() {
+			t.Errorf("applied %v", got)
+		}
+		if !validated {
+			t.Error("admission did not ask the API (validate_only)")
+		}
+		if !meta.IsStatusConditionTrue(s.Status.Conditions, "Synced") || s.Status.Phase != "Tailing" || s.Status.Scored != 5 || s.Status.LagSeconds != "12" || s.Status.Watermark == nil {
+			t.Errorf("status %+v", s.Status)
+		}
+
+		// What the API would refuse is refused at kubectl apply.
+		bad := example(t, "sources/studio-mlflow.yaml", "team-a")
+		bad.SetName("metadata")
+		spec := bad.Object["spec"].(map[string]any)
+		spec["endpoint"] = "http://169.254.169.254"
+		if err := alice.Create(ctx, bad); err == nil || !strings.Contains(err.Error(), "private, loopback") {
+			t.Fatalf("a metadata endpoint was admitted: %v", err)
+		}
+		// So is a spec that sets what metadata owns.
+		bad2 := example(t, "sources/studio-mlflow.yaml", "team-a")
+		bad2.SetName("named")
+		bad2.Object["spec"].(map[string]any)["name"] = "other"
+		if err := alice.Create(ctx, bad2); err == nil || !strings.Contains(err.Error(), "metadata") {
+			t.Fatalf("a spec naming itself was admitted: %v", err)
+		}
+
+		// Deleting the resource deletes the source.
+		if err := alice.Delete(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "the source to go", func() bool {
+			e.api.mu.Lock()
+			defer e.api.mu.Unlock()
+			return e.api.sources["support/studio-mlflow"] == nil && e.admin.Get(ctx, key, s) != nil
+		})
+	})
+
 	t.Run("Evaluator", func(t *testing.T) {
 		ev := &v1.Evaluator{
 			ObjectMeta: metav1.ObjectMeta{Name: "judges", Namespace: "team-a"},

@@ -15,10 +15,10 @@ metadata:
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 rules:
   - apiGroups: [evals.si]
-    resources: [evalruns, onlineevalpolicies, evaluators]
+    resources: [evalruns, onlineevalpolicies, tracesources, evaluators]
     verbs: [get, list, watch, update, patch]
   - apiGroups: [evals.si]
-    resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, evaluators/status]
+    resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, tracesources/status, tracesources/finalizers, evaluators/status]
     verbs: [get, update, patch]
   - apiGroups: [apps]
     resources: [deployments]
@@ -86,7 +86,7 @@ spec:
             {{- if not $v.operator.allNamespaces }}
             - --watch-namespace={{ $ns }}
             {{- end }}
-            - --controllers=evalrun,onlineevalpolicy,evaluator{{ if $v.operator.sandboxClasses }},sandboxclass{{ end }}
+            - --controllers=evalrun,onlineevalpolicy,tracesource,evaluator{{ if $v.operator.sandboxClasses }},sandboxclass{{ end }}
             - --image={{ include "evalsi.image" . }}
             - --sandbox-tls-secret={{ $fn }}-sandbox-tls
             - --sandbox-allow-client={{ $fn }}-worker

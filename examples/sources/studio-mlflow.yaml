@@ -1,0 +1,23 @@
+# A trace source: evalsid reads the traces an agent studio already keeps in
+# MLflow, scores them with the project's online policies, and writes the
+# scores back as MLflow assessments (docs/guides/trace-sources.md).
+#
+#   kubectl apply -f studio-mlflow.yaml          # with the operator
+#   evalsi source apply -f studio-mlflow.yaml --server $URL
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata:
+  name: studio-mlflow
+  labels: {evals.si/project: support}
+spec:
+  connector: mlflow
+  endpoint: https://mlflow.example.com
+  locations: ["1"]                       # MLflow experiment IDs
+  # A Secret the chart mounts (sources.secrets), granted to the project for
+  # this host in credentials.grants as file:mlflow-token/token.
+  credentials: {file: mlflow-token/token}
+  backfill: {since: 720h}                # read 30 days of history first
+  poll: {interval: 30s}
+  maxTraceDuration: 30m                  # a trace running longer is missed
+  policies: [support-agent]
+  writeBack: {enabled: true}

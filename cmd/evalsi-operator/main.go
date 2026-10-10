@@ -52,7 +52,7 @@ func run() error {
 		allowClients  list
 		watchNS       list
 		namespace     = os.Getenv("POD_NAMESPACE")
-		enabled       = "evalrun,onlineevalpolicy,evaluator,sandboxclass"
+		enabled       = "evalrun,onlineevalpolicy,tracesource,evaluator,sandboxclass"
 		image         string
 		tlsSecret     = "evalsi-sandbox-tls"
 		sandboxSA     = "evalsi-sandboxd"
