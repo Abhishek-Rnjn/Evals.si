@@ -331,7 +331,7 @@ func anyValue(v any) *commonpb.AnyValue {
 // annotation in place when one with the same name and identifier exists on
 // the trace (verified on 20.20.0), so a changed score replaces the old one
 // and a retry adds nothing.
-func (c *connector) WriteBack(ctx context.Context, scores []source.Score, _ map[[2]string]store.SourceWrite) ([]store.SourceWrite, error) {
+func (c *connector) WriteBack(ctx context.Context, scores []source.Score, _ map[store.WriteKey]store.SourceWrite) ([]store.SourceWrite, error) {
 	var done []store.SourceWrite
 	for _, s := range scores {
 		kind := "CODE"
@@ -372,7 +372,7 @@ func (c *connector) WriteBack(ctx context.Context, scores []source.Score, _ map[
 		if len(resp.Data) > 0 {
 			id = resp.Data[0].ID
 		}
-		done = append(done, store.SourceWrite{TraceID: s.TraceID, Metric: s.Metric, RemoteID: id, Digest: s.Digest(), Written: time.Now().UTC()})
+		done = append(done, store.SourceWrite{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric, RemoteID: id, Digest: s.Digest(), Written: time.Now().UTC()})
 	}
 	return done, nil
 }

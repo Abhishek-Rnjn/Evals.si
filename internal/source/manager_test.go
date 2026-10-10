@@ -31,7 +31,7 @@ type fakeStore struct {
 	lists     int
 	listErr   error
 	written   []Score
-	priorSeen []map[[2]string]store.SourceWrite
+	priorSeen []map[store.WriteKey]store.SourceWrite
 	// writeFails is how many WriteBack calls fail before one succeeds.
 	writeFails int
 }
@@ -79,7 +79,7 @@ func (f *fakeStore) Fetch(_ context.Context, infos []Info) ([]ingest.Trace, erro
 	return out, nil
 }
 
-func (f *fakeStore) WriteBack(_ context.Context, scores []Score, prior map[[2]string]store.SourceWrite) ([]store.SourceWrite, error) {
+func (f *fakeStore) WriteBack(_ context.Context, scores []Score, prior map[store.WriteKey]store.SourceWrite) ([]store.SourceWrite, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.priorSeen = append(f.priorSeen, prior)
@@ -91,10 +91,10 @@ func (f *fakeStore) WriteBack(_ context.Context, scores []Score, prior map[[2]st
 	for _, s := range scores {
 		f.written = append(f.written, s)
 		id := "a-" + s.TraceID
-		if w, ok := prior[[2]string{s.TraceID, s.Metric}]; ok {
+		if w, ok := prior[s.Key()]; ok {
 			id = w.RemoteID
 		}
-		out = append(out, store.SourceWrite{TraceID: s.TraceID, Metric: s.Metric, RemoteID: id, Digest: s.Digest(), Written: epoch})
+		out = append(out, store.SourceWrite{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric, RemoteID: id, Digest: s.Digest(), Written: epoch})
 	}
 	return out, nil
 }
@@ -488,13 +488,25 @@ func TestWriteBackSendsChangedScoresOnce(t *testing.T) {
 		t.Fatalf("written %d scores, want 2 (the repeat must be skipped)", len(h.fs.written))
 	}
 	last := h.fs.priorSeen[len(h.fs.priorSeen)-1]
-	if w := last[[2]string{"tr-a", "task-success"}]; w.RemoteID != "a-tr-a" {
+	if w := last[store.WriteKey{TraceID: "tr-a", Policy: "quality", Metric: "task-success"}]; w.RemoteID != "a-tr-a" {
 		t.Fatalf("an update did not carry the stored remote ID: %+v", last)
 	}
 	// Traces that are not from a source, or from one with write-back off, are ignored.
 	h.m.OnResults("quality", nil, ingest.TraceInfo{Project: "p"}, result(1))
 	if st, _ := h.st.SourceState(ctx, "p", "studio"); st.Scored != 2 {
 		t.Fatalf("scored %d", st.Scored)
+	}
+	h.fs.mu.Unlock()
+	// Another policy's score for the same metric is its own write, not a
+	// repeat of the first policy's, and does not reuse its remote ID.
+	h.m.OnResults("safety", nil, tinfo, result(0))
+	wait(3)
+	h.fs.mu.Lock()
+	if s := h.fs.written[2]; s.Policy != "safety" {
+		t.Fatalf("written %+v", s)
+	}
+	if w, ok := h.fs.priorSeen[len(h.fs.priorSeen)-1][store.WriteKey{TraceID: "tr-a", Policy: "safety", Metric: "task-success"}]; ok {
+		t.Fatalf("the safety policy's first write saw a prior write: %+v", w)
 	}
 }
 

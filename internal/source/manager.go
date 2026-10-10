@@ -716,7 +716,7 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 	}
 	var todo []Score
 	for _, s := range scores {
-		if w, ok := prior[[2]string{s.TraceID, s.Metric}]; ok && w.Digest == s.Digest() {
+		if w, ok := prior[s.Key()]; ok && w.Digest == s.Digest() {
 			continue // already written, unchanged
 		}
 		todo = append(todo, s)
@@ -741,13 +741,13 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 	if err != nil {
 		r.log.Warn("writing scores back failed", "err", err)
 		// Keep only what was not written; the next flush retries it.
-		done := map[[2]string]bool{}
+		done := map[store.WriteKey]bool{}
 		for _, w := range written {
-			done[[2]string{w.TraceID, w.Metric}] = true
+			done[w.Key()] = true
 		}
 		var rest []Score
 		for _, s := range todo {
-			if !done[[2]string{s.TraceID, s.Metric}] {
+			if !done[s.Key()] {
 				rest = append(rest, s)
 			}
 		}

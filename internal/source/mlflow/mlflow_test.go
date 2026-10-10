@@ -234,7 +234,7 @@ func TestWriteBackCreatesThenUpdatesInPlace(t *testing.T) {
 
 	// With the stored ID, a changed score is a PATCH, not another assessment.
 	f.requests, f.bodies = nil, nil
-	prior := map[[2]string]store.SourceWrite{{traceID, "task-success"}: written[0]}
+	prior := map[store.WriteKey]store.SourceWrite{written[0].Key(): written[0]}
 	written, err = c.WriteBack(ctx, []source.Score{score("task-success", 0.0)}, prior)
 	if err != nil || len(written) != 1 {
 		t.Fatal(written, err)
