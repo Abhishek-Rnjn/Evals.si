@@ -491,7 +491,9 @@ def test_mlflow_registry_and_stop_file(
         (None, False, False),
     ],
 )
-def test_unfinished_server_runs_never_pass(status: str | None, passed: bool, finished: bool) -> None:
+def test_unfinished_server_runs_never_pass(
+    status: str | None, passed: bool, finished: bool
+) -> None:
     from evalsi.training import format_curve
     from evalsi.training.loop import _from_run
 

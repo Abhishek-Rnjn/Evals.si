@@ -1,13 +1,29 @@
 from __future__ import annotations
 
+import contextlib
+import os
+import shutil
 import stat
 import sys
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from evalsi import Content, Record, Usage
+
+
+@contextlib.contextmanager
+def short_socket_dir() -> Iterator[Path]:
+    """A short directory for Unix sockets: pytest's tmp_path can exceed the
+    104-byte socket path limit on macOS."""
+    path = Path(tempfile.mkdtemp(prefix="evalsi-", dir="/tmp" if os.path.isdir("/tmp") else None))
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 def make_record(
