@@ -144,7 +144,6 @@ func TestApplySourceValidates(t *testing.T) {
 		"bad name":         func(s *evalsiv1alpha1.TraceSource) { s.Name = "Studio!" },
 		"no connector":     func(s *evalsiv1alpha1.TraceSource) { s.Connector = "" },
 		"unknown":          func(s *evalsiv1alpha1.TraceSource) { s.Connector = "splunk" },
-		"langfuse unbuilt": func(s *evalsiv1alpha1.TraceSource) { s.Connector = "langfuse" },
 		"loopback":         func(s *evalsiv1alpha1.TraceSource) { s.Endpoint = "http://127.0.0.1:5000" },
 		"no locations":     func(s *evalsiv1alpha1.TraceSource) { s.Locations = nil },
 		"bad override":     func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"input": "trace.request"} },

@@ -71,11 +71,7 @@ func (s *Service) Validate(ctx context.Context, src *evalsiv1alpha1.TraceSource)
 	factory := s.mgr.opts.Factories[src.GetConnector()]
 	switch src.GetConnector() {
 	case "":
-		return invalid("source.connector is required (\"mlflow\" or \"phoenix\")")
-	case "langfuse", "phoenix":
-		if factory == nil {
-			return invalid("source.connector %q is designed (decision 0016) but not built yet", src.GetConnector())
-		}
+		return invalid("source.connector is required (\"mlflow\", \"phoenix\" or \"langfuse\")")
 	}
 	if factory == nil {
 		return invalid("source.connector %q is unknown", src.GetConnector())
