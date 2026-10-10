@@ -179,6 +179,7 @@ func (g *gate) accessRules() map[string]accessRule {
 
 		evalsiv1alpha1connect.TraceServiceListTracesProcedure: {action: "traces.read", filtered: true},
 		evalsiv1alpha1connect.TraceServiceGetTraceProcedure:   {action: "traces.read", filtered: true},
+		evalsiv1alpha1connect.TraceServiceListScoresProcedure: {action: "traces.read", filtered: true},
 		ingest.TraceExportProcedure:                           {action: "traces.write", filtered: true},
 
 		evalsiv1alpha1connect.AuthServiceWhoAmIProcedure:          {action: "self.read", filtered: true},

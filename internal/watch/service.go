@@ -2,6 +2,8 @@ package watch
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -135,6 +137,103 @@ func (t Traces) GetTrace(ctx context.Context, req *connect.Request[evalsiv1alpha
 		return nil, err
 	}
 	return connect.NewResponse(&evalsiv1alpha1.GetTraceResponse{Record: record, Policies: results}), nil
+}
+
+// scoreScanChunks bounds how many chunks of traces one ListScores page reads
+// while label and access filters drop traces; past it the page is returned
+// short, with a token to continue.
+const scoreScanChunks = 20
+
+// ListScores implements TraceService: the online results of the traces the
+// caller may read, newest trace first, without the traces' records.
+func (t Traces) ListScores(ctx context.Context, req *connect.Request[evalsiv1alpha1.ListScoresRequest]) (*connect.Response[evalsiv1alpha1.ListScoresResponse], error) {
+	m := req.Msg
+	size := int(m.GetPageSize())
+	if size <= 0 || size > 500 {
+		size = 50
+	}
+	var labels [][2]string
+	for _, l := range m.GetLabels() {
+		k, v, ok := strings.Cut(l, "=")
+		if !ok || k == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("label %q is not key=value", l))
+		}
+		labels = append(labels, [2]string{k, v})
+	}
+	q := store.ScoreQuery{
+		Projects:  authz.Projects(ctx, "traces.read"),
+		TraceID:   strings.ToLower(m.GetTraceId()),
+		Service:   m.GetService(),
+		Policy:    m.GetPolicy(),
+		Evaluator: m.GetEvaluator(),
+		// One more than a page, to know whether the store holds more.
+		Limit: size + 1,
+	}
+	if p := m.GetProject(); p != "" {
+		if q.Projects != nil && !slices.Contains(q.Projects, p) {
+			q.Projects = []string{}
+		} else {
+			q.Projects = []string{p}
+		}
+	}
+	if m.GetSince() != nil {
+		q.Since = m.GetSince().AsTime()
+	}
+	if tok := m.GetPageToken(); tok != "" {
+		var c store.TraceCursor
+		b, err := base64.RawURLEncoding.DecodeString(tok)
+		if err == nil {
+			err = json.Unmarshal(b, &c)
+		}
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("bad page_token"))
+		}
+		q.After = &c
+	}
+	resp := &evalsiv1alpha1.ListScoresResponse{}
+	// last is where the next page starts; nil once the store has no more.
+	var last *store.TraceCursor
+	for chunk := 1; ; chunk++ {
+		traces, err := t.Store.ScoredTraces(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		exhausted := len(traces) < q.Limit
+		for i, st := range traces {
+			c := store.CursorOf(st.Summary)
+			last = &c
+			if !hasLabels(st.Summary.GetLabels(), labels) || !authz.Can(ctx, "traces.read", st.Summary.GetProject(), authz.TraceResource(st.Summary)) {
+				continue
+			}
+			resp.Traces = append(resp.Traces, &evalsiv1alpha1.TraceScores{Trace: st.Summary, Policies: st.Policies})
+			if len(resp.Traces) == size {
+				exhausted = exhausted && i == len(traces)-1
+				break
+			}
+		}
+		if exhausted {
+			last = nil
+		}
+		if exhausted || len(resp.Traces) == size || chunk == scoreScanChunks {
+			break
+		}
+		q.After = last
+	}
+	if last != nil {
+		b, _ := json.Marshal(last)
+		resp.NextPageToken = base64.RawURLEncoding.EncodeToString(b)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// hasLabels reports whether a trace carries every key=value pair.
+func hasLabels(have map[string]string, want [][2]string) bool {
+	for _, kv := range want {
+		if got, ok := have[kv[0]]; !ok || got != kv[1] {
+			return false
+		}
+	}
+	return true
 }
 
 // MetricsHandler serves Prometheus text-format metrics for ingest and policies.

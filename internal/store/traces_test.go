@@ -149,3 +149,103 @@ func testTraceStore(t *testing.T, ts TraceStore) {
 		t.Errorf("kept trace's results: %v", groups)
 	}
 }
+
+func TestScoredTraces(t *testing.T) {
+	for name, ts := range traceBackends(t) {
+		t.Run(name, func(t *testing.T) { testScoredTraces(t, ts) })
+	}
+}
+
+func testScoredTraces(t *testing.T, ts TraceStore) {
+	ctx := context.Background()
+	base := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	// s1 and s2 start together, in two projects with the same id; u is unscored.
+	put := func(project, id, service string, start time.Time) {
+		t.Helper()
+		sum, rec := trace(project, id, service, start)
+		if err := ts.PutTrace(ctx, sum, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("p", "s0", "chat", base)
+	put("p", "s1", "chat", base.Add(time.Minute))
+	put("q", "s1", "chat", base.Add(time.Minute))
+	put("p", "s2", "search", base.Add(time.Minute))
+	put("p", "u", "chat", base.Add(2*time.Minute))
+	res := func(names ...string) []*evalsiv1alpha1.EvaluationResult {
+		var out []*evalsiv1alpha1.EvaluationResult
+		for _, n := range names {
+			out = append(out, &evalsiv1alpha1.EvaluationResult{Evaluator: n})
+		}
+		return out
+	}
+	for _, w := range []struct{ project, id, policy string }{{"p", "s0", "prod"}, {"p", "s1", "prod"}, {"q", "s1", "prod"}, {"p", "s2", "canary"}} {
+		if err := ts.PutTraceResults(ctx, w.project, w.id, w.policy, res("loop", "cost")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ts.PutTraceResults(ctx, "p", "s1", "canary", res("pii")); err != nil {
+		t.Fatal(err)
+	}
+	keys := func(got []ScoredTrace) []string {
+		var out []string
+		for _, st := range got {
+			out = append(out, st.Summary.GetProject()+"/"+st.Summary.GetTraceId())
+		}
+		return out
+	}
+	check := func(q ScoreQuery, want ...string) []ScoredTrace {
+		t.Helper()
+		got, err := ts.ScoredTraces(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fmt.Sprint(keys(got)) != fmt.Sprint(want) {
+			t.Errorf("%+v: got %v, want %v", q, keys(got), want)
+		}
+		return got
+	}
+	// Newest first, ties by trace id then project; the unscored trace is left out.
+	all := check(ScoreQuery{}, "p/s1", "q/s1", "p/s2", "p/s0")
+	if st := all[0]; st.Summary.GetResults() != 3 || len(st.Policies) != 2 || st.Policies[0].GetPolicy() != "canary" || len(st.Policies[1].GetResults()) != 2 {
+		t.Errorf("p/s1 = %d results, %v", st.Summary.GetResults(), st.Policies)
+	}
+	check(ScoreQuery{Projects: []string{"q"}}, "q/s1")
+	check(ScoreQuery{Projects: []string{}})
+	check(ScoreQuery{TraceID: "s1"}, "p/s1", "q/s1")
+	check(ScoreQuery{Service: "search"}, "p/s2")
+	check(ScoreQuery{Since: base.Add(time.Minute)}, "p/s1", "q/s1", "p/s2")
+	// A policy or evaluator selects both the traces and their results; the
+	// count still covers every result.
+	got := check(ScoreQuery{Policy: "canary"}, "p/s1", "p/s2")
+	if st := got[0]; st.Summary.GetResults() != 3 || len(st.Policies) != 1 || len(st.Policies[0].GetResults()) != 1 {
+		t.Errorf("canary p/s1 = %d results, %v", st.Summary.GetResults(), st.Policies)
+	}
+	got = check(ScoreQuery{Evaluator: "cost", Projects: []string{"p"}}, "p/s1", "p/s2", "p/s0")
+	for _, st := range got {
+		for _, g := range st.Policies {
+			if len(g.GetResults()) != 1 || g.GetResults()[0].GetEvaluator() != "cost" {
+				t.Errorf("evaluator cost: %s %v", st.Summary.GetTraceId(), g)
+			}
+		}
+	}
+	check(ScoreQuery{Evaluator: "pii", Policy: "prod"})
+	// Pages resume after a cursor, through ties on the start time.
+	var paged []string
+	q := ScoreQuery{Limit: 1}
+	for {
+		page, err := ts.ScoredTraces(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		paged = append(paged, keys(page)...)
+		c := CursorOf(page[len(page)-1].Summary)
+		q.After = &c
+	}
+	if fmt.Sprint(paged) != fmt.Sprint(keys(all)) {
+		t.Errorf("paged %v, want %v", paged, keys(all))
+	}
+}

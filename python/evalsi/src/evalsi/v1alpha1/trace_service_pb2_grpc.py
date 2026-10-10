@@ -46,6 +46,11 @@ class TraceServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.GetTraceRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.GetTraceResponse.FromString,
                 _registered_method=True)
+        self.ListScores = channel.unary_unary(
+                '/evalsi.v1alpha1.TraceService/ListScores',
+                request_serializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.ListScoresRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.ListScoresResponse.FromString,
+                _registered_method=True)
 
 
 class TraceServiceServicer:
@@ -65,6 +70,15 @@ class TraceServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListScores(self, request, context):
+        """ListScores returns online scores per trace, newest trace first, without
+        the traces' records: what an application shows per execution and per
+        workflow (by label) in its own UI.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_TraceServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -77,6 +91,11 @@ def add_TraceServiceServicer_to_server(servicer, server):
                     servicer.GetTrace,
                     request_deserializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.GetTraceRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.GetTraceResponse.SerializeToString,
+            ),
+            'ListScores': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListScores,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.ListScoresRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_trace__service__pb2.ListScoresResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -135,6 +154,33 @@ class TraceService:
             '/evalsi.v1alpha1.TraceService/GetTrace',
             evalsi_dot_v1alpha1_dot_trace__service__pb2.GetTraceRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_trace__service__pb2.GetTraceResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListScores(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.TraceService/ListScores',
+            evalsi_dot_v1alpha1_dot_trace__service__pb2.ListScoresRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_trace__service__pb2.ListScoresResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -54,6 +54,8 @@ func TestRESTRoutes(t *testing.T) {
 		{"GET", "/v1alpha1/policies/prod/stats", "", "MonitorService/GetPolicyStats", "name", "prod"},
 		{"GET", "/v1alpha1/traces?service=bot", "", "TraceService/ListTraces", "service", "bot"},
 		{"GET", "/v1alpha1/traces/0af7", "", "TraceService/GetTrace", "traceId", "0af7"},
+		{"GET", "/v1alpha1/traces/0af7/scores?policy=prod", "", "TraceService/ListScores", "traceId", "0af7"},
+		{"GET", "/v1alpha1/scores?project=p&labels=workflow=w1&since=2026-10-01T00:00:00Z", "", "TraceService/ListScores", "since", "2026-10-01T00:00:00Z"},
 	}
 	for _, c := range cases {
 		req := httptest.NewRequest(c.method, c.path, strings.NewReader(c.body))

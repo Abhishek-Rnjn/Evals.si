@@ -35,6 +35,8 @@ import (
 //	GET    /v1alpha1/policies/{name}/stats     MonitorService.GetPolicyStats
 //	GET    /v1alpha1/traces                    TraceService.ListTraces
 //	GET    /v1alpha1/traces/{trace_id}         TraceService.GetTrace
+//	GET    /v1alpha1/traces/{trace_id}/scores  TraceService.ListScores (?project=&policy=&evaluator=)
+//	GET    /v1alpha1/scores                    TraceService.ListScores (?project=&service=&labels=k=v&policy=&evaluator=&since=&page_size=&page_token=)
 //	GET    /v1alpha1/whoami                    AuthService.WhoAmI
 //	GET    /v1alpha1/projects                  AuthService.ListProjects
 //	POST   /v1alpha1/projects                  AuthService.CreateProject
@@ -111,6 +113,8 @@ func restRules() []*annotations.HttpRule {
 		rule("MonitorService.GetPolicyStats", http.MethodGet, v+"/policies/{name}/stats", ""),
 		rule("TraceService.ListTraces", http.MethodGet, v+"/traces", ""),
 		rule("TraceService.GetTrace", http.MethodGet, v+"/traces/{trace_id}", ""),
+		rule("TraceService.ListScores", http.MethodGet, v+"/traces/{trace_id}/scores", ""),
+		rule("TraceService.ListScores", http.MethodGet, v+"/scores", ""),
 		rule("AuthService.WhoAmI", http.MethodGet, v+"/whoami", ""),
 		rule("AuthService.ListProjects", http.MethodGet, v+"/projects", ""),
 		rule("AuthService.CreateProject", http.MethodPost, v+"/projects", "*"),

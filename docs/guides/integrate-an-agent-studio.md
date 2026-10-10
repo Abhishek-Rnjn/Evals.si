@@ -127,7 +127,15 @@ Runs execute the agent in a sandbox per trial (the pod rung on Kubernetes), with
         - mlflow: {tracking_uri: "http://mlflow.studio.svc:5000", experiment: evalsi}
   ```
 - **Prometheus and Grafana.** The chart ships a dashboard and metrics; see [Dashboards](kubernetes.md#dashboards).
-- **The API and CLI.** `evalsi report <run id> --server $URL -o report.html`, or the `RunService` API (`ListRunResults`) for the studio to show in its own UI. Live-traffic scores for a policy: `evalsi policy stats studio-agents`.
+- **Per execution and per workflow, in the studio's own UI.** `GET /v1alpha1/scores` returns the online scores of live traffic, pushed or pulled alike, one entry per trace (newest first) with its summary and its results grouped by policy, without the trace's full record. Filter it with `project`, `service`, `policy`, `evaluator`, `since` (RFC 3339) and any number of `labels=key=value`. `GET /v1alpha1/traces/{trace_id}/scores` returns one execution's. Label each workflow's traces with the resource attributes `evalsi.label.workflow` and `evalsi.label.version` (or a trace source's labels), and a workflow's page is one query:
+
+  ```bash
+  curl -H "Authorization: Bearer $KEY" \
+    "$URL/v1alpha1/scores?project=studio&labels=workflow=support-bot&since=2026-10-01T00:00:00Z&page_size=50"
+  ```
+
+  Pass `next_page_token` back as `page_token` for the next page; a page can be shorter than `page_size` while a token is set. A caller sees only the traces its `traces.read` grant covers, including service- and label-scoped grants, so a studio key can be limited to its own workflows. Link each entry to `/ui/` for the trajectory.
+- **The API and CLI.** `evalsi report <run id> --server $URL -o report.html`, or the `RunService` API (`ListRunResults`) for a gate run's results. Live-traffic scores for a policy as a window: `evalsi policy stats studio-agents`.
 
 ## A checklist
 

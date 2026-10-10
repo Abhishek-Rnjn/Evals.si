@@ -425,6 +425,231 @@ func (x *GetTraceResponse) GetPolicies() []*PolicyResults {
 	return nil
 }
 
+type ListScoresRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only traces in this project, when set.
+	Project string `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	// Only this trace (hex id), when set.
+	TraceId string `protobuf:"bytes,2,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	// Only traces from this service, when set.
+	Service string `protobuf:"bytes,3,opt,name=service,proto3" json:"service,omitempty"`
+	// Only traces carrying every one of these labels, each as key=value (for
+	// example workflow=support-bot).
+	Labels []string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty"`
+	// Only results from this policy, when set.
+	Policy string `protobuf:"bytes,5,opt,name=policy,proto3" json:"policy,omitempty"`
+	// Only results from this evaluator, when set.
+	Evaluator string `protobuf:"bytes,6,opt,name=evaluator,proto3" json:"evaluator,omitempty"`
+	// Only traces that started at or after this time, when set.
+	Since *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=since,proto3" json:"since,omitempty"`
+	// Traces per page: default 50, at most 500.
+	PageSize      int32  `protobuf:"varint,8,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,9,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListScoresRequest) Reset() {
+	*x = ListScoresRequest{}
+	mi := &file_evalsi_v1alpha1_trace_service_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListScoresRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListScoresRequest) ProtoMessage() {}
+
+func (x *ListScoresRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_trace_service_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListScoresRequest.ProtoReflect.Descriptor instead.
+func (*ListScoresRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_trace_service_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListScoresRequest) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *ListScoresRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *ListScoresRequest) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *ListScoresRequest) GetLabels() []string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *ListScoresRequest) GetPolicy() string {
+	if x != nil {
+		return x.Policy
+	}
+	return ""
+}
+
+func (x *ListScoresRequest) GetEvaluator() string {
+	if x != nil {
+		return x.Evaluator
+	}
+	return ""
+}
+
+func (x *ListScoresRequest) GetSince() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Since
+	}
+	return nil
+}
+
+func (x *ListScoresRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListScoresRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type TraceScores struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The trace's summary; its results field counts every result stored for it.
+	Trace *TraceSummary `protobuf:"bytes,1,opt,name=trace,proto3" json:"trace,omitempty"`
+	// The results the request selected, grouped by policy.
+	Policies      []*PolicyResults `protobuf:"bytes,2,rep,name=policies,proto3" json:"policies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TraceScores) Reset() {
+	*x = TraceScores{}
+	mi := &file_evalsi_v1alpha1_trace_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TraceScores) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TraceScores) ProtoMessage() {}
+
+func (x *TraceScores) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_trace_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TraceScores.ProtoReflect.Descriptor instead.
+func (*TraceScores) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_trace_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *TraceScores) GetTrace() *TraceSummary {
+	if x != nil {
+		return x.Trace
+	}
+	return nil
+}
+
+func (x *TraceScores) GetPolicies() []*PolicyResults {
+	if x != nil {
+		return x.Policies
+	}
+	return nil
+}
+
+type ListScoresResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Traces with at least one selected result, newest first. A page can hold
+	// fewer than page_size traces while next_page_token is set.
+	Traces        []*TraceScores `protobuf:"bytes,1,rep,name=traces,proto3" json:"traces,omitempty"`
+	NextPageToken string         `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListScoresResponse) Reset() {
+	*x = ListScoresResponse{}
+	mi := &file_evalsi_v1alpha1_trace_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListScoresResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListScoresResponse) ProtoMessage() {}
+
+func (x *ListScoresResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_trace_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListScoresResponse.ProtoReflect.Descriptor instead.
+func (*ListScoresResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_trace_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListScoresResponse) GetTraces() []*TraceScores {
+	if x != nil {
+		return x.Traces
+	}
+	return nil
+}
+
+func (x *ListScoresResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_evalsi_v1alpha1_trace_service_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_trace_service_proto_rawDesc = "" +
@@ -463,11 +688,30 @@ const file_evalsi_v1alpha1_trace_service_proto_rawDesc = "" +
 	"\aresults\x18\x02 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\"\x7f\n" +
 	"\x10GetTraceResponse\x12/\n" +
 	"\x06record\x18\x01 \x01(\v2\x17.evalsi.v1alpha1.RecordR\x06record\x12:\n" +
-	"\bpolicies\x18\x02 \x03(\v2\x1e.evalsi.v1alpha1.PolicyResultsR\bpolicies2\xb6\x01\n" +
+	"\bpolicies\x18\x02 \x03(\v2\x1e.evalsi.v1alpha1.PolicyResultsR\bpolicies\"\x9e\x02\n" +
+	"\x11ListScoresRequest\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12\x19\n" +
+	"\btrace_id\x18\x02 \x01(\tR\atraceId\x12\x18\n" +
+	"\aservice\x18\x03 \x01(\tR\aservice\x12\x16\n" +
+	"\x06labels\x18\x04 \x03(\tR\x06labels\x12\x16\n" +
+	"\x06policy\x18\x05 \x01(\tR\x06policy\x12\x1c\n" +
+	"\tevaluator\x18\x06 \x01(\tR\tevaluator\x120\n" +
+	"\x05since\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x05since\x12\x1b\n" +
+	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\t \x01(\tR\tpageToken\"~\n" +
+	"\vTraceScores\x123\n" +
+	"\x05trace\x18\x01 \x01(\v2\x1d.evalsi.v1alpha1.TraceSummaryR\x05trace\x12:\n" +
+	"\bpolicies\x18\x02 \x03(\v2\x1e.evalsi.v1alpha1.PolicyResultsR\bpolicies\"r\n" +
+	"\x12ListScoresResponse\x124\n" +
+	"\x06traces\x18\x01 \x03(\v2\x1c.evalsi.v1alpha1.TraceScoresR\x06traces\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\x8d\x02\n" +
 	"\fTraceService\x12U\n" +
 	"\n" +
 	"ListTraces\x12\".evalsi.v1alpha1.ListTracesRequest\x1a#.evalsi.v1alpha1.ListTracesResponse\x12O\n" +
-	"\bGetTrace\x12 .evalsi.v1alpha1.GetTraceRequest\x1a!.evalsi.v1alpha1.GetTraceResponseB\xce\x01\n" +
+	"\bGetTrace\x12 .evalsi.v1alpha1.GetTraceRequest\x1a!.evalsi.v1alpha1.GetTraceResponse\x12U\n" +
+	"\n" +
+	"ListScores\x12\".evalsi.v1alpha1.ListScoresRequest\x1a#.evalsi.v1alpha1.ListScoresResponseB\xce\x01\n" +
 	"\x13com.evalsi.v1alpha1B\x11TraceServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
@@ -482,7 +726,7 @@ func file_evalsi_v1alpha1_trace_service_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_trace_service_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_trace_service_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_evalsi_v1alpha1_trace_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_evalsi_v1alpha1_trace_service_proto_goTypes = []any{
 	(*TraceSummary)(nil),          // 0: evalsi.v1alpha1.TraceSummary
 	(*ListTracesRequest)(nil),     // 1: evalsi.v1alpha1.ListTracesRequest
@@ -490,29 +734,38 @@ var file_evalsi_v1alpha1_trace_service_proto_goTypes = []any{
 	(*GetTraceRequest)(nil),       // 3: evalsi.v1alpha1.GetTraceRequest
 	(*PolicyResults)(nil),         // 4: evalsi.v1alpha1.PolicyResults
 	(*GetTraceResponse)(nil),      // 5: evalsi.v1alpha1.GetTraceResponse
-	nil,                           // 6: evalsi.v1alpha1.TraceSummary.LabelsEntry
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 8: google.protobuf.Duration
-	(*EvaluationResult)(nil),      // 9: evalsi.v1alpha1.EvaluationResult
-	(*Record)(nil),                // 10: evalsi.v1alpha1.Record
+	(*ListScoresRequest)(nil),     // 6: evalsi.v1alpha1.ListScoresRequest
+	(*TraceScores)(nil),           // 7: evalsi.v1alpha1.TraceScores
+	(*ListScoresResponse)(nil),    // 8: evalsi.v1alpha1.ListScoresResponse
+	nil,                           // 9: evalsi.v1alpha1.TraceSummary.LabelsEntry
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 11: google.protobuf.Duration
+	(*EvaluationResult)(nil),      // 12: evalsi.v1alpha1.EvaluationResult
+	(*Record)(nil),                // 13: evalsi.v1alpha1.Record
 }
 var file_evalsi_v1alpha1_trace_service_proto_depIdxs = []int32{
-	7,  // 0: evalsi.v1alpha1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
-	8,  // 1: evalsi.v1alpha1.TraceSummary.duration:type_name -> google.protobuf.Duration
-	6,  // 2: evalsi.v1alpha1.TraceSummary.labels:type_name -> evalsi.v1alpha1.TraceSummary.LabelsEntry
+	10, // 0: evalsi.v1alpha1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
+	11, // 1: evalsi.v1alpha1.TraceSummary.duration:type_name -> google.protobuf.Duration
+	9,  // 2: evalsi.v1alpha1.TraceSummary.labels:type_name -> evalsi.v1alpha1.TraceSummary.LabelsEntry
 	0,  // 3: evalsi.v1alpha1.ListTracesResponse.traces:type_name -> evalsi.v1alpha1.TraceSummary
-	9,  // 4: evalsi.v1alpha1.PolicyResults.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	10, // 5: evalsi.v1alpha1.GetTraceResponse.record:type_name -> evalsi.v1alpha1.Record
+	12, // 4: evalsi.v1alpha1.PolicyResults.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	13, // 5: evalsi.v1alpha1.GetTraceResponse.record:type_name -> evalsi.v1alpha1.Record
 	4,  // 6: evalsi.v1alpha1.GetTraceResponse.policies:type_name -> evalsi.v1alpha1.PolicyResults
-	1,  // 7: evalsi.v1alpha1.TraceService.ListTraces:input_type -> evalsi.v1alpha1.ListTracesRequest
-	3,  // 8: evalsi.v1alpha1.TraceService.GetTrace:input_type -> evalsi.v1alpha1.GetTraceRequest
-	2,  // 9: evalsi.v1alpha1.TraceService.ListTraces:output_type -> evalsi.v1alpha1.ListTracesResponse
-	5,  // 10: evalsi.v1alpha1.TraceService.GetTrace:output_type -> evalsi.v1alpha1.GetTraceResponse
-	9,  // [9:11] is the sub-list for method output_type
-	7,  // [7:9] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	10, // 7: evalsi.v1alpha1.ListScoresRequest.since:type_name -> google.protobuf.Timestamp
+	0,  // 8: evalsi.v1alpha1.TraceScores.trace:type_name -> evalsi.v1alpha1.TraceSummary
+	4,  // 9: evalsi.v1alpha1.TraceScores.policies:type_name -> evalsi.v1alpha1.PolicyResults
+	7,  // 10: evalsi.v1alpha1.ListScoresResponse.traces:type_name -> evalsi.v1alpha1.TraceScores
+	1,  // 11: evalsi.v1alpha1.TraceService.ListTraces:input_type -> evalsi.v1alpha1.ListTracesRequest
+	3,  // 12: evalsi.v1alpha1.TraceService.GetTrace:input_type -> evalsi.v1alpha1.GetTraceRequest
+	6,  // 13: evalsi.v1alpha1.TraceService.ListScores:input_type -> evalsi.v1alpha1.ListScoresRequest
+	2,  // 14: evalsi.v1alpha1.TraceService.ListTraces:output_type -> evalsi.v1alpha1.ListTracesResponse
+	5,  // 15: evalsi.v1alpha1.TraceService.GetTrace:output_type -> evalsi.v1alpha1.GetTraceResponse
+	8,  // 16: evalsi.v1alpha1.TraceService.ListScores:output_type -> evalsi.v1alpha1.ListScoresResponse
+	14, // [14:17] is the sub-list for method output_type
+	11, // [11:14] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_trace_service_proto_init() }
@@ -528,7 +781,7 @@ func file_evalsi_v1alpha1_trace_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_trace_service_proto_rawDesc), len(file_evalsi_v1alpha1_trace_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

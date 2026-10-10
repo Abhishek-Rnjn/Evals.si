@@ -25,6 +25,7 @@ type TraceStore interface {
 	TraceResults(ctx context.Context, project, traceID string) ([]*evalsiv1alpha1.PolicyResults, error)
 	DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error)
 	QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrace, error)
+	ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTrace, error)
 	Close() error
 }
 
@@ -138,4 +139,9 @@ func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, err
 // QueryTraces returns the traces a query selects.
 func (s *Store) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrace, error) {
 	return s.traces.QueryTraces(ctx, q)
+}
+
+// ScoredTraces returns the traces a score query selects, with their results.
+func (s *Store) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTrace, error) {
+	return s.traces.ScoredTraces(ctx, q)
 }

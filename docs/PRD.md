@@ -59,7 +59,8 @@ The Kubernetes form factor and the push and embed doors exist today; the pull do
 | Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source) and Phoenix built and verified; Langfuse built from its spec, unverified; the rest not built | [trace sources guide](guides/trace-sources.md) |
 | Log and stream sources (Kafka, CloudWatch, Loki, S3 drops) | Not designed | none |
 | `evalsi.log()` SDK call | Designed, not built | DESIGN.md "Path E" |
-| Remote `Client.evaluate()` helper | Missing (raw `client.call` only) | `python/evalsi/src/evalsi/client.py` |
+| Remote `Client.evaluate()` helper | Built (E2), with a parity test against a real `evalsid` | `python/evalsi/src/evalsi/client.py` |
+| Scores query API for the studio UI (`/v1alpha1/scores`) | Built (A3) | `internal/watch/service.go` |
 | Release tag, signed images, published charts | Not done | `.github/workflows/release.yml` |
 
 ## Priority customer: agent-studio-standalone
@@ -81,7 +82,7 @@ agent-studio-standalone is the first application integrated, and every requireme
 | --- | --- | --- | --- |
 | A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 |
 | A2 | Evaluate a workflow on a test set from the studio's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 |
-| A3 | Show scores inside the studio UI, per workflow and per execution, linked to the trace | API + write-back | P0 |
+| A3 | Show scores inside the studio UI, per workflow and per execution, linked to the trace | API + write-back | P0 (API built: `GET /v1alpha1/scores`, [guide](guides/integrate-an-agent-studio.md#4-read-the-scores)) |
 | A4 | Read traces already stored in its MLflow tracking server, including history from before Evals.si was installed | Pull | P1 |
 | A5 | Turn failing production executions into regression datasets, and replay a new workflow version against them | Push + Run API | P1 |
 | A6 | Inline guardrails on tool calls and model calls, in audit mode first | Guardrails | P2 |
@@ -316,7 +317,7 @@ status:
 | --- | --- |
 | `POST/GET/DELETE /v1alpha1/sources`, `POST /v1alpha1/sources/{name}:backfill`, `:pause`, `:resume` | New SourceService |
 | `POST /v1alpha1/webhooks` | Subscribe to run finished, gate failed, trace scored, alert fired; HMAC-signed |
-| `GET /v1alpha1/traces/{id}/scores`, `GET /v1alpha1/scores?project=&label=&since=` | Query scores per trace, workflow or label, for the studio UI |
+| `GET /v1alpha1/traces/{id}/scores`, `GET /v1alpha1/scores?project=&label=&since=` | Query scores per trace, workflow or label, for the studio UI. Built as `TraceService.ListScores`: labels are repeated `labels=key=value`, and `service`, `policy`, `evaluator` and paging are filters too |
 | `evalsi.Client.evaluate()`, `evaluate_stream()`, `evaluate_async()` | Python wrappers over `EvaluationService` returning `EvaluationResult` |
 | `evalsi.log(input=, output=, trace_id=, metadata=)` | Buffered client that sends OTLP to evalsid |
 | Idempotency-Key header on every POST | Dedup retries |
