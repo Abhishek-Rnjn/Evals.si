@@ -227,7 +227,7 @@ class Reward:
             raise TypeError("a reward function needs completions")
         rollouts = _rollouts(prompts, completions, kwargs)
         results = self.score(rollouts)
-        self.last_call = call_key(prompts, completions)
+        self.last_call = call_key(rollouts)
         return [r.total for r in results]
 
     def compute_score(
@@ -356,9 +356,10 @@ class LocalReward(Reward):
         return results
 
 
-def call_key(prompts: Sequence[Any] | None, completions: Sequence[Any]) -> str:
-    """A digest of one reward-function call's batch."""
-    body = json.dumps([prompts, completions], sort_keys=True, default=str)
+def call_key(rollouts: Sequence[Mapping[str, Any]]) -> str:
+    """A digest of one reward-function call's batch: its rollouts with every
+    per-sample column (references, tests, metadata), not only the text."""
+    body = json.dumps(list(rollouts), sort_keys=True, default=str)
     return hashlib.sha256(body.encode()).hexdigest()
 
 

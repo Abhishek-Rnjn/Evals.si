@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from evalsi.rewards import Reward, RewardSpec, call_key, load
+from evalsi.rewards import Reward, RewardSpec, _rollouts, call_key, load
 
 RewardFunc = Callable[..., list[float | None]]
 
@@ -44,7 +44,9 @@ def component_func(reward: Reward, key: str) -> RewardFunc:
     ) -> list[float | None]:
         if completions is None:
             raise TypeError("a reward function needs completions")
-        if reward.last_call != call_key(prompts, completions):
+        # Reuse the total's results only for the very same rollouts: the
+        # same text with another answer or test set is another batch.
+        if reward.last_call != call_key(_rollouts(prompts, completions, kwargs)):
             reward(prompts=prompts, completions=completions, **kwargs)
         return [
             r.components[key].value if r.components[key].status == "scored" else None
