@@ -6,6 +6,8 @@ This report consolidates the repository review, the subsequent live kind run, an
 
 No application source was changed for this review. Go regression probes were injected with an external `-overlay` file. Cluster manifests and Helm overrides were kept outside the repository. This report is the only repository file added.
 
+> **Status:** fixes for every finding but F31 have landed on `bug-findings-and-fix`; see the [status table](README.md#bug-findings-of-2026-10-10). The text below is the report as written.
+
 ## Priority and Evidence
 
 - P1: address before relying on the affected security or shared-service behavior.
