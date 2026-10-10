@@ -26,6 +26,7 @@ from evalsi.training import (
 )
 from evalsi.training.callback import CheckpointRunner
 from evalsi.training.checkpoints import localize
+from evalsi.training.loop import StepResult
 
 QUESTIONS = [(f"q{i}", f"What is {i} + {i}?", str(2 * i)) for i in range(12)]
 
@@ -474,3 +475,34 @@ def test_mlflow_registry_and_stop_file(
     finally:
         mlflow.server.shutdown()
         mlflow.server.server_close()
+
+
+@pytest.mark.parametrize(
+    ("status", "passed", "finished"),
+    [
+        ("RUN_STATUS_SUCCEEDED", True, True),
+        ("RUN_STATUS_FAILED", False, True),
+        ("RUN_STATUS_ERROR", False, True),
+        ("RUN_STATUS_CANCELLED", False, True),
+        ("RUN_STATUS_PENDING", False, False),
+        ("RUN_STATUS_RUNNING", False, False),
+        ("RUN_STATUS_UNSPECIFIED", False, False),
+        ("RUN_STATUS_SOMETHING_NEW", False, False),
+        (None, False, False),
+    ],
+)
+def test_unfinished_server_runs_never_pass(status: str | None, passed: bool, finished: bool) -> None:
+    from evalsi.training import format_curve
+    from evalsi.training.loop import _from_run
+
+    run: dict[str, Any] = {"id": "r", "labels": {"training-step": "10"}}
+    if status is not None:
+        run["status"] = status
+    result = _from_run(run, "")
+    assert result.passed is passed
+    assert result.finished is finished
+    if not finished:
+        assert "ok" not in format_curve([result]).splitlines()[1]
+    # Saved results from before status was recorded are finished embedded runs.
+    old = StepResult.from_dict({"training_run": "t", "step": "1", "checkpoint": ""})
+    assert old.passed
