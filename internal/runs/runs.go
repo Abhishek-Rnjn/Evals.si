@@ -203,6 +203,39 @@ func newID() string {
 	return "run-" + hex.EncodeToString(b)
 }
 
+// checkSpecGrants checks the worker variables and the user simulator's judge
+// a spec names against the project's current credential grants.
+func (m *Manager) checkSpecGrants(ctx context.Context, project string, spec *evalsiv1alpha1.RunSpec) error {
+	uses, err := credentials.SpecUses(spec)
+	if err != nil {
+		return err
+	}
+	if err := m.engine.Credentials().Check(ctx, project, uses); err != nil {
+		return err
+	}
+	if sim := spec.GetHarness().GetBuiltin().GetUserSimulator(); sim != nil {
+		judge := sim.GetJudge()
+		if judge == "" {
+			judge = m.engine.JudgeOr(spec.GetJudge())
+		}
+		if err := m.engine.Credentials().CheckJudge(ctx, project, judge, "spec.harness.builtin.user_simulator"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkGrants checks a stored run against the current credential grants:
+// a grant revoked after the run was created stops it before it starts new
+// work, whether it is queued, resumed or adopted.
+func (ex *execution) checkGrants(ctx context.Context) error {
+	project := projectOr(ex.run.GetProject())
+	if err := ex.m.engine.Authorize(ctx, project, ex.insts); err != nil {
+		return err
+	}
+	return ex.m.checkSpecGrants(ctx, project, ex.spec)
+}
+
 // validate checks a spec before anything is stored, including the worker
 // variables it names against the project's credential grants.
 func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1alpha1.RunSpec) ([]evaluation.Instance, error) {
@@ -214,21 +247,8 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 	if err != nil {
 		return nil, err
 	}
-	uses, err := credentials.SpecUses(spec)
-	if err != nil {
+	if err := m.checkSpecGrants(ctx, project, spec); err != nil {
 		return nil, err
-	}
-	if err := m.engine.Credentials().Check(ctx, project, uses); err != nil {
-		return nil, err
-	}
-	if sim := spec.GetHarness().GetBuiltin().GetUserSimulator(); sim != nil {
-		judge := sim.GetJudge()
-		if judge == "" {
-			judge = m.engine.JudgeOr(spec.GetJudge())
-		}
-		if err := m.engine.Credentials().CheckJudge(ctx, project, judge, "spec.harness.builtin.user_simulator"); err != nil {
-			return nil, err
-		}
 	}
 	if spec.GetDataset().GetSource() == nil {
 		return nil, invalid("spec.dataset needs one of inline, path or uri")
@@ -652,6 +672,9 @@ func (m *Manager) prepare(ctx context.Context, run *evalsiv1alpha1.Run, a *activ
 		return nil, err
 	}
 	ex := &execution{m: m, a: a, run: run, spec: run.GetSpec(), insts: insts, records: records, outputs: outputs, keys: keys}
+	if err := ex.checkGrants(ctx); err != nil {
+		return nil, err
+	}
 	// Recount progress and spend from what is already stored (resume).
 	done := int64(len(keys))
 	if generates(run.GetSpec()) {
@@ -702,6 +725,9 @@ func (ex *execution) progress(ctx context.Context, n int) error {
 
 func (ex *execution) checkBudget(ctx context.Context) error {
 	if err := ex.checkQuota(ctx); err != nil {
+		return err
+	}
+	if err := ex.checkGrants(ctx); err != nil {
 		return err
 	}
 	b := ex.spec.GetBudget()
