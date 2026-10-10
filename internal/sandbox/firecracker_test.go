@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -94,7 +95,11 @@ func calls(t *testing.T, vmDir string) string {
 func TestFirecrackerUnavailableWithoutKVM(t *testing.T) {
 	s, _ := New(Config{Ladder: []string{"firecracker"}, Firecracker: &FirecrackerConfig{Kernel: "/x", KVMDevice: "/nonexistent/kvm", DefaultImage: "alpine"}})
 	st := s.Probe(context.Background())[0]
-	if st.Available || !strings.Contains(st.Reason, "no usable KVM") {
+	want := "no usable KVM"
+	if runtime.GOOS != "linux" {
+		want = "needs Linux" // the platform check comes first
+	}
+	if st.Available || !strings.Contains(st.Reason, want) {
 		t.Fatalf("probe = %+v", st)
 	}
 	none, _ := New(Config{Ladder: []string{"firecracker"}})

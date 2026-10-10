@@ -34,10 +34,12 @@ operator-gen:
 	cp operator/config/crd/*.yaml deploy/helm/evalsi-crds/crds/
 
 # Static binaries: evalsid doubles as the in-sandbox egress forwarder (in any
-# image root), and evalsi-guest is init inside Firecracker microVMs.
+# image root), and evalsi-guest is init inside Firecracker microVMs. The guest
+# is Linux-only and is always built for Linux; on another host, `go test ./...`
+# skips it and the sandbox's Linux checks, so run those on Linux (CI does).
 build:
 	CGO_ENABLED=0 go build -o bin/evalsid ./cmd/evalsid
-	CGO_ENABLED=0 go build -o bin/evalsi-guest ./cmd/evalsi-guest
+	CGO_ENABLED=0 GOOS=linux go build -o bin/evalsi-guest ./cmd/evalsi-guest
 	CGO_ENABLED=0 go build -o bin/evalsi-operator ./cmd/evalsi-operator
 
 go-check:
