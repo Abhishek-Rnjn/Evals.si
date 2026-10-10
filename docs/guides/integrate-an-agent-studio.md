@@ -135,6 +135,8 @@ Runs execute the agent in a sandbox per trial (the pod rung on Kubernetes), with
   ```
 
   Pass `next_page_token` back as `page_token` for the next page; a page can be shorter than `page_size` while a token is set. A caller sees only the traces its `traces.read` grant covers, including service- and label-scoped grants, so a studio key can be limited to its own workflows. Link each entry to `/ui/` for the trajectory.
+
+  To be told instead of asking, subscribe a webhook to `trace.scored`: one signed delivery per scored execution and policy, with the same summary and results ([webhooks](webhooks.md)). `alert.fired` tells the studio when a workflow's quality drops below a policy's alert threshold.
 - **The API and CLI.** `evalsi report <run id> --server $URL -o report.html`, or the `RunService` API (`ListRunResults`) for a gate run's results. Live-traffic scores for a policy as a window: `evalsi policy stats studio-agents`.
 
 ## A checklist

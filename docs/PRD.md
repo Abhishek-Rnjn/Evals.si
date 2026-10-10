@@ -214,7 +214,7 @@ All three modes feed the same evaluator catalog and policy engine, so a record g
 | P1 | OTLP gRPC and HTTP ingest of GenAI, OpenInference and OpenLLMetry spans, project assigned from the ingest credential | P0 | Built |
 | P2 | On-demand `Evaluate` and `EvaluateStream` for records sent in the request | P0 | Built |
 | P3 | Run API: create, watch, cancel, resume, compare, with gates and budgets | P0 | Built |
-| P4 | Webhook callback when a run or a scored trace finishes, signed with HMAC | P0 | Built for runs (`run.finished`, `run.gate_failed`; `POST /v1alpha1/webhooks`, [guide](guides/webhooks.md)). Scored traces: policy alerts keep their own webhooks; a per-trace event is not built |
+| P4 | Webhook callback when a run or a scored trace finishes, signed with HMAC | P0 | Built: `run.finished`, `run.gate_failed`, `trace.scored` (opt-in, one per trace and policy, pushed or pulled), `alert.fired` and `alert.resolved`; `POST /v1alpha1/webhooks` ([guide](guides/webhooks.md)) |
 | P5 | `evalsi.log(input, output, trace_id, metadata)` SDK call for apps without OTel, batched and async | P1 | Gap (DESIGN Path E) |
 | P6 | Bulk upload: POST a JSONL or Parquet file, or reference an S3 object, as a dataset | P1 | Gap (datasets from S3 exist; the REST API has no upload endpoint) |
 | P7 | Idempotency key on every write, so retries from customer pipelines never double-score | P1 | Gap |

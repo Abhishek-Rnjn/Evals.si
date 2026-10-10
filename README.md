@@ -121,7 +121,7 @@ uv run evalsi run -f ../examples/runs/capitals.yaml --server http://localhost:80
 uv run evalsi compare --server http://localhost:8080 <baseline-run> <candidate-run>
 ```
 
-`trials: 3` adds pass@3 and pass^3, gates fail the command with exit code 3 (so CI fails), and budgets cap tokens. Server runs are durable: a run interrupted by a restart resumes without redoing finished work. A project can subscribe to signed [webhooks](docs/guides/webhooks.md) for finished runs and failed gates. See [`examples/ci`](examples/ci/) for a pull-request gate.
+`trials: 3` adds pass@3 and pass^3, gates fail the command with exit code 3 (so CI fails), and budgets cap tokens. Server runs are durable: a run interrupted by a restart resumes without redoing finished work. A project can subscribe to signed [webhooks](docs/guides/webhooks.md) for finished runs, failed gates, scored traces and alerts. See [`examples/ci`](examples/ci/) for a pull-request gate.
 
 ### Agent runs on sandboxed tasks
 

@@ -32,6 +32,14 @@ const (
 	// A run finished with at least one failed gate (status FAILED), so a
 	// pipeline can stop on it. "run.gate_failed".
 	WebhookEvent_WEBHOOK_EVENT_RUN_GATE_FAILED WebhookEvent = 2
+	// An online policy stored results for a trace, pushed or pulled: one
+	// event per trace and policy. Sent only to webhooks that list it, never to
+	// one with no events, since it follows live traffic. "trace.scored".
+	WebhookEvent_WEBHOOK_EVENT_TRACE_SCORED WebhookEvent = 3
+	// A policy's alert started firing. "alert.fired".
+	WebhookEvent_WEBHOOK_EVENT_ALERT_FIRED WebhookEvent = 4
+	// A firing alert stopped firing. "alert.resolved".
+	WebhookEvent_WEBHOOK_EVENT_ALERT_RESOLVED WebhookEvent = 5
 )
 
 // Enum value maps for WebhookEvent.
@@ -40,11 +48,17 @@ var (
 		0: "WEBHOOK_EVENT_UNSPECIFIED",
 		1: "WEBHOOK_EVENT_RUN_FINISHED",
 		2: "WEBHOOK_EVENT_RUN_GATE_FAILED",
+		3: "WEBHOOK_EVENT_TRACE_SCORED",
+		4: "WEBHOOK_EVENT_ALERT_FIRED",
+		5: "WEBHOOK_EVENT_ALERT_RESOLVED",
 	}
 	WebhookEvent_value = map[string]int32{
 		"WEBHOOK_EVENT_UNSPECIFIED":     0,
 		"WEBHOOK_EVENT_RUN_FINISHED":    1,
 		"WEBHOOK_EVENT_RUN_GATE_FAILED": 2,
+		"WEBHOOK_EVENT_TRACE_SCORED":    3,
+		"WEBHOOK_EVENT_ALERT_FIRED":     4,
+		"WEBHOOK_EVENT_ALERT_RESOLVED":  5,
 	}
 )
 
@@ -137,7 +151,7 @@ type Webhook struct {
 	// An http or https URL. The server dials it from where it runs, so a
 	// cluster's own services are reachable by their in-cluster names.
 	Url string `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
-	// Events to deliver; empty means all.
+	// Events to deliver; empty means every event but trace.scored.
 	Events []WebhookEvent `protobuf:"varint,4,rep,packed,name=events,proto3,enum=evalsi.v1alpha1.WebhookEvent" json:"events,omitempty"`
 	// The HMAC key. On apply: set it, or leave it empty to keep the stored
 	// one (a new webhook then gets a generated secret). Never returned by
@@ -733,8 +747,10 @@ type WebhookDelivery struct {
 	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Webhook string                 `protobuf:"bytes,2,opt,name=webhook,proto3" json:"webhook,omitempty"`
 	Project string                 `protobuf:"bytes,3,opt,name=project,proto3" json:"project,omitempty"`
-	// "run.finished" or "run.gate_failed".
-	Event    string        `protobuf:"bytes,4,opt,name=event,proto3" json:"event,omitempty"`
+	// "run.finished", "run.gate_failed", "trace.scored", "alert.fired" or
+	// "alert.resolved".
+	Event string `protobuf:"bytes,4,opt,name=event,proto3" json:"event,omitempty"`
+	// The run of a run event.
 	RunId    string        `protobuf:"bytes,5,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	State    DeliveryState `protobuf:"varint,6,opt,name=state,proto3,enum=evalsi.v1alpha1.DeliveryState" json:"state,omitempty"`
 	Attempts int32         `protobuf:"varint,7,opt,name=attempts,proto3" json:"attempts,omitempty"`
@@ -744,6 +760,10 @@ type WebhookDelivery struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	NextAttemptAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=next_attempt_at,json=nextAttemptAt,proto3" json:"next_attempt_at,omitempty"`
 	DeliveredAt   *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=delivered_at,json=deliveredAt,proto3" json:"delivered_at,omitempty"`
+	// The trace of a trace.scored event.
+	TraceId string `protobuf:"bytes,13,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	// The policy of a trace.scored or alert event.
+	Policy        string `protobuf:"bytes,14,opt,name=policy,proto3" json:"policy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -860,6 +880,20 @@ func (x *WebhookDelivery) GetDeliveredAt() *timestamppb.Timestamp {
 		return x.DeliveredAt
 	}
 	return nil
+}
+
+func (x *WebhookDelivery) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *WebhookDelivery) GetPolicy() string {
+	if x != nil {
+		return x.Policy
+	}
+	return ""
 }
 
 type ListWebhookDeliveriesRequest struct {
@@ -1014,7 +1048,7 @@ const file_evalsi_v1alpha1_webhook_service_proto_rawDesc = "" +
 	"\tdelivered\x18\x01 \x01(\bR\tdelivered\x12\x1f\n" +
 	"\vstatus_code\x18\x02 \x01(\x05R\n" +
 	"statusCode\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\xc9\x03\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"\xfc\x03\n" +
 	"\x0fWebhookDelivery\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\awebhook\x18\x02 \x01(\tR\awebhook\x12\x18\n" +
@@ -1030,7 +1064,9 @@ const file_evalsi_v1alpha1_webhook_service_proto_rawDesc = "" +
 	"created_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12B\n" +
 	"\x0fnext_attempt_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\rnextAttemptAt\x12=\n" +
-	"\fdelivered_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vdeliveredAt\"b\n" +
+	"\fdelivered_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vdeliveredAt\x12\x19\n" +
+	"\btrace_id\x18\r \x01(\tR\atraceId\x12\x16\n" +
+	"\x06policy\x18\x0e \x01(\tR\x06policy\"b\n" +
 	"\x1cListWebhookDeliveriesRequest\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -1038,11 +1074,14 @@ const file_evalsi_v1alpha1_webhook_service_proto_rawDesc = "" +
 	"\x1dListWebhookDeliveriesResponse\x12@\n" +
 	"\n" +
 	"deliveries\x18\x01 \x03(\v2 .evalsi.v1alpha1.WebhookDeliveryR\n" +
-	"deliveries*p\n" +
+	"deliveries*\xd1\x01\n" +
 	"\fWebhookEvent\x12\x1d\n" +
 	"\x19WEBHOOK_EVENT_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aWEBHOOK_EVENT_RUN_FINISHED\x10\x01\x12!\n" +
-	"\x1dWEBHOOK_EVENT_RUN_GATE_FAILED\x10\x02*\x84\x01\n" +
+	"\x1dWEBHOOK_EVENT_RUN_GATE_FAILED\x10\x02\x12\x1e\n" +
+	"\x1aWEBHOOK_EVENT_TRACE_SCORED\x10\x03\x12\x1d\n" +
+	"\x19WEBHOOK_EVENT_ALERT_FIRED\x10\x04\x12 \n" +
+	"\x1cWEBHOOK_EVENT_ALERT_RESOLVED\x10\x05*\x84\x01\n" +
 	"\rDeliveryState\x12\x1e\n" +
 	"\x1aDELIVERY_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DELIVERY_STATE_PENDING\x10\x01\x12\x1c\n" +

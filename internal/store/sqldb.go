@@ -130,23 +130,44 @@ type querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// addTenantColumns adds tenant_id to every project-scoped table that lacks it.
+// addedColumns are columns added to tables after their first release; each
+// is added to a database that lacks it.
+var addedColumns = []struct{ table, column string }{
+	{"webhook_deliveries", "trace_id"},
+	{"webhook_deliveries", "policy"},
+}
+
+// addTenantColumns adds tenant_id to every project-scoped table that lacks
+// it, and the other added columns.
 func addTenantColumns(ctx context.Context, q querier, d dialect) error {
 	for _, table := range tenantTables {
-		if d == postgresDialect {
-			if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT ''`); err != nil {
-				return fmt.Errorf("adding tenant_id to %s: %w", table, err)
-			}
-			continue
-		}
-		var n int
-		if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'tenant_id'`, table).Scan(&n); err != nil {
+		if err := addColumn(ctx, q, d, table, "tenant_id"); err != nil {
 			return err
 		}
-		if n == 0 {
-			if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''`); err != nil {
-				return fmt.Errorf("adding tenant_id to %s: %w", table, err)
-			}
+	}
+	for _, c := range addedColumns {
+		if err := addColumn(ctx, q, d, c.table, c.column); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// addColumn adds a text column, empty by default, when the table lacks it.
+func addColumn(ctx context.Context, q querier, d dialect, table, column string) error {
+	if d == postgresDialect {
+		if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN IF NOT EXISTS `+column+` TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("adding %s to %s: %w", column, table, err)
+		}
+		return nil
+	}
+	var n int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN `+column+` TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("adding %s to %s: %w", column, table, err)
 		}
 	}
 	return nil

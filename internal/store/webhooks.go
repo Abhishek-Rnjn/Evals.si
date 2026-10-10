@@ -11,10 +11,11 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 )
 
-// webhookSchema holds webhooks and their deliveries. A delivery row is the
-// outbox: a finished run writes one per matching webhook, and the dispatcher
-// (whichever replica holds the lease) sends it, retrying until it is
-// delivered or out of attempts, so a restart loses nothing.
+// webhookSchema holds webhooks and their deliveries (trace_id and policy are
+// added by addTenantColumns). A delivery row is the outbox: an event writes
+// one per matching webhook, and the dispatcher (whichever replica holds the
+// lease) sends it, retrying until it is delivered or out of attempts, so a
+// restart loses nothing.
 const webhookSchema = `
 CREATE TABLE IF NOT EXISTS webhooks (
   project TEXT NOT NULL, name TEXT NOT NULL, body BLOB NOT NULL, updated_ns INTEGER NOT NULL,
@@ -106,13 +107,15 @@ const (
 
 // Delivery is one event for one webhook.
 type Delivery struct {
-	ID, Project, Webhook, Event, RunID string
-	Payload                            []byte
-	State                              int
-	Attempts                           int
-	StatusCode                         int
-	Error                              string
-	Created, Next, Delivered           time.Time
+	ID, Project, Webhook, Event string
+	// The run of a run event; the trace and policy of a trace or alert event.
+	RunID, TraceID, Policy   string
+	Payload                  []byte
+	State                    int
+	Attempts                 int
+	StatusCode               int
+	Error                    string
+	Created, Next, Delivered time.Time
 }
 
 func ns(t time.Time) int64 {
@@ -132,13 +135,13 @@ func fromNS(n int64) time.Time {
 // AddDelivery queues a delivery.
 func (s *Store) AddDelivery(ctx context.Context, d *Delivery) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO webhook_deliveries (id, project, webhook, event, run_id, payload, state, attempts, status_code, error, created_ns, next_ns, delivered_ns)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, '', ?, ?, 0)`,
-		d.ID, d.Project, d.Webhook, d.Event, d.RunID, d.Payload, DeliveryPending, ns(d.Created), ns(d.Next))
+		`INSERT INTO webhook_deliveries (id, project, webhook, event, run_id, trace_id, policy, payload, state, attempts, status_code, error, created_ns, next_ns, delivered_ns)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', ?, ?, 0)`,
+		d.ID, d.Project, d.Webhook, d.Event, d.RunID, d.TraceID, d.Policy, d.Payload, DeliveryPending, ns(d.Created), ns(d.Next))
 	return err
 }
 
-const deliveryColumns = `id, project, webhook, event, run_id, payload, state, attempts, status_code, error, created_ns, next_ns, delivered_ns`
+const deliveryColumns = `id, project, webhook, event, run_id, trace_id, policy, payload, state, attempts, status_code, error, created_ns, next_ns, delivered_ns`
 
 func scanDeliveries(rows *sql.Rows) ([]*Delivery, error) {
 	defer rows.Close()
@@ -146,7 +149,7 @@ func scanDeliveries(rows *sql.Rows) ([]*Delivery, error) {
 	for rows.Next() {
 		var d Delivery
 		var created, next, delivered int64
-		if err := rows.Scan(&d.ID, &d.Project, &d.Webhook, &d.Event, &d.RunID, &d.Payload, &d.State, &d.Attempts,
+		if err := rows.Scan(&d.ID, &d.Project, &d.Webhook, &d.Event, &d.RunID, &d.TraceID, &d.Policy, &d.Payload, &d.State, &d.Attempts,
 			&d.StatusCode, &d.Error, &created, &next, &delivered); err != nil {
 			return nil, err
 		}
