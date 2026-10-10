@@ -141,14 +141,14 @@ func TestApplySourceValidates(t *testing.T) {
 		return &evalsiv1alpha1.TraceSource{Name: "studio", Project: "p", Connector: "mlflow", Endpoint: "http://store:5000", Locations: []string{"1"}, Policies: []string{"quality"}}
 	}
 	for name, mutate := range map[string]func(*evalsiv1alpha1.TraceSource){
-		"bad name":         func(s *evalsiv1alpha1.TraceSource) { s.Name = "Studio!" },
-		"no connector":     func(s *evalsiv1alpha1.TraceSource) { s.Connector = "" },
-		"unknown":          func(s *evalsiv1alpha1.TraceSource) { s.Connector = "splunk" },
-		"loopback":         func(s *evalsiv1alpha1.TraceSource) { s.Endpoint = "http://127.0.0.1:5000" },
-		"no locations":     func(s *evalsiv1alpha1.TraceSource) { s.Locations = nil },
-		"bad override":     func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"input": "trace.request"} },
-		"override field":   func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"usage": "'x'"} },
-		"profile":          func(s *evalsiv1alpha1.TraceSource) { s.Profile = "weird" },
+		"bad name":       func(s *evalsiv1alpha1.TraceSource) { s.Name = "Studio!" },
+		"no connector":   func(s *evalsiv1alpha1.TraceSource) { s.Connector = "" },
+		"unknown":        func(s *evalsiv1alpha1.TraceSource) { s.Connector = "splunk" },
+		"loopback":       func(s *evalsiv1alpha1.TraceSource) { s.Endpoint = "http://127.0.0.1:5000" },
+		"no locations":   func(s *evalsiv1alpha1.TraceSource) { s.Locations = nil },
+		"bad override":   func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"input": "trace.request"} },
+		"override field": func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"usage": "'x'"} },
+		"profile":        func(s *evalsiv1alpha1.TraceSource) { s.Profile = "weird" },
 		"fast poll": func(s *evalsiv1alpha1.TraceSource) {
 			s.Poll = &evalsiv1alpha1.Poll{Interval: durationpb.New(time.Millisecond)}
 		},
