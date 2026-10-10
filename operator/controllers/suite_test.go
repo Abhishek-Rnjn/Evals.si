@@ -264,7 +264,7 @@ func start(t *testing.T) *env {
 		API:     APIConfig{URL: srv.URL, TokenFile: tokenFile, CreateProjects: true}, PollInterval: 200 * time.Millisecond, StatsInterval: 200 * time.Millisecond,
 		Namespace: "evalsi", Image: "ghcr.io/abhishek-rnjn/evalsi:test", SandboxTLSSecret: "sandbox-tls",
 		SandboxAllowClients: []string{"spiffe://evals.si/ns/evalsi/sa/evalsi-worker"}, SandboxServiceAccount: "evalsi-sandboxd",
-		WorkerConfigMap: "evalsi-worker", NATSMonitoringEndpoint: "evalsi-nats.evalsi.svc:8222",
+		WorkerConfigMap: "evalsi-worker", WorkerTLSSecret: "evalsi-worker-tls", WorkerS3Secret: "evalsi-s3", NATSMonitoringEndpoint: "evalsi-nats.evalsi.svc:8222",
 	}); err != nil {
 		t.Fatal(err)
 	}

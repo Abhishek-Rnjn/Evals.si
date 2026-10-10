@@ -25,6 +25,7 @@ const (
 	workStream     = "EVALSI_WORK"
 	consumerPrefix = "pool-"
 	configMount    = "/etc/evalsi"
+	workerHome     = "/var/lib/evalsi"
 )
 
 var scaledObjectGVK = schema.GroupVersionKind{Group: "keda.sh", Version: "v1alpha1", Kind: "ScaledObject"}
@@ -37,6 +38,12 @@ type EvaluatorReconciler struct {
 	// sandbox service) when an Evaluator names none; it must be in the
 	// Evaluator's namespace.
 	WorkerConfigMap string
+	// Secrets workers using WorkerConfigMap need, as the chart's workers
+	// get them: the client certificate for remote sandbox pools (mounted at
+	// /etc/evalsi/worker-tls) and S3 credentials (access_key, secret_key).
+	// An Evaluator with its own ConfigMap brings its own, through env.
+	WorkerTLSSecret string
+	WorkerS3Secret  string
 	// Names of the Deployments it makes start with this (default "evalsi").
 	NamePrefix string
 	// NATS's monitoring endpoint (host:8222), which KEDA's JetStream scaler reads.
@@ -94,14 +101,20 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true),
 				Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 			},
-			VolumeMounts: []corev1.VolumeMount{{Name: "tmp", MountPath: "/tmp"}},
+			// The root stays read-only; the worker's home (its judge cache)
+			// and /tmp are writable, as in the chart's workers.
+			VolumeMounts: []corev1.VolumeMount{{Name: "home", MountPath: workerHome}, {Name: "tmp", MountPath: "/tmp"}},
 		}
-		pod.Spec.Volumes = []corev1.Volume{{Name: "tmp", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}}}
+		emptyDir := corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+		pod.Spec.Volumes = []corev1.Volume{{Name: "home", VolumeSource: emptyDir}, {Name: "tmp", VolumeSource: emptyDir}}
 		if configMap != "" {
 			c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: "config", MountPath: configMount, ReadOnly: true})
 			pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: "config", VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: configMap}},
 			}})
+		}
+		if ev.Spec.ConfigMap == "" {
+			r.addReleaseSecrets(pod, &c)
 		}
 		pod.Spec.Containers = []corev1.Container{c}
 		return controllerutil.SetControllerReference(ev, dep, r.Scheme())
@@ -124,6 +137,29 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	scaling.ObservedGeneration = ev.Generation
 	meta.SetStatusCondition(&ev.Status.Conditions, scaling)
 	return ctrl.Result{}, r.Status().Update(ctx, ev)
+}
+
+// addReleaseSecrets gives a worker on the release's default ConfigMap what
+// that config refers to: the sandbox client certificate and S3 credentials.
+func (r *EvaluatorReconciler) addReleaseSecrets(pod *corev1.PodTemplateSpec, c *corev1.Container) {
+	if r.WorkerTLSSecret != "" {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: "worker-tls", MountPath: configMount + "/worker-tls", ReadOnly: true})
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: "worker-tls", VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: r.WorkerTLSSecret},
+		}})
+	}
+	if r.WorkerS3Secret != "" {
+		secret := func(key string) *corev1.EnvVarSource {
+			return &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: r.WorkerS3Secret}, Key: key,
+			}}
+		}
+		// Ahead of the Evaluator's own env, which can still override them.
+		c.Env = append([]corev1.EnvVar{
+			{Name: "EVALSI_S3_ACCESS_KEY", ValueFrom: secret("access_key")},
+			{Name: "EVALSI_S3_SECRET_KEY", ValueFrom: secret("secret_key")},
+		}, c.Env...)
+	}
 }
 
 // scaledObject scales the Deployment on the backlog of the pools'

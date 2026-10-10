@@ -293,8 +293,27 @@ func TestOperator(t *testing.T) {
 		if c.Image != "ghcr.io/example/judges:1" || strings.Join(c.Args, " ") != "worker --pools judge,cpu --config /etc/evalsi/evalsi.yaml --concurrency 8" {
 			t.Errorf("container %s %v", c.Image, c.Args)
 		}
-		if dep.Spec.Template.Spec.Volumes[1].ConfigMap.Name != "evalsi-worker" || *c.SecurityContext.ReadOnlyRootFilesystem != true {
+		volumes := map[string]corev1.Volume{}
+		for _, v := range dep.Spec.Template.Spec.Volumes {
+			volumes[v.Name] = v
+		}
+		mounts := map[string]string{}
+		for _, m := range c.VolumeMounts {
+			mounts[m.Name] = m.MountPath
+		}
+		if volumes["config"].ConfigMap.Name != "evalsi-worker" || *c.SecurityContext.ReadOnlyRootFilesystem != true {
 			t.Errorf("pod %+v", dep.Spec.Template.Spec)
+		}
+		// A writable home (the judge cache) under the read-only root, and
+		// what the release's worker config refers to.
+		if volumes["home"].EmptyDir == nil || mounts["home"] != "/var/lib/evalsi" {
+			t.Errorf("no writable home: %+v %v", volumes, mounts)
+		}
+		if volumes["worker-tls"].Secret.SecretName != "evalsi-worker-tls" || mounts["worker-tls"] != "/etc/evalsi/worker-tls" {
+			t.Errorf("no sandbox client certificate: %+v %v", volumes, mounts)
+		}
+		if len(c.Env) < 2 || c.Env[0].ValueFrom.SecretKeyRef.Name != "evalsi-s3" || c.Env[1].Name != "EVALSI_S3_SECRET_KEY" {
+			t.Errorf("no S3 credentials: %+v", c.Env)
 		}
 		so := &unstructured.Unstructured{}
 		so.SetGroupVersionKind(scaledObjectGVK)

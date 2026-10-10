@@ -174,6 +174,8 @@ spec:
   autoscaling: {minReplicas: 1, maxReplicas: 20, lagThreshold: 10}
 ```
 
+Without `spec.configMap`, the worker uses the release's worker config and gets what that config refers to, like the chart's own workers: the sandbox client certificate (`<release>-worker-tls`, when `sandbox.address` is set) and the S3 credentials (`storage.s3.credentialsSecret`, or the dev MinIO's). With your own `configMap`, supply credentials through `spec.env`. The root filesystem stays read-only; the worker's home (`/var/lib/evalsi`, its judge cache) and `/tmp` are writable.
+
 **`SandboxClass`** (cluster-scoped) is a sandbox pool: the isolation ladder, the minimum level, and the rungs' settings. The operator runs `evalsi-sandbox-<name>` (a Deployment and its Service) and writes the address workers use into `status.address`. Point `sandbox.address` at it. Because the kind is cluster-scoped, reconciling it needs a ClusterRoleBinding, so it is opt-in: set `operator.sandboxClasses=true` on both the `evalsi-crds` and the `evalsi` charts (or use the `evalsi` chart's own pool, `sandbox.pool`, which needs no cluster permission).
 
 ```yaml
