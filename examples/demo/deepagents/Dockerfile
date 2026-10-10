@@ -11,7 +11,10 @@ COPY agent.py server.py ./
 COPY corpus ./corpus
 # Runs as a non-root user, so it works on the pod rung and under Pod Security
 # "restricted"; the user needs a home for dcode's config.
-RUN useradd --uid 10001 --create-home demo
+# /workspace is a task's workdir in a sandbox: on the pod rung the image's
+# own user creates it, which it cannot do at the filesystem root.
+RUN useradd --uid 10001 --create-home demo \
+    && mkdir /workspace && chown 10001:10001 /workspace
 USER 10001
 ENV HOME=/home/demo DEMO_CORPUS=/opt/demo/corpus
 EXPOSE 8080
