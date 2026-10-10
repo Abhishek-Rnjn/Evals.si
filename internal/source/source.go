@@ -66,7 +66,9 @@ type Score struct {
 }
 
 // Key identifies the score: its trace, policy and metric.
-func (s Score) Key() store.WriteKey { return store.WriteKey{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric} }
+func (s Score) Key() store.WriteKey {
+	return store.WriteKey{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric}
+}
 
 // Digest identifies a score's value, so one already written is not sent again.
 func (s Score) Digest() string { return fmt.Sprintf("%v|%s", s.Value, s.Rationale) }
