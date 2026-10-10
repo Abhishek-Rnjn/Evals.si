@@ -390,3 +390,28 @@ def test_api_key_env_none_sends_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Authorization" not in OpenAICompatibleTarget(cfg)._headers
     default = TargetConfig(connector="openai-compatible", model="m", base_url="http://x/v1")
     assert OpenAICompatibleTarget(default)._headers["Authorization"] == "Bearer worker-secret"
+
+
+@pytest.mark.parametrize(
+    ("outcomes", "passed"),
+    [
+        ([Outcome.ERROR, Outcome.ERROR], False),
+        ([Outcome.SCORED, Outcome.ERROR], True),
+        ([Outcome.SKIPPED, Outcome.SKIPPED], True),
+        ([], True),
+    ],
+)
+def test_a_run_whose_evaluations_all_errored_never_passes(
+    outcomes: list[Outcome], passed: bool
+) -> None:
+    from evalsi.results import EvalResult
+    from evalsi.run import RunResult
+
+    results = [
+        EvaluationResult(
+            "a", "exact-match", "x", o, [Score(passed=True)] if o is Outcome.SCORED else []
+        )
+        for o in outcomes
+    ]
+    result = EvalResult(records=[], results=results, summaries=[], manifest={})
+    assert RunResult(result=result).passed is passed

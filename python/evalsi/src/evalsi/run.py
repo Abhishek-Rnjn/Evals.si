@@ -45,7 +45,9 @@ class RunResult:
 
     @property
     def passed(self) -> bool:
-        return all(g.passed for g in self.gates)
+        """Every gate passed and something was scored: a run whose
+        evaluations all errored fails, with or without gates."""
+        return not self.result.all_errored and all(g.passed for g in self.gates)
 
 
 def is_agent_run(spec: run_pb2.RunSpec) -> bool:

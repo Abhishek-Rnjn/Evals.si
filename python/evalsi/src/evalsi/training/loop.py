@@ -243,6 +243,7 @@ class CheckpointEvaluator:
                 value = score.numeric()
                 if value is not None and metric in summaries:
                     values.setdefault(metric, {})[f"{r.record_id}#{r.trial}"] = value
+        errors = outcome.result.errors()
         return StepResult(
             self.training_run,
             step,
@@ -250,6 +251,10 @@ class CheckpointEvaluator:
             summaries=summaries,
             gates_passed=outcome.passed,
             values=values,
+            # As the server reports such a run: an error, not a gate failure.
+            error=f"all {len(errors)} evaluations failed; the first: {errors[0].reason}"
+            if outcome.result.all_errored
+            else "",
         )
 
     def _client(self) -> Any:

@@ -268,6 +268,13 @@ class EvalResult:
     def errors(self) -> list[EvaluationResult]:
         return [r for r in self.results if r.outcome is Outcome.ERROR]
 
+    @property
+    def all_errored(self) -> bool:
+        """Every evaluation failed, so nothing was scored: such a run never
+        passes, gates or not (the server's rule too). Skipped records alone
+        are not errors."""
+        return bool(self.results) and all(r.outcome is Outcome.ERROR for r in self.results)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "manifest": self.manifest,
