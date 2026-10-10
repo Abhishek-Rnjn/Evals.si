@@ -283,7 +283,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		},
 	})
 	authSvc := authz.NewService(engine, st, auditor, authn.ConfigKeys())
-	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, log)
+	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, svc.EffectiveJudge, log)
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
 	if cfg.Rewards.SharedCache {
 		rewardSvc.UseSharedCache(st, log)

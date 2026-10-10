@@ -70,19 +70,22 @@ type gate struct {
 	watcher  *watch.Engine
 	authSvc  *authz.Service
 	runsCode authz.RunsCode
-	log      *slog.Logger
-	rules    map[string]accessRule
+	// judgeOf is the judge a request's evaluators actually use, defaults
+	// included.
+	judgeOf func(refs []*evalsiv1alpha1.EvaluatorRef, judge string) string
+	log     *slog.Logger
+	rules   map[string]accessRule
 	// unauthAudit bounds how many rejected credentials are audited, so a
 	// scanner cannot flood the audit log; the rest are only counted.
 	unauthAudit *rate.Limiter
 	unauthTotal atomic.Int64
 }
 
-func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, log *slog.Logger) *gate {
+func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, judgeOf func([]*evalsiv1alpha1.EvaluatorRef, string) string, log *slog.Logger) *gate {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	g := &gate{engine: engine, auditor: auditor, store: st, watcher: watcher, authSvc: authSvc, runsCode: runsCode, log: log,
+	g := &gate{engine: engine, auditor: auditor, store: st, watcher: watcher, authSvc: authSvc, runsCode: runsCode, judgeOf: judgeOf, log: log,
 		unauthAudit: rate.NewLimiter(10, 50)}
 	g.rules = g.accessRules()
 	return g
@@ -523,7 +526,33 @@ func (g *gate) evaluateTarget(project string, refs []*evalsiv1alpha1.EvaluatorRe
 	if err != nil {
 		return nil, err
 	}
-	return []target{{project: project, resource: authz.EvaluateResource(refs, judge, records, g.runsCode), name: "evaluation"}}, nil
+	return []target{{project: project, resource: g.effectiveJudge(authz.EvaluateResource(refs, judge, records, g.runsCode), refs, judge), name: "evaluation"}}, nil
+}
+
+// effectiveJudge sets resource.judge to the judge the evaluators will
+// actually use, so a rule on the default judge also covers requests that
+// name none.
+func (g *gate) effectiveJudge(r map[string]any, refs []*evalsiv1alpha1.EvaluatorRef, judge string) map[string]any {
+	if g.judgeOf != nil {
+		r["judge"] = g.judgeOf(refs, judge)
+	}
+	return r
+}
+
+func (g *gate) specResource(spec *evalsiv1alpha1.RunSpec, labels map[string]string) map[string]any {
+	return g.effectiveJudge(authz.SpecResource(spec, labels, g.runsCode), spec.GetEvaluators(), spec.GetJudge())
+}
+
+func (g *gate) runResource(run *evalsiv1alpha1.Run) map[string]any {
+	return g.effectiveJudge(authz.RunResource(run, g.runsCode), run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
+}
+
+func (g *gate) policyResource(p *evalsiv1alpha1.OnlineEvalPolicy) map[string]any {
+	var refs []*evalsiv1alpha1.EvaluatorRef
+	for _, s := range p.GetStages() {
+		refs = append(refs, s.GetEvaluators()...)
+	}
+	return g.effectiveJudge(authz.PolicyResource(p, g.runsCode), refs, p.GetJudge())
 }
 
 // newRunTargets is a new run in a project plus what its dataset reads.
@@ -536,7 +565,7 @@ func (g *gate) newRunTargets(ctx context.Context, project string, spec *evalsiv1
 	if err != nil {
 		return nil, err
 	}
-	return append([]target{{project: project, resource: authz.SpecResource(spec, labels, g.runsCode), name: name}}, extra...), nil
+	return append([]target{{project: project, resource: g.specResource(spec, labels), name: name}}, extra...), nil
 }
 
 // runTargets loads runs. An unknown run becomes a target in no project,
@@ -553,7 +582,7 @@ func (g *gate) runTargets(ctx context.Context, ids ...string) ([]target, error) 
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, target{project: run.GetProject(), resource: authz.RunResource(run, g.runsCode), name: "run/" + id})
+		out = append(out, target{project: run.GetProject(), resource: g.runResource(run), name: "run/" + id})
 	}
 	return out, nil
 }
@@ -563,7 +592,7 @@ func (g *gate) policyTarget(name string) []target {
 	if !ok {
 		return []target{{name: "policy/" + name}}
 	}
-	return []target{{project: p.GetProject(), resource: authz.PolicyResource(p, g.runsCode), name: "policy/" + name}}
+	return []target{{project: p.GetProject(), resource: g.policyResource(p), name: "policy/" + name}}
 }
 
 // applyPolicyTargets checks the new policy and, when it replaces one, the
@@ -576,9 +605,9 @@ func (g *gate) applyPolicyTargets(_ context.Context, msg any) ([]target, error) 
 	if err != nil {
 		return nil, err
 	}
-	out := []target{{project: project, resource: authz.PolicyResource(p, g.runsCode), name: "policy/" + p.GetName()}}
+	out := []target{{project: project, resource: g.policyResource(p), name: "policy/" + p.GetName()}}
 	if old, ok := g.watcher.Policy(p.GetName()); ok {
-		out = append(out, target{project: old.GetProject(), resource: authz.PolicyResource(old, g.runsCode), name: "policy/" + p.GetName()})
+		out = append(out, target{project: old.GetProject(), resource: g.policyResource(old), name: "policy/" + p.GetName()})
 	}
 	return out, nil
 }

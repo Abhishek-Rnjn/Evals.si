@@ -112,6 +112,22 @@ func (s *Service) JudgeOr(name string) string {
 	return name
 }
 
+// EffectiveJudge is the judge Bind assigns for these refs: the named one,
+// or the server's default when an evaluator needs a judge and none is
+// named. Access rules see it as resource.judge, so omitting the judge
+// cannot sidestep a rule about the default one.
+func (s *Service) EffectiveJudge(refs []*evalsiv1alpha1.EvaluatorRef, judge string) string {
+	if judge != "" {
+		return judge
+	}
+	for _, r := range refs {
+		if m, err := s.catalog.Resolve(r.GetRef()); err == nil && m.GetRequires().GetJudge() {
+			return s.defaultJudge
+		}
+	}
+	return ""
+}
+
 // RunsCode reports whether any referenced evaluator executes code, which
 // access rules see as resource.runs_code. Unknown references count as not
 // running code; binding rejects them anyway.

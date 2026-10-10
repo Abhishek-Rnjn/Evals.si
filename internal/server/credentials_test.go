@@ -15,6 +15,8 @@ import (
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 )
@@ -375,5 +377,39 @@ func TestEscalationAndUnauthenticatedAreAudited(t *testing.T) {
 	}
 	if !escalation || !unauth {
 		t.Errorf("escalation audited %v, unauthenticated audited %v; events: %v", escalation, unauth, events.Msg.GetEvents())
+	}
+}
+
+// Access rules see the judge evaluators will actually use: omitting the
+// judge gets the same decision as naming the default.
+func TestRulesSeeTheDefaultJudge(t *testing.T) {
+	plain, hash := auth.NewAPIKey()
+	s := startAuthServer(t, func(c *config.Config) {
+		c.Judges = map[string]config.Judge{"claude": {Provider: "anthropic", Model: "m"}, "shared": {Provider: "anthropic", Model: "m"}}
+		c.DefaultJudge = "claude"
+		c.RBAC.Roles = append(c.RBAC.Roles, authz.Role{Name: "cheap-judges", Permissions: []string{"evaluations.run"},
+			Condition: `resource.judge != "claude"`})
+		c.Auth.APIKeys.Keys = append(c.Auth.APIKeys.Keys, auth.ConfigKey{Name: "cheap", Key: "sha256:" + hash,
+			Roles: map[string][]string{"support": {"cheap-judges"}}})
+	})
+	eval := evalsiv1alpha1connect.NewEvaluationServiceClient(s.http, s.url, as(plain))
+	evaluate := func(ref, judge string) error {
+		_, err := eval.Evaluate(context.Background(), connect.NewRequest(&evalsiv1alpha1.EvaluateRequest{
+			Project: "support", Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: ref}}, Judge: judge,
+			Records: []*evalsiv1alpha1.Record{{Input: text("q"), Output: text("a"), Reference: text("a")}},
+		}))
+		return err
+	}
+	for _, judge := range []string{"claude", ""} {
+		if err := evaluate("judge-score", judge); codeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("judge %q: %v, want PermissionDenied", judge, err)
+		}
+	}
+	if err := evaluate("judge-score", "shared"); codeOf(err) == connect.CodePermissionDenied {
+		t.Errorf("another judge: %v", err)
+	}
+	// An evaluator that needs no judge uses none, so the rule does not apply.
+	if err := evaluate("exact-match", ""); codeOf(err) == connect.CodePermissionDenied {
+		t.Errorf("no judge needed: %v", err)
 	}
 }
