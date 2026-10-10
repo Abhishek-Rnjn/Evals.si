@@ -166,3 +166,59 @@ def test_the_mock_does_not_pretend_to_know_a_task(mock_model: str) -> None:
     reply = chat(mock_model, [{"role": "user", "content": "Write a sonnet."}], [BASH]).json()
     assert reply["choices"][0]["finish_reason"] == "stop"
     assert "could not" in reply["choices"][0]["message"]["content"]
+
+
+RAG = "Research how retrieval-augmented generation is evaluated and write a short report."
+SEARCH = {
+    "name": "mcp__docs__search_docs",
+    "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}},
+}
+
+
+def messages_api(base: str, messages: list[dict[str, Any]], **extra: Any) -> Any:
+    body = {"model": "mock", "max_tokens": 1024, "messages": messages, "tools": [SEARCH], **extra}
+    return httpx.post(f"{base}/messages", json=body, timeout=10)
+
+
+def test_the_mock_speaks_the_messages_api_and_finds_an_mcp_tool(mock_model: str) -> None:
+    ask = [{"role": "user", "content": [{"type": "text", "text": RAG}]}]
+    first = messages_api(mock_model, ask).json()
+    assert first["stop_reason"] == "tool_use"
+    (call,) = first["content"]
+    assert call["type"] == "tool_use"
+    assert call["name"] == "mcp__docs__search_docs"  # the tool, under its MCP server's prefix
+    assert call["input"] == {"query": "retrieval-augmented generation evaluation"}
+
+    answered = [
+        *ask,
+        {"role": "assistant", "content": first["content"]},
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": call["id"], "content": "docs"}],
+        },
+    ]
+    last = messages_api(mock_model, answered).json()
+    assert last["stop_reason"] == "end_turn"
+    assert last["content"][0]["text"].startswith("# Findings")
+    assert last["usage"]["output_tokens"] > 0
+
+
+def test_the_mock_streams_the_messages_api(mock_model: str) -> None:
+    ask = [{"role": "user", "content": RAG}]
+    response = messages_api(mock_model, ask, stream=True)
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    kinds = [e["type"] for e in events]
+    assert kinds[0] == "message_start"
+    assert kinds[-1] == "message_stop"
+    deltas = [e["delta"] for e in events if e["type"] == "content_block_delta"]
+    assert json.loads(deltas[0]["partial_json"]) == {
+        "query": "retrieval-augmented generation evaluation"
+    }
+    stop = next(e for e in events if e["type"] == "message_delta")
+    assert stop["delta"]["stop_reason"] == "tool_use"
+    count = httpx.post(f"{mock_model}/messages/count_tokens", json={"messages": ask}, timeout=10)
+    assert count.json()["input_tokens"] > 0

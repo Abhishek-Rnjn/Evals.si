@@ -1,0 +1,7 @@
+# record_openai_agents.py (openinference, openllmetry)
+openai-agents==0.23.1
+openai==3.28.0
+openinference-instrumentation-openai-agents==2.5.3
+opentelemetry-instrumentation-openai-agents==0.62.4
+opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-sdk==1.45.1

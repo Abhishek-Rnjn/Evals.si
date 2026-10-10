@@ -8,11 +8,18 @@
 //     gen_ai.system_instructions, gen_ai.tool.*, gen_ai.conversation.id, and the
 //     older gen_ai.prompt / gen_ai.completion event attributes.
 //   - OpenInference (Arize Phoenix): openinference.span.kind, input.value,
-//     output.value, llm.input_messages.N.message.*, llm.output_messages.N.message.*,
-//     llm.model_name, llm.token_count.*, tool.name, session.id.
+//     output.value, llm.input_messages.N.message.*, llm.output_messages.N.message.*
+//     (with their tool_calls), llm.model_name, llm.token_count.*, tool.name,
+//     session.id.
 //   - OpenLLMetry (Traceloop): gen_ai.prompt.N.*, gen_ai.completion.N.*,
 //     traceloop.span.kind, llm.request.type.
 //   - MLflow tracing: mlflow.spanType, mlflow.spanInputs, mlflow.spanOutputs.
+//   - LangChain and LangGraph messages in any of those, or in LangSmith's
+//     gen_ai.prompt and gen_ai.completion JSON (langchain.go).
+//
+// profiles.go adds what the first-cut agent frameworks need beyond these
+// (LangGraph, CrewAI, OpenAI Agents SDK, LlamaIndex, Claude Agent SDK), each
+// tested against a recorded trace in testdata/frameworks.
 //
 // Spans no mapper recognizes become generic steps with their raw attributes.
 package ingest
@@ -215,17 +222,58 @@ func rawText(raw json.RawMessage) string {
 }
 
 // indexedMessages reads prefix.N.<role|content> style attributes
-// (OpenLLMetry gen_ai.prompt.N.*, OpenInference llm.input_messages.N.message.*).
+// (OpenLLMetry gen_ai.prompt.N.*, OpenInference llm.input_messages.N.message.*),
+// with the tool calls a message makes (OpenInference
+// ...tool_calls.M.tool_call.function.{name,arguments}, OpenLLMetry
+// ...tool_calls.M.{name,arguments}) and the call a tool message answers.
+// Content split into parts (...contents.K.message_content.text, or
+// ...content.K) is joined.
 func indexedMessages(a Attrs, prefix, roleKey, contentKey string) []*evalsiv1alpha1.Message {
+	msgBase := strings.TrimSuffix(roleKey, "role") // "message." or ""
 	var out []*evalsiv1alpha1.Message
 	for i := 0; ; i++ {
 		base := fmt.Sprintf("%s.%d.", prefix, i)
-		role, content := a.str(base+roleKey), a.str(base+contentKey)
-		if role == "" && content == "" {
+		msg := &evalsiv1alpha1.Message{
+			Role:       a.str(base + roleKey),
+			Content:    a.str(base + contentKey),
+			ToolCallId: a.str(base+msgBase+"tool_call_id", base+msgBase+"tool_call.id"),
+		}
+		if msg.Content == "" {
+			var parts []string
+			for k := 0; ; k++ {
+				p := a.str(fmt.Sprintf("%s%scontents.%d.message_content.text", base, msgBase, k), fmt.Sprintf("%s%s.%d", base, contentKey, k))
+				if p == "" {
+					break
+				}
+				parts = append(parts, p)
+			}
+			msg.Content = strings.Join(parts, "\n")
+		}
+		for m := 0; ; m++ {
+			call := fmt.Sprintf("%s%stool_calls.%d.", base, msgBase, m)
+			name := a.str(call+"tool_call.function.name", call+"name")
+			if name == "" {
+				break
+			}
+			msg.ToolCalls = append(msg.ToolCalls, &evalsiv1alpha1.ToolCall{
+				Id:        a.str(call+"tool_call.id", call+"id"),
+				Name:      name,
+				Arguments: a.str(call+"tool_call.function.arguments", call+"arguments"),
+			})
+		}
+		if msg.Role == "" && msg.Content == "" && len(msg.ToolCalls) == 0 {
+			break
+		}
+		out = append(out, msg)
+	}
+	// OpenInference puts roles without content on LangGraph's chain spans:
+	// that is no message to read.
+	for _, m := range out {
+		if m.GetContent() != "" || len(m.GetToolCalls()) > 0 {
 			return out
 		}
-		out = append(out, &evalsiv1alpha1.Message{Role: role, Content: content})
 	}
+	return nil
 }
 
 func contentOf(v string) *evalsiv1alpha1.Content {
@@ -277,12 +325,13 @@ func spanIO(a Attrs, events []*tracepb.Span_Event) (in, out *evalsiv1alpha1.Cont
 	if out == nil {
 		out = messagesContent(indexedMessages(a, "llm.output_messages", "message.role", "message.content"))
 	}
-	// MLflow (LangChain, LangGraph, Deep Agents): chat messages, else raw JSON.
+	// LangChain, LangGraph and OpenAI calls as MLflow, OpenInference and
+	// LangSmith serialize them: chat messages, else raw JSON below.
 	if in == nil {
-		in = messagesContent(mlflowMessages(a.str("mlflow.spanInputs")))
+		in = messagesContent(messagesOf(a.str("mlflow.spanInputs", "input.value", "gen_ai.prompt")))
 	}
 	if out == nil {
-		out = messagesContent(mlflowMessages(a.str("mlflow.spanOutputs")))
+		out = messagesContent(messagesOf(a.str("mlflow.spanOutputs", "output.value", "gen_ai.completion")))
 	}
 	if in == nil {
 		in = contentOf(a.str("gen_ai.tool.call.arguments", "input.value", "mlflow.spanInputs", "gen_ai.prompt"))
@@ -350,6 +399,7 @@ func ToStep(s Span) *evalsiv1alpha1.Step {
 			step.Attributes[k] = val
 		}
 	}
+	profileStep(sp, a, step)
 	return step
 }
 
@@ -405,8 +455,6 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 	if info.Resource == nil {
 		info.Resource = Attrs{}
 	}
-	usage := &evalsiv1alpha1.Usage{}
-	var firstLLM, lastLLM *evalsiv1alpha1.Step
 	seenModel := map[string]bool{}
 	for _, s := range spans {
 		step := ToStep(s)
@@ -418,27 +466,31 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 		if step.GetError() != "" {
 			info.Error = true
 		}
+		// Agent spans name the model too (the Claude Agent SDK's
+		// OpenInference spans record no separate model call).
+		if t := step.GetType(); t != evalsiv1alpha1.StepType_STEP_TYPE_LLM && t != evalsiv1alpha1.StepType_STEP_TYPE_AGENT {
+			continue
+		}
+		if m := a.mlflowStr("gen_ai.response.model", "gen_ai.request.model", "llm.model_name", "mlflow.llm.model"); m != "" && !seenModel[m] {
+			seenModel[m] = true
+			info.Models = append(info.Models, m)
+		}
+	}
+	demoteWrappers(traj.Steps)
+	var firstLLM, lastLLM *evalsiv1alpha1.Step
+	for _, step := range traj.Steps {
 		switch step.GetType() {
 		case evalsiv1alpha1.StepType_STEP_TYPE_LLM:
 			if firstLLM == nil {
 				firstLLM = step
 			}
 			lastLLM = step
-			if u := step.GetUsage(); u != nil {
-				if u.InputTokens != nil {
-					usage.InputTokens = proto.Int64(usage.GetInputTokens() + u.GetInputTokens())
-				}
-				if u.OutputTokens != nil {
-					usage.OutputTokens = proto.Int64(usage.GetOutputTokens() + u.GetOutputTokens())
-				}
-			}
-			if m := a.mlflowStr("gen_ai.response.model", "gen_ai.request.model", "llm.model_name", "mlflow.llm.model"); m != "" && !seenModel[m] {
-				seenModel[m] = true
-				info.Models = append(info.Models, m)
-			}
 		case evalsiv1alpha1.StepType_STEP_TYPE_TOOL:
 			info.Tools = append(info.Tools, step.GetName())
 		}
+	}
+	if len(info.Tools) == 0 {
+		info.Tools = requestedTools(traj.Steps)
 	}
 	info.Steps = len(traj.Steps)
 	rootStep := traj.Steps[0]
@@ -447,24 +499,19 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 			rootStep = st
 		}
 	}
+	usage := usageOf(traj.Steps, rootStep)
 	if d := rootStep.GetUsage().GetLatency(); d != nil {
 		usage.Latency = d
 		info.DurationMS = float64(d.AsDuration().Microseconds()) / 1000
 	}
 	record := &evalsiv1alpha1.Record{
 		Id:         t.TraceID,
-		Input:      rootStep.GetInput(),
-		Output:     rootStep.GetOutput(),
+		Input:      recordInput(rootStep, firstLLM),
+		Output:     recordOutput(rootStep, lastLLM),
 		Trajectory: traj,
 		Usage:      usage,
 		Metadata:   map[string]*structpb.Value{},
 		Provenance: &evalsiv1alpha1.Provenance{Source: &evalsiv1alpha1.Provenance_Trace{Trace: &evalsiv1alpha1.TraceProvenance{TraceId: t.TraceID}}},
-	}
-	if record.Input == nil && firstLLM != nil {
-		record.Input = firstLLM.GetInput()
-	}
-	if record.Output == nil && lastLLM != nil {
-		record.Output = lastLLM.GetOutput()
 	}
 	meta := map[string]any{"service": info.Service, "span_name": info.Name, "error": info.Error}
 	if traj.SessionId != "" {

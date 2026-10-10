@@ -192,7 +192,7 @@ See the [agent runs guide](docs/guides/agent-runs.md).
 
 ### Watch: evaluate live agent traces
 
-Point any OpenTelemetry-instrumented app or agent (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or agentgateway, at the server's OTLP endpoint. Then apply a policy:
+Point any OpenTelemetry-instrumented app or agent (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or agentgateway, at the server's OTLP endpoint. LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK are tested against traces recorded from each; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup for each one. Then apply a policy:
 
 ```bash
 uv run evalsi policy apply -f ../examples/watch/support-policy.yaml --server http://localhost:8080

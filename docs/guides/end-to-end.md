@@ -305,7 +305,7 @@ uv run evalsi shadow -f candidate.yaml --server $URL
 
 ## 6. Watch: online evaluation of live traces
 
-Point any OpenTelemetry-instrumented app or agent (OTel GenAI, OpenInference, OpenLLMetry, MLflow conventions) or agentgateway at the server's OTLP endpoint. The server accepts OTLP gRPC and HTTP on the main port, and on 4317/4318 when enabled in `evalsi.yaml`.
+Point any OpenTelemetry-instrumented app or agent (OTel GenAI, OpenInference, OpenLLMetry, MLflow conventions) or agentgateway at the server's OTLP endpoint. For LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK, the [agent frameworks guide](agent-frameworks.md) says which instrumentation to use and what each one records. The server accepts OTLP gRPC and HTTP on the main port, and on 4317/4318 when enabled in `evalsi.yaml`.
 
 ```bash
 # In the app (standard OpenTelemetry environment variables)

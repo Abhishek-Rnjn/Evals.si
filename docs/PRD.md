@@ -18,15 +18,15 @@ Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls
 
 **Agent loops.** Any loop is supported through one of three generic paths: OTel GenAI semantic conventions, OpenInference or OpenLLMetry spans, or `evalsi.log()` and the Run API for loops with no tracing. A mapping profile turns a framework's spans into an Evals.si trajectory (steps, tool calls, model calls, final output). Profiles are tested against fixtures captured from each framework.
 
-| Agent framework | First cut | Instrumentation |
-| --- | --- | --- |
-| LangGraph / LangChain | Yes | OpenInference, LangSmith OTel export |
-| OpenAI Agents SDK | Yes | OpenInference, native tracing processor |
-| CrewAI (and agent-studio-standalone) | Yes | MLflow autolog, OpenInference, OpenLLMetry |
-| Claude Agent SDK | Yes | OTel GenAI conventions |
-| LlamaIndex | Yes | OpenInference |
-| AutoGen, Pydantic AI, Google ADK, Semantic Kernel | Later (generic path works today) | OTel GenAI conventions |
-| Custom loop, PyTorch or RL rollout | Generic path | `evalsi.log()`, Run API, in-process SDK |
+| Agent framework | First cut | Instrumentation | Status |
+| --- | --- | --- | --- |
+| LangGraph / LangChain | Yes | OpenInference, LangSmith OTel export | Tested against recorded traces: OpenInference, LangSmith's OTel export, MLflow autolog ([guide](guides/agent-frameworks.md)) |
+| OpenAI Agents SDK | Yes | OpenInference, native tracing processor | Tested: OpenInference, and OpenLLMetry, which records no model output. The native processor exports only to OpenAI, not over OTLP ([guide](guides/agent-frameworks.md)) |
+| CrewAI (and agent-studio-standalone) | Yes | MLflow autolog, OpenInference, OpenLLMetry | Tested: all three (MLflow needs its OpenAI autolog too; it and OpenLLMetry record no tool spans) ([guide](guides/agent-frameworks.md)) |
+| Claude Agent SDK | Yes | OTel GenAI conventions | Tested: OpenInference, and Claude Code's own traces (beta), which record no model output ([guide](guides/agent-frameworks.md)) |
+| LlamaIndex | Yes | OpenInference | Tested ([guide](guides/agent-frameworks.md)) |
+| AutoGen, Pydantic AI, Google ADK, Semantic Kernel | Later (generic path works today) | OTel GenAI conventions | Not tested |
+| Custom loop, PyTorch or RL rollout | Generic path | `evalsi.log()`, Run API, in-process SDK | Run API and SDK built; `evalsi.log()` a gap (P5) |
 
 **Trace stores.** OTLP is a push protocol, so any OTLP-compatible store (Tempo, Jaeger, Datadog, Honeycomb, Elastic) is covered by teeing the customer's OTel Collector to evalsid; no connector is needed. Pull connectors are for stores that keep LLM traces behind their own API, where customers also want scores written back into the UI they already use.
 
@@ -49,6 +49,7 @@ The Kubernetes form factor and the push and embed doors exist today; the pull do
 | Operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator`, `SandboxClass` | Built | `operator/` |
 | gRPC, HTTP/JSON and REST API; durable, resumable runs | Built | `internal/server/`, `internal/runs/` |
 | OTLP trace ingest, online policies (CEL select, sampling, cascades, alerts) | Built | `internal/ingest/`, `internal/watch/` |
+| Mapping profiles for the five first-cut agent frameworks | Built; tested against traces recorded from each framework | `internal/ingest/profiles.go`, `tests/frameworks/` |
 | evalsi-collector (OTel Collector distribution with redaction) | Built | `deploy/collector/` |
 | Score write-back to MLflow, Langfuse, Phoenix, OTel | Built | `internal/sinks/` |
 | Evaluator packs (core, judge, text, RAG, safety, agent, code, RL, fine-tune, classic ML, monitoring) and framework adapters | Built | `python/evalsi/src/evalsi/packs/`, `python/adapters/` |

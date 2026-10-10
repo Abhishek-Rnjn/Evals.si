@@ -1,0 +1,776 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "10669423-2d5a-42e7-862b-e8c687440676"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai",
+      "version": "0.1.65"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "llm.system",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "input.value",
+         "value": {
+          "stringValue": "{\"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}], \"model\": \"gpt-4o-mini\", \"tool_choice\": \"auto\", \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}]}"
+         }
+        },
+        {
+         "key": "input.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "{\"id\":\"chatcmpl-ef2aea5e82e9\",\"choices\":[{\"finish_reason\":\"tool_calls\",\"index\":0,\"message\":{\"content\":null,\"role\":\"assistant\",\"tool_calls\":[{\"id\":\"call_c3756b861158\",\"function\":{\"arguments\":\"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\",\"name\":\"search_docs\"},\"type\":\"function\"}]}}],\"created\":1791611788,\"model\":\"gpt-4o-mini\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":41,\"prompt_tokens\":97,\"total_tokens\":138}}"
+         }
+        },
+        {
+         "key": "output.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "llm.tools.0.tool.json_schema",
+         "value": {
+          "stringValue": "{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}"
+         }
+        },
+        {
+         "key": "llm.invocation_parameters",
+         "value": {
+          "stringValue": "{\"model\": \"gpt-4o-mini\", \"tool_choice\": \"auto\"}"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.role",
+         "value": {
+          "stringValue": "system"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.content",
+         "value": {
+          "stringValue": "You are Researcher. You search the corpus before you write.\nYour personal goal is: Answer research questions from the documentation corpus"
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.role",
+         "value": {
+          "stringValue": "user"
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.content",
+         "value": {
+          "stringValue": "\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\n\nThis is the expected criteria for your final answer: A short report\nyou MUST return the actual complete content as the final answer, not a summary."
+         }
+        },
+        {
+         "key": "llm.model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "llm.token_count.total",
+         "value": {
+          "intValue": "138"
+         }
+        },
+        {
+         "key": "llm.token_count.prompt",
+         "value": {
+          "intValue": "97"
+         }
+        },
+        {
+         "key": "llm.token_count.completion",
+         "value": {
+          "intValue": "41"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.role",
+         "value": {
+          "stringValue": "assistant"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.tool_calls.0.tool_call.id",
+         "value": {
+          "stringValue": "call_c3756b861158"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.tool_calls.0.tool_call.function.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "llm.finish_reason",
+         "value": {
+          "stringValue": "tool_calls"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "LLM"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611788358549452",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "ChatCompletion",
+       "parentSpanId": "de58e7b0466da696",
+       "spanId": "a402958e3de13cd9",
+       "startTimeUnixNano": "1791611788345590925",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1d1825ff72fa02f7d8f42da9441096e6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "10669423-2d5a-42e7-862b-e8c687440676"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.crewai",
+      "version": "1.1.21"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "input.value",
+         "value": {
+          "stringValue": "{\"query\": \"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "input.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "tool.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "tool.description",
+         "value": {
+          "stringValue": "Tool Name: search_docs\nTool Arguments: {\n  \"properties\": {\n    \"query\": {\n      \"title\": \"Query\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"query\"\n  ],\n  \"title\": \"Search_Docs\",\n  \"type\": \"object\",\n  \"additionalProperties\": false\n}\nTool Description: Searches the documentation corpus and returns the matching passages."
+         }
+        },
+        {
+         "key": "tool.parameters",
+         "value": {
+          "stringValue": "{\"properties\": {\"query\": {\"title\": \"Query\", \"type\": \"string\"}}, \"required\": [\"query\"], \"title\": \"Search_Docs\", \"type\": \"object\"}"
+         }
+        },
+        {
+         "key": "tool.description_updated",
+         "value": {
+          "boolValue": false
+         }
+        },
+        {
+         "key": "tool.cache_function",
+         "value": {
+          "stringValue": "_default_cache_function"
+         }
+        },
+        {
+         "key": "tool.result_as_answer",
+         "value": {
+          "boolValue": false
+         }
+        },
+        {
+         "key": "tool.current_usage_count",
+         "value": {
+          "intValue": "0"
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them)."
+         }
+        },
+        {
+         "key": "output.mime_type",
+         "value": {
+          "stringValue": "text/plain"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "TOOL"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611788366006573",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "search_docs.run",
+       "parentSpanId": "de58e7b0466da696",
+       "spanId": "c0046ff9b4976f9e",
+       "startTimeUnixNano": "1791611788365328654",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1d1825ff72fa02f7d8f42da9441096e6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "10669423-2d5a-42e7-862b-e8c687440676"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai",
+      "version": "0.1.65"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "llm.system",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "input.value",
+         "value": {
+          "stringValue": "{\"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}, {\"role\": \"assistant\", \"content\": null, \"tool_calls\": [{\"id\": \"call_c3756b861158\", \"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\"}}]}, {\"role\": \"tool\", \"tool_call_id\": \"call_c3756b861158\", \"name\": \"search_docs\", \"content\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\"}], \"model\": \"gpt-4o-mini\", \"tool_choice\": \"auto\", \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}]}"
+         }
+        },
+        {
+         "key": "input.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "{\"id\":\"chatcmpl-6f9076489ece\",\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"role\":\"assistant\"}}],\"created\":1791611788,\"model\":\"gpt-4o-mini\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":69,\"prompt_tokens\":135,\"total_tokens\":204}}"
+         }
+        },
+        {
+         "key": "output.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "llm.tools.0.tool.json_schema",
+         "value": {
+          "stringValue": "{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}"
+         }
+        },
+        {
+         "key": "llm.invocation_parameters",
+         "value": {
+          "stringValue": "{\"model\": \"gpt-4o-mini\", \"tool_choice\": \"auto\"}"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.role",
+         "value": {
+          "stringValue": "system"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.content",
+         "value": {
+          "stringValue": "You are Researcher. You search the corpus before you write.\nYour personal goal is: Answer research questions from the documentation corpus"
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.role",
+         "value": {
+          "stringValue": "user"
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.content",
+         "value": {
+          "stringValue": "\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\n\nThis is the expected criteria for your final answer: A short report\nyou MUST return the actual complete content as the final answer, not a summary."
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.role",
+         "value": {
+          "stringValue": "assistant"
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.tool_calls.0.tool_call.id",
+         "value": {
+          "stringValue": "call_c3756b861158"
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.tool_calls.0.tool_call.function.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.tool_calls.0.tool_call.function.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "llm.input_messages.3.message.role",
+         "value": {
+          "stringValue": "tool"
+         }
+        },
+        {
+         "key": "llm.input_messages.3.message.tool_call_id",
+         "value": {
+          "stringValue": "call_c3756b861158"
+         }
+        },
+        {
+         "key": "llm.input_messages.3.message.content",
+         "value": {
+          "stringValue": "[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them)."
+         }
+        },
+        {
+         "key": "llm.input_messages.3.message.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "llm.model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "llm.token_count.total",
+         "value": {
+          "intValue": "204"
+         }
+        },
+        {
+         "key": "llm.token_count.prompt",
+         "value": {
+          "intValue": "135"
+         }
+        },
+        {
+         "key": "llm.token_count.completion",
+         "value": {
+          "intValue": "69"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.role",
+         "value": {
+          "stringValue": "assistant"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.content",
+         "value": {
+          "stringValue": "# Findings\n\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\n\n## Sources\n[1] rag-overview\n[2] rag-evaluation\n"
+         }
+        },
+        {
+         "key": "llm.finish_reason",
+         "value": {
+          "stringValue": "stop"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "LLM"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611788417903864",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "ChatCompletion",
+       "parentSpanId": "de58e7b0466da696",
+       "spanId": "893e224922f60fc2",
+       "startTimeUnixNano": "1791611788374472947",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1d1825ff72fa02f7d8f42da9441096e6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "10669423-2d5a-42e7-862b-e8c687440676"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.crewai",
+      "version": "1.1.21"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "input.value",
+         "value": {
+          "stringValue": "{\"agent\": {\"role\": \"Researcher\", \"goal\": \"Answer research questions from the documentation corpus\", \"backstory\": \"You search the corpus before you write.\", \"verbose\": false, \"allow_delegation\": false, \"max_iter\": 3, \"max_rpm\": null, \"id\": \"c2e194b9-3fcb-49ee-a797-a7f3c9ad4528\", \"key\": \"6b7124a89ebc85765670da7112bba19d\"}, \"context\": \"\", \"tools\": [\"name='search_docs' description='Searches the documentation corpus and returns the matching passages.' env_vars=[] args_schema=<class 'crewai.tools.base_tool.Search_Docs'> result_schema=None description_updated=False cache_function=<function _default_cache_function at 0x7f2fcb331300> result_as_answer=False max_usage_count=None tool_failure_policy=None current_usage_count=0 func=<function search_docs at 0x7f2fd1b66d40> tool_type='crewai.tools.base_tool.Tool'\"]}"
+         }
+        },
+        {
+         "key": "input.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "task_key",
+         "value": {
+          "stringValue": "c433db514d1d07b5533ec348ebeee3bd"
+         }
+        },
+        {
+         "key": "task_id",
+         "value": {
+          "stringValue": "58c91d86-b74f-4d00-907d-7fc6b1de47e6"
+         }
+        },
+        {
+         "key": "graph.node.id",
+         "value": {
+          "stringValue": "Researcher"
+         }
+        },
+        {
+         "key": "crew_key",
+         "value": {
+          "stringValue": "592e39d83d8b040f8f5c0276f524d893"
+         }
+        },
+        {
+         "key": "crew_id",
+         "value": {
+          "stringValue": "bd6b72b5-3d93-47aa-9f90-57689cfcac5e"
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "{\"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"name\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"summary\": \"Research how retrieval-augmented generation is evaluated and write a short...\", \"raw\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"pydantic\": null, \"json_dict\": null, \"agent\": \"Researcher\", \"output_format\": \"raw\", \"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}, {\"role\": \"assistant\", \"content\": \"\", \"tool_calls\": [{\"id\": \"call_c3756b861158\", \"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\"}}]}, {\"role\": \"tool\", \"content\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\", \"tool_call_id\": \"call_c3756b861158\", \"name\": \"search_docs\"}, {\"role\": \"assistant\", \"content\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\"}], \"tool_failures\": []}"
+         }
+        },
+        {
+         "key": "output.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "AGENT"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611788433246619",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Researcher._execute_core",
+       "parentSpanId": "c542cfae87f932af",
+       "spanId": "de58e7b0466da696",
+       "startTimeUnixNano": "1791611787986082233",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1d1825ff72fa02f7d8f42da9441096e6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "10669423-2d5a-42e7-862b-e8c687440676"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.crewai",
+      "version": "1.1.21"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "crew_key",
+         "value": {
+          "stringValue": "592e39d83d8b040f8f5c0276f524d893"
+         }
+        },
+        {
+         "key": "crew_id",
+         "value": {
+          "stringValue": "bd6b72b5-3d93-47aa-9f90-57689cfcac5e"
+         }
+        },
+        {
+         "key": "crew_inputs",
+         "value": {
+          "stringValue": ""
+         }
+        },
+        {
+         "key": "crew_agents",
+         "value": {
+          "stringValue": "[{\"key\": \"6b7124a89ebc85765670da7112bba19d\", \"id\": \"c2e194b9-3fcb-49ee-a797-a7f3c9ad4528\", \"role\": \"Researcher\", \"goal\": \"Answer research questions from the documentation corpus\", \"backstory\": \"You search the corpus before you write.\", \"verbose?\": false, \"max_iter\": 3, \"max_rpm\": null, \"delegation_enabled\": false, \"tools_names\": [\"search_docs\"]}]"
+         }
+        },
+        {
+         "key": "crew_tasks",
+         "value": {
+          "stringValue": "[{\"id\": \"58c91d86-b74f-4d00-907d-7fc6b1de47e6\", \"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"async_execution?\": false, \"human_input?\": false, \"agent_role\": \"Researcher\", \"agent_key\": \"6b7124a89ebc85765670da7112bba19d\", \"context\": null, \"tools_names\": [\"search_docs\"]}]"
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "{\"raw\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"pydantic\": null, \"json_dict\": null, \"tasks_output\": [{\"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"name\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"summary\": \"Research how retrieval-augmented generation is evaluated and write a short...\", \"raw\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"pydantic\": null, \"json_dict\": null, \"agent\": \"Researcher\", \"output_format\": \"raw\", \"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}, {\"role\": \"assistant\", \"content\": \"\", \"tool_calls\": [{\"id\": \"call_c3756b861158\", \"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\"}}]}, {\"role\": \"tool\", \"content\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\", \"tool_call_id\": \"call_c3756b861158\", \"name\": \"search_docs\"}, {\"role\": \"assistant\", \"content\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\"}], \"tool_failures\": []}], \"token_usage\": {\"total_tokens\": 342, \"prompt_tokens\": 232, \"cached_prompt_tokens\": 0, \"completion_tokens\": 110, \"reasoning_tokens\": 0, \"cache_creation_tokens\": 0, \"successful_requests\": 2}}"
+         }
+        },
+        {
+         "key": "output.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "CHAIN"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611788439317683",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Crew_bd6b72b5-3d93-47aa-9f90-57689cfcac5e.kickoff",
+       "spanId": "c542cfae87f932af",
+       "startTimeUnixNano": "1791611787923495561",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1d1825ff72fa02f7d8f42da9441096e6"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
