@@ -46,7 +46,7 @@ TASKS: list[dict] = [
                 return a + b
         """)},
         "test": "from calc import add, mul\nassert add(2, 3) == 5 and mul(2, 3) == 6\n",
-        "fix": "sed -i '/def mul/,$ s/return a + b/return a * b/' calc.py && sed -i 's/return a - b/return a + b/' calc.py",
+        "fix": "sed -i.orig '/def mul/,$ s/return a + b/return a * b/' calc.py && sed -i.orig 's/return a - b/return a + b/' calc.py && rm -f *.orig",
     },
     {
         "id": "range-sum",
@@ -57,7 +57,7 @@ TASKS: list[dict] = [
                 return sum(range(lo, hi))
         ''')},
         "test": "from mathx import range_sum\nassert range_sum(1, 4) == 10 and range_sum(5, 5) == 5\n",
-        "fix": "sed -i 's/range(lo, hi)/range(lo, hi + 1)/' mathx.py",
+        "fix": "sed -i.orig 's/range(lo, hi)/range(lo, hi + 1)/' mathx.py && rm -f *.orig",
     },
     {
         "id": "slugify",
@@ -71,7 +71,7 @@ TASKS: list[dict] = [
                 return re.sub(r"[^a-z0-9]+", "-", text.lower())
         ''')},
         "test": "from textutil import slugify\nassert slugify('  Hello, World!  ') == 'hello-world'\nassert slugify('a--b') == 'a-b'\n",
-        "fix": "sed -i 's/return re.sub(r\"\\[^a-z0-9\\]+\", \"-\", text.lower())/return re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")/' textutil.py",
+        "fix": "sed -i.orig 's/return re.sub(r\"\\[^a-z0-9\\]+\", \"-\", text.lower())/return re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")/' textutil.py && rm -f *.orig",
     },
     {
         "id": "parse-duration",
@@ -104,7 +104,7 @@ TASKS: list[dict] = [
                 return list(set(items))
         ''')},
         "test": "from listutil import dedupe\nassert dedupe([3, 1, 3, 2, 1]) == [3, 1, 2] and dedupe([]) == []\n",
-        "fix": "sed -i 's/return list(set(items))/return list(dict.fromkeys(items))/' listutil.py",
+        "fix": "sed -i.orig 's/return list(set(items))/return list(dict.fromkeys(items))/' listutil.py && rm -f *.orig",
     },
     {
         "id": "stack-empty",
@@ -150,7 +150,7 @@ TASKS: list[dict] = [
                 return counts
         ''')},
         "test": "from wordcount import count_words\nassert count_words('The the THE cat') == {'the': 3, 'cat': 1}\n",
-        "fix": "sed -i 's/for word in text.split():/for word in text.lower().split():/' wordcount.py",
+        "fix": "sed -i.orig 's/for word in text.split():/for word in text.lower().split():/' wordcount.py && rm -f *.orig",
     },
     {
         "id": "palindrome",
@@ -172,7 +172,7 @@ TASKS: list[dict] = [
                 return [items[i : i + size] for i in range(0, len(items) - size + 1, size)]
         ''')},
         "test": "from batching import chunk\nassert chunk([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]] and chunk([], 3) == [] and chunk([1, 2], 2) == [[1, 2]]\n",
-        "fix": "sed -i 's/range(0, len(items) - size + 1, size)/range(0, len(items), size)/' batching.py",
+        "fix": "sed -i.orig 's/range(0, len(items) - size + 1, size)/range(0, len(items), size)/' batching.py && rm -f *.orig",
     },
     {
         "id": "merge-nested",

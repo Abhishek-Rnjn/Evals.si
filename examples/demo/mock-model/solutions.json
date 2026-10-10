@@ -13,17 +13,17 @@
   },
   {
     "match": "calc.py has a bug: add(2, 3) returns -1, and mul(2, 3) retur",
-    "command": "sed -i '/def mul/,$ s/return a + b/return a * b/' calc.py && sed -i 's/return a - b/return a + b/' calc.py",
+    "command": "sed -i.orig '/def mul/,$ s/return a + b/return a * b/' calc.py && sed -i.orig 's/return a - b/return a + b/' calc.py && rm -f *.orig",
     "suite": "small-repo-fixes"
   },
   {
     "match": "mathx.range_sum(1, 4) should be 10 (1+2+3+4, both ends inclu",
-    "command": "sed -i 's/range(lo, hi)/range(lo, hi + 1)/' mathx.py",
+    "command": "sed -i.orig 's/range(lo, hi)/range(lo, hi + 1)/' mathx.py && rm -f *.orig",
     "suite": "small-repo-fixes"
   },
   {
     "match": "textutil.slugify('  Hello, World!  ') returns 'hello-world-'",
-    "command": "sed -i 's/return re.sub(r\"\\[^a-z0-9\\]+\", \"-\", text.lower())/return re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")/' textutil.py",
+    "command": "sed -i.orig 's/return re.sub(r\"\\[^a-z0-9\\]+\", \"-\", text.lower())/return re.sub(r\"[^a-z0-9]+\", \"-\", text.lower()).strip(\"-\")/' textutil.py && rm -f *.orig",
     "suite": "small-repo-fixes"
   },
   {
@@ -33,7 +33,7 @@
   },
   {
     "match": "listutil.dedupe([3, 1, 3, 2, 1]) should keep the first occur",
-    "command": "sed -i 's/return list(set(items))/return list(dict.fromkeys(items))/' listutil.py",
+    "command": "sed -i.orig 's/return list(set(items))/return list(dict.fromkeys(items))/' listutil.py && rm -f *.orig",
     "suite": "small-repo-fixes"
   },
   {
@@ -48,7 +48,7 @@
   },
   {
     "match": "wordcount.count_words('The the THE cat') should return {'the",
-    "command": "sed -i 's/for word in text.split():/for word in text.lower().split():/' wordcount.py",
+    "command": "sed -i.orig 's/for word in text.split():/for word in text.lower().split():/' wordcount.py && rm -f *.orig",
     "suite": "small-repo-fixes"
   },
   {
@@ -58,7 +58,7 @@
   },
   {
     "match": "batching.chunk([1, 2, 3, 4, 5], 2) should be [[1, 2], [3, 4]",
-    "command": "sed -i 's/range(0, len(items) - size + 1, size)/range(0, len(items), size)/' batching.py",
+    "command": "sed -i.orig 's/range(0, len(items) - size + 1, size)/range(0, len(items), size)/' batching.py && rm -f *.orig",
     "suite": "small-repo-fixes"
   },
   {
