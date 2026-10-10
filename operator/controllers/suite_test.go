@@ -175,6 +175,14 @@ func (f *fakeAPI) ApplySource(_ context.Context, req *connect.Request[evalsiv1al
 	}
 	if req.Msg.GetValidateOnly() {
 		f.validated = append(f.validated, "source/"+s.GetName())
+	}
+	// As evalsid answers for a policy it does not have (yet): NotFound.
+	for _, name := range s.GetPolicies() {
+		if f.policies[name] == nil {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source.policies: policy %q does not exist in project %q", name, s.GetProject()))
+		}
+	}
+	if req.Msg.GetValidateOnly() {
 		return connect.NewResponse(&evalsiv1alpha1.ApplySourceResponse{Source: s}), nil
 	}
 	f.sources[s.GetProject()+"/"+s.GetName()] = s

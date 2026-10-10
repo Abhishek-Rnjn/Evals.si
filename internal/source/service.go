@@ -114,7 +114,11 @@ func (s *Service) Validate(ctx context.Context, src *evalsiv1alpha1.TraceSource)
 	if s.opts.PolicyExists != nil {
 		for _, name := range src.GetPolicies() {
 			if !s.opts.PolicyExists(project(src.GetProject()), name) {
-				return invalid("source.policies: policy %q does not exist in project %q", name, project(src.GetProject()))
+				// NotFound, not InvalidArgument: the policy may be on its way
+				// (applied in the same `kubectl apply`, not yet synced by the
+				// operator), so the operator admits the source and retries.
+				return connect.NewError(connect.CodeNotFound,
+					fmt.Errorf("source.policies: policy %q does not exist in project %q", name, project(src.GetProject())))
 			}
 		}
 	}

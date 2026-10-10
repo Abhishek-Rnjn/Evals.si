@@ -152,8 +152,7 @@ func TestApplySourceValidates(t *testing.T) {
 		"fast poll": func(s *evalsiv1alpha1.TraceSource) {
 			s.Poll = &evalsiv1alpha1.Poll{Interval: durationpb.New(time.Millisecond)}
 		},
-		"short horizon":  func(s *evalsiv1alpha1.TraceSource) { s.MaxTraceDuration = durationpb.New(time.Second) },
-		"no such policy": func(s *evalsiv1alpha1.TraceSource) { s.Policies = []string{"nope"} },
+		"short horizon": func(s *evalsiv1alpha1.TraceSource) { s.MaxTraceDuration = durationpb.New(time.Second) },
 		"both credentials": func(s *evalsiv1alpha1.TraceSource) {
 			s.Credentials = &evalsiv1alpha1.SourceCredentials{Env: "A", File: "b/c"}
 		},
@@ -164,6 +163,13 @@ func TestApplySourceValidates(t *testing.T) {
 		if connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Errorf("%s: got %v", name, err)
 		}
+	}
+	// A policy that does not exist yet is NotFound, which the operator retries:
+	// it may be applied in the same `kubectl apply` and not synced yet.
+	missing := good()
+	missing.Policies = []string{"nope"}
+	if _, err := apply(t, svc, missing, true); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("no such policy: got %v, want NotFound", err)
 	}
 	// validate_only checks and stores nothing.
 	if _, err := apply(t, svc, good(), true); err != nil {
