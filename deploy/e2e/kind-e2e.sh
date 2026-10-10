@@ -37,6 +37,23 @@ work="$(mktemp -d)"
 
 step() { echo; echo "=== $*"; }
 
+# sandbox_image_on_nodes reports whether each node has the air-gapped sandbox
+# image, and loads the saved copy into the nodes that lost it.
+sandbox_image_on_nodes() {
+  local node missing=0
+  for node in $(kind get nodes --name "$cluster"); do
+    if docker exec "$node" crictl inspecti "$registry/python:3.13-slim" >/dev/null 2>&1; then
+      echo "$node has $registry/python:3.13-slim ($1)"
+    else
+      echo "$node lost $registry/python:3.13-slim ($1)" >&2
+      missing=1
+    fi
+  done
+  if [ "$missing" = 1 ] && [ -s "$work/sandbox-image.tar" ]; then
+    kind load image-archive "$work/sandbox-image.tar" --name "$cluster"
+  fi
+}
+
 diagnose() {
   step "diagnostics"
   kubectl get pods,deploy,sts,ds,svc -n "$ns" -o wide || true
@@ -129,6 +146,9 @@ step "install from the bundle"
   --wait --timeout 10m
 kubectl rollout status ds/evalsi-sandboxd -n "$ns" --timeout 5m
 # The images are in the kind nodes now; the runner's copies only fill its disk.
+# Keep the sandbox image, which the namespace-only steps need, in case it
+# leaves the nodes before then (see sandbox_image_on_nodes).
+docker save "$registry/python:3.13-slim" -o "$work/sandbox-image.tar"
 rm -f "$work/bundle/images.tar"
 docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E "^($registry/|ghcr.io/abhishek-rnjn/evalsi:|nats:|postgres:|python:)" | xargs -r docker rmi -f >/dev/null || true
 docker builder prune -af >/dev/null || true
@@ -227,6 +247,7 @@ sort -u "$work/sandbox-pods.txt"
 [ -s "$work/sandbox-pods.txt" ] || { echo "no sandbox pods were created" >&2; exit 1; }
 left="$(kubectl get pods -n "$ns" -l evals.si/sandbox=true -o name | wc -l)"
 echo "sandbox pods left after the run: $left"
+sandbox_image_on_nodes "after the first pod-rung run"
 
 step "the reference demos: the small-repo-fix suite, for both agents, against the mock model"
 # The studio stand-ins (examples/demo) on the same cluster: a mock model, the Deep
@@ -291,6 +312,8 @@ curl -s -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/s
 grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evals.si assessment on the Deep Agents traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
+sandbox_image_on_nodes "after the demos"
+
 step "removing the demos, to free the nodes' disk"
 # The demo images (two agents, MLflow) fill the nodes' disk enough for the
 # kubelet's image garbage collection to remove images no pod is using, such
@@ -315,9 +338,11 @@ for verb in "create clusterroles" "create clusterrolebindings" "create customres
   if kubectl auth can-i $verb --as alice >/dev/null; then echo "alice can $verb" >&2; exit 1; fi
 done
 ci="user:kubernetes/system:serviceaccount:$ns2:ci"
-# The bundle's images are loaded again: the kubelet may have garbage-collected
-# ones no pod was using since the first install.
-"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --namespace "$ns2" --namespace-only -- \
+# The namespace-only steps need the sandbox image on the node; it has gone
+# missing between the first install and here before, so check, and load the
+# saved copy if it is not there.
+sandbox_image_on_nodes "before the namespace-only install"
+"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --namespace "$ns2" --namespace-only --skip-images -- \
   --kube-as-user alice \
   --set-json "rbac.projects={\"e2e\": {\"runner\": [\"$ci\"]}}" \
   --wait --timeout 10m
