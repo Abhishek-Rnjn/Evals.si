@@ -20,6 +20,29 @@ func evaluatorRefs(refs []*evalsiv1alpha1.EvaluatorRef) []any {
 // RunsCode reports whether any of the evaluator references runs code in the sandbox.
 type RunsCode func(refs []*evalsiv1alpha1.EvaluatorRef) bool
 
+// JudgeOf is the judge evaluators actually use: the named one, or the
+// server's default when an evaluator needs a judge and none is named.
+type JudgeOf func(refs []*evalsiv1alpha1.EvaluatorRef, judge string) string
+
+// EffectiveJudge sets resource.judge to the judge the evaluators will
+// actually use, so a rule on the default judge also covers resources that
+// name none. A nil judgeOf leaves the resource as it is.
+func EffectiveJudge(r map[string]any, judgeOf JudgeOf, refs []*evalsiv1alpha1.EvaluatorRef, judge string) map[string]any {
+	if judgeOf != nil {
+		r["judge"] = judgeOf(refs, judge)
+	}
+	return r
+}
+
+// PolicyRefs lists a policy's evaluators, every stage's.
+func PolicyRefs(p *evalsiv1alpha1.OnlineEvalPolicy) []*evalsiv1alpha1.EvaluatorRef {
+	var refs []*evalsiv1alpha1.EvaluatorRef
+	for _, s := range p.GetStages() {
+		refs = append(refs, s.GetEvaluators()...)
+	}
+	return refs
+}
+
 // EvaluateResource describes an Evaluate or EvaluateStream request.
 func EvaluateResource(refs []*evalsiv1alpha1.EvaluatorRef, judge string, records int, runsCode RunsCode) map[string]any {
 	return map[string]any{
@@ -102,10 +125,7 @@ func RunResource(run *evalsiv1alpha1.Run, runsCode RunsCode) map[string]any {
 
 // PolicyResource describes an online policy.
 func PolicyResource(p *evalsiv1alpha1.OnlineEvalPolicy, runsCode RunsCode) map[string]any {
-	var refs []*evalsiv1alpha1.EvaluatorRef
-	for _, s := range p.GetStages() {
-		refs = append(refs, s.GetEvaluators()...)
-	}
+	refs := PolicyRefs(p)
 	return map[string]any{
 		"policy": map[string]any{
 			"name": p.GetName(), "selector": p.GetSelector(), "judge": p.GetJudge(),

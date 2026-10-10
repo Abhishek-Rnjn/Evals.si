@@ -1059,10 +1059,9 @@ func (m *Manager) ListRuns(ctx context.Context, req *connect.Request[evalsiv1alp
 		return nil, invalid("%v", err)
 	}
 	// Pages can come back short: runs the caller cannot read are dropped.
-	runsCode := authz.RunsCodeFrom(ctx)
 	visible := runs[:0]
 	for _, r := range runs {
-		if authz.Can(ctx, "runs.read", r.GetProject(), authz.RunResource(r, runsCode)) {
+		if authz.Can(ctx, "runs.read", r.GetProject(), authz.RunResourceFor(ctx, r)) {
 			r.Spec = nil
 			visible = append(visible, r)
 		}

@@ -41,9 +41,8 @@ func (e *Engine) ApplyPolicy(ctx context.Context, req *connect.Request[evalsiv1a
 // caller may read.
 func (e *Engine) ListPolicies(ctx context.Context, req *connect.Request[evalsiv1alpha1.ListPoliciesRequest]) (*connect.Response[evalsiv1alpha1.ListPoliciesResponse], error) {
 	var out []*evalsiv1alpha1.OnlineEvalPolicy
-	runsCode := authz.RunsCodeFrom(ctx)
 	for _, p := range e.Policies(req.Msg.GetProject()) {
-		if authz.Can(ctx, "policies.read", p.GetProject(), authz.PolicyResource(p, runsCode)) {
+		if authz.Can(ctx, "policies.read", p.GetProject(), authz.PolicyResourceFor(ctx, p)) {
 			out = append(out, p)
 		}
 	}

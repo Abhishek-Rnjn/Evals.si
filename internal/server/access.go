@@ -81,7 +81,7 @@ type gate struct {
 	unauthTotal atomic.Int64
 }
 
-func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, judgeOf func([]*evalsiv1alpha1.EvaluatorRef, string) string, log *slog.Logger) *gate {
+func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, judgeOf authz.JudgeOf, log *slog.Logger) *gate {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -526,33 +526,19 @@ func (g *gate) evaluateTarget(project string, refs []*evalsiv1alpha1.EvaluatorRe
 	if err != nil {
 		return nil, err
 	}
-	return []target{{project: project, resource: g.effectiveJudge(authz.EvaluateResource(refs, judge, records, g.runsCode), refs, judge), name: "evaluation"}}, nil
-}
-
-// effectiveJudge sets resource.judge to the judge the evaluators will
-// actually use, so a rule on the default judge also covers requests that
-// name none.
-func (g *gate) effectiveJudge(r map[string]any, refs []*evalsiv1alpha1.EvaluatorRef, judge string) map[string]any {
-	if g.judgeOf != nil {
-		r["judge"] = g.judgeOf(refs, judge)
-	}
-	return r
+	return []target{{project: project, resource: authz.EffectiveJudge(authz.EvaluateResource(refs, judge, records, g.runsCode), g.judgeOf, refs, judge), name: "evaluation"}}, nil
 }
 
 func (g *gate) specResource(spec *evalsiv1alpha1.RunSpec, labels map[string]string) map[string]any {
-	return g.effectiveJudge(authz.SpecResource(spec, labels, g.runsCode), spec.GetEvaluators(), spec.GetJudge())
+	return authz.EffectiveJudge(authz.SpecResource(spec, labels, g.runsCode), g.judgeOf, spec.GetEvaluators(), spec.GetJudge())
 }
 
 func (g *gate) runResource(run *evalsiv1alpha1.Run) map[string]any {
-	return g.effectiveJudge(authz.RunResource(run, g.runsCode), run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
+	return authz.EffectiveJudge(authz.RunResource(run, g.runsCode), g.judgeOf, run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
 }
 
 func (g *gate) policyResource(p *evalsiv1alpha1.OnlineEvalPolicy) map[string]any {
-	var refs []*evalsiv1alpha1.EvaluatorRef
-	for _, s := range p.GetStages() {
-		refs = append(refs, s.GetEvaluators()...)
-	}
-	return g.effectiveJudge(authz.PolicyResource(p, g.runsCode), refs, p.GetJudge())
+	return authz.EffectiveJudge(authz.PolicyResource(p, g.runsCode), g.judgeOf, authz.PolicyRefs(p), p.GetJudge())
 }
 
 // newRunTargets is a new run in a project plus what its dataset reads.
@@ -713,7 +699,7 @@ func (g *gate) authenticate(ctx context.Context, procedure, protocol, source str
 	header = header.Clone()
 	header.Set("X-Request-Id", requestID(header))
 	chk := &authz.Checker{
-		Engine: g.engine, Principal: auth.PrincipalFrom(ctx), RunsCode: g.runsCode,
+		Engine: g.engine, Principal: auth.PrincipalFrom(ctx), RunsCode: g.runsCode, JudgeOf: g.judgeOf,
 		Meta: authz.Request{Procedure: procedure, Protocol: protocol, Headers: header, Source: source},
 	}
 	return authz.WithChecker(ctx, chk), chk, nil

@@ -413,3 +413,67 @@ func TestRulesSeeTheDefaultJudge(t *testing.T) {
 		t.Errorf("no judge needed: %v", err)
 	}
 }
+
+// Lists show exactly what single reads allow: a run or policy that uses the
+// default judge through an omitted judge is hidden from a caller whose rule
+// excludes that judge.
+func TestListsSeeTheDefaultJudge(t *testing.T) {
+	plain, hash := auth.NewAPIKey()
+	s := startAuthServer(t, func(c *config.Config) {
+		c.Judges = map[string]config.Judge{"claude": {Provider: "anthropic", Model: "m"}, "shared": {Provider: "anthropic", Model: "m"}}
+		c.DefaultJudge = "claude"
+		c.RBAC.Roles = append(c.RBAC.Roles, authz.Role{Name: "cheap-reader", Permissions: []string{"runs.read", "policies.read"},
+			Condition: `resource.judge != "claude"`})
+		c.Auth.APIKeys.Keys = append(c.Auth.APIKeys.Keys, auth.ConfigKey{Name: "cheap", Key: "sha256:" + hash,
+			Roles: map[string][]string{"support": {"cheap-reader"}}})
+	})
+	ctx := context.Background()
+	owner := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys["owner"]))
+	created := map[string]string{}
+	for _, judge := range []string{"", "shared"} {
+		resp, err := owner.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: func() *evalsiv1alpha1.RunSpec {
+			spec := runSpec("qwen3", "judge-score")
+			spec.Judge = judge
+			return spec
+		}()}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		created[judge] = resp.Msg.GetRun().GetId()
+	}
+	runs := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(plain))
+	if _, err := runs.GetRun(ctx, connect.NewRequest(&evalsiv1alpha1.GetRunRequest{Id: created[""]})); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("GetRun of a default-judge run: %v", err)
+	}
+	list, err := runs.ListRuns(ctx, connect.NewRequest(&evalsiv1alpha1.ListRunsRequest{Project: "support"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listed []string
+	for _, r := range list.Msg.GetRuns() {
+		listed = append(listed, r.GetId())
+	}
+	if !slices.Equal(listed, []string{created["shared"]}) {
+		t.Errorf("ListRuns = %v, want only the run on another judge (%s)", listed, created["shared"])
+	}
+
+	ownerMon := evalsiv1alpha1connect.NewMonitorServiceClient(s.http, s.url, as(s.keys["owner"]))
+	for name, judge := range map[string]string{"default-judge": "", "other-judge": "shared"} {
+		p := &evalsiv1alpha1.OnlineEvalPolicy{Name: name, Project: "support", Judge: judge,
+			Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "judge-score"}}}}}
+		if _, err := ownerMon.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: p})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mon := evalsiv1alpha1connect.NewMonitorServiceClient(s.http, s.url, as(plain))
+	if _, err := mon.GetPolicyStats(ctx, connect.NewRequest(&evalsiv1alpha1.GetPolicyStatsRequest{Name: "default-judge"})); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("GetPolicyStats of a default-judge policy: %v", err)
+	}
+	policies, err := mon.ListPolicies(ctx, connect.NewRequest(&evalsiv1alpha1.ListPoliciesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ps := policies.Msg.GetPolicies(); len(ps) != 1 || ps[0].GetName() != "other-judge" {
+		t.Errorf("ListPolicies = %v, want only other-judge", ps)
+	}
+}

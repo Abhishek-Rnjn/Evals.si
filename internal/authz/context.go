@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 )
 
@@ -17,6 +18,9 @@ type Checker struct {
 	Meta Request
 	// Whether evaluators run code, for resource attributes.
 	RunsCode RunsCode
+	// The judge evaluators actually use (defaults included), for
+	// resource.judge.
+	JudgeOf JudgeOf
 	// The enforcement point's decision for the call, for services that write
 	// their own (more detailed) audit events.
 	Decision Decision
@@ -28,6 +32,27 @@ func RunsCodeFrom(ctx context.Context) RunsCode {
 		return c.RunsCode
 	}
 	return nil
+}
+
+// JudgeOfFrom returns the request's judge resolver, or nil.
+func JudgeOfFrom(ctx context.Context) JudgeOf {
+	if c := CheckerFrom(ctx); c != nil {
+		return c.JudgeOf
+	}
+	return nil
+}
+
+// RunResourceFor describes a stored run for a check in this request, as the
+// enforcement point does: with its effective judge. List filters use it, so
+// a list shows exactly the runs GetRun allows.
+func RunResourceFor(ctx context.Context, run *evalsiv1alpha1.Run) map[string]any {
+	return EffectiveJudge(RunResource(run, RunsCodeFrom(ctx)), JudgeOfFrom(ctx), run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
+}
+
+// PolicyResourceFor describes a policy for a check in this request, with its
+// effective judge.
+func PolicyResourceFor(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) map[string]any {
+	return EffectiveJudge(PolicyResource(p, RunsCodeFrom(ctx)), JudgeOfFrom(ctx), PolicyRefs(p), p.GetJudge())
 }
 
 type checkerKey struct{}
