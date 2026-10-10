@@ -92,6 +92,9 @@ type Manager struct {
 	slots  chan struct{}
 	log    *slog.Logger
 
+	// admit serializes quota checks with the inserts they admit.
+	admit sync.Mutex
+
 	mu     sync.Mutex
 	active map[string]*activeRun
 	// Per-project concurrency slots, made on first use.
@@ -453,22 +456,29 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 		return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{}), nil
 	}
 	project := projectOr(req.Msg.GetProject())
-	if err := m.checkQuota(ctx, project); err != nil {
+	if err := m.checkQuota(ctx, project, 1); err != nil {
 		return nil, err
 	}
 	records, err := m.loadDataset(ctx, spec.GetDataset(), project)
 	if err != nil {
 		return nil, err
 	}
-	run, err := m.createRun(ctx, req.Msg.GetName(), project, req.Msg.GetLabels(), spec, insts, records)
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	// Again, with the insert: the dataset may have taken a while to load.
+	if err := m.checkQuota(ctx, project, 1); err != nil {
+		return nil, err
+	}
+	run, err := m.storeRun(ctx, req.Msg.GetName(), project, req.Msg.GetLabels(), spec, insts, records)
 	if err != nil {
 		return nil, err
 	}
+	m.start(run)
 	return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{Run: run}), nil
 }
 
-// createRun stores a validated run over a dataset snapshot and starts it.
-func (m *Manager) createRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record) (*evalsiv1alpha1.Run, error) {
+// storeRun stores a validated run over a dataset snapshot; start runs it.
+func (m *Manager) storeRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record) (*evalsiv1alpha1.Run, error) {
 	stored := proto.Clone(spec).(*evalsiv1alpha1.RunSpec)
 	if stored.GetDataset().GetInline() != nil {
 		// The records live in the snapshot; keep the stored spec small.
@@ -490,7 +500,6 @@ func (m *Manager) createRun(ctx context.Context, name, project string, labels ma
 	if err := m.store.CreateRun(ctx, run, records); err != nil {
 		return nil, err
 	}
-	m.start(run)
 	return run, nil
 }
 

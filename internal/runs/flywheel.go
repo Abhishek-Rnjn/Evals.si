@@ -16,6 +16,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
@@ -353,6 +354,10 @@ func (m *Manager) CreateShadowReplay(ctx context.Context, req *connect.Request[e
 		return nil, err
 	}
 	project := projectOr(msg.GetProject())
+	// A replay is two runs; the quota admits both or neither.
+	if err := m.checkQuota(ctx, project, 2); err != nil {
+		return nil, err
+	}
 	records, err := m.loadDataset(ctx, candidate.GetDataset(), project)
 	if err != nil {
 		return nil, err
@@ -370,14 +375,26 @@ func (m *Manager) CreateShadowReplay(ctx context.Context, req *connect.Request[e
 	if name == "" {
 		name = "shadow-replay"
 	}
-	base, err := m.createRun(ctx, name+"-baseline", project, msg.GetLabels(), baseline, baseInsts, records)
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	if err := m.checkQuota(ctx, project, 2); err != nil {
+		return nil, err
+	}
+	base, err := m.storeRun(ctx, name+"-baseline", project, msg.GetLabels(), baseline, baseInsts, records)
 	if err != nil {
 		return nil, err
 	}
-	cand, err := m.createRun(ctx, name, project, msg.GetLabels(), candidate, insts, records)
+	cand, err := m.storeRun(ctx, name, project, msg.GetLabels(), candidate, insts, records)
 	if err != nil {
+		// Neither runs: the baseline alone is no replay.
+		base.Status, base.Error, base.FinishedAt = evalsiv1alpha1.RunStatus_RUN_STATUS_CANCELLED, "the shadow replay's candidate could not be stored: "+err.Error(), timestamppb.Now()
+		if uerr := m.store.UpdateRun(context.Background(), base); uerr != nil {
+			m.log.Error("cancelling a shadow replay's baseline", "run", base.GetId(), "err", uerr)
+		}
 		return nil, err
 	}
+	m.start(base)
+	m.start(cand)
 	return connect.NewResponse(&evalsiv1alpha1.CreateShadowReplayResponse{Baseline: base, Candidate: cand}), nil
 }
 

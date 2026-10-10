@@ -156,3 +156,43 @@ func TestRunMetrics(t *testing.T) {
 		}
 	}
 }
+
+// A shadow replay is two runs: the stored-run quota admits both or neither.
+func TestQuotaStoredRunsCoverShadowReplays(t *testing.T) {
+	h := quotaHarness(t, config.Quotas{Default: config.QuotaLimits{MaxStoredRuns: 2}}, nil)
+	recorded := &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{Records: []*evalsiv1alpha1.Record{
+		{Id: "a", Input: text("easy"), Output: text("right"), Reference: text("right")},
+	}}}}
+	replay := func() error {
+		_, err := h.m.CreateShadowReplay(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateShadowReplayRequest{
+			Project: "p", Candidate: &evalsiv1alpha1.RunSpec{Target: target(), Dataset: recorded, Evaluators: refs("exact-match")},
+		}))
+		return err
+	}
+	count := func() int {
+		n, err := h.st.CountRuns(context.Background(), "p")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	// Two free slots: the pair fits.
+	if err := replay(); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("%d stored runs after a replay, want 2", n)
+	}
+	// None free, or one: refused, and nothing is stored.
+	if err := replay(); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("a replay over the quota: %v", err)
+	}
+	h2 := quotaHarness(t, config.Quotas{Default: config.QuotaLimits{MaxStoredRuns: 1}}, nil)
+	h = h2
+	if err := replay(); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("a replay with one free slot: %v", err)
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("a refused replay stored %d runs", n)
+	}
+}

@@ -31,17 +31,20 @@ func exhausted(format string, args ...any) error {
 	return connect.NewError(connect.CodeResourceExhausted, fmt.Errorf(format, args...))
 }
 
-// checkQuota refuses a new run when the project is at its stored-run limit
-// or has used up a daily token quota.
-func (m *Manager) checkQuota(ctx context.Context, project string) error {
+// checkQuota refuses runs new runs when the project would pass its
+// stored-run limit or has used up a daily token quota. Every way of creating
+// runs calls it, under m.admit with the inserts, so a replica cannot admit
+// past the limit; replicas admitting at the same moment can still each take
+// the last slot.
+func (m *Manager) checkQuota(ctx context.Context, project string, runs int) error {
 	lim := m.opts.Quotas.For(project)
 	if lim.MaxStoredRuns > 0 {
 		n, err := m.store.CountRuns(ctx, project)
 		if err != nil {
 			return err
 		}
-		if n >= lim.MaxStoredRuns {
-			return exhausted("project %s has %d stored runs, its quota (max_stored_runs); delete old runs first", project, n)
+		if n+runs > lim.MaxStoredRuns {
+			return exhausted("project %s has %d stored runs and its quota (max_stored_runs) is %d; this needs %d more: delete old runs first", project, n, lim.MaxStoredRuns, runs)
 		}
 	}
 	if lim.JudgeTokensPerDay == 0 && lim.TargetTokensPerDay == 0 {
