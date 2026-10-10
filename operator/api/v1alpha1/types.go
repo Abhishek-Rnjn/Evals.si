@@ -132,6 +132,59 @@ type OnlineEvalPolicyList struct {
 	Items           []OnlineEvalPolicy `json:"items"`
 }
 
+// TraceSource is a store that already holds an agent's traces (MLflow).
+// evalsid pulls its traces, scores them with the project's online policies and
+// writes the scores back (decision 0016). Its spec is the source, exactly as
+// in a file for `evalsi source apply -f`; the API name is the resource's and
+// its project is the resource's.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=evsource
+// +kubebuilder:printcolumn:name="Synced",type=string,JSONPath=`.status.conditions[?(@.type=="Synced")].status`
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Pulled",type=integer,JSONPath=`.status.pulled`
+// +kubebuilder:printcolumn:name="Scored",type=integer,JSONPath=`.status.scored`
+// +kubebuilder:printcolumn:name="Watermark",type=string,JSONPath=`.status.watermark`
+type TraceSource struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Spec   runtime.RawExtension `json:"spec"`
+	Status TraceSourceStatus    `json:"status,omitempty"`
+}
+
+// TraceSourceStatus mirrors the source's status in the API.
+type TraceSourceStatus struct {
+	// The source's name in the API.
+	Name               string `json:"name,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	// Backfilling, Tailing, Paused or Error.
+	Phase string `json:"phase,omitempty"`
+	// Every trace that started before this has been handled.
+	Watermark *metav1.Time `json:"watermark,omitempty"`
+	// Seconds since the last complete pull began, as a string (Kubernetes
+	// APIs avoid floats).
+	LagSeconds    string       `json:"lagSeconds,omitempty"`
+	Pulled        int64        `json:"pulled,omitempty"`
+	Scored        int64        `json:"scored,omitempty"`
+	Deferred      int32        `json:"deferred,omitempty"`
+	LastError     string       `json:"lastError,omitempty"`
+	LastWriteBack *metav1.Time `json:"lastWriteBack,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+type TraceSourceList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []TraceSource `json:"items"`
+}
+
 // Evaluator registers an evaluator plugin: an image with evalsid, the
 // Python worker and the plugin's packages, run as a worker Deployment that
 // serves pools from the work queues.
@@ -324,6 +377,7 @@ func init() {
 	SchemeBuilder.Register(
 		&EvalRun{}, &EvalRunList{},
 		&OnlineEvalPolicy{}, &OnlineEvalPolicyList{},
+		&TraceSource{}, &TraceSourceList{},
 		&Evaluator{}, &EvaluatorList{},
 		&SandboxClass{}, &SandboxClassList{},
 	)

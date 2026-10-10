@@ -43,6 +43,10 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
+	"github.com/abhishek-rnjn/evals.si/internal/source"
+	"github.com/abhishek-rnjn/evals.si/internal/source/langfuse"
+	"github.com/abhishek-rnjn/evals.si/internal/source/mlflow"
+	"github.com/abhishek-rnjn/evals.si/internal/source/phoenix"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
@@ -158,7 +162,8 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		Logger: log, MaxAttempts: cfg.Webhooks.MaxAttempts,
 		Timeout: optDuration(cfg.Webhooks.Timeout), Retention: optDuration(cfg.Webhooks.Retention),
 	})
-	var watcher *watch.Engine // created below; runs read its policies' score names
+	var watcher *watch.Engine     // created below; runs read its policies' score names
+	var sourceMgr *source.Manager // likewise; pulled traces' scores are written back through it
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
 		DatasetsDir:   cfg.DatasetsDir,
 		Objects:       objects,
@@ -202,11 +207,22 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 				TraceID: rec.GetId(), RootSpanID: rootSpan(rec), Service: info.Service,
 				Policy: policy, Results: results, Time: time.Now(),
 			})
+			if sourceMgr != nil {
+				sourceMgr.OnResults(policy, rec, info, results)
+			}
 		},
 	})
 	if err != nil {
 		return err
 	}
+	sourceMgr = source.New(st, watcher, source.Options{
+		Factories: map[string]source.Factory{"mlflow": mlflow.Factory, "phoenix": phoenix.Factory, "langfuse": langfuse.Factory},
+		Resolve:   source.NewResolver(creds, cfg.Sources.Dir),
+		// Every request a source makes, redirects included, is checked
+		// against internal addresses, not only the URL it names.
+		HTTP:   source.NewGuard(cfg.Sources.AllowHosts).Client(time.Minute),
+		Logger: log, MaxRate: cfg.Sources.MaxRecordsPerSecond,
+	})
 	for i, raw := range cfg.Policies {
 		p := &evalsiv1alpha1.OnlineEvalPolicy{}
 		if err := protojson.Unmarshal(raw, p); err != nil {
@@ -237,7 +253,11 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		}
 		defer stopReloads()
 		wg.Add(1)
-		go func() { defer wg.Done(); leadPolicyEngine(bg, st, cl, assembler, watcher, log) }()
+		go func() { defer wg.Done(); leadPolicyEngine(bg, st, cl, assembler, watcher, sourceMgr, log) }()
+	} else {
+		// One process: it is the policy engine, so it pulls the sources too.
+		wg.Add(1)
+		go func() { defer wg.Done(); sourceMgr.Run(bg) }()
 	}
 	wg.Add(5)
 	go func() { defer wg.Done(); hooks.Run(bg) }()
@@ -255,6 +275,13 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		wg.Wait()
 	}()
 
+	sourceSvc := source.NewService(st, sourceMgr, source.ServiceOptions{
+		Credentials: creds, AllowHosts: cfg.Sources.AllowHosts,
+		PolicyExists: func(project, name string) bool {
+			p, ok := watcher.Policy(name)
+			return ok && p.GetProject() == project
+		},
+	})
 	authSvc := authz.NewService(engine, st, auditor, authn.ConfigKeys())
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, log)
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
@@ -262,7 +289,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		rewardSvc.UseSharedCache(st, log)
 		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
 	}
-	d := deps{svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, webhooks: hooks, mcp: cfg.MCP, ui: cfg.UI, log: log}
+	d := deps{sources: sourceSvc, svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, webhooks: hooks, mcp: cfg.MCP, ui: cfg.UI, log: log}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -416,6 +443,7 @@ type deps struct {
 	gate      *gate
 	authSvc   *authz.Service
 	webhooks  *webhooks.Service
+	sources   *source.Service
 	// In a cluster, received spans go to the span stream.
 	forward ingest.Forward
 	mcp     mcp.Config
@@ -470,6 +498,9 @@ func Handler(d deps) http.Handler {
 		func() (string, http.Handler) {
 			return evalsiv1alpha1connect.NewWebhookServiceHandler(d.webhooks, gated)
 		},
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewSourceServiceHandler(d.sources, gated)
+		},
 	} {
 		path, handler := h()
 		mux.Handle(path, handler)
@@ -487,7 +518,7 @@ func Handler(d deps) http.Handler {
 	// (LLM traffic) and the ExtMcp processor service (MCP traffic, gRPC).
 	mux.Handle("POST /guardrails/{project}/{guardrail}/{phase}", guard.Webhook(d.gate.authorizeGuardrail))
 	mux.Handle(ext_mcpconnect.NewExtMcpHandler(guard.ExtMcp(), gated))
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.webhooks.WriteMetrics, d.svc.Credentials().WriteMetrics, d.gate.WriteMetrics)))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.webhooks.WriteMetrics, d.sources.WriteMetrics, d.svc.Credentials().WriteMetrics, d.gate.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
@@ -499,6 +530,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,
 		evalsiv1alpha1connect.WebhookServiceName,
+		evalsiv1alpha1connect.SourceServiceName,
 	}
 	// Health reports liveness only and stays open, like /healthz.
 	mux.Handle(grpchealth.NewHandler(grpchealth.NewStaticChecker(services...)))

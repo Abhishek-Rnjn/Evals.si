@@ -28,7 +28,7 @@ One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offl
 >
 > The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)). It has also been verified on real clusters: AKS, and an Istio ambient cluster with STRICT mTLS and KVM nodes, where the Firecracker rung ran in microVMs. Most findings are fixed; the [verification report](docs/verification/README.md) lists what is still open.
 >
-> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix, a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents (built: [`examples/demo`](examples/demo/README.md), and the [integration guide](docs/guides/integrate-an-agent-studio.md)). The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
+> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix (built: [trace sources](docs/guides/trace-sources.md) read a store's traces, score them and write the scores back), a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents (built: [`examples/demo`](examples/demo/README.md), and the [integration guide](docs/guides/integrate-an-agent-studio.md)). The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
 >
 
 > New here? Start with the [end-to-end guide](docs/guides/end-to-end.md): every feature, the integrations, and copy-paste pull request workflows.
@@ -392,6 +392,8 @@ evalsi guardrails check support-chat --project support --text "key AKIAIOSFODNN7
 See the [guardrails guide](docs/guides/guardrails.md).
 
 A project can also subscribe an HTTP endpoint to run results: signed webhooks fire when a run finishes or fails a gate, with retries that survive a restart. See the [webhooks guide](docs/guides/webhooks.md).
+
+Traces an agent already sends to MLflow, Phoenix or Langfuse can be scored without a second exporter: a [trace source](docs/guides/trace-sources.md) reads them (history included), scores them with the project's online policies, and writes the scores back to the same traces, as MLflow assessments or Phoenix annotations. `evalsi source apply -f`, or `kubectl apply` of a `TraceSource`.
 
 ### Human annotation
 

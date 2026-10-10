@@ -37,7 +37,7 @@ const (
 // Mutator stamps the creator.
 type Mutator struct{}
 
-// +kubebuilder:webhook:path=/mutate-evals-si,mutating=true,failurePolicy=fail,sideEffects=None,groups=evals.si,resources=evalruns;onlineevalpolicies;evaluators;sandboxclasses,verbs=create;update,versions=v1alpha1,name=mutate.evals.si,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-evals-si,mutating=true,failurePolicy=fail,sideEffects=None,groups=evals.si,resources=evalruns;onlineevalpolicies;tracesources;evaluators;sandboxclasses,verbs=create;update,versions=v1alpha1,name=mutate.evals.si,admissionReviewVersions=v1
 
 func (Mutator) Handle(_ context.Context, req admission.Request) admission.Response {
 	obj, err := decode(req.Object.Raw)
@@ -84,12 +84,13 @@ type Validator struct {
 type Remote interface {
 	CheckRun(ctx context.Context, project, name string, spec *evalsiv1alpha1.RunSpec, labels map[string]string) error
 	CheckPolicy(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) error
+	CheckSource(ctx context.Context, s *evalsiv1alpha1.TraceSource) error
 }
 
 // remoteTimeout bounds the API call inside an admission request.
 const remoteTimeout = 5 * time.Second
 
-// +kubebuilder:webhook:path=/validate-evals-si,mutating=false,failurePolicy=fail,sideEffects=None,groups=evals.si,resources=evalruns;onlineevalpolicies,verbs=create;update,versions=v1alpha1,name=validate.evals.si,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-evals-si,mutating=false,failurePolicy=fail,sideEffects=None,groups=evals.si,resources=evalruns;onlineevalpolicies;tracesources,verbs=create;update,versions=v1alpha1,name=validate.evals.si,admissionReviewVersions=v1
 
 func (val Validator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	obj, err := decode(req.Object.Raw)
@@ -130,6 +131,12 @@ func (val Validator) Handle(ctx context.Context, req admission.Request) admissio
 		if p, err = spec.Policy(raw); err == nil && val.Remote != nil {
 			p.Name, p.Project, p.Labels = obj.GetName(), v1.ProjectOf(obj), v1.APILabels(obj)
 			check = func(ctx context.Context) error { return val.Remote.CheckPolicy(ctx, p) }
+		}
+	case "TraceSource":
+		var s *evalsiv1alpha1.TraceSource
+		if s, err = spec.Source(raw); err == nil && val.Remote != nil {
+			s.Name, s.Project, s.Labels = obj.GetName(), v1.ProjectOf(obj), v1.APILabels(obj)
+			check = func(ctx context.Context) error { return val.Remote.CheckSource(ctx, s) }
 		}
 	}
 	if err != nil {

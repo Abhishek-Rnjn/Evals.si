@@ -71,6 +71,11 @@
 {{- $_ := set $server "otlp" (dict "grpc_listen" "0.0.0.0:4317" "http_listen" "0.0.0.0:4318") }}
 {{- end }}
 {{- with $v.bootstrap.credentialGrants }}{{ $_ := set $server "credentials" (dict "grants" .) }}{{ end }}
+{{- $sources := dict }}
+{{- if $v.sources.secrets }}{{ $_ := set $sources "dir" "/etc/evalsi/sources" }}{{ end }}
+{{- with $v.sources.allowHosts }}{{ $_ := set $sources "allow_hosts" . }}{{ end }}
+{{- with $v.sources.maxRecordsPerSecond }}{{ $_ := set $sources "max_records_per_second" . }}{{ end }}
+{{- if $sources }}{{ $_ := set $server "sources" $sources }}{{ end }}
 {{- $server = mergeOverwrite $server (deepCopy $v.server.config) }}
 ---
 apiVersion: v1

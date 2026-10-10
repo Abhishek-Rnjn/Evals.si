@@ -1,0 +1,24 @@
+{{- if .Values.networkPolicy.egress.enabled }}
+{{- $fn := include "evalsi.fullname" . }}
+# Egress for evalsid (decision 0016, item 25): DNS, the release's namespace,
+# and the rules listed in networkPolicy.egress.extra. Everything else is
+# denied, trace stores and judges included, unless a rule lists them.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fn }}-egress
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}}
+  policyTypes: [Egress]
+  egress:
+    - ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - podSelector: {}
+    {{- with .Values.networkPolicy.egress.extra }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+{{- end }}

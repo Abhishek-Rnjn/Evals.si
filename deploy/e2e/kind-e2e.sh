@@ -12,6 +12,8 @@
 #     bubblewrap pool, and an agent run on the pod rung (a SandboxClass);
 #     the reference demos (examples/demo): both agents fix the small-repo suite
 #     against the mock model on the pod rung, and the scores reach MLflow;
+#     R6: a TraceSource pulls the Deep Agents service's MLflow traces, a
+#     policy scores them, and the scores are written back as assessments;
 #  4. installs again, namespace-only, as a user who is only admin of a
 #     namespace that enforces Pod Security "restricted": no CRDs, no
 #     cluster-scoped object, sandboxes from the chart's own pool. Code
@@ -254,6 +256,33 @@ sleep 3
 curl -s -X POST http://127.0.0.1:15000/api/2.0/mlflow/experiments/search -H 'content-type: application/json' \
   -d '{"filter":"name = '"'"'evalsi-demo'"'"'"}' | tee "$work/mlflow-experiments.json"
 grep -q evalsi-demo "$work/mlflow-experiments.json" || { echo "no MLflow experiment from the sink" >&2; exit 1; }
+kill "$pf" 2>/dev/null || true
+
+step "R6: Deep Agents traces in MLflow, pulled by a TraceSource, scored and written back"
+# The Deep Agents service traces each run to the demo MLflow (LangChain
+# autolog). A TraceSource reads them back, a policy scores them, and the scores
+# land on the same MLflow traces as assessments.
+kubectl port-forward -n "$ns" svc/evalsi-demo-deepagents 18080:8080 >/dev/null 2>&1 &
+pf=$!
+sleep 3
+question="$(head -n1 "$demo/fixtures/deep-research.jsonl" | python3 -c 'import json,sys; print(json.dumps({"input": json.load(sys.stdin)["input"]}))')"
+curl -sf -m 300 -X POST http://127.0.0.1:18080/invoke -H 'content-type: application/json' -d "$question" | head -c 300; echo
+kill "$pf" 2>/dev/null || true
+kubectl apply -n "$ns" -f "$demo/deepagents-online-policy.yaml" -f "$demo/deepagents-mlflow-source.yaml"
+for _ in $(seq 1 60); do
+  scored="$(kubectl get tracesource deepagents-mlflow -n "$ns" -o jsonpath='{.status.scored}')"
+  [ "${scored:-0}" -ge 1 ] && break
+  sleep 5
+done
+kubectl get tracesource deepagents-mlflow -n "$ns" -o yaml | tee "$work/tracesource.yaml"
+[ "${scored:-0}" -ge 1 ] || { echo "the TraceSource wrote no scores back" >&2; exit 1; }
+kubectl port-forward -n "$ns" svc/evalsi-demo-mlflow 15000:5000 >/dev/null 2>&1 &
+pf=$!
+sleep 3
+exp="$(curl -s "http://127.0.0.1:15000/api/2.0/mlflow/experiments/get-by-name?experiment_name=evalsi-demo-deepagents" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["experiment_id"])')"
+curl -s -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
+  -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$exp"'"}}]}' | tee "$work/mlflow-traces.json" >/dev/null
+grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evals.si assessment on the Deep Agents traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
 step "deleting an EvalRun"

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,7 +35,10 @@ type fakeAPI struct {
 	evalsiv1alpha1connect.UnimplementedRunServiceHandler
 	evalsiv1alpha1connect.UnimplementedMonitorServiceHandler
 	evalsiv1alpha1connect.UnimplementedAuthServiceHandler
-	mu sync.Mutex
+	evalsiv1alpha1connect.UnimplementedSourceServiceHandler
+	mu             sync.Mutex
+	sources        map[string]*evalsiv1alpha1.TraceSource
+	deletedSources []string
 	// Projects the server knows; runs and policies elsewhere are refused.
 	projects  map[string]bool
 	runs      map[string]*evalsiv1alpha1.Run
@@ -158,6 +162,49 @@ func (f *fakeAPI) GetPolicyStats(_ context.Context, req *connect.Request[evalsiv
 	return connect.NewResponse(&evalsiv1alpha1.GetPolicyStatsResponse{Stats: &evalsiv1alpha1.PolicyStats{Policy: req.Msg.GetName(), TracesSeen: 40, TracesEvaluated: 4}}), nil
 }
 
+func (f *fakeAPI) ApplySource(_ context.Context, req *connect.Request[evalsiv1alpha1.ApplySourceRequest]) (*connect.Response[evalsiv1alpha1.ApplySourceResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	s := req.Msg.GetSource()
+	if !f.projects[s.GetProject()] {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", s.GetProject()))
+	}
+	// As evalsid refuses an endpoint the operator did not allow.
+	if strings.Contains(s.GetEndpoint(), "169.254.169.254") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source.endpoint host %q is a private, loopback or cluster-internal address", "169.254.169.254"))
+	}
+	if req.Msg.GetValidateOnly() {
+		f.validated = append(f.validated, "source/"+s.GetName())
+		return connect.NewResponse(&evalsiv1alpha1.ApplySourceResponse{Source: s}), nil
+	}
+	f.sources[s.GetProject()+"/"+s.GetName()] = s
+	return connect.NewResponse(&evalsiv1alpha1.ApplySourceResponse{Source: s}), nil
+}
+
+func (f *fakeAPI) GetSource(_ context.Context, req *connect.Request[evalsiv1alpha1.GetSourceRequest]) (*connect.Response[evalsiv1alpha1.GetSourceResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	s := f.sources[req.Msg.GetProject()+"/"+req.Msg.GetName()]
+	if s == nil {
+		return nil, connect.NewError(connect.CodeNotFound, nil)
+	}
+	out := proto.Clone(s).(*evalsiv1alpha1.TraceSource)
+	out.Status = &evalsiv1alpha1.SourceStatus{
+		Phase: evalsiv1alpha1.SourcePhase_SOURCE_PHASE_TAILING, Pulled: 7, Scored: 5, LagSeconds: 12.4,
+		Watermark: timestamppb.New(time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)), LastPullAt: timestamppb.Now(),
+	}
+	return connect.NewResponse(&evalsiv1alpha1.GetSourceResponse{Source: out}), nil
+}
+
+func (f *fakeAPI) DeleteSource(_ context.Context, req *connect.Request[evalsiv1alpha1.DeleteSourceRequest]) (*connect.Response[evalsiv1alpha1.DeleteSourceResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := req.Msg.GetProject() + "/" + req.Msg.GetName()
+	delete(f.sources, key)
+	f.deletedSources = append(f.deletedSources, key)
+	return connect.NewResponse(&evalsiv1alpha1.DeleteSourceResponse{}), nil
+}
+
 type env struct {
 	api   *fakeAPI
 	admin client.Client
@@ -175,12 +222,13 @@ func start(t *testing.T) *env {
 		}
 		t.Setenv("KUBEBUILDER_ASSETS", "/opt/envtest/bin")
 	}
-	fake := &fakeAPI{runs: map[string]*evalsiv1alpha1.Run{}, policies: map[string]*evalsiv1alpha1.OnlineEvalPolicy{}, holdJudge: "hold",
+	fake := &fakeAPI{runs: map[string]*evalsiv1alpha1.Run{}, policies: map[string]*evalsiv1alpha1.OnlineEvalPolicy{}, holdJudge: "hold", sources: map[string]*evalsiv1alpha1.TraceSource{},
 		projects: map[string]bool{"quickstart": true, "support": true}}
 	mux := http.NewServeMux()
 	mux.Handle(evalsiv1alpha1connect.NewRunServiceHandler(fake))
 	mux.Handle(evalsiv1alpha1connect.NewMonitorServiceHandler(fake))
 	mux.Handle(evalsiv1alpha1connect.NewAuthServiceHandler(fake))
+	mux.Handle(evalsiv1alpha1connect.NewSourceServiceHandler(fake))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
@@ -212,7 +260,7 @@ func start(t *testing.T) *env {
 	tokenFile := filepath.Join(t.TempDir(), "token")
 	_ = os.WriteFile(tokenFile, []byte("sa-token\n"), 0o600)
 	if err := Setup(mgr, Config{
-		Enabled: []string{"evalrun", "onlineevalpolicy", "evaluator", "sandboxclass"},
+		Enabled: []string{"evalrun", "onlineevalpolicy", "tracesource", "evaluator", "sandboxclass"},
 		API:     APIConfig{URL: srv.URL, TokenFile: tokenFile, CreateProjects: true}, PollInterval: 200 * time.Millisecond, StatsInterval: 200 * time.Millisecond,
 		Namespace: "evalsi", Image: "ghcr.io/abhishek-rnjn/evalsi:test", SandboxTLSSecret: "sandbox-tls",
 		SandboxAllowClients: []string{"spiffe://evals.si/ns/evalsi/sa/evalsi-worker"}, SandboxServiceAccount: "evalsi-sandboxd",

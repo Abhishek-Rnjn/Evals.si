@@ -408,6 +408,9 @@ type Trace struct {
 	TraceID string
 	Project string
 	Spans   []Span
+	// Adjust, when set, changes the record and the facts policies select on
+	// after the conventions have been read: a trace source's overrides.
+	Adjust func(*evalsiv1alpha1.Record, *TraceInfo)
 }
 
 // TraceInfo is what policy expressions see about a trace.
@@ -506,6 +509,9 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 		if val, err := structpb.NewValue(v); err == nil {
 			record.Metadata[k] = val
 		}
+	}
+	if t.Adjust != nil {
+		t.Adjust(record, &info)
 	}
 	return record, info
 }

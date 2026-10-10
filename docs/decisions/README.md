@@ -19,7 +19,7 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0013](0013-rewards-and-checkpoint-evaluation.md) | Rewards from evaluators, composed in Python and Go with shared vectors; checkpoints served outside the operator | Accepted, implemented |
 | [0014](0014-mcp-guardrails-plugins-ui.md) | MCP locally and on evalsid; guardrails on agentgateway's protocols; Wasm plugins on wazero; a read-only web UI | Accepted, implemented |
 | [0015](0015-per-project-credentials.md) | Worker secrets named in specs are granted per project and destination host (HTTPS), judges scoped per project; refusals audited, admission checks, reload | Accepted, implemented |
-| [0016](0016-trace-source-connectors.md) | Trace-source connectors: a `TraceSource` per store, a Go `Connector` interface, per-variant MLflow transports, start-time watermarks with lookback, a durable `IngestBatchContext`, write-back as assessments, egress by chart value | Proposed, design only |
+| [0016](0016-trace-source-connectors.md) | Trace-source connectors: a `TraceSource` per store, a Go `Connector` interface, per-variant MLflow transports, start-time watermarks with lookback, a durable `IngestBatchContext`, write-back as assessments, egress by chart value | Accepted, built (M3; Langfuse unverified) |
 | [0017](0017-release-prefixed-names.md) | Charts name what they create after the release; the default release keeps its names; dependencies bundled or external | Accepted, implemented |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

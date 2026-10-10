@@ -40,6 +40,38 @@ server:
   nodeSelector: {}
   tolerations: []
 
+# Trace sources: stores evalsid pulls traces from and writes scores to
+# (TraceSource resources, `evalsi source`; docs/guides/trace-sources.md).
+sources:
+  # Secrets mounted for sources' credentials: a source names
+  # `credentials: {file: <secret>/<key>}`, granted in credentials.grants as
+  # file:<secret>/<key>. Kubelet refreshes a rotated Secret in place.
+  secrets: []             # [mlflow-token]
+  # Hosts a source may reach over plain HTTP or at a cluster-internal
+  # address (exact, or *.domain). Any other endpoint must be https to a
+  # public name.
+  allowHosts: []          # [mlflow.studio.svc.cluster.local]
+  maxRecordsPerSecond: 0  # the server's cap for a source that sets none (0: 200)
+
+# An egress NetworkPolicy for the evalsid pods (off by default: turning it on
+# denies whatever it does not list). It allows DNS, every pod in the release's
+# namespace (Postgres, NATS, MinIO, workers, sandbox pools), and the rules
+# below: your trace stores, judges, sinks and S3 when they are elsewhere.
+# Plain NetworkPolicy cannot name hosts; restrict hosted stores by name in
+# your mesh or CNI (docs/guides/trace-sources.md).
+networkPolicy:
+  egress:
+    enabled: false
+    # NetworkPolicy egress rules, as is: [{to: [{namespaceSelector: ...}], ports: [...]}]
+    extra: []
+
+# PrometheusRules for the Prometheus Operator: trace-source lag and failures.
+prometheusRule:
+  enabled: false
+  labels: {}
+  # Alert when a source's last complete pull began longer ago than this.
+  sourceLagSeconds: 120
+
 storage:
   postgres:
     # A Secret key holding the DSN (postgres://user:pass@host/db?sslmode=verify-full).

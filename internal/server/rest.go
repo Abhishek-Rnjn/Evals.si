@@ -64,6 +64,13 @@ import (
 //	GET    /v1alpha1/guardrails/{name}         GuardrailService.GetGuardrail (?project=)
 //	DELETE /v1alpha1/guardrails/{name}         GuardrailService.DeleteGuardrail (?project=)
 //	POST   /v1alpha1/guardrails/{guardrail}:check GuardrailService.Check
+//	POST   /v1alpha1/sources                   SourceService.ApplySource (body: the source; ?validate_only=true)
+//	GET    /v1alpha1/sources                   SourceService.ListSources (?project=)
+//	GET    /v1alpha1/sources/{name}            SourceService.GetSource (?project=)
+//	DELETE /v1alpha1/sources/{name}            SourceService.DeleteSource (?project=)
+//	POST   /v1alpha1/sources/{name}:pause      SourceService.PauseSource
+//	POST   /v1alpha1/sources/{name}:resume     SourceService.ResumeSource
+//	POST   /v1alpha1/sources/{name}:backfill   SourceService.BackfillSource (body: {project, since})
 //	POST   /v1alpha1/webhooks                  WebhookService.ApplyWebhook (body: the webhook)
 //	GET    /v1alpha1/webhooks                  WebhookService.ListWebhooks (?project=)
 //	GET    /v1alpha1/webhooks/{name}           WebhookService.GetWebhook (?project=)
@@ -133,6 +140,13 @@ func restRules() []*annotations.HttpRule {
 		rule("GuardrailService.GetGuardrail", http.MethodGet, v+"/guardrails/{name}", ""),
 		rule("GuardrailService.DeleteGuardrail", http.MethodDelete, v+"/guardrails/{name}", ""),
 		rule("GuardrailService.Check", http.MethodPost, v+"/guardrails/{guardrail}:check", "*"),
+		rule("SourceService.ApplySource", http.MethodPost, v+"/sources", "source"),
+		rule("SourceService.ListSources", http.MethodGet, v+"/sources", ""),
+		rule("SourceService.GetSource", http.MethodGet, v+"/sources/{name}", ""),
+		rule("SourceService.DeleteSource", http.MethodDelete, v+"/sources/{name}", ""),
+		rule("SourceService.PauseSource", http.MethodPost, v+"/sources/{name}:pause", "*"),
+		rule("SourceService.ResumeSource", http.MethodPost, v+"/sources/{name}:resume", "*"),
+		rule("SourceService.BackfillSource", http.MethodPost, v+"/sources/{name}:backfill", "*"),
 		rule("WebhookService.ApplyWebhook", http.MethodPost, v+"/webhooks", "webhook"),
 		rule("WebhookService.ListWebhooks", http.MethodGet, v+"/webhooks", ""),
 		rule("WebhookService.GetWebhook", http.MethodGet, v+"/webhooks/{name}", ""),
@@ -155,6 +169,7 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,
 		evalsiv1alpha1connect.WebhookServiceName,
+		evalsiv1alpha1connect.SourceServiceName,
 	}
 	services := make([]*vanguard.Service, 0, len(names))
 	for _, name := range names {

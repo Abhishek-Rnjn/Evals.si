@@ -3,7 +3,7 @@
 Evals.si on Kubernetes is the same `evalsid` as standalone, split into roles and run by the [operator](#the-operator-and-its-resources). Run specs and policies are the same files: what `evalsi run -f` takes, `kubectl apply -f` takes. This is Phase 4 of the [roadmap](../DESIGN.md#23-roadmap).
 
 ```text
-            kubectl apply (EvalRun, OnlineEvalPolicy, Evaluator, SandboxClass)
+  kubectl apply (EvalRun, OnlineEvalPolicy, TraceSource, Evaluator, SandboxClass)
                                    │
                           ┌────────▼─────────┐  admission webhooks: validate specs,
                           │  evalsi-operator │  record who created each resource
@@ -159,6 +159,8 @@ kubectl wait evalrun/capitals -n evalsi --for=condition=Succeeded --timeout=30m
 
 **`OnlineEvalPolicy`** is a policy file applied as a resource. The operator applies it on every spec change, deletes it with the resource, and mirrors its counters (`tracesSeen`, `tracesEvaluated`, ...). Policy names are global on the server: a policy of the same name in another project is reported as a `Conflict`, not taken over.
 
+**`TraceSource`** is a [trace source](trace-sources.md) applied as a resource: a store such as MLflow that evalsid reads traces from, scores, and writes the scores back to. The operator applies it on every spec change, deletes it with the resource, and mirrors its phase, watermark, lag and counters (`kubectl get tracesources`). Only namespace admins may create one (the aggregated `evalsi-admin` role), as only the API's `admin` role holds `sources.write`. The chart's `sources.secrets` mounts the Secrets a source's `credentials.file` names, `sources.allowHosts` lists the plain-HTTP or in-cluster stores the server may reach, `networkPolicy.egress` adds an egress policy for evalsid, and `prometheusRule.enabled` adds alerts on source lag and failures. An operator from before the `TraceSource` CRD keeps running without it: Helm does not upgrade CRDs, so apply `deploy/helm/evalsi-crds/crds/evals.si_tracesources.yaml` when upgrading.
+
 **`Evaluator`** runs your evaluator plugin: an image with your package installed on top of the evalsi image, serving the pools you name, optionally scaled by KEDA.
 
 ```yaml
@@ -186,9 +188,9 @@ spec:
 
 ### Admission webhooks
 
-The `EvalRun` and `OnlineEvalPolicy` schemas are generated from the API's messages, so `kubectl explain evalrun.spec.target` documents a field, and a wrong type (a string where `trials` wants a number) fails at the API server. Run files may use either `snake_case` or `camelCase` names, enums by name, and durations such as `10m`.
+The `EvalRun`, `OnlineEvalPolicy` and `TraceSource` schemas are generated from the API's messages, so `kubectl explain evalrun.spec.target` documents a field, and a wrong type (a string where `trials` wants a number) fails at the API server. Run files may use either `snake_case` or `camelCase` names, enums by name, and durations such as `10m`.
 
-Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun` and `OnlineEvalPolicy` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The webhook then asks evalsid whether it would accept the resource (`validate_only`): a variable the project has no [credential grant](identity.md#8-credentials-which-worker-secrets-a-project-may-use) for, a judge it may not use, or a spec the server refuses fails at `kubectl apply` too. When evalsid does not answer within 5 seconds, or the project does not exist yet (the operator creates it), the resource is admitted with a warning and its status reports the outcome. The `admin`, `edit` and `view` roles cover the resources through aggregation.
+Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun`, `OnlineEvalPolicy` and `TraceSource` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The webhook then asks evalsid whether it would accept the resource (`validate_only`): a variable the project has no [credential grant](identity.md#8-credentials-which-worker-secrets-a-project-may-use) for, a judge it may not use, a trace source's endpoint the server may not reach, or a spec the server refuses fails at `kubectl apply` too. When evalsid does not answer within 5 seconds, or the project does not exist yet (the operator creates it), the resource is admitted with a warning and its status reports the outcome. The `admin`, `edit` and `view` roles cover the resources through aggregation (`TraceSource`s: `admin` only).
 
 ## Sandboxes on Kubernetes
 
@@ -241,9 +243,9 @@ The operator watches only its own namespace unless `operator.allNamespaces` is s
 
 | Object | Scope | Notes |
 |---|---|---|
-| The four CRDs | cluster | Needed for `kubectl apply` of runs and policies, and for the operator |
+| The five CRDs | cluster | Needed for `kubectl apply` of runs, policies and trace sources, and for the operator |
 | Validating and mutating webhook configurations | cluster | Only for `evals.si` resources; `failurePolicy: Fail` |
-| `evalsi-edit`, `evalsi-view` | cluster | Aggregated into the built-in `admin`, `edit` and `view` roles, so namespace admins and editors manage the resources; they grant Evals.si itself nothing |
+| `evalsi-edit`, `evalsi-admin`, `evalsi-view` | cluster | Aggregated into the built-in `admin`, `edit` and `view` roles, so namespace admins and editors manage the resources (trace sources: admins only); they grant Evals.si itself nothing |
 | `evalsi-operator` ClusterRole and binding | cluster | Only if `operator.sandboxClasses` (read and update SandboxClasses, nothing else) or `operator.allNamespaces` is set; both are off by default |
 
 `operator.allNamespaces` is the one broad grant: the `evals.si` resources in every namespace, and creating Deployments and `ScaledObject`s in any of them (an `Evaluator`'s workers run in its own namespace). Leave it off and install the `evalsi` chart per namespace instead, if that is too much.

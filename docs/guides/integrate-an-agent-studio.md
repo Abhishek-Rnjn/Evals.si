@@ -7,7 +7,7 @@ Evals.si has three doors, and a studio can use any mix:
 | Door | The studio does | Section |
 |---|---|---|
 | Push | exports OpenTelemetry traces, or calls the API from its deploy pipeline | [2](#2-connect-traces), [3](#3-gate-deploys) |
-| Pull | already stores traces in MLflow, Langfuse or Phoenix (connectors are [designed](../decisions/0016-trace-source-connectors.md), not built) | [2](#2-connect-traces) |
+| Pull | already stores traces in MLflow, Phoenix or Langfuse: a [trace source](trace-sources.md) reads them and writes scores back | [2](#2-connect-traces) |
 | Embed | calls the SDK, including from a training loop | [3](#3-gate-deploys) |
 
 ## 1. Install beside the studio
@@ -54,7 +54,21 @@ The chart's certificate comes from its internal CA (`evalsi-server-tls`, `ca.crt
 
 What a trace needs: an MLflow LangChain/LangGraph trace (what Deep Agents emits with `mlflow.langchain.autolog()` and MLflow's OTLP exporter) or any GenAI-convention trace is read into a trajectory: model calls with their messages and token counts, tool calls with arguments and results, and errors. The demo's recorded export ([internal/ingest/testdata](../../internal/ingest/testdata)) is a test of exactly that. A CrewAI 1.x studio traced by MLflow needs `mlflow.openai.autolog()` beside `mlflow.crewai.autolog()` when its agents use CrewAI's own OpenAI provider (the default), or its model calls are missing (seen with CrewAI 1.15.27 and MLflow 3.17.0). The [agent frameworks guide](agent-frameworks.md) covers CrewAI and the other first-cut frameworks. Agents that are CLIs, like dsh, don't need tracing: their `--json` run events are the trajectory (`output_format: dsh-json`).
 
-**Pull.** If the studio already keeps traces in MLflow, Langfuse or Phoenix, trace-source connectors will read them without a second exporter (requirement A4 in the [PRD](../PRD.md)). They are designed ([decision 0016](../decisions/0016-trace-source-connectors.md)) and not built; until then, add Evals.si as a second OTLP exporter.
+**Pull.** If the studio already keeps traces in MLflow, Phoenix or Langfuse, a [trace source](trace-sources.md) reads them without a second exporter, history included, and writes the scores back to the same traces (MLflow assessments, Phoenix annotations, Langfuse scores), so they show in the studio's own UI:
+
+```yaml
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata: {name: studio-mlflow, labels: {evals.si/project: studio}}
+spec:
+  connector: mlflow
+  endpoint: http://mlflow.studio.svc:5000
+  locations: [studio-workflows]        # the MLflow experiment, by name or ID
+  backfill: {since: 720h}
+  writeBack: {enabled: true}
+```
+
+An in-cluster, plain-HTTP MLflow must be allowed in the chart (`sources.allowHosts: [mlflow.studio.svc]`), and a token, if it needs one, is a granted Secret (`sources.secrets`, `credentials: {file: <secret>/<key>}`). The demo does exactly this for the Deep Agents service ([R6](../../examples/demo/README.md#online-scoring-from-mlflow-r6)). Pulled traces carry the label `source: studio-mlflow`. Langfuse is built from its API spec and not yet run against a server; see the guide for what is verified.
 
 Then say what to score and how often, with a policy per environment:
 
@@ -65,7 +79,7 @@ metadata:
   name: studio-agents
   labels: {evals.si/project: studio}
 spec:
-  selector: 'resource.labels["deployed"] == "true"'
+  selector: 'labels["deployed"] == "true"'
   sampling: {rate: 0.1, always: ["error"]}
   stages:
     - evaluators: [{ref: builtin/latency}, {ref: tool-errors}, {ref: loop-detection}]
@@ -118,7 +132,7 @@ Runs execute the agent in a sandbox per trial (the pod rung on Kubernetes), with
 ## A checklist
 
 - [ ] Evals.si installed; the sandbox pool answers (`kubectl get sandboxclass` or the pool pod is Ready).
-- [ ] `studio-ingest` key set on the studio's exporter; a trace appears in the UI.
+- [ ] `studio-ingest` key set on the studio's exporter, or a `TraceSource` on its MLflow; a trace appears in the UI.
 - [ ] An `OnlineEvalPolicy` applied; `evalsi policy stats` shows scored traces.
 - [ ] A suite for the studio's agents, with gates; the deploy step runs it and fails on exit 3 or `phase: Failed`.
 - [ ] A webhook (or the API) tells the studio when a gate fails.

@@ -146,3 +146,8 @@ func GuardrailResource(name string, labels map[string]string) map[string]any {
 func WebhookResource(name string, labels map[string]string) map[string]any {
 	return map[string]any{"webhook": map[string]any{"name": name}, "labels": StringMap(labels)}
 }
+
+// SourceResource describes a trace source (resource.source, resource.labels).
+func SourceResource(name string, labels map[string]string) map[string]any {
+	return map[string]any{"source": map[string]any{"name": name}, "labels": StringMap(labels)}
+}

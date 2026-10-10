@@ -63,7 +63,9 @@ type Grant struct {
 }
 
 var (
-	envName  = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	// A mounted file is granted as "file:<secret>/<key>" (decision 0016).
+	fileName = regexp.MustCompile(`^file:[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$`)
 	hostName = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
 )
 
@@ -72,8 +74,8 @@ func (c Config) Validate() error {
 	var errs []error
 	for i, g := range c.Grants {
 		at := fmt.Sprintf("credentials.grants[%d]", i)
-		if !envName.MatchString(g.Env) {
-			errs = append(errs, fmt.Errorf("%s.env must be a variable name, not %q", at, g.Env))
+		if !envName.MatchString(g.Env) && !fileName.MatchString(g.Env) {
+			errs = append(errs, fmt.Errorf("%s.env must be a variable name (or file:<secret>/<key> for a trace source's mounted file), not %q", at, g.Env))
 		}
 		if len(g.Projects) == 0 {
 			errs = append(errs, fmt.Errorf("%s.projects is required (\"*\" for every project)", at))
@@ -506,4 +508,27 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// SourceUse is the reference a trace source's credentials make: an
+// environment variable, or a mounted file as "file:<secret>/<key>", sent to
+// the source's endpoint. A source naming none makes no use.
+func SourceUse(src *evalsiv1alpha1.TraceSource) (Use, bool, error) {
+	c := src.GetCredentials()
+	switch {
+	case c.GetEnv() != "" && c.GetFile() != "":
+		return Use{}, false, fmt.Errorf("source.credentials names both env and file; name one")
+	case c.GetEnv() != "":
+		if !envName.MatchString(c.GetEnv()) {
+			return Use{}, false, fmt.Errorf("source.credentials.env must be a variable name, not %q", c.GetEnv())
+		}
+		return Use{Env: c.GetEnv(), Field: "source.credentials.env", URL: src.GetEndpoint()}, true, nil
+	case c.GetFile() != "":
+		env := "file:" + c.GetFile()
+		if !fileName.MatchString(env) {
+			return Use{}, false, fmt.Errorf("source.credentials.file must be <secret>/<key>, not %q", c.GetFile())
+		}
+		return Use{Env: env, Field: "source.credentials.file", URL: src.GetEndpoint()}, true, nil
+	}
+	return Use{}, false, nil
 }

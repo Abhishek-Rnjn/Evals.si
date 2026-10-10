@@ -16,10 +16,10 @@ rules:
   {{- end }}
   {{- if .Values.operator.allNamespaces }}
   - apiGroups: [evals.si]
-    resources: [evalruns, onlineevalpolicies, evaluators]
+    resources: [evalruns, onlineevalpolicies, tracesources, evaluators]
     verbs: [get, list, watch, update, patch]
   - apiGroups: [evals.si]
-    resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, evaluators/status]
+    resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, tracesources/status, tracesources/finalizers, evaluators/status]
     verbs: [get, update, patch]
   - apiGroups: [apps]
     resources: [deployments]
@@ -52,6 +52,20 @@ rules:
     resources: [evalruns, onlineevalpolicies, evaluators]
     verbs: [get, list, watch, create, update, patch, delete]
 ---
+# A TraceSource makes evalsid read another system and write scores to it, so
+# only namespace admins manage them (as only the API's admin role holds
+# sources.write).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fn }}-admin
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [evals.si]
+    resources: [tracesources]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -60,5 +74,5 @@ metadata:
     rbac.authorization.k8s.io/aggregate-to-view: "true"
 rules:
   - apiGroups: [evals.si]
-    resources: [evalruns, onlineevalpolicies, evaluators, sandboxclasses]
+    resources: [evalruns, onlineevalpolicies, tracesources, evaluators, sandboxclasses]
     verbs: [get, list, watch]

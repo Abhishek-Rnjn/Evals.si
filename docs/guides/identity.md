@@ -184,7 +184,7 @@ rbac:
 | `runner` | viewer, plus evaluations, guardrail checks, and runs (create, cancel, resume) |
 | `editor` | runner, plus writing policies and guardrails, promoting run results into datasets (`datasets.write`), and setting up and answering annotation queues |
 | `annotator` | annotation queues: read and answer (`annotations.read`, `annotations.write`) |
-| `admin` | editor, plus the project's keys, roles, bindings and audit log |
+| `admin` | editor, plus the project's keys, roles, bindings and audit log, its webhooks, and its [trace sources](trace-sources.md) (`sources.read`, `sources.write`) |
 | `ingest` | `traces.write` only |
 | `guard` | `guardrails.check` only: a gateway's credential for [inline guardrails](guardrails.md) |
 | `owner` | everything, everywhere |

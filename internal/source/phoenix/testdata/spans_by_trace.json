@@ -1,0 +1,133 @@
+{
+    "data": [
+        {
+            "id": "U3Bhbjo2",
+            "name": "agent",
+            "context": {
+                "trace_id": "c2be2de4942854960790118094948902",
+                "span_id": "80542ded00a0711a"
+            },
+            "span_kind": "AGENT",
+            "parent_id": null,
+            "start_time": "2026-10-10T05:00:13.670819+00:00",
+            "end_time": "2026-10-10T05:00:13.688003+00:00",
+            "status_code": "ERROR",
+            "status_message": "tool failed",
+            "attributes": {
+                "input.value": "What is 1/0?",
+                "evalsi.label.workflow": "support",
+                "output.value": "I could not compute that."
+            },
+            "events": []
+        },
+        {
+            "id": "U3Bhbjo1",
+            "name": "calculator",
+            "context": {
+                "trace_id": "c2be2de4942854960790118094948902",
+                "span_id": "1c072084463a4c26"
+            },
+            "span_kind": "TOOL",
+            "parent_id": "80542ded00a0711a",
+            "start_time": "2026-10-10T05:00:13.677824+00:00",
+            "end_time": "2026-10-10T05:00:13.677897+00:00",
+            "status_code": "ERROR",
+            "status_message": "division by zero",
+            "attributes": {
+                "tool.name": "calculator",
+                "input.value": "{\"expr\": \"2+2\"}",
+                "output.value": "error: division by zero"
+            },
+            "events": []
+        },
+        {
+            "id": "U3Bhbjo0",
+            "name": "ChatCompletion",
+            "context": {
+                "trace_id": "c2be2de4942854960790118094948902",
+                "span_id": "861c3b8bb4efd7ba"
+            },
+            "span_kind": "LLM",
+            "parent_id": "80542ded00a0711a",
+            "start_time": "2026-10-10T05:00:13.670902+00:00",
+            "end_time": "2026-10-10T05:00:13.670934+00:00",
+            "status_code": "UNSET",
+            "status_message": "",
+            "attributes": {
+                "llm.input_messages.0.message.role": "user",
+                "llm.input_messages.0.message.content": "What is 1/0?",
+                "llm.model_name": "mock",
+                "llm.output_messages.0.message.role": "assistant",
+                "llm.output_messages.0.message.content": "I could not compute that.",
+                "llm.token_count.prompt": 12,
+                "llm.token_count.completion": 3
+            },
+            "events": []
+        },
+        {
+            "id": "U3Bhbjoz",
+            "name": "agent",
+            "context": {
+                "trace_id": "be3f90a78c62dbfa9f184f136ce8d1a5",
+                "span_id": "e81f302c40ddfcf6"
+            },
+            "span_kind": "AGENT",
+            "parent_id": null,
+            "start_time": "2026-10-10T05:00:13.453819+00:00",
+            "end_time": "2026-10-10T05:00:13.466372+00:00",
+            "status_code": "UNSET",
+            "status_message": "",
+            "attributes": {
+                "input.value": "What is 2+2?",
+                "evalsi.label.workflow": "support",
+                "output.value": "4"
+            },
+            "events": []
+        },
+        {
+            "id": "U3Bhbjoy",
+            "name": "calculator",
+            "context": {
+                "trace_id": "be3f90a78c62dbfa9f184f136ce8d1a5",
+                "span_id": "fbbbdd276d4c0f89"
+            },
+            "span_kind": "TOOL",
+            "parent_id": "e81f302c40ddfcf6",
+            "start_time": "2026-10-10T05:00:13.462184+00:00",
+            "end_time": "2026-10-10T05:00:13.462224+00:00",
+            "status_code": "UNSET",
+            "status_message": "",
+            "attributes": {
+                "tool.name": "calculator",
+                "input.value": "{\"expr\": \"2+2\"}",
+                "output.value": "4"
+            },
+            "events": []
+        },
+        {
+            "id": "U3Bhbjox",
+            "name": "ChatCompletion",
+            "context": {
+                "trace_id": "be3f90a78c62dbfa9f184f136ce8d1a5",
+                "span_id": "aaf84b8ec2d1bf14"
+            },
+            "span_kind": "LLM",
+            "parent_id": "e81f302c40ddfcf6",
+            "start_time": "2026-10-10T05:00:13.453887+00:00",
+            "end_time": "2026-10-10T05:00:13.453906+00:00",
+            "status_code": "UNSET",
+            "status_message": "",
+            "attributes": {
+                "llm.input_messages.0.message.role": "user",
+                "llm.input_messages.0.message.content": "What is 2+2?",
+                "llm.model_name": "mock",
+                "llm.output_messages.0.message.role": "assistant",
+                "llm.output_messages.0.message.content": "4",
+                "llm.token_count.prompt": 12,
+                "llm.token_count.completion": 3
+            },
+            "events": []
+        }
+    ],
+    "next_cursor": null
+}

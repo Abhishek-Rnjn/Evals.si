@@ -84,7 +84,7 @@ CrewAIInstrumentor().instrument(tracer_provider=provider)
 OpenAIInstrumentor().instrument(tracer_provider=provider)
 ```
 
-Set `CREWAI_DISABLE_TELEMETRY=true` so CrewAI's own telemetry stays out of your traces. The record's answer is the crew's `raw` output.
+Set `CREWAI_DISABLE_TELEMETRY=true` so CrewAI's own telemetry stays out of your traces. The record's answer is the crew's `raw` output. If the traces already land in MLflow, a [trace source](trace-sources.md) can read them from there instead of a second exporter.
 
 ## OpenAI Agents SDK
 
@@ -132,4 +132,4 @@ These give model calls with tokens, tools with their results (`OTEL_LOG_TOOL_CON
 
 ## Other frameworks
 
-AutoGen, Pydantic AI, Google ADK, Semantic Kernel and custom loops work through the same conventions (OTel GenAI, OpenInference, OpenLLMetry) without a tested profile. Look at a few stored traces in the web UI first. To add a framework profile, record a fixture with a recorder like the ones in `tests/frameworks`, add its expectations to the test, and change [`internal/ingest/profiles.go`](../../internal/ingest/profiles.go) until it passes.
+AutoGen, Pydantic AI, Google ADK, Semantic Kernel and custom loops work through the same conventions (OTel GenAI, OpenInference, OpenLLMetry) without a tested profile. Look at a few stored traces in the web UI first. For traces read by a trace source, [`overrides`](trace-sources.md#filling-in-what-the-conventions-miss) can set the record's input, output or other fields when the conventions miss them. To add a framework profile, record a fixture with a recorder like the ones in `tests/frameworks`, add its expectations to the test, and change [`internal/ingest/profiles.go`](../../internal/ingest/profiles.go) until it passes.

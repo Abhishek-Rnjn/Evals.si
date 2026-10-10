@@ -48,6 +48,28 @@ func Policy(raw []byte) (*evalsiv1alpha1.OnlineEvalPolicy, error) {
 	return out, nil
 }
 
+// Source parses a TraceSource spec. Name, project and access labels come from
+// the resource's metadata, and status from the server.
+func Source(raw []byte) (*evalsiv1alpha1.TraceSource, error) {
+	out := &evalsiv1alpha1.TraceSource{}
+	if err := parse(raw, out); err != nil {
+		return nil, err
+	}
+	if out.GetName() != "" || out.GetProject() != "" || len(out.GetLabels()) > 0 {
+		return nil, errors.New("spec cannot set name, project or labels; they come from metadata")
+	}
+	if out.GetStatus() != nil || out.GetUpdatedAt() != nil || out.GetUpdatedBy() != "" {
+		return nil, errors.New("spec cannot set status, updatedAt or updatedBy; the server does")
+	}
+	if out.GetConnector() == "" {
+		return nil, errors.New("spec.connector is required (mlflow)")
+	}
+	if out.GetEndpoint() == "" {
+		return nil, errors.New("spec.endpoint is required")
+	}
+	return out, nil
+}
+
 func parse(raw []byte, m proto.Message) error {
 	if len(raw) == 0 {
 		return errors.New("spec is required")
@@ -140,7 +162,7 @@ func normalizeDurations(obj map[string]any, md protoreflect.MessageDescriptor) m
 func normalizeDuration(v any) any {
 	switch d := v.(type) {
 	case float64:
-		return strconv.FormatFloat(d, 'g', -1, 64) + "s"
+		return seconds(d)
 	case string:
 		m := duration.FindStringSubmatch(d)
 		if m == nil {
@@ -148,7 +170,13 @@ func normalizeDuration(v any) any {
 		}
 		n, _ := strconv.ParseFloat(m[1], 64)
 		scale := map[string]float64{"ms": 0.001, "s": 1, "m": 60, "h": 3600}[m[2]]
-		return strconv.FormatFloat(n*scale, 'g', -1, 64) + "s"
+		return seconds(n * scale)
 	}
 	return v
+}
+
+// seconds writes fixed point: 'g' writes 720h as 2.592e+06s, which protobuf
+// JSON rejects.
+func seconds(s float64) string {
+	return strconv.FormatFloat(s, 'f', -1, 64) + "s"
 }

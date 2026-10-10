@@ -21,8 +21,8 @@ const queue = []; // {src, route, title?, description?, text}
 const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
-  ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["integrate-an-agent-studio", 12],
-  ["agent-frameworks", 13],
+  ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-studio", 13],
+  ["agent-frameworks", 14],
 ];
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
@@ -124,6 +124,7 @@ const examples = [
   { dir: "runs", title: "Runs: execute a target on a dataset", desc: "A durable run with a dataset, evaluators and a pass/fail gate.", guide: "/docs/get-started/" },
   { dir: "agents", title: "Agent runs on sandboxed tasks", desc: "Put the built-in agent, or your own, to work on tasks in a sandbox, including SWE-bench.", guide: "/docs/guides/agent-runs/" },
   { dir: "watch", title: "Watch: evaluate live traces", desc: "An online policy that scores OpenTelemetry traces as they arrive.", guide: "/docs/get-started/" },
+  { dir: "sources", title: "Trace sources: score traces kept in MLflow", desc: "A TraceSource that reads an agent studio's MLflow traces, scores them and writes the scores back.", guide: "/docs/guides/trace-sources/" },
   { dir: "guardrails", title: "Inline guardrails", desc: "Block or flag model output through agentgateway before it reaches users.", guide: "/docs/guides/guardrails/" },
   { dir: "annotation", title: "Human annotation queues", desc: "Collect human labels and measure agreement alongside automated scores.", guide: "/docs/guides/annotation/" },
   { dir: "finetuning", title: "Fine-tuning and RL rewards", desc: "Evaluators as RL rewards, and checkpoint checks for forgetting and safety regressions.", guide: "/docs/guides/fine-tuning/" },
