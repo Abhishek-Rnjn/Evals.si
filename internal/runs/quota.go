@@ -44,7 +44,9 @@ func (m *Manager) checkQuota(ctx context.Context, project string, runs int) erro
 			return err
 		}
 		if n+runs > lim.MaxStoredRuns {
-			return exhausted("project %s has %d stored runs and its quota (max_stored_runs) is %d; this needs %d more: delete old runs first", project, n, lim.MaxStoredRuns, runs)
+			// There is no API to delete runs yet (docs/LEFTOVERS.md), so the
+			// way out is a larger quota.
+			return exhausted("project %s has %d stored runs and its quota (max_stored_runs) is %d; this needs %d more: ask an administrator to raise quotas.max_stored_runs", project, n, lim.MaxStoredRuns, runs)
 		}
 	}
 	if lim.JudgeTokensPerDay == 0 && lim.TargetTokensPerDay == 0 {
