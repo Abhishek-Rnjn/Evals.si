@@ -1,0 +1,47 @@
+{
+    "data": [
+        {
+            "id": "VHJhY2U6Mg==",
+            "trace_id": "c2be2de4942854960790118094948902",
+            "project_id": "UHJvamVjdDoy",
+            "start_time": "2026-10-10T05:00:13.670819+00:00",
+            "end_time": "2026-10-10T05:00:13.688003+00:00",
+            "token_count_prompt": 12,
+            "token_count_completion": 3,
+            "token_count_total": 15,
+            "spans": [
+                {
+                    "id": "U3Bhbjo2",
+                    "span_id": "80542ded00a0711a",
+                    "parent_id": null,
+                    "name": "agent",
+                    "span_kind": "AGENT",
+                    "status_code": "ERROR",
+                    "start_time": "2026-10-10T05:00:13.670819+00:00",
+                    "end_time": "2026-10-10T05:00:13.688003+00:00"
+                },
+                {
+                    "id": "U3Bhbjo0",
+                    "span_id": "861c3b8bb4efd7ba",
+                    "parent_id": "80542ded00a0711a",
+                    "name": "ChatCompletion",
+                    "span_kind": "LLM",
+                    "status_code": "UNSET",
+                    "start_time": "2026-10-10T05:00:13.670902+00:00",
+                    "end_time": "2026-10-10T05:00:13.670934+00:00"
+                },
+                {
+                    "id": "U3Bhbjo1",
+                    "span_id": "1c072084463a4c26",
+                    "parent_id": "80542ded00a0711a",
+                    "name": "calculator",
+                    "span_kind": "TOOL",
+                    "status_code": "ERROR",
+                    "start_time": "2026-10-10T05:00:13.677824+00:00",
+                    "end_time": "2026-10-10T05:00:13.677897+00:00"
+                }
+            ]
+        }
+    ],
+    "next_cursor": null
+}

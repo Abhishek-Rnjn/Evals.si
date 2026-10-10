@@ -65,9 +65,9 @@ webhooks:
         apiVersions: [v1alpha1]
         operations: [CREATE, UPDATE]
         {{- if eq $kind "Mutating" }}
-        resources: [evalruns, onlineevalpolicies, evaluators, sandboxclasses]
+        resources: [evalruns, onlineevalpolicies, tracesources, evaluators, sandboxclasses]
         {{- else }}
-        resources: [evalruns, onlineevalpolicies]
+        resources: [evalruns, onlineevalpolicies, tracesources]
         {{- end }}
 {{- end }}
 {{- end }}

@@ -98,6 +98,20 @@ What each part does:
 - Scores: `kubectl port-forward svc/evalsi 8080:8080` and open `/ui/`; `kubectl port-forward svc/evalsi-demo-mlflow 5000:5000` shows the run in the `evalsi-demo` experiment.
 - A real model: `--set agents.model.baseURL=https://... --set agents.model.name=... --set agents.model.apiKey=...` on the demo chart, and put the key in `evalsi-demo-model-key`; add the host to each spec's `allow_hosts`.
 
+### Online scoring from MLflow (R6)
+
+The Deep Agents service traces every run to the demo MLflow (LangChain autolog, experiment `evalsi-demo-deepagents`). A [trace source](../../docs/guides/trace-sources.md) reads those traces back, a policy scores them, and the scores land on the same MLflow traces as assessments, where the studio's people already look:
+
+```bash
+kubectl apply -n evalsi -f examples/demo/deepagents-online-policy.yaml -f examples/demo/deepagents-mlflow-source.yaml
+kubectl port-forward -n evalsi svc/evalsi-demo-deepagents 8080:8080 &
+curl -s localhost:8080/invoke -H 'content-type: application/json' \
+  -d '{"input": "Research how retrieval-augmented generation is evaluated and write a short report."}'
+kubectl get tracesource deepagents-mlflow -n evalsi      # PULLED and SCORED climb within a poll
+```
+
+The demo MLflow is plain HTTP in the cluster, so `overlays/evalsi-demo.yaml` allows its host (`sources.allowHosts`). Standalone, the same two files work with `evalsi policy apply -f` and `evalsi source apply -f` against `evalsi serve --config evalsi.yaml`, which allows `evalsi-demo-mlflow` too; run the service with `MLFLOW_TRACKING_URI=http://evalsi-demo-mlflow:5000` (and `python3 deepagents/server.py --port 8090`).
+
 ### Any cluster
 
 Every pod and Service the demo chart adds takes `tolerations`, `nodeSelector`, `podLabels`, `serviceLabels` and `imageRegistry` as values (each component can set its own), and the MLflow volume takes `mlflow.persistence.storageClassName`. The overlays show three shapes:

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -123,6 +124,21 @@ type Webhooks struct {
 	Timeout string `json:"timeout,omitempty"`
 	// How long finished deliveries are kept for inspection (default 168h).
 	Retention string `json:"retention,omitempty"`
+}
+
+// Sources configures trace sources: stores such as MLflow that Evals.si pulls
+// traces from and writes scores to (decision 0016).
+type Sources struct {
+	// Where the chart mounts Secrets for sources: a source's credentials.file
+	// "<secret>/<key>" is read from <dir>/<secret>/<key> at each use.
+	Dir string `json:"dir,omitempty"`
+	// Hosts a source's endpoint may have although it is plain HTTP or a
+	// private, loopback or cluster-internal address (exact, or *.domain).
+	// Any other endpoint must be https to a public name, so that a project
+	// editor cannot point the server at an internal service.
+	AllowHosts []string `json:"allow_hosts,omitempty"`
+	// The most traces per second a source pulls when it sets no cap (default 200).
+	MaxRecordsPerSecond int `json:"max_records_per_second,omitempty"`
 }
 
 // Quotas limit what each project may use (§17 "Tenancy"). Zero means
@@ -243,6 +259,8 @@ type Config struct {
 	Sinks []sinks.Config `json:"sinks"`
 	// Signed HTTP callbacks when runs finish.
 	Webhooks Webhooks `json:"webhooks"`
+	// Trace sources pulled from MLflow and other stores.
+	Sources Sources `json:"sources"`
 	// Authentication: JWT providers, API keys, TLS. Required on a
 	// non-loopback listen address; `auth: {mode: none}` opts out explicitly.
 	Auth *auth.Config `json:"auth,omitempty"`
@@ -412,6 +430,8 @@ func (c Config) StartTimeout() time.Duration {
 	return d
 }
 
+var sourceHostRE = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
+
 // Validate checks the configuration for mistakes that would only surface later.
 func (c Config) Validate() error {
 	var errs []error
@@ -420,6 +440,14 @@ func (c Config) Validate() error {
 	}
 	if len(c.Worker.Command) == 0 {
 		errs = append(errs, errors.New("worker.command is required"))
+	}
+	for i, h := range c.Sources.AllowHosts {
+		if !sourceHostRE.MatchString(h) {
+			errs = append(errs, fmt.Errorf("sources.allow_hosts[%d]: %q is not a lowercase host name or *.domain", i, h))
+		}
+	}
+	if c.Sources.MaxRecordsPerSecond < 0 {
+		errs = append(errs, errors.New("sources.max_records_per_second must not be negative"))
 	}
 	if _, err := time.ParseDuration(c.Worker.StartTimeout); err != nil {
 		errs = append(errs, fmt.Errorf("worker.start_timeout: %w", err))

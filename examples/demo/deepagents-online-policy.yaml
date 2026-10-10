@@ -1,0 +1,12 @@
+# R6: score the Deep Agents service's production traces as they arrive. The
+# traces come from MLflow through deepagents-mlflow-source.yaml.
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: deepagents-online
+  labels: {evals.si/project: demo}
+spec:
+  selector: 'labels["source"] == "deepagents-mlflow"'
+  stages:
+    - evaluators: [{ref: tool-errors}, {ref: loop-detection}]
+  window: 1h

@@ -31,6 +31,12 @@ workers:
     - name: DEMO_API_KEY
       valueFrom: {secretKeyRef: {name: evalsi-demo-model-key, key: key}}
 
+# R6: the Deep Agents service's traces are read back from that MLflow
+# (deepagents-mlflow-source.yaml), which is plain HTTP inside the cluster, so
+# the server must be told it may reach it.
+sources:
+  allowHosts: [evalsi-demo-mlflow]
+
 # Run scores and run results go to the MLflow the demo chart runs.
 server:
   config:

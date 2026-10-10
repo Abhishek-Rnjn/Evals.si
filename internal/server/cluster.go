@@ -18,6 +18,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxsvc"
+	"github.com/abhishek-rnjn/evals.si/internal/source"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
 )
@@ -144,7 +145,7 @@ func validPool(p string) bool {
 // the span stream into its assembler, evaluates policies and answers
 // statistics; the others only forward spans. A replica that stalls past the
 // lease loses it and steps down; traces it held in its assembler are lost.
-func leadPolicyEngine(ctx context.Context, st *store.Store, cl *cluster.Cluster, assembler *ingest.Assembler, watcher *watch.Engine, log *slog.Logger) {
+func leadPolicyEngine(ctx context.Context, st *store.Store, cl *cluster.Cluster, assembler *ingest.Assembler, watcher *watch.Engine, sources *source.Manager, log *slog.Logger) {
 	const name, ttl = "policy-engine", 15 * time.Second
 	owner := cl.Owner()
 	var stepDown func()
@@ -175,6 +176,9 @@ func leadPolicyEngine(ctx context.Context, st *store.Store, cl *cluster.Cluster,
 					log.Error("consuming spans", "err", err)
 				}
 			}()
+			// Sources are pulled only by the replica that scores their traces.
+			sourcesDone := make(chan struct{})
+			go func() { defer close(sourcesDone); sources.Run(lctx) }()
 			stopStats, err := cl.ServeStats(watcher.LocalStats)
 			if err != nil {
 				log.Error("serving policy statistics", "err", err)
@@ -183,6 +187,7 @@ func leadPolicyEngine(ctx context.Context, st *store.Store, cl *cluster.Cluster,
 			stepDown = func() {
 				cancel()
 				<-done
+				<-sourcesDone
 				stopStats()
 				watcher.SetLeader(false)
 			}

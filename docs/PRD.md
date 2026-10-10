@@ -55,7 +55,7 @@ The Kubernetes form factor and the push and embed doors exist today; the pull do
 | Agent runs in sandboxes (Firecracker, bubblewrap, Landlock, hardened pod) | Built; all rungs verified on real clusters, Firecracker on a KVM cluster. `mode: bwrap` fails on some hosts (VR-D15) | `internal/sandbox/` |
 | In-process `evalsi.evaluate()`, RL rewards (TRL, verl, OpenRLHF), checkpoint evaluation | Built | `python/evalsi/src/evalsi/` |
 | OIDC, API keys, project RBAC, CEL rules, audit log | Built | `internal/auth/`, `internal/authz/` |
-| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | Designed, not built | DESIGN.md "Path C" |
+| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source) and Phoenix built and verified; Langfuse built from its spec, unverified; the rest not built | [trace sources guide](guides/trace-sources.md) |
 | Log and stream sources (Kafka, CloudWatch, Loki, S3 drops) | Not designed | none |
 | `evalsi.log()` SDK call | Designed, not built | DESIGN.md "Path E" |
 | Remote `Client.evaluate()` helper | Missing (raw `client.call` only) | `python/evalsi/src/evalsi/client.py` |
@@ -124,7 +124,7 @@ dsh's OpenTelemetry plugin exports product analytics only, not session traces. O
 | R3 | Run specs under `examples/demo/`, one per agent and suite, identical in standalone and Kubernetes mode | P0 | Built; six specs, loaded and checked by tests |
 | R4 | Standalone walkthrough: `evalsi run -f ...` embedded, then `--server` against `evalsid serve`, on the bubblewrap rung; report and `/ui/` | P0 | Built; walkthrough in `examples/demo/README.md`, run end to end with the mock model |
 | R5 | Kubernetes walkthrough: the Evals.si charts and a sandbox pool, an MLflow server, the Deep Agents HTTP service and `dsh web` as studio stand-ins, and `kubectl apply` of the `EvalRun`s; scores in `/ui/` and in MLflow | P0 | Built; chart and overlays are chart-tested. Run on a cluster by the kind e2e step, which has not run yet |
-| R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 | Gap |
+| R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 | Partly: the MLflow half is built and was run here with the real service and MLflow 3.17.0 ([demo](../examples/demo/README.md#online-scoring-from-mlflow-r6)); its kind e2e step has not run; the dsh plugin is a gap |
 | R7 | CI: the kind e2e job runs the small-repo-fix suite for both agents against a mock model | P0 | Built; `deploy/e2e/kind-e2e.sh` step, not yet run on CI |
 | R8 | Portability: chart values for storage class, ingress, image registry and node placement; no cloud-specific dependency | P0 | Built; placement values on every pod and Service, overlays for kind, tainted nodes and Istio ambient, chart-tested |
 | R9 | Integration guide `docs/guides/integrate-an-agent-studio.md`, built on these demos and covering the steps agent-studio-standalone will follow: install, connect traces, gate deploys, read scores | P0 | Built |
@@ -223,14 +223,14 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
-| S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Built ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
+| S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Partly: MLflow open source (verified on 3.17.0), Phoenix (verified on 20.20.0), Langfuse (from the spec, unverified); Databricks, SageMaker and Azure ML refused as not built ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
 | S3 | Connectors for streams and logs: Kafka, AWS Kinesis, GCP Pub/Sub, S3/GCS prefix watcher; Loki and CloudWatch Logs via the evalsi-collector as recipes | P2 (after first cut) | Gap |
-| S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
-| S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
-| S6 | Pulled records reuse `OnlineEvalPolicy` (selectors, sampling, cascades, alerts, promotion) | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
-| S7 | Credentials for sources from Kubernetes Secrets or the existing per-project credential store, never in the CRD | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)); the credential store exists |
-| S8 | Status on the resource: watermark age, records/s, errors, last write-back | P0 | Designed ([0016](decisions/0016-trace-source-connectors.md)) |
+| S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Built: decoders per store over the existing conventions, plus CEL `overrides` ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
+| S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Built: backfill, tail with a `maxTraceDuration` lookback, rate cap, dedup by trace ID and digest ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
+| S6 | Pulled records reuse `OnlineEvalPolicy` (selectors, sampling, cascades, alerts, promotion) | P0 | Built ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
+| S7 | Credentials for sources from Kubernetes Secrets or the existing per-project credential store, never in the CRD | P0 | Built: a granted variable or a mounted Secret file (`sources.secrets`), never in the resource ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
+| S8 | Status on the resource: watermark age, records/s, errors, last write-back | P0 | Built: phase, watermark, lag, counters, last error and write-back on the resource and in metrics ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
 | S9 | Scheduled pull runs (cron) that evaluate a query window as a batch run with a report | P1 | Gap |
 
 ### Embed: local scripts, notebooks and training loops

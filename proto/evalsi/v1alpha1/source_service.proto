@@ -1,0 +1,204 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// SourceService manages trace sources: stores that already hold an agent's
+// traces (MLflow, later Langfuse and Phoenix) which Evals.si reads, scores
+// with the project's online policies, and writes the scores back to. See
+// docs/decisions/0016-trace-source-connectors.md.
+//
+// A pulled trace is an ordinary trace of the source's project: it is stored,
+// shown in the UI and graded by every policy that selects it.
+service SourceService {
+  // Creates or replaces a source. With validate_only the source is checked
+  // (including the grants its credentials and endpoint need) and nothing is
+  // stored.
+  rpc ApplySource(ApplySourceRequest) returns (ApplySourceResponse);
+  rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse);
+  rpc GetSource(GetSourceRequest) returns (GetSourceResponse);
+  rpc DeleteSource(DeleteSourceRequest) returns (DeleteSourceResponse);
+  // Stops pulling and writing back; the watermark is kept.
+  rpc PauseSource(PauseSourceRequest) returns (PauseSourceResponse);
+  rpc ResumeSource(ResumeSourceRequest) returns (ResumeSourceResponse);
+  // Re-reads history from a time, ahead of tailing. Traces already scored
+  // are not scored again unless they changed.
+  rpc BackfillSource(BackfillSourceRequest) returns (BackfillSourceResponse);
+}
+
+message TraceSource {
+  // Lowercase letters, digits, '.', '_' or '-'.
+  string name = 1;
+  string project = 2;
+  // "mlflow". "langfuse" and "phoenix" follow.
+  string connector = 3;
+  // How the store is reached. MLflow: "oss" (the default). "databricks",
+  // "sagemaker" and "azureml" are accepted names that are refused until built.
+  string variant = 4;
+  // The store's base URL, for example http://mlflow.studio:5000.
+  string endpoint = 5;
+  // Where to read: MLflow experiment IDs, a Phoenix project, a Langfuse
+  // environment.
+  repeated string locations = 6;
+  SourceCredentials credentials = 7;
+  SourceAuth auth = 8;
+  Backfill backfill = 9;
+  Poll poll = 10;
+  // Traces are filtered by start time but logged when they end, so each
+  // cycle re-reads this far back; a longer trace is missed. Default 30m.
+  google.protobuf.Duration max_trace_duration = 11;
+  // A trace its store still reports as in progress is held back this long,
+  // then scored as it is. Default 1h.
+  google.protobuf.Duration max_in_progress_age = 12;
+  // Decoder and defaults for the store's traces: "auto" (the default) reads
+  // OTel GenAI, OpenInference, OpenLLMetry and MLflow LangChain conventions.
+  string profile = 13;
+  // CEL expressions that set record fields the conventions did not: "input",
+  // "output", "reference", "context", "metadata.<key>" and "labels.<key>".
+  map<string, string> overrides = 14;
+  // Policies that score this source's traces; empty means every policy of the
+  // project that selects them.
+  repeated string policies = 15;
+  WriteBack write_back = 16;
+  // Resource labels put on every pulled trace, for policy selectors.
+  map<string, string> trace_labels = 17;
+  // Stops pulling and writing back; set by PauseSource and ResumeSource.
+  bool paused = 18;
+  // Labels for access rules.
+  map<string, string> labels = 19;
+  google.protobuf.Timestamp updated_at = 20;
+  string updated_by = 21;
+  // Set by the server; ignored on apply.
+  SourceStatus status = 22;
+}
+
+// Names where the source's credential comes from, never the value. It is
+// checked against the credential grants (decision 0015) for the source's
+// project and endpoint host.
+message SourceCredentials {
+  // An environment variable of evalsid holding the token or API key.
+  string env = 1;
+  // "<secret>/<key>" under the server's sources directory, where the chart
+  // mounts Secrets; re-read at each use, so a rotated Secret takes effect.
+  string file = 2;
+}
+
+message SourceAuth {
+  // SageMaker managed MLflow signs requests with AWS Signature Version 4.
+  message SigV4 {
+    string service = 1;
+    string region = 2;
+  }
+  SigV4 sigv4 = 1;
+  // Databricks UC-schema search runs on a SQL warehouse.
+  message Databricks {
+    string sql_warehouse_id = 1;
+  }
+  Databricks databricks = 2;
+}
+
+message Backfill {
+  // How far back to read when the source is first applied. Zero: tail only.
+  google.protobuf.Duration since = 1;
+}
+
+message Poll {
+  // Default 30s.
+  google.protobuf.Duration interval = 1;
+  // Pulled traces per second, backfill included; 0 means the server's cap.
+  int32 max_records_per_second = 2;
+}
+
+message WriteBack {
+  bool enabled = 1;
+}
+
+enum SourcePhase {
+  SOURCE_PHASE_UNSPECIFIED = 0;
+  SOURCE_PHASE_BACKFILLING = 1;
+  SOURCE_PHASE_TAILING = 2;
+  SOURCE_PHASE_PAUSED = 3;
+  // The last cycle failed; it is retried with backoff.
+  SOURCE_PHASE_ERROR = 4;
+}
+
+message SourceStatus {
+  SourcePhase phase = 1;
+  // Every trace that started before this has been stored and queued.
+  google.protobuf.Timestamp watermark = 2;
+  // Now minus the watermark.
+  double lag_seconds = 3;
+  double records_per_second = 4;
+  // Traces held back because the store reports them in progress.
+  int32 deferred = 5;
+  int64 pulled = 6;
+  int64 scored = 7;
+  string last_error = 8;
+  google.protobuf.Timestamp last_error_at = 9;
+  google.protobuf.Timestamp last_pull_at = 10;
+  google.protobuf.Timestamp last_write_back_at = 11;
+}
+
+message ApplySourceRequest {
+  TraceSource source = 1;
+  bool validate_only = 2;
+}
+
+message ApplySourceResponse {
+  TraceSource source = 1;
+}
+
+message ListSourcesRequest {
+  string project = 1;
+}
+
+message ListSourcesResponse {
+  repeated TraceSource sources = 1;
+}
+
+message GetSourceRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message GetSourceResponse {
+  TraceSource source = 1;
+}
+
+message DeleteSourceRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message DeleteSourceResponse {}
+
+message PauseSourceRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message PauseSourceResponse {
+  TraceSource source = 1;
+}
+
+message ResumeSourceRequest {
+  string project = 1;
+  string name = 2;
+}
+
+message ResumeSourceResponse {
+  TraceSource source = 1;
+}
+
+message BackfillSourceRequest {
+  string project = 1;
+  string name = 2;
+  // Read from here; default: the source's backfill.since before now.
+  google.protobuf.Timestamp since = 3;
+}
+
+message BackfillSourceResponse {
+  TraceSource source = 1;
+}

@@ -121,6 +121,14 @@ sinks: []
 #      endpoint: http://phoenix:6006          # online scores as trace annotations
 #      api_key_env: PHOENIX_API_KEY
 
+# Trace sources (docs/guides/trace-sources.md): stores whose traces evalsid
+# reads, scores and writes back to. Their endpoints must be https to a public
+# name unless listed here.
+sources: {}
+#  dir: /etc/evalsi/sources          # where Secrets are mounted, for credentials.file
+#  allow_hosts: [mlflow.studio.svc.cluster.local, "*.corp.example.com"]
+#  max_records_per_second: 200        # for a source that sets no cap
+
 # The Reward Service (rewards for RL trainers; docs/guides/fine-tuning.md).
 rewards:
   max_rollouts: 16384     # per ScoreRewards call

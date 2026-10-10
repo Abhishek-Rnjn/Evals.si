@@ -6,12 +6,14 @@ import (
 	"slices"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // Config configures the controllers Setup adds.
 type Config struct {
-	// Controllers to run: evalrun, onlineevalpolicy, evaluator, sandboxclass.
+	// Controllers to run: evalrun, onlineevalpolicy, tracesource, evaluator, sandboxclass.
 	Enabled                []string
 	API                    APIConfig
 	PollInterval           time.Duration
@@ -41,11 +43,11 @@ func childName(prefix, what, name string) string {
 func Setup(mgr ctrl.Manager, cfg Config) error {
 	on := func(name string) bool { return slices.Contains(cfg.Enabled, name) }
 	for _, name := range cfg.Enabled {
-		if !slices.Contains([]string{"evalrun", "onlineevalpolicy", "evaluator", "sandboxclass"}, name) {
+		if !slices.Contains([]string{"evalrun", "onlineevalpolicy", "tracesource", "evaluator", "sandboxclass"}, name) {
 			return fmt.Errorf("unknown controller %q", name)
 		}
 	}
-	if on("evalrun") || on("onlineevalpolicy") {
+	if on("evalrun") || on("onlineevalpolicy") || on("tracesource") {
 		api, err := NewAPI(cfg.API)
 		if err != nil {
 			return err
@@ -57,6 +59,15 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 		}
 		if on("onlineevalpolicy") {
 			if err := (&PolicyReconciler{Client: mgr.GetClient(), API: api, StatsInterval: cfg.StatsInterval}).SetupWithManager(mgr); err != nil {
+				return err
+			}
+		}
+		// Helm does not upgrade CRDs: an evalsi-crds release older than the
+		// TraceSource CRD leaves it out, and the operator runs without it.
+		if on("tracesource") {
+			if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "evals.si", Kind: "TraceSource"}, "v1alpha1"); meta.IsNoMatchError(err) {
+				ctrl.Log.Info("the TraceSource CRD is not installed; apply the evalsi-crds chart's CRDs to manage trace sources", "controller", "tracesource")
+			} else if err := (&TraceSourceReconciler{Client: mgr.GetClient(), API: api, StatsInterval: cfg.StatsInterval}).SetupWithManager(mgr); err != nil {
 				return err
 			}
 		}

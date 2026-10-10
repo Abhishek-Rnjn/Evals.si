@@ -11,6 +11,10 @@ datasets_dir: .                 # run it from this directory
 # judges:
 #   claude: {provider: anthropic, model: claude-opus-5-5}
 # default_judge: claude
+# R6 (deepagents-mlflow-source.yaml): the demo MLflow is plain HTTP on this
+# machine, reached by the name the hosts file gives it.
+sources:
+  allow_hosts: [evalsi-demo-mlflow]
 sandbox:
   ladder: [bwrap, landlock]
   min_isolation: namespaced

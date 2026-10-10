@@ -57,7 +57,9 @@ def _duration(value: Any) -> Any:
         return f"{value}s"
     if isinstance(value, str) and (m := _DURATION.match(value.strip())):
         scale = {"ms": 0.001, "s": 1, "m": 60, "h": 3600}[m.group(2)]
-        return f"{float(m.group(1)) * scale:g}s"
+        # Fixed point: "%g" writes 720h as 2.592e+06s, which protobuf rejects.
+        seconds = f"{float(m.group(1)) * scale:.9f}".rstrip("0").rstrip(".")
+        return f"{seconds}s"
     return value
 
 

@@ -1,0 +1,27 @@
+{{- if .Values.prometheusRule.enabled }}
+{{- $fn := include "evalsi.fullname" . }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $fn }}
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}{{ toYaml . | nindent 4 }}{{ end }}
+spec:
+  groups:
+    - name: evalsi-trace-sources
+      rules:
+        - alert: EvalsiTraceSourceLagging
+          expr: evalsi_source_lag_seconds > {{ .Values.prometheusRule.sourceLagSeconds }}
+          for: 10m
+          labels: {severity: warning}
+          annotations:
+            summary: 'Trace source {{ "{{" }} $labels.project {{ "}}" }}/{{ "{{" }} $labels.source {{ "}}" }} has not completed a pull for {{ "{{" }} $value | humanizeDuration {{ "}}" }}'
+            description: 'Its traces are scored late. Check `evalsi source get` for the last error, and the store for rate limits.'
+        - alert: EvalsiTraceSourceFailing
+          expr: evalsi_source_failing == 1
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: 'Trace source {{ "{{" }} $labels.project {{ "}}" }}/{{ "{{" }} $labels.source {{ "}}" }} is failing'
+            description: 'Its last pulls failed; `evalsi source get` shows the error. The watermark is kept, so it resumes where it stopped.'
+{{- end }}

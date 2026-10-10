@@ -47,8 +47,9 @@ type object struct {
 		Labels      map[string]string `json:"labels"`
 		Annotations map[string]string `json:"annotations"`
 	} `json:"metadata"`
-	Data map[string]string `json:"data"`
-	Spec map[string]any    `json:"spec"`
+	Data     map[string]string `json:"data"`
+	Webhooks []map[string]any  `json:"webhooks"`
+	Spec     map[string]any    `json:"spec"`
 }
 
 type rule struct {
@@ -283,7 +284,7 @@ func TestSandboxdChart(t *testing.T) {
 // The chart ships the CRDs controller-gen writes (make operator-gen).
 func TestCRDsAreCurrent(t *testing.T) {
 	generated, _ := filepath.Glob("../../operator/config/crd/*.yaml")
-	if len(generated) != 4 {
+	if len(generated) != 5 {
 		t.Fatalf("%d CRDs", len(generated))
 	}
 	for _, g := range generated {

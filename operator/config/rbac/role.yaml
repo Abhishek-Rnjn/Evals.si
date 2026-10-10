@@ -36,6 +36,7 @@ rules:
   - evaluators
   - onlineevalpolicies
   - sandboxclasses
+  - tracesources
   verbs:
   - get
   - list
@@ -51,6 +52,8 @@ rules:
   - onlineevalpolicies/finalizers
   - onlineevalpolicies/status
   - sandboxclasses/status
+  - tracesources/finalizers
+  - tracesources/status
   verbs:
   - get
   - patch

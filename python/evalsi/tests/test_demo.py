@@ -21,7 +21,33 @@ import pytest
 from evalsi.runspec import load_spec
 
 DEMO = Path(__file__).resolve().parents[3] / "examples" / "demo"
-SPECS = sorted(p for agent in ("deepagents", "dsh") for p in DEMO.glob(f"{agent}-*.yaml"))
+
+
+def _kind(path: Path) -> str:
+    import yaml
+
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return str(doc.get("kind", "EvalRun")) if isinstance(doc, dict) else ""
+
+
+# Run specs: the R6 policy and trace source beside them are other kinds.
+SPECS = sorted(
+    p
+    for agent in ("deepagents", "dsh")
+    for p in DEMO.glob(f"{agent}-*.yaml")
+    if _kind(p) == "EvalRun"
+)
+
+
+def test_online_scoring_files_load() -> None:
+    from evalsi.cli import load_policy
+    from evalsi.cli_sources import load_source
+
+    policy = load_policy(str(DEMO / "deepagents-online-policy.yaml"))
+    source = load_source(str(DEMO / "deepagents-mlflow-source.yaml"))
+    assert source["policies"] == [policy["name"]]
+    assert source["project"] == policy["project"] == "demo"
+    assert source["locations"] == ["evalsi-demo-deepagents"]
 
 
 def test_there_is_a_spec_per_agent_and_suite() -> None:
