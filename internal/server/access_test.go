@@ -724,3 +724,35 @@ func TestFlywheelAccess(t *testing.T) {
 		t.Errorf("runner shadow replay: %v", err)
 	}
 }
+
+// Replacing a policy checks the stored policy too, even in the same
+// project: relabelling cannot take over a policy the caller may not manage.
+func TestPolicyReplacementChecksTheStoredPolicy(t *testing.T) {
+	plain, hash := auth.NewAPIKey()
+	s := startAuthServer(t, func(c *config.Config) {
+		c.RBAC.Roles = append(c.RBAC.Roles, authz.Role{Name: "team-editor", Permissions: []string{"policies.write", "policies.read"},
+			Condition: `"team" in resource.labels && resource.labels.team == "mine"`})
+		c.Auth.APIKeys.Keys = append(c.Auth.APIKeys.Keys, auth.ConfigKey{Name: "team-editor", Key: "sha256:" + hash,
+			Roles: map[string][]string{"support": {"team-editor"}}})
+	})
+	ctx := context.Background()
+	mon := func(cred string) evalsiv1alpha1connect.MonitorServiceClient {
+		return evalsiv1alpha1connect.NewMonitorServiceClient(s.http, s.url, as(cred))
+	}
+	policy := func(team string) *evalsiv1alpha1.OnlineEvalPolicy {
+		return &evalsiv1alpha1.OnlineEvalPolicy{Name: "p1", Project: "support", Labels: map[string]string{"team": team},
+			Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "exact-match"}}}}}
+	}
+	if _, err := mon(s.keys["owner"]).ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy("theirs")})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mon(plain).ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy("mine")})); codeOf(err) != connect.CodePermissionDenied {
+		t.Errorf("relabelling another team's policy: %v, want PermissionDenied", err)
+	}
+	if _, err := mon(s.keys["owner"]).ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy("mine")})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mon(plain).ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy("mine")})); err != nil {
+		t.Errorf("editing the team's own policy: %v", err)
+	}
+}

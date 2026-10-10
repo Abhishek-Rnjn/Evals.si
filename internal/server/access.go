@@ -566,8 +566,10 @@ func (g *gate) policyTarget(name string) []target {
 	return []target{{project: p.GetProject(), resource: authz.PolicyResource(p, g.runsCode), name: "policy/" + name}}
 }
 
-// applyPolicyTargets checks the new policy and, when it replaces one in
-// another project, that project too: policy names are install-wide.
+// applyPolicyTargets checks the new policy and, when it replaces one, the
+// stored policy too (in its own project: policy names are install-wide), so
+// a rule protecting a labelled policy cannot be sidestepped by applying it
+// without the label.
 func (g *gate) applyPolicyTargets(_ context.Context, msg any) ([]target, error) {
 	p := msg.(*evalsiv1alpha1.ApplyPolicyRequest).GetPolicy()
 	project, err := g.project(p.GetProject())
@@ -575,7 +577,7 @@ func (g *gate) applyPolicyTargets(_ context.Context, msg any) ([]target, error) 
 		return nil, err
 	}
 	out := []target{{project: project, resource: authz.PolicyResource(p, g.runsCode), name: "policy/" + p.GetName()}}
-	if old, ok := g.watcher.Policy(p.GetName()); ok && old.GetProject() != project {
+	if old, ok := g.watcher.Policy(p.GetName()); ok {
 		out = append(out, target{project: old.GetProject(), resource: authz.PolicyResource(old, g.runsCode), name: "policy/" + p.GetName()})
 	}
 	return out, nil
