@@ -357,6 +357,7 @@ func (r *runner) run(ctx context.Context) {
 	wait := time.Duration(0) // first cycle at once
 	var pending []Score
 	var flush <-chan time.Time
+	writeFailures := 0
 	for {
 		poll := time.NewTimer(wait)
 	idle:
@@ -372,9 +373,18 @@ func (r *runner) run(ctx context.Context) {
 				}
 			case <-flush:
 				flush = nil
+				var werr error
 				if conn != nil {
-					pending = r.writeBack(ctx, conn, pending)
+					pending, werr = r.writeBack(ctx, conn, pending)
 				}
+				// What was not written retries on its own, with backoff,
+				// whether or not more scores arrive.
+				if len(pending) == 0 {
+					writeFailures = 0
+					break
+				}
+				writeFailures++
+				flush = time.After(backoff(writeRetry, writeFailures, werr))
 			case <-poll.C:
 				break idle
 			}
@@ -684,11 +694,15 @@ func (r *runner) label(t ingest.Trace, id string) ingest.Trace {
 	return t
 }
 
+// writeRetry is the first delay before scores that could not be written
+// back are tried again; later attempts back off from it.
+var writeRetry = 5 * time.Second
+
 // writeBack sends the scores, remembers what the store returned, and returns
-// what could not be sent (kept for the next flush).
-func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) []Score {
+// what could not be sent (kept for the next flush) with the reason.
+func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) ([]Score, error) {
 	if len(scores) == 0 || !r.src.GetWriteBack().GetEnabled() {
-		return nil
+		return nil, nil
 	}
 	project, name := r.src.GetProject(), r.src.GetName()
 	ids := make([]string, 0, len(scores))
@@ -698,7 +712,7 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 	prior, err := r.m.st.SourceWrites(ctx, project, name, ids)
 	if err != nil {
 		r.log.Warn("reading write-back records", "err", err)
-		return scores
+		return scores, err
 	}
 	var todo []Score
 	for _, s := range scores {
@@ -708,7 +722,7 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 		todo = append(todo, s)
 	}
 	if len(todo) == 0 {
-		return nil
+		return nil, nil
 	}
 	sort.SliceStable(todo, func(i, j int) bool { return todo[i].TraceID < todo[j].TraceID })
 	written, err := conn.WriteBack(ctx, todo, prior)
@@ -737,9 +751,9 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 				rest = append(rest, s)
 			}
 		}
-		return rest
+		return rest, err
 	}
-	return nil
+	return nil, nil
 }
 
 func minTime(ts ...time.Time) time.Time {
