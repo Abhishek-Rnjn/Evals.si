@@ -20,6 +20,7 @@ const doc = (p: string) => `${base}${p}`;
 
 const ecosystem = [
   "lm-evaluation-harness", "Inspect AI", "RAGAS", "DeepEval", "SWE-bench", "τ-bench", "Terminal-Bench", "BFCL",
+  "LangGraph", "CrewAI", "OpenAI Agents SDK", "LlamaIndex", "Claude Agent SDK", "OpenInference", "OpenLLMetry",
   "MLflow", "OpenTelemetry", "Langfuse", "Phoenix", "agentgateway", "Kubernetes", "KEDA", "NATS",
   "PostgreSQL", "ClickHouse", "S3", "Firecracker", "TRL", "verl", "OpenRLHF", "MCP", "A2A",
 ];
@@ -43,6 +44,18 @@ def polite(record: Record) -> Score:
 result = evalsi.evaluate("qa.jsonl", ["exact-match", polite])
 print(result.table())
 result.save("results.json")` },
+  { label: "Trace source", lang: "yaml", code: `apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata:
+  name: studio-mlflow
+  labels: {evals.si/project: studio}
+spec:
+  connector: mlflow
+  endpoint: https://mlflow.example.com
+  locations: [studio-agents]       # experiments
+  backfill: {since: 720h}          # 30 days of history first
+  policies: [studio-agents]        # score with these online policies
+  writeBack: {enabled: true}       # scores become MLflow assessments` },
   { label: "Kubernetes", lang: "yaml", code: `apiVersion: evals.si/v1alpha1
 kind: EvalRun
 metadata:
@@ -58,6 +71,10 @@ spec:
 ];
 
 const extras = [
+  { name: "Trace sources", text: "Score traces kept in MLflow, Phoenix or Langfuse, and write scores back", href: "/docs/guides/trace-sources/" },
+  { name: "Agent frameworks", text: "LangGraph, CrewAI, OpenAI Agents, LlamaIndex, Claude Agent SDK", href: "/docs/guides/agent-frameworks/" },
+  { name: "Agent studio integration", text: "Online scoring and deploy gates beside your studio", href: "/docs/guides/integrate-an-agent-studio/" },
+  { name: "Webhooks", text: "Signed events when a run finishes or fails a gate", href: "/docs/guides/webhooks/" },
   { name: "Human annotation", text: "Queues with progress and agreement", href: "/docs/guides/annotation/" },
   { name: "Wasm evaluators", text: "Ship graders as Wasm with a plugin index", href: "/docs/guides/plugins/" },
   { name: "Read-only web UI", text: "Runs, comparisons, policies and catalog", href: "/docs/guides/web-ui/" },
@@ -99,10 +116,10 @@ const extras = [
       <div aria-hidden="true" class="pointer-events-none absolute left-1/2 top-[-12rem] -z-10 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(99,102,241,0.35),rgba(45,212,191,0.12),transparent)] blur-2xl"></div>
 
       <div class="mx-auto max-w-6xl px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <a href={doc("/docs/roadmap/")} class="animate-fade-up inline-block">
+        <a href={doc("/docs/guides/trace-sources/")} class="animate-fade-up inline-block">
           <AnimatedGradientText>
             <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
-            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">Phases 0–6 shipped: MCP, guardrails, Wasm plugins and a web UI</span>
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">Trace sources for MLflow, Phoenix and Langfuse, and five agent frameworks tested</span>
             <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
           </AnimatedGradientText>
         </a>
@@ -174,10 +191,10 @@ latency        6  <span class="text-indigo-600 font-medium">517.500</span>  [276
         <div>
           <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">Fits your stack</p>
           <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Plug in at either end</h2>
-          <p class="mt-4 text-neutral-600 dark:text-neutral-400">Send traces from any OpenTelemetry source or gateway, point runs at your own agent over A2A, MCP, HTTP or a CLI, and export results to the dashboards you already watch.</p>
+          <p class="mt-4 text-neutral-600 dark:text-neutral-400">Send traces from any OpenTelemetry source or gateway, or read them from the MLflow, Phoenix or Langfuse you already run, point runs at your own agent over A2A, MCP, HTTP or a CLI, and export results to the dashboards you already watch.</p>
           <ul class="mt-6 space-y-3 text-sm text-neutral-600 dark:text-neutral-400">
             <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>gRPC, gRPC-Web, HTTP/JSON and MCP on one port</li>
-            <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>Sinks for MLflow, OpenTelemetry, Langfuse and Phoenix</li>
+            <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>Scores written back to MLflow, Langfuse and Phoenix, or exported over OpenTelemetry</li>
             <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>No default judge, so nothing is billed by surprise</li>
           </ul>
           <a href={doc("/integrations/")} class="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:gap-3 dark:text-indigo-300 transition-all">Explore integrations <ArrowRight className="size-4" /></a>

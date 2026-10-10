@@ -1,0 +1,8 @@
+# record_langgraph.py (openinference, langsmith)
+langgraph==1.2.14
+langchain-core==1.6.9
+langchain-openai==1.7.0
+langsmith[otel]==0.14.7
+openinference-instrumentation-langchain==0.1.79
+opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-sdk==1.45.1

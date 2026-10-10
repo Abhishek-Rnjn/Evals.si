@@ -1,0 +1,10 @@
+# record_crewai.py (mlflow, openinference, openllmetry)
+crewai==1.15.27
+mlflow==3.17.0
+openai==2.54.0
+openinference-instrumentation-crewai==1.1.21
+openinference-instrumentation-openai==0.1.65
+opentelemetry-instrumentation-crewai==0.62.4
+opentelemetry-instrumentation-openai==0.62.4
+opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-sdk==1.45.1

@@ -1,0 +1,2757 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "LangGraph"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"role\":\"user\",\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\"}]}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}},{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"},{\"content\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":69,\"prompt_tokens\":60,\"total_tokens\":129,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-a5e3ef96ef8d\",\"finish_reason\":\"stop\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-9105-7e90-b976-b05e30615727-0\",\"tool_calls\":[],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":60,\"output_tokens\":69,\"total_tokens\":129,\"input_token_details\":{},\"output_token_details\":{}}}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801911400960",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "LangGraph",
+       "spanId": "048f229f9262b7d6",
+       "startTimeUnixNano": "1791611801824758016",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "1"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "graph:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"}],\"remaining_steps\":10006}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801854522112",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "agent",
+       "parentSpanId": "048f229f9262b7d6",
+       "spanId": "49d7509853f0498f",
+       "startTimeUnixNano": "1791611801838302976",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "call_model"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "1"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"}],\"remaining_steps\":10006}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801853167104",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "call_model",
+       "parentSpanId": "49d7509853f0498f",
+       "spanId": "f1d09f88c485a077",
+       "startTimeUnixNano": "1791611801839122944",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "RunnableSequence"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "1"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"}],\"remaining_steps\":10006}"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "21"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "41"
+         }
+        },
+        {
+         "key": "gen_ai.usage.total_tokens",
+         "value": {
+          "intValue": "62"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"output\":{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}}}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801853010944",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "RunnableSequence",
+       "parentSpanId": "f1d09f88c485a077",
+       "spanId": "b066bf070b911b9c",
+       "startTimeUnixNano": "1791611801839606016",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "Prompt"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "1"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"}],\"remaining_steps\":10006}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"output\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801839910912",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Prompt",
+       "parentSpanId": "b066bf070b911b9c",
+       "spanId": "e4a2e55f0eae77aa",
+       "startTimeUnixNano": "1791611801839781120",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "llm"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "ChatOpenAI"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.tool.definitions",
+         "value": {
+          "stringValue": "[{\"type\":\"function\",\"function\":{\"name\":\"search_docs\",\"description\":\"Searches the documentation corpus and returns the matching passages.\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"}}}]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langchain_chat_model"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "1"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_provider",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_model_type",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "langsmith.metadata.lc_versions",
+         "value": {
+          "stringValue": "{\"langchain-core\":\"1.6.9\",\"langchain-openai\":\"1.7.0\"}"
+         }
+        },
+        {
+         "key": "langsmith.metadata.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "langsmith.metadata.model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "langsmith.metadata.stream",
+         "value": {
+          "boolValue": false
+         }
+        },
+        {
+         "key": "langsmith.metadata._type",
+         "value": {
+          "stringValue": "openai-chat"
+         }
+        },
+        {
+         "key": "langsmith.metadata.usage_metadata",
+         "value": {
+          "stringValue": "{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:2"
+         }
+        },
+        {
+         "key": "gen_ai.serialized.name",
+         "value": {
+          "stringValue": "ChatOpenAI"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[[{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"HumanMessage\"],\"kwargs\":{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"}}]]}"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "21"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "41"
+         }
+        },
+        {
+         "key": "gen_ai.usage.total_tokens",
+         "value": {
+          "intValue": "62"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"generations\":[[{\"text\":\"\",\"generation_info\":{\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ChatGeneration\",\"message\":{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"AIMessage\"],\"kwargs\":{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}},\"invalid_tool_calls\":[]}}}]],\"llm_output\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\"},\"run\":null,\"type\":\"LLMResult\"}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801852741120",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "ChatOpenAI",
+       "parentSpanId": "b066bf070b911b9c",
+       "spanId": "bd52b09e60f4684f",
+       "startTimeUnixNano": "1791611801840805120",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "should_continue"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "1"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:fbccc24c-ced6-b662-6f78-b013a02a8bb0"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:3"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}}],\"remaining_steps\":10006}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"output\":[\"Send(node='tools', arg={'__type': 'tool_call_with_context', 'tool_call': {'name': 'search_docs', 'args': {'query': 'retrieval-augmented generation evaluation'}, 'id': 'call_9ac7f0eacd79', 'type': 'tool_call'}, 'state': {'messages': [HumanMessage(content='Research how retrieval-augmented generation is evaluated and write a short report.', additional_kwargs={}, response_metadata={}, id='4b197204-caf6-4179-85d5-e052900cd510'), AIMessage(content='', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 41, 'prompt_tokens': 21, 'total_tokens': 62, 'completion_tokens_details': None, 'prompt_tokens_details': None}, 'model_provider': 'openai', 'model_name': 'gpt-4o-mini', 'system_fingerprint': None, 'id': 'chatcmpl-57f20251b48d', 'finish_reason': 'tool_calls', 'logprobs': None}, id='lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0', tool_calls=[{'name': 'search_docs', 'args': {'query': 'retrieval-augmented generation evaluation'}, 'id': 'call_9ac7f0eacd79', 'type': 'tool_call'}], invalid_tool_calls=[], usage_metadata={'input_tokens': 21, 'output_tokens': 41, 'total_tokens': 62, 'input_token_details': {}, 'output_token_details': {}})], 'remaining_steps': 10006}})\"]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801853676032",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "should_continue",
+       "parentSpanId": "49d7509853f0498f",
+       "spanId": "d4564e60eb359284",
+       "startTimeUnixNano": "1791611801853415936",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "tools"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "2"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "tools"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"__pregel_push\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_push\",0,false]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "tools:2a6956ba-d9ce-f93d-a6cd-74e269a7d557"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "graph:step:2"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"__type\":\"tool_call_with_context\",\"tool_call\":{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"},\"state\":{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}}],\"remaining_steps\":10006}}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801857984000",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "tools",
+       "parentSpanId": "048f229f9262b7d6",
+       "spanId": "35871af99f6f5353",
+       "startTimeUnixNano": "1791611801855243008",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "tool"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.id",
+         "value": {
+          "stringValue": "call_9ac7f0eacd79"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "2"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "tools"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"__pregel_push\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_push\",0,false]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "tools:2a6956ba-d9ce-f93d-a6cd-74e269a7d557"
+         }
+        },
+        {
+         "key": "langsmith.metadata.checkpoint_ns",
+         "value": {
+          "stringValue": "tools:2a6956ba-d9ce-f93d-a6cd-74e269a7d557"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"query\":\"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"output\":{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801857163008",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "search_docs",
+       "parentSpanId": "35871af99f6f5353",
+       "spanId": "6fe7b039e977224b",
+       "startTimeUnixNano": "1791611801856456960",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "3"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "graph:step:3"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}},{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}],\"remaining_steps\":10004}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":69,\"prompt_tokens\":60,\"total_tokens\":129,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-a5e3ef96ef8d\",\"finish_reason\":\"stop\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-9105-7e90-b976-b05e30615727-0\",\"tool_calls\":[],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":60,\"output_tokens\":69,\"total_tokens\":129,\"input_token_details\":{},\"output_token_details\":{}}}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801911091200",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "agent",
+       "parentSpanId": "048f229f9262b7d6",
+       "spanId": "cafc7763becef3f8",
+       "startTimeUnixNano": "1791611801858678016",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "call_model"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "3"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}},{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}],\"remaining_steps\":10004}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":69,\"prompt_tokens\":60,\"total_tokens\":129,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-a5e3ef96ef8d\",\"finish_reason\":\"stop\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-9105-7e90-b976-b05e30615727-0\",\"tool_calls\":[],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":60,\"output_tokens\":69,\"total_tokens\":129,\"input_token_details\":{},\"output_token_details\":{}}}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801910454016",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "call_model",
+       "parentSpanId": "cafc7763becef3f8",
+       "spanId": "963584f87488e2ef",
+       "startTimeUnixNano": "1791611801859047936",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "RunnableSequence"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "3"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}},{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}],\"remaining_steps\":10004}"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "60"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "69"
+         }
+        },
+        {
+         "key": "gen_ai.usage.total_tokens",
+         "value": {
+          "intValue": "129"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"output\":{\"content\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":69,\"prompt_tokens\":60,\"total_tokens\":129,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-a5e3ef96ef8d\",\"finish_reason\":\"stop\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-9105-7e90-b976-b05e30615727-0\",\"tool_calls\":[],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":60,\"output_tokens\":69,\"total_tokens\":129,\"input_token_details\":{},\"output_token_details\":{}}}}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801910327040",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "RunnableSequence",
+       "parentSpanId": "963584f87488e2ef",
+       "spanId": "a74b2be09d903421",
+       "startTimeUnixNano": "1791611801860039936",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "Prompt"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "3"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:1"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}},{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}],\"remaining_steps\":10004}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"output\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}},{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}]}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801860645120",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Prompt",
+       "parentSpanId": "a74b2be09d903421",
+       "spanId": "3f2ad48aaf45efa4",
+       "startTimeUnixNano": "1791611801860389120",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "llm"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "ChatOpenAI"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.tool.definitions",
+         "value": {
+          "stringValue": "[{\"type\":\"function\",\"function\":{\"name\":\"search_docs\",\"description\":\"Searches the documentation corpus and returns the matching passages.\",\"parameters\":{\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"type\":\"object\"}}}]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langchain_chat_model"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "3"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_provider",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_model_type",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "langsmith.metadata.lc_versions",
+         "value": {
+          "stringValue": "{\"langchain-core\":\"1.6.9\",\"langchain-openai\":\"1.7.0\"}"
+         }
+        },
+        {
+         "key": "langsmith.metadata.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "langsmith.metadata.model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "langsmith.metadata.stream",
+         "value": {
+          "boolValue": false
+         }
+        },
+        {
+         "key": "langsmith.metadata._type",
+         "value": {
+          "stringValue": "openai-chat"
+         }
+        },
+        {
+         "key": "langsmith.metadata.usage_metadata",
+         "value": {
+          "stringValue": "{\"input_tokens\":60,\"output_tokens\":69,\"total_tokens\":129,\"input_token_details\":{},\"output_token_details\":{}}"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:2"
+         }
+        },
+        {
+         "key": "gen_ai.serialized.name",
+         "value": {
+          "stringValue": "ChatOpenAI"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[[{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"HumanMessage\"],\"kwargs\":{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"}},{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"AIMessage\"],\"kwargs\":{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}},\"invalid_tool_calls\":[]}},{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"ToolMessage\"],\"kwargs\":{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"}}]]}"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "60"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "69"
+         }
+        },
+        {
+         "key": "gen_ai.usage.total_tokens",
+         "value": {
+          "intValue": "129"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"generations\":[[{\"text\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"generation_info\":{\"finish_reason\":\"stop\",\"logprobs\":null},\"type\":\"ChatGeneration\",\"message\":{\"lc\":1,\"type\":\"constructor\",\"id\":[\"langchain\",\"schema\",\"messages\",\"AIMessage\"],\"kwargs\":{\"content\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":69,\"prompt_tokens\":60,\"total_tokens\":129,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-a5e3ef96ef8d\",\"finish_reason\":\"stop\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-9105-7e90-b976-b05e30615727-0\",\"usage_metadata\":{\"input_tokens\":60,\"output_tokens\":69,\"total_tokens\":129,\"input_token_details\":{},\"output_token_details\":{}},\"tool_calls\":[],\"invalid_tool_calls\":[]}}}]],\"llm_output\":{\"token_usage\":{\"completion_tokens\":69,\"prompt_tokens\":60,\"total_tokens\":129,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-a5e3ef96ef8d\"},\"run\":null,\"type\":\"LLMResult\"}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801910082048",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "ChatOpenAI",
+       "parentSpanId": "a74b2be09d903421",
+       "spanId": "d7843e025300380a",
+       "startTimeUnixNano": "1791611801861125888",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "23cba5d1-e006-477b-8fa8-aeb2a1074992"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-langgraph"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "langsmith"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "langsmith.span.kind",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "langsmith.trace.name",
+         "value": {
+          "stringValue": "should_continue"
+         }
+        },
+        {
+         "key": "langsmith.trace.session_name",
+         "value": {
+          "stringValue": "default"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chain"
+         }
+        },
+        {
+         "key": "gen_ai.system",
+         "value": {
+          "stringValue": "langchain"
+         }
+        },
+        {
+         "key": "langsmith.metadata.ls_integration",
+         "value": {
+          "stringValue": "langgraph"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_step",
+         "value": {
+          "intValue": "3"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_node",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_triggers",
+         "value": {
+          "stringValue": "[\"branch:to:agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_path",
+         "value": {
+          "stringValue": "[\"__pregel_pull\",\"agent\"]"
+         }
+        },
+        {
+         "key": "langsmith.metadata.langgraph_checkpoint_ns",
+         "value": {
+          "stringValue": "agent:d158af1a-2344-14c8-5171-1a287fba74d5"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_TRACING",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ENABLED",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.LANGSMITH_OTEL_ONLY",
+         "value": {
+          "stringValue": "true"
+         }
+        },
+        {
+         "key": "langsmith.metadata.revision_id",
+         "value": {
+          "stringValue": "05ddb2b-dirty"
+         }
+        },
+        {
+         "key": "langsmith.span.tags",
+         "value": {
+          "stringValue": "seq:step:3"
+         }
+        },
+        {
+         "key": "gen_ai.prompt",
+         "value": {
+          "stringValue": "{\"messages\":[{\"content\":\"Research how retrieval-augmented generation is evaluated and write a short report.\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"human\",\"id\":\"4b197204-caf6-4179-85d5-e052900cd510\"},{\"content\":\"\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":41,\"prompt_tokens\":21,\"total_tokens\":62,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-57f20251b48d\",\"finish_reason\":\"tool_calls\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-90f0-7562-bbdc-609c56eb7d7e-0\",\"tool_calls\":[{\"name\":\"search_docs\",\"args\":{\"query\":\"retrieval-augmented generation evaluation\"},\"id\":\"call_9ac7f0eacd79\",\"type\":\"tool_call\"}],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":21,\"output_tokens\":41,\"total_tokens\":62,\"input_token_details\":{},\"output_token_details\":{}}},{\"content\":\"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\",\"additional_kwargs\":{},\"response_metadata\":{},\"type\":\"tool\",\"name\":\"search_docs\",\"id\":\"d2971628-e024-43a0-b395-f3465e945477\",\"tool_call_id\":\"call_9ac7f0eacd79\",\"status\":\"success\"},{\"content\":\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\",\"additional_kwargs\":{\"refusal\":null},\"response_metadata\":{\"token_usage\":{\"completion_tokens\":69,\"prompt_tokens\":60,\"total_tokens\":129,\"completion_tokens_details\":null,\"prompt_tokens_details\":null},\"model_provider\":\"openai\",\"model_name\":\"gpt-4o-mini\",\"system_fingerprint\":null,\"id\":\"chatcmpl-a5e3ef96ef8d\",\"finish_reason\":\"stop\",\"logprobs\":null},\"type\":\"ai\",\"id\":\"lc_run--01a12462-9105-7e90-b976-b05e30615727-0\",\"tool_calls\":[],\"invalid_tool_calls\":[],\"usage_metadata\":{\"input_tokens\":60,\"output_tokens\":69,\"total_tokens\":129,\"input_token_details\":{},\"output_token_details\":{}}}],\"remaining_steps\":10004}"
+         }
+        },
+        {
+         "key": "gen_ai.completion",
+         "value": {
+          "stringValue": "{\"output\":\"__end__\"}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611801910994944",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "should_continue",
+       "parentSpanId": "cafc7763becef3f8",
+       "spanId": "ccc95e5b66c61e9f",
+       "startTimeUnixNano": "1791611801910675968",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "a9b53590b8d11437355038607ab77a4e"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

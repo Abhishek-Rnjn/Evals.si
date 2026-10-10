@@ -1,0 +1,760 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "a2423758-4aab-418e-9047-f12e6e612c9d"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.openai.v1",
+      "version": "0.62.4"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.headers",
+         "value": {
+          "stringValue": "{'X-Stainless-Raw-Response': 'true'}"
+         }
+        },
+        {
+         "key": "gen_ai.is_streaming",
+         "value": {
+          "boolValue": false
+         }
+        },
+        {
+         "key": "gen_ai.openai.api_base",
+         "value": {
+          "stringValue": "http://127.0.0.1:8124/v1/"
+         }
+        },
+        {
+         "key": "gen_ai.input.messages",
+         "value": {
+          "stringValue": "[{\"role\": \"system\", \"parts\": [{\"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\", \"type\": \"text\"}]}, {\"role\": \"user\", \"parts\": [{\"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\", \"type\": \"text\"}]}]"
+         }
+        },
+        {
+         "key": "gen_ai.tool.definitions",
+         "value": {
+          "stringValue": "[{\"type\": \"function\", \"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}]"
+         }
+        },
+        {
+         "key": "gen_ai.response.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.response.id",
+         "value": {
+          "stringValue": "chatcmpl-59d04f274536"
+         }
+        },
+        {
+         "key": "gen_ai.response.finish_reasons",
+         "value": {
+          "arrayValue": {
+           "values": [
+            {
+             "stringValue": "tool_call"
+            }
+           ]
+          }
+         }
+        },
+        {
+         "key": "gen_ai.usage.total_tokens",
+         "value": {
+          "intValue": "138"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "41"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "97"
+         }
+        },
+        {
+         "key": "gen_ai.output.messages",
+         "value": {
+          "stringValue": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"name\": \"search_docs\", \"id\": \"call_e3b37a5277b9\", \"arguments\": {\"query\": \"retrieval-augmented generation evaluation\"}}], \"finish_reason\": \"tool_call\"}]"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611793241142943",
+       "flags": 256,
+       "kind": "SPAN_KIND_CLIENT",
+       "name": "openai.chat",
+       "parentSpanId": "573e3060fbb5535f",
+       "spanId": "5b44d3ef48711b40",
+       "startTimeUnixNano": "1791611793223961236",
+       "status": {},
+       "traceId": "0e5517435f09a6ef6ee878036c58df65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "a2423758-4aab-418e-9047-f12e6e612c9d"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.openai.v1",
+      "version": "0.62.4"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.headers",
+         "value": {
+          "stringValue": "{'X-Stainless-Raw-Response': 'true'}"
+         }
+        },
+        {
+         "key": "gen_ai.is_streaming",
+         "value": {
+          "boolValue": false
+         }
+        },
+        {
+         "key": "gen_ai.openai.api_base",
+         "value": {
+          "stringValue": "http://127.0.0.1:8124/v1/"
+         }
+        },
+        {
+         "key": "gen_ai.input.messages",
+         "value": {
+          "stringValue": "[{\"role\": \"system\", \"parts\": [{\"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\", \"type\": \"text\"}]}, {\"role\": \"user\", \"parts\": [{\"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\", \"type\": \"text\"}]}, {\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"name\": \"search_docs\", \"id\": \"call_e3b37a5277b9\", \"arguments\": {\"query\": \"retrieval-augmented generation evaluation\"}}]}, {\"role\": \"tool\", \"parts\": [{\"type\": \"tool_call_response\", \"id\": \"call_e3b37a5277b9\", \"response\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\"}]}]"
+         }
+        },
+        {
+         "key": "gen_ai.tool.definitions",
+         "value": {
+          "stringValue": "[{\"type\": \"function\", \"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}]"
+         }
+        },
+        {
+         "key": "gen_ai.response.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.response.id",
+         "value": {
+          "stringValue": "chatcmpl-15d8bd45a0d4"
+         }
+        },
+        {
+         "key": "gen_ai.response.finish_reasons",
+         "value": {
+          "arrayValue": {
+           "values": [
+            {
+             "stringValue": "stop"
+            }
+           ]
+          }
+         }
+        },
+        {
+         "key": "gen_ai.usage.total_tokens",
+         "value": {
+          "intValue": "204"
+         }
+        },
+        {
+         "key": "gen_ai.usage.output_tokens",
+         "value": {
+          "intValue": "69"
+         }
+        },
+        {
+         "key": "gen_ai.usage.input_tokens",
+         "value": {
+          "intValue": "135"
+         }
+        },
+        {
+         "key": "gen_ai.output.messages",
+         "value": {
+          "stringValue": "[{\"role\": \"assistant\", \"parts\": [{\"content\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"type\": \"text\"}], \"finish_reason\": \"stop\"}]"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611793298237369",
+       "flags": 256,
+       "kind": "SPAN_KIND_CLIENT",
+       "name": "openai.chat",
+       "parentSpanId": "573e3060fbb5535f",
+       "spanId": "c91bdc49c50f4f2a",
+       "startTimeUnixNano": "1791611793251390116",
+       "status": {},
+       "traceId": "0e5517435f09a6ef6ee878036c58df65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "a2423758-4aab-418e-9047-f12e6e612c9d"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.crewai.instrumentation",
+      "version": "0.36.0"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "traceloop.span.kind",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "crewai"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "invoke_agent"
+         }
+        },
+        {
+         "key": "crewai.agent.id",
+         "value": {
+          "stringValue": "711db3ee-c1cf-4044-9461-5ac29621fdc0"
+         }
+        },
+        {
+         "key": "crewai.agent.role",
+         "value": {
+          "stringValue": "Researcher"
+         }
+        },
+        {
+         "key": "crewai.agent.goal",
+         "value": {
+          "stringValue": "Answer research questions from the documentation corpus"
+         }
+        },
+        {
+         "key": "crewai.agent.backstory",
+         "value": {
+          "stringValue": "You search the corpus before you write."
+         }
+        },
+        {
+         "key": "crewai.agent.cache",
+         "value": {
+          "stringValue": "True"
+         }
+        },
+        {
+         "key": "crewai.agent.verbose",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.agent.allow_delegation",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.agent.tools",
+         "value": {
+          "stringValue": "[{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\"}]"
+         }
+        },
+        {
+         "key": "crewai.agent.max_iter",
+         "value": {
+          "stringValue": "3"
+         }
+        },
+        {
+         "key": "crewai.agent.llm",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "Researcher"
+         }
+        },
+        {
+         "key": "gen_ai.agent.id",
+         "value": {
+          "stringValue": "711db3ee-c1cf-4044-9461-5ac29621fdc0"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.response.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611793314375327",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Researcher.agent",
+       "parentSpanId": "fea694dba97f9a29",
+       "spanId": "573e3060fbb5535f",
+       "startTimeUnixNano": "1791611793212577122",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "0e5517435f09a6ef6ee878036c58df65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "a2423758-4aab-418e-9047-f12e6e612c9d"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.crewai.instrumentation",
+      "version": "0.36.0"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "traceloop.span.kind",
+         "value": {
+          "stringValue": "task"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "crewai"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "invoke_agent"
+         }
+        },
+        {
+         "key": "crewai.task.id",
+         "value": {
+          "stringValue": "6597a803-e201-49b3-8d9f-bd18e4ea8b58"
+         }
+        },
+        {
+         "key": "crewai.task.agent",
+         "value": {
+          "stringValue": "Researcher"
+         }
+        },
+        {
+         "key": "crewai.task.description",
+         "value": {
+          "stringValue": "Research how retrieval-augmented generation is evaluated and write a short report."
+         }
+        },
+        {
+         "key": "crewai.task.async_execution",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.task.expected_output",
+         "value": {
+          "stringValue": "A short report"
+         }
+        },
+        {
+         "key": "crewai.task.human_input",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.task.tools",
+         "value": {
+          "stringValue": "[{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\"}]"
+         }
+        },
+        {
+         "key": "traceloop.entity.output",
+         "value": {
+          "stringValue": "# Findings\n\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\n\n## Sources\n[1] rag-overview\n[2] rag-evaluation\n"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611793317355005",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Research how retrieval-augmented generation is evaluated and write a short report..task",
+       "parentSpanId": "428181913b270463",
+       "spanId": "fea694dba97f9a29",
+       "startTimeUnixNano": "1791611793212152550",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "0e5517435f09a6ef6ee878036c58df65"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "a2423758-4aab-418e-9047-f12e6e612c9d"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.crewai.instrumentation",
+      "version": "0.36.0"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "crewai"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "invoke_agent"
+         }
+        },
+        {
+         "key": "crewai.crew.tasks",
+         "value": {
+          "stringValue": "[{\"id\": \"6597a803-e201-49b3-8d9f-bd18e4ea8b58\", \"agent\": \"Researcher\", \"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"async_execution\": false, \"expected_output\": \"A short report\", \"human_input\": false, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\"}], \"output_file\": null}]"
+         }
+        },
+        {
+         "key": "crewai.crew.agents",
+         "value": {
+          "stringValue": "[{\"id\": \"711db3ee-c1cf-4044-9461-5ac29621fdc0\", \"role\": \"Researcher\", \"goal\": \"Answer research questions from the documentation corpus\", \"backstory\": \"You search the corpus before you write.\", \"cache\": true, \"verbose\": false, \"allow_delegation\": false, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\"}], \"max_iter\": 3, \"llm\": \"gpt-4o-mini\"}]"
+         }
+        },
+        {
+         "key": "crewai.crew.id",
+         "value": {
+          "stringValue": "d2c06998-4406-46d6-a544-8b9448929794"
+         }
+        },
+        {
+         "key": "crewai.crew.name",
+         "value": {
+          "stringValue": "crew"
+         }
+        },
+        {
+         "key": "crewai.crew.process",
+         "value": {
+          "stringValue": "Process.sequential"
+         }
+        },
+        {
+         "key": "crewai.crew.verbose",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.crew.memory",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.crew.cache",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.crew.planning",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.crew.share_crew",
+         "value": {
+          "stringValue": "False"
+         }
+        },
+        {
+         "key": "crewai.crew.result",
+         "value": {
+          "stringValue": "# Findings\n\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\n\n## Sources\n[1] rag-overview\n[2] rag-evaluation\n"
+         }
+        },
+        {
+         "key": "crewai.crew.tasks_output",
+         "value": {
+          "stringValue": "[TaskOutput(description='Research how retrieval-augmented generation is evaluated and write a short report.', name='Research how retrieval-augmented generation is evaluated and write a short report.', expected_output='A short report', summary='Research how retrieval-augmented generation is evaluated and write a short...', raw=\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", pydantic=None, json_dict=None, agent='Researcher', output_format=<OutputFormat.RAW: 'raw'>, messages=[{'role': 'system', 'content': 'You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus'}, {'role': 'user', 'content': '\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.'}, {'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'call_e3b37a5277b9', 'type': 'function', 'function': {'name': 'search_docs', 'arguments': '{\"query\": \"retrieval-augmented generation evaluation\"}'}}]}, {'role': 'tool', 'content': '[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).', 'tool_call_id': 'call_e3b37a5277b9', 'name': 'search_docs'}, {'role': 'assistant', 'content': \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\"}], tool_failures=[])]"
+         }
+        },
+        {
+         "key": "crewai.crew.token_usage",
+         "value": {
+          "stringValue": "total_tokens=342 prompt_tokens=232 cached_prompt_tokens=0 completion_tokens=110 reasoning_tokens=0 cache_creation_tokens=0 successful_requests=2"
+         }
+        },
+        {
+         "key": "crewai.crew.usage_metrics",
+         "value": {
+          "stringValue": "{'total_tokens': 342, 'prompt_tokens': 232, 'cached_prompt_tokens': 0, 'completion_tokens': 110, 'reasoning_tokens': 0, 'cache_creation_tokens': 0, 'successful_requests': 2}"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611793324762785",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "crewai.workflow",
+       "spanId": "428181913b270463",
+       "startTimeUnixNano": "1791611793191739584",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "0e5517435f09a6ef6ee878036c58df65"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

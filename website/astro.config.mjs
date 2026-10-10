@@ -10,6 +10,7 @@ const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si"
 const guides = [
   "agent-runs", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-studio",
+  "agent-frameworks",
 ];
 const examples = [
   "quickstart", "runs", "agents", "watch", "sources", "guardrails", "annotation",

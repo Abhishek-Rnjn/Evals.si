@@ -1,0 +1,821 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "llm.system",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "llm.model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "llm.invocation_parameters",
+         "value": {
+          "stringValue": "{\"base_url\": \"http://127.0.0.1:8124/v1/\"}"
+         }
+        },
+        {
+         "key": "input.value",
+         "value": {
+          "stringValue": "[{\"content\": \"Search the documentation corpus, then write a short report.\", \"role\": \"system\"}, {\"role\": \"user\", \"content\": \"Research how retrieval-augmented generation is evaluated and write a short report.\"}]"
+         }
+        },
+        {
+         "key": "input.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.role",
+         "value": {
+          "stringValue": "system"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.content",
+         "value": {
+          "stringValue": "Search the documentation corpus, then write a short report."
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.role",
+         "value": {
+          "stringValue": "user"
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.content",
+         "value": {
+          "stringValue": "Research how retrieval-augmented generation is evaluated and write a short report."
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "[{\"content\": null, \"refusal\": null, \"role\": \"assistant\", \"annotations\": null, \"audio\": null, \"function_call\": null, \"tool_calls\": [{\"id\": \"call_9ec835baaa42\", \"function\": {\"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\", \"name\": \"search_docs\"}, \"type\": \"function\"}]}]"
+         }
+        },
+        {
+         "key": "output.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.role",
+         "value": {
+          "stringValue": "assistant"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.tool_calls.0.tool_call.id",
+         "value": {
+          "stringValue": "call_9ec835baaa42"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.tool_calls.0.tool_call.function.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "llm.token_count.prompt",
+         "value": {
+          "intValue": "36"
+         }
+        },
+        {
+         "key": "llm.token_count.completion",
+         "value": {
+          "intValue": "41"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "LLM"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807093187072",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "generation",
+       "parentSpanId": "0d203302a7a789a1",
+       "spanId": "11965f52cfe235e7",
+       "startTimeUnixNano": "1791611806986213888",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "tool.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "input.value",
+         "value": {
+          "stringValue": "{\"query\": \"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "input.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them)."
+         }
+        },
+        {
+         "key": "tool.description",
+         "value": {
+          "stringValue": "Searches the documentation corpus and returns the matching passages."
+         }
+        },
+        {
+         "key": "tool.parameters",
+         "value": {
+          "stringValue": "{\"properties\": {\"query\": {\"title\": \"Query\", \"type\": \"string\"}}, \"required\": [\"query\"], \"title\": \"search_docs_args\", \"type\": \"object\", \"additionalProperties\": false}"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "TOOL"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807100282880",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "search_docs",
+       "parentSpanId": "0d203302a7a789a1",
+       "spanId": "24e4599d27b1b846",
+       "startTimeUnixNano": "1791611807098514176",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "CHAIN"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807103108864",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "turn",
+       "parentSpanId": "5893e67a7860864b",
+       "spanId": "0d203302a7a789a1",
+       "startTimeUnixNano": "1791611806985254912",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "llm.system",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "llm.model_name",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "llm.invocation_parameters",
+         "value": {
+          "stringValue": "{\"base_url\": \"http://127.0.0.1:8124/v1/\"}"
+         }
+        },
+        {
+         "key": "input.value",
+         "value": {
+          "stringValue": "[{\"content\": \"Search the documentation corpus, then write a short report.\", \"role\": \"system\"}, {\"role\": \"user\", \"content\": \"Research how retrieval-augmented generation is evaluated and write a short report.\"}, {\"role\": \"assistant\", \"content\": null, \"tool_calls\": [{\"id\": \"call_9ec835baaa42\", \"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\"}}]}, {\"role\": \"tool\", \"tool_call_id\": \"call_9ec835baaa42\", \"content\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\"}]"
+         }
+        },
+        {
+         "key": "input.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.role",
+         "value": {
+          "stringValue": "system"
+         }
+        },
+        {
+         "key": "llm.input_messages.0.message.content",
+         "value": {
+          "stringValue": "Search the documentation corpus, then write a short report."
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.role",
+         "value": {
+          "stringValue": "user"
+         }
+        },
+        {
+         "key": "llm.input_messages.1.message.content",
+         "value": {
+          "stringValue": "Research how retrieval-augmented generation is evaluated and write a short report."
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.role",
+         "value": {
+          "stringValue": "assistant"
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.tool_calls.0.tool_call.id",
+         "value": {
+          "stringValue": "call_9ec835baaa42"
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.tool_calls.0.tool_call.function.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "llm.input_messages.2.message.tool_calls.0.tool_call.function.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "llm.input_messages.3.message.role",
+         "value": {
+          "stringValue": "tool"
+         }
+        },
+        {
+         "key": "llm.input_messages.3.message.content",
+         "value": {
+          "stringValue": "[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them)."
+         }
+        },
+        {
+         "key": "llm.input_messages.3.message.tool_call_id",
+         "value": {
+          "stringValue": "call_9ec835baaa42"
+         }
+        },
+        {
+         "key": "output.value",
+         "value": {
+          "stringValue": "[{\"content\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"refusal\": null, \"role\": \"assistant\", \"annotations\": null, \"audio\": null, \"function_call\": null, \"tool_calls\": null}]"
+         }
+        },
+        {
+         "key": "output.mime_type",
+         "value": {
+          "stringValue": "application/json"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.role",
+         "value": {
+          "stringValue": "assistant"
+         }
+        },
+        {
+         "key": "llm.output_messages.0.message.content",
+         "value": {
+          "stringValue": "# Findings\n\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\n\n## Sources\n[1] rag-overview\n[2] rag-evaluation\n"
+         }
+        },
+        {
+         "key": "llm.token_count.prompt",
+         "value": {
+          "intValue": "75"
+         }
+        },
+        {
+         "key": "llm.token_count.completion",
+         "value": {
+          "intValue": "69"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "LLM"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807155736064",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "generation",
+       "parentSpanId": "b7e5a2b8951cc597",
+       "spanId": "ebfc1691e521c9d1",
+       "startTimeUnixNano": "1791611807106283776",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "CHAIN"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807160131072",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "turn",
+       "parentSpanId": "5893e67a7860864b",
+       "spanId": "b7e5a2b8951cc597",
+       "startTimeUnixNano": "1791611807105232128",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "graph.node.id",
+         "value": {
+          "stringValue": "Researcher"
+         }
+        },
+        {
+         "key": "agent.name",
+         "value": {
+          "stringValue": "Researcher"
+         }
+        },
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "AGENT"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807162607872",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Researcher",
+       "parentSpanId": "7ab4c7c337d9144c",
+       "spanId": "5893e67a7860864b",
+       "startTimeUnixNano": "1791611806985050880",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "CHAIN"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807164892928",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Agent workflow",
+       "parentSpanId": "64e840e7d4a71a25",
+       "spanId": "7ab4c7c337d9144c",
+       "startTimeUnixNano": "1791611806984265216",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "d5e813ec-2799-405e-9877-7ae3d0acf7f3"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "openinference.instrumentation.openai_agents",
+      "version": "2.5.3"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "openinference.span.kind",
+         "value": {
+          "stringValue": "AGENT"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611807167105798",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Agent workflow",
+       "spanId": "64e840e7d4a71a25",
+       "startTimeUnixNano": "1791611806984123895",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "1f290299618f4b6301b762c84bee71cf"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

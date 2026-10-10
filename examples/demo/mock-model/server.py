@@ -1,6 +1,7 @@
 """A deterministic stand-in for a model, for the demos and CI.
 
-It speaks the OpenAI chat-completions API (streaming or not) and needs no key.
+It speaks the OpenAI chat-completions API and the Anthropic Messages API
+(streaming or not) and needs no key.
 It plays a fixed script: on a task it recognises (an entry of solutions.json
 whose ``match`` occurs in the task text) it makes one tool call, then answers
 once the tool has reported back. An entry has either a ``command`` (a shell
@@ -73,9 +74,11 @@ class Script:
                 # Other required arguments (a description, say) get a short text.
                 call = (shell[0], {**{r: "apply the fix" for r in shell[2]}, shell[1]: solution["command"]})
         elif solution and "tool" in solution:
-            names = {(t.get("function", t)).get("name") for t in tools}
-            if solution["tool"] in names:
-                call = (solution["tool"], solution.get("arguments", {}))
+            # An MCP tool's name carries its server's: mcp__<server>__<tool>.
+            names = [(t.get("function", t)).get("name", "") for t in tools]
+            name = next((n for n in names if n == solution["tool"] or n.endswith("__" + solution["tool"])), None)
+            if name:
+                call = (name, solution.get("arguments", {}))
         if call:
             return {
                 "content": "",
@@ -127,6 +130,53 @@ def chunks(body: dict[str, Any], reply: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def from_anthropic(body: dict[str, Any]) -> dict[str, Any]:
+    """An Anthropic Messages request in the chat-completions shape Script reads."""
+    messages: list[dict[str, Any]] = []
+    for m in body.get("messages", []):
+        content = m.get("content")
+        if isinstance(content, list) and any(b.get("type") == "tool_result" for b in content if isinstance(b, dict)):
+            messages.append({"role": "tool", "content": ""})
+        else:
+            messages.append({"role": m.get("role"), "content": content})
+    return {**body, "messages": messages}
+
+
+def message(body: dict[str, Any], reply: dict[str, Any]) -> dict[str, Any]:
+    content: list[dict[str, Any]] = []
+    if reply.get("content"):
+        content.append({"type": "text", "text": reply["content"]})
+    for tc in reply.get("tool_calls", []):
+        content.append({"type": "tool_use", "id": "toolu_" + tc["id"][5:], "name": tc["function"]["name"], "input": json.loads(tc["function"]["arguments"])})
+    u = usage(body, reply)
+    return {
+        "id": "msg_" + uuid.uuid4().hex[:12],
+        "type": "message",
+        "role": "assistant",
+        "model": body.get("model", "mock"),
+        "content": content,
+        "stop_reason": "tool_use" if reply.get("tool_calls") else "end_turn",
+        "stop_sequence": None,
+        "usage": {"input_tokens": u["prompt_tokens"], "output_tokens": u["completion_tokens"]},
+    }
+
+
+def message_events(msg: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    start = {**msg, "content": [], "stop_reason": None, "usage": {**msg["usage"], "output_tokens": 0}}
+    out: list[tuple[str, dict[str, Any]]] = [("message_start", {"type": "message_start", "message": start})]
+    for i, block in enumerate(msg["content"]):
+        if block["type"] == "text":
+            out.append(("content_block_start", {"type": "content_block_start", "index": i, "content_block": {"type": "text", "text": ""}}))
+            out.append(("content_block_delta", {"type": "content_block_delta", "index": i, "delta": {"type": "text_delta", "text": block["text"]}}))
+        else:
+            out.append(("content_block_start", {"type": "content_block_start", "index": i, "content_block": {**block, "input": {}}}))
+            out.append(("content_block_delta", {"type": "content_block_delta", "index": i, "delta": {"type": "input_json_delta", "partial_json": json.dumps(block["input"])}}))
+        out.append(("content_block_stop", {"type": "content_block_stop", "index": i}))
+    out.append(("message_delta", {"type": "message_delta", "delta": {"stop_reason": msg["stop_reason"], "stop_sequence": None}, "usage": {"output_tokens": msg["usage"]["output_tokens"]}}))
+    out.append(("message_stop", {"type": "message_stop"}))
+    return out
+
+
 class Handler(BaseHTTPRequestHandler):
     script: Script
     protocol_version = "HTTP/1.1"
@@ -153,8 +203,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(length) or b"{}")
-        if not self.path.rstrip("/").endswith("/chat/completions"):
-            self._send(404, {"error": "only /chat/completions is served"})
+        path = self.path.split("?")[0].rstrip("/")
+        if path.endswith("/messages/count_tokens"):
+            self._send(200, {"input_tokens": usage(from_anthropic(body), {})["prompt_tokens"]})
+            return
+        if path.endswith("/messages"):
+            self._anthropic(body)
+            return
+        if not path.endswith("/chat/completions"):
+            self._send(404, {"error": "only /chat/completions and /messages are served"})
             return
         reply = self.script.reply(body)
         if not body.get("stream"):
@@ -168,6 +225,21 @@ class Handler(BaseHTTPRequestHandler):
         for c in chunks(body, reply):
             self.wfile.write(b"data: " + json.dumps(c).encode() + b"\n\n")
         self.wfile.write(b"data: [DONE]\n\n")
+        self.wfile.flush()
+        self.close_connection = True
+
+    def _anthropic(self, body: dict[str, Any]) -> None:
+        msg = message(body, self.script.reply(from_anthropic(body)))
+        if not body.get("stream"):
+            self._send(200, msg)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        for event, data in message_events(msg):
+            self.wfile.write(f"event: {event}\ndata: {json.dumps(data)}\n\n".encode())
         self.wfile.flush()
         self.close_connection = True
 

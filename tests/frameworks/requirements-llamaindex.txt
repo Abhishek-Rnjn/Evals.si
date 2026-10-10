@@ -1,0 +1,6 @@
+# record_llamaindex.py (openinference)
+llama-index-core==0.14.25
+llama-index-llms-openai-like==0.8.1
+openinference-instrumentation-llama-index==4.6.0
+opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-sdk==1.45.1

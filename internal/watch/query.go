@@ -5,6 +5,7 @@ import (
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
@@ -27,19 +28,10 @@ func CompileTraceFilter(expr string) (*TraceFilter, error) {
 // online scores by metric (see TraceScores).
 func (f *TraceFilter) Match(t store.StoredTrace, scores map[string]float64) bool {
 	sum, traj := t.Summary, t.Record.GetTrajectory()
-	tools, models := []string{}, []string{}
-	seen := map[string]bool{}
+	// The same tools and models policies select on.
+	tools, models := append([]string{}, ingest.Tools(traj.GetSteps())...), append([]string{}, ingest.Models(traj.GetSteps())...)
 	attributes, resource := map[string]any{}, map[string]any{}
 	for _, s := range traj.GetSteps() {
-		switch s.GetType() {
-		case evalsiv1alpha1.StepType_STEP_TYPE_TOOL:
-			tools = append(tools, s.GetName())
-		case evalsiv1alpha1.StepType_STEP_TYPE_LLM:
-			if m := s.GetAttributes()["gen_ai.request.model"].GetStringValue(); m != "" && !seen[m] {
-				seen[m] = true
-				models = append(models, m)
-			}
-		}
 		if s.GetParentSpanId() == "" {
 			for k, v := range s.GetAttributes() {
 				attributes[k] = v.AsInterface()

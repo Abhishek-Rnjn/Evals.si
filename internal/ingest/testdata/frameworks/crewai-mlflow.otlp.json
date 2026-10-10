@@ -1,0 +1,804 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "mlflow"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "3.17.0"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "70e36d57-4a19-47b7-81cc-6932cbb51073"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "mlflow.tracing.provider"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "mlflow.traceRequestId",
+         "value": {
+          "stringValue": "\"tr-994c14ffb63512fc4ac4e7538a6de6f6\""
+         }
+        },
+        {
+         "key": "mlflow.spanType",
+         "value": {
+          "stringValue": "\"CHAT_MODEL\""
+         }
+        },
+        {
+         "key": "mlflow.spanInputs",
+         "value": {
+          "stringValue": "{\"model\": \"gpt-4o-mini\", \"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}], \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}], \"tool_choice\": \"auto\", \"extra_headers\": {\"X-Stainless-Raw-Response\": \"true\"}}"
+         }
+        },
+        {
+         "key": "model",
+         "value": {
+          "stringValue": "\"gpt-4o-mini\""
+         }
+        },
+        {
+         "key": "tools",
+         "value": {
+          "stringValue": "[{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}]"
+         }
+        },
+        {
+         "key": "tool_choice",
+         "value": {
+          "stringValue": "\"auto\""
+         }
+        },
+        {
+         "key": "extra_headers",
+         "value": {
+          "stringValue": "{\"X-Stainless-Raw-Response\": \"true\"}"
+         }
+        },
+        {
+         "key": "mlflow.message.format",
+         "value": {
+          "stringValue": "\"openai\""
+         }
+        },
+        {
+         "key": "mlflow.chat.tools",
+         "value": {
+          "stringValue": "[{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"type\": \"object\", \"required\": [\"query\"], \"additionalProperties\": false}, \"strict\": true}}]"
+         }
+        },
+        {
+         "key": "mlflow.llm.model",
+         "value": {
+          "stringValue": "\"gpt-4o-mini\""
+         }
+        },
+        {
+         "key": "mlflow.chat.tokenUsage",
+         "value": {
+          "stringValue": "{\"input_tokens\": 97, \"output_tokens\": 41, \"total_tokens\": 138}"
+         }
+        },
+        {
+         "key": "mlflow.spanOutputs",
+         "value": {
+          "stringValue": "{\"id\": \"chatcmpl-caa1e75a6ec5\", \"choices\": [{\"finish_reason\": \"tool_calls\", \"index\": 0, \"logprobs\": null, \"message\": {\"content\": null, \"refusal\": null, \"role\": \"assistant\", \"annotations\": null, \"audio\": null, \"function_call\": null, \"tool_calls\": [{\"id\": \"call_943b4258e4c5\", \"function\": {\"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\", \"name\": \"search_docs\"}, \"type\": \"function\"}]}}], \"created\": 1791611782, \"model\": \"gpt-4o-mini\", \"object\": \"chat.completion\", \"moderation\": null, \"service_tier\": null, \"system_fingerprint\": null, \"usage\": {\"completion_tokens\": 41, \"prompt_tokens\": 97, \"total_tokens\": 138, \"completion_tokens_details\": null, \"prompt_tokens_details\": null}}"
+         }
+        },
+        {
+         "key": "mlflow.spanLogLevel",
+         "value": {
+          "stringValue": "20"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611782729663092",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Completions",
+       "parentSpanId": "4652cdf12a04f695",
+       "spanId": "fa3e3dd0b2f8bf7f",
+       "startTimeUnixNano": "1791611782714241715",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "994c14ffb63512fc4ac4e7538a6de6f6"
+      },
+      {
+       "attributes": [
+        {
+         "key": "mlflow.traceRequestId",
+         "value": {
+          "stringValue": "\"tr-994c14ffb63512fc4ac4e7538a6de6f6\""
+         }
+        },
+        {
+         "key": "mlflow.spanType",
+         "value": {
+          "stringValue": "\"CHAT_MODEL\""
+         }
+        },
+        {
+         "key": "mlflow.spanInputs",
+         "value": {
+          "stringValue": "{\"model\": \"gpt-4o-mini\", \"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}, {\"role\": \"assistant\", \"content\": null, \"tool_calls\": [{\"id\": \"call_943b4258e4c5\", \"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\"}}]}, {\"role\": \"tool\", \"tool_call_id\": \"call_943b4258e4c5\", \"name\": \"search_docs\", \"content\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\"}], \"tools\": [{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}], \"tool_choice\": \"auto\", \"extra_headers\": {\"X-Stainless-Raw-Response\": \"true\"}}"
+         }
+        },
+        {
+         "key": "model",
+         "value": {
+          "stringValue": "\"gpt-4o-mini\""
+         }
+        },
+        {
+         "key": "tools",
+         "value": {
+          "stringValue": "[{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"strict\": true, \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"], \"type\": \"object\", \"additionalProperties\": false}}}]"
+         }
+        },
+        {
+         "key": "tool_choice",
+         "value": {
+          "stringValue": "\"auto\""
+         }
+        },
+        {
+         "key": "extra_headers",
+         "value": {
+          "stringValue": "{\"X-Stainless-Raw-Response\": \"true\"}"
+         }
+        },
+        {
+         "key": "mlflow.message.format",
+         "value": {
+          "stringValue": "\"openai\""
+         }
+        },
+        {
+         "key": "mlflow.chat.tools",
+         "value": {
+          "stringValue": "[{\"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"parameters\": {\"properties\": {\"query\": {\"type\": \"string\"}}, \"type\": \"object\", \"required\": [\"query\"], \"additionalProperties\": false}, \"strict\": true}}]"
+         }
+        },
+        {
+         "key": "mlflow.llm.model",
+         "value": {
+          "stringValue": "\"gpt-4o-mini\""
+         }
+        },
+        {
+         "key": "mlflow.chat.tokenUsage",
+         "value": {
+          "stringValue": "{\"input_tokens\": 135, \"output_tokens\": 69, \"total_tokens\": 204}"
+         }
+        },
+        {
+         "key": "mlflow.spanOutputs",
+         "value": {
+          "stringValue": "{\"id\": \"chatcmpl-5ea997beb389\", \"choices\": [{\"finish_reason\": \"stop\", \"index\": 0, \"logprobs\": null, \"message\": {\"content\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"refusal\": null, \"role\": \"assistant\", \"annotations\": null, \"audio\": null, \"function_call\": null, \"tool_calls\": null}}], \"created\": 1791611782, \"model\": \"gpt-4o-mini\", \"object\": \"chat.completion\", \"moderation\": null, \"service_tier\": null, \"system_fingerprint\": null, \"usage\": {\"completion_tokens\": 69, \"prompt_tokens\": 135, \"total_tokens\": 204, \"completion_tokens_details\": null, \"prompt_tokens_details\": null}}"
+         }
+        },
+        {
+         "key": "mlflow.spanLogLevel",
+         "value": {
+          "stringValue": "20"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611782786332929",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Completions",
+       "parentSpanId": "4652cdf12a04f695",
+       "spanId": "b03df26f81106d17",
+       "startTimeUnixNano": "1791611782738143197",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "994c14ffb63512fc4ac4e7538a6de6f6"
+      },
+      {
+       "attributes": [
+        {
+         "key": "mlflow.traceRequestId",
+         "value": {
+          "stringValue": "\"tr-994c14ffb63512fc4ac4e7538a6de6f6\""
+         }
+        },
+        {
+         "key": "mlflow.spanType",
+         "value": {
+          "stringValue": "\"AGENT\""
+         }
+        },
+        {
+         "key": "mlflow.spanInputs",
+         "value": {
+          "stringValue": "{\"task\": {\"used_tools\": 0, \"tools_errors\": 0, \"delegations\": 0, \"name\": null, \"prompt_context\": \"\", \"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"config\": null, \"callback\": null, \"agent\": {\"entity_type\": \"agent\", \"id\": \"b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e\", \"role\": \"Researcher\", \"goal\": \"Answer research questions from the documentation corpus\", \"backstory\": \"You search the corpus before you write.\", \"config\": null, \"cache\": true, \"verbose\": false, \"max_rpm\": null, \"allow_delegation\": false, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}], \"max_iter\": 3, \"tool_failure_policy\": null, \"agent_executor\": {\"executor_type\": \"experimental\", \"crew\": {\"entity_type\": \"crew\", \"name\": \"crew\", \"cache\": false, \"tool_failure_policy\": null, \"tasks\": [\"dict\"], \"agents\": [\"Agent\"], \"process\": \"sequential\", \"verbose\": false, \"memory\": false, \"embedder\": null, \"usage_metrics\": null, \"manager_llm\": null, \"manager_agent\": null, \"function_calling_llm\": null, \"config\": null, \"id\": \"95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb\", \"share_crew\": false, \"step_callback\": null, \"task_callback\": null, \"before_kickoff_callbacks\": [], \"after_kickoff_callbacks\": [], \"stream\": false, \"max_rpm\": null, \"prompt_file\": null, \"trained_agents_file\": null, \"output_log_file\": null, \"planning\": false, \"planning_llm\": null, \"task_execution_output_json_files\": null, \"execution_logs\": [], \"knowledge_sources\": null, \"chat_llm\": null, \"knowledge\": null, \"skills\": null, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"checkpoint\": null, \"token_usage\": null, \"tracing\": null, \"execution_context\": null, \"checkpoint_inputs\": null, \"checkpoint_train\": null, \"checkpoint_kickoff_event_id\": null}, \"agent\": \"Agent\", \"task\": null, \"max_iter\": 3, \"entity_type\": \"flow\", \"initial_state\": null, \"name\": null, \"tracing\": null, \"stream\": false, \"memory\": null, \"input_provider\": null, \"suppress_flow_events\": true, \"defer_trace_finalization\": false, \"human_feedback_history\": [], \"last_human_feedback\": null, \"persistence\": null, \"max_method_calls\": 30, \"execution_context\": null, \"checkpoint\": null, \"checkpoint_completed_methods\": null, \"checkpoint_method_outputs\": null, \"checkpoint_method_counts\": null, \"checkpoint_state\": null, \"llm\": \"gpt-4o-mini\", \"prompt\": {\"prompt\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\\nCurrent Task: {input}\", \"system\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\", \"user\": \"\\nCurrent Task: {input}\"}, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"func\": \"<bound method Tool._run of Tool(name='search_docs', description='Searches the documentation corpus and returns the matching passages.', env_vars=[], args_schema=<class 'crewai.tools.base_tool.Search_Docs'>, result_schema=None, description_updated=False, cache_function=<function _default_cache_function at 0x7fa07071af20>, result_as_answer=False, max_usage_count=None, tool_failure_policy=None, current_usage_count=0, func=<function search_docs at 0x7fa0915649a0>, tool_type='crewai.tools.base_tool.Tool')>\", \"result_as_answer\": false, \"max_usage_count\": null, \"current_usage_count\": 0, \"tool_failure_policy\": null, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\"}], \"tools_names\": \"search_docs\", \"stop_words\": [\"\\nObservation:\"], \"tools_description\": \"Tool Name: search_docs\\nTool Arguments: {\\n  \\\"properties\\\": {\\n    \\\"query\\\": {\\n      \\\"title\\\": \\\"Query\\\",\\n      \\\"type\\\": \\\"string\\\"\\n    }\\n  },\\n  \\\"required\\\": [\\n    \\\"query\\\"\\n  ],\\n  \\\"title\\\": \\\"Search_Docs\\\",\\n  \\\"type\\\": \\\"object\\\",\\n  \\\"additionalProperties\\\": false\\n}\\nTool Description: Searches the documentation corpus and returns the matching passages.\", \"tools_handler\": {\"cache\": null, \"last_used_tool\": null}, \"step_callback\": null, \"original_tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}], \"function_calling_llm\": null, \"respect_context_window\": true, \"request_within_rpm_limit\": null, \"callbacks\": [{\"token_cost_process\": {\"total_tokens\": 0, \"prompt_tokens\": 0, \"cached_prompt_tokens\": 0, \"completion_tokens\": 0, \"successful_requests\": 0}}], \"response_model\": null, \"log_error_after\": 3, \"before_llm_call_hooks\": [], \"after_llm_call_hooks\": [], \"_flow_post_init_done\": true, \"_conversation_messages\": [], \"_pending_user_message\": null, \"_pending_intents\": null, \"_pending_intent_llm\": null, \"_streaming_conversation_turn\": false, \"_turn_classified_intent\": null, \"_assistant_reply_appended\": false, \"_turn_recorded_results\": [], \"_resolved_conversation_config\": null}, \"i18n\": {\"prompt_file\": null}, \"llm\": \"gpt-4o-mini\", \"crew\": {\"entity_type\": \"crew\", \"name\": \"crew\", \"cache\": false, \"tool_failure_policy\": null, \"tasks\": [\"dict\"], \"agents\": [\"Agent\"], \"process\": \"sequential\", \"verbose\": false, \"memory\": false, \"embedder\": null, \"usage_metrics\": null, \"manager_llm\": null, \"manager_agent\": null, \"function_calling_llm\": null, \"config\": null, \"id\": \"95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb\", \"share_crew\": false, \"step_callback\": null, \"task_callback\": null, \"before_kickoff_callbacks\": [], \"after_kickoff_callbacks\": [], \"stream\": false, \"max_rpm\": null, \"prompt_file\": null, \"trained_agents_file\": null, \"output_log_file\": null, \"planning\": false, \"planning_llm\": null, \"task_execution_output_json_files\": null, \"execution_logs\": [], \"knowledge_sources\": null, \"chat_llm\": null, \"knowledge\": null, \"skills\": null, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"checkpoint\": null, \"token_usage\": null, \"tracing\": null, \"execution_context\": null, \"checkpoint_inputs\": null, \"checkpoint_train\": null, \"checkpoint_kickoff_event_id\": null}, \"cache_handler\": null, \"tools_handler\": {\"cache\": null, \"last_used_tool\": null}, \"tools_results\": [], \"max_tokens\": null, \"knowledge\": null, \"knowledge_sources\": null, \"knowledge_storage\": null, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"checkpoint\": null, \"callbacks\": [], \"adapted_agent\": false, \"knowledge_config\": null, \"apps\": null, \"mcps\": null, \"memory\": null, \"skills\": null, \"execution_context\": null, \"checkpoint_kickoff_event_id\": null, \"max_execution_time\": null, \"step_callback\": null, \"use_system_prompt\": true, \"function_calling_llm\": null, \"system_template\": null, \"prompt_template\": null, \"response_template\": null, \"allow_code_execution\": false, \"respect_context_window\": true, \"max_retry_limit\": 2, \"multimodal\": false, \"inject_date\": false, \"date_format\": \"%Y-%m-%d\", \"code_execution_mode\": \"safe\", \"planning_config\": null, \"planning\": false, \"reasoning\": false, \"max_reasoning_attempts\": null, \"embedder\": null, \"agent_knowledge_context\": null, \"crew_knowledge_context\": null, \"knowledge_search_query\": null, \"from_repository\": null, \"guardrail\": null, \"guardrail_max_retries\": 3, \"a2a\": null, \"executor_class\": \"<class 'crewai.experimental.agent_executor.AgentExecutor'>\"}, \"context\": \"NOT_SPECIFIED\", \"async_execution\": false, \"output_json\": null, \"output_pydantic\": null, \"response_model\": null, \"output_file\": null, \"create_directory\": true, \"output\": null, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}], \"input_files\": {}, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"id\": \"b9dd4ea9-4cc2-46a1-957b-f28ce1709d1e\", \"human_input\": false, \"markdown\": false, \"converter_cls\": null, \"processed_by_agents\": [\"Researcher\"], \"guardrail\": null, \"guardrails\": null, \"max_retries\": null, \"guardrail_max_retries\": 3, \"retry_count\": 0, \"tool_failure_policy\": null, \"start_time\": \"2026-10-10 05:56:22.687603\", \"end_time\": null, \"allow_crewai_trigger_context\": null, \"checkpoint_original_description\": null, \"checkpoint_original_expected_output\": null}, \"context\": \"\", \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}]}"
+         }
+        },
+        {
+         "key": "entity_type",
+         "value": {
+          "stringValue": "\"agent\""
+         }
+        },
+        {
+         "key": "id",
+         "value": {
+          "stringValue": "\"b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e\""
+         }
+        },
+        {
+         "key": "role",
+         "value": {
+          "stringValue": "\"Researcher\""
+         }
+        },
+        {
+         "key": "goal",
+         "value": {
+          "stringValue": "\"Answer research questions from the documentation corpus\""
+         }
+        },
+        {
+         "key": "backstory",
+         "value": {
+          "stringValue": "\"You search the corpus before you write.\""
+         }
+        },
+        {
+         "key": "cache",
+         "value": {
+          "stringValue": "\"True\""
+         }
+        },
+        {
+         "key": "verbose",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "allow_delegation",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "tools",
+         "value": {
+          "stringValue": "\"[{'type': 'function', 'function': {'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.'}}]\""
+         }
+        },
+        {
+         "key": "max_iter",
+         "value": {
+          "stringValue": "\"3\""
+         }
+        },
+        {
+         "key": "agent_executor",
+         "value": {
+          "stringValue": "\"{'executor_type': 'experimental', 'crew': {'entity_type': 'crew', 'name': 'crew', 'cache': False, 'tool_failure_policy': None, 'tasks': [{'used_tools': 0, 'tools_errors': 0, 'delegations': 0, 'name': None, 'prompt_context': '', 'description': 'Research how retrieval-augmented generation is evaluated and write a short report.', 'expected_output': 'A short report', 'config': None, 'callback': None, 'agent': {'entity_type': 'agent', 'id': UUID('b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e'), 'role': 'Researcher', 'goal': 'Answer research questions from the documentation corpus', 'backstory': 'You search the corpus before you write.', 'config': None, 'cache': True, 'verbose': False, 'max_rpm': None, 'allow_delegation': False, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'max_iter': 3, 'tool_failure_policy': None, 'agent_executor': 'AgentExecutor', 'i18n': {'prompt_file': None}, 'llm': 'gpt-4o-mini', 'crew': 'Crew', 'cache_handler': None, 'tools_handler': {'cache': None, 'last_used_tool': None}, 'tools_results': [], 'max_tokens': None, 'knowledge': None, 'knowledge_sources': None, 'knowledge_storage': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'callbacks': [], 'adapted_agent': False, 'knowledge_config': None, 'apps': None, 'mcps': None, 'memory': None, 'skills': None, 'execution_context': None, 'checkpoint_kickoff_event_id': None, 'max_execution_time': None, 'step_callback': None, 'use_system_prompt': True, 'function_calling_llm': None, 'system_template': None, 'prompt_template': None, 'response_template': None, 'allow_code_execution': False, 'respect_context_window': True, 'max_retry_limit': 2, 'multimodal': False, 'inject_date': False, 'date_format': '%Y-%m-%d', 'code_execution_mode': 'safe', 'planning_config': None, 'planning': False, 'reasoning': False, 'max_reasoning_attempts': None, 'embedder': None, 'agent_knowledge_context': None, 'crew_knowledge_context': None, 'knowledge_search_query': None, 'from_repository': None, 'guardrail': None, 'guardrail_max_retries': 3, 'a2a': None, 'executor_class': <class 'crewai.experimental.agent_executor.AgentExecutor'>}, 'context': NOT_SPECIFIED, 'async_execution': False, 'output_json': None, 'output_pydantic': None, 'response_model': None, 'output_file': None, 'create_directory': True, 'output': None, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'input_files': {}, 'security_config': {'fingerprint': {'metadata': {}}}, 'id': UUID('b9dd4ea9-4cc2-46a1-957b-f28ce1709d1e'), 'human_input': False, 'markdown': False, 'converter_cls': None, 'processed_by_agents': ['Researcher'], 'guardrail': None, 'guardrails': None, 'max_retries': None, 'guardrail_max_retries': 3, 'retry_count': 0, 'tool_failure_policy': None, 'start_time': datetime.datetime(2026, 10, 10, 5, 56, 22, 687603), 'end_time': None, 'allow_crewai_trigger_context': None, 'checkpoint_original_description': None, 'checkpoint_original_expected_output': None}], 'agents': [{'entity_type': 'agent', 'id': UUID('b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e'), 'role': 'Researcher', 'goal': 'Answer research questions from the documentation corpus', 'backstory': 'You search the corpus before you write.', 'config': None, 'cache': True, 'verbose': False, 'max_rpm': None, 'allow_delegation': False, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'max_iter': 3, 'tool_failure_policy': None, 'agent_executor': 'AgentExecutor', 'i18n': {'prompt_file': None}, 'llm': 'gpt-4o-mini', 'crew': 'Crew', 'cache_handler': None, 'tools_handler': {'cache': None, 'last_used_tool': None}, 'tools_results': [], 'max_tokens': None, 'knowledge': None, 'knowledge_sources': None, 'knowledge_storage': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'callbacks': [], 'adapted_agent': False, 'knowledge_config': None, 'apps': None, 'mcps': None, 'memory': None, 'skills': None, 'execution_context': None, 'checkpoint_kickoff_event_id': None, 'max_execution_time': None, 'step_callback': None, 'use_system_prompt': True, 'function_calling_llm': None, 'system_template': None, 'prompt_template': None, 'response_template': None, 'allow_code_execution': False, 'respect_context_window': True, 'max_retry_limit': 2, 'multimodal': False, 'inject_date': False, 'date_format': '%Y-%m-%d', 'code_execution_mode': 'safe', 'planning_config': None, 'planning': False, 'reasoning': False, 'max_reasoning_attempts': None, 'embedder': None, 'agent_knowledge_context': None, 'crew_knowledge_context': None, 'knowledge_search_query': None, 'from_repository': None, 'guardrail': None, 'guardrail_max_retries': 3, 'a2a': None, 'executor_class': <class 'crewai.experimental.agent_executor.AgentExecutor'>}], 'process': <Process.sequential: 'sequential'>, 'verbose': False, 'memory': False, 'embedder': None, 'usage_metrics': None, 'manager_llm': None, 'manager_agent': None, 'function_calling_llm': None, 'config': None, 'id': UUID('95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb'), 'share_crew': False, 'step_callback': None, 'task_callback': None, 'before_kickoff_callbacks': [], 'after_kickoff_callbacks': [], 'stream': False, 'max_rpm': None, 'prompt_file': None, 'trained_agents_file': None, 'output_log_file': None, 'planning': False, 'planning_llm': None, 'task_execution_output_json_files': None, 'execution_logs': [], 'knowledge_sources': None, 'chat_llm': None, 'knowledge': None, 'skills': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'token_usage': None, 'tracing': None, 'execution_context': None, 'checkpoint_inputs': None, 'checkpoint_train': None, 'checkpoint_kickoff_event_id': None}, 'agent': {'entity_type': 'agent', 'id': UUID('b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e'), 'role': 'Researcher', 'goal': 'Answer research questions from the documentation corpus', 'backstory': 'You search the corpus before you write.', 'config': None, 'cache': True, 'verbose': False, 'max_rpm': None, 'allow_delegation': False, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'max_iter': 3, 'tool_failure_policy': None, 'agent_executor': 'AgentExecutor', 'i18n': {'prompt_file': None}, 'llm': 'gpt-4o-mini', 'crew': {'entity_type': 'crew', 'name': 'crew', 'cache': False, 'tool_failure_policy': None, 'tasks': [{'used_tools': 0, 'tools_errors': 0, 'delegations': 0, 'name': None, 'prompt_context': '', 'description': 'Research how retrieval-augmented generation is evaluated and write a short report.', 'expected_output': 'A short report', 'config': None, 'callback': None, 'agent': 'Agent', 'context': NOT_SPECIFIED, 'async_execution': False, 'output_json': None, 'output_pydantic': None, 'response_model': None, 'output_file': None, 'create_directory': True, 'output': None, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'input_files': {}, 'security_config': {'fingerprint': {'metadata': {}}}, 'id': UUID('b9dd4ea9-4cc2-46a1-957b-f28ce1709d1e'), 'human_input': False, 'markdown': False, 'converter_cls': None, 'processed_by_agents': ['Researcher'], 'guardrail': None, 'guardrails': None, 'max_retries': None, 'guardrail_max_retries': 3, 'retry_count': 0, 'tool_failure_policy': None, 'start_time': datetime.datetime(2026, 10, 10, 5, 56, 22, 687603), 'end_time': None, 'allow_crewai_trigger_context': None, 'checkpoint_original_description': None, 'checkpoint_original_expected_output': None}], 'agents': ['Agent'], 'process': <Process.sequential: 'sequential'>, 'verbose': False, 'memory': False, 'embedder': None, 'usage_metrics': None, 'manager_llm': None, 'manager_agent': None, 'function_calling_llm': None, 'config': None, 'id': UUID('95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb'), 'share_crew': False, 'step_callback': None, 'task_callback': None, 'before_kickoff_callbacks': [], 'after_kickoff_callbacks': [], 'stream': False, 'max_rpm': None, 'prompt_file': None, 'trained_agents_file': None, 'output_log_file': None, 'planning': False, 'planning_llm': None, 'task_execution_output_json_files': None, 'execution_logs': [], 'knowledge_sources': None, 'chat_llm': None, 'knowledge': None, 'skills': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'token_usage': None, 'tracing': None, 'execution_context': None, 'checkpoint_inputs': None, 'checkpoint_train': None, 'checkpoint_kickoff_event_id': None}, 'cache_handler': None, 'tools_handler': {'cache': None, 'last_used_tool': None}, 'tools_results': [], 'max_tokens': None, 'knowledge': None, 'knowledge_sources': None, 'knowledge_storage': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'callbacks': [], 'adapted_agent': False, 'knowledge_config': None, 'apps': None, 'mcps': None, 'memory': None, 'skills': None, 'execution_context': None, 'checkpoint_kickoff_event_id': None, 'max_execution_time': None, 'step_callback': None, 'use_system_prompt': True, 'function_calling_llm': None, 'system_template': None, 'prompt_template': None, 'response_template': None, 'allow_code_execution': False, 'respect_context_window': True, 'max_retry_limit': 2, 'multimodal': False, 'inject_date': False, 'date_format': '%Y-%m-%d', 'code_execution_mode': 'safe', 'planning_config': None, 'planning': False, 'reasoning': False, 'max_reasoning_attempts': None, 'embedder': None, 'agent_knowledge_context': None, 'crew_knowledge_context': None, 'knowledge_search_query': None, 'from_repository': None, 'guardrail': None, 'guardrail_max_retries': 3, 'a2a': None, 'executor_class': <class 'crewai.experimental.agent_executor.AgentExecutor'>}, 'task': None, 'max_iter': 3, 'entity_type': 'flow', 'initial_state': None, 'name': None, 'tracing': None, 'stream': False, 'memory': None, 'input_provider': None, 'suppress_flow_events': True, 'defer_trace_finalization': False, 'human_feedback_history': [], 'last_human_feedback': None, 'persistence': None, 'max_method_calls': 30, 'execution_context': None, 'checkpoint': None, 'checkpoint_completed_methods': None, 'checkpoint_method_outputs': None, 'checkpoint_method_counts': None, 'checkpoint_state': None, 'llm': 'gpt-4o-mini', 'prompt': {'prompt': 'You are Researcher. You search the corpus before you write.\\\\nYour personal goal is: Answer research questions from the documentation corpus\\\\nCurrent Task: {input}', 'system': 'You are Researcher. You search the corpus before you write.\\\\nYour personal goal is: Answer research questions from the documentation corpus', 'user': '\\\\nCurrent Task: {input}'}, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'func': <bound method Tool._run of Tool(name='search_docs', description='Searches the documentation corpus and returns the matching passages.', env_vars=[], args_schema=<class 'crewai.tools.base_tool.Search_Docs'>, result_schema=None, description_updated=False, cache_function=<function _default_cache_function at 0x7fa07071af20>, result_as_answer=False, max_usage_count=None, tool_failure_policy=None, current_usage_count=0, func=<function search_docs at 0x7fa0915649a0>, tool_type='crewai.tools.base_tool.Tool')>, 'result_as_answer': False, 'max_usage_count': None, 'current_usage_count': 0, 'tool_failure_policy': None, 'cache_function': <function _default_cache_function at 0x7fa07071af20>}], 'tools_names': 'search_docs', 'stop_words': ['\\\\nObservation:'], 'tools_description': 'Tool Name: search_docs\\\\nTool Arguments: {\\\\n  \\\"properties\\\": {\\\\n    \\\"query\\\": {\\\\n      \\\"title\\\": \\\"Query\\\",\\\\n      \\\"type\\\": \\\"string\\\"\\\\n    }\\\\n  },\\\\n  \\\"required\\\": [\\\\n    \\\"query\\\"\\\\n  ],\\\\n  \\\"title\\\": \\\"Search_Docs\\\",\\\\n  \\\"type\\\": \\\"object\\\",\\\\n  \\\"additionalProperties\\\": false\\\\n}\\\\nTool Description: Searches the documentation corpus and returns the matching passages.', 'tools_handler': {'cache': None, 'last_used_tool': None}, 'step_callback': None, 'original_tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'function_calling_llm': None, 'respect_context_window': True, 'request_within_rpm_limit': None, 'callbacks': [{'token_cost_process': {'total_tokens': 0, 'prompt_tokens': 0, 'cached_prompt_tokens': 0, 'completion_tokens': 0, 'successful_requests': 0}}], 'response_model': None, 'log_error_after': 3, 'before_llm_call_hooks': [], 'after_llm_call_hooks': [], '_flow_post_init_done': True, '_conversation_messages': [], '_pending_user_message': None, '_pending_intents': None, '_pending_intent_llm': None, '_streaming_conversation_turn': False, '_turn_classified_intent': None, '_assistant_reply_appended': False, '_turn_recorded_results': [], '_resolved_conversation_config': None}\""
+         }
+        },
+        {
+         "key": "i18n",
+         "value": {
+          "stringValue": "\"{'prompt_file': None}\""
+         }
+        },
+        {
+         "key": "llm",
+         "value": {
+          "stringValue": "\"gpt-4o-mini\""
+         }
+        },
+        {
+         "key": "crew",
+         "value": {
+          "stringValue": "\"{'entity_type': 'crew', 'name': 'crew', 'cache': False, 'tool_failure_policy': None, 'tasks': [{'used_tools': 0, 'tools_errors': 0, 'delegations': 0, 'name': None, 'prompt_context': '', 'description': 'Research how retrieval-augmented generation is evaluated and write a short report.', 'expected_output': 'A short report', 'config': None, 'callback': None, 'agent': {'entity_type': 'agent', 'id': UUID('b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e'), 'role': 'Researcher', 'goal': 'Answer research questions from the documentation corpus', 'backstory': 'You search the corpus before you write.', 'config': None, 'cache': True, 'verbose': False, 'max_rpm': None, 'allow_delegation': False, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'max_iter': 3, 'tool_failure_policy': None, 'agent_executor': {'executor_type': 'experimental', 'crew': 'Crew', 'agent': 'Agent', 'task': None, 'max_iter': 3, 'entity_type': 'flow', 'initial_state': None, 'name': None, 'tracing': None, 'stream': False, 'memory': None, 'input_provider': None, 'suppress_flow_events': True, 'defer_trace_finalization': False, 'human_feedback_history': [], 'last_human_feedback': None, 'persistence': None, 'max_method_calls': 30, 'execution_context': None, 'checkpoint': None, 'checkpoint_completed_methods': None, 'checkpoint_method_outputs': None, 'checkpoint_method_counts': None, 'checkpoint_state': None, 'llm': 'gpt-4o-mini', 'prompt': {'prompt': 'You are Researcher. You search the corpus before you write.\\\\nYour personal goal is: Answer research questions from the documentation corpus\\\\nCurrent Task: {input}', 'system': 'You are Researcher. You search the corpus before you write.\\\\nYour personal goal is: Answer research questions from the documentation corpus', 'user': '\\\\nCurrent Task: {input}'}, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'func': <bound method Tool._run of Tool(name='search_docs', description='Searches the documentation corpus and returns the matching passages.', env_vars=[], args_schema=<class 'crewai.tools.base_tool.Search_Docs'>, result_schema=None, description_updated=False, cache_function=<function _default_cache_function at 0x7fa07071af20>, result_as_answer=False, max_usage_count=None, tool_failure_policy=None, current_usage_count=0, func=<function search_docs at 0x7fa0915649a0>, tool_type='crewai.tools.base_tool.Tool')>, 'result_as_answer': False, 'max_usage_count': None, 'current_usage_count': 0, 'tool_failure_policy': None, 'cache_function': <function _default_cache_function at 0x7fa07071af20>}], 'tools_names': 'search_docs', 'stop_words': ['\\\\nObservation:'], 'tools_description': 'Tool Name: search_docs\\\\nTool Arguments: {\\\\n  \\\"properties\\\": {\\\\n    \\\"query\\\": {\\\\n      \\\"title\\\": \\\"Query\\\",\\\\n      \\\"type\\\": \\\"string\\\"\\\\n    }\\\\n  },\\\\n  \\\"required\\\": [\\\\n    \\\"query\\\"\\\\n  ],\\\\n  \\\"title\\\": \\\"Search_Docs\\\",\\\\n  \\\"type\\\": \\\"object\\\",\\\\n  \\\"additionalProperties\\\": false\\\\n}\\\\nTool Description: Searches the documentation corpus and returns the matching passages.', 'tools_handler': {'cache': None, 'last_used_tool': None}, 'step_callback': None, 'original_tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'function_calling_llm': None, 'respect_context_window': True, 'request_within_rpm_limit': None, 'callbacks': [{'token_cost_process': {'total_tokens': 0, 'prompt_tokens': 0, 'cached_prompt_tokens': 0, 'completion_tokens': 0, 'successful_requests': 0}}], 'response_model': None, 'log_error_after': 3, 'before_llm_call_hooks': [], 'after_llm_call_hooks': [], '_flow_post_init_done': True, '_conversation_messages': [], '_pending_user_message': None, '_pending_intents': None, '_pending_intent_llm': None, '_streaming_conversation_turn': False, '_turn_classified_intent': None, '_assistant_reply_appended': False, '_turn_recorded_results': [], '_resolved_conversation_config': None}, 'i18n': {'prompt_file': None}, 'llm': 'gpt-4o-mini', 'crew': 'Crew', 'cache_handler': None, 'tools_handler': {'cache': None, 'last_used_tool': None}, 'tools_results': [], 'max_tokens': None, 'knowledge': None, 'knowledge_sources': None, 'knowledge_storage': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'callbacks': [], 'adapted_agent': False, 'knowledge_config': None, 'apps': None, 'mcps': None, 'memory': None, 'skills': None, 'execution_context': None, 'checkpoint_kickoff_event_id': None, 'max_execution_time': None, 'step_callback': None, 'use_system_prompt': True, 'function_calling_llm': None, 'system_template': None, 'prompt_template': None, 'response_template': None, 'allow_code_execution': False, 'respect_context_window': True, 'max_retry_limit': 2, 'multimodal': False, 'inject_date': False, 'date_format': '%Y-%m-%d', 'code_execution_mode': 'safe', 'planning_config': None, 'planning': False, 'reasoning': False, 'max_reasoning_attempts': None, 'embedder': None, 'agent_knowledge_context': None, 'crew_knowledge_context': None, 'knowledge_search_query': None, 'from_repository': None, 'guardrail': None, 'guardrail_max_retries': 3, 'a2a': None, 'executor_class': <class 'crewai.experimental.agent_executor.AgentExecutor'>}, 'context': NOT_SPECIFIED, 'async_execution': False, 'output_json': None, 'output_pydantic': None, 'response_model': None, 'output_file': None, 'create_directory': True, 'output': None, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'input_files': {}, 'security_config': {'fingerprint': {'metadata': {}}}, 'id': UUID('b9dd4ea9-4cc2-46a1-957b-f28ce1709d1e'), 'human_input': False, 'markdown': False, 'converter_cls': None, 'processed_by_agents': ['Researcher'], 'guardrail': None, 'guardrails': None, 'max_retries': None, 'guardrail_max_retries': 3, 'retry_count': 0, 'tool_failure_policy': None, 'start_time': datetime.datetime(2026, 10, 10, 5, 56, 22, 687603), 'end_time': None, 'allow_crewai_trigger_context': None, 'checkpoint_original_description': None, 'checkpoint_original_expected_output': None}], 'agents': [{'entity_type': 'agent', 'id': UUID('b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e'), 'role': 'Researcher', 'goal': 'Answer research questions from the documentation corpus', 'backstory': 'You search the corpus before you write.', 'config': None, 'cache': True, 'verbose': False, 'max_rpm': None, 'allow_delegation': False, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'max_iter': 3, 'tool_failure_policy': None, 'agent_executor': {'executor_type': 'experimental', 'crew': 'Crew', 'agent': 'Agent', 'task': None, 'max_iter': 3, 'entity_type': 'flow', 'initial_state': None, 'name': None, 'tracing': None, 'stream': False, 'memory': None, 'input_provider': None, 'suppress_flow_events': True, 'defer_trace_finalization': False, 'human_feedback_history': [], 'last_human_feedback': None, 'persistence': None, 'max_method_calls': 30, 'execution_context': None, 'checkpoint': None, 'checkpoint_completed_methods': None, 'checkpoint_method_outputs': None, 'checkpoint_method_counts': None, 'checkpoint_state': None, 'llm': 'gpt-4o-mini', 'prompt': {'prompt': 'You are Researcher. You search the corpus before you write.\\\\nYour personal goal is: Answer research questions from the documentation corpus\\\\nCurrent Task: {input}', 'system': 'You are Researcher. You search the corpus before you write.\\\\nYour personal goal is: Answer research questions from the documentation corpus', 'user': '\\\\nCurrent Task: {input}'}, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'func': <bound method Tool._run of Tool(name='search_docs', description='Searches the documentation corpus and returns the matching passages.', env_vars=[], args_schema=<class 'crewai.tools.base_tool.Search_Docs'>, result_schema=None, description_updated=False, cache_function=<function _default_cache_function at 0x7fa07071af20>, result_as_answer=False, max_usage_count=None, tool_failure_policy=None, current_usage_count=0, func=<function search_docs at 0x7fa0915649a0>, tool_type='crewai.tools.base_tool.Tool')>, 'result_as_answer': False, 'max_usage_count': None, 'current_usage_count': 0, 'tool_failure_policy': None, 'cache_function': <function _default_cache_function at 0x7fa07071af20>}], 'tools_names': 'search_docs', 'stop_words': ['\\\\nObservation:'], 'tools_description': 'Tool Name: search_docs\\\\nTool Arguments: {\\\\n  \\\"properties\\\": {\\\\n    \\\"query\\\": {\\\\n      \\\"title\\\": \\\"Query\\\",\\\\n      \\\"type\\\": \\\"string\\\"\\\\n    }\\\\n  },\\\\n  \\\"required\\\": [\\\\n    \\\"query\\\"\\\\n  ],\\\\n  \\\"title\\\": \\\"Search_Docs\\\",\\\\n  \\\"type\\\": \\\"object\\\",\\\\n  \\\"additionalProperties\\\": false\\\\n}\\\\nTool Description: Searches the documentation corpus and returns the matching passages.', 'tools_handler': {'cache': None, 'last_used_tool': None}, 'step_callback': None, 'original_tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'function_calling_llm': None, 'respect_context_window': True, 'request_within_rpm_limit': None, 'callbacks': [{'token_cost_process': {'total_tokens': 0, 'prompt_tokens': 0, 'cached_prompt_tokens': 0, 'completion_tokens': 0, 'successful_requests': 0}}], 'response_model': None, 'log_error_after': 3, 'before_llm_call_hooks': [], 'after_llm_call_hooks': [], '_flow_post_init_done': True, '_conversation_messages': [], '_pending_user_message': None, '_pending_intents': None, '_pending_intent_llm': None, '_streaming_conversation_turn': False, '_turn_classified_intent': None, '_assistant_reply_appended': False, '_turn_recorded_results': [], '_resolved_conversation_config': None}, 'i18n': {'prompt_file': None}, 'llm': 'gpt-4o-mini', 'crew': 'Crew', 'cache_handler': None, 'tools_handler': {'cache': None, 'last_used_tool': None}, 'tools_results': [], 'max_tokens': None, 'knowledge': None, 'knowledge_sources': None, 'knowledge_storage': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'callbacks': [], 'adapted_agent': False, 'knowledge_config': None, 'apps': None, 'mcps': None, 'memory': None, 'skills': None, 'execution_context': None, 'checkpoint_kickoff_event_id': None, 'max_execution_time': None, 'step_callback': None, 'use_system_prompt': True, 'function_calling_llm': None, 'system_template': None, 'prompt_template': None, 'response_template': None, 'allow_code_execution': False, 'respect_context_window': True, 'max_retry_limit': 2, 'multimodal': False, 'inject_date': False, 'date_format': '%Y-%m-%d', 'code_execution_mode': 'safe', 'planning_config': None, 'planning': False, 'reasoning': False, 'max_reasoning_attempts': None, 'embedder': None, 'agent_knowledge_context': None, 'crew_knowledge_context': None, 'knowledge_search_query': None, 'from_repository': None, 'guardrail': None, 'guardrail_max_retries': 3, 'a2a': None, 'executor_class': <class 'crewai.experimental.agent_executor.AgentExecutor'>}], 'process': <Process.sequential: 'sequential'>, 'verbose': False, 'memory': False, 'embedder': None, 'usage_metrics': None, 'manager_llm': None, 'manager_agent': None, 'function_calling_llm': None, 'config': None, 'id': UUID('95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb'), 'share_crew': False, 'step_callback': None, 'task_callback': None, 'before_kickoff_callbacks': [], 'after_kickoff_callbacks': [], 'stream': False, 'max_rpm': None, 'prompt_file': None, 'trained_agents_file': None, 'output_log_file': None, 'planning': False, 'planning_llm': None, 'task_execution_output_json_files': None, 'execution_logs': [], 'knowledge_sources': None, 'chat_llm': None, 'knowledge': None, 'skills': None, 'security_config': {'fingerprint': {'metadata': {}}}, 'checkpoint': None, 'token_usage': None, 'tracing': None, 'execution_context': None, 'checkpoint_inputs': None, 'checkpoint_train': None, 'checkpoint_kickoff_event_id': None}\""
+         }
+        },
+        {
+         "key": "tools_handler",
+         "value": {
+          "stringValue": "\"{'cache': None, 'last_used_tool': None}\""
+         }
+        },
+        {
+         "key": "tools_results",
+         "value": {
+          "stringValue": "\"[]\""
+         }
+        },
+        {
+         "key": "security_config",
+         "value": {
+          "stringValue": "\"{'fingerprint': {'metadata': {}}}\""
+         }
+        },
+        {
+         "key": "callbacks",
+         "value": {
+          "stringValue": "\"[]\""
+         }
+        },
+        {
+         "key": "adapted_agent",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "use_system_prompt",
+         "value": {
+          "stringValue": "\"True\""
+         }
+        },
+        {
+         "key": "allow_code_execution",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "respect_context_window",
+         "value": {
+          "stringValue": "\"True\""
+         }
+        },
+        {
+         "key": "max_retry_limit",
+         "value": {
+          "stringValue": "\"2\""
+         }
+        },
+        {
+         "key": "multimodal",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "inject_date",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "date_format",
+         "value": {
+          "stringValue": "\"%Y-%m-%d\""
+         }
+        },
+        {
+         "key": "code_execution_mode",
+         "value": {
+          "stringValue": "\"safe\""
+         }
+        },
+        {
+         "key": "planning",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "reasoning",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "guardrail_max_retries",
+         "value": {
+          "stringValue": "\"3\""
+         }
+        },
+        {
+         "key": "executor_class",
+         "value": {
+          "stringValue": "\"<class 'crewai.experimental.agent_executor.AgentExecutor'>\""
+         }
+        },
+        {
+         "key": "mlflow.spanOutputs",
+         "value": {
+          "stringValue": "\"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\""
+         }
+        },
+        {
+         "key": "mlflow.spanLogLevel",
+         "value": {
+          "stringValue": "20"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611782800727858",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Researcher",
+       "parentSpanId": "cb52ae7ee51e76ba",
+       "spanId": "4652cdf12a04f695",
+       "startTimeUnixNano": "1791611782688333008",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "994c14ffb63512fc4ac4e7538a6de6f6"
+      },
+      {
+       "attributes": [
+        {
+         "key": "mlflow.traceRequestId",
+         "value": {
+          "stringValue": "\"tr-994c14ffb63512fc4ac4e7538a6de6f6\""
+         }
+        },
+        {
+         "key": "mlflow.spanType",
+         "value": {
+          "stringValue": "\"CHAIN\""
+         }
+        },
+        {
+         "key": "mlflow.spanInputs",
+         "value": {
+          "stringValue": "{\"agent\": {\"entity_type\": \"agent\", \"id\": \"b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e\", \"role\": \"Researcher\", \"goal\": \"Answer research questions from the documentation corpus\", \"backstory\": \"You search the corpus before you write.\", \"config\": null, \"cache\": true, \"verbose\": false, \"max_rpm\": null, \"allow_delegation\": false, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}], \"max_iter\": 3, \"tool_failure_policy\": null, \"agent_executor\": {\"executor_type\": \"experimental\", \"crew\": {\"entity_type\": \"crew\", \"name\": \"crew\", \"cache\": false, \"tool_failure_policy\": null, \"tasks\": [{\"used_tools\": 0, \"tools_errors\": 0, \"delegations\": 0, \"name\": null, \"prompt_context\": null, \"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"config\": null, \"callback\": null, \"agent\": \"dict\", \"context\": \"NOT_SPECIFIED\", \"async_execution\": false, \"output_json\": null, \"output_pydantic\": null, \"response_model\": null, \"output_file\": null, \"create_directory\": true, \"output\": null, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}], \"input_files\": {}, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"id\": \"b9dd4ea9-4cc2-46a1-957b-f28ce1709d1e\", \"human_input\": false, \"markdown\": false, \"converter_cls\": null, \"processed_by_agents\": [], \"guardrail\": null, \"guardrails\": null, \"max_retries\": null, \"guardrail_max_retries\": 3, \"retry_count\": 0, \"tool_failure_policy\": null, \"start_time\": null, \"end_time\": null, \"allow_crewai_trigger_context\": null, \"checkpoint_original_description\": null, \"checkpoint_original_expected_output\": null}], \"agents\": [\"dict\"], \"process\": \"sequential\", \"verbose\": false, \"memory\": false, \"embedder\": null, \"usage_metrics\": null, \"manager_llm\": null, \"manager_agent\": null, \"function_calling_llm\": null, \"config\": null, \"id\": \"95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb\", \"share_crew\": false, \"step_callback\": null, \"task_callback\": null, \"before_kickoff_callbacks\": [], \"after_kickoff_callbacks\": [], \"stream\": false, \"max_rpm\": null, \"prompt_file\": null, \"trained_agents_file\": null, \"output_log_file\": null, \"planning\": false, \"planning_llm\": null, \"task_execution_output_json_files\": null, \"execution_logs\": [], \"knowledge_sources\": null, \"chat_llm\": null, \"knowledge\": null, \"skills\": null, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"checkpoint\": null, \"token_usage\": null, \"tracing\": null, \"execution_context\": null, \"checkpoint_inputs\": null, \"checkpoint_train\": null, \"checkpoint_kickoff_event_id\": null}, \"agent\": \"dict\", \"task\": null, \"max_iter\": 3, \"entity_type\": \"flow\", \"initial_state\": null, \"name\": null, \"tracing\": null, \"stream\": false, \"memory\": null, \"input_provider\": null, \"suppress_flow_events\": true, \"defer_trace_finalization\": false, \"human_feedback_history\": [], \"last_human_feedback\": null, \"persistence\": null, \"max_method_calls\": 30, \"execution_context\": null, \"checkpoint\": null, \"checkpoint_completed_methods\": null, \"checkpoint_method_outputs\": null, \"checkpoint_method_counts\": null, \"checkpoint_state\": null, \"llm\": \"gpt-4o-mini\", \"prompt\": {\"prompt\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\\nCurrent Task: {input}\", \"system\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\", \"user\": \"\\nCurrent Task: {input}\"}, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"func\": \"<bound method Tool._run of Tool(name='search_docs', description='Searches the documentation corpus and returns the matching passages.', env_vars=[], args_schema=<class 'crewai.tools.base_tool.Search_Docs'>, result_schema=None, description_updated=False, cache_function=<function _default_cache_function at 0x7fa07071af20>, result_as_answer=False, max_usage_count=None, tool_failure_policy=None, current_usage_count=0, func=<function search_docs at 0x7fa0915649a0>, tool_type='crewai.tools.base_tool.Tool')>\", \"result_as_answer\": false, \"max_usage_count\": null, \"current_usage_count\": 0, \"tool_failure_policy\": null, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\"}], \"tools_names\": \"search_docs\", \"stop_words\": [\"\\nObservation:\"], \"tools_description\": \"Tool Name: search_docs\\nTool Arguments: {\\n  \\\"properties\\\": {\\n    \\\"query\\\": {\\n      \\\"title\\\": \\\"Query\\\",\\n      \\\"type\\\": \\\"string\\\"\\n    }\\n  },\\n  \\\"required\\\": [\\n    \\\"query\\\"\\n  ],\\n  \\\"title\\\": \\\"Search_Docs\\\",\\n  \\\"type\\\": \\\"object\\\",\\n  \\\"additionalProperties\\\": false\\n}\\nTool Description: Searches the documentation corpus and returns the matching passages.\", \"tools_handler\": {\"cache\": null, \"last_used_tool\": null}, \"step_callback\": null, \"original_tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}], \"function_calling_llm\": null, \"respect_context_window\": true, \"request_within_rpm_limit\": null, \"callbacks\": [{\"token_cost_process\": {\"total_tokens\": 0, \"prompt_tokens\": 0, \"cached_prompt_tokens\": 0, \"completion_tokens\": 0, \"successful_requests\": 0}}], \"response_model\": null, \"log_error_after\": 3, \"before_llm_call_hooks\": [], \"after_llm_call_hooks\": [], \"_flow_post_init_done\": true, \"_conversation_messages\": [], \"_pending_user_message\": null, \"_pending_intents\": null, \"_pending_intent_llm\": null, \"_streaming_conversation_turn\": false, \"_turn_classified_intent\": null, \"_assistant_reply_appended\": false, \"_turn_recorded_results\": [], \"_resolved_conversation_config\": null}, \"i18n\": {\"prompt_file\": null}, \"llm\": \"gpt-4o-mini\", \"crew\": {\"entity_type\": \"crew\", \"name\": \"crew\", \"cache\": false, \"tool_failure_policy\": null, \"tasks\": [{\"used_tools\": 0, \"tools_errors\": 0, \"delegations\": 0, \"name\": null, \"prompt_context\": null, \"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"config\": null, \"callback\": null, \"agent\": \"dict\", \"context\": \"NOT_SPECIFIED\", \"async_execution\": false, \"output_json\": null, \"output_pydantic\": null, \"response_model\": null, \"output_file\": null, \"create_directory\": true, \"output\": null, \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}], \"input_files\": {}, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"id\": \"b9dd4ea9-4cc2-46a1-957b-f28ce1709d1e\", \"human_input\": false, \"markdown\": false, \"converter_cls\": null, \"processed_by_agents\": [], \"guardrail\": null, \"guardrails\": null, \"max_retries\": null, \"guardrail_max_retries\": 3, \"retry_count\": 0, \"tool_failure_policy\": null, \"start_time\": null, \"end_time\": null, \"allow_crewai_trigger_context\": null, \"checkpoint_original_description\": null, \"checkpoint_original_expected_output\": null}], \"agents\": [\"dict\"], \"process\": \"sequential\", \"verbose\": false, \"memory\": false, \"embedder\": null, \"usage_metrics\": null, \"manager_llm\": null, \"manager_agent\": null, \"function_calling_llm\": null, \"config\": null, \"id\": \"95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb\", \"share_crew\": false, \"step_callback\": null, \"task_callback\": null, \"before_kickoff_callbacks\": [], \"after_kickoff_callbacks\": [], \"stream\": false, \"max_rpm\": null, \"prompt_file\": null, \"trained_agents_file\": null, \"output_log_file\": null, \"planning\": false, \"planning_llm\": null, \"task_execution_output_json_files\": null, \"execution_logs\": [], \"knowledge_sources\": null, \"chat_llm\": null, \"knowledge\": null, \"skills\": null, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"checkpoint\": null, \"token_usage\": null, \"tracing\": null, \"execution_context\": null, \"checkpoint_inputs\": null, \"checkpoint_train\": null, \"checkpoint_kickoff_event_id\": null}, \"cache_handler\": null, \"tools_handler\": {\"cache\": null, \"last_used_tool\": null}, \"tools_results\": [], \"max_tokens\": null, \"knowledge\": null, \"knowledge_sources\": null, \"knowledge_storage\": null, \"security_config\": {\"fingerprint\": {\"metadata\": {}}}, \"checkpoint\": null, \"callbacks\": [], \"adapted_agent\": false, \"knowledge_config\": null, \"apps\": null, \"mcps\": null, \"memory\": null, \"skills\": null, \"execution_context\": null, \"checkpoint_kickoff_event_id\": null, \"max_execution_time\": null, \"step_callback\": null, \"use_system_prompt\": true, \"function_calling_llm\": null, \"system_template\": null, \"prompt_template\": null, \"response_template\": null, \"allow_code_execution\": false, \"respect_context_window\": true, \"max_retry_limit\": 2, \"multimodal\": false, \"inject_date\": false, \"date_format\": \"%Y-%m-%d\", \"code_execution_mode\": \"safe\", \"planning_config\": null, \"planning\": false, \"reasoning\": false, \"max_reasoning_attempts\": null, \"embedder\": null, \"agent_knowledge_context\": null, \"crew_knowledge_context\": null, \"knowledge_search_query\": null, \"from_repository\": null, \"guardrail\": null, \"guardrail_max_retries\": 3, \"a2a\": null, \"executor_class\": \"<class 'crewai.experimental.agent_executor.AgentExecutor'>\"}, \"context\": \"\", \"tools\": [{\"name\": \"search_docs\", \"description\": \"Searches the documentation corpus and returns the matching passages.\", \"env_vars\": [], \"args_schema\": \"<class 'crewai.tools.base_tool.Search_Docs'>\", \"result_schema\": null, \"description_updated\": false, \"cache_function\": \"<function _default_cache_function at 0x7fa07071af20>\", \"result_as_answer\": false, \"max_usage_count\": null, \"tool_failure_policy\": null, \"current_usage_count\": 0, \"func\": \"<function search_docs at 0x7fa0915649a0>\"}]}"
+         }
+        },
+        {
+         "key": "used_tools",
+         "value": {
+          "stringValue": "\"0\""
+         }
+        },
+        {
+         "key": "tools_errors",
+         "value": {
+          "stringValue": "\"0\""
+         }
+        },
+        {
+         "key": "delegations",
+         "value": {
+          "stringValue": "\"0\""
+         }
+        },
+        {
+         "key": "description",
+         "value": {
+          "stringValue": "\"Research how retrieval-augmented generation is evaluated and write a short report.\""
+         }
+        },
+        {
+         "key": "expected_output",
+         "value": {
+          "stringValue": "\"A short report\""
+         }
+        },
+        {
+         "key": "agent",
+         "value": {
+          "stringValue": "\"Researcher\""
+         }
+        },
+        {
+         "key": "context",
+         "value": {
+          "stringValue": "\"NOT_SPECIFIED\""
+         }
+        },
+        {
+         "key": "async_execution",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "create_directory",
+         "value": {
+          "stringValue": "\"True\""
+         }
+        },
+        {
+         "key": "tools",
+         "value": {
+          "stringValue": "\"[{'type': 'function', 'function': {'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.'}}]\""
+         }
+        },
+        {
+         "key": "input_files",
+         "value": {
+          "stringValue": "\"{}\""
+         }
+        },
+        {
+         "key": "security_config",
+         "value": {
+          "stringValue": "\"{'fingerprint': {'metadata': {}}}\""
+         }
+        },
+        {
+         "key": "id",
+         "value": {
+          "stringValue": "\"b9dd4ea9-4cc2-46a1-957b-f28ce1709d1e\""
+         }
+        },
+        {
+         "key": "human_input",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "markdown",
+         "value": {
+          "stringValue": "\"False\""
+         }
+        },
+        {
+         "key": "processed_by_agents",
+         "value": {
+          "stringValue": "\"[]\""
+         }
+        },
+        {
+         "key": "guardrail_max_retries",
+         "value": {
+          "stringValue": "\"3\""
+         }
+        },
+        {
+         "key": "retry_count",
+         "value": {
+          "stringValue": "\"0\""
+         }
+        },
+        {
+         "key": "mlflow.spanOutputs",
+         "value": {
+          "stringValue": "{\"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"name\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"summary\": \"Research how retrieval-augmented generation is evaluated and write a short...\", \"raw\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"pydantic\": null, \"json_dict\": null, \"agent\": \"Researcher\", \"output_format\": \"raw\", \"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}, {\"role\": \"assistant\", \"content\": \"\", \"tool_calls\": [{\"id\": \"call_943b4258e4c5\", \"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\"}}]}, {\"role\": \"tool\", \"content\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\", \"tool_call_id\": \"call_943b4258e4c5\", \"name\": \"search_docs\"}, {\"role\": \"assistant\", \"content\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\"}], \"tool_failures\": []}"
+         }
+        },
+        {
+         "key": "mlflow.spanLogLevel",
+         "value": {
+          "stringValue": "10"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611782802613321",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Task.execute_sync",
+       "parentSpanId": "95a1de0b5c10b29c",
+       "spanId": "cb52ae7ee51e76ba",
+       "startTimeUnixNano": "1791611782681630850",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "994c14ffb63512fc4ac4e7538a6de6f6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "mlflow"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "3.17.0"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "70e36d57-4a19-47b7-81cc-6932cbb51073"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-crewai"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "mlflow.tracing.provider"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "mlflow.traceRequestId",
+         "value": {
+          "stringValue": "\"tr-994c14ffb63512fc4ac4e7538a6de6f6\""
+         }
+        },
+        {
+         "key": "mlflow.spanType",
+         "value": {
+          "stringValue": "\"CHAIN\""
+         }
+        },
+        {
+         "key": "mlflow.spanInputs",
+         "value": {
+          "stringValue": "{}"
+         }
+        },
+        {
+         "key": "entity_type",
+         "value": {
+          "stringValue": "\"crew\""
+         }
+        },
+        {
+         "key": "name",
+         "value": {
+          "stringValue": "\"crew\""
+         }
+        },
+        {
+         "key": "cache",
+         "value": {
+          "stringValue": "false"
+         }
+        },
+        {
+         "key": "tasks",
+         "value": {
+          "stringValue": "\"[{'agent': 'Researcher', 'description': 'Research how retrieval-augmented generation is evaluated and write a short report.', 'async_execution': False, 'expected_output': 'A short report', 'human_input': False, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'output_file': None}]\""
+         }
+        },
+        {
+         "key": "agents",
+         "value": {
+          "stringValue": "\"[{'id': 'b6f4a7ac-244b-4b8e-a09e-5d68a6c9568e', 'role': 'Researcher', 'goal': 'Answer research questions from the documentation corpus', 'backstory': 'You search the corpus before you write.', 'cache': True, 'config': None, 'verbose': False, 'allow_delegation': False, 'tools': [{'name': 'search_docs', 'description': 'Searches the documentation corpus and returns the matching passages.', 'env_vars': [], 'args_schema': <class 'crewai.tools.base_tool.Search_Docs'>, 'result_schema': None, 'description_updated': False, 'cache_function': <function _default_cache_function at 0x7fa07071af20>, 'result_as_answer': False, 'max_usage_count': None, 'tool_failure_policy': None, 'current_usage_count': 0, 'func': <function search_docs at 0x7fa0915649a0>}], 'max_iter': 3, 'llm': 'gpt-4o-mini'}]\""
+         }
+        },
+        {
+         "key": "process",
+         "value": {
+          "stringValue": "\"sequential\""
+         }
+        },
+        {
+         "key": "verbose",
+         "value": {
+          "stringValue": "false"
+         }
+        },
+        {
+         "key": "memory",
+         "value": {
+          "stringValue": "false"
+         }
+        },
+        {
+         "key": "id",
+         "value": {
+          "stringValue": "\"95ce8cd1-8f3d-4f9c-aae6-1c636a65eadb\""
+         }
+        },
+        {
+         "key": "share_crew",
+         "value": {
+          "stringValue": "false"
+         }
+        },
+        {
+         "key": "before_kickoff_callbacks",
+         "value": {
+          "stringValue": "\"[]\""
+         }
+        },
+        {
+         "key": "after_kickoff_callbacks",
+         "value": {
+          "stringValue": "\"[]\""
+         }
+        },
+        {
+         "key": "stream",
+         "value": {
+          "stringValue": "false"
+         }
+        },
+        {
+         "key": "planning",
+         "value": {
+          "stringValue": "false"
+         }
+        },
+        {
+         "key": "execution_logs",
+         "value": {
+          "stringValue": "\"[]\""
+         }
+        },
+        {
+         "key": "security_config",
+         "value": {
+          "stringValue": "{\"fingerprint\": {\"metadata\": {}}}"
+         }
+        },
+        {
+         "key": "mlflow.spanOutputs",
+         "value": {
+          "stringValue": "{\"raw\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"pydantic\": null, \"json_dict\": null, \"tasks_output\": [{\"description\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"name\": \"Research how retrieval-augmented generation is evaluated and write a short report.\", \"expected_output\": \"A short report\", \"summary\": \"Research how retrieval-augmented generation is evaluated and write a short...\", \"raw\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\\n\", \"pydantic\": null, \"json_dict\": null, \"agent\": \"Researcher\", \"output_format\": \"raw\", \"messages\": [{\"role\": \"system\", \"content\": \"You are Researcher. You search the corpus before you write.\\nYour personal goal is: Answer research questions from the documentation corpus\"}, {\"role\": \"user\", \"content\": \"\\nCurrent Task: Research how retrieval-augmented generation is evaluated and write a short report.\\n\\nThis is the expected criteria for your final answer: A short report\\nyou MUST return the actual complete content as the final answer, not a summary.\"}, {\"role\": \"assistant\", \"content\": \"\", \"tool_calls\": [{\"id\": \"call_943b4258e4c5\", \"type\": \"function\", \"function\": {\"name\": \"search_docs\", \"arguments\": \"{\\\"query\\\": \\\"retrieval-augmented generation evaluation\\\"}\"}}]}, {\"role\": \"tool\", \"content\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\", \"tool_call_id\": \"call_943b4258e4c5\", \"name\": \"search_docs\"}, {\"role\": \"assistant\", \"content\": \"# Findings\\n\\nRAG grounds a model's answer in documents fetched at question time [1]. It is evaluated in two parts, context quality and answer quality, which shows whether a bad answer came from retrieval or generation [2].\\n\\n## Sources\\n[1] rag-overview\\n[2] rag-evaluation\"}], \"tool_failures\": []}], \"token_usage\": {\"total_tokens\": 342, \"prompt_tokens\": 232, \"cached_prompt_tokens\": 0, \"completion_tokens\": 110, \"reasoning_tokens\": 0, \"cache_creation_tokens\": 0, \"successful_requests\": 2}}"
+         }
+        },
+        {
+         "key": "mlflow.spanLogLevel",
+         "value": {
+          "stringValue": "10"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611782811513775",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Crew.kickoff",
+       "spanId": "95a1de0b5c10b29c",
+       "startTimeUnixNano": "1791611782611622318",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "994c14ffb63512fc4ac4e7538a6de6f6"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

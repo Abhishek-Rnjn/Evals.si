@@ -1,0 +1,440 @@
+{
+ "resourceSpans": [
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "4fff3cd4-4ce1-494c-8d9e-1c058548d8c4"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.openai_agents",
+      "version": "0.62.4"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.input.messages",
+         "value": {
+          "stringValue": "[{\"role\": \"system\", \"parts\": [{\"type\": \"text\", \"content\": \"Search the documentation corpus, then write a short report.\"}]}, {\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Research how retrieval-augmented generation is evaluated and write a short report.\"}]}]"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611810269189860",
+       "flags": 256,
+       "kind": "SPAN_KIND_CLIENT",
+       "name": "openai.response",
+       "parentSpanId": "1fedb4b122b5aebf",
+       "spanId": "e40a6e17ff8ab6a4",
+       "startTimeUnixNano": "1791611810226391848",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "f87b215f43afbb5f4afa391c229bec28"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "4fff3cd4-4ce1-494c-8d9e-1c058548d8c4"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.openai_agents",
+      "version": "0.62.4"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "traceloop.span.kind",
+         "value": {
+          "stringValue": "tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.name",
+         "value": {
+          "stringValue": "search_docs"
+         }
+        },
+        {
+         "key": "gen_ai.tool.type",
+         "value": {
+          "stringValue": "function"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "execute_tool"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.arguments",
+         "value": {
+          "stringValue": "{\"query\": \"retrieval-augmented generation evaluation\"}"
+         }
+        },
+        {
+         "key": "gen_ai.tool.call.result",
+         "value": {
+          "stringValue": "[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them)."
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611810275395088",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "search_docs.tool",
+       "parentSpanId": "1fedb4b122b5aebf",
+       "spanId": "9ae1190050f94171",
+       "startTimeUnixNano": "1791611810274063189",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "f87b215f43afbb5f4afa391c229bec28"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "4fff3cd4-4ce1-494c-8d9e-1c058548d8c4"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.openai_agents",
+      "version": "0.62.4"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "chat"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.request.model",
+         "value": {
+          "stringValue": "gpt-4o-mini"
+         }
+        },
+        {
+         "key": "gen_ai.input.messages",
+         "value": {
+          "stringValue": "[{\"role\": \"system\", \"parts\": [{\"type\": \"text\", \"content\": \"Search the documentation corpus, then write a short report.\"}]}, {\"role\": \"user\", \"parts\": [{\"type\": \"text\", \"content\": \"Research how retrieval-augmented generation is evaluated and write a short report.\"}]}, {\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call_5d3af36871d4\", \"name\": \"search_docs\", \"arguments\": {\"query\": \"retrieval-augmented generation evaluation\"}}]}, {\"role\": \"tool\", \"parts\": [{\"type\": \"tool_call_response\", \"id\": \"call_5d3af36871d4\", \"response\": \"[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved documents relevant) and answer quality (is the answer faithful to them).\"}]}]"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611810327383857",
+       "flags": 256,
+       "kind": "SPAN_KIND_CLIENT",
+       "name": "openai.response",
+       "parentSpanId": "1fedb4b122b5aebf",
+       "spanId": "834d50a56d15c93a",
+       "startTimeUnixNano": "1791611810278950558",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "f87b215f43afbb5f4afa391c229bec28"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "4fff3cd4-4ce1-494c-8d9e-1c058548d8c4"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.openai_agents",
+      "version": "0.62.4"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "traceloop.span.kind",
+         "value": {
+          "stringValue": "agent"
+         }
+        },
+        {
+         "key": "gen_ai.agent.name",
+         "value": {
+          "stringValue": "Researcher"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "gen_ai.operation.name",
+         "value": {
+          "stringValue": "invoke_agent"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611810331437660",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Researcher.agent",
+       "parentSpanId": "babbc1e46ee231ef",
+       "spanId": "1fedb4b122b5aebf",
+       "startTimeUnixNano": "1791611810225530092",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "f87b215f43afbb5f4afa391c229bec28"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "resource": {
+    "attributes": [
+     {
+      "key": "telemetry.sdk.language",
+      "value": {
+       "stringValue": "python"
+      }
+     },
+     {
+      "key": "telemetry.sdk.name",
+      "value": {
+       "stringValue": "opentelemetry"
+      }
+     },
+     {
+      "key": "telemetry.sdk.version",
+      "value": {
+       "stringValue": "1.45.1"
+      }
+     },
+     {
+      "key": "service.instance.id",
+      "value": {
+       "stringValue": "4fff3cd4-4ce1-494c-8d9e-1c058548d8c4"
+      }
+     },
+     {
+      "key": "service.name",
+      "value": {
+       "stringValue": "evalsi-fixture-openai-agents"
+      }
+     }
+    ]
+   },
+   "scopeSpans": [
+    {
+     "scope": {
+      "name": "opentelemetry.instrumentation.openai_agents",
+      "version": "0.62.4"
+     },
+     "spans": [
+      {
+       "attributes": [
+        {
+         "key": "traceloop.span.kind",
+         "value": {
+          "stringValue": "workflow"
+         }
+        },
+        {
+         "key": "gen_ai.provider.name",
+         "value": {
+          "stringValue": "openai"
+         }
+        },
+        {
+         "key": "traceloop.workflow.name",
+         "value": {
+          "stringValue": "Agent Workflow"
+         }
+        }
+       ],
+       "endTimeUnixNano": "1791611810333170181",
+       "flags": 256,
+       "kind": "SPAN_KIND_INTERNAL",
+       "name": "Agent Workflow",
+       "spanId": "babbc1e46ee231ef",
+       "startTimeUnixNano": "1791611810224628428",
+       "status": {
+        "code": "STATUS_CODE_OK"
+       },
+       "traceId": "f87b215f43afbb5f4afa391c229bec28"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

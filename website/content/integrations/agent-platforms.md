@@ -6,7 +6,7 @@ description: Connect visual agent builders, low-code studios and agent framework
 Agent studios and builders (visual workflow tools, low-code platforms, hosted agent services and frameworks) differ in how you build agents. For evaluation they need only one of a few capabilities, and Evals.si integrates through those rather than through a per-product plugin.
 
 :::note
-This page describes what Evals.si supports. It does not claim tested compatibility with any named product. Check each platform's own docs for how to enable its tracing export or expose its agent endpoint, then use the recipe below that matches.
+This page describes what Evals.si supports. Five agent frameworks are tested against traces recorded from them: LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK (see [agent frameworks](__BASE__/docs/guides/agent-frameworks/)). For any other platform, check its own docs for how to enable its tracing export or expose its agent endpoint, then use the recipe below that matches.
 :::
 
 ## Pick the recipe that matches your platform
@@ -14,6 +14,7 @@ This page describes what Evals.si supports. It does not claim tested compatibili
 | If the platform can... | Use | Gets you |
 |---|---|---|
 | Export OpenTelemetry traces (OTel GenAI, OpenInference, OpenLLMetry, MLflow) | **Recipe A** | Live scoring of production traffic |
+| Keep traces in MLflow, Phoenix or Langfuse already | **Recipe A2** | Live scoring without a second exporter, scores written back to the same traces |
 | Expose a deployed agent as an A2A, MCP, OpenAI Responses or HTTP endpoint | **Recipe B** | Offline runs, benchmarks and CI gates against the real agent |
 | Run behind a gateway that supports webhook or MCP guardrails | **Recipe C** | Inline redaction and blocking |
 | Run as a command-line program | **Recipe B (CLI)** | Sandboxed runs on benchmarks like SWE-bench |
@@ -33,6 +34,17 @@ This page describes what Evals.si supports. It does not claim tested compatibili
    ```
 
 A policy samples deterministically, runs cheap evaluators before a judge, alerts on windowed metrics and promotes bad traces into a dataset. See the [watch example](__BASE__/examples/watch/).
+
+## Recipe A2: score traces where they already are
+
+If the platform already sends its traces to MLflow, Phoenix or Langfuse, a trace source reads them from there (history included), scores them with the project's online policies, and writes the scores back as MLflow assessments, Phoenix annotations or Langfuse scores. Nothing changes on the platform's side:
+
+```bash
+evalsi source apply -f studio-mlflow.yaml --server https://evals.example.com
+evalsi source list --project studio --server https://evals.example.com
+```
+
+The same file works with `kubectl apply` as a `TraceSource`. See [trace sources](__BASE__/docs/guides/trace-sources/) and the [sources example](__BASE__/examples/sources/).
 
 ## Recipe B: evaluate the agent itself
 

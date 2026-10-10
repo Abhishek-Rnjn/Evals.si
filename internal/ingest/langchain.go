@@ -100,29 +100,94 @@ func contentText(raw json.RawMessage) string {
 	return string(raw)
 }
 
-// mlflowMessages reads the messages in a span's inputs or outputs:
-// {"messages": [...]} (a model call's input, a graph's state) or an OpenAI
-// completion {"choices": [{"message": {...}}]}. It returns nil for anything else.
-func mlflowMessages(raw string) []*evalsiv1alpha1.Message {
+// messagesOf reads the messages in a span's inputs or outputs, as MLflow,
+// OpenInference (input.value, output.value) and LangSmith (gen_ai.prompt,
+// gen_ai.completion) write them for LangChain, LangGraph and OpenAI calls:
+//   - {"messages": [...]}: a model call's input or a graph's state; LangSmith
+//     nests a batch ([[...]]);
+//   - {"choices": [{"message": {...}}]}: an OpenAI completion;
+//   - {"generations": [[{"message": {...}}]]}: a LangChain LLMResult.
+//
+// A message is OpenAI-style ({"role", "content", "tool_calls"}), LangChain's
+// own ({"type": "human", "content"}), its dumped form ({"type": "human",
+// "data": {...}}) or its serialized form ({"lc": 1, "kwargs": {...}}). It
+// returns nil for anything else.
+func messagesOf(raw string) []*evalsiv1alpha1.Message {
 	raw = strings.TrimSpace(raw)
 	if !strings.HasPrefix(raw, "{") {
 		return nil
 	}
 	var doc struct {
-		Messages []mlflowMessage `json:"messages"`
+		Messages []json.RawMessage `json:"messages"`
 		Choices  []struct {
-			Message mlflowMessage `json:"message"`
+			Message json.RawMessage `json:"message"`
 		} `json:"choices"`
+		Generations []json.RawMessage `json:"generations"`
 	}
 	if json.Unmarshal([]byte(raw), &doc) != nil {
 		return nil
 	}
-	var out []*evalsiv1alpha1.Message
+	var items []json.RawMessage
 	for _, m := range doc.Messages {
-		out = append(out, m.message())
+		items = append(items, flatten(m)...)
 	}
 	for _, c := range doc.Choices {
-		out = append(out, c.Message.message())
+		items = append(items, c.Message)
+	}
+	for _, g := range doc.Generations {
+		for _, gen := range flatten(g) {
+			var x struct {
+				Message json.RawMessage `json:"message"`
+			}
+			if json.Unmarshal(gen, &x) == nil && len(x.Message) > 0 {
+				items = append(items, x.Message)
+			}
+		}
+	}
+	var out []*evalsiv1alpha1.Message
+	for _, item := range items {
+		m, ok := langchainMessage(item)
+		if !ok {
+			return nil
+		}
+		out = append(out, m.message())
 	}
 	return out
+}
+
+// flatten unnests lists: [[a, b], [c]] is a, b, c.
+func flatten(raw json.RawMessage) []json.RawMessage {
+	var list []json.RawMessage
+	if json.Unmarshal(raw, &list) != nil {
+		return []json.RawMessage{raw}
+	}
+	var out []json.RawMessage
+	for _, e := range list {
+		out = append(out, flatten(e)...)
+	}
+	return out
+}
+
+// langchainMessage reads one message in any of the shapes messagesOf lists.
+func langchainMessage(raw json.RawMessage) (mlflowMessage, bool) {
+	var wrap struct {
+		LC     int             `json:"lc"`
+		Kwargs json.RawMessage `json:"kwargs"`
+		Type   string          `json:"type"`
+		Data   json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal(raw, &wrap) != nil {
+		return mlflowMessage{}, false
+	}
+	switch {
+	case wrap.LC > 0 && len(wrap.Kwargs) > 0:
+		raw = wrap.Kwargs
+	case wrap.Type != "" && len(wrap.Data) > 0 && strings.HasPrefix(strings.TrimSpace(string(wrap.Data)), "{"):
+		raw = wrap.Data
+	}
+	var m mlflowMessage
+	if json.Unmarshal(raw, &m) != nil || (m.Role == "" && langchainRoles[m.Type] == "") {
+		return mlflowMessage{}, false
+	}
+	return m, true
 }
