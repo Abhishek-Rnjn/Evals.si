@@ -25,7 +25,7 @@ def main() -> None:
     mode = sys.argv[1]
     # The CLI inherits this process's environment. Keep only what it needs:
     # a session the recorder runs in must not leak into it (a TRACEPARENT
-    # marked unsampled silences its spans; a proxy carries the export away).
+    # marked as not sampled silences its spans).
     for k in list(os.environ):
         if k not in ("PATH", "LANG", "LC_ALL", "TMPDIR"):
             del os.environ[k]

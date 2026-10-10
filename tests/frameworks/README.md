@@ -26,7 +26,7 @@ uv venv /tmp/fw-crewai && VIRTUAL_ENV=/tmp/fw-crewai uv pip install -r requireme
 | `record_llamaindex.py` | `openinference` |
 | `record_claude_agent_sdk.py` | `native` (Claude Code's own traces), `openinference` |
 
-The Claude Agent SDK recorder starts the bundled Claude Code CLI with only `PATH`, `LANG`, `LC_ALL` and `TMPDIR` from its environment, and with an empty home. Nothing of the machine's own Claude setup reaches it, and a `TRACEPARENT` or proxy from a surrounding session cannot silence or divert its spans.
+The Claude Agent SDK recorder starts the bundled Claude Code CLI with only `PATH`, `LANG`, `LC_ALL` and `TMPDIR` from its environment, and with an empty home. Nothing of the machine's own Claude setup reaches it. A `TRACEPARENT` that a surrounding session sets, marked as not sampled, would silence its spans.
 
 After recording, check the fixture before committing it:
 

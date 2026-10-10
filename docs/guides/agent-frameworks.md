@@ -125,10 +125,10 @@ The SDK runs the Claude Code CLI, which has its own traces (a beta). Pass the va
 ```text
 CLAUDE_CODE_ENABLE_TELEMETRY=1  CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
 OTEL_TRACES_EXPORTER=otlp  OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf  OTEL_EXPORTER_OTLP_ENDPOINT=...
-OTEL_LOG_USER_PROMPTS=1  OTEL_LOG_TOOL_DETAILS=1
+OTEL_LOG_USER_PROMPTS=1  OTEL_LOG_TOOL_DETAILS=1  OTEL_LOG_TOOL_CONTENT=1  OTEL_LOG_ASSISTANT_RESPONSES=1
 ```
 
-These give model calls with tokens, tools with their results, and the prompt. They do not include the model's output, so the records have no answer. If the environment that starts the CLI has a `TRACEPARENT` marked as not sampled, the CLI records nothing.
+These give model calls with tokens, tools with their results (`OTEL_LOG_TOOL_CONTENT`), and the prompt. The spans do not include the model's output, even with `OTEL_LOG_ASSISTANT_RESPONSES`, so the records have no answer. The CLI joins a trace named by a `TRACEPARENT` in its environment: if that trace is marked as not sampled, the CLI records nothing.
 
 ## Other frameworks
 

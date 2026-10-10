@@ -124,11 +124,20 @@ func recordOutput(root, lastLLM *evalsiv1alpha1.Step) *evalsiv1alpha1.Content {
 	return out
 }
 
-// requestedTools are the tools the model asked for, for a trace whose
-// instrumentation records no tool spans (MLflow's CrewAI autolog, OpenLLMetry
-// for CrewAI): the same fallback evaluators use.
-func requestedTools(steps []*evalsiv1alpha1.Step) []string {
+// Tools are the tools a trajectory called, for selectors: its tool steps,
+// or, when its instrumentation records no tool spans (MLflow's CrewAI
+// autolog, OpenLLMetry for CrewAI), the tool calls the model asked for. The
+// evaluators fall back the same way.
+func Tools(steps []*evalsiv1alpha1.Step) []string {
 	var out []string
+	for _, s := range steps {
+		if s.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_TOOL {
+			out = append(out, s.GetName())
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
 	for _, s := range steps {
 		if s.GetType() != evalsiv1alpha1.StepType_STEP_TYPE_LLM {
 			continue
@@ -141,6 +150,32 @@ func requestedTools(steps []*evalsiv1alpha1.Step) []string {
 	}
 	return out
 }
+
+// Models are the models a trajectory's model calls and agents name, once
+// each. Agent spans count because the Claude Agent SDK's OpenInference spans
+// record no separate model call.
+func Models(steps []*evalsiv1alpha1.Step) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, s := range steps {
+		if t := s.GetType(); t != evalsiv1alpha1.StepType_STEP_TYPE_LLM && t != evalsiv1alpha1.StepType_STEP_TYPE_AGENT {
+			continue
+		}
+		a := Attrs{}
+		for _, k := range modelKeys {
+			if v, ok := s.GetAttributes()[k]; ok {
+				a[k] = v.AsInterface()
+			}
+		}
+		if m := a.mlflowStr(modelKeys...); m != "" && !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+var modelKeys = []string{"gen_ai.response.model", "gen_ai.request.model", "llm.model_name", "mlflow.llm.model"}
 
 // usageOf sums the model calls' tokens. When no model call records any (the
 // Claude Agent SDK's OpenInference spans count them on the agent span), the
@@ -161,7 +196,7 @@ func usageOf(steps []*evalsiv1alpha1.Step, root *evalsiv1alpha1.Step) *evalsiv1a
 	}
 	if usage.InputTokens == nil && usage.OutputTokens == nil {
 		for _, s := range append([]*evalsiv1alpha1.Step{root}, steps...) {
-			if u := s.GetUsage(); u.InputTokens != nil || u.OutputTokens != nil {
+			if u := s.GetUsage(); u.GetInputTokens() != 0 || u.GetOutputTokens() != 0 {
 				usage.InputTokens, usage.OutputTokens = u.InputTokens, u.OutputTokens
 				break
 			}

@@ -455,7 +455,6 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 	if info.Resource == nil {
 		info.Resource = Attrs{}
 	}
-	seenModel := map[string]bool{}
 	for _, s := range spans {
 		step := ToStep(s)
 		traj.Steps = append(traj.Steps, step)
@@ -466,32 +465,18 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 		if step.GetError() != "" {
 			info.Error = true
 		}
-		// Agent spans name the model too (the Claude Agent SDK's
-		// OpenInference spans record no separate model call).
-		if t := step.GetType(); t != evalsiv1alpha1.StepType_STEP_TYPE_LLM && t != evalsiv1alpha1.StepType_STEP_TYPE_AGENT {
-			continue
-		}
-		if m := a.mlflowStr("gen_ai.response.model", "gen_ai.request.model", "llm.model_name", "mlflow.llm.model"); m != "" && !seenModel[m] {
-			seenModel[m] = true
-			info.Models = append(info.Models, m)
-		}
 	}
 	demoteWrappers(traj.Steps)
 	var firstLLM, lastLLM *evalsiv1alpha1.Step
 	for _, step := range traj.Steps {
-		switch step.GetType() {
-		case evalsiv1alpha1.StepType_STEP_TYPE_LLM:
+		if step.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_LLM {
 			if firstLLM == nil {
 				firstLLM = step
 			}
 			lastLLM = step
-		case evalsiv1alpha1.StepType_STEP_TYPE_TOOL:
-			info.Tools = append(info.Tools, step.GetName())
 		}
 	}
-	if len(info.Tools) == 0 {
-		info.Tools = requestedTools(traj.Steps)
-	}
+	info.Tools, info.Models = Tools(traj.Steps), Models(traj.Steps)
 	info.Steps = len(traj.Steps)
 	rootStep := traj.Steps[0]
 	for _, st := range traj.Steps {
