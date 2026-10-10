@@ -18,6 +18,7 @@ Served reward models and LLM judges come in through ``reward-model`` and the
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import math
@@ -213,9 +214,94 @@ def _equal_plain(predicted: str, expected: str, rel_tol: float) -> bool:
     return predicted.casefold() == expected.casefold()
 
 
+# What a math answer may use once sympy's tokenizer has rewritten it: number
+# and symbol constructors, mathematical functions and constants. Anything else
+# (attribute access, subscripts, other calls, lambdas) is refused before
+# evaluation: answers are untrusted model output.
+_SYMPY_CONSTRUCTORS = frozenset({"Integer", "Float", "Rational", "Symbol"})
+_SYMPY_FUNCTIONS = frozenset(
+    {
+        "sqrt", "root", "exp", "log", "ln", "Abs", "floor", "ceiling",
+        "sin", "cos", "tan", "cot", "sec", "csc", "asin", "acos", "atan",
+        "sinh", "cosh", "tanh",
+    }
+)  # fmt: skip
+_SYMPY_CONSTANTS = frozenset({"pi", "E", "I", "oo"})
+_SYMBOL_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,15}")
+# Exponents bigger than this are refused, so an answer cannot ask for a
+# number too large to compute (10**10**10).
+_MAX_EXPONENT = 1000
+
+
+class _UnsafeExpression(ValueError):
+    pass
+
+
+def _small(values: list[Any]) -> bool:
+    try:
+        return all(abs(float(v)) <= _MAX_EXPONENT for v in values)
+    except (OverflowError, ValueError):
+        return False
+
+
+def _check_sympy_code(tree: ast.Expression) -> None:
+    """Refuses code that is not plain arithmetic over the allowed names."""
+
+    def literal(node: ast.expr) -> bool:
+        return isinstance(node, ast.Constant) and type(node.value) in (int, float, str)
+
+    def check(node: ast.expr, in_exponent: bool) -> None:
+        match node:
+            case ast.BinOp(op=ast.Pow(), left=left, right=right):
+                if in_exponent:
+                    raise _UnsafeExpression("a power in an exponent")
+                check(left, in_exponent)
+                check(right, True)
+            case ast.BinOp(
+                op=ast.Add() | ast.Sub() | ast.Mult() | ast.Div(), left=left, right=right
+            ):
+                check(left, in_exponent)
+                check(right, in_exponent)
+            case ast.UnaryOp(op=ast.UAdd() | ast.USub(), operand=operand):
+                check(operand, in_exponent)
+            case ast.Tuple(elts=elts):
+                for elt in elts:
+                    check(elt, in_exponent)
+            case ast.Name(id=name) if name in _SYMPY_CONSTANTS:
+                pass
+            case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if (
+                name in _SYMPY_CONSTRUCTORS
+            ):
+                if not args or not all(literal(a) for a in args):
+                    raise _UnsafeExpression(f"{name} of a non-literal")
+                values = [a.value for a in args if isinstance(a, ast.Constant)]
+                if name == "Symbol" and not (
+                    len(values) == 1
+                    and isinstance(values[0], str)
+                    and _SYMBOL_NAME.fullmatch(values[0])
+                ):
+                    raise _UnsafeExpression("a symbol name")
+                if in_exponent and name != "Symbol" and not _small(values):
+                    raise _UnsafeExpression("an exponent too large")
+            case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if (
+                name in _SYMPY_FUNCTIONS
+            ):
+                for arg in args:
+                    check(arg, in_exponent)
+            case _:
+                raise _UnsafeExpression(type(node).__name__)
+
+    check(tree.body, False)
+
+
 def _equal_sympy(predicted: str, expected: str) -> bool | None:
     """Symbolic equivalence with sympy, when it is installed. ``None`` means
-    sympy could not decide (or is missing)."""
+    sympy could not decide (or is missing).
+
+    Answers are untrusted: they are tokenized by sympy without being run, the
+    resulting code is checked against an allowlist of arithmetic, numbers,
+    symbols and mathematical functions, and only then evaluated, with no
+    builtins. Anything else counts as undecided."""
     if max(len(predicted), len(expected)) > 200:
         return None
     try:
@@ -223,8 +309,8 @@ def _equal_sympy(predicted: str, expected: str) -> bool | None:
         from sympy.parsing.sympy_parser import (
             convert_xor,
             implicit_multiplication_application,
-            parse_expr,
             standard_transformations,
+            stringify_expr,
         )
     except ImportError:
         return None
@@ -233,11 +319,20 @@ def _equal_sympy(predicted: str, expected: str) -> bool | None:
         implicit_multiplication_application,
         convert_xor,
     )
+    names: dict[str, Any] = {
+        name: getattr(sympy, name)
+        for name in (*_SYMPY_CONSTRUCTORS, *_SYMPY_FUNCTIONS - {"ln"}, *_SYMPY_CONSTANTS)
+    }
+    names["ln"] = sympy.log
 
     def parse(s: str) -> Any:
         s = s.replace("\\pi", "pi").replace("\\cdot", "*").replace("\\times", "*")
         s = s.replace("{", "(").replace("}", ")").replace("\\", "")
-        return parse_expr(s, transformations=transformations, evaluate=True)
+        # stringify_expr only tokenizes and rewrites; nothing runs yet.
+        code = stringify_expr(s, {}, dict(names), transformations)
+        tree = ast.parse(code.strip(), mode="eval")
+        _check_sympy_code(tree)
+        return eval(compile(tree, "<answer>", "eval"), {"__builtins__": {}}, dict(names))
 
     try:
         difference = sympy.simplify(parse(predicted) - parse(expected))

@@ -57,6 +57,45 @@ def test_answers_equal(a: str, b: str, equal: bool) -> None:
     assert rl.answers_equal(a, b) is equal
 
 
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("\\sqrt{2}/2", "1/\\sqrt{2}"),
+        ("2\\pi", "\\pi + \\pi"),
+        ("x^2-1", "(x-1)(x+1)"),
+        ("\\sin(x)^2 + \\cos(x)^2", "1"),
+        ("e^{0}", "1"),
+    ],
+)
+def test_sympy_backend_still_decides(a: str, b: str) -> None:
+    pytest.importorskip("sympy")
+    assert rl.answers_equal(a, b, backend="sympy")
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "__import__('builtins').print('MARKER')",
+        "x.__class__",
+        "Symbol('x').__class__.__mro__",
+        "(lambda: 1)()",
+        "[1, 2][0]",
+        "exec('1')",
+        "eval('1')",
+        "9^9^9",
+        "2^(10^6)",
+        "100000!",
+    ],
+)
+def test_sympy_backend_never_runs_an_answer(
+    answer: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pytest.importorskip("sympy")
+    assert rl._equal_sympy(answer, "1") is None
+    assert not rl.answers_equal(answer, "1", backend="sympy")
+    assert "MARKER" not in capsys.readouterr().out
+
+
 def test_answers_equal_plain_backend_skips_algebra() -> None:
     assert not rl.answers_equal("x^2+2x+1", "(x+1)^2", backend="plain")
 
