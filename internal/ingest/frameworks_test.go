@@ -1,12 +1,15 @@
 package ingest
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	collectortracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 )
@@ -184,4 +187,49 @@ func toolCalls(c *evalsiv1alpha1.Content) []*evalsiv1alpha1.ToolCall {
 		out = append(out, m.GetToolCalls()...)
 	}
 	return out
+}
+
+// A model call recorded twice (a framework's span around its client's) is
+// one model call; its tokens count once, from whichever span has them.
+func TestNestedModelCallsCountOnce(t *testing.T) {
+	llm := func(id, parent byte, start uint64, tokens bool) Span {
+		attrs := []*commonpb.KeyValue{
+			{Key: "openinference.span.kind", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: "LLM"}}},
+		}
+		if tokens {
+			attrs = append(attrs,
+				&commonpb.KeyValue{Key: "llm.token_count.prompt", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 10}}},
+				&commonpb.KeyValue{Key: "llm.token_count.completion", Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: 5}}})
+		}
+		sp := &tracepb.Span{TraceId: []byte{1}, SpanId: []byte{id}, Name: fmt.Sprintf("call-%d", id), StartTimeUnixNano: start, EndTimeUnixNano: start + 100, Attributes: attrs}
+		if parent != 0 {
+			sp.ParentSpanId = []byte{parent}
+		}
+		return Span{Span: sp}
+	}
+	root := Span{Span: &tracepb.Span{TraceId: []byte{1}, SpanId: []byte{9}, Name: "agent", StartTimeUnixNano: 1, EndTimeUnixNano: 1000}}
+	for name, tc := range map[string]struct {
+		spans    []Span
+		in, out  int64
+		llmSteps int
+	}{
+		"both record tokens":           {spans: []Span{root, llm(1, 9, 10, true), llm(2, 1, 20, true)}, in: 10, out: 5, llmSteps: 1},
+		"only the wrapper has tokens":  {spans: []Span{root, llm(1, 9, 10, true), llm(2, 1, 20, false)}, in: 10, out: 5, llmSteps: 1},
+		"two wrappers, inner has none": {spans: []Span{root, llm(1, 9, 10, true), llm(2, 1, 20, true), llm(3, 2, 30, false)}, in: 10, out: 5, llmSteps: 1},
+		"two separate calls":           {spans: []Span{root, llm(1, 9, 10, true), llm(2, 9, 200, true)}, in: 20, out: 10, llmSteps: 2},
+		"a wrapped call and another":   {spans: []Span{root, llm(1, 9, 10, true), llm(2, 1, 20, false), llm(3, 9, 200, true)}, in: 20, out: 10, llmSteps: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec, _ := ToRecord(Trace{TraceID: "t", Spans: tc.spans})
+			n := 0
+			for _, s := range rec.GetTrajectory().GetSteps() {
+				if s.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_LLM {
+					n++
+				}
+			}
+			if n != tc.llmSteps || rec.GetUsage().GetInputTokens() != tc.in || rec.GetUsage().GetOutputTokens() != tc.out {
+				t.Errorf("%d model calls, usage %d/%d; want %d, %d/%d", n, rec.GetUsage().GetInputTokens(), rec.GetUsage().GetOutputTokens(), tc.llmSteps, tc.in, tc.out)
+			}
+		})
+	}
 }

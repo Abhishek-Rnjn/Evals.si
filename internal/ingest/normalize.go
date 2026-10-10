@@ -469,7 +469,7 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 			info.Error = true
 		}
 	}
-	demoteWrappers(traj.Steps)
+	wrappers := demoteWrappers(traj.Steps)
 	var firstLLM, lastLLM *evalsiv1alpha1.Step
 	for _, step := range traj.Steps {
 		if step.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_LLM {
@@ -487,7 +487,7 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 			rootStep = st
 		}
 	}
-	usage := usageOf(traj.Steps, rootStep)
+	usage := usageOf(traj.Steps, rootStep, wrappers)
 	if d := rootStep.GetUsage().GetLatency(); d != nil {
 		usage.Latency = d
 		info.DurationMS = float64(d.AsDuration().Microseconds()) / 1000

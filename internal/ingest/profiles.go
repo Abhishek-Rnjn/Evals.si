@@ -60,15 +60,19 @@ func claudeCodeStep(sp *tracepb.Span, a Attrs, step *evalsiv1alpha1.Step) {
 }
 
 // demoteWrappers makes a model-call step that contains another model call a
-// generic one: LlamaIndex nests a streamed call in another, and an agent SDK's
-// generation span can hold an OpenAI client span. The innermost call is the
-// one the model answered.
-func demoteWrappers(steps []*evalsiv1alpha1.Step) {
+// generic one, and returns each such wrapper with the model calls inside it.
+// A call to a model does not make other model calls, so a model-call span
+// with one inside is either a wrapper (LlamaIndex nests a streamed call in
+// another, and marks the step that prepares a tool call as a model call) or
+// the same call recorded twice (a framework and its model client both
+// instrumented). Counting both would count the call twice; the innermost is
+// the one the model answered.
+func demoteWrappers(steps []*evalsiv1alpha1.Step) map[*evalsiv1alpha1.Step][]*evalsiv1alpha1.Step {
 	byID := map[string]*evalsiv1alpha1.Step{}
 	for _, s := range steps {
 		byID[s.GetSpanId()] = s
 	}
-	wrappers := map[*evalsiv1alpha1.Step]bool{}
+	inner := map[*evalsiv1alpha1.Step][]*evalsiv1alpha1.Step{}
 	for _, s := range steps {
 		if s.GetType() != evalsiv1alpha1.StepType_STEP_TYPE_LLM {
 			continue
@@ -77,13 +81,14 @@ func demoteWrappers(steps []*evalsiv1alpha1.Step) {
 		for p := byID[s.GetParentSpanId()]; p != nil && !seen[p.GetSpanId()]; p = byID[p.GetParentSpanId()] {
 			seen[p.GetSpanId()] = true
 			if p.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_LLM {
-				wrappers[p] = true
+				inner[p] = append(inner[p], s)
 			}
 		}
 	}
-	for s := range wrappers {
+	for s := range inner {
 		s.Type = evalsiv1alpha1.StepType_STEP_TYPE_GENERIC
 	}
+	return inner
 }
 
 // recordInput is what the agent was asked: the root span's input, unless it
@@ -177,21 +182,50 @@ func Models(steps []*evalsiv1alpha1.Step) []string {
 
 var modelKeys = []string{"gen_ai.response.model", "gen_ai.request.model", "llm.model_name", "mlflow.llm.model"}
 
-// usageOf sums the model calls' tokens. When no model call records any (the
-// Claude Agent SDK's OpenInference spans count them on the agent span), the
-// outermost step that does is used.
-func usageOf(steps []*evalsiv1alpha1.Step, root *evalsiv1alpha1.Step) *evalsiv1alpha1.Usage {
+// usageOf sums the model calls' tokens. A wrapper's tokens count when none of
+// the calls inside it records any (a streamed call whose usage only the
+// framework's span has). When no model call records any (the Claude Agent
+// SDK's OpenInference spans count them on the agent span), the outermost step
+// that does is used.
+func usageOf(steps []*evalsiv1alpha1.Step, root *evalsiv1alpha1.Step, wrappers map[*evalsiv1alpha1.Step][]*evalsiv1alpha1.Step) *evalsiv1alpha1.Usage {
 	usage := &evalsiv1alpha1.Usage{}
-	for _, s := range steps {
-		u := s.GetUsage()
-		if s.GetType() != evalsiv1alpha1.StepType_STEP_TYPE_LLM || u == nil {
-			continue
-		}
+	add := func(u *evalsiv1alpha1.Usage) {
 		if u.InputTokens != nil {
 			usage.InputTokens = proto.Int64(usage.GetInputTokens() + u.GetInputTokens())
 		}
 		if u.OutputTokens != nil {
 			usage.OutputTokens = proto.Int64(usage.GetOutputTokens() + u.GetOutputTokens())
+		}
+	}
+	hasTokens := func(s *evalsiv1alpha1.Step) bool {
+		return s.GetUsage().InputTokens != nil || s.GetUsage().OutputTokens != nil
+	}
+	counted := map[*evalsiv1alpha1.Step]bool{}
+	for _, s := range steps {
+		if s.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_LLM && hasTokens(s) {
+			add(s.GetUsage())
+			counted[s] = true
+		}
+	}
+	// Outermost wrappers first, so a wrapper inside a wrapper is not counted
+	// as well: a wrapper counts only when nothing inside it was.
+	for _, s := range steps {
+		calls, ok := wrappers[s]
+		if !ok || !hasTokens(s) {
+			continue
+		}
+		covered := false
+		for _, c := range calls {
+			covered = covered || counted[c]
+		}
+		for w, ws := range wrappers {
+			if w != s && counted[w] && contains(ws, calls) {
+				covered = true
+			}
+		}
+		if !covered {
+			add(s.GetUsage())
+			counted[s] = true
 		}
 	}
 	if usage.InputTokens == nil && usage.OutputTokens == nil {
@@ -203,4 +237,18 @@ func usageOf(steps []*evalsiv1alpha1.Step, root *evalsiv1alpha1.Step) *evalsiv1a
 		}
 	}
 	return usage
+}
+
+// contains reports whether every step of sub is in set.
+func contains(set, sub []*evalsiv1alpha1.Step) bool {
+	in := map[*evalsiv1alpha1.Step]bool{}
+	for _, s := range set {
+		in[s] = true
+	}
+	for _, s := range sub {
+		if !in[s] {
+			return false
+		}
+	}
+	return true
 }
