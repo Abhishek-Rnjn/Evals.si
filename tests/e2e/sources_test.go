@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -149,6 +150,11 @@ func TestTraceSourceMLflow(t *testing.T) {
 		ListTraces(ctx, connect.NewRequest(&evalsiv1alpha1.ListTracesRequest{}))
 	if err != nil || len(traces.Msg.GetTraces()) != 1 || traces.Msg.GetTraces()[0].GetLabels()["source"] != "studio" {
 		t.Fatalf("traces %v %v", traces, err)
+	}
+	// The CLI reads the same status.
+	args := append(append([]string{}, e.workerCmd[1:]...), "source", "list", "--server", e.base)
+	if out, err := exec.Command(e.workerCmd[0], args...).CombinedOutput(); err != nil || !strings.Contains(string(out), "default/studio") || !strings.Contains(string(out), "tailing") {
+		t.Fatalf("evalsi source list: %v\n%s", err, out)
 	}
 	metrics, _ := http.Get(e.base + "/metrics")
 	body, _ := io.ReadAll(metrics.Body)

@@ -61,6 +61,7 @@ def _parser() -> argparse.ArgumentParser:
     from evalsi.cli_mcp import add_mcp_command
     from evalsi.cli_plugins import add_plugin_commands
     from evalsi.cli_rewards import add_report_command, add_rewards_commands
+    from evalsi.cli_sources import add_source_commands
     from evalsi.cli_training import add_training_commands
 
     add_auth_commands(sub)
@@ -72,6 +73,7 @@ def _parser() -> argparse.ArgumentParser:
     add_mcp_command(sub)
     add_annotate_commands(sub)
     add_guardrail_commands(sub)
+    add_source_commands(sub)
     add_plugin_commands(sub)
     add_credentials_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
@@ -594,7 +596,7 @@ def load_policy(path: str) -> dict[str, Any]:
     import yaml
     from google.protobuf import json_format
 
-    from evalsi.runspec import api_labels, project_of
+    from evalsi.runspec import api_labels, normalize_durations, project_of
     from evalsi.v1alpha1 import monitor_service_pb2
 
     with open(path, encoding="utf-8") as handle:
@@ -611,7 +613,10 @@ def load_policy(path: str) -> dict[str, Any]:
         "labels": api_labels(metadata.get("labels") or {}),
     }
     try:
-        message = json_format.ParseDict(body, monitor_service_pb2.OnlineEvalPolicy())
+        message = json_format.ParseDict(
+            normalize_durations(body, monitor_service_pb2.OnlineEvalPolicy.DESCRIPTOR),
+            monitor_service_pb2.OnlineEvalPolicy(),
+        )
     except json_format.ParseError as exc:
         raise ValueError(f"{path}: invalid policy: {exc}") from exc
     out: dict[str, Any] = json_format.MessageToDict(message)
