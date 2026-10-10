@@ -45,6 +45,9 @@ diagnose() {
     echo "--- $ns2 $p"
     kubectl logs -n "$ns2" "$p" --all-containers --tail=80 || true
   done
+  for node in $(kind get nodes --name "$cluster" 2>/dev/null); do
+    echo "--- $node disk"; docker exec "$node" df -h /var/lib/containerd 2>/dev/null | tail -1 || true
+  done
   kubectl get evalruns,onlineevalpolicies,evaluators -n "$ns" -o yaml || true
   kubectl get sandboxclasses -o yaml || true
   kubectl get events -n "$ns" --sort-by=.lastTimestamp | tail -60 || true
@@ -288,6 +291,17 @@ curl -s -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/s
 grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evals.si assessment on the Deep Agents traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
+step "removing the demos, to free the nodes' disk"
+# The demo images (two agents, MLflow) fill the nodes' disk enough for the
+# kubelet's image garbage collection to remove images no pod is using, such
+# as the air-gapped sandbox image the namespace-only steps below need.
+helm uninstall evalsi-demo -n "$ns" --wait --timeout 5m
+for node in $(kind get nodes --name "$cluster"); do
+  docker exec "$node" crictl rmi ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 \
+    ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0 ghcr.io/mlflow/mlflow:v3.17.0 >/dev/null 2>&1 || true
+  docker exec "$node" df -h /var/lib/containerd | tail -1
+done
+
 step "deleting an EvalRun"
 kubectl delete evalrun parity -n "$ns" --wait --timeout=1m
 
@@ -301,7 +315,9 @@ for verb in "create clusterroles" "create clusterrolebindings" "create customres
   if kubectl auth can-i $verb --as alice >/dev/null; then echo "alice can $verb" >&2; exit 1; fi
 done
 ci="user:kubernetes/system:serviceaccount:$ns2:ci"
-"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --namespace "$ns2" --namespace-only --skip-images -- \
+# The bundle's images are loaded again: the kubelet may have garbage-collected
+# ones no pod was using since the first install.
+"$work/bundle/install.sh" --kind "$cluster" --registry "$registry" --namespace "$ns2" --namespace-only -- \
   --kube-as-user alice \
   --set-json "rbac.projects={\"e2e\": {\"runner\": [\"$ci\"]}}" \
   --wait --timeout 10m
