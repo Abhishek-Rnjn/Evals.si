@@ -198,6 +198,18 @@ func TestOperator(t *testing.T) {
 			defer e.api.mu.Unlock()
 			return e.api.policies["support-agent"].GetSampling().GetRate() == 0.5
 		})
+		// So is a label-only edit, which leaves the generation alone.
+		_ = alice.Get(ctx, key, p)
+		patch = client.MergeFrom(p.DeepCopy())
+		p.Labels["team"] = "after"
+		if err := alice.Patch(ctx, p, patch); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "the label to apply", func() bool {
+			e.api.mu.Lock()
+			defer e.api.mu.Unlock()
+			return e.api.policies["support-agent"].GetLabels()["team"] == "after"
+		})
 
 		// The same name in another project conflicts rather than taking over.
 		other := example(t, "watch/support-policy.yaml", "evalsi")
@@ -247,6 +259,21 @@ func TestOperator(t *testing.T) {
 		if !meta.IsStatusConditionTrue(s.Status.Conditions, "Synced") || s.Status.Phase != "Tailing" || s.Status.Scored != 5 || s.Status.LagSeconds != "12" || s.Status.Watermark == nil {
 			t.Errorf("status %+v", s.Status)
 		}
+
+		// A label-only edit is applied.
+		patch := client.MergeFrom(s.DeepCopy())
+		if s.Labels == nil {
+			s.Labels = map[string]string{}
+		}
+		s.Labels["team"] = "after"
+		if err := alice.Patch(ctx, s, patch); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "the label to apply", func() bool {
+			e.api.mu.Lock()
+			defer e.api.mu.Unlock()
+			return e.api.sources["support/studio-mlflow"].GetLabels()["team"] == "after"
+		})
 
 		// What the API would refuse is refused at kubectl apply.
 		bad := example(t, "sources/studio-mlflow.yaml", "team-a")

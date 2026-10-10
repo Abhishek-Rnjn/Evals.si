@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
@@ -57,7 +56,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 	}
 	synced := meta.IsStatusConditionTrue(p.Status.Conditions, "Synced")
-	if !synced || p.Status.ObservedGeneration != p.Generation {
+	if !synced || p.Status.ObservedGeneration != p.Generation || p.Status.AppliedMetadata != appliedMetadata(p) {
 		return r.apply(ctx, p, name)
 	}
 	stats, err := r.API.Monitor.GetPolicyStats(ctx, connect.NewRequest(&evalsiv1alpha1.GetPolicyStatsRequest{Name: name}))
@@ -82,7 +81,7 @@ func (r *PolicyReconciler) interval() time.Duration {
 
 func (r *PolicyReconciler) apply(ctx context.Context, p *v1.OnlineEvalPolicy, name string) (ctrl.Result, error) {
 	fail := func(reason string, err error) (ctrl.Result, error) {
-		p.Status.ObservedGeneration = p.Generation
+		p.Status.ObservedGeneration, p.Status.AppliedMetadata = p.Generation, appliedMetadata(p)
 		meta.SetStatusCondition(&p.Status.Conditions, metav1.Condition{Type: "Synced", Status: metav1.ConditionFalse, Reason: reason, Message: err.Error(), ObservedGeneration: p.Generation})
 		return ctrl.Result{}, r.Status().Update(ctx, p)
 	}
@@ -112,11 +111,11 @@ func (r *PolicyReconciler) apply(ctx context.Context, p *v1.OnlineEvalPolicy, na
 		}
 		return ctrl.Result{}, err
 	}
-	p.Status.Name, p.Status.ObservedGeneration = name, p.Generation
+	p.Status.Name, p.Status.ObservedGeneration, p.Status.AppliedMetadata = name, p.Generation, appliedMetadata(p)
 	meta.SetStatusCondition(&p.Status.Conditions, metav1.Condition{Type: "Synced", Status: metav1.ConditionTrue, Reason: "Applied", Message: "applied to project " + project, ObservedGeneration: p.Generation})
 	return ctrl.Result{RequeueAfter: r.interval()}, r.Status().Update(ctx, p)
 }
 
 func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).For(&v1.OnlineEvalPolicy{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).Named("onlineevalpolicy").Complete(r)
+	return ctrl.NewControllerManagedBy(mgr).For(&v1.OnlineEvalPolicy{}, builder.WithPredicates(metadataChanged)).Named("onlineevalpolicy").Complete(r)
 }

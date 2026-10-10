@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
@@ -56,7 +55,7 @@ func (r *TraceSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 	synced := meta.IsStatusConditionTrue(s.Status.Conditions, "Synced")
-	if !synced || s.Status.ObservedGeneration != s.Generation {
+	if !synced || s.Status.ObservedGeneration != s.Generation || s.Status.AppliedMetadata != appliedMetadata(s) {
 		return r.apply(ctx, s, project)
 	}
 	got, err := r.API.Sources.GetSource(ctx, connect.NewRequest(&evalsiv1alpha1.GetSourceRequest{Project: project, Name: s.Name}))
@@ -79,7 +78,7 @@ func (r *TraceSourceReconciler) interval() time.Duration {
 
 func (r *TraceSourceReconciler) apply(ctx context.Context, s *v1.TraceSource, project string) (ctrl.Result, error) {
 	fail := func(reason string, err error) (ctrl.Result, error) {
-		s.Status.ObservedGeneration = s.Generation
+		s.Status.ObservedGeneration, s.Status.AppliedMetadata = s.Generation, appliedMetadata(s)
 		meta.SetStatusCondition(&s.Status.Conditions, metav1.Condition{Type: "Synced", Status: metav1.ConditionFalse, Reason: reason, Message: err.Error(), ObservedGeneration: s.Generation})
 		return ctrl.Result{}, r.Status().Update(ctx, s)
 	}
@@ -102,7 +101,7 @@ func (r *TraceSourceReconciler) apply(ctx context.Context, s *v1.TraceSource, pr
 		}
 		return ctrl.Result{}, err
 	}
-	s.Status.Name, s.Status.ObservedGeneration = s.Name, s.Generation
+	s.Status.Name, s.Status.ObservedGeneration, s.Status.AppliedMetadata = s.Name, s.Generation, appliedMetadata(s)
 	mirrorSource(&s.Status, applied.GetStatus())
 	meta.SetStatusCondition(&s.Status.Conditions, metav1.Condition{Type: "Synced", Status: metav1.ConditionTrue, Reason: "Applied", Message: "applied to project " + project, ObservedGeneration: s.Generation})
 	return ctrl.Result{RequeueAfter: r.interval()}, r.Status().Update(ctx, s)
@@ -134,5 +133,5 @@ func mirrorSource(dst *v1.TraceSourceStatus, src *evalsiv1alpha1.SourceStatus) {
 }
 
 func (r *TraceSourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).For(&v1.TraceSource{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).Named("tracesource").Complete(r)
+	return ctrl.NewControllerManagedBy(mgr).For(&v1.TraceSource{}, builder.WithPredicates(metadataChanged)).Named("tracesource").Complete(r)
 }

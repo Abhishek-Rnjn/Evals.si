@@ -124,6 +124,11 @@ spec:
             x-kubernetes-preserve-unknown-fields: true
           status:
             properties:
+              appliedMetadata:
+                description: |-
+                  A digest of the project and labels last applied to the API, so a
+                  label-only edit (which leaves the generation alone) is applied too.
+                type: string
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
