@@ -45,6 +45,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/source"
 	"github.com/abhishek-rnjn/evals.si/internal/source/mlflow"
+	"github.com/abhishek-rnjn/evals.si/internal/source/phoenix"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
@@ -214,7 +215,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		return err
 	}
 	sourceMgr = source.New(st, watcher, source.Options{
-		Factories: map[string]source.Factory{"mlflow": mlflow.Factory},
+		Factories: map[string]source.Factory{"mlflow": mlflow.Factory, "phoenix": phoenix.Factory},
 		Resolve:   source.NewResolver(creds, cfg.Sources.Dir),
 		Logger:    log, MaxRate: cfg.Sources.MaxRecordsPerSecond,
 	})
