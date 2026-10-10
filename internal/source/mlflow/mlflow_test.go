@@ -63,6 +63,13 @@ func (f *fakeMLflow) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/api/3.0/mlflow/traces/search":
 		_, _ = w.Write(fixture(f.t, "search"))
+	case r.Method == http.MethodGet && r.URL.Path == "/api/2.0/mlflow/experiments/get-by-name":
+		if r.URL.Query().Get("experiment_name") != "studio-agents" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error_code":"RESOURCE_DOES_NOT_EXIST","message":"not found"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"experiment":{"experiment_id":"7","name":"studio-agents"}}`))
 	case r.Method == http.MethodGet && r.URL.Path == "/api/3.0/mlflow/traces/batchGet":
 		_, _ = w.Write(fixture(f.t, "batchget"))
 	case r.Method == http.MethodGet && r.URL.Path == "/api/3.0/mlflow/traces/"+traceID:
@@ -336,5 +343,26 @@ func TestAgainstALiveServer(t *testing.T) {
 	w2, err := c.WriteBack(ctx, []source.Score{{TraceID: id, Policy: "live-test", Metric: "live-test", Value: 0.0}}, nil)
 	if err != nil || len(w2) != 1 || w2[0].RemoteID != w[0].RemoteID {
 		t.Fatalf("second write: %v %v (first %v)", w2, err, w)
+	}
+}
+
+// A location that is not an ID is an experiment name, resolved by MLflow.
+func TestLocationsByName(t *testing.T) {
+	f := &fakeMLflow{}
+	c := newConnector(t, f, func(s *evalsiv1alpha1.TraceSource) { s.Locations = []string{"studio-agents", "3"} })
+	if _, err := c.List(context.Background(), source.ListRequest{Since: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	locs := f.bodies[len(f.bodies)-1]["locations"].([]any)
+	got := []any{}
+	for _, l := range locs {
+		got = append(got, l.(map[string]any)["mlflow_experiment"].(map[string]any)["experiment_id"])
+	}
+	if len(got) != 2 || got[0] != "7" || got[1] != "3" {
+		t.Fatalf("experiment ids %v", got)
+	}
+	c = newConnector(t, &fakeMLflow{}, func(s *evalsiv1alpha1.TraceSource) { s.Locations = []string{"nope"} })
+	if _, err := c.List(context.Background(), source.ListRequest{Since: time.Now()}); err == nil || !strings.Contains(err.Error(), `no experiment named "nope"`) {
+		t.Fatalf("got %v", err)
 	}
 }

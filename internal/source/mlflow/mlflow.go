@@ -50,7 +50,7 @@ func Factory(src *evalsiv1alpha1.TraceSource, token string, client *http.Client)
 		return nil, fmt.Errorf("mlflow variant %q is not built (decision 0016): only \"oss\" is", v)
 	}
 	if len(src.GetLocations()) == 0 {
-		return nil, fmt.Errorf("mlflow: locations must list at least one experiment ID")
+		return nil, fmt.Errorf("mlflow: locations must list at least one experiment ID or name")
 	}
 	u, err := url.Parse(src.GetEndpoint())
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
@@ -149,8 +149,12 @@ type assessment struct {
 // oldest first. MLflow indexes a trace by its start time but only knows of it
 // once it ends (decision 0016, item 15), which is why the manager reads back.
 func (c *connector) List(ctx context.Context, req source.ListRequest) (source.ListResult, error) {
-	locations := make([]map[string]any, len(c.src.GetLocations()))
-	for i, id := range c.src.GetLocations() {
+	ids, err := c.experimentIDs(ctx)
+	if err != nil {
+		return source.ListResult{}, err
+	}
+	locations := make([]map[string]any, len(ids))
+	for i, id := range ids {
 		locations[i] = map[string]any{"type": "MLFLOW_EXPERIMENT", "mlflow_experiment": map[string]any{"experiment_id": id}}
 	}
 	body := map[string]any{
@@ -178,6 +182,34 @@ func (c *connector) List(ctx context.Context, req source.ListRequest) (source.Li
 		out.Infos = append(out.Infos, source.Info{
 			ID: t.TraceID, Started: started.UTC(), InProgress: t.State == "IN_PROGRESS", Digest: digest(t),
 		})
+	}
+	return out, nil
+}
+
+// experimentIDs resolves the locations: an experiment ID as is, anything else
+// as an experiment name (MLflow assigns IDs, so a spec written before the
+// experiment exists can only know its name).
+func (c *connector) experimentIDs(ctx context.Context) ([]string, error) {
+	out := make([]string, 0, len(c.src.GetLocations()))
+	for _, loc := range c.src.GetLocations() {
+		if _, err := strconv.ParseUint(loc, 10, 64); err == nil {
+			out = append(out, loc)
+			continue
+		}
+		var resp struct {
+			Experiment struct {
+				ID string `json:"experiment_id"`
+			} `json:"experiment"`
+		}
+		err := c.call(ctx, http.MethodGet, "/api/2.0/mlflow/experiments/get-by-name", url.Values{"experiment_name": {loc}}, nil, &resp)
+		var ae *apiError
+		if errors.As(err, &ae) && ae.Status == http.StatusNotFound {
+			return nil, fmt.Errorf("mlflow: no experiment named %q (yet)", loc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, resp.Experiment.ID)
 	}
 	return out, nil
 }

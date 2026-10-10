@@ -1,6 +1,6 @@
 """Records the OTLP export of one demo run, for internal/ingest's fixture test.
 
-Needs the packages in requirements.txt plus pandas (MLflow's file store wants it)
+Needs the packages in requirements.txt (pandas included, which MLflow's LangChain autolog wants)
 and the mock model running:
 
     python3 ../mock-model/server.py --port 8124 &

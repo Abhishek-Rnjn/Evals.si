@@ -141,6 +141,10 @@ func TestDemoOverlays(t *testing.T) {
 				}
 				find(t, main, "PeerAuthentication", "evalsi-operator-webhook")
 			}
+			// R6: the server may reach the demo's plain-HTTP MLflow.
+			if cfg := find(t, main, "ConfigMap", "evalsi").Data["evalsi.yaml"]; !strings.Contains(cfg, "- evalsi-demo-mlflow") {
+				t.Errorf("%s: sources.allow_hosts lacks the demo MLflow:\n%s", shape, cfg)
+			}
 		})
 	}
 }
