@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Hashable, Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import fmean, stdev
@@ -67,6 +67,27 @@ def metric_key(instance: BoundEvaluator, score_name: str) -> str:
     if not score_name or score_name == instance.spec.short_name:
         return instance.name
     return f"{instance.name}.{score_name}"
+
+
+def result_metric(evaluator: str, evaluator_ref: str, score_name: str) -> str:
+    """:func:`metric_key` for a stored result: ``evaluator`` is the instance
+    name (an alias, perhaps) and ``evaluator_ref`` the manifest it ran
+    (``builtin/exact-match@1.0.0``). Without a ref, a score named like the
+    instance is its primary metric."""
+    short = evaluator_ref.split("@", 1)[0].rsplit("/", 1)[-1] if evaluator_ref else evaluator
+    if not score_name or score_name == short:
+        return evaluator
+    return f"{evaluator}.{score_name}"
+
+
+def record_trial(record: Mapping[str, Any]) -> int | None:
+    """The trial whose output a record (in its JSON form) is, from
+    ``provenance.run``; ``None`` for a dataset record, the same in every
+    trial."""
+    run = (record.get("provenance") or {}).get("run")
+    if not isinstance(run, Mapping):
+        return None
+    return int(run.get("trial", 0) or 0)
 
 
 def summarize(
@@ -234,6 +255,9 @@ class EvalResult:
     results: list[EvaluationResult]
     summaries: list[MetricSummary]
     manifest: dict[str, Any]
+    # The trial that produced each of ``records``, when they are a run's
+    # outputs (one per record and trial); empty for dataset records.
+    record_trials: list[int] = field(default_factory=list)
 
     def metric(self, name: str) -> MetricSummary:
         for summary in self.summaries:
@@ -244,13 +268,28 @@ class EvalResult:
     def errors(self) -> list[EvaluationResult]:
         return [r for r in self.results if r.outcome is Outcome.ERROR]
 
+    @property
+    def all_errored(self) -> bool:
+        """Every evaluation failed, so nothing was scored: such a run never
+        passes, gates or not (the server's rule too). Skipped records alone
+        are not errors."""
+        return bool(self.results) and all(r.outcome is Outcome.ERROR for r in self.results)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "manifest": self.manifest,
             "summaries": [s.to_dict() for s in self.summaries],
             "results": [r.to_dict() for r in self.results],
-            "records": [r.to_dict() for r in self.records],
+            "records": [self._record_dict(i, r) for i, r in enumerate(self.records)],
         }
+
+    def _record_dict(self, i: int, record: Record) -> dict[str, Any]:
+        out = record.to_dict()
+        if i < len(self.record_trials):
+            # The server's shape (Record.provenance.run.trial), so reports and
+            # analytics pair each result with the output it graded.
+            out["provenance"] = {"run": {"trial": self.record_trials[i]}}
+        return out
 
     def save(self, path: str | Path) -> None:
         """Write the manifest, summaries and every per-record result as JSON."""

@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect"
+
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 )
 
@@ -342,5 +345,39 @@ func TestConjuncts(t *testing.T) {
 	b, _ := conjuncts(`c && b.y   ==  "z" && a.x == 1`)
 	if strings.Join(a, "|") != strings.Join(b, "|") || len(a) != 3 {
 		t.Errorf("conjuncts: %v vs %v", a, b)
+	}
+}
+
+// changeStore stores projects in memory; the service's other store methods
+// are not used by the test.
+type changeStore struct {
+	ServiceStore
+	mem *memStore
+}
+
+func (c *changeStore) AuthRoles(ctx context.Context) ([]Role, error) { return c.mem.AuthRoles(ctx) }
+func (c *changeStore) AuthBindings(ctx context.Context) ([]Binding, error) {
+	return c.mem.AuthBindings(ctx)
+}
+func (c *changeStore) AuthProjects(ctx context.Context) ([]Project, error) {
+	return c.mem.AuthProjects(ctx)
+}
+func (c *changeStore) CreateProject(_ context.Context, p Project) error {
+	c.mem.projects = append(c.mem.projects, p)
+	return nil
+}
+
+// A stored access-control change is announced, so other replicas reload.
+func TestServiceAnnouncesChanges(t *testing.T) {
+	st := &changeStore{mem: &memStore{}}
+	e := engine(t, testRBAC, nil, st)
+	svc := NewService(e, st, nil, nil)
+	changes := 0
+	svc.OnChange(func() { changes++ })
+	if _, err := svc.CreateProject(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateProjectRequest{Name: "review-ha"})); err != nil {
+		t.Fatal(err)
+	}
+	if changes != 1 || !e.ProjectExists("review-ha") {
+		t.Errorf("changes = %d, project known here: %v", changes, e.ProjectExists("review-ha"))
 	}
 }

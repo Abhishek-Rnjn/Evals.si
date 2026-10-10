@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import sys
 import tempfile
 import threading
@@ -388,7 +389,9 @@ def test_external_harnesses_in_python_and_over_grpc(
     assert rec.check == TaskCheck(passed=True)
 
     async def over_grpc() -> Record | None:
-        socket = f"unix://{tmp_path / 'h.sock'}"
+        # Not under tmp_path, which can pass macOS's 104-byte socket path limit.
+        sockets = tempfile.mkdtemp(prefix="evalsi-", dir="/tmp" if Path("/tmp").is_dir() else None)
+        socket = f"unix://{sockets}/h.sock"
         server = asyncio.create_task(serve(EchoHarness(None, {"prefix": "grpc: "}), socket))  # type: ignore[arg-type]
         await asyncio.sleep(0.3)
         harness = GrpcHarness(address=socket)
@@ -397,6 +400,7 @@ def test_external_harnesses_in_python_and_over_grpc(
         finally:
             await harness.aclose()
             server.cancel()
+            shutil.rmtree(sockets, ignore_errors=True)
         assert harness.describe().name == "echo"
         return out.record
 

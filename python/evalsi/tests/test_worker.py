@@ -11,7 +11,7 @@ from google.protobuf import struct_pb2
 from grpc_health.v1 import health_pb2, health_pb2_grpc
 from test_judge import OPENAI, FakeBackend
 
-from conftest import make_record
+from conftest import make_record, short_socket_dir
 from evalsi import Content, Message, Record, Score, ToolCall, Usage, evaluator
 from evalsi.convert import (
     coerce_params,
@@ -111,8 +111,13 @@ Call = Callable[["pb_grpc.EvaluatorPluginServiceAsyncStub"], Awaitable[Any]]
 
 
 def with_worker(plugin: EvaluatorPlugin, call: Call, tmp_path: Path) -> Any:
+    with short_socket_dir() as sockets:
+        return _with_worker(plugin, call, sockets)
+
+
+def _with_worker(plugin: EvaluatorPlugin, call: Call, sockets: Path) -> Any:
     async def main() -> Any:
-        listen = f"unix://{tmp_path}/w.sock"
+        listen = f"unix://{sockets}/w.sock"
         server = grpc.aio.server()
         pb_grpc.add_EvaluatorPluginServiceServicer_to_server(plugin, server)
         server.add_insecure_port(listen)
@@ -247,8 +252,8 @@ def test_serve_reports_healthy_and_loads_judges(tmp_path: Path) -> None:
     )
     assert load_judges(judges_file)["j"].model == "m"
 
-    async def main() -> int:
-        listen = f"unix://{tmp_path}/s.sock"
+    async def main(sockets: Path) -> int:
+        listen = f"unix://{sockets}/s.sock"
         ready = asyncio.Event()
         task = asyncio.create_task(serve(listen, judges=load_judges(judges_file), ready=ready))
         await asyncio.wait_for(ready.wait(), 10)
@@ -262,7 +267,8 @@ def test_serve_reports_healthy_and_loads_judges(tmp_path: Path) -> None:
             with pytest.raises(asyncio.CancelledError):
                 await task
 
-    assert asyncio.run(main()) == health_pb2.HealthCheckResponse.SERVING
+    with short_socket_dir() as sockets:
+        assert asyncio.run(main(sockets)) == health_pb2.HealthCheckResponse.SERVING
 
 
 def test_generate_and_load_dataset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

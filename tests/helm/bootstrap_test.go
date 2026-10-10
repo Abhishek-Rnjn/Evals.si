@@ -2,6 +2,7 @@ package helm
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -70,6 +71,27 @@ func TestBootstrapJob(t *testing.T) {
 	if !owned {
 		t.Errorf("owners %v", server.RBAC.Owners)
 	}
+	// The keys it creates can sign in: API keys are on.
+	if server.Auth == nil || server.Auth.APIKeys == nil {
+		t.Errorf("bootstrap creates API keys the server refuses: auth %+v", server.Auth)
+	}
+	// An explicit api_keys setting is kept; turning keys off while asking
+	// for some is refused.
+	kept := load(t, find(t, render(t, "evalsi", append(bootstrapValues, "auth.config.api_keys.mode=strict")...), "ConfigMap", "evalsi"))
+	if kept.Auth.APIKeys == nil || kept.Auth.APIKeys.Mode != "strict" {
+		t.Errorf("auth.config.api_keys was not kept: %+v", kept.Auth.APIKeys)
+	}
+	args := []string{"template", "t", filepath.Join(charts, "evalsi"), "--kube-version", "1.34.0", "--set", "auth.config.api_keys=null"}
+	for _, v := range bootstrapValues {
+		args = append(args, "--set", v)
+	}
+	if out, err := exec.Command(helm(t), args...).CombinedOutput(); err == nil || !strings.Contains(string(out), "turns API keys off") {
+		t.Errorf("keys requested with API keys off: %v %s", err, out)
+	}
+	if none := load(t, find(t, render(t, "evalsi"), "ConfigMap", "evalsi")); none.Auth.APIKeys != nil {
+		t.Errorf("API keys on without bootstrap keys: %+v", none.Auth.APIKeys)
+	}
+
 	grants := server.Credentials.Grants
 	if len(grants) != 1 || grants[0].Env != "ANTHROPIC_API_KEY" || grants[0].Hosts[0] != "api.anthropic.com" {
 		t.Errorf("grants %+v", grants)

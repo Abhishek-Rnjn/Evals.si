@@ -257,3 +257,23 @@ func TestLongTasksAreNotRedelivered(t *testing.T) {
 		t.Errorf("the task ran %d times", total)
 	}
 }
+
+func TestAuthzChangesReachEveryReplica(t *testing.T) {
+	a, connect := embedded(t, "")
+	b := connect("b")
+	got := make(chan struct{}, 1)
+	stop, err := b.OnAuthzChanged(func() { got <- struct{}{} })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	if err := b.nc.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	a.AuthzChanged()
+	select {
+	case <-got:
+	case <-time.After(5 * time.Second):
+		t.Fatal("replica b never heard of the change")
+	}
+}

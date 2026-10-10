@@ -42,11 +42,26 @@ type Service struct {
 	auditor    *Auditor
 	configKeys []auth.ConfigKey
 	now        func() time.Time
+	// changed is told after a mutation is stored and applied here, so other
+	// replicas reload too.
+	changed func()
 }
 
 // NewService builds the AuthService.
 func NewService(e *Engine, st ServiceStore, auditor *Auditor, configKeys []auth.ConfigKey) *Service {
 	return &Service{engine: e, store: st, auditor: auditor, configKeys: configKeys, now: time.Now}
+}
+
+// OnChange registers fn, called after every stored change to projects,
+// roles or bindings (a cluster broadcasts it to the other replicas).
+func (s *Service) OnChange(fn func()) { s.changed = fn }
+
+// reload applies a stored change here and announces it.
+func (s *Service) reload(ctx context.Context) error {
+	if s.changed != nil {
+		defer s.changed()
+	}
+	return s.engine.Reload(ctx)
 }
 
 func invalid(format string, args ...any) error {
@@ -165,7 +180,7 @@ func (s *Service) CreateProject(ctx context.Context, req *connect.Request[evalsi
 	if err := s.store.CreateProject(ctx, p); err != nil {
 		return nil, storeErr(err, "project "+name)
 	}
-	if err := s.engine.Reload(ctx); err != nil {
+	if err := s.reload(ctx); err != nil {
 		return nil, err
 	}
 	s.record(ctx, "projects.manage", name, "project/"+name, map[string]any{"new": p})
@@ -417,7 +432,7 @@ func (s *Service) putRole(ctx context.Context, msg *evalsiv1alpha1.Role, create 
 	if err := s.store.PutRole(ctx, def, create); err != nil {
 		return nil, storeErr(err, "role "+def.Name)
 	}
-	if err := s.engine.Reload(ctx); err != nil {
+	if err := s.reload(ctx); err != nil {
 		return nil, err
 	}
 	detail := map[string]any{"new": def}
@@ -473,7 +488,7 @@ func (s *Service) DeleteRole(ctx context.Context, req *connect.Request[evalsiv1a
 	if err := s.store.DeleteRole(ctx, project, name); err != nil {
 		return nil, storeErr(err, "role "+name)
 	}
-	if err := s.engine.Reload(ctx); err != nil {
+	if err := s.reload(ctx); err != nil {
 		return nil, err
 	}
 	s.record(ctx, "access.manage", or(project, "*"), "role/"+or(project, "*")+"/"+name, map[string]any{"old": old})
@@ -562,7 +577,7 @@ func (s *Service) CreateBinding(ctx context.Context, req *connect.Request[evalsi
 	if err := s.store.CreateBinding(ctx, b); err != nil {
 		return nil, storeErr(err, "binding")
 	}
-	if err := s.engine.Reload(ctx); err != nil {
+	if err := s.reload(ctx); err != nil {
 		return nil, err
 	}
 	s.record(ctx, "access.manage", b.Project, "binding/"+b.Project+"/"+b.Role, map[string]any{"new": map[string]string{"role": b.Role, "subject": b.Subject}})
@@ -583,7 +598,7 @@ func (s *Service) DeleteBinding(ctx context.Context, req *connect.Request[evalsi
 	if err := s.store.DeleteBinding(ctx, b); err != nil {
 		return nil, storeErr(err, "such binding")
 	}
-	if err := s.engine.Reload(ctx); err != nil {
+	if err := s.reload(ctx); err != nil {
 		return nil, err
 	}
 	s.record(ctx, "access.manage", b.Project, "binding/"+b.Project+"/"+b.Role, map[string]any{"old": map[string]string{"role": b.Role, "subject": b.Subject}})

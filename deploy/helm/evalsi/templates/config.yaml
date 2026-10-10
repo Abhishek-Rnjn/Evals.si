@@ -47,8 +47,14 @@
 {{- else }}
 {{- $_ := set $auth "allow_plaintext" true }}
 {{- end }}
-{{- /* Keys the bootstrap Job makes only sign in when the server accepts API keys. */ -}}
-{{- if and $v.bootstrap.enabled $v.bootstrap.apiKeys }}{{ $_ := set $auth "api_keys" (dict) }}{{ end }}
+{{- /* Keys the bootstrap Job creates must be usable: API keys are on
+unless auth.config turns them off, which contradicts asking for keys. */ -}}
+{{- if and $v.bootstrap.enabled $v.bootstrap.apiKeys }}
+{{- if and (hasKey $v.auth.config "api_keys") (not (index $v.auth.config "api_keys" | kindIs "map")) }}
+{{- fail "bootstrap.apiKeys creates API keys, but auth.config.api_keys turns API keys off" }}
+{{- end }}
+{{- $_ := set $auth "api_keys" dict }}
+{{- end }}
 {{- $auth = mergeOverwrite $auth (deepCopy $v.auth.config) }}
 
 {{- $owners := list (printf "user:kubernetes/system:serviceaccount:%s:%s-operator" $ns $fn) }}

@@ -483,3 +483,42 @@ func TestSharedCacheAcrossReplicas(t *testing.T) {
 		t.Errorf("pruned %d (%v), want the 2 component scores", n, err)
 	}
 }
+
+func TestScoreRewardsParamsCannotWeakenMinIsolation(t *testing.T) {
+	for _, tc := range []struct{ component, param, want string }{
+		{"vm", "confined", "vm"},
+		{"confined", "vm", "vm"},
+		{"kernel", "kernel", "kernel"},
+		{"namespaced", "", "namespaced"},
+	} {
+		w := &fakeWorker{}
+		s := newService(t, w, config.Rewards{})
+		c := &evalsiv1alpha1.RewardComponent{Ref: "code-exec-tests", Weight: 1, MinIsolation: tc.component}
+		if tc.param != "" {
+			c.Params = &structpb.Struct{Fields: map[string]*structpb.Value{"min_isolation": structpb.NewStringValue(tc.param)}}
+		}
+		if _, err := score(t, s, &evalsiv1alpha1.RewardSpec{Components: []*evalsiv1alpha1.RewardComponent{c}}, rollout("x", true)); err != nil {
+			t.Fatalf("%s/%s: %v", tc.component, tc.param, err)
+		}
+		if len(w.params) == 0 {
+			t.Fatalf("%s/%s: the worker saw no params", tc.component, tc.param)
+		}
+		for _, p := range w.params {
+			if got := p.GetFields()["min_isolation"].GetStringValue(); got != tc.want {
+				t.Errorf("component %s, param %s: worker got min_isolation %q, want %q", tc.component, tc.param, got, tc.want)
+			}
+		}
+	}
+
+	s := newService(t, &fakeWorker{}, config.Rewards{})
+	for _, c := range []*evalsiv1alpha1.RewardComponent{
+		{Ref: "code-exec-tests", MinIsolation: "bogus"},
+		{Ref: "code-exec-tests", MinIsolation: "vm", Params: &structpb.Struct{Fields: map[string]*structpb.Value{"min_isolation": structpb.NewStringValue("bogus")}}},
+		{Ref: "code-exec-tests", MinIsolation: "vm", Params: &structpb.Struct{Fields: map[string]*structpb.Value{"min_isolation": structpb.NewNumberValue(1)}}},
+	} {
+		_, err := score(t, s, &evalsiv1alpha1.RewardSpec{Components: []*evalsiv1alpha1.RewardComponent{c}}, rollout("x", true))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%v: got %v, want InvalidArgument", c, err)
+		}
+	}
+}

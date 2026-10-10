@@ -50,6 +50,20 @@ def test_trl_reward_funcs_log_components() -> None:
         trl.component_func(rewards.load(SPEC), "nope")
 
 
+def test_trl_component_funcs_rescore_a_changed_reference() -> None:
+    funcs, _ = trl.reward_funcs(SPEC)
+    same = {"prompts": ["q"], "completions": ["<answer>x</answer>"]}
+    assert funcs[0](**same, answer=["x"]) == pytest.approx([1.0])
+    assert funcs[2](**same, answer=["x"]) == [1.0]
+    # The same text with another answer is another batch, not the last one.
+    assert funcs[2](**same, answer=["y"]) == [0.0]
+    # Non-sample trainer state does not make a batch new.
+    assert funcs[0](**same, answer=["x"], trainer_state={"step": 1}) == pytest.approx([1.0])
+    key = funcs[0].last_call  # type: ignore[attr-defined]
+    assert funcs[1](**same, answer=["x"], trainer_state={"step": 2}) == [1.0]
+    assert funcs[0].last_call == key  # type: ignore[attr-defined]
+
+
 def test_trl_skipped_components_are_none() -> None:
     funcs, _ = trl.reward_funcs(SPEC)
     # No reference column: math-equiv is skipped, which adds nothing to the total.

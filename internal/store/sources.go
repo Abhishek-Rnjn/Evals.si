@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -255,7 +256,10 @@ func (s *Store) PruneSeen(ctx context.Context, project, source string, t time.Ti
 // SourceWrite is a score written back to a source's trace.
 type SourceWrite struct {
 	TraceID string
-	Metric  string
+	// The policy that produced the score: two policies with the same
+	// metric write separate scores.
+	Policy string
+	Metric string
 	// The store's ID for what was written (an MLflow assessment ID), so a
 	// changed score updates it instead of adding another.
 	RemoteID string
@@ -264,9 +268,34 @@ type SourceWrite struct {
 	Written time.Time
 }
 
+// WriteKey identifies one written-back score.
+type WriteKey struct{ TraceID, Policy, Metric string }
+
+// Key is the write's identity.
+func (w SourceWrite) Key() WriteKey { return WriteKey{w.TraceID, w.Policy, w.Metric} }
+
+// writeSep joins policy and metric in the metric column, so scores from
+// different policies keep separate rows. Rows written before policies were
+// recorded have no separator and read back with no policy.
+const writeSep = "\x1f"
+
+func writeColumn(policy, metric string) string {
+	if policy == "" {
+		return metric
+	}
+	return policy + writeSep + metric
+}
+
+func splitWriteColumn(col string) (policy, metric string) {
+	if p, m, ok := strings.Cut(col, writeSep); ok {
+		return p, m
+	}
+	return "", col
+}
+
 // SourceWrites returns what was written back for the given traces.
-func (s *Store) SourceWrites(ctx context.Context, project, source string, ids []string) (map[[2]string]SourceWrite, error) {
-	out := map[[2]string]SourceWrite{}
+func (s *Store) SourceWrites(ctx context.Context, project, source string, ids []string) (map[WriteKey]SourceWrite, error) {
+	out := map[WriteKey]SourceWrite{}
 	const chunk = 400
 	for start := 0; start < len(ids); start += chunk {
 		part := ids[start:min(start+chunk, len(ids))]
@@ -287,7 +316,8 @@ func (s *Store) SourceWrites(ctx context.Context, project, source string, ids []
 				return nil, err
 			}
 			w.Written = fromNS(written)
-			out[[2]string{w.TraceID, w.Metric}] = w
+			w.Policy, w.Metric = splitWriteColumn(w.Metric)
+			out[w.Key()] = w
 		}
 		if err := rows.Err(); err != nil {
 			_ = rows.Close()
@@ -303,6 +333,6 @@ func (s *Store) PutSourceWrite(ctx context.Context, project, source string, w So
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO source_writes (project, source, trace_id, metric, remote_id, digest, written_ns) VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT (project, source, trace_id, metric) DO UPDATE SET remote_id = excluded.remote_id, digest = excluded.digest, written_ns = excluded.written_ns`,
-		project, source, w.TraceID, w.Metric, w.RemoteID, w.Digest, ns(w.Written))
+		project, source, w.TraceID, writeColumn(w.Policy, w.Metric), w.RemoteID, w.Digest, ns(w.Written))
 	return err
 }

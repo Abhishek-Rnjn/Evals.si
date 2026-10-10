@@ -59,6 +59,8 @@ func run() error {
 		workerConfig  = "evalsi-worker"
 		namePrefix    = "evalsi"
 		natsMonitor   string
+		workerTLS     string
+		workerS3      string
 		poll          = 5 * time.Second
 		statsInterval = 30 * time.Second
 		webhooks      = true
@@ -83,6 +85,8 @@ func run() error {
 	flag.Var(&allowClients, "sandbox-allow-client", "a client allowed into sandbox pools (repeatable)")
 	flag.StringVar(&sandboxSA, "sandbox-service-account", sandboxSA, "service account of sandbox pools")
 	flag.StringVar(&workerConfig, "worker-config-map", workerConfig, "default ConfigMap with the workers' evalsi.yaml")
+	flag.StringVar(&workerTLS, "worker-tls-secret", "", "Secret with the workers' sandbox client certificate, for Evaluators on the default ConfigMap")
+	flag.StringVar(&workerS3, "worker-s3-secret", "", "Secret with S3 credentials (access_key, secret_key), for Evaluators on the default ConfigMap")
 	flag.StringVar(&namePrefix, "name-prefix", namePrefix, "start the names of what the operator creates, and its leader election lease, with this")
 	flag.StringVar(&natsMonitor, "nats-monitoring-endpoint", "", "NATS monitoring host:port, for KEDA scaling")
 	flag.DurationVar(&poll, "poll-interval", poll, "how often running runs are polled")
@@ -137,7 +141,7 @@ func run() error {
 	if err := controllers.Setup(mgr, controllers.Config{
 		Enabled: strings.Split(enabled, ","), API: api, PollInterval: poll, StatsInterval: statsInterval,
 		Namespace: namespace, Image: image, SandboxTLSSecret: tlsSecret, SandboxAllowClients: allowClients,
-		SandboxServiceAccount: sandboxSA, WorkerConfigMap: workerConfig, NATSMonitoringEndpoint: natsMonitor, NamePrefix: namePrefix,
+		SandboxServiceAccount: sandboxSA, WorkerConfigMap: workerConfig, WorkerTLSSecret: workerTLS, WorkerS3Secret: workerS3, NATSMonitoringEndpoint: natsMonitor, NamePrefix: namePrefix,
 	}); err != nil {
 		return err
 	}

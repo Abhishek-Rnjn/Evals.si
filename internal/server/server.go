@@ -283,7 +283,23 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		},
 	})
 	authSvc := authz.NewService(engine, st, auditor, authn.ConfigKeys())
-	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, log)
+	if cl != nil {
+		// Access control changes on one replica apply on all of them: at once
+		// through the cluster, and within authzReconcile if that is missed.
+		authSvc.OnChange(cl.AuthzChanged)
+		stopAuthz, err := cl.OnAuthzChanged(func() {
+			if err := engine.Reload(bg); err != nil {
+				log.Warn("reloading access control", "err", err)
+			}
+		})
+		if err != nil {
+			return err
+		}
+		defer stopAuthz()
+		wg.Add(1)
+		go func() { defer wg.Done(); reconcileAuthz(bg, engine, log) }()
+	}
+	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, svc.EffectiveJudge, log)
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
 	if cfg.Rewards.SharedCache {
 		rewardSvc.UseSharedCache(st, log)
@@ -399,6 +415,27 @@ func claimRoles(c *auth.Config) []string {
 }
 
 // retain deletes traces older than the retention period, hourly.
+// authzReconcile bounds how long a replica can act on access control another
+// replica changed when the change's broadcast is missed (a NATS reconnect).
+var authzReconcile = 10 * time.Second
+
+// reconcileAuthz reloads projects, roles and bindings from the database
+// every authzReconcile.
+func reconcileAuthz(ctx context.Context, engine *authz.Engine, log *slog.Logger) {
+	tick := time.NewTicker(authzReconcile)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			if err := engine.Reload(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("reloading access control", "err", err)
+			}
+		}
+	}
+}
+
 func retain(ctx context.Context, st *store.Store, retention time.Duration, log *slog.Logger) {
 	if retention <= 0 {
 		return

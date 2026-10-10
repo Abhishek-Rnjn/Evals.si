@@ -153,7 +153,7 @@ func (m *Manager) recordingDir(rel string, create bool) (string, error) {
 			return "", err
 		}
 	}
-	return m.resolvePath(clean)
+	return m.resolvePath(clean, "")
 }
 
 // workerSpec is the spec as the worker gets it: the recording directory

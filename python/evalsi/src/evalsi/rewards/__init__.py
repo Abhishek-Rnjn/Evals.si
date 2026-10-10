@@ -227,7 +227,7 @@ class Reward:
             raise TypeError("a reward function needs completions")
         rollouts = _rollouts(prompts, completions, kwargs)
         results = self.score(rollouts)
-        self.last_call = call_key(prompts, completions)
+        self.last_call = call_key(rollouts)
         return [r.total for r in results]
 
     def compute_score(
@@ -356,9 +356,10 @@ class LocalReward(Reward):
         return results
 
 
-def call_key(prompts: Sequence[Any] | None, completions: Sequence[Any]) -> str:
-    """A digest of one reward-function call's batch."""
-    body = json.dumps([prompts, completions], sort_keys=True, default=str)
+def call_key(rollouts: Sequence[Mapping[str, Any]]) -> str:
+    """A digest of one reward-function call's batch: its rollouts with every
+    per-sample column (references, tests, metadata), not only the text."""
+    body = json.dumps(list(rollouts), sort_keys=True, default=str)
     return hashlib.sha256(body.encode()).hexdigest()
 
 
@@ -403,6 +404,22 @@ def _component_result(
     return ComponentResult("scored", value=value)
 
 
+_ISOLATION_ORDER = ("none", "confined", "namespaced", "kernel", "vm")
+
+
+def _stronger_isolation(component: Component, floor: str, param: Any) -> str:
+    """The stronger of the component's minimum and a ``min_isolation`` param:
+    a param never weakens the component's minimum."""
+    levels = [floor] if param is None else [floor, param]
+    for level in levels:
+        if level not in _ISOLATION_ORDER:
+            raise RewardSpecError(
+                f"component {component.key!r}: unknown isolation level {level!r} "
+                f"(use one of {', '.join(_ISOLATION_ORDER)})"
+            )
+    return max(levels, key=_ISOLATION_ORDER.index)
+
+
 def _bind(component: Component, registry: Registry) -> BoundEvaluator:
     definition = registry.resolve(component.ref)
     params = dict(component.params)
@@ -412,7 +429,9 @@ def _bind(component: Component, registry: Registry) -> BoundEvaluator:
                 f"component {component.key!r}: {definition.spec.name} does not run code in a "
                 "sandbox, so sandbox.minIsolation does not apply"
             )
-        params.setdefault("min_isolation", component.min_isolation)
+        params["min_isolation"] = _stronger_isolation(
+            component, component.min_isolation, params.get("min_isolation")
+        )
     if component.metric and definition.spec.output(component.metric) is None:
         raise RewardSpecError(
             f"component {component.key!r}: {definition.spec.name} has no metric "

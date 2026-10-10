@@ -74,63 +74,111 @@ func Row(rec *evalsiv1alpha1.Record, extra map[string]any) ([]byte, error) {
 var mu sync.Mutex
 
 // Append adds rows to datasets_dir/promoted/<project>/<name>.jsonl and
-// returns that path relative to datasets_dir. Writers in one process are
-// serialized, so lines never interleave. On object storage (datasets_dir
-// s3://...), each append is a conditional write retried on conflict, so
-// concurrent replicas never lose each other's rows.
-func Append(ctx context.Context, root string, objects *objstore.Client, project, name string, rows [][]byte) (string, error) {
+// returns that path relative to datasets_dir and how many rows it added. A
+// row whose record ID the dataset already has is skipped, so the dataset
+// stays loadable (IDs are unique) and repeating a promotion adds nothing.
+// Writers in one process are serialized, so lines never interleave. On
+// object storage (datasets_dir s3://...), each append is a conditional write
+// retried on conflict, so concurrent replicas never lose each other's rows.
+func Append(ctx context.Context, root string, objects *objstore.Client, project, name string, rows [][]byte) (string, int, error) {
 	if root == "" {
-		return "", fmt.Errorf("promotion needs datasets_dir in the server config")
+		return "", 0, fmt.Errorf("promotion needs datasets_dir in the server config")
 	}
 	if !ValidName(name) {
-		return "", fmt.Errorf("dataset name %q must be lowercase letters, digits, '.', '_' or '-'", name)
+		return "", 0, fmt.Errorf("dataset name %q must be lowercase letters, digits, '.', '_' or '-'", name)
 	}
 	if !ValidName(project) {
-		return "", fmt.Errorf("project %q cannot name a dataset directory", project)
+		return "", 0, fmt.Errorf("project %q cannot name a dataset directory", project)
 	}
 	rel := Path(project, name)
 	if loc, ok := objstore.Parse(root); ok {
-		return rel, appendObject(ctx, objects, loc.Join(rel), rows)
+		n, err := appendObject(ctx, objects, loc.Join(rel), rows)
+		return rel, n, err
 	}
 	full := filepath.Join(root, filepath.FromSlash(rel))
 	mu.Lock()
 	defer mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
-		return "", err
+		return "", 0, err
+	}
+	existing, err := os.ReadFile(full)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", 0, err
+	}
+	add := newRows(existing, rows)
+	if len(add) == 0 {
+		return rel, 0, nil
 	}
 	f, err := os.OpenFile(full, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer f.Close()
-	for _, row := range rows {
+	for _, row := range add {
 		if _, err := f.Write(append(row, '\n')); err != nil {
-			return "", err
+			return "", 0, err
 		}
 	}
-	return rel, nil
+	return rel, len(add), nil
 }
 
-func appendObject(ctx context.Context, objects *objstore.Client, loc objstore.Location, rows [][]byte) error {
-	if objects == nil {
-		return fmt.Errorf("datasets_dir %s needs storage.s3 in the server config", loc)
+// newRows are the rows whose record IDs neither the existing JSONL nor an
+// earlier row has. Rows without an ID are always new.
+func newRows(existing []byte, rows [][]byte) [][]byte {
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(existing), "\n") {
+		if id := rowID([]byte(line)); id != "" {
+			seen[id] = true
+		}
 	}
-	var add []byte
+	var out [][]byte
 	for _, row := range rows {
-		add = append(append(add, row...), '\n')
+		id := rowID(row)
+		if id != "" && seen[id] {
+			continue
+		}
+		if id != "" {
+			seen[id] = true
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+func rowID(line []byte) string {
+	var r struct {
+		ID string `json:"id"`
+	}
+	if len(strings.TrimSpace(string(line))) == 0 || json.Unmarshal(line, &r) != nil {
+		return ""
+	}
+	return r.ID
+}
+
+func appendObject(ctx context.Context, objects *objstore.Client, loc objstore.Location, rows [][]byte) (int, error) {
+	if objects == nil {
+		return 0, fmt.Errorf("datasets_dir %s needs storage.s3 in the server config", loc)
 	}
 	for attempt := 0; attempt < 8; attempt++ {
 		data, etag, err := objects.Get(ctx, loc)
 		create := errors.Is(err, objstore.ErrNotFound)
 		if err != nil && !create {
-			return err
+			return 0, err
+		}
+		rows := newRows(data, rows)
+		if len(rows) == 0 {
+			return 0, nil
+		}
+		var add []byte
+		for _, row := range rows {
+			add = append(append(add, row...), '\n')
 		}
 		_, err = objects.Put(ctx, loc, append(data, add...), etag, create)
 		if !errors.Is(err, objstore.ErrConflict) {
-			return err
+			return len(rows), err
 		}
 	}
-	return fmt.Errorf("appending to %s: too many concurrent writers", loc)
+	return 0, fmt.Errorf("appending to %s: too many concurrent writers", loc)
 }
 
 // Local reports whether datasets_dir is a local directory (not object storage).

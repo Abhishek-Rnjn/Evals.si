@@ -14,16 +14,22 @@ import (
 // Config configures the controllers Setup adds.
 type Config struct {
 	// Controllers to run: evalrun, onlineevalpolicy, tracesource, evaluator, sandboxclass.
-	Enabled                []string
-	API                    APIConfig
-	PollInterval           time.Duration
-	StatsInterval          time.Duration
-	Namespace              string
-	Image                  string
-	SandboxTLSSecret       string
-	SandboxAllowClients    []string
-	SandboxServiceAccount  string
-	WorkerConfigMap        string
+	Enabled               []string
+	API                   APIConfig
+	PollInterval          time.Duration
+	StatsInterval         time.Duration
+	Namespace             string
+	Image                 string
+	SandboxTLSSecret      string
+	SandboxAllowClients   []string
+	SandboxServiceAccount string
+	WorkerConfigMap       string
+	// What workers using WorkerConfigMap also need, as the chart's own
+	// workers get it: the Secret with their mutual-TLS client certificate for
+	// remote sandbox pools, and the one with S3 credentials (access_key,
+	// secret_key). Empty when the release uses neither.
+	WorkerTLSSecret        string
+	WorkerS3Secret         string
 	NATSMonitoringEndpoint string
 	// Names of what the operator creates start with this (default "evalsi"),
 	// so releases of the chart can share a namespace.
@@ -73,7 +79,7 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 		}
 	}
 	if on("evaluator") {
-		if err := (&EvaluatorReconciler{Client: mgr.GetClient(), WorkerConfigMap: cfg.WorkerConfigMap, NATSMonitoringEndpoint: cfg.NATSMonitoringEndpoint, NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
+		if err := (&EvaluatorReconciler{Client: mgr.GetClient(), WorkerConfigMap: cfg.WorkerConfigMap, WorkerTLSSecret: cfg.WorkerTLSSecret, WorkerS3Secret: cfg.WorkerS3Secret, NATSMonitoringEndpoint: cfg.NATSMonitoringEndpoint, NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
 			return err
 		}
 	}

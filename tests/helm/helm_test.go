@@ -173,6 +173,9 @@ func TestEvalsiChart(t *testing.T) {
 				}
 				find(t, objs, "StatefulSet", "evalsi-nats")
 				find(t, objs, "NetworkPolicy", "evalsi-sandbox-pods")
+				if op := toYAML(t, find(t, objs, "Deployment", "evalsi-operator").Spec); strings.Contains(op, "--worker-tls-secret") || strings.Contains(op, "--worker-s3-secret") {
+					t.Errorf("operator names Secrets the release does not have: %s", op)
+				}
 			case "production":
 				if server.Storage.Postgres.DSNEnv == "" || server.Storage.ClickHouse == nil || server.DatasetsDir != "s3://evals/datasets" || server.Cluster.Replicas != 3 {
 					t.Errorf("storage %+v %q", server.Storage, server.DatasetsDir)
@@ -189,6 +192,12 @@ func TestEvalsiChart(t *testing.T) {
 				out := find(t, objs, "Deployment", "evalsi-operator")
 				if !strings.Contains(toYAML(t, out.Spec), "--image=registry.internal:5000/abhishek-rnjn/evalsi:") || !strings.Contains(toYAML(t, out.Spec), "sandboxclass") {
 					t.Errorf("operator %s", toYAML(t, out.Spec))
+				}
+				// Evaluators on the release's worker config get its Secrets.
+				for _, arg := range []string{"--worker-tls-secret=evalsi-worker-tls", "--worker-s3-secret=s3"} {
+					if !strings.Contains(toYAML(t, out.Spec), arg) {
+						t.Errorf("operator without %s", arg)
+					}
 				}
 			}
 		})

@@ -10,7 +10,9 @@ its API, are loaded into three tables:
     outcome, reason, explanation: one row per score, plus one per result
     that was skipped or errored (value NULL)
 ``records``
-    run_id, record_id, input, output, reference, metadata (JSON)
+    run_id, record_id, trial, input, output, reference, metadata (JSON):
+    one row per record, or per record and trial when a run produced the
+    outputs (trial -1 is a dataset record, the same in every trial)
 
 so results can be sliced by record metadata across many runs, in SQL or
 with :meth:`Warehouse.slice`. Going through the API, a server's results are
@@ -28,6 +30,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from evalsi.results import record_trial, result_metric
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     run_id VARCHAR PRIMARY KEY, name VARCHAR, project VARCHAR, status VARCHAR,
@@ -39,10 +43,13 @@ CREATE TABLE IF NOT EXISTS scores (
     outcome VARCHAR, reason VARCHAR, explanation VARCHAR
 );
 CREATE TABLE IF NOT EXISTS records (
-    run_id VARCHAR, record_id VARCHAR, input VARCHAR, output VARCHAR,
+    run_id VARCHAR, record_id VARCHAR, trial INTEGER, input VARCHAR, output VARCHAR,
     reference VARCHAR, metadata JSON
 );
 """
+# Warehouse files from before records had a trial.
+_MIGRATE = "ALTER TABLE records ADD COLUMN IF NOT EXISTS trial INTEGER DEFAULT -1"
+_RECORD_COLUMNS = "run_id, record_id, trial, input, output, reference, metadata"
 
 
 def _duckdb() -> Any:
@@ -65,16 +72,13 @@ def _text(value: Any) -> str | None:
     return str(value)
 
 
-def _metric(evaluator: str, score_name: str) -> str:
-    return evaluator if not score_name or score_name == evaluator else f"{evaluator}.{score_name}"
-
-
 def _score_rows(run_id: str, results: Iterable[Mapping[str, Any]]) -> list[tuple[Any, ...]]:
     rows: list[tuple[Any, ...]] = []
     for r in results:
         rid = str(r.get("record_id", r.get("recordId", "")))
         trial = int(r.get("trial", 0) or 0)
         evaluator = str(r.get("evaluator", ""))
+        ref = str(r.get("evaluator_ref", r.get("evaluatorRef", "")))
         outcome = str(r.get("outcome", "")).lower().removeprefix("outcome_")
         reason = str(r.get("reason", "")) or None
         scores = r.get("scores") or []
@@ -96,7 +100,7 @@ def _score_rows(run_id: str, results: Iterable[Mapping[str, Any]]) -> list[tuple
                     rid,
                     trial,
                     evaluator,
-                    _metric(evaluator, str(s.get("name", ""))),
+                    result_metric(evaluator, ref, str(s.get("name", ""))),
                     value,
                     None if passed is None else bool(passed),
                     None if label is None else str(label),
@@ -109,17 +113,23 @@ def _score_rows(run_id: str, results: Iterable[Mapping[str, Any]]) -> list[tuple
 
 
 def _record_rows(run_id: str, records: Iterable[Mapping[str, Any]]) -> list[tuple[Any, ...]]:
-    return [
-        (
+    # One row per record and trial: result pages repeat a record for each
+    # page its results fall on.
+    rows: dict[tuple[str, int], tuple[Any, ...]] = {}
+    for r in records:
+        rid = str(r.get("id", ""))
+        trial = record_trial(r)
+        key = (rid, -1 if trial is None else trial)
+        rows[key] = (
             run_id,
-            str(r.get("id", "")),
+            rid,
+            key[1],
             _text(r.get("input")),
             _text(r.get("output")),
             _text(r.get("reference")),
             json.dumps(r.get("metadata") or {}, ensure_ascii=False, default=str),
         )
-        for r in records
-    ]
+    return list(rows.values())
 
 
 class Warehouse:
@@ -128,6 +138,7 @@ class Warehouse:
     def __init__(self, path: str = ":memory:") -> None:
         self.db = _duckdb().connect(path)
         self.db.execute(_SCHEMA)
+        self.db.execute(_MIGRATE)
 
     def close(self) -> None:
         self.db.close()
@@ -157,7 +168,9 @@ class Warehouse:
                 )
             recs = _record_rows(run_id, records)
             if recs:
-                self.db.executemany("INSERT INTO records VALUES (?, ?, ?, ?, ?, ?)", recs)
+                self.db.executemany(
+                    f"INSERT INTO records ({_RECORD_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)", recs
+                )
             self.db.execute("COMMIT")
         except Exception:
             self.db.execute("ROLLBACK")
@@ -238,7 +251,10 @@ class Warehouse:
                 have = run.get("labels") or {}
                 if labels and any(have.get(k) != v for k, v in labels.items()):
                     continue
-                loaded.append(self.add_server_run(client, run))
+                # ListRuns leaves the spec out (the target, the model); the
+                # run itself has it.
+                full = run if "spec" in run else client.get_run(str(run.get("id", "")))
+                loaded.append(self.add_server_run(client, full))
                 if len(loaded) >= limit:
                     break
             token = page.get("nextPageToken", "")
@@ -266,11 +282,18 @@ class Warehouse:
         _, rows = self.query(
             f"""
             SELECT s.run_id, any_value(r.name) AS run,
-                   coalesce(json_extract_string(rec.metadata, ?), '(none)') AS "{alias}",
+                   coalesce(
+                       json_extract_string(coalesce(out.metadata, rec.metadata), ?), '(none)'
+                   ) AS "{alias}",
                    count(s.value) AS n, avg(s.value) AS mean, stddev_samp(s.value) AS sd
             FROM scores s
             JOIN runs r USING (run_id)
-            LEFT JOIN records rec ON rec.run_id = s.run_id AND rec.record_id = s.record_id
+            -- The output of the score's own trial, else the dataset record:
+            -- at most one row each, so a score is counted once.
+            LEFT JOIN records out
+              ON out.run_id = s.run_id AND out.record_id = s.record_id AND out.trial = s.trial
+            LEFT JOIN records rec
+              ON rec.run_id = s.run_id AND rec.record_id = s.record_id AND rec.trial = -1
             WHERE s.metric = ? AND s.value IS NOT NULL
             GROUP BY ALL
             ORDER BY 3, any_value(r.created_at), 1

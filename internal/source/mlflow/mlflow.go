@@ -317,12 +317,12 @@ func firstNonEmpty(ss ...string) string {
 // already written updates its assessment in place; with no record of one (the
 // bookkeeping was lost) the trace's own assessments are searched for the same
 // name and source before another is created.
-func (c *connector) WriteBack(ctx context.Context, scores []source.Score, prior map[[2]string]store.SourceWrite) ([]store.SourceWrite, error) {
+func (c *connector) WriteBack(ctx context.Context, scores []source.Score, prior map[store.WriteKey]store.SourceWrite) ([]store.SourceWrite, error) {
 	var done []store.SourceWrite
 	existing := map[string][]assessment{}
 	for _, s := range scores {
 		sourceID := "evalsi/" + s.Policy
-		remote := prior[[2]string{s.TraceID, s.Metric}].RemoteID
+		remote := prior[s.Key()].RemoteID
 		if remote == "" {
 			if _, ok := existing[s.TraceID]; !ok {
 				found, err := c.assessments(ctx, s.TraceID)
@@ -369,7 +369,7 @@ func (c *connector) WriteBack(ctx context.Context, scores []source.Score, prior 
 		if err != nil {
 			return done, err
 		}
-		done = append(done, store.SourceWrite{TraceID: s.TraceID, Metric: s.Metric, RemoteID: remote, Digest: s.Digest(), Written: time.Now().UTC()})
+		done = append(done, store.SourceWrite{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric, RemoteID: remote, Digest: s.Digest(), Written: time.Now().UTC()})
 	}
 	return done, nil
 }

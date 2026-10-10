@@ -156,6 +156,41 @@ def test_sandbox_settings_become_params() -> None:
     assert reward._instances[0].params["min_isolation"] == "namespaced"
 
 
+@pytest.mark.parametrize(
+    ("floor", "param", "want"),
+    [("vm", "confined", "vm"), ("confined", "vm", "vm"), ("kernel", "kernel", "kernel")],
+)
+def test_sandbox_params_cannot_weaken_min_isolation(floor: str, param: str, want: str) -> None:
+    reward = rewards.load(
+        {
+            "components": [
+                {
+                    "ref": "code-exec-tests",
+                    "params": {"min_isolation": param},
+                    "sandbox": {"minIsolation": floor},
+                }
+            ]
+        }
+    )
+    assert isinstance(reward, rewards.LocalReward)
+    assert reward._instances[0].params["min_isolation"] == want
+
+
+def test_unknown_isolation_level_is_rejected() -> None:
+    with pytest.raises(RewardSpecError, match="isolation level"):
+        rewards.load(
+            {
+                "components": [
+                    {
+                        "ref": "code-exec-tests",
+                        "params": {"min_isolation": "bogus"},
+                        "sandbox": {"minIsolation": "vm"},
+                    }
+                ]
+            }
+        )
+
+
 def test_spec_round_trips() -> None:
     import yaml
 

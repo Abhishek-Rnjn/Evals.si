@@ -70,19 +70,22 @@ type gate struct {
 	watcher  *watch.Engine
 	authSvc  *authz.Service
 	runsCode authz.RunsCode
-	log      *slog.Logger
-	rules    map[string]accessRule
+	// judgeOf is the judge a request's evaluators actually use, defaults
+	// included.
+	judgeOf func(refs []*evalsiv1alpha1.EvaluatorRef, judge string) string
+	log     *slog.Logger
+	rules   map[string]accessRule
 	// unauthAudit bounds how many rejected credentials are audited, so a
 	// scanner cannot flood the audit log; the rest are only counted.
 	unauthAudit *rate.Limiter
 	unauthTotal atomic.Int64
 }
 
-func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, log *slog.Logger) *gate {
+func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, judgeOf authz.JudgeOf, log *slog.Logger) *gate {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	g := &gate{engine: engine, auditor: auditor, store: st, watcher: watcher, authSvc: authSvc, runsCode: runsCode, log: log,
+	g := &gate{engine: engine, auditor: auditor, store: st, watcher: watcher, authSvc: authSvc, runsCode: runsCode, judgeOf: judgeOf, log: log,
 		unauthAudit: rate.NewLimiter(10, 50)}
 	g.rules = g.accessRules()
 	return g
@@ -523,7 +526,19 @@ func (g *gate) evaluateTarget(project string, refs []*evalsiv1alpha1.EvaluatorRe
 	if err != nil {
 		return nil, err
 	}
-	return []target{{project: project, resource: authz.EvaluateResource(refs, judge, records, g.runsCode), name: "evaluation"}}, nil
+	return []target{{project: project, resource: authz.EffectiveJudge(authz.EvaluateResource(refs, judge, records, g.runsCode), g.judgeOf, refs, judge), name: "evaluation"}}, nil
+}
+
+func (g *gate) specResource(spec *evalsiv1alpha1.RunSpec, labels map[string]string) map[string]any {
+	return authz.EffectiveJudge(authz.SpecResource(spec, labels, g.runsCode), g.judgeOf, spec.GetEvaluators(), spec.GetJudge())
+}
+
+func (g *gate) runResource(run *evalsiv1alpha1.Run) map[string]any {
+	return authz.EffectiveJudge(authz.RunResource(run, g.runsCode), g.judgeOf, run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
+}
+
+func (g *gate) policyResource(p *evalsiv1alpha1.OnlineEvalPolicy) map[string]any {
+	return authz.EffectiveJudge(authz.PolicyResource(p, g.runsCode), g.judgeOf, authz.PolicyRefs(p), p.GetJudge())
 }
 
 // newRunTargets is a new run in a project plus what its dataset reads.
@@ -536,7 +551,7 @@ func (g *gate) newRunTargets(ctx context.Context, project string, spec *evalsiv1
 	if err != nil {
 		return nil, err
 	}
-	return append([]target{{project: project, resource: authz.SpecResource(spec, labels, g.runsCode), name: name}}, extra...), nil
+	return append([]target{{project: project, resource: g.specResource(spec, labels), name: name}}, extra...), nil
 }
 
 // runTargets loads runs. An unknown run becomes a target in no project,
@@ -553,7 +568,7 @@ func (g *gate) runTargets(ctx context.Context, ids ...string) ([]target, error) 
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, target{project: run.GetProject(), resource: authz.RunResource(run, g.runsCode), name: "run/" + id})
+		out = append(out, target{project: run.GetProject(), resource: g.runResource(run), name: "run/" + id})
 	}
 	return out, nil
 }
@@ -563,20 +578,22 @@ func (g *gate) policyTarget(name string) []target {
 	if !ok {
 		return []target{{name: "policy/" + name}}
 	}
-	return []target{{project: p.GetProject(), resource: authz.PolicyResource(p, g.runsCode), name: "policy/" + name}}
+	return []target{{project: p.GetProject(), resource: g.policyResource(p), name: "policy/" + name}}
 }
 
-// applyPolicyTargets checks the new policy and, when it replaces one in
-// another project, that project too: policy names are install-wide.
+// applyPolicyTargets checks the new policy and, when it replaces one, the
+// stored policy too (in its own project: policy names are install-wide), so
+// a rule protecting a labelled policy cannot be sidestepped by applying it
+// without the label.
 func (g *gate) applyPolicyTargets(_ context.Context, msg any) ([]target, error) {
 	p := msg.(*evalsiv1alpha1.ApplyPolicyRequest).GetPolicy()
 	project, err := g.project(p.GetProject())
 	if err != nil {
 		return nil, err
 	}
-	out := []target{{project: project, resource: authz.PolicyResource(p, g.runsCode), name: "policy/" + p.GetName()}}
-	if old, ok := g.watcher.Policy(p.GetName()); ok && old.GetProject() != project {
-		out = append(out, target{project: old.GetProject(), resource: authz.PolicyResource(old, g.runsCode), name: "policy/" + p.GetName()})
+	out := []target{{project: project, resource: g.policyResource(p), name: "policy/" + p.GetName()}}
+	if old, ok := g.watcher.Policy(p.GetName()); ok {
+		out = append(out, target{project: old.GetProject(), resource: g.policyResource(old), name: "policy/" + p.GetName()})
 	}
 	return out, nil
 }
@@ -682,7 +699,7 @@ func (g *gate) authenticate(ctx context.Context, procedure, protocol, source str
 	header = header.Clone()
 	header.Set("X-Request-Id", requestID(header))
 	chk := &authz.Checker{
-		Engine: g.engine, Principal: auth.PrincipalFrom(ctx), RunsCode: g.runsCode,
+		Engine: g.engine, Principal: auth.PrincipalFrom(ctx), RunsCode: g.runsCode, JudgeOf: g.judgeOf,
 		Meta: authz.Request{Procedure: procedure, Protocol: protocol, Headers: header, Source: source},
 	}
 	return authz.WithChecker(ctx, chk), chk, nil
@@ -760,8 +777,15 @@ func (g *gate) check(ctx context.Context, chk *authz.Checker, procedure string, 
 func (g *gate) datasetTargets(ctx context.Context, project string, src *evalsiv1alpha1.DatasetSource) ([]target, error) {
 	switch s := src.GetSource().(type) {
 	case *evalsiv1alpha1.DatasetSource_Traces:
+		// Like listing traces: which traces the caller may read depends on
+		// each trace (its service, its labels), so they are checked one by one
+		// as the run loads them. Here only a caller who holds traces.read in
+		// the project through no role at all is refused.
+		if authz.MayHold(ctx, "traces.read", project) {
+			return nil, nil
+		}
 		return []target{{project: project, name: "traces/" + project, action: "traces.read",
-			resource: map[string]any{"traces": map[string]any{"service": s.Traces.GetService(), "policy": s.Traces.GetPolicy()}}}}, nil
+			resource: authz.TraceQueryResource(s.Traces.GetService(), s.Traces.GetPolicy())}}, nil
 	case *evalsiv1alpha1.DatasetSource_Run:
 		ts, err := g.runTargets(ctx, s.Run.GetRunId())
 		for i := range ts {

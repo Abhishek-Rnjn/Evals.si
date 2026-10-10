@@ -36,6 +36,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
@@ -90,6 +91,9 @@ type Manager struct {
 	opts   Options
 	slots  chan struct{}
 	log    *slog.Logger
+
+	// admit serializes quota checks with the inserts they admit.
+	admit sync.Mutex
 
 	mu     sync.Mutex
 	active map[string]*activeRun
@@ -203,6 +207,39 @@ func newID() string {
 	return "run-" + hex.EncodeToString(b)
 }
 
+// checkSpecGrants checks the worker variables and the user simulator's judge
+// a spec names against the project's current credential grants.
+func (m *Manager) checkSpecGrants(ctx context.Context, project string, spec *evalsiv1alpha1.RunSpec) error {
+	uses, err := credentials.SpecUses(spec)
+	if err != nil {
+		return err
+	}
+	if err := m.engine.Credentials().Check(ctx, project, uses); err != nil {
+		return err
+	}
+	if sim := spec.GetHarness().GetBuiltin().GetUserSimulator(); sim != nil {
+		judge := sim.GetJudge()
+		if judge == "" {
+			judge = m.engine.JudgeOr(spec.GetJudge())
+		}
+		if err := m.engine.Credentials().CheckJudge(ctx, project, judge, "spec.harness.builtin.user_simulator"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkGrants checks a stored run against the current credential grants:
+// a grant revoked after the run was created stops it before it starts new
+// work, whether it is queued, resumed or adopted.
+func (ex *execution) checkGrants(ctx context.Context) error {
+	project := projectOr(ex.run.GetProject())
+	if err := ex.m.engine.Authorize(ctx, project, ex.insts); err != nil {
+		return err
+	}
+	return ex.m.checkSpecGrants(ctx, project, ex.spec)
+}
+
 // validate checks a spec before anything is stored, including the worker
 // variables it names against the project's credential grants.
 func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1alpha1.RunSpec) ([]evaluation.Instance, error) {
@@ -214,21 +251,8 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 	if err != nil {
 		return nil, err
 	}
-	uses, err := credentials.SpecUses(spec)
-	if err != nil {
+	if err := m.checkSpecGrants(ctx, project, spec); err != nil {
 		return nil, err
-	}
-	if err := m.engine.Credentials().Check(ctx, project, uses); err != nil {
-		return nil, err
-	}
-	if sim := spec.GetHarness().GetBuiltin().GetUserSimulator(); sim != nil {
-		judge := sim.GetJudge()
-		if judge == "" {
-			judge = m.engine.JudgeOr(spec.GetJudge())
-		}
-		if err := m.engine.Credentials().CheckJudge(ctx, project, judge, "spec.harness.builtin.user_simulator"); err != nil {
-			return nil, err
-		}
 	}
 	if spec.GetDataset().GetSource() == nil {
 		return nil, invalid("spec.dataset needs one of inline, path or uri")
@@ -262,7 +286,8 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 
 // resolvePath keeps dataset paths inside DatasetsDir, symlinks included. On
 // object storage the result is an s3:// URL, which the worker side fetches.
-func (m *Manager) resolvePath(rel string) (string, error) {
+// project is the project reading the path ("" for none).
+func (m *Manager) resolvePath(rel, project string) (string, error) {
 	if m.opts.DatasetsDir == "" {
 		return "", invalid("this server does not accept dataset paths; set datasets_dir in its config, or send records inline")
 	}
@@ -273,11 +298,13 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 		}
 		return loc.Join(clean).String(), nil
 	}
-	root, err := filepath.EvalSymlinks(m.opts.DatasetsDir)
+	// A relative datasets_dir (./datasets) is relative to where evalsid
+	// started; the worker wants absolute paths. Make it absolute before
+	// resolving symlinks, so a working directory reached through a symlink
+	// resolves the same way as the files inside it.
+	root, err := filepath.Abs(m.opts.DatasetsDir)
 	if err == nil {
-		// A relative datasets_dir (./datasets) is relative to where evalsid
-		// started; the worker wants absolute paths.
-		root, err = filepath.Abs(root)
+		root, err = filepath.EvalSymlinks(root)
 	}
 	if err != nil {
 		return "", fmt.Errorf("datasets_dir: %w", err)
@@ -289,8 +316,15 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 	if err != nil {
 		return "", invalid("dataset %q: %v", rel, errors.Unwrap(err))
 	}
-	if r, err := filepath.Rel(root, full); err != nil || r == ".." || strings.HasPrefix(r, ".."+string(os.PathSeparator)) {
+	r, err := filepath.Rel(root, full)
+	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(os.PathSeparator)) {
 		return "", invalid("dataset %q is outside the server's datasets_dir", rel)
+	}
+	// Access rules check the project a promoted dataset belongs to by the
+	// path as spelled; an alias (a symlink) must not lead into another
+	// project's promotions.
+	if to := datasets.ProjectOf(r); to != "" && to != datasets.ProjectOf(rel) && to != project {
+		return "", invalid("dataset %q resolves to %q; name it by that path", rel, filepath.ToSlash(r))
 	}
 	return full, nil
 }
@@ -298,7 +332,7 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 // resolveURI passes hf:// through and confines importer URIs
 // (scheme://path?options, for example inspect://logs/run.eval), which name
 // local files, to DatasetsDir like plain paths.
-func (m *Manager) resolveURI(uri string) (string, error) {
+func (m *Manager) resolveURI(uri, project string) (string, error) {
 	scheme, rest, ok := strings.Cut(uri, "://")
 	if !ok || scheme == "" {
 		return "", invalid("dataset uri %q needs a scheme such as hf:// or inspect://; use path for files", uri)
@@ -307,7 +341,7 @@ func (m *Manager) resolveURI(uri string) (string, error) {
 		return uri, nil
 	}
 	path, query, hasQuery := strings.Cut(rest, "?")
-	full, err := m.resolvePath(path)
+	full, err := m.resolvePath(path, project)
 	if err != nil {
 		return "", err
 	}
@@ -342,13 +376,13 @@ func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSo
 		req := proto.Clone(src).(*evalsiv1alpha1.DatasetSource)
 		switch s := s.(type) {
 		case *evalsiv1alpha1.DatasetSource_Path:
-			full, err := m.resolvePath(s.Path)
+			full, err := m.resolvePath(s.Path, projectOr(project))
 			if err != nil {
 				return nil, err
 			}
 			req.Source = &evalsiv1alpha1.DatasetSource_Path{Path: full}
 		case *evalsiv1alpha1.DatasetSource_Uri:
-			uri, err := m.resolveURI(s.Uri)
+			uri, err := m.resolveURI(s.Uri, projectOr(project))
 			if err != nil {
 				return nil, err
 			}
@@ -422,22 +456,29 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 		return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{}), nil
 	}
 	project := projectOr(req.Msg.GetProject())
-	if err := m.checkQuota(ctx, project); err != nil {
+	if err := m.checkQuota(ctx, project, 1); err != nil {
 		return nil, err
 	}
 	records, err := m.loadDataset(ctx, spec.GetDataset(), project)
 	if err != nil {
 		return nil, err
 	}
-	run, err := m.createRun(ctx, req.Msg.GetName(), project, req.Msg.GetLabels(), spec, insts, records)
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	// Again, with the insert: the dataset may have taken a while to load.
+	if err := m.checkQuota(ctx, project, 1); err != nil {
+		return nil, err
+	}
+	run, err := m.storeRun(ctx, req.Msg.GetName(), project, req.Msg.GetLabels(), spec, insts, records)
 	if err != nil {
 		return nil, err
 	}
+	m.start(run)
 	return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{Run: run}), nil
 }
 
-// createRun stores a validated run over a dataset snapshot and starts it.
-func (m *Manager) createRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record) (*evalsiv1alpha1.Run, error) {
+// storeRun stores a validated run over a dataset snapshot; start runs it.
+func (m *Manager) storeRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record) (*evalsiv1alpha1.Run, error) {
 	stored := proto.Clone(spec).(*evalsiv1alpha1.RunSpec)
 	if stored.GetDataset().GetInline() != nil {
 		// The records live in the snapshot; keep the stored spec small.
@@ -459,7 +500,6 @@ func (m *Manager) createRun(ctx context.Context, name, project string, labels ma
 	if err := m.store.CreateRun(ctx, run, records); err != nil {
 		return nil, err
 	}
-	m.start(run)
 	return run, nil
 }
 
@@ -652,6 +692,9 @@ func (m *Manager) prepare(ctx context.Context, run *evalsiv1alpha1.Run, a *activ
 		return nil, err
 	}
 	ex := &execution{m: m, a: a, run: run, spec: run.GetSpec(), insts: insts, records: records, outputs: outputs, keys: keys}
+	if err := ex.checkGrants(ctx); err != nil {
+		return nil, err
+	}
 	// Recount progress and spend from what is already stored (resume).
 	done := int64(len(keys))
 	if generates(run.GetSpec()) {
@@ -702,6 +745,9 @@ func (ex *execution) progress(ctx context.Context, n int) error {
 
 func (ex *execution) checkBudget(ctx context.Context) error {
 	if err := ex.checkQuota(ctx); err != nil {
+		return err
+	}
+	if err := ex.checkGrants(ctx); err != nil {
 		return err
 	}
 	b := ex.spec.GetBudget()
@@ -1013,10 +1059,9 @@ func (m *Manager) ListRuns(ctx context.Context, req *connect.Request[evalsiv1alp
 		return nil, invalid("%v", err)
 	}
 	// Pages can come back short: runs the caller cannot read are dropped.
-	runsCode := authz.RunsCodeFrom(ctx)
 	visible := runs[:0]
 	for _, r := range runs {
-		if authz.Can(ctx, "runs.read", r.GetProject(), authz.RunResource(r, runsCode)) {
+		if authz.Can(ctx, "runs.read", r.GetProject(), authz.RunResourceFor(ctx, r)) {
 			r.Spec = nil
 			visible = append(visible, r)
 		}

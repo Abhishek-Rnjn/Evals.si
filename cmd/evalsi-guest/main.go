@@ -1,3 +1,5 @@
+//go:build linux
+
 // Command evalsi-guest is init inside each Firecracker microVM of the
 // Evals.si sandbox (design §13). As PID 1 it mounts the basic filesystems,
 // starts itself as the agent (PID 2) and reaps orphans; the agent serves

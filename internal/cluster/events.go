@@ -82,6 +82,24 @@ func (c *Cluster) OnPoliciesChanged(fn func()) (func(), error) {
 	return func() { _ = sub.Unsubscribe() }, nil
 }
 
+// Access control: projects, roles and bindings live in the database; a change
+// is broadcast so every replica reloads its snapshot at once (each replica
+// also reloads periodically, in case a broadcast is missed).
+
+const authzChanged = "evalsi.authz.changed"
+
+// AuthzChanged tells every replica to reload access control.
+func (c *Cluster) AuthzChanged() { _ = c.nc.Publish(authzChanged, nil) }
+
+// OnAuthzChanged calls fn when a replica changed access control.
+func (c *Cluster) OnAuthzChanged(fn func()) (func(), error) {
+	sub, err := c.nc.Subscribe(authzChanged, func(*nats.Msg) { fn() })
+	if err != nil {
+		return nil, err
+	}
+	return func() { _ = sub.Unsubscribe() }, nil
+}
+
 // ServeStats answers statistics requests (the policy engine leader does).
 func (c *Cluster) ServeStats(fn func(name string) (*evalsiv1alpha1.PolicyStats, bool)) (func(), error) {
 	sub, err := c.nc.QueueSubscribe(policyStats, "leader", func(m *nats.Msg) {

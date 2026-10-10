@@ -82,14 +82,23 @@ class StepResult:
     comparisons: list[Comparison] = field(default_factory=list)
     error: str = ""
     created_at: float = field(default_factory=time.time)
+    # The server run's status (RUN_STATUS_*); empty for embedded evaluations,
+    # which finish before they return.
+    status: str = ""
 
     @property
     def regressed(self) -> bool:
         return any(c.regressed for c in self.comparisons)
 
     @property
+    def finished(self) -> bool:
+        """Whether the evaluation has ended; a pending or running server run
+        has not, and neither has one whose status is unknown."""
+        return self.status in _FINISHED
+
+    @property
     def passed(self) -> bool:
-        return not self.error and self.gates_passed and not self.regressed
+        return self.finished and not self.error and self.gates_passed and not self.regressed
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -99,6 +108,11 @@ class StepResult:
         data = dict(data)
         data["comparisons"] = [Comparison(**c) for c in data.get("comparisons", [])]
         return cls(**data)
+
+
+_FINISHED = frozenset(
+    {"", "RUN_STATUS_SUCCEEDED", "RUN_STATUS_FAILED", "RUN_STATUS_ERROR", "RUN_STATUS_CANCELLED"}
+)
 
 
 def step_key(step: int | str) -> str:
@@ -192,9 +206,9 @@ class CheckpointEvaluator:
             result = StepResult(
                 self.training_run, key, checkpoint, error=f"{type(exc).__name__}: {exc}"
             )
-        if key != BASE and not result.error:
+        if key != BASE and not result.error and result.finished:
             base = self.get(BASE)
-            if base is not None and not base.error:
+            if base is not None and not base.error and base.finished:
                 result.comparisons = self._compare(base, result)
         if not self.server:
             self._save(result)
@@ -229,6 +243,7 @@ class CheckpointEvaluator:
                 value = score.numeric()
                 if value is not None and metric in summaries:
                     values.setdefault(metric, {})[f"{r.record_id}#{r.trial}"] = value
+        errors = outcome.result.errors()
         return StepResult(
             self.training_run,
             step,
@@ -236,6 +251,10 @@ class CheckpointEvaluator:
             summaries=summaries,
             gates_passed=outcome.passed,
             values=values,
+            # As the server reports such a run: an error, not a gate failure.
+            error=f"all {len(errors)} evaluations failed; the first: {errors[0].reason}"
+            if outcome.result.all_errored
+            else "",
         )
 
     def _client(self) -> Any:
@@ -257,6 +276,9 @@ class CheckpointEvaluator:
             for event in client.watch_run(run["id"]):
                 if "run" in event:
                     run = event["run"]
+            # A watch that ended early (a dropped stream) is not a result.
+            if run.get("status", "") not in _FINISHED - {""}:
+                run = client.get_run(run["id"])
         return _from_run(run, checkpoint)
 
     def _compare(self, base: StepResult, step: StepResult) -> list[Comparison]:
@@ -327,10 +349,10 @@ class CheckpointEvaluator:
     def curve(self) -> list[StepResult]:
         """The history with every step compared against the base model."""
         history = self.history()
-        base = next((r for r in history if r.step == BASE and not r.error), None)
+        base = next((r for r in history if r.step == BASE and not r.error and r.finished), None)
         if base is not None:
             for r in history:
-                if r.step != BASE and not r.error and not r.comparisons:
+                if r.step != BASE and not r.error and r.finished and not r.comparisons:
                     r.comparisons = self._compare(base, r)
         return history
 
@@ -347,7 +369,7 @@ def _summary(data: dict[str, Any]) -> dict[str, Any]:
 
 def _from_run(run: dict[str, Any], checkpoint: str) -> StepResult:
     labels = run.get("labels", {})
-    status = run.get("status", "")
+    status = run.get("status") or "RUN_STATUS_UNSPECIFIED"
     return StepResult(
         training_run=labels.get(TRAINING_RUN_LABEL, ""),
         step=labels.get(STEP_LABEL, ""),
@@ -358,6 +380,7 @@ def _from_run(run: dict[str, Any], checkpoint: str) -> StepResult:
         error=(run.get("error") or status)
         if status in ("RUN_STATUS_ERROR", "RUN_STATUS_CANCELLED")
         else "",
+        status=status,
     )
 
 
@@ -377,11 +400,12 @@ def format_curve(history: Sequence[StepResult], metrics: Sequence[str] = ()) -> 
                 mark = "!" if c.regressed else ("*" if c.significant else "")
                 cell += f" ({c.diff:+.3f}{mark})"
             cells.append(cell)
-        status = (
-            "error"
-            if r.error
-            else ("regressed" if r.regressed else ("ok" if r.gates_passed else "gates failed"))
-        )
+        if r.error:
+            status = "error"
+        elif not r.finished:
+            status = r.status.removeprefix("RUN_STATUS_").lower() or "unfinished"
+        else:
+            status = "regressed" if r.regressed else ("ok" if r.gates_passed else "gates failed")
         cells.append(status)
         rows.append(cells)
     widths = [max(len(str(c)) for c in col) for col in zip(headers, *rows, strict=False)]

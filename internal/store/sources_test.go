@@ -93,8 +93,13 @@ func TestSources(t *testing.T) {
 	if err := s.PutSourceWrite(ctx, "p", "studio", SourceWrite{TraceID: "a", Metric: "task-success", RemoteID: "a-1", Digest: "v2", Written: base}); err != nil {
 		t.Fatal(err)
 	}
+	// Another policy's score for the same metric is its own row.
+	if err := s.PutSourceWrite(ctx, "p", "studio", SourceWrite{TraceID: "a", Policy: "other", Metric: "task-success", RemoteID: "a-2", Digest: "v9", Written: base}); err != nil {
+		t.Fatal(err)
+	}
 	writes, err := s.SourceWrites(ctx, "p", "studio", []string{"a", "z"})
-	if err != nil || len(writes) != 1 || writes[[2]string{"a", "task-success"}].Digest != "v2" {
+	if err != nil || len(writes) != 2 || writes[WriteKey{"a", "", "task-success"}].Digest != "v2" ||
+		writes[WriteKey{"a", "other", "task-success"}].RemoteID != "a-2" || writes[WriteKey{"a", "other", "task-success"}].Metric != "task-success" {
 		t.Fatalf("writes: %+v %v", writes, err)
 	}
 

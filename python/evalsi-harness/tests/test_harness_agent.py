@@ -394,7 +394,10 @@ def test_the_record_carries_the_agents_diff(model: Model, sandboxes: LocalSandbo
                     "tool_calls": [
                         (
                             "bash",
-                            {"command": "sed -i s/-/+/ calc.py && echo new > notes.txt"},
+                            {
+                                "command": "sed -i.orig s/-/+/ calc.py && rm calc.py.orig"
+                                " && echo new > notes.txt"
+                            },
                         )
                     ]
                 },

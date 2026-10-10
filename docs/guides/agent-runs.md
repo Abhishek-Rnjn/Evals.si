@@ -178,7 +178,7 @@ Memory, web-search and format-sensitivity categories are not supported.
 
 ## From production to regression tests
 
-- **Promote failures into a dataset.** `evalsi promote <run> --dataset <name> --when '<CEL>'` appends the records where the condition holds (over `scores`, `errored`, `trial`, `record`) to `promoted/<project>/<name>.jsonl`. For example: `scores["task-success"] < 1`. Add `--include-outputs` to keep outputs and trajectories for re-scoring. It needs `datasets.write`, which `editor` holds.
+- **Promote failures into a dataset.** `evalsi promote <run> --dataset <name> --when '<CEL>'` appends the records where the condition holds (over `scores`, `errored`, `trial`, `record`) to `promoted/<project>/<name>.jsonl`. For example: `scores["task-success"] < 1`. Add `--include-outputs` to keep outputs and trajectories for re-scoring. A promoted record's ID is `<run>/<record>` (the original ID and trial are in `metadata.promoted_from`), so a dataset gathered from many runs keeps unique IDs, and promoting the same run again adds nothing. It needs `datasets.write`, which `editor` holds.
 - **Turn traces into tasks.** A dataset can be built from production traces (`dataset: {traces: {service, policy, filter, lookback}}`) or from another run's outputs (`dataset: {run: {run_id, trial, all_trials}}`).
 - **Shadow replay.** `evalsi shadow -f candidate.yaml` replays recorded inputs against a candidate. It scores the recording with the same evaluators as a baseline run, and compares the two.
 

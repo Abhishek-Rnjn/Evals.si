@@ -372,7 +372,7 @@ func nanos(s string) uint64 {
 // the trace, policy and metric. Whether Langfuse replaces a score sent again
 // with the same ID is not stated in the spec and not verified; the manager
 // sends a score again only when its value changed.
-func (c *connector) WriteBack(ctx context.Context, scores []source.Score, _ map[[2]string]store.SourceWrite) ([]store.SourceWrite, error) {
+func (c *connector) WriteBack(ctx context.Context, scores []source.Score, _ map[store.WriteKey]store.SourceWrite) ([]store.SourceWrite, error) {
 	var done []store.SourceWrite
 	for _, s := range scores {
 		h := sha256.Sum256([]byte(s.TraceID + "|" + s.Policy + "|" + s.Metric))
@@ -408,7 +408,7 @@ func (c *connector) WriteBack(ctx context.Context, scores []source.Score, _ map[
 		if resp.ID == "" {
 			resp.ID = id
 		}
-		done = append(done, store.SourceWrite{TraceID: s.TraceID, Metric: s.Metric, RemoteID: resp.ID, Digest: s.Digest(), Written: time.Now().UTC()})
+		done = append(done, store.SourceWrite{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric, RemoteID: resp.ID, Digest: s.Digest(), Written: time.Now().UTC()})
 	}
 	return done, nil
 }

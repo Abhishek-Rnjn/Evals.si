@@ -2,6 +2,10 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +69,27 @@ func Project(obj metav1.Object) string { return v1.ProjectOf(obj) }
 // apiLabels are the resource's labels that travel to the API (for access
 // rules), without Kubernetes' own prefixed ones.
 func apiLabels(obj metav1.Object) map[string]string { return v1.APILabels(obj) }
+
+// appliedMetadata digests what an applied resource's API object takes from
+// its metadata (the project and API labels), so a label-only edit, which
+// leaves the generation alone, is seen and applied.
+func appliedMetadata(obj metav1.Object) string {
+	labels := apiLabels(obj)
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	h := sha256.New()
+	fmt.Fprintf(h, "%q", Project(obj))
+	for _, k := range keys {
+		fmt.Fprintf(h, "\x00%q=%q", k, labels[k])
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// metadataChanged passes events where the generation or the labels changed.
+var metadataChanged = predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{})
 
 // +kubebuilder:rbac:groups=evals.si,resources=evalruns,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=evals.si,resources=evalruns/status;evalruns/finalizers,verbs=get;update;patch

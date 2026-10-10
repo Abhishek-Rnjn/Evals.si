@@ -116,10 +116,13 @@ type OnlineEvalPolicyStatus struct {
 	// The policy's name in the API.
 	Name               string `json:"name,omitempty"`
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	TracesSeen         int64  `json:"tracesSeen,omitempty"`
-	TracesEvaluated    int64  `json:"tracesEvaluated,omitempty"`
-	TracesPromoted     int64  `json:"tracesPromoted,omitempty"`
-	EvaluationErrors   int64  `json:"evaluationErrors,omitempty"`
+	// A digest of the project and labels last applied to the API, so a
+	// label-only edit (which leaves the generation alone) is applied too.
+	AppliedMetadata  string `json:"appliedMetadata,omitempty"`
+	TracesSeen       int64  `json:"tracesSeen,omitempty"`
+	TracesEvaluated  int64  `json:"tracesEvaluated,omitempty"`
+	TracesPromoted   int64  `json:"tracesPromoted,omitempty"`
+	EvaluationErrors int64  `json:"evaluationErrors,omitempty"`
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
@@ -161,6 +164,9 @@ type TraceSourceStatus struct {
 	// The source's name in the API.
 	Name               string `json:"name,omitempty"`
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	// A digest of the project and labels last applied to the API, so a
+	// label-only edit (which leaves the generation alone) is applied too.
+	AppliedMetadata string `json:"appliedMetadata,omitempty"`
 	// Backfilling, Tailing, Paused or Error.
 	Phase string `json:"phase,omitempty"`
 	// Every trace that started before this has been handled.

@@ -65,6 +65,11 @@ spec:
           status:
             description: TraceSourceStatus mirrors the source's status in the API.
             properties:
+              appliedMetadata:
+                description: |-
+                  A digest of the project and labels last applied to the API, so a
+                  label-only edit (which leaves the generation alone) is applied too.
+                type: string
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current

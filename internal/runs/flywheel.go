@@ -16,8 +16,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -40,6 +42,10 @@ func (m *Manager) traceRecords(ctx context.Context, q *evalsiv1alpha1.TraceQuery
 	}
 	var out []*evalsiv1alpha1.Record
 	for _, t := range stored {
+		// Only traces the caller may read, by the same rules as reading them.
+		if !authz.Can(ctx, "traces.read", project, authz.TraceResource(t.Summary)) {
+			continue
+		}
 		var scores map[string]float64
 		if q.GetPolicy() != "" && m.opts.TraceScores != nil {
 			scores = m.opts.TraceScores(q.GetPolicy(), t.Results)
@@ -300,6 +306,10 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 	var rows [][]byte
 	for _, match := range matches {
 		row := proto.Clone(match.Record).(*evalsiv1alpha1.Record)
+		// Records from different runs share IDs (r0, r1, ...); a promoted
+		// record is named by its run too, so a dataset gathered from many
+		// runs stays loadable, and promoting the same run again adds nothing.
+		original := match.Record.GetId()
 		if msg.GetIncludeOutputs() {
 			if match.Produced != nil {
 				row = proto.Clone(match.Produced).(*evalsiv1alpha1.Record)
@@ -308,8 +318,9 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 			// The case to replay is the input; keep the reference, drop what this run produced.
 			row.Output, row.Trajectory, row.Check, row.Usage = nil, nil, nil, nil
 		}
+		row.Id = run.GetId() + "/" + original
 		line, err := datasets.Row(row, map[string]any{
-			"promoted_from": map[string]any{"run_id": run.GetId(), "trial": match.Trial},
+			"promoted_from": map[string]any{"run_id": run.GetId(), "trial": match.Trial, "record_id": original},
 			"run_scores":    match.Scores,
 		})
 		if err != nil {
@@ -318,12 +329,13 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 		rows = append(rows, line)
 	}
 	path := datasets.Path(run.GetProject(), msg.GetDataset())
+	added := 0
 	if len(rows) > 0 {
-		if path, err = datasets.Append(ctx, m.opts.DatasetsDir, m.opts.Objects, run.GetProject(), msg.GetDataset(), rows); err != nil {
+		if path, added, err = datasets.Append(ctx, m.opts.DatasetsDir, m.opts.Objects, run.GetProject(), msg.GetDataset(), rows); err != nil {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 	}
-	return connect.NewResponse(&evalsiv1alpha1.PromoteResultsResponse{Promoted: int64(len(rows)), Path: path}), nil
+	return connect.NewResponse(&evalsiv1alpha1.PromoteResultsResponse{Promoted: int64(added), Path: path}), nil
 }
 
 // CreateShadowReplay creates two runs over one dataset snapshot: the
@@ -348,6 +360,10 @@ func (m *Manager) CreateShadowReplay(ctx context.Context, req *connect.Request[e
 		return nil, err
 	}
 	project := projectOr(msg.GetProject())
+	// A replay is two runs; the quota admits both or neither.
+	if err := m.checkQuota(ctx, project, 2); err != nil {
+		return nil, err
+	}
 	records, err := m.loadDataset(ctx, candidate.GetDataset(), project)
 	if err != nil {
 		return nil, err
@@ -365,14 +381,26 @@ func (m *Manager) CreateShadowReplay(ctx context.Context, req *connect.Request[e
 	if name == "" {
 		name = "shadow-replay"
 	}
-	base, err := m.createRun(ctx, name+"-baseline", project, msg.GetLabels(), baseline, baseInsts, records)
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	if err := m.checkQuota(ctx, project, 2); err != nil {
+		return nil, err
+	}
+	base, err := m.storeRun(ctx, name+"-baseline", project, msg.GetLabels(), baseline, baseInsts, records)
 	if err != nil {
 		return nil, err
 	}
-	cand, err := m.createRun(ctx, name, project, msg.GetLabels(), candidate, insts, records)
+	cand, err := m.storeRun(ctx, name, project, msg.GetLabels(), candidate, insts, records)
 	if err != nil {
+		// Neither runs: the baseline alone is no replay.
+		base.Status, base.Error, base.FinishedAt = evalsiv1alpha1.RunStatus_RUN_STATUS_CANCELLED, "the shadow replay's candidate could not be stored: "+err.Error(), timestamppb.Now()
+		if uerr := m.store.UpdateRun(context.Background(), base); uerr != nil {
+			m.log.Error("cancelling a shadow replay's baseline", "run", base.GetId(), "err", uerr)
+		}
 		return nil, err
 	}
+	m.start(base)
+	m.start(cand)
 	return connect.NewResponse(&evalsiv1alpha1.CreateShadowReplayResponse{Baseline: base, Candidate: cand}), nil
 }
 

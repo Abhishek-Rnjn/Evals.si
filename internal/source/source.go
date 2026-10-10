@@ -65,6 +65,11 @@ type Score struct {
 	Judged bool
 }
 
+// Key identifies the score: its trace, policy and metric.
+func (s Score) Key() store.WriteKey {
+	return store.WriteKey{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric}
+}
+
 // Digest identifies a score's value, so one already written is not sent again.
 func (s Score) Digest() string { return fmt.Sprintf("%v|%s", s.Value, s.Rationale) }
 
@@ -76,9 +81,10 @@ type Connector interface {
 	// the store no longer has is left out.
 	Fetch(ctx context.Context, infos []Info) ([]ingest.Trace, error)
 	// WriteBack records scores on the store's traces. prior holds what an
-	// earlier call wrote, keyed by (trace ID, metric), so a changed score
-	// updates it in place. It returns what it wrote, for the manager to keep.
-	WriteBack(ctx context.Context, scores []Score, prior map[[2]string]store.SourceWrite) ([]store.SourceWrite, error)
+	// earlier call wrote, keyed by trace ID, policy and metric (Score.Key),
+	// so a changed score updates it in place. It returns what it wrote, with
+	// each write's policy, for the manager to keep.
+	WriteBack(ctx context.Context, scores []Score, prior map[store.WriteKey]store.SourceWrite) ([]store.SourceWrite, error)
 }
 
 // Factory builds a connector for a source. token is the resolved credential

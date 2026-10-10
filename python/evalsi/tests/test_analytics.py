@@ -46,7 +46,9 @@ class FakeClient:
 
     def list_runs(self, *, project: str = "", page_token: str = "", **_: Any) -> dict[str, Any]:
         start = int(page_token or 0)
-        page: dict[str, Any] = {"runs": self.runs[start : start + 2]}
+        # As the server does: ListRuns leaves the spec out.
+        runs = [{k: v for k, v in r.items() if k != "spec"} for r in self.runs[start : start + 2]]
+        page: dict[str, Any] = {"runs": runs}
         if start + 2 < len(self.runs):
             page["nextPageToken"] = str(start + 2)
         return page
@@ -114,6 +116,76 @@ def test_server_runs_with_label_filter_and_pages() -> None:
         de = [r for r in sliced if r[2] == "de"]
         assert [round(r[4], 3) for r in de] == [0.1, 0.2, 0.3]
         assert all(r[3] == 2 and r[5] == r[4] == r[6] for r in de)  # two equal trials: zero width
+
+
+def test_list_loading_reads_each_runs_model() -> None:
+    with Warehouse() as wh:
+        wh.add_server_runs(FakeClient(), limit=2)
+        _, models = wh.query("select model from runs order by run_id")
+        assert [m for (m,) in models] == ["model-0", "model-1"]
+
+
+class AliasedClient(FakeClient):
+    """One record, two aliased evaluators, one result per page: the record
+    comes back on both pages, as the server sends it."""
+
+    def list_run_results(self, run_id: str, *, page_token: str = "", **_: Any) -> dict[str, Any]:
+        results = [
+            {
+                "recordId": "r0",
+                "evaluator": "quality",
+                "evaluatorRef": "builtin/exact-match@1.0.0",
+                "outcome": "OUTCOME_SCORED",
+                "scores": [{"name": "exact-match", "passed": True}],
+            },
+            {
+                "recordId": "r0",
+                "evaluator": "format",
+                "evaluatorRef": "builtin/format-check@1.0.0",
+                "outcome": "OUTCOME_SCORED",
+                "scores": [{"name": "format-check", "passed": True}],
+            },
+        ]
+        record = {"id": "r0", "metadata": {"lang": "en"}}
+        i = int(page_token or 0)
+        page: dict[str, Any] = {"results": [results[i]], "records": [record]}
+        if i == 0:
+            page["nextPageToken"] = "1"
+        return page
+
+
+def test_aliased_metrics_keep_their_alias_and_pages_count_once() -> None:
+    with Warehouse() as wh:
+        wh.add_server_runs(AliasedClient(), run_ids=["run-0"])
+        _, metrics = wh.query("select distinct metric from scores order by metric")
+        assert [m for (m,) in metrics] == ["format", "quality"]
+        assert wh.query("select count(*) from records")[1] == [(1,)]
+        _, sliced = wh.slice("quality", "lang")
+        assert [(r[2], r[3]) for r in sliced] == [("en", 1)]
+
+
+def test_slices_pair_each_trial_with_its_own_output() -> None:
+    data = {
+        "manifest": {"name": "t", "started_at": "2026-10-01T00:00:00+00:00"},
+        "results": [
+            {
+                "record_id": "r",
+                "trial": t,
+                "evaluator": "exact-match",
+                "outcome": "scored",
+                "scores": [{"name": "exact-match", "passed": t == 1}],
+            }
+            for t in range(2)
+        ],
+        "records": [
+            {"id": "r", "metadata": {"tier": tier}, "provenance": {"run": {"trial": t}}}
+            for t, tier in enumerate(["free", "paid"])
+        ],
+    }
+    with Warehouse() as wh:
+        wh.add_results(data)
+        _, sliced = wh.slice("exact-match", "tier")
+        assert sorted((r[2], r[3], r[4]) for r in sliced) == [("free", 1, 0.0), ("paid", 1, 1.0)]
 
 
 def test_limit_and_run_ids() -> None:

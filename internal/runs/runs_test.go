@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -708,6 +709,38 @@ func TestPromotionRescoringAndShadowReplay(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	if len(lines) != 2 || !strings.Contains(lines[0], `"promoted_from"`) || strings.Contains(lines[0], `"output"`) {
 		t.Fatalf("promoted rows:\n%s", raw)
+	}
+	// Promoting again adds nothing; another run's records with the same IDs
+	// are added under their own run, so the dataset's IDs stay unique.
+	again, err := h.m.PromoteResults(ctx, connect.NewRequest(&evalsiv1alpha1.PromoteResultsRequest{
+		RunId: run.GetId(), Dataset: "regressions", When: `scores["exact-match"] < 1.0 || errored`,
+	}))
+	if err != nil || again.Msg.GetPromoted() != 0 {
+		t.Fatalf("promoting again: %v %v", again, err)
+	}
+	other := h.wait(t, h.create(t, &evalsiv1alpha1.RunSpec{
+		Target: target(), Dataset: inline("easy", "flaky", "broken"), Evaluators: refs("exact-match"), Trials: 2,
+	}).GetId())
+	more, err := h.m.PromoteResults(ctx, connect.NewRequest(&evalsiv1alpha1.PromoteResultsRequest{
+		RunId: other.GetId(), Dataset: "regressions", When: `scores["exact-match"] < 1.0 || errored`,
+	}))
+	if err != nil || more.Msg.GetPromoted() != 2 {
+		t.Fatalf("promoting another run: %v %v", more, err)
+	}
+	raw, _ = os.ReadFile(filepath.Join(h.dir, "datasets", "promoted", "p", "regressions.jsonl"))
+	var promoted []*evalsiv1alpha1.Record
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		rec := &evalsiv1alpha1.Record{}
+		if err := protojson.Unmarshal([]byte(line), rec); err != nil {
+			t.Fatal(err)
+		}
+		promoted = append(promoted, rec)
+	}
+	if err := evaluation.NormalizeIDs(promoted, 0, map[string]bool{}); err != nil || len(promoted) != 4 {
+		t.Fatalf("the promoted dataset does not load: %v (%d records)", err, len(promoted))
+	}
+	if from := promoted[0].GetMetadata()["promoted_from"].GetStructValue().GetFields(); from["record_id"].GetStringValue() == "" || from["run_id"].GetStringValue() != run.GetId() {
+		t.Errorf("provenance %v", from)
 	}
 	for _, bad := range []*evalsiv1alpha1.PromoteResultsRequest{
 		{RunId: run.GetId(), Dataset: "../x", When: "true"},

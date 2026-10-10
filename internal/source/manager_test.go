@@ -31,7 +31,9 @@ type fakeStore struct {
 	lists     int
 	listErr   error
 	written   []Score
-	priorSeen []map[[2]string]store.SourceWrite
+	priorSeen []map[store.WriteKey]store.SourceWrite
+	// writeFails is how many WriteBack calls fail before one succeeds.
+	writeFails int
 }
 
 func (f *fakeStore) set(infos ...Info) {
@@ -77,18 +79,22 @@ func (f *fakeStore) Fetch(_ context.Context, infos []Info) ([]ingest.Trace, erro
 	return out, nil
 }
 
-func (f *fakeStore) WriteBack(_ context.Context, scores []Score, prior map[[2]string]store.SourceWrite) ([]store.SourceWrite, error) {
+func (f *fakeStore) WriteBack(_ context.Context, scores []Score, prior map[store.WriteKey]store.SourceWrite) ([]store.SourceWrite, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.priorSeen = append(f.priorSeen, prior)
+	if f.writeFails > 0 {
+		f.writeFails--
+		return nil, errors.New("store unavailable")
+	}
 	var out []store.SourceWrite
 	for _, s := range scores {
 		f.written = append(f.written, s)
 		id := "a-" + s.TraceID
-		if w, ok := prior[[2]string{s.TraceID, s.Metric}]; ok {
+		if w, ok := prior[s.Key()]; ok {
 			id = w.RemoteID
 		}
-		out = append(out, store.SourceWrite{TraceID: s.TraceID, Metric: s.Metric, RemoteID: id, Digest: s.Digest(), Written: epoch})
+		out = append(out, store.SourceWrite{TraceID: s.TraceID, Policy: s.Policy, Metric: s.Metric, RemoteID: id, Digest: s.Digest(), Written: epoch})
 	}
 	return out, nil
 }
@@ -482,7 +488,7 @@ func TestWriteBackSendsChangedScoresOnce(t *testing.T) {
 		t.Fatalf("written %d scores, want 2 (the repeat must be skipped)", len(h.fs.written))
 	}
 	last := h.fs.priorSeen[len(h.fs.priorSeen)-1]
-	if w := last[[2]string{"tr-a", "task-success"}]; w.RemoteID != "a-tr-a" {
+	if w := last[store.WriteKey{TraceID: "tr-a", Policy: "quality", Metric: "task-success"}]; w.RemoteID != "a-tr-a" {
 		t.Fatalf("an update did not carry the stored remote ID: %+v", last)
 	}
 	// Traces that are not from a source, or from one with write-back off, are ignored.
@@ -490,6 +496,53 @@ func TestWriteBackSendsChangedScoresOnce(t *testing.T) {
 	if st, _ := h.st.SourceState(ctx, "p", "studio"); st.Scored != 2 {
 		t.Fatalf("scored %d", st.Scored)
 	}
+	h.fs.mu.Unlock()
+	// Another policy's score for the same metric is its own write, not a
+	// repeat of the first policy's, and does not reuse its remote ID.
+	h.m.OnResults("safety", nil, tinfo, result(0))
+	wait(3)
+	h.fs.mu.Lock()
+	if s := h.fs.written[2]; s.Policy != "safety" {
+		t.Fatalf("written %+v", s)
+	}
+	if w, ok := h.fs.priorSeen[len(h.fs.priorSeen)-1][store.WriteKey{TraceID: "tr-a", Policy: "safety", Metric: "task-success"}]; ok {
+		t.Fatalf("the safety policy's first write saw a prior write: %+v", w)
+	}
+}
+
+// A score whose write-back failed is retried on its own, with no new scores
+// to trigger a flush.
+func TestFailedWriteBackRetriesItself(t *testing.T) {
+	defer func(d time.Duration) { writeRetry = d }(writeRetry)
+	writeRetry = 20 * time.Millisecond
+	h := newHarness(t, func(s *evalsiv1alpha1.TraceSource) { s.WriteBack = &evalsiv1alpha1.WriteBack{Enabled: true} })
+	h.fs.writeFails = 2
+	ctx := context.Background()
+	h.r.start(ctx)
+	h.m.mu.Lock()
+	h.m.runners[key{"p", "studio"}] = h.r
+	h.m.mu.Unlock()
+	defer h.r.stop()
+
+	tinfo := ingest.TraceInfo{Project: "p", Labels: map[string]string{LabelSource: "studio"}, Resource: ingest.Attrs{AttrSourceTraceID: "tr-a"}}
+	h.m.OnResults("quality", nil, tinfo, []*evalsiv1alpha1.EvaluationResult{{
+		Evaluator: "task-success", Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED,
+		Scores: []*evalsiv1alpha1.Score{{Name: "task-success", Value: &evalsiv1alpha1.Score_Number{Number: 1}}},
+	}})
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		h.fs.mu.Lock()
+		n, calls := len(h.fs.written), len(h.fs.priorSeen)
+		h.fs.mu.Unlock()
+		if n == 1 {
+			if calls != 3 {
+				t.Errorf("WriteBack called %d times, want 3 (two failures, then success)", calls)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the failed score was never written")
 }
 
 func TestManagerStartsStopsAndRestartsRunners(t *testing.T) {

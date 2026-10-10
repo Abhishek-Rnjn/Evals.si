@@ -92,6 +92,12 @@ spec:
             - --sandbox-allow-client={{ $fn }}-worker
             - --sandbox-service-account={{ $fn }}-sandboxd
             - --worker-config-map={{ $fn }}-worker
+            {{- if include "evalsi.sandboxAddress" . }}
+            - --worker-tls-secret={{ $fn }}-worker-tls
+            {{- end }}
+            {{- with (include "evalsi.storage" . | fromJson).s3.credentialsSecret }}
+            - --worker-s3-secret={{ . }}
+            {{- end }}
             - --name-prefix={{ $fn }}
             - --nats-monitoring-endpoint={{ $fn }}-nats.{{ $ns }}.svc:8222
             - --create-projects={{ $v.operator.createProjects }}

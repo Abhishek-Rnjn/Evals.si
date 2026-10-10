@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -195,7 +196,11 @@ func TestFailsClosed(t *testing.T) {
 	}
 	broken, _ := New(Config{Ladder: []string{"bwrap"}, BwrapPath: "/bin/false", MinIsolation: "none"})
 	_, err = broken.Run(context.Background(), &Request{Command: []string{"true"}})
-	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "probe failed") {
+	want := "probe failed"
+	if runtime.GOOS != "linux" {
+		want = "needs Linux" // refused before the probe runs, still closed
+	}
+	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), want) {
 		t.Fatalf("a broken runner must fail closed: %v", err)
 	}
 	if _, err := New(Config{Ladder: []string{"kata"}}); err == nil {

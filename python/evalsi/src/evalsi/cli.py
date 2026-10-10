@@ -485,7 +485,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(result.table())
         _print_gates(gates)
     errors = result.errors()
-    if errors and len(errors) == len(result.results):
+    if result.all_errored:
         # Nothing was scored: a run without gates must not pass.
         reason = errors[0].reason or "no reason given"
         print(

@@ -85,3 +85,61 @@ def test_report_from_a_server_run() -> None:
     assert r.errors == [{"record_id": "3", "evaluator": "judge", "reason": "timeout"}]
     md = report.to_markdown(r)
     assert "❌ judge mean ≥ 0.5 (0.25 < 0.5)" in md
+
+
+def test_each_example_shows_the_output_its_trial_produced() -> None:
+    r = report.build(
+        title="t",
+        meta={},
+        summaries=[{"metric": "exact-match", "higher_is_better": True}],
+        gates=[],
+        results=[
+            {
+                "record_id": "r",
+                "trial": t,
+                "evaluator": "exact-match",
+                "outcome": "scored",
+                "scores": [{"name": "exact-match", "passed": t == 1}],
+            }
+            for t in (1, 0)
+        ],
+        records=[
+            {"id": "r", "output": {"text": answer}, "provenance": {"run": {"trial": t}}}
+            for t, answer in ((0, "wrong"), (1, "right"))
+        ],
+    )
+    (failed,) = r.worst["exact-match"]
+    assert (failed.trial, failed.output) == (0, "wrong")
+
+
+def test_a_low_score_on_a_one_to_five_scale_is_shown() -> None:
+    r = report.build(
+        title="t",
+        meta={},
+        summaries=[{"metric": "rating", "higher_is_better": True}],
+        gates=[],
+        results=[
+            {
+                "record_id": "r",
+                "evaluator": "rating",
+                "outcome": "scored",
+                "scores": [{"name": "rating", "number": 1}],
+            }
+        ],
+        records=[{"id": "r", "output": {"text": "poor"}}],
+    )
+    assert [e.value for e in r.worst["rating"]] == [1.0]
+
+
+def test_embedded_results_files_record_each_outputs_trial(tmp_path: Path) -> None:
+    from evalsi.results import EvalResult
+    from evalsi.types import Record
+
+    result = EvalResult(
+        records=[Record(id="r"), Record(id="r")],
+        results=[],
+        summaries=[],
+        manifest={},
+        record_trials=[0, 1],
+    )
+    assert [r["provenance"]["run"]["trial"] for r in result.to_dict()["records"]] == [0, 1]
