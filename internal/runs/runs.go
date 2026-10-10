@@ -36,6 +36,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
@@ -282,7 +283,8 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 
 // resolvePath keeps dataset paths inside DatasetsDir, symlinks included. On
 // object storage the result is an s3:// URL, which the worker side fetches.
-func (m *Manager) resolvePath(rel string) (string, error) {
+// project is the project reading the path ("" for none).
+func (m *Manager) resolvePath(rel, project string) (string, error) {
 	if m.opts.DatasetsDir == "" {
 		return "", invalid("this server does not accept dataset paths; set datasets_dir in its config, or send records inline")
 	}
@@ -293,11 +295,13 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 		}
 		return loc.Join(clean).String(), nil
 	}
-	root, err := filepath.EvalSymlinks(m.opts.DatasetsDir)
+	// A relative datasets_dir (./datasets) is relative to where evalsid
+	// started; the worker wants absolute paths. Make it absolute before
+	// resolving symlinks, so a working directory reached through a symlink
+	// resolves the same way as the files inside it.
+	root, err := filepath.Abs(m.opts.DatasetsDir)
 	if err == nil {
-		// A relative datasets_dir (./datasets) is relative to where evalsid
-		// started; the worker wants absolute paths.
-		root, err = filepath.Abs(root)
+		root, err = filepath.EvalSymlinks(root)
 	}
 	if err != nil {
 		return "", fmt.Errorf("datasets_dir: %w", err)
@@ -309,8 +313,15 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 	if err != nil {
 		return "", invalid("dataset %q: %v", rel, errors.Unwrap(err))
 	}
-	if r, err := filepath.Rel(root, full); err != nil || r == ".." || strings.HasPrefix(r, ".."+string(os.PathSeparator)) {
+	r, err := filepath.Rel(root, full)
+	if err != nil || r == ".." || strings.HasPrefix(r, ".."+string(os.PathSeparator)) {
 		return "", invalid("dataset %q is outside the server's datasets_dir", rel)
+	}
+	// Access rules check the project a promoted dataset belongs to by the
+	// path as spelled; an alias (a symlink) must not lead into another
+	// project's promotions.
+	if to := datasets.ProjectOf(r); to != "" && to != datasets.ProjectOf(rel) && to != project {
+		return "", invalid("dataset %q resolves to %q; name it by that path", rel, filepath.ToSlash(r))
 	}
 	return full, nil
 }
@@ -318,7 +329,7 @@ func (m *Manager) resolvePath(rel string) (string, error) {
 // resolveURI passes hf:// through and confines importer URIs
 // (scheme://path?options, for example inspect://logs/run.eval), which name
 // local files, to DatasetsDir like plain paths.
-func (m *Manager) resolveURI(uri string) (string, error) {
+func (m *Manager) resolveURI(uri, project string) (string, error) {
 	scheme, rest, ok := strings.Cut(uri, "://")
 	if !ok || scheme == "" {
 		return "", invalid("dataset uri %q needs a scheme such as hf:// or inspect://; use path for files", uri)
@@ -327,7 +338,7 @@ func (m *Manager) resolveURI(uri string) (string, error) {
 		return uri, nil
 	}
 	path, query, hasQuery := strings.Cut(rest, "?")
-	full, err := m.resolvePath(path)
+	full, err := m.resolvePath(path, project)
 	if err != nil {
 		return "", err
 	}
@@ -362,13 +373,13 @@ func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSo
 		req := proto.Clone(src).(*evalsiv1alpha1.DatasetSource)
 		switch s := s.(type) {
 		case *evalsiv1alpha1.DatasetSource_Path:
-			full, err := m.resolvePath(s.Path)
+			full, err := m.resolvePath(s.Path, projectOr(project))
 			if err != nil {
 				return nil, err
 			}
 			req.Source = &evalsiv1alpha1.DatasetSource_Path{Path: full}
 		case *evalsiv1alpha1.DatasetSource_Uri:
-			uri, err := m.resolveURI(s.Uri)
+			uri, err := m.resolveURI(s.Uri, projectOr(project))
 			if err != nil {
 				return nil, err
 			}
