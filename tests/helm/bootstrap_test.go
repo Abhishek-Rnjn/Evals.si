@@ -96,3 +96,15 @@ func TestBootstrapIsOffByDefaultAndNeedsKubernetesAuth(t *testing.T) {
 		t.Errorf("bootstrap without Kubernetes auth: %v\n%s", err, out)
 	}
 }
+
+// A key the Job makes is useless if the server rejects API keys.
+func TestBootstrapKeysEnableAPIKeyAuth(t *testing.T) {
+	cfg := find(t, render(t, "evalsi", bootstrapValues...), "ConfigMap", "evalsi").Data["evalsi.yaml"]
+	if !strings.Contains(cfg, "api_keys:") {
+		t.Errorf("bootstrap.apiKeys is set but the server config has no auth.api_keys:\n%s", cfg)
+	}
+	cfg = find(t, render(t, "evalsi"), "ConfigMap", "evalsi").Data["evalsi.yaml"]
+	if strings.Contains(cfg, "api_keys:") {
+		t.Errorf("API keys are on without bootstrap keys:\n%s", cfg)
+	}
+}
