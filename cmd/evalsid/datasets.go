@@ -59,8 +59,21 @@ func datasetsMain(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		fmt.Fprintf(stderr, "evalsid: %v\n", err)
 		return 1
 	}
+	// Relative paths, of the files or of --dir, are relative to the working
+	// directory: `cd /datasets && evalsid datasets put --dir /datasets
+	// fixtures/a.jsonl` names /datasets/fixtures/a.jsonl.
+	base, err := filepath.Abs(*dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "evalsid: %v\n", err)
+		return 1
+	}
 	for _, file := range fs.Args() {
-		rel, err := filepath.Rel(*dir, file)
+		abs, err := filepath.Abs(file)
+		if err != nil {
+			fmt.Fprintf(stderr, "evalsid: %v\n", err)
+			return 1
+		}
+		rel, err := filepath.Rel(base, abs)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			fmt.Fprintf(stderr, "evalsid: %s is not under --dir %s\n", file, *dir)
 			return 1
