@@ -119,3 +119,14 @@ func Projects(ctx context.Context, action string) []string {
 	slices.Sort(out)
 	return out
 }
+
+// MayHold reports whether the request's principal holds action in project
+// through some role, whatever the role's conditions say about a resource.
+// It is for checks made before the resources are known (a run over a query
+// of traces), where each resource is then checked with Can as it is loaded.
+// When it cannot tell (owners, allow rules, an external authorizer), it
+// says yes and leaves the decision to those per-item checks.
+func MayHold(ctx context.Context, action, project string) bool {
+	projects := Projects(ctx, action)
+	return projects == nil || slices.Contains(projects, project)
+}

@@ -777,6 +777,13 @@ func (g *gate) check(ctx context.Context, chk *authz.Checker, procedure string, 
 func (g *gate) datasetTargets(ctx context.Context, project string, src *evalsiv1alpha1.DatasetSource) ([]target, error) {
 	switch s := src.GetSource().(type) {
 	case *evalsiv1alpha1.DatasetSource_Traces:
+		// Like listing traces: which traces the caller may read depends on
+		// each trace (its service, its labels), so they are checked one by one
+		// as the run loads them. Here only a caller who holds traces.read in
+		// the project through no role at all is refused.
+		if authz.MayHold(ctx, "traces.read", project) {
+			return nil, nil
+		}
 		return []target{{project: project, name: "traces/" + project, action: "traces.read",
 			resource: authz.TraceQueryResource(s.Traces.GetService(), s.Traces.GetPolicy())}}, nil
 	case *evalsiv1alpha1.DatasetSource_Run:

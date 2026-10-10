@@ -757,20 +757,36 @@ func TestPolicyReplacementChecksTheStoredPolicy(t *testing.T) {
 	}
 }
 
-// A service-scoped traces.read permission drives a trace dataset the same
-// way it reads traces, and each trace the query returns is checked too.
+// A trace dataset is read like a trace listing: traces.read scoped by
+// service or by label drives a dataset over the traces it may read, and each
+// trace is checked as the run loads it.
 func TestTraceDatasetsUseTraceReadRules(t *testing.T) {
-	plain, hash := auth.NewAPIKey()
+	keys := map[string]string{}
 	s := startAuthServer(t, func(c *config.Config) {
 		c.OTLP.Grace = "10ms"
-		c.RBAC.Roles = append(c.RBAC.Roles, authz.Role{Name: "public-traces", Permissions: []string{"traces.read"},
-			Condition: `resource.service == "public" && !("secret" in resource.labels)`})
-		c.Auth.APIKeys.Keys = append(c.Auth.APIKeys.Keys, auth.ConfigKey{Name: "public", Key: "sha256:" + hash,
-			Roles: map[string][]string{"support": {"blind-runner", "public-traces"}}})
+		c.RBAC.Roles = append(c.RBAC.Roles,
+			authz.Role{Name: "public-traces", Permissions: []string{"traces.read"},
+				Condition: `resource.service == "public" && !("secret" in resource.labels)`},
+			authz.Role{Name: "team-traces", Permissions: []string{"traces.read"},
+				Condition: `"team" in resource.labels && resource.labels.team == "mine"`})
+		for _, role := range []string{"public-traces", "team-traces"} {
+			plain, hash := auth.NewAPIKey()
+			keys[role] = plain
+			c.Auth.APIKeys.Keys = append(c.Auth.APIKeys.Keys, auth.ConfigKey{Name: role, Key: "sha256:" + hash,
+				Roles: map[string][]string{"support": {"blind-runner", role}}})
+		}
 	})
 	ctx := context.Background()
-	for _, labels := range []map[string]string{{"evalsi.label.env": "prod"}, {"evalsi.label.secret": "yes"}} {
-		req, _ := http.NewRequest(http.MethodPost, s.url+"/v1/traces", bytes.NewReader(otlpRequest("public", labels)))
+	ingest := []struct {
+		service string
+		labels  map[string]string
+	}{
+		{"public", map[string]string{"evalsi.label.team": "mine"}},
+		{"public", map[string]string{"evalsi.label.secret": "yes", "evalsi.label.team": "theirs"}},
+		{"private", map[string]string{"evalsi.label.team": "mine"}},
+	}
+	for _, tr := range ingest {
+		req, _ := http.NewRequest(http.MethodPost, s.url+"/v1/traces", bytes.NewReader(otlpRequest(tr.service, tr.labels)))
 		req.Header.Set("Content-Type", "application/x-protobuf")
 		req.Header.Set("Authorization", "Bearer "+s.keys["ingest"])
 		resp, err := s.http.Do(req)
@@ -785,39 +801,56 @@ func TestTraceDatasetsUseTraceReadRules(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(l.Msg.GetTraces()) == 2 {
+		if len(l.Msg.GetTraces()) == len(ingest) {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	runs := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(plain))
-	create := func(service string) (*evalsiv1alpha1.Run, error) {
+	create := func(key, service string, validateOnly bool) (*evalsiv1alpha1.Run, error) {
 		spec := runSpec("qwen3")
 		spec.Target = nil
 		spec.Dataset = &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Traces{Traces: &evalsiv1alpha1.TraceQuery{Service: service}}}
-		resp, err := runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: spec}))
+		runs := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(key))
+		resp, err := runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: spec, ValidateOnly: validateOnly}))
 		if err != nil {
 			return nil, err
 		}
 		return resp.Msg.GetRun(), nil
 	}
-	if _, err := create("private"); codeOf(err) != connect.CodePermissionDenied {
-		t.Errorf("another service's traces: %v", err)
-	}
-	run, err := create("public")
-	if err != nil {
-		t.Fatalf("the allowed service's traces: %v", err)
-	}
-	records, err := runs.ListRunResults(ctx, connect.NewRequest(&evalsiv1alpha1.ListRunResultsRequest{RunId: run.GetId()}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, r := range records.Msg.GetRecords() {
-		if r.GetMetadata()["labels"].GetStructValue().GetFields()["secret"] != nil {
-			t.Errorf("a trace the caller may not read became a record: %v", r)
+	for _, tc := range []struct {
+		role, service string
+		tasks         int64
+	}{
+		// Service-scoped: the public trace without the secret label.
+		{"public-traces", "public", 1},
+		// Label-scoped: the trace labelled team=mine in the service asked for.
+		{"team-traces", "public", 1},
+		{"team-traces", "private", 1},
+	} {
+		if _, err := create(keys[tc.role], tc.service, true); err != nil {
+			t.Errorf("%s validating a dataset over %s: %v", tc.role, tc.service, err)
+		}
+		run, err := create(keys[tc.role], tc.service, false)
+		if err != nil {
+			t.Errorf("%s over %s: %v", tc.role, tc.service, err)
+			continue
+		}
+		if total := run.GetProgress().GetTotal(); total != tc.tasks {
+			t.Errorf("%s over %s: %d tasks, want %d (traces it may not read must be left out)", tc.role, tc.service, total, tc.tasks)
+		}
+		page, err := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys["owner"])).ListRunResults(ctx,
+			connect.NewRequest(&evalsiv1alpha1.ListRunResultsRequest{RunId: run.GetId()}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range page.Msg.GetRecords() {
+			if r.GetMetadata()["trace"].GetStructValue().GetFields()["service"].GetStringValue() != tc.service {
+				t.Errorf("%s over %s: a record from another service: %v", tc.role, tc.service, r)
+			}
 		}
 	}
-	if total := run.GetProgress().GetTotal(); total != 1 {
-		t.Errorf("the run has %d tasks, want 1 (the secret trace must be left out)", total)
+	// No readable trace in the service: nothing to evaluate, and no run.
+	if _, err := create(keys["public-traces"], "private", false); codeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("a service none of whose traces the caller may read: %v", err)
 	}
 }

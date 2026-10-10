@@ -57,12 +57,12 @@ The report's finding IDs clash with the PRD's own D1–D11, so other documents r
 |---------|--------|
 | F01 reward params weaken `min_isolation` | Fixed (`72f2369`): the stronger level wins, in Go and Python; unknown levels are refused |
 | F02 same-project policy replacement skips the stored policy | Fixed (`e317b99`) |
-| F03 omitted judge sidesteps rules on the default judge | Fixed (`9224980`): rules see the effective judge (Evaluate, EvaluateStream, rewards, runs, policies) |
+| F03 omitted judge sidesteps rules on the default judge | Fixed (`9224980`): rules see the effective judge (Evaluate, EvaluateStream, rewards, runs, policies); ListRuns and ListPolicies filter with it too |
 | F04 stored runs ignore revoked grants | Fixed (`0d6d29f`): checked when a run is prepared and at every batch |
 | F05 dataset symlink aliases cross projects | Fixed (`7bb6c49`): a path resolving into another project's promotions is refused |
 | F07 failed write-backs never retry | Fixed (`0019eb1`): retried with backoff, honouring Retry-After. Pending scores still live in memory only |
 | F08 write-back scores of two policies collide | Fixed (`47589b6`): the policy is part of a write's identity |
-| F09 service-scoped `traces.read` cannot drive trace datasets | Fixed (`106899c`): same attributes as trace reads, and each trace is checked |
+| F09 service-scoped `traces.read` cannot drive trace datasets | Fixed (`106899c`): like a trace listing, a trace dataset needs `traces.read` in the project, and each trace (service, labels) is checked as it loads, so service- and label-scoped grants both work. A query matching no readable trace has no records (InvalidArgument) |
 | F10 TRL component functions reuse stale rewards | Fixed (`91e973e`) |
 | F11 unfinished checkpoint evaluations pass | Fixed (`0586b29`) |
 | F12 relative `datasets_dir` under a symlinked working directory | Fixed (`7bb6c49`) |
