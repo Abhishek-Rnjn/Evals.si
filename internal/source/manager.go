@@ -292,6 +292,10 @@ type runner struct {
 	phase  atomic.Int32
 	scores chan Score
 
+	// The source's overrides, compiled on the first cycle.
+	adjust   func(*evalsiv1alpha1.Record, *ingest.TraceInfo)
+	compiled bool
+
 	rateMu    sync.Mutex
 	rateCount int64
 	rateSince time.Time
@@ -449,6 +453,12 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 	src, st := r.src, store.SourceState{}
 	project, name := src.GetProject(), src.GetName()
 	var err error
+	if !r.compiled {
+		if r.adjust, err = CompileOverrides(src.GetOverrides()); err != nil {
+			return err
+		}
+		r.compiled = true
+	}
 	if st, err = r.m.st.SourceState(ctx, project, name); err != nil {
 		return err
 	}
@@ -652,6 +662,7 @@ func (r *runner) label(t ingest.Trace, id string) ingest.Trace {
 		spans[i] = sp
 	}
 	t.Spans = spans
+	t.Adjust = r.adjust
 	return t
 }
 

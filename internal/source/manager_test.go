@@ -108,6 +108,7 @@ type call struct {
 	policies []string
 	labels   map[string]string
 	project  string
+	records  []string // labels["workflow"] of each trace's record, after overrides
 }
 
 type fakeIngester struct {
@@ -137,6 +138,8 @@ func (f *fakeIngester) IngestBatchContext(ctx context.Context, traces []ingest.T
 		c.ids = append(c.ids, sourceID(t))
 		c.project = t.Project
 		c.labels = t.Spans[0].Labels
+		_, info := ingest.ToRecord(t)
+		c.records = append(c.records, info.Labels["workflow"])
 	}
 	f.calls = append(f.calls, c)
 	n, hook := len(f.calls), f.onCall
@@ -543,4 +546,19 @@ func TestManagerStartsStopsAndRestartsRunners(t *testing.T) {
 		st, _ := h.st.SourceState(ctx, "p", "bad")
 		return st.LastError != ""
 	})
+}
+
+func TestPulledTracesCarryTheOverrides(t *testing.T) {
+	h := newHarness(t, func(s *evalsiv1alpha1.TraceSource) {
+		s.Overrides = map[string]string{"labels.workflow": `resource["evalsi.source.trace_id"] + "-wf"`}
+	})
+	_ = h.cycle(t)
+	h.now = epoch.Add(time.Minute)
+	h.fs.set(info("tr-a", epoch.Add(10*time.Second)))
+	if err := h.cycle(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ing.calls[0].records; len(got) != 1 || got[0] != "tr-a-wf" {
+		t.Fatalf("overrides not applied: %v", got)
+	}
 }

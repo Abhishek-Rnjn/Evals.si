@@ -94,8 +94,8 @@ func (s *Service) Validate(ctx context.Context, src *evalsiv1alpha1.TraceSource)
 			return err
 		}
 	}
-	if len(src.GetOverrides()) > 0 {
-		return invalid("source.overrides is not built yet (decision 0016, item 20)")
+	if _, err := CompileOverrides(src.GetOverrides()); err != nil {
+		return invalid("%v", err)
 	}
 	if p := src.GetProfile(); p != "" && p != "auto" && p != src.GetConnector() {
 		return invalid("source.profile %q is unknown (\"auto\", or %q)", p, src.GetConnector())

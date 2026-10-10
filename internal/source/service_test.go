@@ -147,7 +147,8 @@ func TestApplySourceValidates(t *testing.T) {
 		"langfuse unbuilt": func(s *evalsiv1alpha1.TraceSource) { s.Connector = "langfuse" },
 		"loopback":         func(s *evalsiv1alpha1.TraceSource) { s.Endpoint = "http://127.0.0.1:5000" },
 		"no locations":     func(s *evalsiv1alpha1.TraceSource) { s.Locations = nil },
-		"overrides":        func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"input": "trace.request"} },
+		"bad override":     func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"input": "trace.request"} },
+		"override field":   func(s *evalsiv1alpha1.TraceSource) { s.Overrides = map[string]string{"usage": "'x'"} },
 		"profile":          func(s *evalsiv1alpha1.TraceSource) { s.Profile = "weird" },
 		"fast poll": func(s *evalsiv1alpha1.TraceSource) {
 			s.Poll = &evalsiv1alpha1.Poll{Interval: durationpb.New(time.Millisecond)}
