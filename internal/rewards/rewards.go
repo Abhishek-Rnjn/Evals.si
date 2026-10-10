@@ -34,6 +34,7 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 )
 
 // SharedCache is a second cache tier shared by replicas (the database).
@@ -140,9 +141,11 @@ func (s *Service) bind(ctx context.Context, project string, spec *evalsiv1alpha1
 		if params.Fields == nil {
 			params.Fields = map[string]*structpb.Value{}
 		}
-		if _, set := params.Fields["min_isolation"]; !set {
-			params.Fields["min_isolation"] = structpb.NewStringValue(c.GetMinIsolation())
+		level, err := strongerIsolation(c.GetMinIsolation(), params.Fields["min_isolation"])
+		if err != nil {
+			return nil, invalid("component %q: %v", c.GetRef(), err)
 		}
+		params.Fields["min_isolation"] = structpb.NewStringValue(level)
 		refs[i].Params = params
 	}
 	insts, err := s.eval.BindFor(ctx, project, refs, spec.GetJudge())
@@ -170,6 +173,28 @@ func (s *Service) bind(ctx context.Context, project string, spec *evalsiv1alpha1
 		out[i] = component{spec: c, inst: in, key: in.Name, prefix: append([]byte(prefix), params...)}
 	}
 	return out, nil
+}
+
+// strongerIsolation is the stronger of a component's minimum isolation and
+// the min_isolation its params already carry: a param never weakens the
+// component's minimum.
+func strongerIsolation(component string, param *structpb.Value) (string, error) {
+	floor, err := sandbox.ParseLevel(component)
+	if err != nil {
+		return "", err
+	}
+	if param == nil {
+		return floor.String(), nil
+	}
+	sv, ok := param.GetKind().(*structpb.Value_StringValue)
+	if !ok {
+		return "", errors.New("params.min_isolation must be a string")
+	}
+	p, err := sandbox.ParseLevel(sv.StringValue)
+	if err != nil {
+		return "", err
+	}
+	return max(floor, p).String(), nil
 }
 
 func hasMetric(m *evalsiv1alpha1.EvaluatorManifest, name string) bool {

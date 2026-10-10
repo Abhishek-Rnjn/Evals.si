@@ -403,6 +403,22 @@ def _component_result(
     return ComponentResult("scored", value=value)
 
 
+_ISOLATION_ORDER = ("none", "confined", "namespaced", "kernel", "vm")
+
+
+def _stronger_isolation(component: Component, floor: str, param: Any) -> str:
+    """The stronger of the component's minimum and a ``min_isolation`` param:
+    a param never weakens the component's minimum."""
+    levels = [floor] if param is None else [floor, param]
+    for level in levels:
+        if level not in _ISOLATION_ORDER:
+            raise RewardSpecError(
+                f"component {component.key!r}: unknown isolation level {level!r} "
+                f"(use one of {', '.join(_ISOLATION_ORDER)})"
+            )
+    return max(levels, key=_ISOLATION_ORDER.index)
+
+
 def _bind(component: Component, registry: Registry) -> BoundEvaluator:
     definition = registry.resolve(component.ref)
     params = dict(component.params)
@@ -412,7 +428,9 @@ def _bind(component: Component, registry: Registry) -> BoundEvaluator:
                 f"component {component.key!r}: {definition.spec.name} does not run code in a "
                 "sandbox, so sandbox.minIsolation does not apply"
             )
-        params.setdefault("min_isolation", component.min_isolation)
+        params["min_isolation"] = _stronger_isolation(
+            component, component.min_isolation, params.get("min_isolation")
+        )
     if component.metric and definition.spec.output(component.metric) is None:
         raise RewardSpecError(
             f"component {component.key!r}: {definition.spec.name} has no metric "
