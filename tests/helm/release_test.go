@@ -213,6 +213,14 @@ func TestStorageDependenciesBundledOrExternal(t *testing.T) {
 	} {
 		find(t, bundled, kind.kind, kind.name)
 	}
+	// The bundled MinIO can write its runtime directories (PID file, mc
+	// config) as the non-root group it runs as.
+	minio := toYAML(t, find(t, bundled, "StatefulSet", "evalsi-dev-minio").Spec)
+	for _, path := range []string{"/opt/bitnami/minio/tmp", "/.mc"} {
+		if !strings.Contains(minio, "mountPath: "+path) {
+			t.Errorf("MinIO cannot write %s:\n%s", path, minio)
+		}
+	}
 	// Both the server and the workers get the generated S3 credentials.
 	for _, d := range []string{"evalsi", "evalsi-worker-cpu"} {
 		if y := toYAML(t, find(t, bundled, "Deployment", d).Spec); !strings.Contains(y, "name: evalsi-dev-minio") {

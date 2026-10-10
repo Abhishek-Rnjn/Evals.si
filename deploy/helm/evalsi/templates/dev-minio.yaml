@@ -53,8 +53,16 @@ spec:
           volumeMounts:
             - {name: data, mountPath: /bitnami/minio/data}
             - {name: tmp, mountPath: /tmp}
+            # The image's runtime directories are root:root 0775, writable
+            # by its default group 0 but not by the group this pod runs as:
+            # the PID file, logs, and mc's config (bucket creation).
+            - {name: runtime, mountPath: /opt/bitnami/minio/tmp, subPath: tmp}
+            - {name: runtime, mountPath: /opt/bitnami/minio/log, subPath: log}
+            - {name: runtime, mountPath: /.mc, subPath: mc}
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: runtime
           emptyDir: {}
   volumeClaimTemplates:
     - metadata: {name: data}
