@@ -342,3 +342,124 @@ func TestOnlyTheLeaseHolderSends(t *testing.T) {
 		t.Errorf("%d deliveries, want 1", n)
 	}
 }
+
+// trace.scored reaches only the webhooks that list it, with the trace's
+// summary and the policy's results, and appears in the deliveries listing.
+func TestTraceScoredIsOptIn(t *testing.T) {
+	traces, all := newReceiver(t), newReceiver(t)
+	s, st := setup(t, Options{})
+	apply(t, s, &evalsiv1alpha1.Webhook{Name: "everything", Url: all.srv.URL})
+	trace := &evalsiv1alpha1.TraceSummary{TraceId: "0af7", Project: "default", Service: "studio", Labels: map[string]string{"workflow": "w1"}}
+	results := []*evalsiv1alpha1.EvaluationResult{{Evaluator: "loop", Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}}
+
+	// No webhook lists it: nothing is written, and the answer is cached.
+	s.TraceScored(trace, "prod", results)
+	if due, _ := st.DueDeliveries(context.Background(), time.Now().Add(time.Hour), 10); len(due) != 0 {
+		t.Fatalf("queued %d deliveries for a webhook that did not ask for trace.scored", len(due))
+	}
+	// Applying one on this replica takes effect at once.
+	apply(t, s, &evalsiv1alpha1.Webhook{Name: "studio", Url: traces.srv.URL,
+		Events: []evalsiv1alpha1.WebhookEvent{evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_TRACE_SCORED}})
+	s.TraceScored(trace, "prod", results)
+	drain(t, s, st)
+	if n := len(all.requests()); n != 0 {
+		t.Errorf("a webhook with no events got %d trace.scored deliveries", n)
+	}
+	got := traces.requests()
+	if len(got) != 1 || got[0].header.Get(HeaderEvent) != EventTraceScored {
+		t.Fatalf("studio got %v", got)
+	}
+	var body struct {
+		Type    string `json:"type"`
+		Project string `json:"project"`
+		Policy  string `json:"policy"`
+		Trace   struct {
+			TraceID string            `json:"traceId"`
+			Labels  map[string]string `json:"labels"`
+		} `json:"trace"`
+		Results []struct {
+			Evaluator string `json:"evaluator"`
+			Outcome   string `json:"outcome"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(got[0].body, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Type != EventTraceScored || body.Project != "default" || body.Policy != "prod" || body.Trace.TraceID != "0af7" ||
+		body.Trace.Labels["workflow"] != "w1" || len(body.Results) != 1 || body.Results[0].Evaluator != "loop" || body.Results[0].Outcome != "OUTCOME_SCORED" {
+		t.Errorf("body = %s", got[0].body)
+	}
+	ds, err := s.ListWebhookDeliveries(context.Background(), connect.NewRequest(&evalsiv1alpha1.ListWebhookDeliveriesRequest{Name: "studio"}))
+	if err != nil || len(ds.Msg.GetDeliveries()) != 1 {
+		t.Fatalf("deliveries = %v %v", ds, err)
+	}
+	if d := ds.Msg.GetDeliveries()[0]; d.GetTraceId() != "0af7" || d.GetPolicy() != "prod" || d.GetRunId() != "" {
+		t.Errorf("delivery = %v", d)
+	}
+
+	// Deleting it on this replica stops them at once too.
+	if _, err := s.DeleteWebhook(context.Background(), connect.NewRequest(&evalsiv1alpha1.DeleteWebhookRequest{Name: "studio"})); err != nil {
+		t.Fatal(err)
+	}
+	s.TraceScored(trace, "prod", results)
+	if due, _ := st.DueDeliveries(context.Background(), time.Now().Add(time.Hour), 10); len(due) != 0 {
+		t.Errorf("queued %d deliveries after the webhook was deleted", len(due))
+	}
+}
+
+// A webhook applied on another replica starts receiving trace.scored once
+// the cached answer expires.
+func TestTraceScoredCacheExpires(t *testing.T) {
+	rcv := newReceiver(t)
+	now := time.Unix(1_700_000_000, 0)
+	s, st := setup(t, Options{Now: func() time.Time { return now }})
+	other := New(st, Options{Now: func() time.Time { return now }})
+	trace := &evalsiv1alpha1.TraceSummary{TraceId: "0af7", Project: "default"}
+	s.TraceScored(trace, "prod", nil) // caches "no one listens"
+	apply(t, other, &evalsiv1alpha1.Webhook{Name: "studio", Url: rcv.srv.URL,
+		Events: []evalsiv1alpha1.WebhookEvent{evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_TRACE_SCORED}})
+	s.TraceScored(trace, "prod", nil)
+	if due, _ := st.DueDeliveries(context.Background(), now.Add(time.Hour), 10); len(due) != 0 {
+		t.Fatalf("cached answer not used: %d deliveries", len(due))
+	}
+	now = now.Add(traceHooksTTL)
+	s.TraceScored(trace, "prod", nil)
+	if due, _ := st.DueDeliveries(context.Background(), now.Add(time.Hour), 10); len(due) != 1 {
+		t.Errorf("after the cache expired: %d deliveries, want 1", len(due))
+	}
+}
+
+// Alert events go to webhooks with no events and to those that list them.
+func TestAlertEvents(t *testing.T) {
+	all, fired := newReceiver(t), newReceiver(t)
+	s, st := setup(t, Options{})
+	apply(t, s, &evalsiv1alpha1.Webhook{Name: "everything", Url: all.srv.URL})
+	apply(t, s, &evalsiv1alpha1.Webhook{Name: "pager", Url: fired.srv.URL,
+		Events: []evalsiv1alpha1.WebhookEvent{evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_ALERT_FIRED}})
+	s.AlertChanged("default", "prod", true, []byte(`{"policy":"prod","metric":"quality","firing":true}`))
+	s.AlertChanged("default", "prod", false, []byte(`{"policy":"prod","metric":"quality","firing":false}`))
+	drain(t, s, st)
+	events := func(r *receiver) []string {
+		var out []string
+		for _, got := range r.requests() {
+			out = append(out, got.header.Get(HeaderEvent))
+		}
+		return out
+	}
+	if got := events(all); len(got) != 2 || got[0] == got[1] {
+		t.Errorf("everything got %v", got)
+	}
+	if got := events(fired); len(got) != 1 || got[0] != EventAlertFired {
+		t.Errorf("pager got %v", got)
+	}
+	var body struct {
+		Policy string `json:"policy"`
+		Alert  struct {
+			Metric string `json:"metric"`
+			Firing bool   `json:"firing"`
+		} `json:"alert"`
+	}
+	if err := json.Unmarshal(fired.requests()[0].body, &body); err != nil || body.Policy != "prod" || body.Alert.Metric != "quality" || !body.Alert.Firing {
+		t.Errorf("alert body = %s (%v)", fired.requests()[0].body, err)
+	}
+}

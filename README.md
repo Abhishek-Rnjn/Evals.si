@@ -105,7 +105,7 @@ with Client("http://localhost:8080") as client:          # API key from EVALSI_A
     print(client.evaluate("qa.jsonl", ["exact-match"]).table())
 ```
 
-`Client.evaluate()` returns the same result as in-process `evalsi.evaluate()`, intervals included; `evaluate_async()` and `evaluate_stream()` (with `evalsi[grpc]`) don't block. REST lives under `/v1alpha1` (`POST /v1alpha1/evaluate`, `POST /v1alpha1/runs`, `GET /v1alpha1/traces/{trace_id}`, …; the full list is in `internal/server/rest.go`), and gRPC reflection is on.
+`Client.evaluate()` returns the same result as in-process `evalsi.evaluate()`, intervals included; `evaluate_async()` and `evaluate_stream()` (with `evalsi[grpc]`) don't block. REST lives under `/v1alpha1` (`POST /v1alpha1/evaluate`, `POST /v1alpha1/runs`, `GET /v1alpha1/traces/{trace_id}`, `GET /v1alpha1/scores` for online scores per trace and label, …; the full list is in `internal/server/rest.go`), and gRPC reflection is on.
 
 On loopback with no `auth` section the server runs without authentication; on any other address it requires it unless you pass `--no-auth`. The example's judge is Claude: export `ANTHROPIC_API_KEY` first, or `llm-judge` reports errors (never zeros). To try API keys, roles and the audit log locally, use [`examples/auth/local.yaml`](examples/auth/local.yaml) and the [identity guide](docs/guides/identity.md).
 
@@ -121,7 +121,7 @@ uv run evalsi run -f ../examples/runs/capitals.yaml --server http://localhost:80
 uv run evalsi compare --server http://localhost:8080 <baseline-run> <candidate-run>
 ```
 
-`trials: 3` adds pass@3 and pass^3, gates fail the command with exit code 3 (so CI fails), and budgets cap tokens. Server runs are durable: a run interrupted by a restart resumes without redoing finished work. A project can subscribe to signed [webhooks](docs/guides/webhooks.md) for finished runs and failed gates. See [`examples/ci`](examples/ci/) for a pull-request gate.
+`trials: 3` adds pass@3 and pass^3, gates fail the command with exit code 3 (so CI fails), and budgets cap tokens. Server runs are durable: a run interrupted by a restart resumes without redoing finished work. A project can subscribe to signed [webhooks](docs/guides/webhooks.md) for finished runs, failed gates, scored traces and alerts. See [`examples/ci`](examples/ci/) for a pull-request gate.
 
 ### Agent runs on sandboxed tasks
 

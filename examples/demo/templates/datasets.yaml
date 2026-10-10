@@ -2,16 +2,15 @@
 {{- $fn := include "demo.fullname" . -}}
 {{- $d := .Values.datasets }}
 # The suites' datasets, uploaded to Evals.si's datasets_dir (S3 on Kubernetes:
-# the server's pod and the workers' cannot read a local file).
+# the server's pod and the workers' cannot read a local file). An ordinary
+# resource, not a hook: Helm creates it before post-install hooks run, and a
+# hook ConfigMap with hook-succeeded would be deleted as soon as it was
+# created, before the Job below could mount it.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ $fn }}-datasets
   labels: {{- include "demo.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-5"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 data:
   {{- range $path, $_ := .Files.Glob "fixtures/*.jsonl" }}
   {{ base $path }}: |

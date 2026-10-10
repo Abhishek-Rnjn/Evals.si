@@ -107,6 +107,12 @@ func TestDemoDatasetsJob(t *testing.T) {
 	if spec := podSpec(t, job); !strings.Contains(spec, "datasets") {
 		t.Errorf("the Job does not run `evalsid datasets put`: %s", spec)
 	}
+	// The ConfigMap the Job mounts must still exist when the post-install hook
+	// runs: an ordinary resource, never a hook Helm deletes once it succeeds.
+	cm := find(t, objs, "ConfigMap", "evalsi-demo-datasets")
+	if hook := cm.Metadata.Annotations["helm.sh/hook"]; hook != "" {
+		t.Errorf("the datasets ConfigMap is a %q hook; Helm deletes it before the Job mounts it", hook)
+	}
 }
 
 // The overlays render with the main chart and with the demo chart, and each does

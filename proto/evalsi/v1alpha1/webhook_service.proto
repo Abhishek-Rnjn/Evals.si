@@ -38,6 +38,14 @@ enum WebhookEvent {
   // A run finished with at least one failed gate (status FAILED), so a
   // pipeline can stop on it. "run.gate_failed".
   WEBHOOK_EVENT_RUN_GATE_FAILED = 2;
+  // An online policy stored results for a trace, pushed or pulled: one
+  // event per trace and policy. Sent only to webhooks that list it, never to
+  // one with no events, since it follows live traffic. "trace.scored".
+  WEBHOOK_EVENT_TRACE_SCORED = 3;
+  // A policy's alert started firing. "alert.fired".
+  WEBHOOK_EVENT_ALERT_FIRED = 4;
+  // A firing alert stopped firing. "alert.resolved".
+  WEBHOOK_EVENT_ALERT_RESOLVED = 5;
 }
 
 message Webhook {
@@ -47,7 +55,7 @@ message Webhook {
   // An http or https URL. The server dials it from where it runs, so a
   // cluster's own services are reachable by their in-cluster names.
   string url = 3;
-  // Events to deliver; empty means all.
+  // Events to deliver; empty means every event but trace.scored.
   repeated WebhookEvent events = 4;
   // The HMAC key. On apply: set it, or leave it empty to keep the stored
   // one (a new webhook then gets a generated secret). Never returned by
@@ -120,8 +128,10 @@ message WebhookDelivery {
   string id = 1;
   string webhook = 2;
   string project = 3;
-  // "run.finished" or "run.gate_failed".
+  // "run.finished", "run.gate_failed", "trace.scored", "alert.fired" or
+  // "alert.resolved".
   string event = 4;
+  // The run of a run event.
   string run_id = 5;
   DeliveryState state = 6;
   int32 attempts = 7;
@@ -131,6 +141,10 @@ message WebhookDelivery {
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp next_attempt_at = 11;
   google.protobuf.Timestamp delivered_at = 12;
+  // The trace of a trace.scored event.
+  string trace_id = 13;
+  // The policy of a trace.scored or alert event.
+  string policy = 14;
 }
 
 message ListWebhookDeliveriesRequest {

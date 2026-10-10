@@ -200,3 +200,37 @@ func TestTenantColumns(t *testing.T) {
 		t.Errorf("existing rows: tenant %q, %v", tenant, err)
 	}
 }
+
+// Deliveries queued before trace_id and policy existed still list and send.
+func TestDeliveryColumnsAdded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	old, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(schema + authSchema + leaseSchema + webhookSchema); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`INSERT INTO webhook_deliveries (id, project, webhook, event, run_id, payload, state, attempts, status_code, error, created_ns, next_ns, delivered_ns)
+		VALUES ('whd_1', 'default', 'ci', 'run.finished', 'run-1', X'7B7D', 1, 0, 0, '', 1, 1, 0)`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	due, err := s.DueDeliveries(context.Background(), time.Unix(0, 2), 10)
+	if err != nil || len(due) != 1 || due[0].RunID != "run-1" || due[0].TraceID != "" || due[0].Policy != "" {
+		t.Fatalf("old delivery = %+v, %v", due, err)
+	}
+	d := &Delivery{ID: "whd_2", Project: "default", Webhook: "studio", Event: "trace.scored", TraceID: "0af7", Policy: "prod", Payload: []byte(`{}`), Created: time.Unix(0, 3), Next: time.Unix(0, 3)}
+	if err := s.AddDelivery(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.RecentDeliveries(context.Background(), "default", "studio", 10)
+	if err != nil || len(got) != 1 || got[0].TraceID != "0af7" || got[0].Policy != "prod" {
+		t.Errorf("new delivery = %+v, %v", got, err)
+	}
+}

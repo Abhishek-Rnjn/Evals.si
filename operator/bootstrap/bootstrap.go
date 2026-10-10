@@ -104,7 +104,7 @@ func (c Config) Validate() error {
 		}
 		for _, e := range w.Events {
 			if _, ok := events[e]; !ok {
-				errs = append(errs, fmt.Errorf("webhooks[%s]: unknown event %q (run.finished or run.gate_failed)", w.Name, e))
+				errs = append(errs, fmt.Errorf("webhooks[%s]: unknown event %q (run.finished, run.gate_failed, trace.scored, alert.fired or alert.resolved)", w.Name, e))
 			}
 		}
 	}
@@ -119,6 +119,9 @@ func (c Config) Validate() error {
 var events = map[string]evalsiv1alpha1.WebhookEvent{
 	"run.finished":    evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_RUN_FINISHED,
 	"run.gate_failed": evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_RUN_GATE_FAILED,
+	"trace.scored":    evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_TRACE_SCORED,
+	"alert.fired":     evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_ALERT_FIRED,
+	"alert.resolved":  evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_ALERT_RESOLVED,
 }
 
 // Secrets keeps the values Bootstrap generates (Kubernetes Secrets).

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -237,12 +238,25 @@ func TestOperator(t *testing.T) {
 	})
 
 	t.Run("TraceSource", func(t *testing.T) {
+		// The source arrives before the policy it names, as when both are in
+		// one `kubectl apply`: it is admitted, waits, and syncs once the
+		// policy does.
 		obj := example(t, "sources/studio-mlflow.yaml", "team-a")
 		if err := alice.Create(ctx, obj); err != nil {
-			t.Fatal(err)
+			t.Fatalf("a source naming a policy not synced yet was refused: %v", err)
 		}
 		s := &v1.TraceSource{}
 		key := client.ObjectKey{Namespace: "team-a", Name: "studio-mlflow"}
+		time.Sleep(time.Second) // the controller tries, and is told NotFound
+		if err := e.admin.Get(ctx, key, s); err != nil || meta.FindStatusCondition(s.Status.Conditions, "Synced") != nil &&
+			meta.FindStatusCondition(s.Status.Conditions, "Synced").Reason == "Rejected" {
+			t.Fatalf("a source waiting for its policy was rejected for good: %+v %v", s.Status, err)
+		}
+		policy := example(t, "watch/support-policy.yaml", "team-a")
+		if err := alice.Create(ctx, policy); err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = alice.Delete(ctx, policy) }()
 		eventually(t, "the source's status", func() bool {
 			return e.admin.Get(ctx, key, s) == nil && s.Status.Pulled == 7
 		})

@@ -41,7 +41,7 @@ These were verified only with stand-ins before the [verification run](verificati
 
 | Item | Notes | Where recorded |
 |------|-------|----------------|
-| Webhooks for scored traces | `run.finished` and `run.gate_failed` are built ([webhooks guide](guides/webhooks.md)); a per-trace event is not (online policies keep their own alert webhooks). Webhook URLs are not restricted to public addresses: the server dials whatever an admin sets, which is how it reaches in-cluster services. | P4 in the PRD |
+| Webhook URLs open to internal addresses | Run, trace and alert events are built ([webhooks guide](guides/webhooks.md)). Webhook URLs are not restricted to public addresses: the server dials whatever an admin sets, which is how it reaches in-cluster services. `trace.scored` has no filter of its own (a policy's selector and sampling bound it), and is not load-tested at the PRD's 10k traces/min. | P4 in the PRD |
 | Per-release isolation of sandbox pools | The sandbox NetworkPolicy selects every pool in the namespace by the shared `evalsi-sandboxd` component label, so two releases' pools can reach each other's sandbox pods. | Decision 0017 |
 | Server-side analytics | `evalsi analyze` loads runs into DuckDB on the client, through the API. It reads every result of the runs it loads, so analysis over thousands of large runs would want a server-side query (ClickHouse already holds the data on Kubernetes). | Decision 0009 |
 | Platform wheels bundling evalsid | Releases publish archives (evalsid, a static bubblewrap), wheels, images, charts and the bundle (`.github/workflows/release.yml`), but no tag has been cut (the signing and SBOM steps have never run), and the wheels do not bundle evalsid as decision 0006 suggests. | Decision 0006 |

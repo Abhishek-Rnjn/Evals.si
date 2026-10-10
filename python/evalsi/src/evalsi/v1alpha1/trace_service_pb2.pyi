@@ -206,3 +206,110 @@ class GetTraceResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___GetTraceResponse: _TypeAlias = GetTraceResponse  # noqa: Y015
+
+@_typing.final
+class ListScoresRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROJECT_FIELD_NUMBER: _builtins.int
+    TRACE_ID_FIELD_NUMBER: _builtins.int
+    SERVICE_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
+    POLICY_FIELD_NUMBER: _builtins.int
+    EVALUATOR_FIELD_NUMBER: _builtins.int
+    SINCE_FIELD_NUMBER: _builtins.int
+    PAGE_SIZE_FIELD_NUMBER: _builtins.int
+    PAGE_TOKEN_FIELD_NUMBER: _builtins.int
+    project: _builtins.str
+    """Only traces in this project, when set."""
+    trace_id: _builtins.str
+    """Only this trace (hex id), when set."""
+    service: _builtins.str
+    """Only traces from this service, when set."""
+    policy: _builtins.str
+    """Only results from this policy, when set."""
+    evaluator: _builtins.str
+    """Only results from this evaluator, when set."""
+    page_size: _builtins.int
+    """Traces per page: default 50, at most 500."""
+    page_token: _builtins.str
+    @_builtins.property
+    def labels(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Only traces carrying every one of these labels, each as key=value (for
+        example workflow=support-bot).
+        """
+
+    @_builtins.property
+    def since(self) -> _timestamp_pb2.Timestamp:
+        """Only traces that started at or after this time, when set."""
+
+    def __init__(
+        self,
+        *,
+        project: _builtins.str = ...,
+        trace_id: _builtins.str = ...,
+        service: _builtins.str = ...,
+        labels: _abc.Iterable[_builtins.str] | None = ...,
+        policy: _builtins.str = ...,
+        evaluator: _builtins.str = ...,
+        since: _timestamp_pb2.Timestamp | None = ...,
+        page_size: _builtins.int = ...,
+        page_token: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["since", b"since"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["evaluator", b"evaluator", "labels", b"labels", "page_size", b"page_size", "page_token", b"page_token", "policy", b"policy", "project", b"project", "service", b"service", "since", b"since", "trace_id", b"trace_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ListScoresRequest: _TypeAlias = ListScoresRequest  # noqa: Y015
+
+@_typing.final
+class TraceScores(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TRACE_FIELD_NUMBER: _builtins.int
+    POLICIES_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def trace(self) -> Global___TraceSummary:
+        """The trace's summary; its results field counts every result stored for it."""
+
+    @_builtins.property
+    def policies(self) -> _containers.RepeatedCompositeFieldContainer[Global___PolicyResults]:
+        """The results the request selected, grouped by policy."""
+
+    def __init__(
+        self,
+        *,
+        trace: Global___TraceSummary | None = ...,
+        policies: _abc.Iterable[Global___PolicyResults] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["trace", b"trace"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["policies", b"policies", "trace", b"trace"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___TraceScores: _TypeAlias = TraceScores  # noqa: Y015
+
+@_typing.final
+class ListScoresResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TRACES_FIELD_NUMBER: _builtins.int
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _builtins.int
+    next_page_token: _builtins.str
+    @_builtins.property
+    def traces(self) -> _containers.RepeatedCompositeFieldContainer[Global___TraceScores]:
+        """Traces with at least one selected result, newest first. A page can hold
+        fewer than page_size traces while next_page_token is set.
+        """
+
+    def __init__(
+        self,
+        *,
+        traces: _abc.Iterable[Global___TraceScores] | None = ...,
+        next_page_token: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["next_page_token", b"next_page_token", "traces", b"traces"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ListScoresResponse: _TypeAlias = ListScoresResponse  # noqa: Y015

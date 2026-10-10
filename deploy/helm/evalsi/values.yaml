@@ -277,6 +277,7 @@ bootstrap:
   # OnlineEvalPolicy documents, in their JSON field names.
   policies: []
   # Webhooks (see docs/guides/webhooks.md). secret.name keeps the generated HMAC secret.
+  # Events: run.finished, run.gate_failed, trace.scored (only when listed), alert.fired, alert.resolved.
   webhooks: []
   #  - {name: studio, project: studio, url: "http://studio.studio.svc/hooks/evalsi", events: [run.finished, run.gate_failed], secret: {name: studio-evalsi-webhook}}
   # Written into the server's credentials.grants (reloaded without a restart).

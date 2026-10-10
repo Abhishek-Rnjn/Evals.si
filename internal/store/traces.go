@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -304,6 +305,128 @@ func (s *sqlTraces) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrac
 				out[i].Results = g.GetResults()
 			}
 		}
+	}
+	return out, nil
+}
+
+// ScoreQuery selects scored traces, newest first: traces with at least one
+// result the query selects.
+type ScoreQuery struct {
+	// nil: every project.
+	Projects []string
+	TraceID  string
+	Service  string
+	// Only results of this policy, and of this evaluator, when set.
+	Policy    string
+	Evaluator string
+	// Only traces that started at or after this time; zero means any.
+	Since time.Time
+	// Resume after this trace.
+	After *TraceCursor
+	Limit int
+}
+
+// TraceCursor is a trace's place in the newest-first order of ScoredTraces:
+// start time descending, then trace id and project ascending.
+type TraceCursor struct {
+	StartNS int64  `json:"s"`
+	TraceID string `json:"t"`
+	Project string `json:"p"`
+}
+
+// CursorOf returns a trace's place in the newest-first order.
+func CursorOf(s *evalsiv1alpha1.TraceSummary) TraceCursor {
+	return TraceCursor{StartNS: s.GetStartTime().AsTime().UnixNano(), TraceID: s.GetTraceId(), Project: s.GetProject()}
+}
+
+// ScoredTrace is a trace's summary with the results a ScoreQuery selected.
+// Summary.Results counts every result stored for the trace.
+type ScoredTrace struct {
+	Summary  *evalsiv1alpha1.TraceSummary
+	Policies []*evalsiv1alpha1.PolicyResults
+}
+
+// scoreBounds returns the lower start bound, the cursor's values and the limit.
+func scoreBounds(q ScoreQuery) (since int64, after int, c TraceCursor, limit int) {
+	since = math.MinInt64
+	if !q.Since.IsZero() {
+		since = q.Since.UnixNano()
+	}
+	if q.After != nil {
+		after, c = 1, *q.After
+	}
+	if q.Limit <= 0 {
+		q.Limit = 1 << 62 // no limit, in a form every dialect accepts
+	}
+	return since, after, c, q.Limit
+}
+
+// selectResults keeps the results of a policy and an evaluator (each when
+// set) and counts every result.
+func selectResults(groups []*evalsiv1alpha1.PolicyResults, policy, evaluator string) ([]*evalsiv1alpha1.PolicyResults, int32) {
+	var out []*evalsiv1alpha1.PolicyResults
+	var total int32
+	for _, g := range groups {
+		total += int32(len(g.GetResults()))
+		if policy != "" && g.GetPolicy() != policy {
+			continue
+		}
+		kept := &evalsiv1alpha1.PolicyResults{Policy: g.GetPolicy()}
+		for _, r := range g.GetResults() {
+			if evaluator == "" || r.GetEvaluator() == evaluator {
+				kept.Results = append(kept.Results, r)
+			}
+		}
+		if len(kept.Results) > 0 {
+			out = append(out, kept)
+		}
+	}
+	return out, total
+}
+
+// ScoredTraces returns the traces a score query selects, with their results.
+func (s *sqlTraces) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTrace, error) {
+	since, after, c, limit := scoreBounds(q)
+	where, args := projectFilter("t.project", q.Projects)
+	args = append(args, q.TraceID, q.TraceID, q.Service, q.Service, since,
+		after, c.StartNS, c.StartNS, c.TraceID, c.TraceID, c.Project,
+		q.Policy, q.Policy, q.Evaluator, q.Evaluator, limit)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.project, t.summary FROM traces t
+		WHERE `+where+` AND (? = '' OR t.trace_id = ?) AND (? = '' OR t.service = ?) AND t.start_ns >= ?
+		  AND (? = 0 OR t.start_ns < ? OR (t.start_ns = ? AND (t.trace_id > ? OR (t.trace_id = ? AND t.project > ?))))
+		  AND EXISTS (SELECT 1 FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id
+		              AND (? = '' OR r.policy = ?) AND (? = '' OR r.evaluator = ?))
+		ORDER BY t.start_ns DESC, t.trace_id, t.project LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	var out []ScoredTrace
+	for rows.Next() {
+		var project string
+		var blob []byte
+		if err := rows.Scan(&project, &blob); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		sum := &evalsiv1alpha1.TraceSummary{}
+		if err := proto.Unmarshal(blob, sum); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		sum.Project = project
+		out = append(out, ScoredTrace{Summary: sum})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		groups, err := s.TraceResults(ctx, out[i].Summary.GetProject(), out[i].Summary.GetTraceId())
+		if err != nil {
+			return nil, err
+		}
+		out[i].Policies, out[i].Summary.Results = selectResults(groups, q.Policy, q.Evaluator)
 	}
 	return out, nil
 }

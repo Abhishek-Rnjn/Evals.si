@@ -95,6 +95,7 @@ func (s *Service) ApplyWebhook(ctx context.Context, req *connect.Request[evalsiv
 	if err := s.store.PutWebhook(ctx, w); err != nil {
 		return nil, err
 	}
+	s.forgetTraceHooks(w.GetProject())
 	out := redacted(w)
 	if generated {
 		out.Secret = w.GetSecret()
@@ -141,6 +142,7 @@ func (s *Service) DeleteWebhook(ctx context.Context, req *connect.Request[evalsi
 	if err != nil {
 		return nil, err
 	}
+	s.forgetTraceHooks(proj)
 	return connect.NewResponse(&evalsiv1alpha1.DeleteWebhookResponse{}), nil
 }
 
@@ -193,7 +195,7 @@ func (s *Service) ListWebhookDeliveries(ctx context.Context, req *connect.Reques
 	out := &evalsiv1alpha1.ListWebhookDeliveriesResponse{}
 	for _, d := range ds {
 		m := &evalsiv1alpha1.WebhookDelivery{
-			Id: d.ID, Webhook: d.Webhook, Project: d.Project, Event: d.Event, RunId: d.RunID,
+			Id: d.ID, Webhook: d.Webhook, Project: d.Project, Event: d.Event, RunId: d.RunID, TraceId: d.TraceID, Policy: d.Policy,
 			State: deliveryStates[d.State], Attempts: int32(d.Attempts), StatusCode: int32(d.StatusCode), Error: d.Error,
 			CreatedAt: timestamppb.New(d.Created),
 		}

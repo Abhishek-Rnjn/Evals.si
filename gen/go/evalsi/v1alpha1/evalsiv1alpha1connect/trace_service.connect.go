@@ -37,12 +37,18 @@ const (
 	TraceServiceListTracesProcedure = "/evalsi.v1alpha1.TraceService/ListTraces"
 	// TraceServiceGetTraceProcedure is the fully-qualified name of the TraceService's GetTrace RPC.
 	TraceServiceGetTraceProcedure = "/evalsi.v1alpha1.TraceService/GetTrace"
+	// TraceServiceListScoresProcedure is the fully-qualified name of the TraceService's ListScores RPC.
+	TraceServiceListScoresProcedure = "/evalsi.v1alpha1.TraceService/ListScores"
 )
 
 // TraceServiceClient is a client for the evalsi.v1alpha1.TraceService service.
 type TraceServiceClient interface {
 	ListTraces(context.Context, *connect.Request[v1alpha1.ListTracesRequest]) (*connect.Response[v1alpha1.ListTracesResponse], error)
 	GetTrace(context.Context, *connect.Request[v1alpha1.GetTraceRequest]) (*connect.Response[v1alpha1.GetTraceResponse], error)
+	// ListScores returns online scores per trace, newest trace first, without
+	// the traces' records: what an application shows per execution and per
+	// workflow (by label) in its own UI.
+	ListScores(context.Context, *connect.Request[v1alpha1.ListScoresRequest]) (*connect.Response[v1alpha1.ListScoresResponse], error)
 }
 
 // NewTraceServiceClient constructs a client for the evalsi.v1alpha1.TraceService service. By
@@ -68,6 +74,12 @@ func NewTraceServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(traceServiceMethods.ByName("GetTrace")),
 			connect.WithClientOptions(opts...),
 		),
+		listScores: connect.NewClient[v1alpha1.ListScoresRequest, v1alpha1.ListScoresResponse](
+			httpClient,
+			baseURL+TraceServiceListScoresProcedure,
+			connect.WithSchema(traceServiceMethods.ByName("ListScores")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -75,6 +87,7 @@ func NewTraceServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type traceServiceClient struct {
 	listTraces *connect.Client[v1alpha1.ListTracesRequest, v1alpha1.ListTracesResponse]
 	getTrace   *connect.Client[v1alpha1.GetTraceRequest, v1alpha1.GetTraceResponse]
+	listScores *connect.Client[v1alpha1.ListScoresRequest, v1alpha1.ListScoresResponse]
 }
 
 // ListTraces calls evalsi.v1alpha1.TraceService.ListTraces.
@@ -87,10 +100,19 @@ func (c *traceServiceClient) GetTrace(ctx context.Context, req *connect.Request[
 	return c.getTrace.CallUnary(ctx, req)
 }
 
+// ListScores calls evalsi.v1alpha1.TraceService.ListScores.
+func (c *traceServiceClient) ListScores(ctx context.Context, req *connect.Request[v1alpha1.ListScoresRequest]) (*connect.Response[v1alpha1.ListScoresResponse], error) {
+	return c.listScores.CallUnary(ctx, req)
+}
+
 // TraceServiceHandler is an implementation of the evalsi.v1alpha1.TraceService service.
 type TraceServiceHandler interface {
 	ListTraces(context.Context, *connect.Request[v1alpha1.ListTracesRequest]) (*connect.Response[v1alpha1.ListTracesResponse], error)
 	GetTrace(context.Context, *connect.Request[v1alpha1.GetTraceRequest]) (*connect.Response[v1alpha1.GetTraceResponse], error)
+	// ListScores returns online scores per trace, newest trace first, without
+	// the traces' records: what an application shows per execution and per
+	// workflow (by label) in its own UI.
+	ListScores(context.Context, *connect.Request[v1alpha1.ListScoresRequest]) (*connect.Response[v1alpha1.ListScoresResponse], error)
 }
 
 // NewTraceServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -112,12 +134,20 @@ func NewTraceServiceHandler(svc TraceServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(traceServiceMethods.ByName("GetTrace")),
 		connect.WithHandlerOptions(opts...),
 	)
+	traceServiceListScoresHandler := connect.NewUnaryHandler(
+		TraceServiceListScoresProcedure,
+		svc.ListScores,
+		connect.WithSchema(traceServiceMethods.ByName("ListScores")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/evalsi.v1alpha1.TraceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TraceServiceListTracesProcedure:
 			traceServiceListTracesHandler.ServeHTTP(w, r)
 		case TraceServiceGetTraceProcedure:
 			traceServiceGetTraceHandler.ServeHTTP(w, r)
+		case TraceServiceListScoresProcedure:
+			traceServiceListScoresHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -133,4 +163,8 @@ func (UnimplementedTraceServiceHandler) ListTraces(context.Context, *connect.Req
 
 func (UnimplementedTraceServiceHandler) GetTrace(context.Context, *connect.Request[v1alpha1.GetTraceRequest]) (*connect.Response[v1alpha1.GetTraceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.TraceService.GetTrace is not implemented"))
+}
+
+func (UnimplementedTraceServiceHandler) ListScores(context.Context, *connect.Request[v1alpha1.ListScoresRequest]) (*connect.Response[v1alpha1.ListScoresResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.TraceService.ListScores is not implemented"))
 }

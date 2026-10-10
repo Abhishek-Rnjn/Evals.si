@@ -12,6 +12,10 @@ import "google/protobuf/timestamp.proto";
 service TraceService {
   rpc ListTraces(ListTracesRequest) returns (ListTracesResponse);
   rpc GetTrace(GetTraceRequest) returns (GetTraceResponse);
+  // ListScores returns online scores per trace, newest trace first, without
+  // the traces' records: what an application shows per execution and per
+  // workflow (by label) in its own UI.
+  rpc ListScores(ListScoresRequest) returns (ListScoresResponse);
 }
 
 message TraceSummary {
@@ -62,4 +66,39 @@ message GetTraceResponse {
   // The trace as the record evaluators saw: input, output, trajectory, usage.
   Record record = 1;
   repeated PolicyResults policies = 2;
+}
+
+message ListScoresRequest {
+  // Only traces in this project, when set.
+  string project = 1;
+  // Only this trace (hex id), when set.
+  string trace_id = 2;
+  // Only traces from this service, when set.
+  string service = 3;
+  // Only traces carrying every one of these labels, each as key=value (for
+  // example workflow=support-bot).
+  repeated string labels = 4;
+  // Only results from this policy, when set.
+  string policy = 5;
+  // Only results from this evaluator, when set.
+  string evaluator = 6;
+  // Only traces that started at or after this time, when set.
+  google.protobuf.Timestamp since = 7;
+  // Traces per page: default 50, at most 500.
+  int32 page_size = 8;
+  string page_token = 9;
+}
+
+message TraceScores {
+  // The trace's summary; its results field counts every result stored for it.
+  TraceSummary trace = 1;
+  // The results the request selected, grouped by policy.
+  repeated PolicyResults policies = 2;
+}
+
+message ListScoresResponse {
+  // Traces with at least one selected result, newest first. A page can hold
+  // fewer than page_size traces while next_page_token is set.
+  repeated TraceScores traces = 1;
+  string next_page_token = 2;
 }

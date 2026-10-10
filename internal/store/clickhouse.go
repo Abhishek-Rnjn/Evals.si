@@ -483,3 +483,86 @@ func (c *clickhouse) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTra
 	}
 	return out, nil
 }
+
+func (c *clickhouse) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTrace, error) {
+	since, after, cur, limit := scoreBounds(q)
+	params := chParams{
+		"id": q.TraceID, "service": q.Service, "policy": q.Policy, "evaluator": q.Evaluator,
+		"since": strconv.FormatInt(since, 10), "after": strconv.Itoa(after),
+		"cs": strconv.FormatInt(cur.StartNS, 10), "ct": cur.TraceID, "cp": cur.Project,
+		"limit": strconv.Itoa(limit),
+	}
+	where := projectsWhere("project", q.Projects, params)
+	var out []ScoredTrace
+	err := c.query(ctx, `SELECT project, base64Encode(summary) AS summary FROM traces FINAL
+		WHERE `+where+` AND ({id:String} = '' OR trace_id = {id:String})
+		  AND ({service:String} = '' OR service = {service:String}) AND start_ns >= {since:Int64}
+		  AND ({after:UInt8} = 0 OR start_ns < {cs:Int64} OR (start_ns = {cs:Int64}
+		       AND (trace_id > {ct:String} OR (trace_id = {ct:String} AND project > {cp:String}))))
+		  AND (project, trace_id) IN (SELECT project, trace_id FROM trace_results FINAL
+		       WHERE `+where+` AND ({policy:String} = '' OR policy = {policy:String})
+		         AND ({evaluator:String} = '' OR evaluator = {evaluator:String}))
+		ORDER BY start_ns DESC, trace_id, project LIMIT {limit:UInt64}`, params, func(line []byte) error {
+		var row struct {
+			Project string `json:"project"`
+			Summary string `json:"summary"`
+		}
+		if err := json.Unmarshal(line, &row); err != nil {
+			return err
+		}
+		sum := &evalsiv1alpha1.TraceSummary{}
+		if err := unb64(row.Summary, sum); err != nil {
+			return err
+		}
+		sum.Project = row.Project
+		out = append(out, ScoredTrace{Summary: sum})
+		return nil
+	})
+	if err != nil || len(out) == 0 {
+		return out, err
+	}
+	// Every result of the page's traces in one query, grouped per trace.
+	var projects, traceIDs []string
+	groups := map[[2]string][]*evalsiv1alpha1.PolicyResults{}
+	for _, st := range out {
+		projects = append(projects, st.Summary.GetProject())
+		traceIDs = append(traceIDs, st.Summary.GetTraceId())
+		groups[[2]string{st.Summary.GetProject(), st.Summary.GetTraceId()}] = nil
+	}
+	err = c.query(ctx, `SELECT project, trace_id, policy, base64Encode(result) AS result FROM trace_results FINAL
+		WHERE has({projects:Array(String)}, project) AND has({ids:Array(String)}, trace_id)
+		ORDER BY project, trace_id, policy, evaluator`, chParams{"projects": chArray(projects), "ids": chArray(traceIDs)}, func(line []byte) error {
+		var row struct {
+			Project string `json:"project"`
+			TraceID string `json:"trace_id"`
+			Policy  string `json:"policy"`
+			Result  string `json:"result"`
+		}
+		if err := json.Unmarshal(line, &row); err != nil {
+			return err
+		}
+		key := [2]string{row.Project, row.TraceID}
+		gs, ok := groups[key]
+		if !ok {
+			return nil // another project's trace with the same id
+		}
+		r := &evalsiv1alpha1.EvaluationResult{}
+		if err := unb64(row.Result, r); err != nil {
+			return err
+		}
+		if len(gs) == 0 || gs[len(gs)-1].GetPolicy() != row.Policy {
+			gs = append(gs, &evalsiv1alpha1.PolicyResults{Policy: row.Policy})
+		}
+		gs[len(gs)-1].Results = append(gs[len(gs)-1].Results, r)
+		groups[key] = gs
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		key := [2]string{out[i].Summary.GetProject(), out[i].Summary.GetTraceId()}
+		out[i].Policies, out[i].Summary.Results = selectResults(groups[key], q.Policy, q.Evaluator)
+	}
+	return out, nil
+}

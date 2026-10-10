@@ -210,7 +210,9 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 			if sourceMgr != nil {
 				sourceMgr.OnResults(policy, rec, info, results)
 			}
+			hooks.TraceScored(watch.Summary(rec, info), policy, results)
 		},
+		OnAlert: hooks.AlertChanged,
 	})
 	if err != nil {
 		return err

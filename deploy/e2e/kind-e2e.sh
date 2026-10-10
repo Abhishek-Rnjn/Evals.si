@@ -250,11 +250,14 @@ for run in dsh-small-repo-fixes deepagents-small-repo-fixes; do
 done
 
 step "the demo's scores reached MLflow"
+# MLflow refuses Host headers it does not list (DNS-rebinding protection); a
+# port-forward's 127.0.0.1:15000 is not one, so name a host the chart allows.
+mlflow_host='Host: localhost:5000'
 kubectl port-forward -n "$ns" svc/evalsi-demo-mlflow 15000:5000 >/dev/null 2>&1 &
 pf=$!
 sleep 3
-curl -s -X POST http://127.0.0.1:15000/api/2.0/mlflow/experiments/search -H 'content-type: application/json' \
-  -d '{"filter":"name = '"'"'evalsi-demo'"'"'"}' | tee "$work/mlflow-experiments.json"
+curl -s -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/2.0/mlflow/experiments/search -H 'content-type: application/json' \
+  -d '{"max_results":100,"filter":"name = '"'"'evalsi-demo'"'"'"}' | tee "$work/mlflow-experiments.json"
 grep -q evalsi-demo "$work/mlflow-experiments.json" || { echo "no MLflow experiment from the sink" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
@@ -279,8 +282,8 @@ kubectl get tracesource deepagents-mlflow -n "$ns" -o yaml | tee "$work/tracesou
 kubectl port-forward -n "$ns" svc/evalsi-demo-mlflow 15000:5000 >/dev/null 2>&1 &
 pf=$!
 sleep 3
-exp="$(curl -s "http://127.0.0.1:15000/api/2.0/mlflow/experiments/get-by-name?experiment_name=evalsi-demo-deepagents" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["experiment_id"])')"
-curl -s -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
+exp="$(curl -s -H "$mlflow_host" "http://127.0.0.1:15000/api/2.0/mlflow/experiments/get-by-name?experiment_name=evalsi-demo-deepagents" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["experiment_id"])')"
+curl -s -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
   -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$exp"'"}}]}' | tee "$work/mlflow-traces.json" >/dev/null
 grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evals.si assessment on the Deep Agents traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true

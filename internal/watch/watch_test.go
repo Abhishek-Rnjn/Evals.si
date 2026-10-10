@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -217,7 +218,17 @@ func TestPolicyPipeline(t *testing.T) {
 		h.e.Ingest(tr)
 		items = append(items, <-h.e.queue)
 	}
+	// The WebhookService's alert events see the same alert.
+	var alerts []string
+	h.e.opts.OnAlert = func(project, policy string, firing bool, body []byte) {
+		var ev alertEvent
+		_ = json.Unmarshal(body, &ev)
+		alerts = append(alerts, project+"/"+policy+"/"+ev.Metric+"/"+strconv.FormatBool(firing && ev.Firing))
+	}
 	h.e.process(context.Background(), items)
+	if len(alerts) != 1 || alerts[0] != DefaultProject+"/support/quality/true" {
+		t.Errorf("OnAlert calls = %v", alerts)
+	}
 
 	stats, _ := h.e.Stats("support")
 	if stats.GetTracesSeen() != 4 || stats.GetTracesMatched() != 3 || stats.GetTracesSampled() != 3 || stats.GetTracesEvaluated() != 3 || stats.GetTracesPromoted() != 2 {

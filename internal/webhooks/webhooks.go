@@ -1,9 +1,9 @@
 // Package webhooks delivers events to HTTP endpoints, signed with HMAC.
 //
-// A finished run writes one delivery row per matching webhook (an outbox in
-// the store), and a dispatcher, run by whichever replica holds a lease, sends
-// them and retries failures with growing delays. A restart or a crashed
-// replica loses nothing.
+// An event (a finished run, a scored trace, an alert) writes one delivery row
+// per matching webhook (an outbox in the store), and a dispatcher, run by
+// whichever replica holds a lease, sends them and retries failures with
+// growing delays. A restart or a crashed replica loses nothing.
 package webhooks
 
 import (
@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,6 +40,9 @@ import (
 const (
 	EventRunFinished   = "run.finished"
 	EventRunGateFailed = "run.gate_failed"
+	EventTraceScored   = "trace.scored"
+	EventAlertFired    = "alert.fired"
+	EventAlertResolved = "alert.resolved"
 	EventPing          = "ping"
 )
 
@@ -55,6 +59,9 @@ const (
 	batchSize     = 16
 	pollInterval  = time.Second
 	pruneInterval = time.Hour
+	// How long a project's "does any webhook want trace.scored" answer is
+	// reused, so live traffic does not read the webhooks table per trace.
+	traceHooksTTL = 5 * time.Second
 )
 
 var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$`)
@@ -84,6 +91,13 @@ type Service struct {
 	mu       sync.Mutex
 	lastPrun time.Time
 	counts   map[string]int64 // by outcome, for /metrics
+	// Per project: whether a webhook lists trace.scored, and when that was read.
+	traceHooks map[string]cachedBool
+}
+
+type cachedBool struct {
+	value bool
+	at    time.Time
 }
 
 // New makes the service.
@@ -116,7 +130,7 @@ func New(st *store.Store, opts Options) *Service {
 	client.Timeout = opts.Timeout
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	opts.Client = &client
-	return &Service{store: st, opts: opts, log: opts.Logger, wake: make(chan struct{}, 1), counts: map[string]int64{}}
+	return &Service{store: st, opts: opts, log: opts.Logger, wake: make(chan struct{}, 1), counts: map[string]int64{}, traceHooks: map[string]cachedBool{}}
 }
 
 // defaultBackoff: 5s, 30s, 3m, 15m, then an hour.
@@ -183,6 +197,16 @@ type payload struct {
 	CreatedAt time.Time       `json:"created_at"`
 	Project   string          `json:"project"`
 	Run       json.RawMessage `json:"run,omitempty"`
+	Trace     json.RawMessage `json:"trace,omitempty"`
+	Policy    string          `json:"policy,omitempty"`
+	Results   json.RawMessage `json:"results,omitempty"`
+	Alert     json.RawMessage `json:"alert,omitempty"`
+}
+
+// event is what an event adds to its payload and delivery rows.
+type event struct {
+	project, runID, traceID, policy string
+	run, trace, results, alert      json.RawMessage
 }
 
 // runJSON is a run as a receiver sees it: without its spec, which holds the
@@ -203,9 +227,98 @@ func (s *Service) RunFinished(run *evalsiv1alpha1.Run) {
 	if run.GetStatus() == evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED {
 		events = append(events, EventRunGateFailed)
 	}
-	if err := s.enqueue(ctx, run, events); err != nil {
+	rj, err := runJSON(run)
+	if err == nil {
+		err = s.enqueue(ctx, event{project: run.GetProject(), runID: run.GetId(), run: rj}, events)
+	}
+	if err != nil {
 		s.log.Error("queueing webhook deliveries", "run", run.GetId(), "err", err)
 	}
+}
+
+// TraceScored queues trace.scored for the webhooks of the trace's project
+// that list it: the trace's summary and one policy's results. It is called
+// for every trace a policy scores, so it reads the project's webhooks at
+// most every few seconds and writes nothing when none listens.
+func (s *Service) TraceScored(trace *evalsiv1alpha1.TraceSummary, policy string, results []*evalsiv1alpha1.EvaluationResult) {
+	project := trace.GetProject()
+	if project == "" {
+		project = "default"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if !s.wantsTraces(ctx, project) {
+		return
+	}
+	tj, err := protojson.Marshal(trace)
+	if err != nil {
+		s.log.Error("queueing webhook deliveries", "trace", trace.GetTraceId(), "err", err)
+		return
+	}
+	rs := make([]json.RawMessage, len(results))
+	for i, r := range results {
+		if rs[i], err = protojson.Marshal(r); err != nil {
+			s.log.Error("queueing webhook deliveries", "trace", trace.GetTraceId(), "err", err)
+			return
+		}
+	}
+	rj, _ := json.Marshal(rs)
+	ev := event{project: project, traceID: trace.GetTraceId(), policy: policy, trace: tj, results: rj}
+	if err := s.enqueue(ctx, ev, []string{EventTraceScored}); err != nil {
+		s.log.Error("queueing webhook deliveries", "trace", trace.GetTraceId(), "err", err)
+	}
+}
+
+// AlertChanged queues alert.fired or alert.resolved for a policy's alert.
+// alert is the body the policy's own alert webhook receives.
+func (s *Service) AlertChanged(project, policy string, firing bool, alert []byte) {
+	if project == "" {
+		project = "default"
+	}
+	name := EventAlertResolved
+	if firing {
+		name = EventAlertFired
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.enqueue(ctx, event{project: project, policy: policy, alert: alert}, []string{name}); err != nil {
+		s.log.Error("queueing webhook deliveries", "policy", policy, "err", err)
+	}
+}
+
+// wantsTraces reports whether a webhook of the project lists trace.scored,
+// from a cache refreshed every traceHooksTTL.
+func (s *Service) wantsTraces(ctx context.Context, project string) bool {
+	now := s.opts.Now()
+	s.mu.Lock()
+	c, ok := s.traceHooks[project]
+	s.mu.Unlock()
+	if ok && now.Sub(c.at) < traceHooksTTL {
+		return c.value
+	}
+	hooks, err := s.store.ListWebhooks(ctx, project)
+	if err != nil {
+		s.log.Warn("reading webhooks", "project", project, "err", err)
+		return true // enqueue reads them again and reports its own error
+	}
+	want := false
+	for _, w := range hooks {
+		if !w.GetDisabled() && slices.Contains(w.GetEvents(), evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_TRACE_SCORED) {
+			want = true
+		}
+	}
+	s.mu.Lock()
+	s.traceHooks[project] = cachedBool{value: want, at: now}
+	s.mu.Unlock()
+	return want
+}
+
+// forgetTraceHooks drops a project's cached answer, after its webhooks change
+// on this replica.
+func (s *Service) forgetTraceHooks(project string) {
+	s.mu.Lock()
+	delete(s.traceHooks, project)
+	s.mu.Unlock()
 }
 
 func eventName(e evalsiv1alpha1.WebhookEvent) string {
@@ -214,13 +327,22 @@ func eventName(e evalsiv1alpha1.WebhookEvent) string {
 		return EventRunFinished
 	case evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_RUN_GATE_FAILED:
 		return EventRunGateFailed
+	case evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_TRACE_SCORED:
+		return EventTraceScored
+	case evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_ALERT_FIRED:
+		return EventAlertFired
+	case evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_ALERT_RESOLVED:
+		return EventAlertResolved
 	}
 	return ""
 }
 
+// subscribed reports whether a webhook receives an event. No events means
+// every event but trace.scored, which follows live traffic and must be asked
+// for by name.
 func subscribed(w *evalsiv1alpha1.Webhook, event string) bool {
 	if len(w.GetEvents()) == 0 {
-		return true
+		return event != EventTraceScored
 	}
 	for _, e := range w.GetEvents() {
 		if eventName(e) == event {
@@ -230,16 +352,12 @@ func subscribed(w *evalsiv1alpha1.Webhook, event string) bool {
 	return false
 }
 
-func (s *Service) enqueue(ctx context.Context, run *evalsiv1alpha1.Run, events []string) error {
-	project := run.GetProject()
+func (s *Service) enqueue(ctx context.Context, ev event, events []string) error {
+	project := ev.project
 	if project == "" {
 		project = "default"
 	}
 	hooks, err := s.store.ListWebhooks(ctx, project)
-	if err != nil {
-		return err
-	}
-	rj, err := runJSON(run)
 	if err != nil {
 		return err
 	}
@@ -249,16 +367,18 @@ func (s *Service) enqueue(ctx context.Context, run *evalsiv1alpha1.Run, events [
 		if w.GetDisabled() {
 			continue
 		}
-		for _, event := range events {
-			if !subscribed(w, event) {
+		for _, name := range events {
+			if !subscribed(w, name) {
 				continue
 			}
 			id := "whd_" + randomHex(12)
-			body, err := json.Marshal(payload{ID: id, Type: event, CreatedAt: now.UTC(), Project: project, Run: rj})
+			body, err := json.Marshal(payload{ID: id, Type: name, CreatedAt: now.UTC(), Project: project,
+				Run: ev.run, Trace: ev.trace, Policy: ev.policy, Results: ev.results, Alert: ev.alert})
 			if err != nil {
 				return err
 			}
-			d := &store.Delivery{ID: id, Project: project, Webhook: w.GetName(), Event: event, RunID: run.GetId(), Payload: body, Created: now, Next: now}
+			d := &store.Delivery{ID: id, Project: project, Webhook: w.GetName(), Event: name,
+				RunID: ev.runID, TraceID: ev.traceID, Policy: ev.policy, Payload: body, Created: now, Next: now}
 			if err := s.store.AddDelivery(ctx, d); err != nil {
 				return err
 			}

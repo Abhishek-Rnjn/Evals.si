@@ -37,6 +37,11 @@ class TraceServiceStub:
     def __new__(cls, channel: _aio.Channel) -> TraceServiceAsyncStub: ...
     ListTraces: _grpc.UnaryUnaryMultiCallable[_trace_service_pb2.ListTracesRequest, _trace_service_pb2.ListTracesResponse]
     GetTrace: _grpc.UnaryUnaryMultiCallable[_trace_service_pb2.GetTraceRequest, _trace_service_pb2.GetTraceResponse]
+    ListScores: _grpc.UnaryUnaryMultiCallable[_trace_service_pb2.ListScoresRequest, _trace_service_pb2.ListScoresResponse]
+    """ListScores returns online scores per trace, newest trace first, without
+    the traces' records: what an application shows per execution and per
+    workflow (by label) in its own UI.
+    """
 
 @_typing.type_check_only
 class TraceServiceAsyncStub(TraceServiceStub):
@@ -47,6 +52,11 @@ class TraceServiceAsyncStub(TraceServiceStub):
     def __init__(self, channel: _aio.Channel) -> None: ...
     ListTraces: _aio.UnaryUnaryMultiCallable[_trace_service_pb2.ListTracesRequest, _trace_service_pb2.ListTracesResponse]  # type: ignore[assignment]
     GetTrace: _aio.UnaryUnaryMultiCallable[_trace_service_pb2.GetTraceRequest, _trace_service_pb2.GetTraceResponse]  # type: ignore[assignment]
+    ListScores: _aio.UnaryUnaryMultiCallable[_trace_service_pb2.ListScoresRequest, _trace_service_pb2.ListScoresResponse]  # type: ignore[assignment]
+    """ListScores returns online scores per trace, newest trace first, without
+    the traces' records: what an application shows per execution and per
+    workflow (by label) in its own UI.
+    """
 
 class TraceServiceServicer(metaclass=_abc_1.ABCMeta):
     """TraceService reads the traces evalsid has ingested over OTLP, with the
@@ -66,5 +76,16 @@ class TraceServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _trace_service_pb2.GetTraceRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_trace_service_pb2.GetTraceResponse, _abc.Awaitable[_trace_service_pb2.GetTraceResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def ListScores(
+        self,
+        request: _trace_service_pb2.ListScoresRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_trace_service_pb2.ListScoresResponse, _abc.Awaitable[_trace_service_pb2.ListScoresResponse]]:
+        """ListScores returns online scores per trace, newest trace first, without
+        the traces' records: what an application shows per execution and per
+        workflow (by label) in its own UI.
+        """
 
 def add_TraceServiceServicer_to_server(servicer: TraceServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

@@ -35,6 +35,15 @@ class _WebhookEventEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_WebhookE
     """A run finished with at least one failed gate (status FAILED), so a
     pipeline can stop on it. "run.gate_failed".
     """
+    WEBHOOK_EVENT_TRACE_SCORED: _WebhookEvent.ValueType  # 3
+    """An online policy stored results for a trace, pushed or pulled: one
+    event per trace and policy. Sent only to webhooks that list it, never to
+    one with no events, since it follows live traffic. "trace.scored".
+    """
+    WEBHOOK_EVENT_ALERT_FIRED: _WebhookEvent.ValueType  # 4
+    """A policy's alert started firing. "alert.fired"."""
+    WEBHOOK_EVENT_ALERT_RESOLVED: _WebhookEvent.ValueType  # 5
+    """A firing alert stopped firing. "alert.resolved"."""
 
 class WebhookEvent(_WebhookEvent, metaclass=_WebhookEventEnumTypeWrapper): ...
 
@@ -47,6 +56,15 @@ WEBHOOK_EVENT_RUN_GATE_FAILED: WebhookEvent.ValueType  # 2
 """A run finished with at least one failed gate (status FAILED), so a
 pipeline can stop on it. "run.gate_failed".
 """
+WEBHOOK_EVENT_TRACE_SCORED: WebhookEvent.ValueType  # 3
+"""An online policy stored results for a trace, pushed or pulled: one
+event per trace and policy. Sent only to webhooks that list it, never to
+one with no events, since it follows live traffic. "trace.scored".
+"""
+WEBHOOK_EVENT_ALERT_FIRED: WebhookEvent.ValueType  # 4
+"""A policy's alert started firing. "alert.fired"."""
+WEBHOOK_EVENT_ALERT_RESOLVED: WebhookEvent.ValueType  # 5
+"""A firing alert stopped firing. "alert.resolved"."""
 Global___WebhookEvent: _TypeAlias = WebhookEvent  # noqa: Y015
 
 class _DeliveryState:
@@ -121,7 +139,7 @@ class Webhook(_message.Message):
     updated_by: _builtins.str
     @_builtins.property
     def events(self) -> _containers.RepeatedScalarFieldContainer[Global___WebhookEvent.ValueType]:
-        """Events to deliver; empty means all."""
+        """Events to deliver; empty means every event but trace.scored."""
 
     @_builtins.property
     def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
@@ -348,17 +366,26 @@ class WebhookDelivery(_message.Message):
     CREATED_AT_FIELD_NUMBER: _builtins.int
     NEXT_ATTEMPT_AT_FIELD_NUMBER: _builtins.int
     DELIVERED_AT_FIELD_NUMBER: _builtins.int
+    TRACE_ID_FIELD_NUMBER: _builtins.int
+    POLICY_FIELD_NUMBER: _builtins.int
     id: _builtins.str
     webhook: _builtins.str
     project: _builtins.str
     event: _builtins.str
-    """"run.finished" or "run.gate_failed"."""
+    """"run.finished", "run.gate_failed", "trace.scored", "alert.fired" or
+    "alert.resolved".
+    """
     run_id: _builtins.str
+    """The run of a run event."""
     state: Global___DeliveryState.ValueType
     attempts: _builtins.int
     status_code: _builtins.int
     """The last attempt's HTTP status (0: no answer) and error."""
     error: _builtins.str
+    trace_id: _builtins.str
+    """The trace of a trace.scored event."""
+    policy: _builtins.str
+    """The policy of a trace.scored or alert event."""
     @_builtins.property
     def created_at(self) -> _timestamp_pb2.Timestamp: ...
     @_builtins.property
@@ -380,10 +407,12 @@ class WebhookDelivery(_message.Message):
         created_at: _timestamp_pb2.Timestamp | None = ...,
         next_attempt_at: _timestamp_pb2.Timestamp | None = ...,
         delivered_at: _timestamp_pb2.Timestamp | None = ...,
+        trace_id: _builtins.str = ...,
+        policy: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["created_at", b"created_at", "delivered_at", b"delivered_at", "next_attempt_at", b"next_attempt_at"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["attempts", b"attempts", "created_at", b"created_at", "delivered_at", b"delivered_at", "error", b"error", "event", b"event", "id", b"id", "next_attempt_at", b"next_attempt_at", "project", b"project", "run_id", b"run_id", "state", b"state", "status_code", b"status_code", "webhook", b"webhook"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["attempts", b"attempts", "created_at", b"created_at", "delivered_at", b"delivered_at", "error", b"error", "event", b"event", "id", b"id", "next_attempt_at", b"next_attempt_at", "policy", b"policy", "project", b"project", "run_id", b"run_id", "state", b"state", "status_code", b"status_code", "trace_id", b"trace_id", "webhook", b"webhook"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___WebhookDelivery: _TypeAlias = WebhookDelivery  # noqa: Y015

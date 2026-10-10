@@ -48,6 +48,21 @@ func TestDatasetsPutLocal(t *testing.T) {
 	if code := datasetsMain(context.Background(), []string{"put", "--config", cfg, "--dir", filepath.Join(work, "src"), other}, &out, &errb); code == 0 {
 		t.Fatal("a file outside --dir was accepted")
 	}
+	// Relative files with an absolute --dir, as the demo chart's Job runs it:
+	// `cd /datasets && evalsid datasets put --dir /datasets fixtures/*.jsonl`.
+	t.Chdir(filepath.Join(work, "src"))
+	errb.Reset()
+	if code := datasetsMain(context.Background(), []string{"put", "--config", cfg, "--dir", filepath.Join(work, "src"), "fixtures/a.jsonl"}, &out, &errb); code != 0 {
+		t.Fatalf("relative file, absolute --dir: exit %d: %s", code, errb.String())
+	}
+	// And a relative --dir.
+	t.Chdir(work)
+	if code := datasetsMain(context.Background(), []string{"put", "--config", cfg, "--dir", "src", filepath.Join(work, "src", "fixtures", "a.jsonl")}, &out, &errb); code != 0 {
+		t.Fatalf("absolute file, relative --dir: exit %d: %s", code, errb.String())
+	}
+	if code := datasetsMain(context.Background(), []string{"put", "--config", cfg, "--dir", "src", "outside.jsonl"}, &out, &errb); code == 0 {
+		t.Fatal("a relative file outside --dir was accepted")
+	}
 	if code := datasetsMain(context.Background(), []string{"nope"}, &out, &errb); code != 2 {
 		t.Fatalf("unknown subcommand exit %d", code)
 	}

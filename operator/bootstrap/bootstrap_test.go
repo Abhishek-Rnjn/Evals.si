@@ -257,3 +257,16 @@ func TestValidate(t *testing.T) {
 }
 
 var metaDelete = metav1.DeleteOptions{}
+
+// Every webhook event the API knows can be named in the chart's values.
+func TestEveryWebhookEventHasAName(t *testing.T) {
+	named := map[evalsiv1alpha1.WebhookEvent]bool{}
+	for _, e := range events {
+		named[e] = true
+	}
+	for v := range evalsiv1alpha1.WebhookEvent_name {
+		if e := evalsiv1alpha1.WebhookEvent(v); e != evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_UNSPECIFIED && !named[e] {
+			t.Errorf("%s has no name in bootstrap values", e)
+		}
+	}
+}

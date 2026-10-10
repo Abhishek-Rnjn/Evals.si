@@ -66,7 +66,7 @@ evalsi source apply -f studio-mlflow.yaml --server $URL
 kubectl apply -f studio-mlflow.yaml                                  # with the operator
 ```
 
-`locations` is a list of MLflow experiments (names or IDs), one Phoenix project, or at most one Langfuse environment. The same file works with `kubectl apply`: the operator applies it through the API, `kubectl apply` is refused for anything the API would refuse (an unlisted host, an ungranted credential), and `kubectl get tracesources` shows phase, pulled and scored counts and the watermark. Only namespace admins may create TraceSources (the `admin` role), not editors.
+`locations` is a list of MLflow experiments (names or IDs), one Phoenix project, or at most one Langfuse environment. The same file works with `kubectl apply`: the operator applies it through the API, `kubectl apply` is refused for anything the API would refuse (an unlisted host, an ungranted credential), and `kubectl get tracesources` shows phase, pulled and scored counts and the watermark. Only namespace admins may create TraceSources (the `admin` role), not editors. A source and the policies it names can be applied together (one `kubectl apply`, or a GitOps sync): a policy the API does not have yet is not a refusal, so the source is admitted with a warning and syncs as soon as its policy does. With `evalsi source apply` and the API, a policy that does not exist is `NotFound`.
 
 A policy for the pulled traces selects on their labels:
 

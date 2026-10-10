@@ -50,6 +50,9 @@ type Options struct {
 	HTTPClient *http.Client
 	// Called with each evaluated trace's results (for sinks); must not block.
 	OnResults func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult)
+	// Called when a policy's alert starts or stops firing, with the body its
+	// own alert webhook receives (for the WebhookService's alert events).
+	OnAlert func(project, policy string, firing bool, body []byte)
 }
 
 type item struct {
@@ -264,16 +267,7 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 		if info.Project == "" {
 			info.Project = DefaultProject
 		}
-		summary := &evalsiv1alpha1.TraceSummary{
-			Project: info.Project, Labels: info.Labels,
-			TraceId: record.GetId(), Service: info.Service, Name: info.Name,
-			Duration: durationpb.New(time.Duration(info.DurationMS * float64(time.Millisecond))),
-			Error:    info.Error, Steps: int32(info.Steps),
-		}
-		if steps := record.GetTrajectory().GetSteps(); len(steps) > 0 {
-			summary.StartTime = steps[0].GetStartTime()
-		}
-		writes = append(writes, store.TraceWrite{Summary: summary, Record: record})
+		writes = append(writes, store.TraceWrite{Summary: Summary(record, info), Record: record})
 		items = append(items, item{record: record, info: info, only: only})
 	}
 	e.TracesIngested.Add(int64(len(traces)))
@@ -562,6 +556,7 @@ type alertEvent struct {
 	Above   *float64  `json:"above,omitempty"`
 	At      time.Time `json:"at"`
 	webhook string
+	project string
 }
 
 func (e *Engine) checkAlertsLocked(st *policyState, now time.Time) []alertEvent {
@@ -583,7 +578,7 @@ func (e *Engine) checkAlertsLocked(st *policyState, now time.Time) []alertEvent 
 		as.Firing, as.Since = firing, timestamppb.New(now)
 		out = append(out, alertEvent{
 			Policy: st.c.policy.GetName(), Metric: a.GetMetric(), Firing: firing, Mean: *mean, N: n,
-			Below: a.Below, Above: a.Above, At: now, webhook: a.GetWebhook(),
+			Below: a.Below, Above: a.Above, At: now, webhook: a.GetWebhook(), project: st.c.policy.GetProject(),
 		})
 	}
 	return out
@@ -591,10 +586,13 @@ func (e *Engine) checkAlertsLocked(st *policyState, now time.Time) []alertEvent 
 
 func (e *Engine) notify(ev alertEvent) {
 	e.log.Warn("alert", "policy", ev.Policy, "metric", ev.Metric, "firing", ev.Firing, "mean", ev.Mean, "n", ev.N)
+	body, _ := json.Marshal(ev)
+	if e.opts.OnAlert != nil {
+		e.opts.OnAlert(ev.project, ev.Policy, ev.Firing, body)
+	}
 	if ev.webhook == "" {
 		return
 	}
-	body, _ := json.Marshal(ev)
 	resp, err := e.opts.HTTPClient.Post(ev.webhook, "application/json", bytes.NewReader(body))
 	if err != nil {
 		e.log.Error("alert webhook failed", "url", ev.webhook, "err", err)
@@ -701,4 +699,19 @@ func (e *Engine) Delete(ctx context.Context, name string) error {
 		e.opts.Changed()
 	}
 	return nil
+}
+
+// Summary is the stored summary of a trace: what ListTraces returns, and what
+// a trace.scored webhook carries.
+func Summary(record *evalsiv1alpha1.Record, info ingest.TraceInfo) *evalsiv1alpha1.TraceSummary {
+	summary := &evalsiv1alpha1.TraceSummary{
+		Project: info.Project, Labels: info.Labels,
+		TraceId: record.GetId(), Service: info.Service, Name: info.Name,
+		Duration: durationpb.New(time.Duration(info.DurationMS * float64(time.Millisecond))),
+		Error:    info.Error, Steps: int32(info.Steps),
+	}
+	if steps := record.GetTrajectory().GetSteps(); len(steps) > 0 {
+		summary.StartTime = steps[0].GetStartTime()
+	}
+	return summary
 }
