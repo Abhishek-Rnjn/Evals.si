@@ -32,7 +32,7 @@ export default function ArchitectureBeams() {
   const inputs = [
     { label: "Your agent or harness", el: <Bot className={icon} /> },
     { label: "agentgateway", el: <Network className={icon} /> },
-    { label: "OpenTelemetry traces", el: <Activity className={icon} /> },
+    { label: "OTel traces and trace stores", el: <Activity className={icon} /> },
     { label: "CI pipelines", el: <GitPullRequest className={icon} /> },
   ];
   const outputs = [

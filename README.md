@@ -1,40 +1,38 @@
+<div align="center">
+
 # Evals.si
-A highly scalable and pluggable evaluations repository that works with all environments to provide an unified experience for all your evaluation tasks
 
-One entrypoint for evaluating classic ML models, LLMs, RAG systems, agents (offline and online) and fine-tuning/RL checkpoints:
+**One entrypoint to evaluate classic ML models, LLMs, RAG systems, agents and RL checkpoints, offline and online.**
 
-- **Score / Run / Watch**: grade outputs you already have, execute a target on a dataset, or continuously evaluate live OpenTelemetry traces.
-- **Pluggable**: existing frameworks (lm-evaluation-harness, Inspect AI, RAGAS, DeepEval, SWE-bench, τ-bench, …) plug in as isolated adapters.
-- **Standalone or Kubernetes**: a single binary, or Helm charts and an operator with CRDs; gRPC, HTTP and MCP APIs, and a read-only web UI.
-- **Sandboxed execution**: Firecracker microVMs where available, otherwise bubblewrap or Landlock, otherwise hardened Kubernetes pods; always fails closed.
-- **Runs in your environment**: self-hosted and air-gappable, with bring-your-own models, storage, identity and secrets.
+Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
 
-> **Status:** Phases 0 to 6 of the roadmap are done. The server runs standalone or on Kubernetes and covers three doors, plus rewards for RL:
->
-> - **Score:** grade outputs you already have.
-> - **Run:** durable, resumable runs with trials, gates and budgets. That includes agent runs, which put the built-in agent or your own agent to work on sandboxed tasks.
-> - **Watch:** online evaluation of OpenTelemetry traces.
-> - **Reward:** evaluators as RL rewards for TRL, verl and OpenRLHF, in-process or from the server's Reward Service, with sandboxed code execution and a per-component breakdown; and evaluation of every training checkpoint against the base model.
->
-> Around them are:
->
-> - evaluator packs and framework adapters;
-> - benchmark adapters for SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL;
-> - a fail-closed sandbox ladder (Firecracker, bubblewrap, Landlock);
-> - MLflow and OTel sinks;
-> - identity and access: OIDC/JWT and API keys, project-scoped RBAC with custom roles, agentgateway-style CEL rules, and an audit log;
-> - MCP for coding agents (`evalsi mcp` locally, `/mcp` on the server), classic ML and monitoring packs, human annotation queues, inline guardrails through agentgateway, Wasm evaluator plugins with a plugin index, and a read-only web UI;
-> - Kubernetes: an operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator` and `SandboxClass`, Helm charts, PostgreSQL/ClickHouse/S3 storage, NATS work queues with KEDA scaling, HA replicas, sandbox pools (bubblewrap, Firecracker, hardened pods), service-account identity and an air-gapped bundle.
->
-> The Kubernetes form factor is tested end to end on a kind cluster in CI, installed from the air-gapped bundle, and a load test meets the scale targets it was run against ([results](docs/DESIGN.md#23-roadmap)). It has also been verified on real clusters: AKS, and an Istio ambient cluster with STRICT mTLS and KVM nodes, where the Firecracker rung ran in microVMs. Most findings are fixed; the [verification report](docs/verification/README.md) lists what is still open.
->
-> **Next:** the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. They cover pull connectors for MLflow, Langfuse and Phoenix (built: [trace sources](docs/guides/trace-sources.md) read a store's traces, score them and write the scores back), a remote `Client.evaluate()`, webhooks, a signed release, and reference demos that evaluate Deep Agents and DeepSeek Harness agents (built: [`examples/demo`](examples/demo/README.md), and the [integration guide](docs/guides/integrate-an-agent-studio.md)). The [implementation brief](docs/IMPLEMENTATION-PROMPT.md) scopes the next phase.
->
+[![CI](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml)
+[![Docs](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/website.yml/badge.svg)](https://abhishek-rnjn.github.io/Evals.si/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8.svg)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)
 
-> New here? Start with the [end-to-end guide](docs/guides/end-to-end.md): every feature, the integrations, and copy-paste pull request workflows.
+[Documentation](https://abhishek-rnjn.github.io/Evals.si/) ·
+[Quickstart](#quickstart) ·
+[Guides](#documentation) ·
+[Examples](examples/) ·
+[Roadmap](docs/LEFTOVERS.md)
 
-> See the [architecture and implementation plan](docs/DESIGN.md), the [decision records](docs/decisions/README.md), the [open leftovers](docs/LEFTOVERS.md), the [product requirements for customer Kubernetes integration](docs/PRD.md) and the [verification report](docs/verification/README.md). Agents working on this repository should start with [AGENTS.md](AGENTS.md).
+</div>
 
+---
+
+Evals.si grades outputs you already have, runs a model or an agent on a dataset and gates on the result, and scores live agent traffic as it happens. The same evaluators work in every mode, so a metric means the same thing in CI, in production and in training.
+
+## Highlights
+
+- **Four ways in.** **Score** outputs you have, **Run** a target (model, RAG pipeline or agent) on a dataset with trials, gates and budgets, **Watch** live traces with online policies, and **Reward** RL training with the same evaluators.
+- **Agents, offline and online.** Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. Score production traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK, each tested against recorded traces.
+- **Works with your trace store.** Push OpenTelemetry (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or let a trace source read MLflow, Phoenix or Langfuse, score the traces and write the scores back where your team already looks.
+- **Pluggable.** lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as isolated adapters; your own evaluators are Python functions or sandboxed Wasm modules.
+- **Honest numbers.** Every mean has a confidence interval. Records an evaluator can't judge are skipped, never scored as zero, and evaluator failures are errors. There is no default judge, so nothing is billed by surprise.
+- **Fails closed.** Untrusted code runs in Firecracker microVMs where available, else bubblewrap or Landlock, else hardened pods, and never with weaker isolation than asked.
+- **Runs in your environment.** A single binary, or Helm charts and an operator with CRDs. Self-hosted and air-gappable, with your own models, storage, identity and secrets.
 
 ## Quickstart
 
@@ -55,11 +53,11 @@ numeric-match  3  0.667    [0.208, 0.939]            3       0
 latency        6  517.500  [276.409, 758.591]        0       0
 ```
 
-Records that lack what an evaluator needs (here, a numeric reference) are **skipped**, never scored as zero. Failures in the evaluator or judge are reported as **errors** and excluded from the metrics. Every mean comes with a confidence interval. Use `--cluster-by <metadata key>` when records are correlated.
+Records that lack what an evaluator needs (here, a numeric reference) are **skipped**, never scored as zero. Failures in the evaluator or judge are reported as **errors** and excluded from the metrics. Use `--cluster-by <metadata key>` when records are correlated.
 
-### With a judge model
+### Add a judge
 
-There is no default judge, so nothing is billed by surprise. Configure one explicitly:
+There is no default judge. Configure one explicitly:
 
 ```bash
 # Any OpenAI-compatible server: vLLM, Ollama, LiteLLM, an AI gateway, OpenAI itself
@@ -90,76 +88,32 @@ result.save("results.json")   # manifest, summaries and every per-record result
 
 `evalsi catalog` lists every installed evaluator and its params.
 
-### As a server (gRPC and HTTP)
+### As a server
 
-`evalsid` serves the same evaluators over gRPC, gRPC-Web and HTTP/JSON on one port. It runs the Python evaluators in a supervised worker process.
+`evalsid` serves the same evaluators over gRPC, gRPC-Web, HTTP/JSON and REST on one port, and runs the Python evaluators in a supervised worker.
 
 ```bash
 go build -o bin/evalsid ./cmd/evalsid        # from the repository root
-cd python && uv sync --all-packages          # installs evalsi[server] into python/.venv
+cd python && uv sync --all-packages
 EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/server/evalsi.yaml
 ```
-
-**Authentication is optional.**
-
-- **Loopback, no `auth` section.** On `127.0.0.1` with no `auth` section the server runs without authentication, as the log says. That is fine on a laptop.
-- **Any other address** needs authentication, unless you switch it off explicitly.
-- **To switch it off for development or testing,** even with an `auth` section in the config, use one of:
-  - `evalsi serve --no-auth`;
-  - `evalsid serve --no-auth`;
-  - `EVALSID_NO_AUTH=1` (convenient in containers);
-  - `auth: {mode: none}` in the file.
-
-  With any of these, every caller is treated as an owner and the server logs a warning at startup. The rest of your auth, roles and rules stay in the config, unenforced, so removing the switch restores them.
-
-To try access control, see [Try access control locally](#try-access-control-locally).
-
-The example's default judge is Claude: export `ANTHROPIC_API_KEY` before starting the server for `llm-judge` to work. Without it, `exact-match` still scores and `llm-judge` reports an error, never a zero. To use a local OpenAI-compatible model instead, edit the `local` judge in the config.
-
-```bash
-# HTTP/JSON
-curl -s localhost:8080/evalsi.v1alpha1.EvaluationService/Evaluate -H 'content-type: application/json' -d '{
-  "records": [{"output": {"text": "Paris"}, "reference": {"text": "Paris"}},
-              {"output": {"text": "Lyon"},  "reference": {"text": "Paris"}}],
-  "evaluators": [{"ref": "exact-match"}, {"ref": "llm-judge", "params": {"rubric": "correctness"}}]
-}'
-
-# gRPC (reflection is on)
-grpcurl -plaintext localhost:8080 list
-grpcurl -plaintext localhost:8080 evalsi.v1alpha1.CatalogService/ListEvaluators
-```
-
-Large jobs use `EvaluationService/EvaluateStream`: send a config message, then records, and receive results as they finish, followed by the summaries. Intervals match the embedded library exactly, bootstrap included. `GET /healthz` reports whether the worker is up.
-
-From Python, `Client.evaluate()` runs the same call and returns the same `EvalResult` as in-process `evalsi.evaluate()`, with the server's scores and intervals (a parity test checks this against a real `evalsid`):
 
 ```python
 from evalsi.client import Client
 
-with Client("http://localhost:8080") as client:                # API key from EVALSI_API_KEY
-    result = client.evaluate("qa.jsonl", ["exact-match", "numeric-match"])
-    print(result.table())
-    # result = await client.evaluate_async(...)                  # without blocking the event loop
-    for r in client.evaluate_stream("qa.jsonl", ["exact-match"]):  # results as they finish
-        print(r.record_id, r.outcome)                            # needs: pip install 'evalsi[grpc]'
+with Client("http://localhost:8080") as client:          # API key from EVALSI_API_KEY
+    print(client.evaluate("qa.jsonl", ["exact-match"]).table())
 ```
 
-Evaluators run on the server, so name ones it has; a judge evaluator needs `judge="<name of a server judge>"`.
+`Client.evaluate()` returns the same result as in-process `evalsi.evaluate()`, intervals included; `evaluate_async()` and `evaluate_stream()` (with `evalsi[grpc]`) don't block. REST lives under `/v1alpha1` (`POST /v1alpha1/evaluate`, `POST /v1alpha1/runs`, `GET /v1alpha1/traces/{trace_id}`, …; the full list is in `internal/server/rest.go`), and gRPC reflection is on.
 
-The same services answer plain REST under `/v1alpha1`, for example:
+On loopback with no `auth` section the server runs without authentication; on any other address it requires it unless you pass `--no-auth`. The example's judge is Claude: export `ANTHROPIC_API_KEY` first, or `llm-judge` reports errors (never zeros). To try API keys, roles and the audit log locally, use [`examples/auth/local.yaml`](examples/auth/local.yaml) and the [identity guide](docs/guides/identity.md).
 
-- `POST /v1alpha1/evaluate`
-- `GET /v1alpha1/evaluators`
-- `POST /v1alpha1/runs`, `GET /v1alpha1/runs/{id}`, `POST /v1alpha1/runs/{id}:cancel`
-- `GET /v1alpha1/runs/{id}/results`
-- `POST /v1alpha1/policies`, `GET /v1alpha1/traces/{trace_id}`
-- `GET /v1alpha1/whoami`, `POST /v1alpha1/apikeys`, `GET /v1alpha1/audit`
+## A tour
 
-The full list is in `internal/server/rest.go`.
+### Runs and CI gates
 
-### Runs: execute a target, gate on the result
-
-A run spec generates outputs from a target (an OpenAI-compatible server such as vLLM, or Claude), scores them, and checks gates. The same file runs embedded or on a server:
+A run spec generates outputs from a target, scores them and checks gates. The same file runs embedded, on a server, or as a Kubernetes `EvalRun`:
 
 ```bash
 uv run evalsi run -f ../examples/runs/capitals.yaml                               # embedded
@@ -167,49 +121,39 @@ uv run evalsi run -f ../examples/runs/capitals.yaml --server http://localhost:80
 uv run evalsi compare --server http://localhost:8080 <baseline-run> <candidate-run>
 ```
 
-- **Trials.** `trials: 3` adds pass@3 and pass^3.
-- **Gates.** They fail the command with exit code 3, which makes them usable in CI.
-- **Budgets.** They cap target and judge tokens.
-- **Durable server runs.** Runs on a server are stored and can be watched, cancelled and resumed. A run interrupted by a restart resumes without redoing finished work.
+`trials: 3` adds pass@3 and pass^3, gates fail the command with exit code 3 (so CI fails), and budgets cap tokens. Server runs are durable: a run interrupted by a restart resumes without redoing finished work. A project can subscribe to signed [webhooks](docs/guides/webhooks.md) for finished runs and failed gates. See [`examples/ci`](examples/ci/) for a pull-request gate.
 
-### Agent runs: put an agent to work on sandboxed tasks
+### Agent runs on sandboxed tasks
 
-An agent run gives each task its own environment: an OCI image, files, setup, and a sandbox policy. The agent works in it, a checker grades the end state, and evaluators score the trajectory and the agent's diff. The agent is either the built-in tool-calling agent on any model, or your own over A2A, MCP, an OpenAI Responses-compatible API or HTTP, or as a CLI run inside the sandbox.
+Each task gets its own environment: an OCI image, files, setup and a sandbox policy. The agent works in it, a checker grades the end state, and evaluators score the trajectory and the diff.
 
 ```bash
-uv run evalsi run -f ../examples/agents/fix-calc.yaml --judge-provider anthropic --judge-model claude-opus-5-5
 uv run evalsi run -f ../examples/agents/swebench-verified.yaml --server http://localhost:8080
 uv run evalsi promote <run> --dataset regressions --when 'scores["task-success"] < 1' --server http://localhost:8080
 ```
 
-- **The harness.** Sandbox and MCP tools, mocks and fault injection, budgets, a simulated user, and record and replay with branching.
-- **Grading.** `task-success` with pass@k and pass^k; `code-quality`, a judge review of the agent's diff; `policy-violations`, from sandbox denials and refused egress.
-- **Benchmarks.** `swebench://`, `taubench://`, `harbor://`, `terminal-bench://` and `bfcl://` datasets, each graded by the benchmark's own code.
-- **Sandbox ladder.** Firecracker microVMs where `/dev/kvm` exists, otherwise bubblewrap or Landlock, with the same scoring on every rung.
-- **From production to regression tests.** Failed results and production traces become datasets, and shadow replay compares a candidate against recorded behavior.
+`swebench://`, `taubench://`, `harbor://`, `terminal-bench://` and `bfcl://` datasets are graded by each benchmark's own code. The harness adds MCP tools, mocks and fault injection, a simulated user, and record and replay. See the [agent runs guide](docs/guides/agent-runs.md).
 
-See the [agent runs guide](docs/guides/agent-runs.md).
+### Online evaluation of live agents
 
-### Watch: evaluate live agent traces
-
-Point any OpenTelemetry-instrumented app or agent (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or agentgateway, at the server's OTLP endpoint. LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK are tested against traces recorded from each; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup for each one. Then apply a policy:
+Send traces to the server's OTLP endpoint, or read them from where they already are, then apply a policy: a CEL selector, deterministic sampling, cascades (the judge runs only after cheap checks pass), windowed alerts, and promotion of bad traces into datasets.
 
 ```bash
 uv run evalsi policy apply -f ../examples/watch/support-policy.yaml --server http://localhost:8080
-uv run evalsi policy stats support-agent --server http://localhost:8080
+uv run evalsi source apply -f ../examples/sources/studio-mlflow.yaml --server http://localhost:8080
 ```
 
-A policy has these parts:
+| Framework | Tested instrumentations |
+|---|---|
+| LangGraph / LangChain | OpenInference, LangSmith's OTel export, MLflow autolog |
+| CrewAI | MLflow autolog, OpenInference, OpenLLMetry |
+| OpenAI Agents SDK | OpenInference, OpenLLMetry |
+| LlamaIndex | OpenInference |
+| Claude Agent SDK | OpenInference, Claude Code's own traces |
 
-- a CEL selector;
-- deterministic sampling;
-- cascades, so the judge runs only after cheap checks pass;
-- windowed alerts with webhooks;
-- promotion of interesting traces into datasets.
+Each row is a real run of the framework, checked in and tested; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup and what each instrumentation records. [Trace sources](docs/guides/trace-sources.md) read MLflow, Phoenix or Langfuse (history included), score the traces, and write the scores back as MLflow assessments, Phoenix annotations or Langfuse scores (Langfuse is built from its API spec and not yet run against a server). To add Evals.si to an agent platform, follow the [integration guide](docs/guides/integrate-an-agent-studio.md) and the [reference demos](examples/demo/README.md), which evaluate Deep Agents and DeepSeek Harness agents end to end.
 
-### Evaluators, adapters and the sandbox
-
-`evalsi catalog` lists what is installed. The built-in packs are:
+### Evaluators and adapters
 
 | Pack | Evaluators |
 |---|---|
@@ -218,113 +162,16 @@ A policy has these parts:
 | `text` | BLEU, corpus BLEU, ROUGE-1/2/L, chrF, token F1 |
 | `rag` | faithfulness, answer relevance, context precision and recall, citation accuracy |
 | `safety` | PII, secret and canary leaks; refusal; harmlessness |
-| `agent` | tool-call accuracy, trajectory match, tool errors, loop detection, step budget, goal completion; for agent runs, task success (pass@k, pass^k), code quality, policy violations, efficiency |
+| `agent` | tool-call accuracy, trajectory match, tool errors, loop detection, step budget, goal completion; task success (pass@k, pass^k), code quality, policy violations, efficiency |
 | `code` | unit tests run in the sandbox, Python syntax |
 | `rl` | verifiers for RL rewards: format, math answers, sandboxed code tests, overlong penalty, reward models |
 | `finetune` | diversity, calibration, contamination, reward hacking |
-| `ml-classic` | classification (accuracy, macro and micro F1, ROC-AUC, PR-AUC, log-loss, calibration), regression (MAE, MSE, RMSE, R², MAPE), ranking (NDCG, MRR, MAP, recall@k) |
-| `ml-monitoring` | drift (PSI, KS, Jensen-Shannon), data quality against a schema, group fairness (demographic parity, equal opportunity, equalized odds) |
+| `ml-classic` | classification, regression and ranking metrics |
+| `ml-monitoring` | drift (PSI, KS, Jensen-Shannon), data quality, group fairness |
 
-**Framework adapters.** DeepEval, RAGAS, Inspect AI and lm-evaluation-harness live in [`python/adapters`](python/adapters/README.md), as do the SWE-bench, τ-bench and BFCL benchmark adapters. Each has its own pinned environment, and judge calls go through your configured judge.
+DeepEval, RAGAS, Inspect AI and lm-evaluation-harness, and the SWE-bench, τ-bench and BFCL benchmarks, live in [`python/adapters`](python/adapters/README.md), each in its own pinned environment. Community evaluators can be [Wasm modules](docs/guides/plugins.md) with no filesystem, network or clock, installed from a plugin index.
 
-**Sandbox for code evaluators.** Code evaluators run untrusted code under the strongest rung that works on the host:
-
-- **Firecracker (vm):** a microVM per sandbox where `/dev/kvm` is usable.
-- **bubblewrap (namespaced):** no network, a read-only system root, seccomp and resource limits.
-- **Landlock (confined):** the fallback when bubblewrap is unavailable.
-
-On Kubernetes, workers never run sandboxes themselves: they lease them over mutual TLS from a sandbox pool (`evalsi-sandboxd` with bubblewrap or Firecracker), or from a `SandboxClass` on the **hardened pod** rung, one locked-down pod per sandbox.
-
-The sandbox fails closed: when no rung works, it never runs code unconfined. Check what works on a host with:
-
-```bash
-evalsid sandbox probe
-```
-
-**Sinks.** Finished runs and online scores can be exported:
-
-- **MLflow:** runs become MLflow runs, and online scores can be written back as assessments on MLflow traces.
-- **OpenTelemetry:** scores become `gen_ai.evaluation.result` events linked to the evaluated trace.
-
-See the `sinks` section of [`examples/server/evalsi.yaml`](examples/server/evalsi.yaml).
-
-### Identity and access
-
-A server on a non-loopback address must authenticate. It accepts:
-
-- **API keys** (`evalsid auth new-key`);
-- **tokens from your OIDC provider:** Keycloak, Entra ID, Okta, Auth0, Google and others;
-- **GitHub Actions OIDC tokens**, with no stored secret;
-- **client certificates.**
-
-Access is granted per project:
-
-- **Built-in roles:** viewer, runner, editor, admin, ingest and owner.
-- **Custom roles** built from the permission list, optionally limited by CEL conditions such as allowed models or labels.
-- **Global rules** in agentgateway's `allow`, `deny` and `require` form.
-
-```bash
-evalsi login --server https://evals.example.com      # device code; --browser for PKCE
-evalsi whoami --server https://evals.example.com
-evalsi auth keys create ci --role support=runner --ttl 90d --server https://evals.example.com
-evalsi auth audit --denied --server https://evals.example.com
-evalsid auth check --config evalsi.yaml --api-key "$KEY" --action runs.create --project support
-```
-
-Scripts and CI use `EVALSI_API_KEY` or `EVALSI_TOKEN` (or `EVALSI_TOKEN_FILE`, for a projected Kubernetes service-account token); GitHub Actions jobs set `EVALSI_OIDC_AUDIENCE`. On Kubernetes, the cluster's service-account tokens work as one more OIDC provider, and components talk to each other over mutual TLS. See the [setup guide](docs/guides/identity.md) and [`examples/auth/evalsi.yaml`](examples/auth/evalsi.yaml).
-
-#### Try access control locally
-
-[`examples/auth/local.yaml`](examples/auth/local.yaml) needs no identity provider or TLS. It uses API keys only, listens on loopback only, and has one project (`demo`) and a custom role (`prompt-engineer`, limited to some models).
-
-1. Create your owner key, and put its hash in the config. The server refuses to start while the placeholder is there.
-
-   ```bash
-   go build -o bin/evalsid ./cmd/evalsid
-   bin/evalsid auth new-key
-   # key:  evk_...          <- keep this; it is shown once
-   # hash: sha256:...       <- paste over the placeholder in examples/auth/local.yaml
-   ```
-
-2. Start the server.
-
-   ```bash
-   cd python && uv sync --all-packages
-   EVALSID=../bin/evalsid uv run evalsi serve --config ../examples/auth/local.yaml
-   ```
-
-3. In another terminal, from `python/`, use it.
-
-   ```bash
-   export EVALSI_SERVER=http://127.0.0.1:8080
-   uv run evalsi whoami                                   # unauthenticated: rejected
-   export EVALSI_API_KEY=evk_...                          # your owner key
-   uv run evalsi whoami                                   # key:me, owner
-
-   # Issue a key for someone else, scoped to one project and role.
-   uv run evalsi auth keys create alice --role demo=prompt-engineer
-   EVALSI_API_KEY=evk_<alice's key> uv run evalsi whoami                        # prompt-engineer in demo
-   EVALSI_API_KEY=evk_<alice's key> uv run evalsi auth projects create other    # permission_denied
-
-   uv run evalsi auth audit --denied                      # alice's denied call, and why
-   ../bin/evalsid auth check --config ../examples/auth/local.yaml --api-key evk_<alice's key> \
-     --action runs.create --project demo --resource '{"target":{"model":"gpt-5"}}'   # deny: model not allowed
-   ```
-
-Delete `python/.evalsi-auth-demo` to start over. To use the same config without access control for a while, add `--no-auth` to the `serve` command.
-
-### On Kubernetes
-
-The same run and policy files apply as resources; the operator runs them through the API and writes their state back. What you get:
-
-- **Resources:** `EvalRun`, `OnlineEvalPolicy`, `Evaluator` (a KEDA-scaled worker pool) and `SandboxClass` (a sandbox pool), validated on admission with the CLI's rules and stamped with their creator (`evals.si/created-by`).
-- **Charts:** the namespace-scoped `evalsi`, plus the cluster-scoped `evalsi-crds` (CRDs, webhooks, aggregated roles) and `evalsi-sandboxd` (the sandbox pool).
-- **Storage:** PostgreSQL for metadata and results, ClickHouse for traces at volume, S3-compatible storage for datasets; TLS and client certificates on each.
-- **High availability:** several API replicas share the database; leases decide which replica schedules runs and runs the policy engine, and a replica adopts a stopped one's runs. Work goes to pools over NATS JetStream.
-- **Air-gapped installs:** `deploy/airgap/bundle.sh` packs every image, the charts and optionally the CLI wheels; `install.sh` loads them into your registry and installs.
-- **No cluster-admin needed:** on clusters with strict RBAC, a namespace admin can install the `evalsi` chart alone (`-f deploy/helm/evalsi/values-namespaced.yaml`). Nothing is cluster-scoped, every pod passes Pod Security `restricted`, and sandboxes run on the chart's own pod-rung or Landlock pool. Runs then go through the CLI and API instead of `kubectl apply`.
-
-See the [Kubernetes guide](docs/guides/kubernetes.md) (and [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md)).
+### Kubernetes
 
 ```bash
 kubectl create namespace evalsi
@@ -334,99 +181,83 @@ kubectl apply -n evalsi -f examples/runs/capitals.yaml
 kubectl get evalruns -n evalsi      # PHASE, RUN, DONE, TOTAL
 ```
 
-### Reports, dashboards and sinks
+An operator with `EvalRun`, `OnlineEvalPolicy`, `TraceSource`, `Evaluator` and `SandboxClass` resources, validated on admission. Also included:
+- PostgreSQL, ClickHouse and S3 storage;
+- NATS work queues with KEDA scaling;
+- HA replicas, sandbox pools, service-account identity;
+- an air-gapped bundle;
+- a namespace-only install for clusters without cluster-admin.
 
-```bash
-uv run evalsi eval --data qa.jsonl --evaluators exact-match --output results.json
-uv run evalsi report results.json -o report.html    # or .md; --server URL RUN_ID for a server run
+See the [Kubernetes guide](docs/guides/kubernetes.md).
+
+### And more
+
+| | |
+|---|---|
+| [Identity and access](docs/guides/identity.md) | OIDC (Keycloak, Entra ID, Okta, …), API keys, GitHub Actions OIDC, client certificates; project RBAC with custom roles, CEL rules and an audit log |
+| [Inline guardrails](docs/guides/guardrails.md) | Redact, evaluate and block LLM and MCP traffic in flight through agentgateway, with an audit mode |
+| [MCP for coding agents](docs/guides/mcp.md) | `evalsi mcp` lets an agent run a suite before and after its change and see what regressed |
+| [Human annotation](docs/guides/annotation.md) | Queues with rubrics, annotator agreement, and judge calibration against human labels |
+| [Fine-tuning and RL](docs/guides/fine-tuning.md) | Evaluators as rewards for TRL, verl and OpenRLHF; every checkpoint checked against the base model |
+| [Web UI](docs/guides/web-ui.md) | Runs, comparisons, policies, annotation queues, guardrails and the catalog, read through the API |
+| Reports and analytics | `evalsi report` (HTML or Markdown), `evalsi analyze` (DuckDB over runs), sinks to MLflow, OpenTelemetry, Langfuse and Phoenix, a Grafana dashboard |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph in [Inputs]
+    CLI[CLI and Python SDK]
+    CI[CI pipelines and MCP clients]
+    OTLP[OpenTelemetry traces]
+    Stores[MLflow · Phoenix · Langfuse]
+    GW[agentgateway]
+  end
+  subgraph core [evalsid]
+    API[gRPC · HTTP · REST · MCP]
+    Runs[Runs and gates]
+    Watch[Ingest and online policies]
+    Guard[Guardrails]
+  end
+  Worker[Python evaluator workers]
+  Sandbox[Sandbox ladder: Firecracker · bubblewrap · Landlock · pods]
+  Storage[(SQLite or PostgreSQL · ClickHouse · S3)]
+  Sinks[Sinks and write-back]
+  CLI --> API
+  CI --> API
+  OTLP --> Watch
+  Stores --> Watch
+  GW --> Guard
+  API --> Runs
+  Runs --> Worker
+  Watch --> Worker
+  Guard --> Worker
+  Worker --> Sandbox
+  core --> Storage
+  core --> Sinks
 ```
 
-A report has the metrics with their intervals, the gates, and the lowest-scoring records with their inputs, outputs and explanations.
+The Go server owns the API, runs, ingest, policies, auth and storage; evaluators run in Python workers (decision [0002](docs/decisions/README.md)). The protobuf API in `proto/` is the single source of truth for gRPC, REST and the CRDs. Read the [architecture and implementation plan](docs/DESIGN.md) and the [decision records](docs/decisions/README.md) for the why.
 
-To analyze results across runs, `evalsi analyze` loads runs into DuckDB (`pip install 'evalsi[analytics]'`). The runs come from results files or from a server's API, filtered by project and labels. They land in three tables, `runs`, `scores` and `records`, which you can query with SQL or slice by record metadata:
+## Project status
 
-```bash
-uv run evalsi analyze slice exact-match --by category --results 'nightly-*.json'
-uv run evalsi analyze query "select model, avg(value) from scores join runs using (run_id) group by 1" \
-  --server https://evalsi.example.com --project support --label suite=nightly --db nightly.duckdb
-```
+The roadmap's phases 0 to 6 are built. The current work follows the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. Built so far:
+- the remote client;
+- webhooks;
+- the reference demos;
+- trace sources for MLflow and Phoenix (Langfuse from its API spec, not yet run against a server);
+- tested profiles for the five first-cut agent frameworks.
 
-Finished runs and online scores export to MLflow, OpenTelemetry, Langfuse and Phoenix (`sinks` in `evalsi.yaml`); a Grafana dashboard for evalsid's `/metrics` ships with the Helm chart.
+The Kubernetes form factor is tested on kind in CI and was verified on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). No release has been tagged yet. [LEFTOVERS](docs/LEFTOVERS.md) lists what is deferred or not yet verified.
 
-### MCP: coding agents check their own changes
+## Documentation
 
-`evalsi mcp` serves your evaluation suites to a coding agent over MCP (stdio). The agent runs a suite, makes its change, runs it again, and gets back whether any metric regressed significantly and whether the gates still pass. evalsid serves the same tools at `/mcp`, behind the MCP authorization specification.
-
-```json
-{"mcpServers": {"evalsi": {"command": "evalsi", "args": ["mcp"]}}}
-```
-
-See the [MCP guide](docs/guides/mcp.md).
-
-### Plugins and Wasm evaluators
-
-`evalsi plugins search|show|install` reads a plugin index (the default lists the native packs and the framework adapters). A plugin's tier (native, wrapped or community) shows in the catalog. Community evaluators can be WebAssembly modules that evalsid runs with no filesystem, network or clock, under memory and time caps, pinned by sha256. Untrusted evaluators therefore need no sandbox, and they score identically in Python and on a server.
-
-```bash
-GOOS=wasip1 GOARCH=wasm go build -o text-checks.wasm ./examples/wasm/text-checks
-evalsid wasm pin examples/wasm/text-checks/evalsi-plugin.yaml
-evalsi plugins install examples/wasm/text-checks/evalsi-plugin.yaml
-evalsi eval --data answers.jsonl --evaluators example/json-valid,example/word-limit
-```
-
-See the [plugins guide](docs/guides/plugins.md).
-
-### Web UI
-
-evalsid serves a read-only UI at `/ui/`. It shows runs (with intervals, gates and the lowest-scoring records), paired comparisons, online policies, annotation queues, guardrails and the evaluator catalog. It reads everything through the API with your credential. See the [web UI guide](docs/guides/web-ui.md).
-
-### Inline guardrails
-
-A guardrail checks content while a request is in flight, either between a client and a model or between an agent and its tools. It redacts what its rules match (e-mail addresses, card numbers, keys, your own patterns), then runs evaluators from any installed pack, then passes, masks or blocks. agentgateway calls it without plugins: LLM traffic through the prompt-guard webhook, MCP traffic through the `mcpGuardrails` remote processor (ExtMcp). Audit mode reports what a guardrail would block before you enforce it.
-
-```bash
-evalsi guardrails apply -f examples/guardrails/support.yaml --server $EVALSID
-evalsi guardrails check support-chat --project support --text "key AKIAIOSFODNN7EXAMPLE" --server $EVALSID   # exit 3: blocked
-```
-
-See the [guardrails guide](docs/guides/guardrails.md).
-
-A project can also subscribe an HTTP endpoint to run results: signed webhooks fire when a run finishes or fails a gate, with retries that survive a restart. See the [webhooks guide](docs/guides/webhooks.md).
-
-Traces an agent already sends to MLflow, Phoenix or Langfuse can be scored without a second exporter: a [trace source](docs/guides/trace-sources.md) reads them (history included), scores them with the project's online policies, and writes the scores back to the same traces, as MLflow assessments or Phoenix annotations. `evalsi source apply -f`, or `kubectl apply` of a `TraceSource`.
-
-### Human annotation
-
-Annotation queues put records in front of people, with a rubric of pass/fail, score, label and text questions. The records can be a run's results (filtered with CEL) or a dataset. evalsid summarizes the answers with intervals, measures agreement between annotators (Krippendorff's alpha), and compares the answers with the run's own metric (accuracy, Cohen's kappa, Pearson), which is how a judge gets calibrated. The `annotator` role can answer but cannot run anything.
-
-```bash
-evalsi annotate create -f examples/annotation/helpfulness.yaml --server $EVALSID
-evalsi annotate add helpfulness --project support --run $RUN_ID --when 'scores["llm-judge"] < 0.5' --server $EVALSID
-evalsi annotate start helpfulness --project support --server $EVALSID    # each annotator
-evalsi annotate stats helpfulness --project support --server $EVALSID
-```
-
-See the [annotation guide](docs/guides/annotation.md).
-
-### Fine-tuning and RL
-
-A `RewardSpec` composes evaluators into a reward: weights, gates, and a breakdown per component. The `rl` pack adds verifiers for format, math answers, sandboxed code tests and overlong penalties.
-
-```python
-from evalsi.rewards.trl import reward_funcs
-
-funcs, weights = reward_funcs("examples/finetuning/code-reward.yaml")   # server=... for the Reward Service
-trainer = GRPOTrainer(model=model, reward_funcs=funcs, args=GRPOConfig(reward_weights=weights, ...), ...)
-```
-
-Checkpoints are served (vLLM, LoRA hot-load, or an endpoint) and evaluated as they are saved, with learning curves and regression gates against the base model:
-
-```bash
-evalsi checkpoints watch out/ -f examples/finetuning/forgetting.yaml --training-run grpo-1 \
-  --serve lora --base-url http://localhost:8000/v1 --regression math-equiv:0.02
-```
-
-See the [fine-tuning and RL guide](docs/guides/fine-tuning.md) for verl, OpenRLHF, the Reward Service, and the `finetune` pack (diversity, calibration, contamination, reward hacking).
+| Start here | Guides | Reference |
+|---|---|---|
+| [Documentation site](https://abhishek-rnjn.github.io/Evals.si/) | [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
+| [End-to-end guide](docs/guides/end-to-end.md) | [Kubernetes](docs/guides/kubernetes.md) · [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md) · [Identity](docs/guides/identity.md) | [Decision records](docs/decisions/README.md) |
+| [Examples](examples/) | [Guardrails](docs/guides/guardrails.md) · [MCP](docs/guides/mcp.md) · [Plugins](docs/guides/plugins.md) · [Webhooks](docs/guides/webhooks.md) | [Product requirements](docs/PRD.md) |
+| [Integrate an agent studio](docs/guides/integrate-an-agent-studio.md) | [Annotation](docs/guides/annotation.md) · [Fine-tuning and RL](docs/guides/fine-tuning.md) · [Web UI](docs/guides/web-ui.md) | [Roadmap and leftovers](docs/LEFTOVERS.md) |
 
 ## Repository layout
 
@@ -434,18 +265,17 @@ See the [fine-tuning and RL guide](docs/guides/fine-tuning.md) for verl, OpenRLH
 |------|------|
 | `proto/` | Protobuf API, the single source of truth (`evalsi.v1alpha1`, `evalsi.plugin.v1alpha1`) |
 | `gen/go/` | Generated Go code (do not edit; run `make proto`) |
-| `cmd/evalsid/`, `internal/` | The Go daemon: API and REST routes, authentication (`auth`) and authorization (`authz`), worker supervision, runs, rewards, OTLP ingest and online policies, sandbox, sinks, statistics |
-| `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker, built-in packs, rewards for trainers (`evalsi.rewards`) and checkpoint evaluation (`evalsi.training`) |
-| `python/evalsi-harness/` | The agent harness: tool loop, agent connectors, environments and checkers, `reset`/`step` RL environments, Harbor and Terminal-Bench importers |
-| `python/adapters/` | Framework and benchmark adapters (DeepEval, RAGAS, Inspect AI, lm-eval, SWE-bench, τ-bench, BFCL), each in its own environment |
+| `cmd/evalsid/`, `internal/` | The Go server: API and REST routes, auth, runs, rewards, OTLP ingest and framework profiles, online policies, trace sources, sandbox, sinks, statistics |
+| `python/evalsi/` | Python SDK, CLI, embedded runner, evaluator worker, built-in packs, rewards (`evalsi.rewards`) and checkpoint evaluation (`evalsi.training`) |
+| `python/evalsi-harness/` | The agent harness: tool loop, agent connectors, environments and checkers, RL environments, Harbor and Terminal-Bench importers |
+| `python/adapters/` | Framework and benchmark adapters, each in its own environment |
 | `cmd/evalsi-guest/` | The init and agent inside Firecracker microVMs, and the agent in sandbox pods |
 | `cmd/evalsi-operator/`, `operator/` | The Kubernetes operator: CRD types, controllers, admission webhooks |
-| `deploy/` | Helm charts (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), the air-gapped bundle, the kind e2e; the image is the root `Dockerfile` |
-| `tests/e2e/` | evalsid against a real Python worker (`make e2e`), and the load test (`EVALSI_LOAD=1`) |
-| `tests/helm/` | The charts, rendered and their configs validated |
-| `tests/trainers/` | TRL GRPO with Evals.si rewards and checkpoint evaluation, on CPU |
-| `examples/` | Runnable examples |
-| `docs/` | Design plan, decision records and guides |
+| `deploy/` | Helm charts (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), the air-gapped bundle, the kind e2e |
+| `tests/` | End-to-end and load tests (`e2e`), chart tests (`helm`), trainer tests (`trainers`), framework trace recorders (`frameworks`) |
+| `examples/` | Runnable examples and the reference demos |
+| `docs/` | Design, decision records, requirements, guides and the verification report |
+| `website/` | The documentation site |
 
 ## Development
 
@@ -457,14 +287,21 @@ make proto   # lint, format and regenerate code after editing proto/
 make check   # everything CI runs: gofmt, go vet/test, buf lint/format, ruff, mypy, pytest
 make e2e     # evalsid against a real Python worker; EVALSI_E2E_IMAGES=1 adds tests that pull images
 make adapters-check   # each framework adapter's contract tests, in its own environment
-make operator-gen     # regenerate the CRDs and deepcopy code after editing operator/api, and copy the CRDs into the chart
+make operator-gen     # regenerate the CRDs and deepcopy code after editing operator/api
 ```
 
 For the Kubernetes pieces:
-
 - **Operator tests** run against a real API server and etcd (envtest). Install its binaries with `setup-envtest` and set `KUBEBUILDER_ASSETS`; without it, those tests skip.
 - **Chart tests** (`tests/helm`) need `helm` on the `PATH`; without it, they skip.
 - **The kind e2e** (`deploy/e2e/kind-e2e.sh`) needs Docker, kind, kubectl and helm. It builds the image, makes an air-gapped bundle and installs from it, as the CI `kubernetes` job does.
-- **The load test:** `EVALSI_LOAD=1 go test -run TestLoad -timeout 30m ./tests/e2e/`. `EVALSI_LOAD_SPANS` and `EVALSI_LOAD_RUN_RECORDS` set its sizes (the 1M-task result used `EVALSI_LOAD_RUN_RECORDS=1000000`), and `EVALSI_LOAD_CLICKHOUSE_URL` runs the trace half against ClickHouse.
+- **The load test:** `EVALSI_LOAD=1 go test -run TestLoad -timeout 30m ./tests/e2e/`. `EVALSI_LOAD_SPANS` and `EVALSI_LOAD_RUN_RECORDS` set its sizes, and `EVALSI_LOAD_CLICKHOUSE_URL` runs the trace half against ClickHouse.
 
 The sandbox tests need bubblewrap and unprivileged user namespaces. On Ubuntu 24.04, also run `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0`.
+
+## Contributing
+
+Issues and pull requests are welcome. Before you push, run what CI runs (`make check`, and `make e2e` for server and worker changes), and never skip or weaken a test to get green. Keep the guides, the [PRD](docs/PRD.md)'s status cells and [LEFTOVERS](docs/LEFTOVERS.md) true when behaviour changes, and record significant design choices as [decision records](docs/decisions/README.md). [AGENTS.md](AGENTS.md) has the full conventions, and is where coding agents working on this repository should start.
+
+## License
+
+[Apache License 2.0](LICENSE).

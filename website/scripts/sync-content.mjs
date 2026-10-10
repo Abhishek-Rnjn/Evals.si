@@ -83,13 +83,17 @@ await importDoc("docs/LEFTOVERS.md", "/docs/roadmap/", { title: "Roadmap and ope
 await importDoc("docs/decisions/README.md", "/docs/decisions/", { title: "Decision records" });
 for (const f of decisions) await importDoc(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
 
-// Get started: the README quickstart through the end of its subsections
+// Get started: the README's quickstart, then its tour of the features
 {
   const readme = await read("README.md");
-  const start = readme.indexOf("## Quickstart");
-  const next = readme.indexOf("\n## ", start + 5);
-  const body = readme.slice(start + "## Quickstart".length, next === -1 ? undefined : next);
-  const intro = "Install, grade your first outputs, then run evaluators from Python or as a server.\n";
+  const section = (h) => {
+    const start = readme.indexOf(`\n## ${h}\n`);
+    if (start === -1) throw new Error(`README.md has no "## ${h}" section`);
+    const next = readme.indexOf("\n## ", start + 4);
+    return readme.slice(start + `\n## ${h}\n`.length, next === -1 ? undefined : next);
+  };
+  const body = section("Quickstart") + "\n## A tour\n" + section("A tour");
+  const intro = "Install, grade your first outputs, run evaluators from Python or as a server, then take a tour of runs, agents and online evaluation.\n";
   let fixed = await rewriteLinks(intro + body, "README.md");
   // In-page anchors that point at README sections not imported here go to GitHub.
   const slug = (h) => h.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/\s/g, "-");
@@ -106,6 +110,8 @@ Evals.si is one entrypoint for evaluating classic ML models, LLMs, RAG systems a
 
 - [Get started](${BASE}/docs/get-started/): install and run your first evaluation in a minute.
 - [Examples](${BASE}/examples/): runnable configs for runs, agents, guardrails, fine-tuning and more.
+- [Agent frameworks](${BASE}/docs/guides/agent-frameworks/): score LangGraph, CrewAI, OpenAI Agents SDK, LlamaIndex and Claude Agent SDK traces.
+- [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.
 
 ## Guides
 
