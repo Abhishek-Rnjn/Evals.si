@@ -8,6 +8,9 @@ WORKDIR /opt/demo
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY agent.py server.py ./
+# The headless coding-agent launcher the small-repo-fix specs run as `dcode-demo`.
+COPY dcode-demo.sh /usr/local/bin/dcode-demo
+RUN chmod 755 /usr/local/bin/dcode-demo
 COPY corpus ./corpus
 # Runs as a non-root user, so it works on the pod rung and under Pod Security
 # "restricted"; the user needs a home for dcode's config.

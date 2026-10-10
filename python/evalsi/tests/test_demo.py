@@ -84,6 +84,29 @@ def test_datasets_named_by_specs_exist() -> None:
                 assert (DEMO / line.removeprefix("path: ")).exists(), f"{spec.name}: {line}"
 
 
+def test_spec_commands_are_installed_in_their_images() -> None:
+    """A spec that runs a demo image calls a command that image installs: the
+    standalone walkthrough installs the launchers by hand, so only the image
+    build can miss one."""
+    import yaml
+
+    images = {"evalsi-demo-deepagents": "deepagents", "evalsi-demo-dsh": "dsh"}
+    checked = 0
+    for spec in SPECS:
+        doc = yaml.safe_load(spec.read_text(encoding="utf-8"))["spec"]
+        image = str(doc.get("environment", {}).get("image", ""))
+        cli = doc.get("target", {}).get("agent", {}).get("cli")
+        name = image.rsplit("/", 1)[-1].split(":", 1)[0]
+        if not cli or name not in images:
+            continue
+        command = cli["command"][0]
+        dockerfile = (DEMO / images[name] / "Dockerfile").read_text(encoding="utf-8")
+        installed = f"/usr/local/bin/{command}" in dockerfile
+        assert installed, f"{spec.name}: {image} does not install {command}"
+        checked += 1
+    assert checked >= 2
+
+
 def _inlined(spec: str, marker: str) -> str:
     """The script a spec writes with `cat > ... <<'MARKER'`, with the spec's indentation removed."""
     lines = (DEMO / spec).read_text().splitlines()
