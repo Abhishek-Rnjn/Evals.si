@@ -614,7 +614,7 @@ func (e *Engine) promoteRecord(project, dataset string, record *evalsiv1alpha1.R
 	if err != nil {
 		return err
 	}
-	_, err = datasets.Append(context.Background(), e.opts.DatasetsDir, e.opts.Objects, project, dataset, [][]byte{row})
+	_, _, err = datasets.Append(context.Background(), e.opts.DatasetsDir, e.opts.Objects, project, dataset, [][]byte{row})
 	return err
 }
 

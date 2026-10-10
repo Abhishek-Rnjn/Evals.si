@@ -306,6 +306,10 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 	var rows [][]byte
 	for _, match := range matches {
 		row := proto.Clone(match.Record).(*evalsiv1alpha1.Record)
+		// Records from different runs share IDs (r0, r1, ...); a promoted
+		// record is named by its run too, so a dataset gathered from many
+		// runs stays loadable, and promoting the same run again adds nothing.
+		original := match.Record.GetId()
 		if msg.GetIncludeOutputs() {
 			if match.Produced != nil {
 				row = proto.Clone(match.Produced).(*evalsiv1alpha1.Record)
@@ -314,8 +318,9 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 			// The case to replay is the input; keep the reference, drop what this run produced.
 			row.Output, row.Trajectory, row.Check, row.Usage = nil, nil, nil, nil
 		}
+		row.Id = run.GetId() + "/" + original
 		line, err := datasets.Row(row, map[string]any{
-			"promoted_from": map[string]any{"run_id": run.GetId(), "trial": match.Trial},
+			"promoted_from": map[string]any{"run_id": run.GetId(), "trial": match.Trial, "record_id": original},
 			"run_scores":    match.Scores,
 		})
 		if err != nil {
@@ -324,12 +329,13 @@ func (m *Manager) PromoteResults(ctx context.Context, req *connect.Request[evals
 		rows = append(rows, line)
 	}
 	path := datasets.Path(run.GetProject(), msg.GetDataset())
+	added := 0
 	if len(rows) > 0 {
-		if path, err = datasets.Append(ctx, m.opts.DatasetsDir, m.opts.Objects, run.GetProject(), msg.GetDataset(), rows); err != nil {
+		if path, added, err = datasets.Append(ctx, m.opts.DatasetsDir, m.opts.Objects, run.GetProject(), msg.GetDataset(), rows); err != nil {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
 	}
-	return connect.NewResponse(&evalsiv1alpha1.PromoteResultsResponse{Promoted: int64(len(rows)), Path: path}), nil
+	return connect.NewResponse(&evalsiv1alpha1.PromoteResultsResponse{Promoted: int64(added), Path: path}), nil
 }
 
 // CreateShadowReplay creates two runs over one dataset snapshot: the
