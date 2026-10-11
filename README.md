@@ -321,7 +321,7 @@ The sandbox tests need bubblewrap and unprivileged user namespaces. On Ubuntu 24
 
 ## Contributing
 
-Issues and pull requests are welcome. Before you push, run what CI runs (`make check`, and `make e2e` for server and worker changes), and never skip or weaken a test to get green. Keep the guides, the [PRD](docs/PRD.md)'s status cells and [LEFTOVERS](docs/LEFTOVERS.md) true when behaviour changes, and record significant design choices as [decision records](docs/decisions/README.md). [AGENTS.md](AGENTS.md) has the full conventions, and is where coding agents working on this repository should start.
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) says where things live, what to run before you push and the conventions to follow. Please read the [Code of Conduct](CODE_OF_CONDUCT.md). Report security problems privately: see [SECURITY.md](SECURITY.md). [SUPPORT.md](SUPPORT.md) covers getting help, stability and what has been verified. Changes are listed in the [CHANGELOG](CHANGELOG.md).
 
 ## License
 
