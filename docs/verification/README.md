@@ -258,7 +258,7 @@ completed successfully at `ba2ceffe3907dc54df35b98321723fa9136b8fce`.
 Its `kubernetes` job ran the default `deploy/e2e/kind-e2e.sh` on
 `ubuntu-latest` (amd64), without `SKIP_LANDLOCK`: kind setup and Kubernetes
 end-to-end steps passed, including Landlock. This is CI's Linux evidence,
-not Mac Landlock certification or a new AKS/AWC run. No tags were pushed.
+not Mac Landlock certification or a new AKS run. No tags were pushed.
 
 ### Release-readiness checks
 
