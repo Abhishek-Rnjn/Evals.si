@@ -120,12 +120,18 @@ test('the UI loads under its Content-Security-Policy and every section renders',
     await page.click(`#nav a[data-section="${section}"]`);
     await page.waitForFunction(name => document.querySelector(`#nav a[data-section="${name}"]`)?.classList.contains('active'), section);
     // The nav link turns active before its view has loaded, and the page may render
-    // a view again (a project list arriving re-runs the route). Wait for the heading
-    // itself, then assert on it.
-    await page
-      .waitForFunction(([source, flags]) => new RegExp(source, flags).test(document.querySelector('#main')?.textContent ?? ''), [heading.source, heading.flags])
-      .catch(() => {});
-    assert.match(await page.textContent('#main'), heading, `section ${section}`);
+    // a view again after it showed (the first click turns an empty hash into
+    // #/runs, whose hashchange re-runs the route and shows "Loading…" again).
+    // Assert on the text the wait saw, not on a second read that can land on
+    // such a re-render.
+    const seen = await page
+      .waitForFunction(([source, flags]) => {
+        const text = document.querySelector('#main')?.textContent ?? '';
+        return new RegExp(source, flags).test(text) && text;
+      }, [heading.source, heading.flags])
+      .then(handle => handle.jsonValue())
+      .catch(() => page.textContent('#main'));
+    assert.match(seen, heading, `section ${section}`);
   }
 
   // The catalog lists the built-in evaluators and its filter narrows them.
