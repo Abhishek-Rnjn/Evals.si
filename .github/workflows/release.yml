@@ -46,6 +46,17 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
+  approve:
+    # The one manual gate before anything is pushed to a registry or released:
+    # a tag run waits here for a reviewer of the `release` environment. A dry
+    # run (workflow_dispatch) skips it and publishes nothing anyway.
+    needs: version
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - run: echo "Approved to publish ${{ needs.version.outputs.version }} from ${GITHUB_REF_NAME} at ${GITHUB_SHA}"
+
   binaries:
     needs: version
     runs-on: ubuntu-latest
@@ -105,7 +116,8 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   image:
-    needs: version
+    needs: [version, approve]
+    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -155,7 +167,8 @@ jobs:
           path: evalsi-*.spdx.json
 
   collector:
-    needs: version
+    needs: [version, approve]
+    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -190,7 +203,8 @@ jobs:
         run: cosign sign --yes "ghcr.io/${{ needs.version.outputs.owner }}/evalsi-collector@${{ steps.build.outputs.digest }}"
 
   charts:
-    needs: version
+    needs: [version, approve]
+    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

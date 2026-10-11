@@ -1,0 +1,10 @@
+# Code owners are requested for review automatically. With one maintainer,
+# every path has the same owner; split these lines when there are more.
+* @Abhishek-Rnjn
+
+# What publishes and what secures a release deserves a named owner.
+/.github/ @Abhishek-Rnjn
+/deploy/ @Abhishek-Rnjn
+/scripts/ @Abhishek-Rnjn
+/SECURITY.md @Abhishek-Rnjn
+/docs/RELEASING.md @Abhishek-Rnjn
