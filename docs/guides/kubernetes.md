@@ -134,6 +134,14 @@ On a connected machine, bundle the images and charts (and, with `--with-cli`, wh
 deploy/airgap/bundle.sh --tag 0.4.0 --out evalsi-bundle --with-cli
 ```
 
+New bundles require Docker 28+ for platform-scoped inspect, load and save.
+The default platform is `linux/amd64`; use `--platform linux/arm64` for arm64
+clusters. Build locally supplied images for that same platform. The bundle
+records it in `platform`, and the installer uses it when loading and exporting
+retagged images for kind, so unloaded variants cannot leave dangling manifest
+references. Older bundles without that file retain their previous behavior.
+The kind job selects the local Docker daemon's architecture.
+
 Across the gap, push the images to your registry and install pulling only from it:
 
 ```bash
@@ -301,6 +309,18 @@ The `kubernetes` job ([`deploy/e2e/kind-e2e.sh`](../../deploy/e2e/kind-e2e.sh)) 
 - a namespace-only install works for a user who is only `admin` of a namespace that enforces Pod Security `restricted`: it installs with no cluster-scoped object, and code evaluation and an agent run, through the CLI, pass on the chart's pod-rung pool and then on Landlock.
 
 The operator is also tested against a real API server and etcd (envtest), and the charts by rendering them and loading every `evalsi.yaml` they produce through `evalsid`'s config validation.
+
+For Docker Desktop kernels without Landlock, explicitly defer only that step:
+
+```bash
+SKIP_LANDLOCK=1 deploy/e2e/kind-e2e.sh
+```
+
+The default remains `SKIP_LANDLOCK=0`, including CI. The opt-out leaves the
+namespace-only sandbox pool on the pod rung, still runs the denied issuer
+discovery and static-key recovery checks, and prints that Landlock was deferred.
+It is not a complete Kubernetes verification. Recheck Landlock on AKS with a
+supported kernel and seccomp profile before claiming that rung verified.
 
 ## Dashboards
 

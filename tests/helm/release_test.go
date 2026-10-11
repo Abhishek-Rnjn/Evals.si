@@ -2,6 +2,9 @@ package helm
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -241,5 +244,136 @@ func TestStorageDependenciesBundledOrExternal(t *testing.T) {
 	ext := load(t, find(t, external, "ConfigMap", "evalsi"))
 	if ext.Storage.S3.Endpoint != "s3.example.com:9000" || ext.Storage.ClickHouse.URL != "http://ch.infra.svc:8123" || ext.Cluster.URL != "nats://nats.infra.svc:4222" {
 		t.Errorf("external: %+v / %+v / %s", ext.Storage.S3, ext.Storage.ClickHouse, ext.Cluster.URL)
+	}
+}
+
+func TestKindLandlockDeferral(t *testing.T) {
+	source, err := os.ReadFile("../../deploy/e2e/kind-e2e.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, block, ok := strings.Cut(string(source), "if [ \"$skip_landlock\" = 1 ]; then")
+	if !ok {
+		t.Fatal("missing explicit Landlock opt-out")
+	}
+	block, _, ok = strings.Cut(block, "step \"namespace-only: a static issuer")
+	if !ok {
+		t.Fatal("Landlock deferral must end before authentication checks")
+	}
+	for _, test := range []struct {
+		name, skip, helmExit string
+		wantError            bool
+	}{
+		{name: "default"},
+		{name: "explicit default", skip: "0"},
+		{name: "deferred", skip: "1"},
+		{name: "default failure", helmExit: "1", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("SKIP_LANDLOCK", test.skip)
+			t.Setenv("HELM_EXIT", test.helmExit)
+			probe := `set -e
+skip_landlock="${SKIP_LANDLOCK:-0}"
+work=/tmp/bundle
+here=/tmp/specs
+ns2=evalsi-restricted
+step() { printf '%s\n' "$*"; }
+helm() { printf 'helm\n'; return "${HELM_EXIT:-0}"; }
+kubectl() { printf 'kubectl\n'; }
+cli() { printf 'cli\n'; }
+want() { printf 'want %s %s\n' "$2" "$3"; }
+if [ "$skip_landlock" = 1 ]; then` + block
+			out, err := exec.Command("bash", "-c", probe).CombinedOutput()
+			if (err != nil) != test.wantError {
+				t.Fatalf("error %v, want failure %v: %s", err, test.wantError, out)
+			}
+			if test.skip == "1" {
+				if !strings.Contains(string(out), "DEFERRED: Landlock") || strings.Contains(string(out), "helm\n") || strings.Contains(string(out), "cli\n") {
+					t.Fatalf("deferred Landlock ran or was not reported: %s", out)
+				}
+			} else if !test.wantError && !strings.Contains(string(out), "want unit-tests 0.5") {
+				t.Fatalf("default omitted the Landlock scoring check: %s", out)
+			}
+		})
+	}
+}
+
+func TestAirgapBundlePlatform(t *testing.T) {
+	for _, test := range []struct {
+		name, platform, failure string
+	}{
+		{name: "default", platform: "linux/amd64"},
+		{name: "arm64", platform: "linux/arm64"},
+		{name: "missing platform", platform: "linux/arm64", failure: "inspect"},
+		{name: "export failure", platform: "linux/arm64", failure: "save"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			calls := filepath.Join(dir, "calls")
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("CALLS", calls)
+			t.Setenv("FAILURE", test.failure)
+			t.Setenv("PULL", "0")
+			mock := `#!/bin/sh
+command="${0##*/}"
+printf '%s %s\n' "$command" "$*" >> "$CALLS"
+if [ "$command" = docker ]; then
+  if [ "$FAILURE" = inspect ] && { [ "$1" = image ] || [ "$1" = pull ]; }; then exit 1; fi
+  if [ "$1" = save ]; then
+    [ "$FAILURE" != save ] || exit 1
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = -o ]; then : > "$2"; break; fi
+      shift
+    done
+  fi
+fi
+`
+			for _, name := range []string{"docker", "helm", "kind", "kubectl"} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(mock), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			bundle := filepath.Join(dir, "bundle")
+			args := []string{"../../deploy/airgap/bundle.sh", "--tag", "e2e", "--out", bundle}
+			if test.name != "default" {
+				args = append(args, "--platform", test.platform)
+			}
+			out, err := exec.Command("bash", args...).CombinedOutput()
+			if test.failure != "" {
+				if err == nil {
+					t.Fatalf("bundle accepted %s: %s", test.failure, out)
+				}
+				if _, err := os.Stat(filepath.Join(bundle, "platform")); !os.IsNotExist(err) {
+					t.Fatalf("failed export recorded a platform: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("bundle: %v\n%s", err, out)
+			}
+			platform, err := os.ReadFile(filepath.Join(bundle, "platform"))
+			if err != nil || string(platform) != test.platform+"\n" {
+				t.Fatalf("platform %q: %v", platform, err)
+			}
+			out, err = exec.Command("bash", filepath.Join(bundle, "install.sh"), "--kind", "test", "--registry", "airgap.invalid").CombinedOutput()
+			if err != nil {
+				t.Fatalf("install: %v\n%s", err, out)
+			}
+			log, err := os.ReadFile(calls)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				"docker image inspect --platform " + test.platform,
+				"docker save --platform " + test.platform + " -o " + bundle + "/images.tar",
+				"docker load --platform " + test.platform + " -q -i " + bundle + "/images.tar",
+				"docker save --platform " + test.platform + " airgap.invalid/",
+				"kind load image-archive " + bundle + "/.kind-images.tar --name test",
+			} {
+				if !strings.Contains(string(log), want) {
+					t.Errorf("missing %q:\n%s", want, log)
+				}
+			}
+		})
 	}
 }

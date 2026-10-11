@@ -81,7 +81,7 @@ func TestBootstrapJob(t *testing.T) {
 	if kept.Auth.APIKeys == nil || kept.Auth.APIKeys.Mode != "strict" {
 		t.Errorf("auth.config.api_keys was not kept: %+v", kept.Auth.APIKeys)
 	}
-	args := []string{"template", "t", filepath.Join(charts, "evalsi"), "--kube-version", "1.34.0", "--set", "auth.config.api_keys=null"}
+	args := []string{"template", "t", filepath.Join(charts, "evalsi"), "--kube-version", kubeVersion(), "--set", "auth.config.api_keys=null"}
 	for _, v := range bootstrapValues {
 		args = append(args, "--set", v)
 	}
@@ -112,7 +112,7 @@ func TestBootstrapIsOffByDefaultAndNeedsKubernetesAuth(t *testing.T) {
 			t.Errorf("%s %s rendered by default", o.Kind, o.Metadata.Name)
 		}
 	}
-	args := []string{"template", "t", charts + "/evalsi", "--kube-version", "1.34.0", "--set", "bootstrap.enabled=true", "--set", "auth.kubernetes.enabled=false"}
+	args := []string{"template", "t", charts + "/evalsi", "--kube-version", kubeVersion(), "--set", "bootstrap.enabled=true", "--set", "auth.kubernetes.enabled=false"}
 	out, err := exec.Command(helm(t), args...).CombinedOutput()
 	if err == nil || !strings.Contains(string(out), "auth.kubernetes.enabled must be on") {
 		t.Errorf("bootstrap without Kubernetes auth: %v\n%s", err, out)

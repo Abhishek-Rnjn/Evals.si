@@ -8,9 +8,16 @@ A pulled trace is an ordinary trace of the source's project. It is stored, shown
 |---|---|---|---|
 | MLflow 3.x (open source) | `POST /api/3.0/mlflow/traces/search`, spans with `batchGet` | Feedback assessments, updated in place when a score changes | MLflow 3.17.0 |
 | Arize Phoenix | `GET /v1/projects/{project}/traces`, spans by trace ID | Trace annotations with an `identifier`, which Phoenix upserts | Phoenix 20.20.0 |
-| Langfuse | `GET /api/public/v2/observations` (the real-time read path) | Scores | The pinned OpenAPI spec only: not yet run against a Langfuse server |
+| Langfuse | `GET /api/public/v2/observations` (the real-time read path) | Scores, replaced under the same ID | Self-hosted 4.56.0: [Compose and in-cluster verification](../verification/README.md#langfuse-live-recheck-2026-10-10) |
+| Databricks MLflow experiments | V3 search and trace metadata; signed HTTPS artifact download | V3 feedback assessments | Contract-tested against pinned MLflow 3.17.0 source; not live-verified |
 
-Databricks, SageMaker and Azure ML variants of MLflow are refused with "not built": their APIs differ from open-source MLflow (see [decision 0016](../decisions/0016-trace-source-connectors.md)).
+For Databricks, set `connector: mlflow`, `variant: databricks`, the workspace
+HTTPS URL, a workspace bearer token in `credentials`, and numeric experiment
+IDs in `locations`. Both workspace and signed artifact requests use the source
+host guard. Artifact requests use only the download headers returned by the
+workspace, never its bearer token, and refuse redirects. Egress must allow the
+artifact storage endpoint too. Unity Catalog, SQL warehouse tracing, experiment
+names, token acquisition/refresh, SageMaker and Azure ML remain unsupported.
 
 ## 1. Allow the store, and grant its credential
 
@@ -134,6 +141,6 @@ On Kubernetes, `networkPolicy.egress.enabled` adds an egress NetworkPolicy for t
 
 ## Not covered yet
 
-- Databricks, SageMaker and Azure ML variants of MLflow.
-- Langfuse has not been run against a server; whether a score sent again under the same ID replaces the old one is not confirmed.
+- Databricks live verification, Unity Catalog and automatic token acquisition; SageMaker and Azure ML variants.
+- Langfuse Cloud, TLS deployments, production persistence and arm64 images. Self-hosted 4.56.0 score replacement, Secret/Service pulls and enforced evalsid egress passed the recorded in-cluster check.
 - LangSmith, ClickHouse, Tempo and Kafka sources (milestone M5).

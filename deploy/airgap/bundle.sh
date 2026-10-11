@@ -5,7 +5,7 @@
 #   deploy/airgap/bundle.sh --tag 0.4.0 --out evalsi-bundle
 #   tar czf evalsi-bundle.tgz evalsi-bundle      # carry it across
 #
-# Needs docker and helm (and uv for --with-cli). EXTRA_IMAGES adds images
+# Needs Docker 28+ and helm (and uv for --with-cli). EXTRA_IMAGES adds images
 # (sandbox images your tasks name, for example), space-separated.
 set -euo pipefail
 
@@ -44,13 +44,14 @@ mkdir -p "$out/charts"
 : > "$out/images.txt"
 for img in "${images[@]}"; do
   # A locally built image (no registry to pull from) is used as is.
-  if ! docker image inspect "$img" >/dev/null 2>&1 || [ "${PULL:-1}" = 1 ]; then
-    docker pull --platform "$platform" "$img" || docker image inspect "$img" >/dev/null
+  if ! docker image inspect --platform "$platform" "$img" >/dev/null 2>&1 || [ "${PULL:-1}" = 1 ]; then
+    docker pull --platform "$platform" "$img" || docker image inspect --platform "$platform" "$img" >/dev/null
   fi
   echo "$img" >> "$out/images.txt"
 done
 echo "saving $(wc -l < "$out/images.txt") images"
-docker save -o "$out/images.tar" "${images[@]}"
+docker save --platform "$platform" -o "$out/images.tar" "${images[@]}"
+printf '%s\n' "$platform" > "$out/platform"
 
 for chart in evalsi-crds evalsi evalsi-sandboxd; do
   helm package "$root/deploy/helm/$chart" --app-version "$tag" -d "$out/charts" >/dev/null

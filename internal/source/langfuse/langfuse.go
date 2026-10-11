@@ -1,9 +1,8 @@
 // Package langfuse reads traces from Langfuse and writes scores back.
 // Decision 0016, item 13.
 //
-// Not verified against a running Langfuse: it is written and tested against
-// the pinned OpenAPI spec (Langfuse cannot run in the environment this was
-// built in). The spec says the older read endpoints lag by about ten minutes
+// Verified against self-hosted Langfuse 4.56.0 in Compose and kind.
+// The spec says the older read endpoints lag by about ten minutes
 // and that GET /api/public/v2/observations is the real-time path, so traces
 // are read as observations: root observations list the traces, and a trace's
 // observations become its spans.

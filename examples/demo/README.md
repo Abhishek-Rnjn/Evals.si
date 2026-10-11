@@ -68,6 +68,7 @@ The specs name an image (`environment.image`) for the pod rung; on the host, run
 Notes:
 
 - dsh is a Node program that reserves a large address range, so its spec gives the sandbox 4 GiB and `NODE_OPTIONS=--disable-wasm-trap-handler`. A smaller limit makes it abort.
+- The dsh small-repo spec sets `DEMO_OUTER_SANDBOX=true`: its headless profile uses dsh's `danger-full-access` mode inside Evals.si's enforced `namespaced`, deny-network task sandbox. This avoids an unavailable nested sandbox backend on the pod rung. Never set it for an unconfined host process; the launcher defaults it off and leaves Web/TUI profiles unchanged ([decision 0018](../../docs/decisions/0018-dsh-outer-sandbox.md)).
 - `dcode` makes one lookup of pypi.org that the sandbox refuses; it is harmless.
 - The research suites need a judge: set `judges` and `default_judge` in `evalsi.yaml` (there is no default; nothing is billed by surprise).
 - Terminal-Bench 2: `git clone https://github.com/laude-institute/terminal-bench-2 terminal-bench-2` under this directory (it is git-ignored); the specs read `harbor://` from there and install the agent inside each task's image.

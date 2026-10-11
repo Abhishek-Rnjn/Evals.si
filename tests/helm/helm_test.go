@@ -22,6 +22,13 @@ import (
 
 const charts = "../../deploy/helm"
 
+func kubeVersion() string {
+	if version := os.Getenv("EVALSI_TEST_KUBE_VERSION"); version != "" {
+		return version
+	}
+	return "1.34.0"
+}
+
 func helm(t *testing.T) string {
 	t.Helper()
 	bin := os.Getenv("HELM")
@@ -76,7 +83,7 @@ func renderAs(t *testing.T, release, chart string, set ...string) []object {
 // renderDir renders the chart in dir. Values ending in .yaml are files, relative to dir.
 func renderDir(t *testing.T, release, dir string, set ...string) []object {
 	t.Helper()
-	args := []string{"template", release, dir, "-n", "evalsi", "--kube-version", "1.34.0"}
+	args := []string{"template", release, dir, "-n", "evalsi", "--kube-version", kubeVersion()}
 	for _, s := range set {
 		if strings.HasSuffix(s, ".yaml") {
 			if !filepath.IsAbs(s) {
@@ -203,7 +210,7 @@ func TestEvalsiChart(t *testing.T) {
 		})
 	}
 	// Several replicas without a shared database are refused.
-	cmd := exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", "1.34.0", "--set", "server.replicas=2")
+	cmd := exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", kubeVersion(), "--set", "server.replicas=2")
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "needs storage.postgres") {
 		t.Errorf("replicas without postgres: %v %s", err, out)
 	}
@@ -389,12 +396,12 @@ func TestNamespacedInstall(t *testing.T) {
 		})
 	}
 	// Rungs that need privileges are refused in the chart's pool.
-	cmd := exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", "1.34.0", "--set", "sandbox.pool.enabled=true", "--set", "sandbox.pool.ladder={bwrap}")
+	cmd := exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", kubeVersion(), "--set", "sandbox.pool.enabled=true", "--set", "sandbox.pool.ladder={bwrap}")
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "needs privileges") {
 		t.Errorf("a bwrap pool: %v %s", err, out)
 	}
 	// A key set without its issuer is refused.
-	cmd = exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", "1.34.0", "--set", "auth.kubernetes.jwksConfigMap=keys")
+	cmd = exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", kubeVersion(), "--set", "auth.kubernetes.jwksConfigMap=keys")
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "needs auth.kubernetes.issuer") {
 		t.Errorf("jwks without an issuer: %v %s", err, out)
 	}

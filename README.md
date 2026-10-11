@@ -36,6 +36,14 @@ Evals.si grades outputs you already have, runs a model or an agent on a dataset 
 
 ## Quickstart
 
+Air-gapped bundles export one platform (amd64 by default, arm64 with
+`--platform linux/arm64`) and require Docker 28+. See the
+[Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs) and the
+[partial local kind recheck](docs/verification/README.md#platform-aware-bundle-recheck-2026-10-10);
+Landlock is explicitly deferred to AKS on Docker Desktop using
+`SKIP_LANDLOCK=1`, not claimed verified by that local run.
+Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).
+
 You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ for you). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, the sandbox for code evaluators needs bubblewrap (see [Development](#development)).
 
 ```bash
@@ -151,7 +159,7 @@ uv run evalsi source apply -f ../examples/sources/studio-mlflow.yaml --server ht
 | LlamaIndex | OpenInference |
 | Claude Agent SDK | OpenInference, Claude Code's own traces |
 
-Each row is a real run of the framework, checked in and tested; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup and what each instrumentation records. [Trace sources](docs/guides/trace-sources.md) read MLflow, Phoenix or Langfuse (history included), score the traces, and write the scores back as MLflow assessments, Phoenix annotations or Langfuse scores (Langfuse is built from its API spec and not yet run against a server). To add Evals.si to an agent platform, follow the [integration guide](docs/guides/integrate-an-agent-studio.md) and the [reference demos](examples/demo/README.md), which evaluate Deep Agents and DeepSeek Harness agents end to end.
+Each row is a real run of the framework, checked in and tested; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup and what each instrumentation records. [Trace sources](docs/guides/trace-sources.md) read MLflow, Phoenix or Langfuse (history included), score the traces, and write the scores back as MLflow assessments, Phoenix annotations or Langfuse scores. Self-hosted Langfuse 4.56.0 passed the recorded two-stage check; Databricks numeric-experiment bearer-token downloads are built and contract-tested, not live-verified. To add Evals.si to an agent platform, follow the [integration guide](docs/guides/integrate-an-agent-studio.md) and the [reference demos](examples/demo/README.md), which evaluate Deep Agents and DeepSeek Harness agents end to end.
 
 ### Evaluators and adapters
 
@@ -245,7 +253,7 @@ The roadmap's phases 0 to 6 are built. The current work follows the [product req
 - the remote client;
 - webhooks;
 - the reference demos;
-- trace sources for MLflow and Phoenix (Langfuse from its API spec, not yet run against a server);
+- trace sources for MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10));
 - tested profiles for the five first-cut agent frameworks.
 
 The Kubernetes form factor is tested on kind in CI and was verified on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). No release has been tagged yet. [LEFTOVERS](docs/LEFTOVERS.md) lists what is deferred or not yet verified.

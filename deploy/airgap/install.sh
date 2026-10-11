@@ -64,7 +64,13 @@ target() {
 }
 
 if ! $skip_images; then
-  docker load -q -i "$bundle/images.tar"
+  platform_args=()
+  if [ -f "$bundle/platform" ]; then
+    platform="$(cat "$bundle/platform")"
+    [ -n "$platform" ] || { echo "the bundle platform is empty" >&2; exit 2; }
+    platform_args=(--platform "$platform")
+  fi
+  docker load "${platform_args[@]}" -q -i "$bundle/images.tar"
   moved=()
   while read -r img; do
     [ -n "$img" ] || continue
@@ -72,7 +78,7 @@ if ! $skip_images; then
     moved+=("$(target "$img")")
   done < "$bundle/images.txt"
   if [ -n "$kind_cluster" ]; then
-    docker save "${moved[@]}" -o "$bundle/.kind-images.tar"
+    docker save "${platform_args[@]}" "${moved[@]}" -o "$bundle/.kind-images.tar"
     kind load image-archive "$bundle/.kind-images.tar" --name "$kind_cluster"
     rm -f "$bundle/.kind-images.tar"
   else

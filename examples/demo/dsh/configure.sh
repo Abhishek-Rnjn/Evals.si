@@ -35,5 +35,12 @@ for profile in headless web tui; do
     provider: demo
     model: $model
 YAML
+  if [ "$profile" = headless ] && [ "${DEMO_OUTER_SANDBOX:-false}" = true ]; then
+    cat >> "$dir/cordis.patch.yml" <<'YAML'
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+YAML
+  fi
 done
 exec "$@"

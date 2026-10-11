@@ -77,6 +77,13 @@ func TestDemoChartPodsAreRestricted(t *testing.T) {
 	}
 }
 
+func TestDemoMockUsesBundledPython(t *testing.T) {
+	model := find(t, demo(t, "model.image=airgap.invalid/python:3.13-slim"), "Deployment", "evalsi-demo-model")
+	if spec := podSpec(t, model); !strings.Contains(spec, "image: airgap.invalid/python:3.13-slim") {
+		t.Errorf("mock model does not reuse the bundled image: %s", spec)
+	}
+}
+
 func TestDemoServicesHaveTheNamesSpecsUse(t *testing.T) {
 	objs := demo(t)
 	for _, name := range []string{"evalsi-demo-model", "evalsi-demo-deepagents", "evalsi-demo-mlflow"} {

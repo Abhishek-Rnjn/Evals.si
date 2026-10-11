@@ -286,17 +286,77 @@ func TestThrottlingBecomesRetryAfter(t *testing.T) {
 }
 
 func TestVariantsAndLocationsAreChecked(t *testing.T) {
-	for _, v := range []string{"databricks", "sagemaker", "azureml", "other"} {
+	for _, v := range []string{"sagemaker", "azureml", "other"} {
 		_, err := Factory(&evalsiv1alpha1.TraceSource{Variant: v, Endpoint: "http://x", Locations: []string{"1"}}, "", nil)
 		if err == nil || !strings.Contains(err.Error(), "not built") {
 			t.Errorf("variant %q: %v", v, err)
 		}
+	}
+	if _, err := Factory(&evalsiv1alpha1.TraceSource{Variant: "databricks", Endpoint: "https://workspace.example.invalid", Locations: []string{"1"}}, "", http.DefaultClient); err == nil || !strings.Contains(err.Error(), "bearer token") {
+		t.Fatalf("Databricks without credentials: %v", err)
 	}
 	if _, err := Factory(&evalsiv1alpha1.TraceSource{Endpoint: "http://x"}, "", nil); err == nil {
 		t.Error("no locations was accepted")
 	}
 	if _, err := Factory(&evalsiv1alpha1.TraceSource{Endpoint: "ftp://x", Locations: []string{"1"}}, "", nil); err == nil {
 		t.Error("a non-http endpoint was accepted")
+	}
+}
+
+func TestDatabricksExperimentSignedDownload(t *testing.T) {
+	redirect := false
+	artifact := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Artifact-Token") != "artifact-token" {
+			t.Errorf("workspace token forwarded or artifact header missing")
+		}
+		if redirect {
+			http.Redirect(w, r, "/redirected", http.StatusFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"spans":[{"trace_id":"AQIDBAUGBwgJCgsMDQ4PEA==","span_id":"AQIDBAUGBwg=","parent_span_id":null,"name":"agent","start_time_unix_nano":1000000000,"end_time_unix_nano":2000000000,"status":{"code":"STATUS_CODE_OK"},"events":[{"name":"event","time_unix_nano":1500000000,"attributes":{"note":"event text"}}],"attributes":{"mlflow.spanType":"\"AGENT\"","mlflow.spanInputs":"\"question\"","mlflow.spanOutputs":"\"answer\""}}]}`))
+	}))
+	defer artifact.Close()
+	fake := &fakeMLflow{t: t}
+	workspace := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer workspace-token" {
+			t.Errorf("missing workspace bearer authentication")
+		}
+		if strings.HasSuffix(r.URL.Path, "/credentials-for-data-download") {
+			if r.Method != http.MethodGet || r.URL.Path != "/api/2.0/mlflow/traces/"+traceID+"/credentials-for-data-download" {
+				t.Errorf("credentials endpoint: %s %s", r.Method, r.URL.Path)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"credential_info": map[string]any{"signed_uri": artifact.URL + "/traces.json?signature=private", "headers": []map[string]string{{"name": "X-Artifact-Token", "value": "artifact-token"}}}})
+			return
+		}
+		fake.ServeHTTP(w, r)
+	}))
+	defer workspace.Close()
+	connector, err := Factory(&evalsiv1alpha1.TraceSource{Connector: "mlflow", Variant: "databricks", Endpoint: workspace.URL, Locations: []string{"1"}}, "workspace-token", artifact.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err := connector.List(t.Context(), source.ListRequest{Since: time.Unix(0, 0), Limit: 10})
+	if err != nil || len(listed.Infos) != 1 {
+		t.Fatalf("list: %+v, %v", listed, err)
+	}
+	traces, err := connector.Fetch(t.Context(), listed.Infos)
+	if err != nil || len(traces) != 1 || len(traces[0].Spans) != 1 {
+		t.Fatalf("fetch: %+v, %v", traces, err)
+	}
+	record, _ := ingest.ToRecord(traces[0])
+	if record.GetInput().GetText() != "question" || record.GetOutput().GetText() != "answer" {
+		t.Fatalf("artifact mapping: %v", record)
+	}
+	if events := traces[0].Spans[0].Span.Events; len(events) != 1 || ingest.ToAttrs(events[0].Attributes)["note"] != "event text" {
+		t.Fatalf("artifact events: %v", events)
+	}
+	written, err := connector.WriteBack(t.Context(), []source.Score{{TraceID: traceID, Policy: "policy", Metric: "metric", Value: 1}}, nil)
+	if err != nil || len(written) != 1 {
+		t.Fatalf("write: %+v, %v", written, err)
+	}
+	redirect = true
+	if _, err := connector.Fetch(t.Context(), listed.Infos); err == nil || !strings.Contains(err.Error(), "HTTP 302") || strings.Contains(err.Error(), "signature") {
+		t.Fatalf("signed artifact redirect: %v", err)
 	}
 }
 

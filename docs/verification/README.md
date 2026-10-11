@@ -87,3 +87,169 @@ The report's finding IDs clash with the PRD's own D1–D11, so other documents r
 ## Never verified on a real cluster
 
 KEDA scaling a live pool, several-node NATS, a real SWE-bench Verified task, vLLM checkpoint curves, and agentgateway in front of Evals.si. See [LEFTOVERS.md](../LEFTOVERS.md).
+
+## Platform-aware bundle recheck (2026-10-10)
+
+On this laptop, Docker 28.5.1 and arm64 kind (Kubernetes 1.35.0) rejected the
+original bundle: its multi-platform NATS index referenced an absent amd64
+manifest. Platform-scoped exports fixed the import. A focused real arm64
+bundle build, kind import and Helm install passed.
+
+The subsequent full `deploy/e2e/kind-e2e.sh` run passed the image build, bundle,
+cluster, bundle install (including sandboxd), bundle-only image assertion,
+embedded/Kubernetes parity, admission webhooks, online policy sync, bootstrap
+key authentication and survival across an upgrade, bubblewrap code evaluation,
+and pod-rung agent evaluation and cleanup. Both demo image builds and loads
+passed. An early run failed during demo installation with readiness and API/DNS
+timeouts. Later runs, described below, supersede that partial result.
+
+`make check` and `go test -race ./...` passed with `TMPDIR=/tmp` and CI's buf
+1.73.0. The latest run reported 456 Python tests passed and 3 existing skips;
+no test was weakened.
+
+### Docker Desktop Landlock deferral
+
+Later local runs passed both agents' small-repo suites (task-success 1 across
+33 trials each), the demo dataset upload and MLflow sink, R6's MLflow pull and
+assessment write-back (one trace, two scores), and restricted-namespace
+pod-rung code and agent evaluations. The dsh nested sandbox needed the explicit
+outer-sandbox setting in [decision 0018](../decisions/0018-dsh-outer-sandbox.md).
+The mock model reuses bundled Python instead of pulling it under another alias.
+
+The run stopped at Landlock: the Docker Desktop kernel lacks its support.
+The maintainer requested deferring that local step to AKS. `SKIP_LANDLOCK=1`
+now explicitly omits only the Landlock block and retains pod-rung isolation for
+the downstream denied issuer-discovery and static-key recovery checks. CI and
+default local runs still require Landlock. The AKS recheck is pending; no
+complete Kubernetes pass is claimed for an opted-out run.
+
+The subsequent command
+`CLUSTER=evalsi-e2e-desktop SKIP_LANDLOCK=1 deploy/e2e/kind-e2e.sh` exited 0 on
+Docker Desktop 28.5.1, arm64 kind/Kubernetes 1.35.0. Every non-Landlock step
+passed, including the bubblewrap and pod-rung runs, both demo suites, MLflow
+sink and R6 trace-source write-back, restricted-namespace code and agent runs,
+denied issuer discovery (a restarted pod reported 403 and failed closed), and
+static issuer/JWKS recovery followed by code evaluation with mean 0.5.
+The job ended with `passed with Landlock deferred (not a complete Kubernetes
+verification)`. The five previously paused unrelated cluster containers were
+restarted afterward. This run does not verify Landlock or the default CI job.
+
+### Release-readiness checks
+
+The full Helm test package passed separately with
+`EVALSI_REQUIRE_HELM=1 EVALSI_TEST_KUBE_VERSION=1.34.0`, `1.36.0` and `1.37.0`.
+The same version loop is now required by CI. These are Helm capability and
+rendered-configuration checks, not live clusters at those three versions.
+`make check` and `go test -race ./...` passed again after these edits.
+`make e2e` passed with the real Python and SWE-bench workers.
+
+[RELEASING.md](../RELEASING.md) describes the required settings audit,
+maintainer-authorized dry run, tag publication and exact-identity signature
+verification. Live GitHub settings and PyPI trusted publishers have not been
+audited in this recheck: the local CLI has no github.com login. No release
+workflow was dispatched, no tag was pushed and no release was published.
+
+## Langfuse live recheck (2026-10-10)
+
+Both stages passed against Langfuse `v4.56.0` (release dated 2026-10-09).
+The fixture uses amd64 web/worker images, emulated on this arm64 laptop and
+kind cluster. The locally pulled arm64 worker had zero-byte entrypoint and
+package files; this is a local observation, not certification of that image.
+Stage 2 deployed these exact amd64 manifests:
+
+| Image | Digest |
+|-------|--------|
+| `docker.langfuse.com/langfuse/langfuse` | `sha256:6ecbe177e900c46cb6f070c5d49e15781b6895fa0f04cd867d15e56ddd7f57bb` |
+| `docker.langfuse.com/langfuse/langfuse-worker` | `sha256:589e328edcacf473734ed0b853e154313b0b243a24a8700a6885d70140b403d5` |
+
+### Stage 1: Compose
+
+The six services in [langfuse-compose.yaml](../../deploy/e2e/langfuse-compose.yaml)
+became healthy. Runtime-generated credentials are required; do not enable shell
+tracing or print Compose's resolved configuration. The successful command sequence,
+with the same credential-generation method, is:
+
+```sh
+export LANGFUSE_TEST_SECRET="$(openssl rand -hex 24)"
+export LANGFUSE_TEST_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+export LANGFUSE_TEST_PUBLIC_KEY="pk-lf-$(openssl rand -hex 16)"
+export LANGFUSE_TEST_SECRET_KEY="sk-lf-$(openssl rand -hex 16)"
+docker compose -f deploy/e2e/langfuse-compose.yaml up -d --wait --wait-timeout 600
+EVALSI_TEST_LANGFUSE_URL=http://127.0.0.1:13001 \
+EVALSI_TEST_LANGFUSE_CREDENTIAL="$LANGFUSE_TEST_PUBLIC_KEY:$LANGFUSE_TEST_SECRET_KEY" \
+go test ./internal/source/langfuse -run '^TestLiveLangfuse$' -count=1 -v
+```
+
+The live test passed in 6.71s: OTLP protobuf ingestion with the v4 ingestion
+header, Basic-auth observations listing, a three-span pull, numeric score
+creation and replacement under the same ID. The connector's v2 observations
+and POST scores paths worked unchanged. The probe's legacy score GET returned
+404 in events-only mode; GET `/api/public/v3/scores?id=...` worked instead.
+
+### Stage 2: In-cluster TraceSource
+
+Prerequisites: the healthy stage-1 Compose fixture, the repository's Python
+environment, and a disposable kind release with the demo project, CPU workers
+and operator. The base release was installed by:
+
+```sh
+CLUSTER=evalsi-e2e-desktop SKIP_LANDLOCK=1 deploy/e2e/kind-e2e.sh
+KUBE_CONTEXT=kind-evalsi-e2e-desktop bash deploy/e2e/langfuse-kind.sh
+```
+
+[langfuse-kind.sh](../../deploy/e2e/langfuse-kind.sh) is opt-in, not part of
+the per-push kind job. It changes the existing release's source grants and egress
+values and leaves the fixture for inspection. It uses ephemeral Kubernetes
+storage, not production persistence. Never run it against a production release.
+
+All six Langfuse Deployments became available. Evalsid ran in-cluster and the
+`langfuse-live` TraceSource reached `Synced` and `Tailing`. Its first successful
+run reported `pulled: 2`, `scored: 4` and `lastWriteBack`. Independent v3
+read-back found both `tool-errors` and `loop-detection` scores with the policy
+metadata. The final hardened rerun additionally required the newly injected
+trace's two deterministic score IDs, avoiding success from previous runs.
+The live connector test in that final run passed in 5.37s.
+
+The Secret file, Service DNS, operator admission, source polling, policy
+evaluation and score write-back passed. The network control ran from an actual
+evalsid pod: allowed connection succeeded, removing only the Langfuse exception
+blocked a new connection, and restoring it recovered access. This cluster uses
+Kubernetes 1.35.0 and `kindest/kindnetd:v20251212-v0.29.0-alpha-105-g20ccfc88`;
+its observed enforcement supersedes the assumption that all kindnet versions
+lack NetworkPolicy support. Earlier cluster records above remain historical.
+
+Stage 2 required the existing `env: file:<secret>/<key>` grant format and an
+explicit host-scoped `allow_http` exception for this HTTP fixture. Admission
+refused the credential without that exception. Egress also had to allow the
+discovered API-server address on port 6443 for issuer discovery, not just the
+Service port 443. These are stage-2 configuration differences, not connector
+API differences. V3 `fields=details` omits `traceId`; read-back uses the supported
+trace filter plus exact score IDs.
+
+The earlier low-disk Docker failure was resolved after host storage cleanup.
+NATS had recovered a stream behind its CPU consumer sequence; with approval,
+only that test consumer was recreated. Streams and stored runs were retained.
+The five previously paused unrelated cluster containers were restored with
+`docker start`. No Langfuse Cloud, TLS deployment, pagination at scale, production
+storage, arm64 Langfuse image or PrometheusRule behaviour is certified here.
+
+## Databricks experiment transport (contract-tested only)
+
+`variant: databricks` now supports numeric MLflow experiment IDs and supplied
+workspace bearer credentials. V3 search, trace metadata and assessment writes
+reuse the MLflow transport. Span fetch uses the signed artifact download API
+defined by MLflow 3.17.0's official `databricks_artifacts.proto` and
+`databricks_artifact_repo_resources.py`. The serialized spans follow its
+`entities/span.py`, including JSON-encoded string attributes.
+
+`go test ./internal/source/mlflow -count=1` passed fake-server checks for
+workspace authentication, signed HTTPS download headers without forwarding the
+workspace token, record and event conversion, assessment creation and redirect
+refusal. The source's existing guarded client remains in use for both hosts.
+No Databricks workspace was available: this is built and contract-tested, not
+live-verified. Unity Catalog, SQL warehouses and automatic token acquisition
+remain unsupported.
+
+After these edits, `PATH="/tmp/evalsi-check-tools:$PATH" TMPDIR=/tmp make check`,
+`TMPDIR=/tmp go test -race ./...` and `TMPDIR=/tmp make e2e` passed. Python
+reported 456 passed and 3 existing skips; the real-worker e2e took 43.59s.

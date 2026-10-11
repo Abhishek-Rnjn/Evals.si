@@ -46,8 +46,20 @@ type connector struct {
 func Factory(src *evalsiv1alpha1.TraceSource, token string, client *http.Client) (source.Connector, error) {
 	switch v := src.GetVariant(); v {
 	case "", "oss":
+	case "databricks":
+		if token == "" {
+			return nil, fmt.Errorf("mlflow databricks: a workspace bearer token is required")
+		}
+		if src.GetAuth().GetDatabricks().GetSqlWarehouseId() != "" {
+			return nil, fmt.Errorf("mlflow databricks: Unity Catalog SQL warehouse tracing is not built; use experiment locations")
+		}
+		for _, location := range src.GetLocations() {
+			if _, err := strconv.ParseUint(location, 10, 64); err != nil {
+				return nil, fmt.Errorf("mlflow databricks: only numeric experiment IDs are supported; Unity Catalog locations and experiment names are not built")
+			}
+		}
 	default:
-		return nil, fmt.Errorf("mlflow variant %q is not built (decision 0016): only \"oss\" is", v)
+		return nil, fmt.Errorf("mlflow variant %q is not built (decision 0016): only \"oss\" and experiment-scoped \"databricks\" are", v)
 	}
 	if len(src.GetLocations()) == 0 {
 		return nil, fmt.Errorf("mlflow: locations must list at least one experiment ID or name")
@@ -223,6 +235,9 @@ func digest(t traceInfo) string {
 
 // Fetch gets the spans of the listed traces.
 func (c *connector) Fetch(ctx context.Context, infos []source.Info) ([]ingest.Trace, error) {
+	if c.src.GetVariant() == "databricks" {
+		return c.fetchDatabricks(ctx, infos)
+	}
 	var out []ingest.Trace
 	const batch = 50
 	for start := 0; start < len(infos); start += batch {
@@ -250,6 +265,129 @@ func (c *connector) Fetch(ctx context.Context, infos []source.Info) ([]ingest.Tr
 		}
 	}
 	return out, nil
+}
+
+func (c *connector) fetchDatabricks(ctx context.Context, infos []source.Info) ([]ingest.Trace, error) {
+	var out []ingest.Trace
+	for _, info := range infos {
+		var metadata struct {
+			Trace struct {
+				Info traceInfo `json:"trace_info"`
+			} `json:"trace"`
+		}
+		if err := c.call(ctx, http.MethodGet, "/api/3.0/mlflow/traces/"+url.PathEscape(info.ID), nil, nil, &metadata); err != nil {
+			return nil, err
+		}
+		var credentials struct {
+			Info struct {
+				URI     string `json:"signed_uri"`
+				Headers []struct {
+					Name  string `json:"name"`
+					Value string `json:"value"`
+				} `json:"headers"`
+			} `json:"credential_info"`
+		}
+		if err := c.call(ctx, http.MethodGet, "/api/2.0/mlflow/traces/"+url.PathEscape(info.ID)+"/credentials-for-data-download", nil, nil, &credentials); err != nil {
+			return nil, err
+		}
+		location, err := url.Parse(credentials.Info.URI)
+		if err != nil || location.Scheme != "https" || location.Host == "" || location.User != nil {
+			return nil, fmt.Errorf("mlflow databricks: trace download requires an HTTPS signed URI")
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, location.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("mlflow databricks: invalid trace download request")
+		}
+		for _, header := range credentials.Info.Headers {
+			request.Header.Set(header.Name, header.Value)
+		}
+		client := *c.client
+		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		response, err := client.Do(request)
+		if err != nil {
+			var transportError *url.Error
+			if errors.As(err, &transportError) {
+				err = transportError.Err
+			}
+			return nil, fmt.Errorf("mlflow databricks: trace download: %w", err)
+		}
+		var data struct {
+			Spans []map[string]json.RawMessage `json:"spans"`
+		}
+		err = json.NewDecoder(io.LimitReader(response.Body, 256<<20)).Decode(&data)
+		response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("mlflow databricks: trace download HTTP %d", response.StatusCode)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("mlflow databricks: decoding trace artifact: %w", err)
+		}
+		var raws []json.RawMessage
+		for _, span := range data.Spans {
+			if err := artifactAttributes(span, true); err != nil {
+				return nil, err
+			}
+			for _, field := range []string{"events", "links"} {
+				if len(span[field]) == 0 {
+					continue
+				}
+				var items []map[string]json.RawMessage
+				if err := json.Unmarshal(span[field], &items); err != nil {
+					return nil, err
+				}
+				for _, item := range items {
+					if err := artifactAttributes(item, false); err != nil {
+						return nil, err
+					}
+				}
+				span[field], err = json.Marshal(items)
+				if err != nil {
+					return nil, err
+				}
+			}
+			raw, err := json.Marshal(span)
+			if err != nil {
+				return nil, err
+			}
+			raws = append(raws, raw)
+		}
+		trace, err := toTrace(metadata.Trace.Info, raws)
+		if err != nil {
+			return nil, err
+		}
+		if len(trace.Spans) > 0 {
+			out = append(out, trace)
+		}
+	}
+	return out, nil
+}
+
+func artifactAttributes(object map[string]json.RawMessage, decodeStrings bool) error {
+	if len(object["attributes"]) == 0 {
+		return nil
+	}
+	var attrs map[string]json.RawMessage
+	if err := json.Unmarshal(object["attributes"], &attrs); err != nil {
+		return fmt.Errorf("mlflow databricks: decoding artifact attributes: %w", err)
+	}
+	kvs := make([]map[string]any, 0, len(attrs))
+	for key, raw := range attrs {
+		var value string
+		if json.Unmarshal(raw, &value) != nil {
+			value = string(raw)
+		}
+		var decoded string
+		if decodeStrings && json.Unmarshal([]byte(value), &decoded) == nil {
+			value = decoded
+		}
+		kvs = append(kvs, map[string]any{"key": key, "value": map[string]string{"stringValue": value}})
+	}
+	encoded, err := json.Marshal(kvs)
+	if err != nil {
+		return err
+	}
+	object["attributes"] = encoded
+	return nil
 }
 
 // toTrace turns MLflow's spans (OTLP spans in protobuf JSON: base64 IDs) into

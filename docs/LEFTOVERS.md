@@ -6,6 +6,24 @@ Last updated: 2026-10-10 (trace sources); before that 2026-10-09, after the [end
 
 ## Verified only with stand-ins (needs real infrastructure)
 
+Landlock in the current local recheck is deferred to AKS at the maintainer's
+request: Docker Desktop's kernel does not enable it. `SKIP_LANDLOCK=1` is an
+explicit local opt-out; the default kind/CI check still requires Landlock.
+The new AKS recheck has not run. Earlier cluster evidence is not a new recheck.
+
+Langfuse `v4.56.0` passed Compose and in-cluster TraceSource checks, including
+Secret credentials, policy scores, replacement under the same score ID and an
+evalsid-pod NetworkPolicy allow/deny/restore control. The tested images were
+amd64 under emulation; Cloud, TLS, production storage and arm64 images remain
+unverified. See the [run record](verification/README.md#langfuse-live-recheck-2026-10-10).
+
+The [platform-aware bundle recheck](verification/README.md#platform-aware-bundle-recheck-2026-10-10)
+passed arm64 bundle export, kind import and installation, and bootstrap key
+authentication across an upgrade. Later runs passed the demo dataset upload,
+both small-repo suites, MLflow sink and TraceSource loop, and restricted-namespace
+pod-rung code and agent checks. Landlock is deferred as above; an opted-out run
+is not a complete Kubernetes verification.
+
 | Item | Why it is open | Where recorded |
 |------|----------------|----------------|
 | Firecracker with the stock image and chart values | The rung itself is verified (see below), but that run used a patched ConfigMap and a derived image. The fixes that make the stock image and `firecracker.defaultImage` work (PR #12) have not been re-run on a KVM cluster. | [verification](verification/README.md) |
@@ -13,10 +31,10 @@ Last updated: 2026-10-10 (trace sources); before that 2026-10-09, after the [end
 | Sandbox egress NetworkPolicy on Calico with Istio ambient | The operator's policy did not block a sandbox-labelled pod's egress on such a cluster; the cause is unknown. kind and the AKS cluster tested have no policy engine. The pod rung now verifies a declared policy with a canary connection and reports `partial` isolation and a probe warning when it is not enforced; that check has not run on the mesh cluster. | [verification](verification/README.md) |
 | Admission webhooks under mesh-wide STRICT mTLS | `operator.istio.peerAuthentication` renders the PeerAuthentication (chart-tested); not re-run on a mesh cluster. | [verification](verification/README.md) (VR-R2) |
 | PR #12 fixes on real clusters | The fixes for the verification findings have unit, chart and kind tests, but have not been re-run on AKS or the Istio cluster. | [verification](verification/README.md) |
-| Bundled MinIO and ClickHouse (`devMinio`, `devClickhouse`), the bootstrap Job, and the Helm charts under a second release | Rendered and checked by the chart tests (and the bootstrap logic by unit tests with a fake server and Secrets), but not run on a cluster: the environment that built them had no Docker daemon for kind. `deploy/e2e/kind-e2e.sh` has a bootstrap step (a key from values survives an upgrade) that CI will run. | [D2 and D4 in the PRD](PRD.md), decision 0017 |
+| Bundled ClickHouse (`devClickhouse`) and the Helm charts under a second release | Chart-tested, not verified on a cluster. Bundled MinIO and demo dataset upload passed on local kind, as did bootstrap key authentication and survival across an upgrade. | [D2 and D4 in the PRD](PRD.md), decision 0017 |
 | Redaction of traces on ingest and on pull | The PRD's security section says redaction rules apply on ingest and pull, before storage and before any judge call; evalsid has none for traces (guardrails redact inline, at a gateway). Pushed and pulled traces are stored as sent. | [decision 0016, as built](decisions/0016-trace-source-connectors.md#as-built-2026-10-10) |
-| Trace sources (milestone M3) | Verified here against MLflow 3.17.0 and Phoenix 20.20.0 servers (recorded fixtures, live connector tests, and the full loop with the Python worker). Not verified: Langfuse (built and tested from its pinned OpenAPI spec only; whether a score sent again under the same ID replaces the old one), the Databricks, SageMaker and Azure ML variants (refused as not built), the TraceSource CRD on a real cluster (envtest only), Postgres for the source tables (CI runs the store tests on Postgres), the egress NetworkPolicy and PrometheusRule on a cluster (chart tests only), and the kind e2e step for R6. A trace stored but not yet scored when the server stops is not scored after the restart. | [trace sources guide](guides/trace-sources.md), [decision 0016](decisions/0016-trace-source-connectors.md) |
-| The reference demos (`examples/demo`) | Run end to end here only in embedded and standalone mode with the mock model. Not run: the demo images' builds, the demo chart and its datasets Job (`evalsid datasets put` to S3 is tested against MinIO in CI only), the MLflow sink against a live MLflow server, and the kind e2e step that runs the small-repo-fix suite for both agents. The deep-research and Terminal-Bench 2 suites need a real model and a judge and have never run. R6's MLflow half runs here (the real service and MLflow 3.17.0); its kind e2e step has not run, and the dsh plugin that exports sessions as OTel GenAI spans is not built. | [R1 to R9 in the PRD](PRD.md) |
+| Trace sources (milestone M3) | Verified here against MLflow 3.17.0 and Phoenix 20.20.0 servers (recorded fixtures, live connector tests, and the full loop with the Python worker). R6's MLflow TraceSource CRD and policy loop passed on local kind with Postgres-backed source tables. Langfuse 4.56.0 passed the two-stage check, including in-cluster Secret/Service polling, score replacement and enforced evalsid egress. Databricks numeric experiment/bearer-token artifact downloads are built and contract-tested against pinned client source, not live-verified. Not verified: Langfuse Cloud/TLS/arm64 images and PrometheusRule behaviour on a cluster. Not built: Databricks Unity Catalog/token acquisition, SageMaker and Azure ML. A trace stored but not yet scored when the server stops is not scored after the restart. | [trace sources guide](guides/trace-sources.md), [decision 0016](decisions/0016-trace-source-connectors.md) |
+| The reference demos (`examples/demo`) | The images' builds, chart, MinIO dataset upload, both agents' small-repo suites against the mock model, live MLflow sink and R6's MLflow loop passed on local kind. The deep-research and Terminal-Bench 2 suites need a real model and a judge and have never run. The dsh plugin that exports sessions as OTel GenAI spans is not built. | [R1 to R9 in the PRD](PRD.md) |
 | Agent framework mapping profiles | Each first-cut framework was recorded once, with the versions in `tests/frameworks/requirements-*.txt`, against the demo's mock model: one tool call, no parallel calls, no errors, no retries. Not recorded: real model output, a framework's default OpenAI Responses API (the OpenAI Agents fixture uses chat completions, since the mock has no Responses API), CrewAI through LiteLLM, streamed calls with usage, multi-agent crews and handoffs. A new framework version can change its spans; record again when upgrading. | [guide](guides/agent-frameworks.md), PRD scope table |
 | `release.yml` signing, SBOM and chart push | Written and checked as YAML only; the first tag exercises it (`scripts/verify-release.sh` then checks the result). | D1 in the PRD |
 | KEDA scaling a live pool | Only the generated `ScaledObject`s are tested (envtest, chart tests). | §23 Phase 4 limits |
