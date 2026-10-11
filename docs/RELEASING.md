@@ -18,11 +18,14 @@ Before the first release, a maintainer must check the live repository settings:
 - Keyless signing uses GitHub OIDC and Sigstore, not a stored signing key. The
   expected certificate identity includes this repository, `release.yml`, and
   the exact release tag. The verifier must not use a wildcard identity.
-- If PyPI publication is intended, register trusted publishers for both
-  `evalsi` and `evalsi-harness`: this owner and repository, workflow
-  `release.yml`, environment `pypi`. Configure that environment's required
-  reviewers, then set repository variable `PUBLISH_PYPI` to `true`. Otherwise
-  leave it unset or false; wheels and sdists are still release assets.
+- If PyPI publication is intended, register one trusted publisher for each
+  package on pypi.org: this owner and repository and workflow `release.yml`,
+  with environment `pypi` for `evalsi` and environment `pypi-harness` for
+  `evalsi-harness`. PyPI allows only one pending publisher per repository,
+  workflow and environment, so the two packages cannot share an environment.
+  Create both GitHub environments with required reviewers, then set
+  repository variable `PUBLISH_PYPI` to `true`. Otherwise leave it unset or
+  false; wheels and sdists are still release assets.
 - Review the final commit, its CI results, version and release notes. Do not
   put credentials, signing keys or private registry names in the repository.
 
