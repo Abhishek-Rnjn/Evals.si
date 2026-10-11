@@ -166,6 +166,62 @@ def _add_run(sub: Any) -> None:
     add_credential_args(cmp)
     cmp.set_defaults(func=_cmd_compare)
 
+    delete = sub.add_parser("delete-run", help="delete a finished server run and its stored data")
+    delete.add_argument("id")
+    delete.add_argument("--server", required=True)
+    delete.add_argument("--yes", action="store_true", required=True)
+    delete.add_argument("--idempotency-key")
+    add_credential_args(delete)
+    delete.set_defaults(func=_cmd_delete_run)
+
+    dataset = sub.add_parser("dataset", help="upload or import server datasets")
+    actions = dataset.add_subparsers(dest="action", required=True)
+    for action in ("upload", "import"):
+        command = actions.add_parser(action)
+        command.add_argument("source")
+        command.add_argument("--name", required=True)
+        command.add_argument("--project", required=True)
+        command.add_argument("--format", choices=["jsonl", "parquet"])
+        command.add_argument("--server", required=True)
+        add_credential_args(command)
+        command.set_defaults(func=_cmd_dataset)
+
+
+def _cmd_delete_run(args: argparse.Namespace) -> int:
+    from evalsi.client import ServerError
+
+    try:
+        with server_client(args) as client:
+            client.delete_run(args.id, idempotency_key=args.idempotency_key)
+    except ServerError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"deleted: {args.id}")
+    return 0
+
+
+def _cmd_dataset(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from evalsi.client import ServerError
+
+    try:
+        with server_client(args) as client:
+            if args.action == "upload":
+                result = client.upload_dataset(
+                    args.source, name=args.name, project=args.project, format=args.format
+                )
+            else:
+                encoding = args.format or Path(args.source).suffix.removeprefix(".")
+                result = client.import_dataset(
+                    args.source, name=args.name, project=args.project, format=encoding
+                )
+    except (ServerError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"{result['path']} ({result.get('records', 0)} records)")
+    return 0
+
 
 def _add_policy(sub: Any) -> None:
     pol = sub.add_parser("policy", help="manage online evaluation policies on a server")

@@ -12,6 +12,51 @@ Evals.si has three doors, and a studio can use any mix:
 
 ## 1. Install beside the studio
 
+### Pipeline writes and datasets
+
+Send `Idempotency-Key` on retryable API writes. The same authenticated principal,
+operation and payload replay the stored outcome for 24 hours; a changed payload
+under the same key conflicts. Permissions are checked again on every retry.
+An unavailable response saying the outcome is uncertain requires reconciliation
+of the original operation, not a new key. Generated API-key secrets are returned
+only on the first successful call, never persisted for replay.
+
+Python callers can pass `idempotency_key` to `Client.call`, `create_run`,
+`delete_run` and `import_dataset`. Keyed gRPC write streams are bounded to 64 MiB
+and 100001 messages and require the sender to close its input before reading
+responses; omit the header for incremental streaming. Responses are bounded to
+64 MiB, and each principal/operation scope holds at most 1024 keys and 64 MiB of
+response data. An unfinished claim remains reserved until reconciled.
+
+```bash
+evalsi dataset upload qa.jsonl --name qa --project studio --server "$URL"
+evalsi dataset import s3://evalsi/datasets/incoming/studio/qa.parquet \
+  --name qa --project studio --format parquet --server "$URL"
+evalsi delete-run "$RUN_ID" --yes --server "$URL"
+```
+
+Upload JSONL or Parquet with
+`POST /v1alpha1/datasets/<name>/upload?project=studio&format=jsonl`; its body is the
+file, not multipart. The Connect/gRPC `DatasetService.UploadDataset` begins with
+a config message followed by data messages. `ImportDataset` takes `config` and
+an S3 `uri` under the configured dataset root's `incoming/<project>/` prefix.
+These operations need `datasets.write`; no arbitrary URL or other bucket is read.
+
+The response's `path` is usable as `RunSpec.dataset.path`. Limits are 64 MiB
+uploaded and normalized, 100000 records and 4 MiB per JSONL row/Parquet page.
+Rows must be Record objects; text input/output/reference strings are normalized
+to Content. Missing IDs become `record-<row>`; duplicate IDs are rejected.
+Errors name the offending row without echoing raw fields. Publication occurs
+only after validation, and its path contains the normalized content hash.
+There are two conversion slots per replica; capacity refusals are retryable.
+
+`DeleteRun`, also `DELETE /v1alpha1/runs/<id>`, requires `runs.delete` (admin by
+default). Pending/running or actively leased runs are refused. Terminal deletion
+removes records, outputs, results and queued webhook deliveries and recovers the
+stored-run quota. Only authorization metadata remains for 24-hour retries.
+Data already delivered to external sinks, source datasets and promoted datasets
+remain; deleting an EvalRun CR does not invoke this API.
+
 Evals.si installs from its own charts, in the studio's namespace or its own. Every name starts with the release name, so releases can share a namespace ([Names](kubernetes.md#names-and-installing-beside-other-charts)).
 
 ```bash

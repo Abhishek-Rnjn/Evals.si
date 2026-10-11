@@ -35,6 +35,8 @@ type Options struct {
 	Resolve   Resolver
 	HTTP      *http.Client
 	Logger    *slog.Logger
+	Redactor  *ingest.Redactor
+	Runs      ScheduledRuns
 	// How often stored sources are re-read to start, stop and restart runners.
 	SyncEvery time.Duration
 	// Traces per List call.
@@ -63,6 +65,9 @@ type key struct{ project, name string }
 
 // New returns a manager; Run starts it.
 func New(st *store.Store, ing Ingester, opts Options) *Manager {
+	if opts.Redactor == nil {
+		opts.Redactor, _ = ingest.NewRedactor(ingest.RedactionConfig{})
+	}
 	if opts.SyncEvery <= 0 {
 		opts.SyncEvery = 5 * time.Second
 	}
@@ -163,6 +168,15 @@ func (m *Manager) Status(ctx context.Context, src *evalsiv1alpha1.TraceSource) (
 	}
 	status := &evalsiv1alpha1.SourceStatus{
 		Pulled: st.Pulled, Scored: st.Scored, Deferred: int32(st.Deferred), LastError: st.LastError,
+	}
+	if src.GetSchedule() != nil {
+		scheduled, err := m.st.SourceSchedule(ctx, src.GetProject(), src.GetName())
+		if err != nil {
+			return nil, err
+		}
+		status.LastScheduledAt, status.LastRunId, status.MissedWindows = scheduled.LastScheduledAt, scheduled.LastRunId, scheduled.MissedWindows
+		status.Pulled = scheduled.Pulled
+		status.LastPullAt = scheduled.LastPullAt
 	}
 	if !st.Watermark.IsZero() {
 		status.Watermark = timestamppb.New(st.Watermark)
@@ -406,7 +420,7 @@ func (r *runner) run(ctx context.Context) {
 			failures++
 			wait = backoff(r.interval(), failures, err)
 			r.fail(ctx, err)
-			r.log.Warn("pulling traces failed", "err", err, "retry_in", wait)
+			r.log.Warn("pulling traces failed", "err", r.m.opts.Redactor.Text(err.Error()), "retry_in", wait)
 			continue
 		}
 		failures = 0
@@ -447,7 +461,7 @@ func (r *runner) fail(ctx context.Context, cause error) {
 	if err != nil {
 		return
 	}
-	st.LastError, st.LastErrorAt = cause.Error(), r.m.opts.Now().UTC()
+	st.LastError, st.LastErrorAt = r.m.opts.Redactor.Text(cause.Error()), r.m.opts.Now().UTC()
 	_ = r.m.st.PutSourceState(ctx, r.src.GetProject(), r.src.GetName(), st)
 }
 
@@ -460,6 +474,9 @@ func (r *runner) fail(ctx context.Context, cause error) {
 // back far enough; a trace longer than maxTraceDuration is missed. It is also
 // never past the start of a deferred (in-progress) trace.
 func (r *runner) cycle(ctx context.Context, conn Connector) error {
+	if r.src.GetSchedule() != nil {
+		return r.scheduledCycle(ctx, conn)
+	}
 	src, st := r.src, store.SourceState{}
 	project, name := src.GetProject(), src.GetName()
 	var err error
@@ -623,10 +640,15 @@ func (r *runner) commit(ctx context.Context, st store.SourceState, startedBackfi
 // is not written again (a source applied later under the same name would
 // otherwise resume the old watermark).
 func (r *runner) alive(ctx context.Context) error {
-	if _, err := r.m.st.GetSource(ctx, r.src.GetProject(), r.src.GetName()); errors.Is(err, store.ErrNotFound) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if current, err := r.m.st.GetSource(ctx, r.src.GetProject(), r.src.GetName()); errors.Is(err, store.ErrNotFound) {
 		return errSuperseded
 	} else if err != nil {
 		return err
+	} else if !proto.Equal(current, r.src) {
+		return errSuperseded
 	}
 	return nil
 }
@@ -711,7 +733,7 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 	}
 	prior, err := r.m.st.SourceWrites(ctx, project, name, ids)
 	if err != nil {
-		r.log.Warn("reading write-back records", "err", err)
+		r.log.Warn("reading write-back records", "err", r.m.opts.Redactor.Text(err.Error()))
 		return scores, err
 	}
 	var todo []Score
@@ -728,7 +750,7 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 	written, err := conn.WriteBack(ctx, todo, prior)
 	for _, w := range written {
 		if perr := r.m.st.PutSourceWrite(ctx, project, name, w); perr != nil {
-			r.log.Warn("recording a written score", "err", perr)
+			r.log.Warn("recording a written score", "err", r.m.opts.Redactor.Text(perr.Error()))
 		}
 	}
 	if len(written) > 0 {
@@ -739,7 +761,7 @@ func (r *runner) writeBack(ctx context.Context, conn Connector, scores []Score) 
 		}
 	}
 	if err != nil {
-		r.log.Warn("writing scores back failed", "err", err)
+		r.log.Warn("writing scores back failed", "err", r.m.opts.Redactor.Text(err.Error()))
 		// Keep only what was not written; the next flush retries it.
 		done := map[store.WriteKey]bool{}
 		for _, w := range written {

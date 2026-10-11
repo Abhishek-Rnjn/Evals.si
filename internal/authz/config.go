@@ -92,7 +92,7 @@ var BuiltinRoles = []Role{
 	{Name: "editor", Description: "Runner, plus writing online policies and guardrails, promoting results into datasets, and managing and answering annotation queues.",
 		Inherits: []string{"runner"}, Permissions: []string{"policies.write", "guardrails.write", "datasets.write", "annotations.manage", "annotations.write"}},
 	{Name: "admin", Description: "Editor, plus the project's API keys, custom roles, bindings, audit log, webhooks and trace sources.",
-		Inherits: []string{"editor"}, Permissions: []string{"access.manage", "audit.read", "webhooks.read", "webhooks.write", "sources.read", "sources.write"}},
+		Inherits: []string{"editor"}, Permissions: []string{"access.manage", "audit.read", "webhooks.read", "webhooks.write", "sources.read", "sources.write", "runs.delete"}},
 	{Name: "annotator", Description: "Answer annotation queues: read queues and their records, take items and submit answers.",
 		Permissions: []string{"annotations.read", "annotations.write"}},
 	{Name: "ingest", Description: "Ingest traces over OTLP and nothing else.",

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package evalsi.v1alpha1;
 
+import "evalsi/v1alpha1/run.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -72,6 +73,15 @@ message TraceSource {
   string updated_by = 21;
   // Set by the server; ignored on apply.
   SourceStatus status = 22;
+  PullSchedule schedule = 23;
+}
+
+message PullSchedule {
+  string cron = 1;
+  google.protobuf.Duration window = 2;
+  google.protobuf.Duration starting_deadline = 3;
+  RunSpec run_spec = 4;
+  int32 max_records = 5;
 }
 
 // Names where the source's credential comes from, never the value. It is
@@ -139,6 +149,9 @@ message SourceStatus {
   google.protobuf.Timestamp last_error_at = 9;
   google.protobuf.Timestamp last_pull_at = 10;
   google.protobuf.Timestamp last_write_back_at = 11;
+  google.protobuf.Timestamp last_scheduled_at = 12;
+  string last_run_id = 13;
+  int64 missed_windows = 14;
 }
 
 message ApplySourceRequest {

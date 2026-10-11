@@ -106,6 +106,155 @@ func TestRunsLifecycle(t *testing.T) {
 	}
 }
 
+func TestDeleteRunTerminalStateAndLease(t *testing.T) {
+	for _, phase := range []evalsiv1alpha1.RunStatus{evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING, evalsiv1alpha1.RunStatus_RUN_STATUS_RUNNING, evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED, evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED, evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR, evalsiv1alpha1.RunStatus_RUN_STATUS_CANCELLED} {
+		t.Run(phase.String(), func(t *testing.T) {
+			st := open(t)
+			run := run("delete", "project", 0)
+			run.Status = phase
+			if err := st.CreateRun(t.Context(), run, []*evalsiv1alpha1.Record{{Id: "record"}}); err != nil {
+				t.Fatal(err)
+			}
+			if phase == evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING || phase == evalsiv1alpha1.RunStatus_RUN_STATUS_RUNNING {
+				if !errors.Is(st.DeleteRun(t.Context(), run.Id), ErrRunActive) {
+					t.Fatal("active run was deletable")
+				}
+				return
+			}
+			if acquired, err := st.AcquireLease(t.Context(), "run:"+run.Id, "worker", time.Minute); err != nil || !acquired {
+				t.Fatalf("lease: %v", err)
+			}
+			if !errors.Is(st.DeleteRun(t.Context(), run.Id), ErrRunActive) {
+				t.Fatal("leased run was deletable")
+			}
+			if err := st.ReleaseLease(t.Context(), "run:"+run.Id, "worker"); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.AddDelivery(t.Context(), &Delivery{ID: "pending", Project: "project", Webhook: "hook", RunID: run.Id, Payload: []byte("owned payload"), Created: time.Now()}); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.DeleteRun(t.Context(), run.Id); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.GetRun(t.Context(), run.Id); !errors.Is(err, ErrNotFound) {
+				t.Fatal("deleted run still exists")
+			}
+			if records, err := st.Records(t.Context(), run.Id); err != nil || len(records) != 0 {
+				t.Fatal("owned records survived deletion")
+			}
+			if count, err := st.CountRuns(t.Context(), "project"); err != nil || count != 0 {
+				t.Fatal("deletion did not recover stored-run quota")
+			}
+			if deliveries, err := st.RecentDeliveries(t.Context(), "project", "hook", 10); err != nil || len(deliveries) != 0 {
+				t.Fatal("owned webhook payload survived deletion")
+			}
+		})
+	}
+}
+
+func TestIdempotencyClaimsConflictExpiryAndUncertainOutcome(t *testing.T) {
+	st := open(t)
+	now := time.Now()
+	first, err := st.BeginIdempotency(t.Context(), "scope", "key", "fingerprint", now)
+	if err != nil || !first.Claimed {
+		t.Fatalf("claim: %+v, %v", first, err)
+	}
+	retry, err := st.BeginIdempotency(t.Context(), "scope", "key", "fingerprint", now.Add(48*time.Hour))
+	if err != nil || retry.Claimed || retry.Completed {
+		t.Fatal("unfinished claim was re-executed after expiry")
+	}
+	if _, err := st.BeginIdempotency(t.Context(), "scope", "key", "different", now); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatal("different request reused a key")
+	}
+	if err := st.CompleteIdempotency(t.Context(), "scope", "key", "fingerprint", "response", []byte("cached"), 0, "", now); err != nil {
+		t.Fatal(err)
+	}
+	retry, err = st.BeginIdempotency(t.Context(), "scope", "key", "fingerprint", now.Add(time.Hour))
+	if err != nil || retry.Claimed || !retry.Completed || string(retry.Response) != "cached" {
+		t.Fatal("completed response was not replayable")
+	}
+	expired, err := st.BeginIdempotency(t.Context(), "scope", "key", "different", now.Add(24*time.Hour))
+	if err != nil || !expired.Claimed {
+		t.Fatal("completed key did not expire at its TTL")
+	}
+}
+
+func TestIdempotencyCapacityPreservesExistingClaims(t *testing.T) {
+	st := open(t)
+	now := time.Now()
+	for index := range 1024 {
+		if _, err := st.db.ExecContext(t.Context(), `INSERT INTO idempotency (scope, key, fingerprint, response, expires_ns) VALUES (?, ?, ?, ?, ?)`, "scope", fmt.Sprint(index), "fingerprint", []byte{}, now.UnixNano()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.BeginIdempotency(t.Context(), "scope", "new", "fingerprint", now); !errors.Is(err, ErrIdempotencyCapacity) {
+		t.Fatalf("new claim at capacity: %v", err)
+	}
+	if retry, err := st.BeginIdempotency(t.Context(), "scope", "0", "fingerprint", now); err != nil || retry.Claimed {
+		t.Fatalf("existing claim at capacity: %+v, %v", retry, err)
+	}
+	if _, err := st.db.ExecContext(t.Context(), `UPDATE idempotency SET completed = 1, response = ? WHERE scope = ? AND key = ?`, make([]byte, 64<<20), "scope", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CompleteIdempotency(t.Context(), "scope", "1", "fingerprint", "response", []byte("overflow"), 0, "", now); !errors.Is(err, ErrIdempotencyCapacity) {
+		t.Fatalf("response at capacity: %v", err)
+	}
+	if retry, err := st.BeginIdempotency(t.Context(), "scope", "1", "fingerprint", now); err != nil || retry.Completed {
+		t.Fatalf("failed completion became replayable: %+v, %v", retry, err)
+	}
+}
+
+func TestIdempotencyConcurrentCapacity(t *testing.T) {
+	for _, limit := range []string{"entries", "bytes"} {
+		t.Run(limit, func(t *testing.T) {
+			st := open(t)
+			now := time.Now()
+			if limit == "entries" {
+				for index := range 1023 {
+					if _, err := st.db.ExecContext(t.Context(), `INSERT INTO idempotency (scope, key, fingerprint, response, expires_ns) VALUES (?, ?, ?, ?, ?)`, "scope", fmt.Sprint(index), "fingerprint", []byte{}, now.Add(24*time.Hour).UnixNano()); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else {
+				for _, key := range []string{"first", "second"} {
+					if _, err := st.BeginIdempotency(t.Context(), "scope", key, "fingerprint", now); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			start := make(chan struct{})
+			results := make(chan error, 2)
+			for _, key := range []string{"first", "second"} {
+				go func() {
+					<-start
+					if limit == "entries" {
+						_, err := st.BeginIdempotency(t.Context(), "scope", key, "fingerprint", now)
+						results <- err
+					} else {
+						results <- st.CompleteIdempotency(t.Context(), "scope", key, "fingerprint", "response", make([]byte, (32<<20)+1), 0, "", now)
+					}
+				}()
+			}
+			close(start)
+			accepted, rejected := 0, 0
+			for range 2 {
+				err := <-results
+				switch {
+				case err == nil:
+					accepted++
+				case errors.Is(err, ErrIdempotencyCapacity):
+					rejected++
+				default:
+					t.Fatalf("concurrent capacity: %v", err)
+				}
+			}
+			if accepted != 1 || rejected != 1 {
+				t.Fatalf("accepted %d, rejected %d", accepted, rejected)
+			}
+		})
+	}
+}
+
 func TestOutputsAndResultsAreIdempotent(t *testing.T) {
 	s := open(t)
 	ctx := context.Background()

@@ -43,6 +43,7 @@ class RunServiceStub:
     CancelRun: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.CancelRunRequest, _run_service_pb2.CancelRunResponse]
     ResumeRun: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ResumeRunRequest, _run_service_pb2.ResumeRunResponse]
     """Continues an errored or cancelled run, skipping finished tasks."""
+    DeleteRun: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.DeleteRunRequest, _run_service_pb2.DeleteRunResponse]
     ListRunResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]
     CompareRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]
     """Paired comparison of two runs over the records they share."""
@@ -71,6 +72,7 @@ class RunServiceAsyncStub(RunServiceStub):
     CancelRun: _aio.UnaryUnaryMultiCallable[_run_service_pb2.CancelRunRequest, _run_service_pb2.CancelRunResponse]  # type: ignore[assignment]
     ResumeRun: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ResumeRunRequest, _run_service_pb2.ResumeRunResponse]  # type: ignore[assignment]
     """Continues an errored or cancelled run, skipping finished tasks."""
+    DeleteRun: _aio.UnaryUnaryMultiCallable[_run_service_pb2.DeleteRunRequest, _run_service_pb2.DeleteRunResponse]  # type: ignore[assignment]
     ListRunResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]  # type: ignore[assignment]
     CompareRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]  # type: ignore[assignment]
     """Paired comparison of two runs over the records they share."""
@@ -132,6 +134,13 @@ class RunServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_run_service_pb2.ResumeRunResponse, _abc.Awaitable[_run_service_pb2.ResumeRunResponse]]:
         """Continues an errored or cancelled run, skipping finished tasks."""
+
+    @_abc_1.abstractmethod
+    def DeleteRun(
+        self,
+        request: _run_service_pb2.DeleteRunRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.DeleteRunResponse, _abc.Awaitable[_run_service_pb2.DeleteRunResponse]]: ...
 
     @_abc_1.abstractmethod
     def ListRunResults(

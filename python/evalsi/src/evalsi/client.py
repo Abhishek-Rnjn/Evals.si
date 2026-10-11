@@ -69,11 +69,15 @@ class Client:
         body: dict[str, Any],
         *,
         timeout: float | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
+        headers = {"Connect-Protocol-Version": "1"}
+        if idempotency_key is not None:
+            headers["Idempotency-Key"] = idempotency_key
         response = self._http.post(
             f"{self.base_url}/evalsi.v1alpha1.{service}/{method}",
             json=body,
-            headers={"Connect-Protocol-Version": "1"},
+            headers=headers,
             timeout=httpx.USE_CLIENT_DEFAULT if timeout is None else timeout,
         )
         if response.status_code != 200:
@@ -233,9 +237,13 @@ class Client:
         name: str = "",
         project: str = "",
         labels: dict[str, str] | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, Any]:
         body = {"name": name, "project": project, "spec": spec, "labels": labels or {}}
-        return self._run("CreateRun", body)
+        run: dict[str, Any] = self.call(
+            "RunService", "CreateRun", body, idempotency_key=idempotency_key
+        )["run"]
+        return run
 
     def get_run(self, run_id: str) -> dict[str, Any]:
         return self._run("GetRun", {"id": run_id})
@@ -264,6 +272,45 @@ class Client:
 
     def resume_run(self, run_id: str) -> dict[str, Any]:
         return self._run("ResumeRun", {"id": run_id})
+
+    def delete_run(self, run_id: str, *, idempotency_key: str | None = None) -> None:
+        self.call("RunService", "DeleteRun", {"id": run_id}, idempotency_key=idempotency_key)
+
+    def upload_dataset(
+        self, file: str, *, name: str, project: str, format: str | None = None
+    ) -> dict[str, Any]:
+        from pathlib import Path
+        from urllib.parse import quote
+
+        source = Path(file)
+        encoding = format or source.suffix.removeprefix(".")
+        with source.open("rb") as reader:
+            response = self._http.post(
+                f"{self.base_url}/v1alpha1/datasets/{quote(name, safe='')}/upload",
+                params={"project": project, "format": encoding},
+                content=iter(lambda: reader.read(256 * 1024), b""),
+                headers={"Content-Type": "application/octet-stream"},
+            )
+        if response.status_code != 201:
+            raise ServerError(str(response.status_code), response.text.strip())
+        result: dict[str, Any] = response.json()
+        return result
+
+    def import_dataset(
+        self,
+        uri: str,
+        *,
+        name: str,
+        project: str,
+        format: str,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        return self.call(
+            "DatasetService",
+            "ImportDataset",
+            {"config": {"name": name, "project": project, "format": format}, "uri": uri},
+            idempotency_key=idempotency_key,
+        )
 
     def compare_runs(self, baseline: str, candidate: str) -> list[dict[str, Any]]:
         out = self.call(

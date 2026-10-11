@@ -19,6 +19,93 @@ workspace, never its bearer token, and refuse redirects. Egress must allow the
 artifact storage endpoint too. Unity Catalog, SQL warehouse tracing, experiment
 names, token acquisition/refresh, SageMaker and Azure ML remain unsupported.
 
+## Scheduled batch reports
+
+Set `schedule` instead of online `policies`, `backfill` or `writeBack` to evaluate
+each query window as an ordinary batch run. Applying a schedule requires both
+`sources.write` and `runs.create`, including evaluator, judge and credential
+grants. The same YAML works through `evalsi source apply` and the operator.
+
+```yaml
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata: {name: studio-hourly, labels: {evals.si/project: studio}}
+spec:
+  connector: mlflow
+  endpoint: https://mlflow.example.com
+  locations: [studio-agents]
+  credentials: {env: STUDIO_MLFLOW_TOKEN}
+  poll: {interval: 30s}
+  schedule:
+    cron: "0 * * * *"
+    window: 1h
+    startingDeadline: 15m
+    maxRecords: 10000
+    runSpec:
+      evaluators: [{ref: latency}, {ref: tool-errors}]
+```
+
+Cron is five-field UTC (no seconds, timezone prefix or descriptors). `window`
+is 1m-168h; `startingDeadline` is 1m-24h, default 1h. `maxRecords` is 1-10000,
+default 10000. A snapshot is capped at 64 MiB. `runSpec` must have evaluators and
+must not have a dataset, target, harness, environment or multiple trials.
+Records are redacted and normalized before the snapshot is stored.
+Each pull is limited to 90 seconds under a two-minute per-source lease; narrow
+the window or raise connector throughput if it cannot finish in that bound.
+
+The window includes its start and excludes its end. A source waits for its
+previous run to finish; deadlines missed while paused, unavailable or busy are
+counted rather than accumulated without limit. In-progress or incomplete
+fetches do not advance the cursor; once their deadline passes they are missed.
+Empty windows advance without a run. Scheduling starts after the source is
+applied, not from historical backfill. Reapplying keeps its stored cursor.
+
+Source JSON status includes `lastScheduledAt`, `lastRunId` and `missedWindows`;
+operator status mirrors `lastScheduled`, `lastRunId` and `missedWindows`.
+Use the run ID with normal run results/reports and configured run sinks.
+Automatic trace-store write-back is not supported in scheduled mode. Stable
+window IDs reconcile a restart after run insertion without inserting it twice.
+
+## Trace redaction
+
+Both direct OTLP exports and pulled traces use the server's `traces.redaction`
+rules before Evals.si stores or evaluates them. By default, values under
+`password`, `passwd`, `authorization`, `api_key`, `api-key`, `access_token`,
+`refresh_token`, and `client_secret` are replaced with `[REDACTED]`. Key matching
+is case-insensitive and checks the whole key and its final dot-separated
+segment, including nested JSON and record metadata.
+
+```yaml
+# evalsi.yaml; restart the server after changes
+traces:
+  redaction:
+    keys: ["private_*", "customer.email"]
+    patterns: ['secret-[A-Za-z0-9]+']
+    pii: [email, us-ssn]
+```
+
+`keys` adds glob rules to the defaults. `patterns` contains RE2 value regexes.
+`pii` optionally enables `email`, `us-ssn`, `credit-card`, or `phone` heuristic
+detectors; no PII class is enabled by default. Use `disabled: true` only to
+explicitly opt out of all redaction. Invalid enabled rules fail startup without
+including their contents in the error.
+
+On Kubernetes, use the same mapping under `server.config.traces.redaction` in
+chart values, consistently on all replicas. Resource attributes, labels,
+events, links, status text and source `overrides` are covered. UTF-8 bytes in
+pushed OTLP attributes and pulled span attributes are inspected; opaque bytes
+in those messages and unknown protobuf fields are dropped while redaction is
+enabled. Project assignment and authentication
+precede redaction, and binary trace/span IDs remain unchanged.
+
+Matched values are unavailable to selectors, evaluators, promotions and sinks.
+Rules can therefore change scores or selection. They do not erase existing
+Evals.si data or change the upstream store, and do not apply to direct Evaluate
+requests or offline run datasets. Detectors may miss PII or match non-PII; test
+your own data before enabling them. Connector error logs and stored source
+error status apply the text rules, but arbitrary external error text is not
+automatically classified as sensitive. See [decision 0019](../decisions/0019-trace-redaction.md).
+
 ## 1. Allow the store, and grant its credential
 
 The server makes the requests, from where it runs. So a project admin cannot point it anywhere they like:

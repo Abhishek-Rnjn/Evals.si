@@ -179,6 +179,9 @@ type TraceSourceStatus struct {
 	Deferred      int32        `json:"deferred,omitempty"`
 	LastError     string       `json:"lastError,omitempty"`
 	LastWriteBack *metav1.Time `json:"lastWriteBack,omitempty"`
+	LastScheduled *metav1.Time `json:"lastScheduled,omitempty"`
+	LastRunID     string       `json:"lastRunId,omitempty"`
+	MissedWindows int64        `json:"missedWindows,omitempty"`
 	// +listType=map
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

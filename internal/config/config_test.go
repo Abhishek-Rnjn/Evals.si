@@ -27,6 +27,7 @@ judges:
   claude: {provider: anthropic, model: claude-opus-5-5, effort: low}
 default_judge: claude
 evaluate: {batch_size: 8}
+traces: {redaction: {keys: ['private_*'], patterns: ['secret-[A-Za-z0-9]+'], pii: [email]}}
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -37,29 +38,35 @@ evaluate: {batch_size: 8}
 	if cfg.Evaluate.Parallelism != 8 || cfg.Worker.Command[0] != "python3" {
 		t.Errorf("defaults not kept: %+v", cfg)
 	}
+	if len(cfg.Traces.Redaction.Keys) != 1 || len(cfg.Traces.Redaction.Patterns) != 1 || len(cfg.Traces.Redaction.PII) != 1 || cfg.Traces.Redaction.Disabled {
+		t.Fatal("trace redaction rules were not loaded")
+	}
 }
 
 func TestLoadRejectsMistakes(t *testing.T) {
 	for body, want := range map[string]string{
-		"listn: x": "unknown field",
-		"judges: {j: {provider: openai-compatible, model: m}}":                                             "base_url is required",
-		"judges: {j: {provider: other, model: m}}":                                                         "provider must be",
-		"default_judge: missing":                                                                           "not among judges",
-		"worker: {start_timeout: soon}":                                                                    "start_timeout",
-		"listen: 0.0.0.0:8080":                                                                             "without authentication",
-		"otlp: {grpc_listen: '0.0.0.0:4317'}":                                                              "without authentication",
-		"listen: 0.0.0.0:8080\nauth: {api_keys: {keys: []}}":                                               "plaintext",
-		"auth: {api_keys: {keys: [{name: k, key: hunter2}]}}":                                              "never put the plaintext key",
-		"auth: {jwt: {providers: [{name: p, issuer: https://i, jwks: {url: https://i/k}}]}}":               "audiences",
+		"listn: x":                                                                           "unknown field",
+		"traces: {redaction: {patterns: ['[']}}":                                             "invalid value regex",
+		"traces: {redaction: {keys: ['[']}}":                                                 "invalid key pattern",
+		"traces: {redaction: {pii: [unknown]}}":                                              "unknown PII class",
+		"judges: {j: {provider: openai-compatible, model: m}}":                               "base_url is required",
+		"judges: {j: {provider: other, model: m}}":                                           "provider must be",
+		"default_judge: missing":                                                             "not among judges",
+		"worker: {start_timeout: soon}":                                                      "start_timeout",
+		"listen: 0.0.0.0:8080":                                                               "without authentication",
+		"otlp: {grpc_listen: '0.0.0.0:4317'}":                                                "without authentication",
+		"listen: 0.0.0.0:8080\nauth: {api_keys: {keys: []}}":                                 "plaintext",
+		"auth: {api_keys: {keys: [{name: k, key: hunter2}]}}":                                "never put the plaintext key",
+		"auth: {jwt: {providers: [{name: p, issuer: https://i, jwks: {url: https://i/k}}]}}": "audiences",
 		"auth: {jwt: {providers: [{name: p, issuer: http://i, audiences: [a], jwks: {discovery: true}}]}}": "must use https",
-		"auth: {mode: off}":                                                                                "auth.mode",
-		"rbac: {owners: [group:corp/admins]}":                                                              "need an auth section",
-		"auth: {api_keys: {}}\nrbac: {owners: [bob]}":                                                      "rbac.owners",
-		"auth: {api_keys: {}}\nauthorization: {rules: [{allow: 'true', deny: 'false'}]}":                   "exactly one",
-		"metrics: {listen: '0.0.0.0:9464'}":                                                                "loopback",
-		"datasets_dir: s3://bucket/datasets":                                                               "needs storage.s3",
-		"storage: {postgres: {dsn_env: EVALSI_UNSET_DSN_FOR_TEST}}":                                        "storage.postgres",
-		"storage: {clickhouse: {database: x}}":                                                             "needs url",
+		"auth: {mode: off}":                           "auth.mode",
+		"rbac: {owners: [group:corp/admins]}":         "need an auth section",
+		"auth: {api_keys: {}}\nrbac: {owners: [bob]}": "rbac.owners",
+		"auth: {api_keys: {}}\nauthorization: {rules: [{allow: 'true', deny: 'false'}]}": "exactly one",
+		"metrics: {listen: '0.0.0.0:9464'}":                                              "loopback",
+		"datasets_dir: s3://bucket/datasets":                                             "needs storage.s3",
+		"storage: {postgres: {dsn_env: EVALSI_UNSET_DSN_FOR_TEST}}":                      "storage.postgres",
+		"storage: {clickhouse: {database: x}}":                                           "needs url",
 	} {
 		if _, err := Load(write(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Load(%q) error = %v, want it to mention %q", body, err, want)

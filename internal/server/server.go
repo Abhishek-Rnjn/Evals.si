@@ -23,6 +23,7 @@ import (
 	"connectrpc.com/connect"
 	"connectrpc.com/grpchealth"
 	"connectrpc.com/grpcreflect"
+	collectortracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
@@ -35,6 +36,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
@@ -189,7 +191,12 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	// Runs stop before the worker does (deferred calls run in reverse order).
 	defer runManager.Shutdown()
 
+	redactor, err := ingest.NewRedactor(cfg.Traces.Redaction)
+	if err != nil {
+		return err
+	}
 	watcher, err = watch.New(ctx, st, svc, watch.Options{
+		Redactor:    redactor,
 		DatasetsDir: cfg.DatasetsDir, Objects: objects, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
 		Changed: func() {
 			if cl != nil {
@@ -218,6 +225,8 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		return err
 	}
 	sourceMgr = source.New(st, watcher, source.Options{
+		Runs:      runManager,
+		Redactor:  redactor,
 		Factories: map[string]source.Factory{"mlflow": mlflow.Factory, "phoenix": phoenix.Factory, "langfuse": langfuse.Factory},
 		Resolve:   source.NewResolver(creds, cfg.Sources.Dir),
 		// Every request a source makes, redirects included, is checked
@@ -307,7 +316,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		rewardSvc.UseSharedCache(st, log)
 		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
 	}
-	d := deps{sources: sourceSvc, svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, webhooks: hooks, mcp: cfg.MCP, ui: cfg.UI, log: log}
+	d := deps{datasets: &datasets.Service{Root: cfg.DatasetsDir, Objects: objects}, redactor: redactor, sources: sourceSvc, svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, webhooks: hooks, mcp: cfg.MCP, ui: cfg.UI, log: log}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -471,12 +480,14 @@ func protocols(tls bool) *http.Protocols {
 
 // deps is everything the HTTP handler serves.
 type deps struct {
+	datasets  *datasets.Service
 	svc       *evaluation.Service
 	rewards   *rewards.Service
 	runs      *runs.Manager
 	watcher   *watch.Engine
 	store     *store.Store
 	assembler *ingest.Assembler
+	redactor  *ingest.Redactor
 	worker    pluginhost.Worker
 	authn     *auth.Authenticator
 	gate      *gate
@@ -496,6 +507,22 @@ type deps struct {
 func registerOTLP(mux *http.ServeMux, d deps) {
 	inner := http.NewServeMux()
 	recv := ingest.NewReceiver(d.assembler, d.gate.assignTrace, connect.WithInterceptors(d.gate.interceptor()))
+	recv.SetHTTPExport(func(ctx context.Context, request *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error) {
+		response, err := d.gate.idempotent(ctx, procedureRequest{AnyRequest: request, procedure: ingest.TraceExportProcedure}, func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+			return recv.Export(ctx, request)
+		})
+		if err != nil {
+			return nil, err
+		}
+		out := connect.NewResponse(response.Any().(*collectortracepb.ExportTraceServiceResponse))
+		if response.Header().Get("Idempotency-Replayed") != "" {
+			out.Header().Set("Idempotency-Replayed", "true")
+		}
+		return out, nil
+	})
+	if d.redactor != nil {
+		recv.SetRedactor(d.redactor)
+	}
 	if d.forward != nil {
 		recv.SetForward(d.forward)
 	}
@@ -514,6 +541,7 @@ func otlpHandler(d deps) http.Handler {
 func Handler(d deps) http.Handler {
 	gated := connect.WithInterceptors(d.gate.interceptor())
 	mux := http.NewServeMux()
+	registerDatasetUpload(mux, d)
 	log := d.log
 	if log == nil {
 		log = slog.Default()
@@ -521,6 +549,9 @@ func Handler(d deps) http.Handler {
 	guard := guardrail.New(d.store, d.svc, log)
 	handlers := map[string]http.Handler{}
 	for _, h := range []func() (string, http.Handler){
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewDatasetServiceHandler(d.datasets, gated)
+		},
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewEvaluationServiceHandler(d.svc, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewCatalogServiceHandler(d.svc, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRewardServiceHandler(d.rewards, gated) },

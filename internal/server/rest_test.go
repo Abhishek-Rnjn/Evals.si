@@ -25,6 +25,7 @@ func TestRESTRoutes(t *testing.T) {
 	})
 	handlers := map[string]http.Handler{}
 	for _, name := range []string{
+		evalsiv1alpha1connect.DatasetServiceName,
 		evalsiv1alpha1connect.EvaluationServiceName, evalsiv1alpha1connect.CatalogServiceName,
 		evalsiv1alpha1connect.RunServiceName, evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
@@ -38,12 +39,14 @@ func TestRESTRoutes(t *testing.T) {
 	cases := []struct {
 		method, path, body, rpc, field, value string
 	}{
+		{"POST", "/v1alpha1/datasets:import", `{"config":{"project":"p","name":"data","format":"jsonl"},"uri":"s3://bucket/incoming/p/data.jsonl"}`, "DatasetService/ImportDataset", "", ""},
 		{"POST", "/v1alpha1/evaluate", `{"records": []}`, "EvaluationService/Evaluate", "", ""},
 		{"GET", "/v1alpha1/evaluators", "", "CatalogService/ListEvaluators", "", ""},
 		{"GET", "/v1alpha1/credentials?project=p", "", "CatalogService/ListCredentials", "project", "p"},
 		{"POST", "/v1alpha1/runs", `{"spec": {"name": "x"}}`, "RunService/CreateRun", "", ""},
 		{"GET", "/v1alpha1/runs?project=p&page_size=5", "", "RunService/ListRuns", "project", "p"},
 		{"GET", "/v1alpha1/runs/run-1", "", "RunService/GetRun", "id", "run-1"},
+		{"DELETE", "/v1alpha1/runs/run-1", "", "RunService/DeleteRun", "id", "run-1"},
 		{"POST", "/v1alpha1/runs/run-1:cancel", "{}", "RunService/CancelRun", "id", "run-1"},
 		{"POST", "/v1alpha1/runs/run-1:resume", "{}", "RunService/ResumeRun", "id", "run-1"},
 		{"GET", "/v1alpha1/runs/run-1/results?evaluator=em", "", "RunService/ListRunResults", "runId", "run-1"},

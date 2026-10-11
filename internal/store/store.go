@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 	_ "modernc.org/sqlite" // database/sql driver "sqlite"
@@ -25,6 +26,8 @@ import (
 
 // ErrNotFound is returned for unknown ids and names.
 var ErrNotFound = authz.ErrNotFound
+
+var ErrRunActive = errors.New("run is active or changed; only inactive terminal runs can be deleted")
 
 // DatasetIndex is the record index used for dataset-scope results.
 const DatasetIndex = -1
@@ -37,6 +40,9 @@ CREATE TABLE IF NOT EXISTS runs (
   run BLOB NOT NULL
 );
 CREATE INDEX IF NOT EXISTS runs_by_project ON runs (project, created_at DESC);
+CREATE TABLE IF NOT EXISTS run_tombstones (
+	id TEXT PRIMARY KEY, project TEXT NOT NULL, resource BLOB NOT NULL, expires_ns INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS run_records (
   run_id TEXT NOT NULL, idx INTEGER NOT NULL, record BLOB NOT NULL,
   PRIMARY KEY (run_id, idx)
@@ -94,7 +100,7 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrating: %w", err)
 	}
-	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + rewardCacheSchema + annotationSchema + guardrailSchema + webhookSchema + sourceSchema); err != nil {
+	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + rewardCacheSchema + annotationSchema + guardrailSchema + webhookSchema + sourceSchema + idempotencySchema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
@@ -193,6 +199,70 @@ func (s *Store) UpdateRun(ctx context.Context, run *evalsiv1alpha1.Run) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (s *Store) DeleteRun(ctx context.Context, id string, resource ...[]byte) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var blob []byte
+	if err := tx.QueryRowContext(ctx, `SELECT run FROM runs WHERE id = ?`, id).Scan(&blob); err != nil {
+		if isNoRows(err) {
+			return ErrNotFound
+		}
+		return err
+	}
+	run, err := unmarshalRun(blob)
+	if err != nil {
+		return err
+	}
+	switch run.GetStatus() {
+	case evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED, evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED,
+		evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR, evalsiv1alpha1.RunStatus_RUN_STATUS_CANCELLED:
+	default:
+		return ErrRunActive
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM runs WHERE id = ? AND run = ?
+		AND NOT EXISTS (SELECT 1 FROM leases WHERE name = ? AND expires_ns >= ?)`,
+		id, blob, "run:"+id, time.Now().UnixNano())
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrRunActive
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM run_tombstones WHERE expires_ns <= ?`, time.Now().UnixNano()); err != nil {
+		return err
+	}
+	if len(resource) != 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO run_tombstones (id, project, resource, expires_ns) VALUES (?, ?, ?, ?)
+			ON CONFLICT (id) DO UPDATE SET project = excluded.project, resource = excluded.resource, expires_ns = excluded.expires_ns`, id, run.GetProject(), resource[0], time.Now().Add(24*time.Hour).UnixNano()); err != nil {
+			return err
+		}
+	}
+	for _, table := range []string{"run_records", "run_outputs", "run_results", "webhook_deliveries"} {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE run_id = ?", id); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM leases WHERE name = ?`, "run:"+id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeletedRunResource(ctx context.Context, id string) (project string, resource []byte, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT project, resource FROM run_tombstones WHERE id = ? AND expires_ns > ?`, id, time.Now().UnixNano()).Scan(&project, &resource)
+	if isNoRows(err) {
+		err = ErrNotFound
+	}
+	return
 }
 
 func unmarshalRun(blob []byte) (*evalsiv1alpha1.Run, error) {

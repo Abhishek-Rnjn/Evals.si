@@ -82,11 +82,70 @@ The report's finding IDs clash with the PRD's own D1–D11, so other documents r
 | F28 embedded all-error runs pass | Fixed (`db11aee`) |
 | F29 reports show another trial's answer | Fixed (`f97f208`): embedded results files record each output's trial |
 | F30 reports hide a numeric 1 | Fixed (`f97f208`): only passes are hidden |
-| F31 no way to delete stored runs | Open: the quota error now says to raise the quota (`1d0b104`); run deletion is in [LEFTOVERS.md](../LEFTOVERS.md) |
+| F31 no way to delete stored runs | Fixed locally (2026-10-11): authorized/audited terminal deletion removes owned records/results/outputs/webhook deliveries and recovers quotas; active/leased runs are refused. Real-server worker pipeline regression passes; external sinks and automatic retention remain separate |
 
 ## Never verified on a real cluster
 
 KEDA scaling a live pool, several-node NATS, a real SWE-bench Verified task, vLLM checkpoint curves, and agentgateway in front of Evals.si. See [LEFTOVERS.md](../LEFTOVERS.md).
+
+## Pipeline and scheduled pull checks (2026-10-11)
+
+Local regressions cover unary and HTTP/2 streaming replay/conflicts, API-key
+metadata-only retries without a stored plaintext secret, durable claim expiry
+and uncertain outcomes, JSONL/real Parquet validation, row errors, input limits,
+filesystem confinement and S3 prefix refusals. Run store tests cover all states,
+live-lease refusal, quota recovery and owned webhook cleanup. The real evalsid
+Python fixture uploads a dataset, executes it, reuses the same CreateRun key and
+deletes the finished run. The source package's real Python worker test creates
+and persists a scheduled batch report; window boundary, deadline, overlap and
+restart reconciliation tests also pass.
+Final review added simultaneous cache entry/byte capacity regressions on both
+SQLite and disposable PostgreSQL 17.11, with race detection. PostgreSQL run
+lifecycle/deletion tests also pass. Its initial 256 MiB test-container limit
+killed a backend while loading the 64 MiB fixture; rerunning with a 1 GiB limit
+passed. Scheduled-source manual backfill is refused without changing its cursor.
+
+Final local gates passed: `make check` (458 Python tests, three existing skips),
+`go test -race ./...`, and `make e2e` (44.004 s for the e2e package and 5.150 s
+for sources, including the real-worker scheduled report). The final corrections
+also pass `go test -race ./internal/store ./internal/server ./internal/source`.
+Authenticated HTTP upload replay/conflict and project-admin deletion retry tests
+pass. This does not certify live
+S3 import, cloud connector credentials, production load or new-operation HA
+failover. The final kind recheck did not pass: the old cluster failed during
+installation, and the clean-cluster rerun showed probe timeouts and API
+connection refusals despite successful parity, sandbox unit-test and pod-agent
+EvalRuns. Pods later recovered, but resource pressure remained. Both attempts
+used the approved local Landlock skip, not a Landlock certification.
+See [the consolidated changes and fixes](CHANGES-2026-10-11.md) for items 1-6,
+the final verification evidence and remaining limits.
+
+## Trace redaction checks (2026-10-11)
+
+The server now shares startup-compiled `traces.redaction` rules across direct
+OTLP ingestion and the policy engine's push/pull storage boundary. Source
+overrides are sanitized after normalization. Connector error logs and stored
+error status apply the configured text rules without changing retry errors.
+See [decision 0019](../decisions/0019-trace-redaction.md).
+
+Local tests passed with raw-value sentinels checked against:
+
+- the pre-NATS forwarding callback;
+- SQLite database/WAL bytes and retrieved trace summaries and records;
+- evaluator queues and result/sink callbacks in both push and pull modes;
+- storage-failure logs, connector-error logs and stored source error status;
+- nested JSON/metadata, resource attributes, labels, events, links, status,
+  inspected byte attributes, unknown fields, disabled mode and repeat passes.
+
+The full gates passed: `make check` (456 Python tests, three existing skips),
+`go test -race ./...`, and `make e2e` with the real Python worker (43.739 s).
+Commands used `TMPDIR=/tmp` for macOS worker sockets and the local buf tool
+directory on `PATH` for `make check`.
+
+This is local executable evidence, not a new Kubernetes or cloud redaction
+certification. It does not prove redaction of historical storage, upstream
+trace stores, arbitrary external error text, direct Evaluate requests or
+offline run inputs.
 
 ## Platform-aware bundle recheck (2026-10-10)
 

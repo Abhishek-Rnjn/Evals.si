@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -478,7 +479,7 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 }
 
 // storeRun stores a validated run over a dataset snapshot; start runs it.
-func (m *Manager) storeRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record) (*evalsiv1alpha1.Run, error) {
+func (m *Manager) storeRun(ctx context.Context, name, project string, labels map[string]string, spec *evalsiv1alpha1.RunSpec, insts []evaluation.Instance, records []*evalsiv1alpha1.Record, ids ...string) (*evalsiv1alpha1.Run, error) {
 	stored := proto.Clone(spec).(*evalsiv1alpha1.RunSpec)
 	if stored.GetDataset().GetInline() != nil {
 		// The records live in the snapshot; keep the stored spec small.
@@ -497,9 +498,50 @@ func (m *Manager) storeRun(ctx context.Context, name, project string, labels map
 		DatasetSha256: datasetHash(records),
 		Records:       int64(len(records)),
 	}
+	if len(ids) > 0 {
+		run.Id = ids[0]
+	}
 	if err := m.store.CreateRun(ctx, run, records); err != nil {
 		return nil, err
 	}
+	return run, nil
+}
+
+func (m *Manager) CreateScheduledRun(ctx context.Context, id string, request *evalsiv1alpha1.CreateRunRequest) (*evalsiv1alpha1.Run, error) {
+	if existing, err := m.store.GetRun(ctx, id); err == nil {
+		if existing.GetProject() != projectOr(request.GetProject()) || existing.GetName() != request.GetName() {
+			return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("scheduled run identity conflict"))
+		}
+		return existing, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	instances, err := m.validate(ctx, request.GetProject(), request.GetSpec())
+	if err != nil {
+		return nil, err
+	}
+	records, err := m.loadDataset(ctx, request.GetSpec().GetDataset(), projectOr(request.GetProject()))
+	if err != nil {
+		return nil, err
+	}
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	if existing, err := m.store.GetRun(ctx, id); err == nil {
+		return existing, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	if err := m.checkQuota(ctx, projectOr(request.GetProject()), 1); err != nil {
+		return nil, err
+	}
+	run, err := m.storeRun(ctx, request.GetName(), projectOr(request.GetProject()), request.GetLabels(), request.GetSpec(), instances, records, id)
+	if err != nil {
+		if existing, getErr := m.store.GetRun(ctx, id); getErr == nil {
+			return existing, nil
+		}
+		return nil, err
+	}
+	m.start(run)
 	return run, nil
 }
 
@@ -1154,6 +1196,8 @@ func (m *Manager) CancelRun(ctx context.Context, req *connect.Request[evalsiv1al
 
 // ResumeRun continues an errored or cancelled run.
 func (m *Manager) ResumeRun(ctx context.Context, req *connect.Request[evalsiv1alpha1.ResumeRunRequest]) (*connect.Response[evalsiv1alpha1.ResumeRunResponse], error) {
+	m.admit.Lock()
+	defer m.admit.Unlock()
 	run, err := m.get(ctx, req.Msg.GetId())
 	if err != nil {
 		return nil, err
@@ -1177,6 +1221,35 @@ func (m *Manager) ResumeRun(ctx context.Context, req *connect.Request[evalsiv1al
 	}
 	m.start(run)
 	return connect.NewResponse(&evalsiv1alpha1.ResumeRunResponse{Run: run}), nil
+}
+
+func (m *Manager) DeleteRun(ctx context.Context, req *connect.Request[evalsiv1alpha1.DeleteRunRequest]) (*connect.Response[evalsiv1alpha1.DeleteRunResponse], error) {
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	m.mu.Lock()
+	_, active := m.active[req.Msg.GetId()]
+	m.mu.Unlock()
+	if active {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, store.ErrRunActive)
+	}
+	run, err := m.get(ctx, req.Msg.GetId())
+	if err != nil {
+		return nil, err
+	}
+	resource, err := json.Marshal(authz.RunResourceFor(ctx, run))
+	if err != nil {
+		return nil, err
+	}
+	if err := m.store.DeleteRun(ctx, req.Msg.GetId(), resource); err != nil {
+		if errors.Is(err, store.ErrRunActive) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, err
+	}
+	return connect.NewResponse(&evalsiv1alpha1.DeleteRunResponse{}), nil
 }
 
 // ListRunResults pages through a run's results with the graded records.

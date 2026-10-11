@@ -1,10 +1,12 @@
 package source
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"sync"
@@ -208,6 +210,32 @@ func newHarness(t *testing.T, mutate func(*evalsiv1alpha1.TraceSource)) *harness
 func (h *harness) cycle(t *testing.T) error {
 	t.Helper()
 	return h.r.cycle(context.Background(), h.fs)
+}
+
+func TestRedactionOfSourceErrorStatusAndLogs(t *testing.T) {
+	h := newHarness(t, func(source *evalsiv1alpha1.TraceSource) {
+		source.WriteBack = &evalsiv1alpha1.WriteBack{Enabled: true}
+	})
+	redactor, err := ingest.NewRedactor(ingest.RedactionConfig{Patterns: []string{"private-sentinel", "store unavailable"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.m.opts.Redactor = redactor
+	var logs bytes.Buffer
+	h.r.log = slog.New(slog.NewTextHandler(&logs, nil))
+	h.r.fail(t.Context(), errors.New("private-sentinel"))
+	state, err := h.st.SourceState(t.Context(), h.src.GetProject(), h.src.GetName())
+	if err != nil || state.LastError != ingest.Redacted {
+		t.Fatal("raw connector error reached stored source status")
+	}
+	h.fs.writeFails = 1
+	_, err = h.r.writeBack(t.Context(), h.fs, []Score{{TraceID: "trace", Policy: "quality", Metric: "score"}})
+	if err == nil || err.Error() != "store unavailable" {
+		t.Fatal("redaction changed the retry error")
+	}
+	if logs.Len() == 0 || bytes.Contains(logs.Bytes(), []byte("store unavailable")) || !bytes.Contains(logs.Bytes(), []byte(ingest.Redacted)) {
+		t.Fatal("connector failure log was not redacted")
+	}
 }
 
 func (h *harness) state(t *testing.T) store.SourceState {

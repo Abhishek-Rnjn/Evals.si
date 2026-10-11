@@ -113,7 +113,10 @@ func TestBuiltinRolesMatrix(t *testing.T) {
 	if !e.Allowed(ctx, user("stranger"), Request{Action: "self.read"}) || e.Allowed(ctx, auth.Anonymous(auth.MethodJWT), Request{Action: "self.read"}) {
 		t.Error("self.read wrong")
 	}
-	if d := e.Decide(ctx, owner, Request{Action: "runs.delete", Project: "support"}); d.Allowed || !strings.Contains(d.Reason, "unknown action") {
+	if e.Allowed(ctx, members["runner"], Request{Action: "runs.delete", Project: "support"}) || !e.Allowed(ctx, members["admin"], Request{Action: "runs.delete", Project: "support"}) {
+		t.Error("run deletion must be admin-only by default")
+	}
+	if d := e.Decide(ctx, owner, Request{Action: "runs.nonexistent", Project: "support"}); d.Allowed || !strings.Contains(d.Reason, "unknown action") {
 		t.Errorf("unknown action: %+v", d)
 	}
 }
@@ -222,7 +225,7 @@ func TestRoleValidation(t *testing.T) {
 		rbac RBACConfig
 		want string
 	}{
-		"unknown permission": {RBACConfig{Roles: []Role{{Name: "x", Permissions: []string{"runs.delete"}}}}, "unknown permission"},
+		"unknown permission": {RBACConfig{Roles: []Role{{Name: "x", Permissions: []string{"runs.nonexistent"}}}}, "unknown permission"},
 		"bad wildcard":       {RBACConfig{Roles: []Role{{Name: "x", Permissions: []string{"nothing.*"}}}}, "unknown permission"},
 		"install-wide":       {RBACConfig{Roles: []Role{{Name: "x", Permissions: []string{"metrics.read"}}}}, "reserved for the owner"},
 		"redefine builtin":   {RBACConfig{Roles: []Role{{Name: "viewer", Permissions: []string{"runs.read"}}}}, "built-in"},

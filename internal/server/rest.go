@@ -94,6 +94,7 @@ func restRules() []*annotations.HttpRule {
 	}
 	const v = "/v1alpha1"
 	return []*annotations.HttpRule{
+		rule("DatasetService.ImportDataset", http.MethodPost, v+"/datasets:import", "*"),
 		rule("EvaluationService.Evaluate", http.MethodPost, v+"/evaluate", "*"),
 		rule("RewardService.ScoreRewards", http.MethodPost, v+"/rewards:score", "*"),
 		rule("CatalogService.ListEvaluators", http.MethodGet, v+"/evaluators", ""),
@@ -101,6 +102,7 @@ func restRules() []*annotations.HttpRule {
 		rule("RunService.CreateRun", http.MethodPost, v+"/runs", "*"),
 		rule("RunService.ListRuns", http.MethodGet, v+"/runs", ""),
 		rule("RunService.GetRun", http.MethodGet, v+"/runs/{id}", ""),
+		rule("RunService.DeleteRun", http.MethodDelete, v+"/runs/{id}", ""),
 		rule("RunService.CancelRun", http.MethodPost, v+"/runs/{id}:cancel", "*"),
 		rule("RunService.ResumeRun", http.MethodPost, v+"/runs/{id}:resume", "*"),
 		rule("RunService.ListRunResults", http.MethodGet, v+"/runs/{run_id}/results", ""),
@@ -163,6 +165,7 @@ func restRules() []*annotations.HttpRule {
 // restHandler transcodes REST calls onto the services' Connect handlers.
 func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 	names := []string{
+		evalsiv1alpha1connect.DatasetServiceName,
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,
 		evalsiv1alpha1connect.RewardServiceName,

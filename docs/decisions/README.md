@@ -22,5 +22,7 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0016](0016-trace-source-connectors.md) | Trace-source connectors: a `TraceSource` per store, a Go `Connector` interface, per-variant MLflow transports, start-time watermarks with lookback, a durable `IngestBatchContext`, write-back as assessments, egress by chart value | Accepted, partly built (Langfuse 4.56.0 live-verified; Databricks experiment transport contract-tested only) |
 | [0017](0017-release-prefixed-names.md) | Charts name what they create after the release; the default release keeps its names; dependencies bundled or external | Accepted, implemented |
 | [0018](0018-dsh-outer-sandbox.md) | The isolated headless dsh small-repo demo explicitly relies on Evals.si's outer sandbox; standalone defaults remain confined | Accepted, implemented |
+| [0019](0019-trace-redaction.md) | Server-owned trace redaction before push/pull persistence and evaluation, including source overrides | Accepted, implemented |
+| [0020](0020-pipeline-retries-and-scheduled-runs.md) | Durable keyed retries without secret replay, bounded dataset publication, terminal deletion and scheduled batch windows | Accepted, implemented |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

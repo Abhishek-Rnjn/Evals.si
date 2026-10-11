@@ -139,9 +139,17 @@ spec:
                 type: string
               lastError:
                 type: string
+              lastRunId:
+                type: string
+              lastScheduled:
+                format: date-time
+                type: string
               lastWriteBack:
                 format: date-time
                 type: string
+              missedWindows:
+                format: int64
+                type: integer
               name:
                 description: The source's name in the API.
                 type: string

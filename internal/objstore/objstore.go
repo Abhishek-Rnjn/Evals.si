@@ -152,6 +152,33 @@ func (c *Client) Get(ctx context.Context, l Location) ([]byte, string, error) {
 // still has that ETag; with create, only if it does not exist yet. Losing
 // either race returns ErrConflict.
 func (c *Client) Put(ctx context.Context, l Location, data []byte, ifMatch string, create bool) (string, error) {
+	return c.PutReader(ctx, l, bytes.NewReader(data), int64(len(data)), ifMatch, create)
+}
+
+func (c *Client) Open(ctx context.Context, location Location, maxBytes int64) (io.ReadCloser, error) {
+	object, err := c.mc.GetObject(ctx, location.Bucket, location.Key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	info, err := object.Stat()
+	if err != nil {
+		_ = object.Close()
+		if notFound(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if info.Size > maxBytes {
+		_ = object.Close()
+		return nil, fmt.Errorf("object exceeds the %d byte limit", maxBytes)
+	}
+	return struct {
+		io.Reader
+		io.Closer
+	}{io.LimitReader(object, maxBytes+1), object}, nil
+}
+
+func (c *Client) PutReader(ctx context.Context, l Location, data io.Reader, size int64, ifMatch string, create bool) (string, error) {
 	opts := minio.PutObjectOptions{ContentType: "application/octet-stream"}
 	switch {
 	case ifMatch != "":
@@ -159,7 +186,7 @@ func (c *Client) Put(ctx context.Context, l Location, data []byte, ifMatch strin
 	case create:
 		opts.SetMatchETagExcept("*")
 	}
-	info, err := c.mc.PutObject(ctx, l.Bucket, l.Key, bytes.NewReader(data), int64(len(data)), opts)
+	info, err := c.mc.PutObject(ctx, l.Bucket, l.Key, data, size, opts)
 	if err != nil {
 		if r := minio.ToErrorResponse(err); r.StatusCode == 412 || r.Code == "PreconditionFailed" || r.StatusCode == 409 {
 			return "", ErrConflict
