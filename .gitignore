@@ -22,3 +22,5 @@ build/
 .evalsi*/
 examples/demo/terminal-bench-2/
 examples/demo/_local-*.yaml
+
+node_modules/

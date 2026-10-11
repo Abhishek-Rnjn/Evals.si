@@ -43,3 +43,19 @@ Locally, with `--no-auth`, there is nothing to paste.
   API calls are allowed. That means no inline script, no third-party
   content, and no framing.
 - **Turning it off:** set `ui: {disabled: true}` in `evalsi.yaml`.
+
+## Testing it
+
+The Go tests cover the files, the headers and the text-only rendering. A browser
+test runs the real `evalsid` against a real Chromium (Playwright) and checks
+what only a browser does: the script runs under the Content-Security-Policy and
+a script the page did not ship does not, every section renders, the catalog
+filter works, and sign-in accepts only a valid key and keeps it in the tab's
+`sessionStorage`. CI runs it as the `ui-browser` job. Locally:
+
+```bash
+cd tests/ui && npm ci && npx playwright-core install chromium
+EVALSI_UI_WORKER="$PWD/../../python/.venv/bin/python -m evalsi" npm test
+```
+
+Set `CHROMIUM_PATH` to use an installed Chromium instead.

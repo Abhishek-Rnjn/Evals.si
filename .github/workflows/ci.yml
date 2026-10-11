@@ -296,6 +296,33 @@ jobs:
       - run: npm test
       - run: npm audit --audit-level=moderate
 
+  ui-browser:
+    # The web UI in a real Chromium, served by a real evalsid: the script runs
+    # under the Content-Security-Policy, every section renders, and sign-in works.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/ui/package-lock.json
+      - run: uv sync --locked --all-packages
+        working-directory: python
+      - run: npm ci
+        working-directory: tests/ui
+      - run: npx playwright-core install --with-deps chromium
+        working-directory: tests/ui
+      - run: npm test
+        working-directory: tests/ui
+        env:
+          EVALSI_UI_WORKER: ${{ github.workspace }}/python/.venv/bin/python -m evalsi
+
   trainers:
     # Phase 5's exit criterion at CPU scale: TRL GRPO trains a tiny model
     # with Evals.si code rewards run in the real sandbox, and the
