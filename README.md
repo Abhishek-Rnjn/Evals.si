@@ -29,7 +29,7 @@ Evals.si grades outputs you already have, runs a model or an agent on a dataset 
 - **Four ways in.** **Score** outputs you have, **Run** a target (model, RAG pipeline or agent) on a dataset with trials, gates and budgets, **Watch** live traces with online policies, and **Reward** RL training with the same evaluators.
 - **Agents, offline and online.** Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. Score production traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK, each tested against recorded traces.
 - **Works with your trace store.** Push OpenTelemetry (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or let a trace source read MLflow, Phoenix or Langfuse, score the traces and write the scores back where your team already looks.
-- **Pipeline controls.** Upload JSONL/Parquet datasets, retry keyed API writes without repeating execution, delete finished runs to recover quotas, or schedule bounded UTC trace-query windows as batch reports. See [pipeline contracts](docs/guides/integrate-an-agent-studio.md#pipeline-writes-and-datasets) and [scheduled pulls](docs/guides/trace-sources.md#scheduled-batch-reports).
+- **Pipeline controls.** Upload JSONL/Parquet datasets, retry keyed API writes without repeating execution, delete finished runs to recover quotas, or schedule bounded UTC trace-query windows as batch reports. See [pipeline contracts](docs/guides/integrate-an-agent-harness.md#pipeline-writes-and-datasets) and [scheduled pulls](docs/guides/trace-sources.md#scheduled-batch-reports).
 - **Pluggable.** lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as isolated adapters; your own evaluators are Python functions or sandboxed Wasm modules.
 - **Honest numbers.** Every mean has a confidence interval. Records an evaluator can't judge are skipped, never scored as zero, and evaluator failures are errors. There is no default judge, so nothing is billed by surprise.
 - **Fails closed.** Untrusted code runs in Firecracker microVMs where available, else bubblewrap or Landlock, else hardened pods, and never with weaker isolation than asked.
@@ -163,7 +163,7 @@ uv run evalsi source apply -f ../examples/sources/studio-mlflow.yaml --server ht
 | LlamaIndex | OpenInference |
 | Claude Agent SDK | OpenInference, Claude Code's own traces |
 
-Each row is a real run of the framework, checked in and tested; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup and what each instrumentation records. [Trace sources](docs/guides/trace-sources.md) read MLflow, Phoenix or Langfuse (history included), score the traces, and write the scores back as MLflow assessments, Phoenix annotations or Langfuse scores. Self-hosted Langfuse 4.56.0 passed the recorded two-stage check; Databricks numeric-experiment bearer-token downloads are built and contract-tested, not live-verified. To add Evals.si to an agent platform, follow the [integration guide](docs/guides/integrate-an-agent-studio.md) and the [reference demos](examples/demo/README.md), which evaluate Deep Agents and DeepSeek Harness agents end to end.
+Each row is a real run of the framework, checked in and tested; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup and what each instrumentation records. [Trace sources](docs/guides/trace-sources.md) read MLflow, Phoenix or Langfuse (history included), score the traces, and write the scores back as MLflow assessments, Phoenix annotations or Langfuse scores. Self-hosted Langfuse 4.56.0 passed the recorded two-stage check; Databricks numeric-experiment bearer-token downloads are built and contract-tested, not live-verified. To add Evals.si to an agent platform, follow the [integration guide](docs/guides/integrate-an-agent-harness.md) and the [reference demos](examples/demo/README.md), which evaluate Deep Agents and DeepSeek Harness agents end to end.
 
 ### Evaluators and adapters
 
@@ -262,7 +262,7 @@ The roadmap's phases 0 to 6 are built. The current work follows the [product req
 - tested profiles for the five first-cut agent frameworks.
 
 The requested M4/M5 subset adds an [operations runbook](docs/guides/operations.md),
-reference cluster values, bounded asynchronous [SDK logging](docs/guides/integrate-an-agent-studio.md#sdk-logging-without-otel),
+reference cluster values, bounded asynchronous [SDK logging](docs/guides/integrate-an-agent-harness.md#sdk-logging-without-otel),
 real CPU PyTorch/Lightning hooks, plugin mounts and native dsh-to-MLflow spans.
 The [final-phase report](docs/verification/PART-C.md) separates verified checks
 from remaining cloud, upgrade and release certification.
@@ -276,7 +276,7 @@ The Kubernetes form factor is tested on kind in CI (amd64, with Landlock) and wa
 | [Documentation site](https://abhishek-rnjn.github.io/Evals.si/) | [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
 | [End-to-end guide](docs/guides/end-to-end.md) | [Kubernetes](docs/guides/kubernetes.md) · [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md) · [Identity](docs/guides/identity.md) | [Decision records](docs/decisions/README.md) |
 | [Examples](examples/) | [Guardrails](docs/guides/guardrails.md) · [MCP](docs/guides/mcp.md) · [Plugins](docs/guides/plugins.md) · [Webhooks](docs/guides/webhooks.md) | [Product requirements](docs/PRD.md) |
-| [Integrate an agent studio](docs/guides/integrate-an-agent-studio.md) | [Annotation](docs/guides/annotation.md) · [Fine-tuning and RL](docs/guides/fine-tuning.md) · [Web UI](docs/guides/web-ui.md) | [Roadmap and leftovers](docs/LEFTOVERS.md) |
+| [Integrate an agent harness](docs/guides/integrate-an-agent-harness.md) | [Annotation](docs/guides/annotation.md) · [Fine-tuning and RL](docs/guides/fine-tuning.md) · [Web UI](docs/guides/web-ui.md) | [Roadmap and leftovers](docs/LEFTOVERS.md) |
 
 ## Repository layout
 

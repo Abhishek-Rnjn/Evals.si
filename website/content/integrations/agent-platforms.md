@@ -3,7 +3,7 @@ title: Agent platforms and studios
 description: Connect visual agent builders, low-code studios and agent frameworks to Evals.si.
 ---
 
-Agent studios and builders (visual workflow tools, low-code platforms, hosted agent services and frameworks) differ in how you build agents. For evaluation they need only one of a few capabilities, and Evals.si integrates through those rather than through a per-product plugin.
+Agent platforms and builders (visual workflow tools, low-code platforms, hosted agent services and frameworks) differ in how you build agents. For evaluation they need only one of a few capabilities, and Evals.si integrates through those rather than through a per-product plugin.
 
 :::note
 This page describes what Evals.si supports. Five agent frameworks are tested against traces recorded from them: LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK (see [agent frameworks](__BASE__/docs/guides/agent-frameworks/)). For any other platform, check its own docs for how to enable its tracing export or expose its agent endpoint, then use the recipe below that matches.

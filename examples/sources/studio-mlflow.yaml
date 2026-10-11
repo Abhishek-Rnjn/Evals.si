@@ -1,4 +1,4 @@
-# A trace source: evalsid reads the traces an agent studio already keeps in
+# A trace source: evalsid reads the traces an agent harness already keeps in
 # MLflow, scores them with the project's online policies, and writes the
 # scores back as MLflow assessments (docs/guides/trace-sources.md).
 #

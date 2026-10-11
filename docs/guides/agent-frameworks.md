@@ -64,7 +64,7 @@ The record's input and output are the graph's first and last messages. LangChain
 
 CrewAI 1.x calls the model through its own provider and runs tools inside that call. Instrument the OpenAI client as well as CrewAI, or the model calls are missing.
 
-MLflow, the agent-studio path:
+MLflow, the agent harness path:
 
 ```python
 import mlflow

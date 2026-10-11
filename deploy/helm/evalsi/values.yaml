@@ -272,7 +272,7 @@ operator:
 bootstrap:
   enabled: false
   projects: []
-  #  - {name: studio, description: agent-studio-standalone}
+  #  - {name: studio, description: agent harness}
   # Keys are shown once, so each is written to a Secret in this namespace
   # (secret.key defaults to api_key). A key whose Secret is gone is replaced by
   # <name>-r2, -r3...; its old value is revoked. Roles cannot change on an

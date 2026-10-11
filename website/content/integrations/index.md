@@ -20,6 +20,6 @@ Evals.si does not replace your agent stack. It evaluates it. Every integration u
 - [Agent platforms and studios](__BASE__/integrations/agent-platforms/): connect a visual or low-code agent builder, or any agent framework.
 - [Agent frameworks](__BASE__/docs/guides/agent-frameworks/): the instrumentation to use for each tested framework, and what it records.
 - [Trace sources](__BASE__/docs/guides/trace-sources/): score traces kept in MLflow, Phoenix or Langfuse.
-- [Integrate an agent studio](__BASE__/docs/guides/integrate-an-agent-studio/): install beside a studio, score every workflow online, and gate deploys.
+- [Integrate an agent harness](__BASE__/docs/guides/integrate-an-agent-harness/): install beside an agent harness, score every workflow online, and gate deploys.
 
 For the plugin side, see [Plugins and Wasm evaluators](__BASE__/docs/guides/plugins/).

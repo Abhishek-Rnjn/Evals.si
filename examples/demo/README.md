@@ -1,6 +1,6 @@
 # Reference demos: Deep Agents and DeepSeek Harness
 
-Two real agents stand in for an agent studio (see [integrate an agent studio](../../docs/guides/integrate-an-agent-studio.md)): [Deep Agents](https://github.com/langchain-ai/deepagents) (`deepagents-code`, and an HTTP service built on `deepagents`) and [DeepSeek Harness](https://github.com/deepseek-ai/dsh) (`dsh`). Each has a run spec per suite, the same file in every mode:
+Two real agents stand in for an agent harness (see [integrate an agent harness](../../docs/guides/integrate-an-agent-harness.md)): [Deep Agents](https://github.com/langchain-ai/deepagents) (`deepagents-code`, and an HTTP service built on `deepagents`) and [DeepSeek Harness](https://github.com/deepseek-ai/dsh) (`dsh`). Each has a run spec per suite, the same file in every mode:
 
 | Suite | What it grades | Needs |
 |---|---|---|
@@ -75,7 +75,7 @@ Notes:
 
 ## On Kubernetes
 
-The charts, a sandbox pool, an MLflow server, the Deep Agents service and `dsh web` (the studio's UI stand-in), and `kubectl apply` of the same specs. `deploy/e2e/kind-e2e.sh` does exactly this on kind and CI runs it.
+The charts, a sandbox pool, an MLflow server, the Deep Agents service and `dsh web` (the agent harness's UI stand-in), and `kubectl apply` of the same specs. `deploy/e2e/kind-e2e.sh` does exactly this on kind and CI runs it.
 
 ```bash
 kubectl create namespace evalsi
@@ -101,7 +101,7 @@ What each part does:
 
 ### Online scoring from MLflow (R6)
 
-The Deep Agents service traces every run to the demo MLflow (LangChain autolog, experiment `evalsi-demo-deepagents`). A [trace source](../../docs/guides/trace-sources.md) reads those traces back, a policy scores them, and the scores land on the same MLflow traces as assessments, where the studio's people already look:
+The Deep Agents service traces every run to the demo MLflow (LangChain autolog, experiment `evalsi-demo-deepagents`). A [trace source](../../docs/guides/trace-sources.md) reads those traces back, a policy scores them, and the scores land on the same MLflow traces as assessments, where the agent harness's people already look:
 
 ```bash
 kubectl apply -n evalsi -f examples/demo/deepagents-online-policy.yaml -f examples/demo/deepagents-mlflow-source.yaml

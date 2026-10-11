@@ -184,7 +184,7 @@ spec:
 
 Write-back replaces the MLflow, Langfuse and Phoenix [sinks'](../../examples/server/evalsi.yaml) `trace_feedback` for the traces a source reads: do not turn on both for the same store, or each score is written twice. `trace_feedback` stays the way to write back traces that reach Evals.si over OTLP.
 
-Trace tags (MLflow) and attributes or metadata (Phoenix, Langfuse) named `evalsi.label.<key>` become labels, so a studio that tags its traces `evalsi.label.workflow` can select per workflow.
+Trace tags (MLflow) and attributes or metadata (Phoenix, Langfuse) named `evalsi.label.<key>` become labels, so an agent harness that tags its traces `evalsi.label.workflow` can select per workflow.
 
 ## 3. Watch it
 
@@ -223,8 +223,8 @@ The trace becomes a record the same way a pushed trace does (OTel GenAI, OpenInf
 spec:
   overrides:
     reference: 'attributes["studio.expected_answer"]'
-    metadata.workflow: 'resource["mlflow.tag.agent_studio.workflow_id"]'
-    labels.workflow: 'resource["mlflow.tag.agent_studio.workflow_id"]'
+    metadata.workflow: 'resource["mlflow.tag.agent_harness.workflow_id"]'
+    labels.workflow: 'resource["mlflow.tag.agent_harness.workflow_id"]'
 ```
 
 They can set `input`, `output`, `reference`, `context`, `metadata.<key>` and `labels.<key>`. They see what policy selectors see (`service`, `name`, the root span's `attributes`, `resource`, `labels`) plus the record's `input` and `output` as text. MLflow's tags and metadata are resource attributes named `mlflow.tag.<key>` and `mlflow.metadata.<key>`; a Langfuse observation's metadata are span attributes named `langfuse.metadata.<key>`. An expression that fails (a missing key) leaves its field as it was, so the evaluators that need it skip the record rather than score it zero.

@@ -54,7 +54,7 @@ The defaults are a working single-replica install on SQLite. Each chart's permis
 
 ### Names, and installing beside other charts
 
-Every name a chart creates starts with its release's name, so releases can share a namespace, and the chart can sit beside others (agent-studio-standalone, agent-sandbox). The `evalsi` chart builds the name this way: a release named for evalsi (such as `evalsi`) is used as it is, and any other release gets `-evalsi` after it, so release `team-a` creates `team-a-evalsi` (the API Service), `team-a-evalsi-operator`, `team-a-evalsi-worker-cpu` and so on. `fullnameOverride` sets the prefix. The default release name `evalsi` keeps the short names used throughout these guides.
+Every name a chart creates starts with its release's name, so releases can share a namespace, and the chart can sit beside others (agent harness, agent-sandbox). The `evalsi` chart builds the name this way: a release named for evalsi (such as `evalsi`) is used as it is, and any other release gets `-evalsi` after it, so release `team-a` creates `team-a-evalsi` (the API Service), `team-a-evalsi-operator`, `team-a-evalsi-worker-cpu` and so on. `fullnameOverride` sets the prefix. The default release name `evalsi` keeps the short names used throughout these guides.
 
 Sandbox pools are isolated per release. The pods of a pool this chart runs carry `evals.si/sandbox-pool: <release>-sandbox-pool`, and the `<release>-sandbox-pool-pods` NetworkPolicy lets only that pool reach them and lets them reach only that pool, so two releases in one namespace cannot reach each other's sandbox pods. The general `<release>-sandbox-pods` policy covers the pods of SandboxClass pools, which are shared by design. This needs a CNI that enforces NetworkPolicy; kind's does not.
 
@@ -86,7 +86,7 @@ The bundled MinIO and ClickHouse run non-root with the images CI uses for its ow
 bootstrap:
   enabled: true
   projects:
-    - {name: studio, description: agent-studio-standalone}
+    - {name: studio, description: agent harness}
   apiKeys:                               # shown once, so each is written to a Secret
     - name: studio-ingest
       roles: {studio: [ingest]}

@@ -26,7 +26,7 @@ func studioTrace() ingest.Trace {
 	}
 	return ingest.Trace{TraceID: hex.EncodeToString(id), Spans: []ingest.Span{{
 		Span: sp, Labels: map[string]string{"source": "studio"},
-		Resource: ingest.Attrs{"service.name": "studio", "mlflow.tag.agent_studio.workflow_id": "wf-42", "mlflow.tag.docs": `["a","b"]`},
+		Resource: ingest.Attrs{"service.name": "studio", "mlflow.tag.agent_harness.workflow_id": "wf-42", "mlflow.tag.docs": `["a","b"]`},
 	}}}
 }
 
@@ -34,8 +34,8 @@ func TestOverridesSetFieldsAfterTheConventions(t *testing.T) {
 	adjust, err := CompileOverrides(map[string]string{
 		"reference":          `attributes["studio.expected"]`,
 		"context":            `["doc one", "doc two"]`,
-		"metadata.workflow":  `resource["mlflow.tag.agent_studio.workflow_id"]`,
-		"labels.workflow":    `resource["mlflow.tag.agent_studio.workflow_id"]`,
+		"metadata.workflow":  `resource["mlflow.tag.agent_harness.workflow_id"]`,
+		"labels.workflow":    `resource["mlflow.tag.agent_harness.workflow_id"]`,
 		"output":             `output + "!"`,
 		"metadata.structure": `{"steps": 2, "ok": true}`,
 		// A key the trace lacks leaves the field alone rather than failing the trace.

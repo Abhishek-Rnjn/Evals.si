@@ -42,7 +42,7 @@ type frameworkWant struct {
 }
 
 var frameworkFixtures = map[string]frameworkWant{
-	// The agent-studio path: MLflow's CrewAI autolog sees the crew, task and
+	// The agent harness path: MLflow's CrewAI autolog sees the crew, task and
 	// agent; its OpenAI autolog the model calls. Nothing records the tool, which
 	// CrewAI 1.x runs inside its LLM call.
 	"crewai-mlflow":        {llm: 2, requestOnLLM: true, model: "gpt-4o-mini", inTokens: 232, outTokens: 110},

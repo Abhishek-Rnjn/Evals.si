@@ -14,7 +14,7 @@ Evals.si calls your HTTP endpoint when a run finishes or fails a gate, when an o
 
 `ping` is sent by `TestWebhook`. A webhook with no `events` receives every event except `trace.scored`.
 
-`trace.scored` follows live traffic, one delivery per scored trace and policy, so it is opt-in: list `WEBHOOK_EVENT_TRACE_SCORED` in `events`. Its volume is the policy's sampled traffic; lower the policy's sampling rate, or narrow its selector, to send fewer. A webhook applied or deleted on another replica takes effect for `trace.scored` within 5 seconds. To read scores in bulk instead, or to catch up after downtime, use [`GET /v1alpha1/scores`](integrate-an-agent-studio.md#4-read-the-scores).
+`trace.scored` follows live traffic, one delivery per scored trace and policy, so it is opt-in: list `WEBHOOK_EVENT_TRACE_SCORED` in `events`. Its volume is the policy's sampled traffic; lower the policy's sampling rate, or narrow its selector, to send fewer. A webhook applied or deleted on another replica takes effect for `trace.scored` within 5 seconds. To read scores in bulk instead, or to catch up after downtime, use [`GET /v1alpha1/scores`](integrate-an-agent-harness.md#4-read-the-scores).
 
 A policy's own `alerts[].webhook` URL still receives its unsigned alert body as before; `alert.fired` and `alert.resolved` carry the same body, signed and retried like every other event.
 

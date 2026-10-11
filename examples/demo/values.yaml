@@ -1,4 +1,4 @@
-# The reference demos' stand-ins for an agent studio (docs/guides/integrate-an-agent-studio.md),
+# The reference demos' stand-ins for an agent harness (docs/guides/integrate-an-agent-harness.md),
 # for a cluster that already runs Evals.si. Install the release as "evalsi-demo",
 # in the namespace Evals.si is in: the run specs name its Services.
 #
