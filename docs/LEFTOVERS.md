@@ -2,7 +2,7 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
-Last updated: 2026-10-11 (trace redaction); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+Last updated: 2026-10-11 (triage of every row, after the Part C review fixes); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 Trace redaction on push and pull is now built and locally regression-tested,
 including source overrides, storage bytes, evaluator queues, result callbacks
@@ -10,6 +10,21 @@ and error reporting. It has not had a new real-cluster redaction run. See
 [decision 0019](decisions/0019-trace-redaction.md) for defaults and limitations;
 historical stored data and direct Evaluate/offline run inputs are not redacted
 by this incoming-trace boundary.
+
+## Triage (2026-10-11)
+
+47 rows are open (the four rows under "Verified on real clusters" are done). Each is in exactly one
+category, by what it needs next. The rows that can be checked against the code, the chart and the CI
+workflow were; the rows that describe a real cluster are taken as written, since they need that
+cluster to re-check.
+
+| Category | Rows | What closes it |
+|----------|------|----------------|
+| **Buildable now** (17) | Bundled ClickHouse and a second release (the kind job installs neither); trace sources: SageMaker, Azure ML and Databricks Unity Catalog connectors; per-release isolation of sandbox pools (the egress policy selects every pool by the shared `evalsi-sandboxd` label); server-side analytics; platform wheels bundling evalsid; archiving and automatic run retention; sandbox-time quotas; verl and OpenRLHF against real installs (a CI job like `trainers`); operator-managed checkpoint serving; environment-spec compatibility; a coding agent product over MCP in CI; a real mounted-plugin evaluator run on kind; hosted Wasm plugins in the index; browser sign-in for the web UI; annotating in the browser; a browser test of the UI in CI (Chromium is available to CI); annotation claims under concurrent Postgres writers | Code and tests, in this repository |
+| **Needs infrastructure or access** (14) | Firecracker with the stock image; sandbox egress NetworkPolicy on Calico with Istio ambient; admission webhooks under STRICT mTLS; PR #12 fixes on AKS and the Istio cluster; the reference demos' deep-research and Terminal-Bench 2 suites (a real model and judge); agent framework mapping profiles (real model output); KEDA on a live pool; several-node NATS; 10k concurrent agent trials; real SWE-bench Verified images; Kata Containers; pipeline and schedule certification (live S3, PostgreSQL HA, production load); reward throughput at the §12 scale; guardrails behind a real agentgateway | A sized or specific cluster, a model key, or access you control |
+| **Known limit, not planned** (11) | User-namespaced bubblewrap pools (a host limit); cgroup v2 limits in an unprivileged container; the limits left after the reviews; separate process roles; pod-rung snapshots; Firecracker egress through a tap device; the four benchmark gaps (BFCL memory and web search, tau2's own user, multi-stage Terminal-Bench tasks, FrontierCode and CursorBench); Wasm evaluators with a judge or the sandbox | Revisit only if a user needs it |
+| **Needs a decision** (3) | Webhook URLs open to internal addresses (they are how the server reaches in-cluster services); feeding scores back into agentgateway (depends on its extension points); checkpoint model serving (which serving strategy to support) | A product choice, then it becomes buildable |
+| **Waiting on the first release tag** (2) | `release.yml` signing, SBOM and chart push; our own keyless signatures (verifying other people's keyless images is a separate, buildable gap) | The tag push, then `scripts/verify-release.sh` |
 
 ## Verified only with stand-ins (needs real infrastructure)
 
