@@ -364,9 +364,9 @@ jobs:
       - run: docker buildx build --load -f deploy/collector/Dockerfile -t evalsi-collector:ci .
       - name: The image carries its configs
         run: |
-          docker create --name c evalsi-collector:ci
-          docker cp c:/etc/evalsi-collector/config.yaml - >/dev/null
-          docker cp c:/etc/evalsi-collector/config-dev.yaml - >/dev/null
+          docker create --name collector-ci evalsi-collector:ci
+          docker cp collector-ci:/etc/evalsi-collector/config.yaml - >/dev/null
+          docker cp collector-ci:/etc/evalsi-collector/config-dev.yaml - >/dev/null
 
   release-check:
     # The release archive builds (static Go binaries and a static
