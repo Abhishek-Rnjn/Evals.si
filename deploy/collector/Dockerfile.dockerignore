@@ -1,0 +1,7 @@
+# BuildKit uses this instead of the repository's .dockerignore when building
+# deploy/collector/Dockerfile. The root file excludes all of deploy/, but this
+# image copies its builder config and pipeline configs from here.
+*
+!deploy/collector/builder-config.yaml
+!deploy/collector/config.yaml
+!deploy/collector/config-dev.yaml

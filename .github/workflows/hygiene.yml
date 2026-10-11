@@ -1,0 +1,53 @@
+name: hygiene
+
+# Keeps secrets and private names out of the repository. It has no path filter
+# on purpose: documentation-only pull requests are where a private name is most
+# likely to slip in, and the main `ci` workflow skips those.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    # gitleaks over the whole history, with .gitleaks.toml.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go install github.com/zricethezav/gitleaks/v8@v8.18.4
+      - run: "$(go env GOPATH)/bin/gitleaks detect --source . --config .gitleaks.toml --redact --no-banner -v"
+
+  private-terms:
+    # The list of terms is the repository secret FORBIDDEN_TERMS (comma or
+    # newline separated). It is not in the repository, because a file listing
+    # the words would publish them. Without the secret (a pull request from a
+    # fork) the check is skipped with a warning.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: The check itself
+        run: tests/hygiene/check-private-terms_test.sh
+      - name: Private terms in files, new commit messages and the PR text
+        env:
+          FORBIDDEN_TERMS: ${{ secrets.FORBIDDEN_TERMS }}
+          # Passed through the environment, never interpolated into the script.
+          PR_TEXT: ${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: scripts/check-private-terms.sh "$BASE"
