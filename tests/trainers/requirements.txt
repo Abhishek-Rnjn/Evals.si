@@ -1,6 +1,6 @@
 # The trainers job's environment (CPU torch comes from the PyTorch CPU index).
 trl==0.24.0
-transformers==4.57.6
+transformers==5.10.1
 datasets==5.0.1
 accelerate==1.15.0
 tokenizers==0.22.2
