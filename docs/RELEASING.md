@@ -15,6 +15,12 @@ Before the first release, a maintainer must check the live repository settings:
   GitHub release job can obtain `contents: write`. Existing GHCR packages must
   grant this repository write access. Confirm package visibility matches the
   intended distribution audience.
+- Create an environment named `release` (Settings > Environments) with
+  required reviewers, and restrict deployment to tags matching `v*`. A tag run
+  stops at the `approve` job until a reviewer approves; nothing is pushed to a
+  registry or released before then. A dry run skips this gate and publishes
+  nothing. A person cannot approve their own run if "prevent self-review" is
+  on, so with one maintainer leave it off or add a second reviewer.
 - Keyless signing uses GitHub OIDC and Sigstore, not a stored signing key. The
   expected certificate identity includes this repository, `release.yml`, and
   the exact release tag. The verifier must not use a wildcard identity.
@@ -75,7 +81,8 @@ or signature-verified on dry-run evidence.
 
 ## Authorized Publication
 
-Only after explicit approval, tag the reviewed commit and push that tag:
+Only after explicit approval, tag the reviewed commit and push that tag. The run
+then waits at the `approve` job for a reviewer of the `release` environment:
 
 ```bash
 git tag -a v0.1.0 REVIEWED_COMMIT -m "Evals.si v0.1.0"
