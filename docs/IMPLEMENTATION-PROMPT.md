@@ -12,7 +12,7 @@ Read these before writing code:
 - docs/PRD.md: the product requirements, with requirement IDs and milestones M1–M5.
 - docs/verification/: a real end-to-end run on three clusters. Start with its README.md, which lists every finding and whether it is fixed or still open. The clusters are:
   - kind (kindnet, no NetworkPolicy enforcement);
-  - AWC (Istio ambient with a forced waypoint and mesh-wide STRICT mTLS, Calico, KVM nodes);
+  - the Istio ambient cluster (Istio ambient with a forced waypoint and mesh-wide STRICT mTLS, Calico, KVM nodes);
   - AKS (Ubuntu 24.04, every node tainted, no NetworkPolicy engine).
 
   Call its findings VR-F1…, VR-D1…, VR-R1…, so they never clash with the PRD's own D1–D11.
@@ -50,10 +50,10 @@ PR #12 (commits 033b11c, 967fdd9, 8cf4c81) fixed most findings after the run. do
 2. Write docs/verification/RECHECK.md: a short, copy-pasteable checklist for re-running the affected rows on AKS and on the mesh cluster. You cannot reach those clusters; the maintainer will run it.
 
 Then handle the findings still marked Open:
-- **Sandbox egress NetworkPolicy not enforced on Calico + Istio ambient (AWC).** The cause is unknown.
+- **Sandbox egress NetworkPolicy not enforced on Calico + Istio ambient (the mesh cluster).** The cause is unknown.
   - Investigate from the policy's selectors and ambient's known interaction with NetworkPolicy.
   - Fix it if it's ours. Otherwise document the limitation and make `evalsid sandbox probe` or the SandboxClass status say plainly when egress isolation is not enforced. Sandbox isolation must never be claimed when it isn't.
-- **VR-D15 and the AWC idmap failure.** `mode: bwrap` fails on Ubuntu 24.04 / AKS (`RTM_NEWADDR: Operation not permitted`) and on hosts whose overlayfs lacks idmap mounts.
+- **VR-D15 and the Istio ambient cluster idmap failure.** `mode: bwrap` fails on Ubuntu 24.04 / AKS (`RTM_NEWADDR: Operation not permitted`) and on hosts whose overlayfs lacks idmap mounts.
   - Make the failure message name the fallback (`mode: privileged`, or the pod rung).
   - Document both cases in docs/guides/kubernetes.md.
 - **VR-R2.** Add an opt-in chart value that renders the Istio PeerAuthentication (webhook port 9443 PERMISSIVE). Leave it off by default.

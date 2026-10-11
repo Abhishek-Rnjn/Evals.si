@@ -21,7 +21,7 @@ Status as of 2026-10-09. The kind run is complete; the remote-cluster run is par
 | Nodes | 1 control plane + 1 worker, arm64, kernel 6.10.14-linuxkit | 3 control plane + 3 workers (`c04m08`), amd64, kernel 5.15.0-179-generic, containerd 2.1.4, k8s v1.34.3 |
 | /dev/kvm | no (`vmx/svm` 0) | **yes on all 6 nodes** (`vmx/svm cpu flag lines: 8`) |
 | GPU / KEDA / agentgateway | none / none / none | none / none / none |
-| CNI | kindnet, does **not** enforce NetworkPolicy (observed) | Calico, plus Istio ambient with mesh-wide STRICT mTLS (`istio-system/default-awc`) |
+| CNI | kindnet, does **not** enforce NetworkPolicy (observed) | Calico, plus Istio ambient with mesh-wide STRICT mTLS (`istio-system/default-<mesh>`) |
 | Landlock | not in kernel | in the LSM list on every node |
 | sandboxd mode | `privileged` (kind nodes are containers) | `bwrap` failed: `snapshotter "overlayfs" doesn't support idmap mounts on this host`. Running `privileged`. |
 | Images | `kind.local/…`, loaded with `kind load` | pulled from the registry |
@@ -188,7 +188,7 @@ mTLS relaxation (approved): PeerAuthentication `ev-operator-webhook` in evalsi-v
 | Check | Result | Evidence |
 |---|---|---|
 | kubectl apply == evalsi run -f (parity) | PASS | phase Succeeded; exact-match n=5 mean 0.8, numeric-match n=3 mean 1.0 both paths; metrics sets equal |
-| Webhooks | PASS | invalid gate: `admission webhook "validate.evals.si" denied the request: gate on "exact-match" needs min or max`; spec patch: `an EvalRun's spec cannot change; create a new EvalRun`; created-by annotation present (value `awc-…`, the mesh/platform identity, not kubernetes-admin) |
+| Webhooks | PASS | invalid gate: `admission webhook "validate.evals.si" denied the request: gate on "exact-match" needs min or max`; spec patch: `an EvalRun's spec cannot change; create a new EvalRun`; created-by annotation present (value `<mesh-user>`, the mesh/platform identity, not kubernetes-admin) |
 | OnlineEvalPolicy | PASS | `onlineevalpolicy/e2e-latency condition met` (Synced) |
 | SandboxClass `pods` | PASS | Ready, address tls://evalsi-sandbox-pods.evalsi-verify.svc:7443 |
 | Agent run on pod rung | FAIL | both records OUTCOME_ERROR: `SANDBOX_UNAVAILABLE ... guest agent: unimplemented: HTTP 404 Not Found URI <platform-ext-authz-url>`. The sandbox pod was created, pulled python-git, started; server->pod gRPC goes through the namespace waypoint, whose ext-authz  returns 404. SandboxClass has no pod label field to opt pods out (istio.io/use-waypoint=none); namespace label is forced by auth-config-operator. Logs: /tmp/evalsi-verify/failures/remote-pod-rung-{pool,worker}.log |
@@ -222,9 +222,9 @@ Notes: after `helm upgrade ev` the port-forward on 28080 drops; restart pf.sh. R
 | bwrap code eval | NOT RUN | `snapshotter "overlayfs" doesn't support idmap mounts on this host` at pod start |
 | Real SWE-bench Verified task | NOT RUN | excluded by the user |
 
-## AKS cluster: the checks AWC could not run (<aks-cluster>, kube-azure.yaml)
+## AKS cluster: the checks the Istio ambient cluster could not run (<aks-cluster>, kube-azure.yaml)
 
-Scope, as agreed: only the checks that were blocked or never ran on AWC. Namespaces `evalsi-verify` and `evalsi-verify-restricted`. Releases `ev-crds`, `ev`, `ev-sandboxd` (and `ev-ns` in the restricted namespace). Same images and charts, no repo change.
+Scope, as agreed: only the checks that were blocked or never ran on the Istio ambient cluster. Namespaces `evalsi-verify` and `evalsi-verify-restricted`. Releases `ev-crds`, `ev`, `ev-sandboxd` (and `ev-ns` in the restricted namespace). Same images and charts, no repo change.
 
 Cluster: k8s v1.36.4, 3 nodes (amd64, Ubuntu 24.04.5, kernel 6.8.0-1067-azure, containerd 2.3.3-2): 2 `infra` (3.86 CPU / 12 GiB, taint `CriticalAddonsOnly`) and 1 `mlinfra` (7.8 CPU / 27 GiB, taint `role.node.kubernetes.io/infra`). Istio ambient is installed (ztunnel), but the new namespaces carry no mesh labels: no waypoint, no STRICT-mTLS problem. CNI is Azure CNS with **no network-policy engine** (node label `kubernetes.azure.com/network-policy=none`, no Calico/Cilium/NPM). Image pulls from the private registry and the hardened Postgres from the private registry worked anonymously.
 
@@ -234,19 +234,19 @@ Cluster: k8s v1.36.4, 3 nodes (amd64, Ubuntu 24.04.5, kernel 6.8.0-1067-azure, c
 | 1 | `kubectl apply` parity with `evalsi run -f` | PASS | exact-match n=5 mean 0.8; numeric-match n=3 mean 1.0 on both paths; same metric sets | |
 | 1 | Webhooks | PASS | `admission webhook "validate.evals.si" denied the request: gate on "exact-match" needs min or max`; `an EvalRun's spec cannot change; create a new EvalRun`; `created-by: masterclient` | No R2 here. The creator is the kubeconfig's identity, not `kubernetes-admin`. |
 | 1 | OnlineEvalPolicy Synced | PASS | `onlineevalpolicy/e2e-latency condition met` | |
-| 3 | Agent run on the pod rung | PASS | `agent` Succeeded, task-success n=2 mean 1; sandbox pods `evalsi-sandbox-88c9b`, `-hcjws` created, 0 left | Blocked on AWC (waypoint ext-authz 404) |
+| 3 | Agent run on the pod rung | PASS | `agent` Succeeded, task-success n=2 mean 1; sandbox pods `evalsi-sandbox-88c9b`, `-hcjws` created, 0 left | Blocked on the Istio ambient cluster (waypoint ext-authz 404) |
 | 3 | Code eval, `bwrap` mode | FAIL | both records `SandboxUnavailable: … bwrap: probe failed (runner_failure, exit 1): bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted` | Log: failures/aks-bwrap-sandboxd.log |
 | 3 | Code eval, `privileged` mode | PASS | unit-tests n=2 mean 0.5; good `passed=True`, bad `False`; isolation driver `bwrap`, level `namespaced` | The chart's documented fallback |
 | 3 | NetworkPolicy blocks sandbox egress | NOT RUN | A pod labelled `evals.si/sandbox=true` reached postgres, nats, `1.1.1.1:443` and the evalsi API, same as a control pod | The cluster has no policy engine; not a product failure |
 | 4 | Namespace-only install under PSA `restricted` | PASS | `alice`: `no` for clusterroles, clusterrolebindings, CRDs, validatingwebhookconfigurations; `helm upgrade --install ev-ns … --kube-as-user alice` deployed; 8/8 pods Ready | |
 | 4 | Namespace-only: code eval + agent run on the pod rung | PASS | sandbox-run unit-tests 0.5; agent-run task-success n=2 mean 1; 5 sandbox pods created | As SA `ci` with a projected token |
-| 4 | …then on Landlock | PASS / refusal | sandbox-run: unit-tests 0.5. agent-run (needs `namespaced`): refused, 2 errors | By design; same as AWC |
+| 4 | …then on Landlock | PASS / refusal | sandbox-run: unit-tests 0.5. agent-run (needs `namespaced`): refused, 2 errors | By design; same as the Istio ambient cluster |
 | 5 | TRL GRPO exit test (CPU) | PASS | `1 passed in 11.28s` (`test_grpo_with_evalsi_rewards_and_checkpoints`), Job `ev-grpo3`, privileged, amd64 trainers image | Attempts 1 and 2 failed on my image setup (`No module named 'evalsi'`, then `'google'`): the evalsi package lives in a different venv than the torch venv. Fixed with a `.pth` fallback in the Job; no repo change. Logs: failures/aks-grpo-attempt{1,2}.log |
 
 New findings from AKS:
 - **F6.** The `evalsi` chart can't set tolerations on the operator, NATS or dev Postgres (only on the server, workers and sandbox pool). On a cluster whose nodes are all tainted those pods stay Pending. Workaround: `kubectl patch` of tolerations on `deploy/evalsi-operator`, `sts/evalsi-nats`, `sts/evalsi-dev-postgres`; the two Pending StatefulSet pods then needed deleting to pick it up (done with your OK).
 - **D15.** `mode: bwrap` fails on this AKS (Ubuntu 24.04) with `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`; `mode: privileged` works.
-- The AWC pod-rung failure is therefore an AWC platform problem (waypoint ext-authz), not an Evals.si defect: the same specs pass here.
-- The AWC NetworkPolicy non-enforcement is still unexplained (Calico present). AKS cannot answer it because it has no policy engine.
+- The Istio ambient cluster pod-rung failure is therefore a platform problem of that cluster (waypoint ext-authz), not an Evals.si defect: the same specs pass here.
+- The Istio ambient cluster NetworkPolicy non-enforcement is still unexplained (Calico present). AKS cannot answer it because it has no policy engine.
 
 AKS not repeated (outside the agreed scope): identity/RBAC, credential grants, guardrails, annotation, MCP, ml, load, HA, Firecracker (no `/dev/kvm` expected on Azure VMs; not checked), UI, real SWE-bench.
