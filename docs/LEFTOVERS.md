@@ -13,10 +13,11 @@ by this incoming-trace boundary.
 
 ## Verified only with stand-ins (needs real infrastructure)
 
-Landlock in the current local recheck is deferred to AKS at the maintainer's
-request: Docker Desktop's kernel does not enable it. `SKIP_LANDLOCK=1` is an
-explicit local opt-out; the default kind/CI check still requires Landlock.
-The new AKS recheck has not run. Earlier cluster evidence is not a new recheck.
+The default amd64 kind job, including Landlock, passed in
+[CI run 119](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38135174954)
+at `ba2ceff` on 2026-10-11. Docker Desktop's kernel does not enable Landlock;
+`SKIP_LANDLOCK=1` remains an explicit local opt-out, not Mac verification of
+that rung. The new AKS recheck has not run.
 
 Langfuse `v4.56.0` passed Compose and in-cluster TraceSource checks, including
 Secret credentials, policy scores, replacement under the same score ID and an
@@ -28,8 +29,8 @@ The [platform-aware bundle recheck](verification/README.md#platform-aware-bundle
 passed arm64 bundle export, kind import and installation, and bootstrap key
 authentication across an upgrade. Later runs passed the demo dataset upload,
 both small-repo suites, MLflow sink and TraceSource loop, and restricted-namespace
-pod-rung code and agent checks. Landlock is deferred as above; an opted-out run
-is not a complete Kubernetes verification.
+pod-rung code and agent checks. CI run 119 covers Landlock on amd64 kind;
+an opted-out Mac run is not a complete Kubernetes verification.
 
 | Item | Why it is open | Where recorded |
 |------|----------------|----------------|

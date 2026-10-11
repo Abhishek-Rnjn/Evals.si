@@ -119,8 +119,9 @@ deploy/e2e/kind-e2e.sh` exited successfully. Airgap installation, parity,
 webhooks, bootstrap, bubblewrap, pod sandboxes, both reference demos, MLflow
 sink and pull/write-back, restricted namespace operation and static issuer/key
 checks passed. The issuer-discovery denial intentionally times out its rollout
-before verifying fail-closed behavior and recovery. Landlock remains deferred
-on Docker's kernel; this is not complete Kubernetes isolation certification.
+before verifying fail-closed behavior and recovery. Landlock was not verified
+on Docker Desktop's kernel; CI run 119 later passed the default amd64 kind
+job with Landlock (see the recheck below).
 See [the consolidated changes and fixes](CHANGES-2026-10-11.md) for items 1-6,
 the final verification evidence and remaining limits.
 
@@ -179,12 +180,13 @@ pod-rung code and agent evaluations. The dsh nested sandbox needed the explicit
 outer-sandbox setting in [decision 0018](../decisions/0018-dsh-outer-sandbox.md).
 The mock model reuses bundled Python instead of pulling it under another alias.
 
-The run stopped at Landlock: the Docker Desktop kernel lacks its support.
-The maintainer requested deferring that local step to AKS. `SKIP_LANDLOCK=1`
-now explicitly omits only the Landlock block and retains pod-rung isolation for
-the downstream denied issuer-discovery and static-key recovery checks. CI and
-default local runs still require Landlock. The AKS recheck is pending; no
-complete Kubernetes pass is claimed for an opted-out run.
+That historical run stopped at Landlock: the Docker Desktop kernel lacks its
+support. `SKIP_LANDLOCK=1` explicitly omits only the Landlock block and retains
+pod-rung isolation for downstream denied issuer-discovery and static-key
+recovery checks. CI and default local runs still require Landlock. The default
+amd64 kind job passed with Landlock in CI run 119 on 2026-10-11; a new AKS
+recheck is still pending. No complete Kubernetes pass is claimed for an
+opted-out Mac run.
 
 The subsequent command
 `CLUSTER=evalsi-e2e-desktop SKIP_LANDLOCK=1 deploy/e2e/kind-e2e.sh` exited 0 on
@@ -196,6 +198,66 @@ static issuer/JWKS recovery followed by code evaluation with mean 0.5.
 The job ended with `passed with Landlock deferred (not a complete Kubernetes
 verification)`. The five previously paused unrelated cluster containers were
 restarted afterward. This run does not verify Landlock or the default CI job.
+
+## Mac and CI recheck (2026-10-11)
+
+Both added commits (`60b31a9`, `ba2ceff`) were reviewed before changes. At
+`ba2ceff`, this arm64 Mac with Docker Desktop client/server 28.5.1 passed:
+
+- `PATH=/tmp/evalsi-verify-tools:$PATH TMPDIR=/tmp make check`, using CI's buf
+    1.73.0: Go formatting, vet and tests; Ruff checks and format, mypy, 458 Python
+    tests with three existing skips; buf lint and format. The first attempt
+    stopped at missing buf; the complete rerun passed without weakening tests.
+- `TMPDIR=/tmp go test -race ./...`.
+- `TMPDIR=/tmp make e2e`: real Python and SWE-bench workers; e2e 32.866 s,
+    source package 4.454 s.
+- `CLUSTER=evalsi-verify119 SKIP_LANDLOCK=1 TMPDIR=/tmp
+    deploy/e2e/kind-e2e.sh` from a new two-node kind/Kubernetes 1.35.0 cluster.
+    Image build, bundle export/import and installation (including sandboxd),
+    bundle-only image assertion, embedded/Kubernetes parity, admission webhooks,
+    online policy, bootstrap key authentication across upgrade, bubblewrap code,
+    pod-rung agent cleanup, both reference demo suites, demo MLflow scores,
+    MLflow TraceSource pull/scoring/write-back, EvalRun deletion, restricted
+    namespace install and pod-rung code/agent runs, denied issuer discovery and
+    static issuer/key recovery all passed. The discovery denial intentionally
+    times out its rollout before recovery. Docker 28.5.1 lists all three platform
+    flags, exercising the scoped inspect/save/load path. Landlock was explicitly
+    omitted and was not attempted on macOS.
+
+A disposable PostgreSQL 17 database with a verified 1 GiB limit passed all
+idempotency store tests with race detection. Temporary Go overlays also ran
+the server's failed-call retry and completed-outcome replay tests against that
+real database: the quota failure released its key, retry executed, and the
+third call replayed without executing. A separate capacity probe seeded 1024
+uncompleted claims older than expiry plus six days; a new claim succeeded and
+subsequent pruning removed all stale claims. The existing retention regression
+also confirmed unresolved claims remain blocked before that boundary. These
+probes changed no branch code; the container reported `OOMKilled=false`.
+
+The older-Docker path also passed with real Docker 27.5.1 client and daemon,
+not mocks. A disposable `docker:27-dind` daemon used the classic `overlay2`
+store (`containerd-snapshotter=false`). An arm64 evalsi image was loaded into
+that store; `bundle.sh --tag verify119 --platform linux/arm64` exported all six
+images, and the resulting `install.sh --kind evalsi-verify119-legacy --registry
+airgap.invalid --with-sandboxd --sandboxd-mode privileged --sandbox-classes`
+loaded, retagged and exported them for native kind, then installed the CRDs,
+server with PostgreSQL, and sandboxd. Docker 27 help lists no platform flag for
+inspect/save/load; recorded calls used the plain commands for all three.
+
+An earlier probe used Docker 27's CLI against Docker Desktop 28's
+multi-platform containerd store. Its unscoped archive failed kind import with
+an absent manifest digest, and a later load stalled. That combination is not
+verified: the successful fallback result applies to a single-platform classic
+store on the matching arm64 host. Temporary CLI transport bugs were corrected
+outside the repository before the successful run. No production scripts were
+changed or tests weakened.
+
+[CI run 119](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38135174954)
+completed successfully at `ba2ceffe3907dc54df35b98321723fa9136b8fce`.
+Its `kubernetes` job ran the default `deploy/e2e/kind-e2e.sh` on
+`ubuntu-latest` (amd64), without `SKIP_LANDLOCK`: kind setup and Kubernetes
+end-to-end steps passed, including Landlock. This is CI's Linux evidence,
+not Mac Landlock certification or a new AKS/AWC run. No tags were pushed.
 
 ### Release-readiness checks
 
