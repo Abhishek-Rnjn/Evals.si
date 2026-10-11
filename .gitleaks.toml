@@ -1,0 +1,15 @@
+# Secret scanning (see .github/workflows/hygiene.yml). The default rules apply;
+# only these exact fake values, used by the guardrail and redaction tests and
+# the docs that show them, are allowed. A real credential still fails.
+title = "Evals.si"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake credentials in tests and docs"
+regexes = [
+  '''AKIAIOSFODNN7EXAMPLE''',   # AWS's documented example access key
+  '''AKIAABCDEFGHIJKLMNOP''',   # an obviously fake key in the guardrail tests
+  '''whsec_0123456789abcdef''', # a fake webhook secret in the webhook tests
+]
