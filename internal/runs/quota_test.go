@@ -110,7 +110,8 @@ func TestQuotaConcurrentRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The global limit is 2: p's first run and q's run start; p's second waits.
+	// The global limit is 2: one of p's runs and q's run start; p's other
+	// run waits. Which of p's runs takes the slot is up to the scheduler.
 	deadline := time.Now().Add(5 * time.Second)
 	for h.worker.evaluateCalls.Load() < 2 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
@@ -119,9 +120,14 @@ func TestQuotaConcurrentRuns(t *testing.T) {
 	if n := h.worker.evaluateCalls.Load(); n != 2 {
 		t.Fatalf("%d runs evaluating, want 2 (one per project)", n)
 	}
-	got, _ := h.st.GetRun(context.Background(), b.GetId())
-	if got.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING {
-		t.Fatalf("p's second run is %v, want PENDING", got.GetStatus())
+	pending := 0
+	for _, run := range []*evalsiv1alpha1.Run{a, b} {
+		if got, _ := h.st.GetRun(context.Background(), run.GetId()); got.GetStatus() == evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING {
+			pending++
+		}
+	}
+	if pending != 1 {
+		t.Fatalf("%d of p's runs are PENDING, want 1", pending)
 	}
 	close(h.worker.release)
 	for _, id := range []string{a.GetId(), b.GetId(), other.GetId()} {

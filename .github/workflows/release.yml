@@ -91,10 +91,7 @@ jobs:
       - name: Build
         working-directory: python
         run: |
-          v="${{ needs.version.outputs.version }}"
-          for p in evalsi/src/evalsi/_version.py evalsi-harness/src/evalsi_harness/_version.py; do
-            sed -i "s/^__version__ = .*/__version__ = \"$v\"/" "$p"
-          done
+          ../scripts/set-python-version.sh "${{ needs.version.outputs.version }}" .
           uv build --all-packages -o ../dist
       - uses: actions/upload-artifact@v5
         with:
@@ -106,8 +103,10 @@ jobs:
   #   evalsi          -> environment "pypi"
   #   evalsi-harness  -> environment "pypi-harness"
   # Register each on pypi.org with that environment name (docs/RELEASING.md).
+  # A PyPI version can never be uploaded again, so these wait for the
+  # release approval and for every other build to succeed first.
   pypi:
-    needs: python
+    needs: [python, approve, binaries, image, collector, charts, bundle]
     if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
     runs-on: ubuntu-latest
     environment: pypi
@@ -123,7 +122,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   pypi-harness:
-    needs: python
+    needs: [python, approve, binaries, image, collector, charts, bundle]
     if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
     runs-on: ubuntu-latest
     environment: pypi-harness

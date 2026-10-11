@@ -58,13 +58,20 @@ func finished(phase string) bool {
 type EvalRunReconciler struct {
 	client.Client
 	API *API
+	// Which projects a resource's namespace may name.
+	Projects v1.ProjectPolicy
 	// How often a running run's state is polled; default 5s.
 	PollInterval time.Duration
 }
 
-// Project is the evalsi project of a namespaced resource: its
-// evals.si/project label, else its namespace.
-func Project(obj metav1.Object) string { return v1.ProjectOf(obj) }
+// labelledProject is the project a resource asks for: its evals.si/project
+// label, else its namespace. Whether it may is ProjectPolicy's decision.
+func labelledProject(obj metav1.Object) string {
+	if p := obj.GetLabels()[v1.ProjectLabel]; p != "" {
+		return p
+	}
+	return obj.GetNamespace()
+}
 
 // apiLabels are the resource's labels that travel to the API (for access
 // rules), without Kubernetes' own prefixed ones.
@@ -81,7 +88,7 @@ func appliedMetadata(obj metav1.Object) string {
 	}
 	sort.Strings(keys)
 	h := sha256.New()
-	fmt.Fprintf(h, "%q", Project(obj))
+	fmt.Fprintf(h, "%q", labelledProject(obj))
 	for _, k := range keys {
 		fmt.Fprintf(h, "\x00%q=%q", k, labels[k])
 	}
@@ -155,10 +162,14 @@ func (r *EvalRunReconciler) create(ctx context.Context, run *v1.EvalRun) (ctrl.R
 	if err != nil {
 		return ctrl.Result{}, r.invalid(ctx, run, err)
 	}
+	project, err := r.Projects.Project(run)
+	if err != nil {
+		return ctrl.Result{}, r.invalid(ctx, run, err)
+	}
 	var created *connect.Response[evalsiv1alpha1.CreateRunResponse]
-	err = r.API.withProject(ctx, Project(run), func() (err error) {
+	err = r.API.withProject(ctx, project, func() (err error) {
 		created, err = r.API.Runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{
-			Name: run.Name, Project: Project(run), Spec: s, Labels: apiLabels(run),
+			Name: run.Name, Project: project, Spec: s, Labels: apiLabels(run),
 		}))
 		return err
 	})

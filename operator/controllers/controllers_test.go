@@ -127,6 +127,15 @@ func TestOperator(t *testing.T) {
 		if err := alice.Create(ctx, secret); err == nil || !strings.Contains(err.Error(), "may not use") {
 			t.Errorf("ungranted variable: %v", err)
 		}
+		// The operator acts as an owner: a namespace may only name the
+		// projects mapped to it, so team-a cannot reach checkout's.
+		elsewhere := &v1.EvalRun{
+			ObjectMeta: metav1.ObjectMeta{Name: "elsewhere", Namespace: "team-a", Labels: map[string]string{v1.ProjectLabel: "checkout"}},
+			Spec:       runtime.RawExtension{Raw: []byte(`{"evaluators":[{"ref":"exact-match"}],"dataset":{"path":"a.jsonl"}}`)},
+		}
+		if err := alice.Create(ctx, elsewhere); err == nil || !strings.Contains(err.Error(), "may not use project") {
+			t.Errorf("unmapped project: %v", err)
+		}
 		e.api.mu.Lock()
 		validated := slices.Clone(e.api.validated)
 		e.api.mu.Unlock()
@@ -353,8 +362,11 @@ func TestOperator(t *testing.T) {
 		if volumes["worker-tls"].Secret.SecretName != "evalsi-worker-tls" || mounts["worker-tls"] != "/etc/evalsi/worker-tls" {
 			t.Errorf("no sandbox client certificate: %+v %v", volumes, mounts)
 		}
-		if len(c.Env) < 2 || c.Env[0].ValueFrom.SecretKeyRef.Name != "evalsi-s3" || c.Env[1].Name != "EVALSI_S3_SECRET_KEY" {
+		if len(c.Env) < 3 || c.Env[1].ValueFrom.SecretKeyRef.Name != "evalsi-s3" || c.Env[2].Name != "EVALSI_S3_SECRET_KEY" {
 			t.Errorf("no S3 credentials: %+v", c.Env)
+		}
+		if c.Env[0].Name != NATSTokenEnv || c.Env[0].ValueFrom.SecretKeyRef.Name != "evalsi-nats-auth" || c.Env[0].ValueFrom.SecretKeyRef.Key != "token" {
+			t.Errorf("no NATS token: %+v", c.Env)
 		}
 		so := &unstructured.Unstructured{}
 		so.SetGroupVersionKind(scaledObjectGVK)

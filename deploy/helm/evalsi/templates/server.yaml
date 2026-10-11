@@ -65,6 +65,7 @@ spec:
             - {name: PYTHONPATH, value: {{ . | quote }}}
             {{- end }}
             {{- include "evalsi.storageEnv" . | nindent 12 }}
+            {{- include "evalsi.natsTokenEnv" . | nindent 12 }}
             {{- with $v.server.env }}{{ toYaml . | nindent 12 }}{{ end }}
           {{- with $v.server.envFrom }}
           envFrom: {{- toYaml . | nindent 12 }}

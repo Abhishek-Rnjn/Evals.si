@@ -526,7 +526,7 @@ type deps struct {
 // the caller's credential (gate.assignTrace).
 func registerOTLP(mux *http.ServeMux, d deps) {
 	inner := http.NewServeMux()
-	recv := ingest.NewReceiver(d.assembler, d.gate.assignTrace, connect.WithInterceptors(d.gate.interceptor()))
+	recv := ingest.NewReceiver(d.assembler, d.gate.assignTrace, d.gate.handlerOptions())
 	recv.SetHTTPExport(func(ctx context.Context, request *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error) {
 		response, err := d.gate.idempotent(ctx, procedureRequest{AnyRequest: request, procedure: ingest.TraceExportProcedure}, func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
 			return recv.Export(ctx, request)
@@ -554,12 +554,12 @@ func registerOTLP(mux *http.ServeMux, d deps) {
 func otlpHandler(d deps) http.Handler {
 	mux := http.NewServeMux()
 	registerOTLP(mux, d)
-	return d.authn.Middleware(mux)
+	return d.authn.Middleware(boundRejected(mux))
 }
 
 // Handler routes every service behind authentication and the gate.
 func Handler(d deps) http.Handler {
-	gated := connect.WithInterceptors(d.gate.interceptor())
+	gated := d.gate.handlerOptions()
 	mux := http.NewServeMux()
 	registerDatasetUpload(mux, d)
 	log := d.log
@@ -650,7 +650,7 @@ func Handler(d deps) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(doc)
 	})
-	root := d.authn.Middleware(mux)
+	root := d.authn.Middleware(boundRejected(mux))
 	if !d.mcp.Disabled {
 		mcp.New(d.mcp, root, d.gate.authorizeTool, d.authn.Issuers, log).Register(mux)
 	}

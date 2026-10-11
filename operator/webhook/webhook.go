@@ -78,6 +78,8 @@ type Validator struct {
 	// Asks the API whether it would accept the resource; nil checks the
 	// schema only.
 	Remote Remote
+	// Which projects a resource's namespace may name.
+	Projects v1.ProjectPolicy
 }
 
 // Remote checks resources against the evalsi API without creating them.
@@ -98,6 +100,12 @@ func (val Validator) Handle(ctx context.Context, req admission.Request) admissio
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 	raw, err := specOf(obj)
+	if err != nil {
+		return admission.Denied(err.Error())
+	}
+	// The operator acts on the resource as an owner, so the project the
+	// label names must be one the resource's namespace may use.
+	project, err := val.Projects.Project(obj)
 	if err != nil {
 		return admission.Denied(err.Error())
 	}
@@ -123,19 +131,19 @@ func (val Validator) Handle(ctx context.Context, req admission.Request) admissio
 		var s *evalsiv1alpha1.RunSpec
 		if s, err = spec.Run(raw); err == nil && val.Remote != nil {
 			check = func(ctx context.Context) error {
-				return val.Remote.CheckRun(ctx, v1.ProjectOf(obj), obj.GetName(), s, v1.APILabels(obj))
+				return val.Remote.CheckRun(ctx, project, obj.GetName(), s, v1.APILabels(obj))
 			}
 		}
 	case "OnlineEvalPolicy":
 		var p *evalsiv1alpha1.OnlineEvalPolicy
 		if p, err = spec.Policy(raw); err == nil && val.Remote != nil {
-			p.Name, p.Project, p.Labels = obj.GetName(), v1.ProjectOf(obj), v1.APILabels(obj)
+			p.Name, p.Project, p.Labels = obj.GetName(), project, v1.APILabels(obj)
 			check = func(ctx context.Context) error { return val.Remote.CheckPolicy(ctx, p) }
 		}
 	case "TraceSource":
 		var s *evalsiv1alpha1.TraceSource
 		if s, err = spec.Source(raw); err == nil && val.Remote != nil {
-			s.Name, s.Project, s.Labels = obj.GetName(), v1.ProjectOf(obj), v1.APILabels(obj)
+			s.Name, s.Project, s.Labels = obj.GetName(), project, v1.APILabels(obj)
 			check = func(ctx context.Context) error { return val.Remote.CheckSource(ctx, s) }
 		}
 	}
@@ -200,8 +208,9 @@ func jsonEqual(a, b []byte) bool {
 }
 
 // Register adds both webhooks to a server; remote, when not nil, checks
-// EvalRuns and policies against the API before they are admitted.
-func Register(s webhook.Server, remote Remote) {
+// EvalRuns and policies against the API before they are admitted, and
+// projects says which projects each namespace's resources may name.
+func Register(s webhook.Server, remote Remote, projects v1.ProjectPolicy) {
 	s.Register(MutatePath, &webhook.Admission{Handler: Mutator{}})
-	s.Register(ValidatePath, &webhook.Admission{Handler: Validator{Remote: remote}})
+	s.Register(ValidatePath, &webhook.Admission{Handler: Validator{Remote: remote, Projects: projects}})
 }

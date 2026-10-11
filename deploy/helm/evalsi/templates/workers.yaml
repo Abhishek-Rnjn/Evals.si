@@ -58,6 +58,7 @@ spec:
             - name: EVALSI_S3_SECRET_KEY
               valueFrom: {secretKeyRef: {name: {{ $st.s3.credentialsSecret }}, key: secret_key}}
             {{- end }}
+            {{- include "evalsi.natsTokenEnv" $ | nindent 12 }}
             {{- with $v.workers.env }}{{ toYaml . | nindent 12 }}{{ end }}
           {{- with $v.workers.envFrom }}
           envFrom: {{- toYaml . | nindent 12 }}

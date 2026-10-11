@@ -77,3 +77,16 @@ func TestGuardChecksWhereRequestsGo(t *testing.T) {
 		t.Fatalf("a public address: %v", err)
 	}
 }
+
+func TestInternalIP(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"10.1.2.3": true, "127.0.0.1": true, "169.254.169.254": true, "0.1.2.3": true,
+		"100.100.100.200": true, "100.64.0.1": true, "::ffff:169.254.169.254": true,
+		"64:ff9b::a9fe:a9fe": true, "64:ff9b:1::a00:1": true, "fd00:ec2::254": true,
+		"8.8.8.8": false, "100.128.0.1": false, "64:ff9b::808:808": false, "2606:4700::1111": false,
+	} {
+		if got := internalIP(net.ParseIP(addr)); got != want {
+			t.Errorf("%s: %v, want %v", addr, got, want)
+		}
+	}
+}

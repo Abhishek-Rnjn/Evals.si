@@ -51,7 +51,7 @@ func matchHost(pattern, host string) bool {
 // the guard rail against the obvious.
 func internalHost(host string) bool {
 	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+		return internalIP(ip)
 	}
 	switch {
 	case host == "localhost", strings.HasSuffix(host, ".localhost"),

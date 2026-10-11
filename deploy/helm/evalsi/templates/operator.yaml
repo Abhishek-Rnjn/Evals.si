@@ -100,7 +100,13 @@ spec:
             {{- end }}
             - --name-prefix={{ $fn }}
             - --nats-monitoring-endpoint={{ $fn }}-nats.{{ $ns }}.svc:8222
+            {{- with include "evalsi.natsAuthSecret" . }}
+            - --worker-nats-secret={{ . }}
+            {{- end }}
             - --create-projects={{ $v.operator.createProjects }}
+            {{- range $project, $namespaces := (default dict $v.operator.projectNamespaces) }}
+            - --project-namespaces={{ $project }}={{ join "," $namespaces }}
+            {{- end }}
             - --webhooks={{ $v.operator.webhooks }}
             - --webhook-cert-dir=/etc/evalsi/webhook-tls
             - --leader-elect={{ gt (int $v.operator.replicas) 1 }}

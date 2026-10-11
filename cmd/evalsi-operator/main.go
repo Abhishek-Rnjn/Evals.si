@@ -51,6 +51,7 @@ func run() error {
 		api           controllers.APIConfig
 		allowClients  list
 		watchNS       list
+		projectNS     list
 		namespace     = os.Getenv("POD_NAMESPACE")
 		enabled       = "evalrun,onlineevalpolicy,tracesource,evaluator,sandboxclass"
 		image         string
@@ -61,6 +62,7 @@ func run() error {
 		natsMonitor   string
 		workerTLS     string
 		workerS3      string
+		workerNATS    string
 		poll          = 5 * time.Second
 		statsInterval = 30 * time.Second
 		webhooks      = true
@@ -78,6 +80,7 @@ func run() error {
 	flag.StringVar(&api.KeyFile, "key-file", "", "its key")
 	flag.BoolVar(&api.CreateProjects, "create-projects", true, "create a namespace's project when evalsid does not know it")
 	flag.Var(&watchNS, "watch-namespace", "only watch this namespace (repeatable; default: all)")
+	flag.Var(&projectNS, "project-namespaces", "project=ns1,ns2: namespaces whose resources may name the project with the evals.si/project label (repeatable; ns \"*\": every namespace). Resources in --namespace may name any project")
 	flag.StringVar(&namespace, "namespace", namespace, "where sandbox pools run (default: $POD_NAMESPACE)")
 	flag.StringVar(&enabled, "controllers", enabled, "controllers to run")
 	flag.StringVar(&image, "image", os.Getenv("EVALSI_IMAGE"), "the evalsi image, for sandbox pools")
@@ -87,6 +90,7 @@ func run() error {
 	flag.StringVar(&workerConfig, "worker-config-map", workerConfig, "default ConfigMap with the workers' evalsi.yaml")
 	flag.StringVar(&workerTLS, "worker-tls-secret", "", "Secret with the workers' sandbox client certificate, for Evaluators on the default ConfigMap")
 	flag.StringVar(&workerS3, "worker-s3-secret", "", "Secret with S3 credentials (access_key, secret_key), for Evaluators on the default ConfigMap")
+	flag.StringVar(&workerNATS, "worker-nats-secret", "", "Secret with the NATS token (token), for Evaluators on the default ConfigMap")
 	flag.StringVar(&namePrefix, "name-prefix", namePrefix, "start the names of what the operator creates, and its leader election lease, with this")
 	flag.StringVar(&natsMonitor, "nats-monitoring-endpoint", "", "NATS monitoring host:port, for KEDA scaling")
 	flag.DurationVar(&poll, "poll-interval", poll, "how often running runs are polled")
@@ -134,15 +138,21 @@ func run() error {
 	if webhooks {
 		mo.WebhookServer = webhook.NewServer(webhook.Options{Port: webhookPort, CertDir: certDir})
 	}
+	projectNamespaces, err := v1.ParseProjectNamespaces(projectNS)
+	if err != nil {
+		return err
+	}
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mo)
 	if err != nil {
 		return err
 	}
-	if err := controllers.Setup(mgr, controllers.Config{
+	cfg := controllers.Config{
 		Enabled: strings.Split(enabled, ","), API: api, PollInterval: poll, StatsInterval: statsInterval,
 		Namespace: namespace, Image: image, SandboxTLSSecret: tlsSecret, SandboxAllowClients: allowClients,
-		SandboxServiceAccount: sandboxSA, WorkerConfigMap: workerConfig, WorkerTLSSecret: workerTLS, WorkerS3Secret: workerS3, NATSMonitoringEndpoint: natsMonitor, NamePrefix: namePrefix,
-	}); err != nil {
+		SandboxServiceAccount: sandboxSA, WorkerConfigMap: workerConfig, WorkerTLSSecret: workerTLS, WorkerS3Secret: workerS3, WorkerNATSSecret: workerNATS, NATSMonitoringEndpoint: natsMonitor, NamePrefix: namePrefix,
+		ProjectNamespaces: projectNamespaces,
+	}
+	if err := controllers.Setup(mgr, cfg); err != nil {
 		return err
 	}
 	if webhooks {
@@ -157,7 +167,7 @@ func run() error {
 			}
 			remote = client
 		}
-		evalsiwebhook.Register(mgr.GetWebhookServer(), remote)
+		evalsiwebhook.Register(mgr.GetWebhookServer(), remote, cfg.Projects())
 		if err := mgr.AddReadyzCheck("webhook", mgr.GetWebhookServer().StartedChecker()); err != nil {
 			return err
 		}

@@ -808,7 +808,7 @@ jobs:
 
 Notes:
 
-- The project is the `evals.si/project` label on the resource, else the namespace.
+- The project is the `evals.si/project` label on the resource, else the namespace. Outside the release's namespace, the label must name the namespace or a project mapped to it in `operator.projectNamespaces`.
 - `kubectl wait` exits non-zero if the run does not reach `Succeeded` in time, which fails the job. A failed gate leaves the phase at `Failed`.
 - Deleting the resource cancels a run that is still going. Its results stay on the server.
 - Admission webhooks validate the spec with the CLI's rules, so a malformed spec is rejected at `kubectl apply`.

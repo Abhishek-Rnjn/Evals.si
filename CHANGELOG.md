@@ -21,6 +21,13 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 - **Kubernetes.** Helm charts (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), an operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator` and `SandboxClass` CRDs, and an air-gapped install bundle.
 - **Release engineering.** Linux amd64 and arm64 archives, Python distributions, multi-architecture images and OCI charts, signed keylessly with Sigstore, with `scripts/verify-release.sh`.
 
+### Security
+
+- The API bounds every RPC message at 64 MiB, and reads at most 64 KiB of a request whose credential was rejected. Connect reads a unary request whole before authentication runs, so a caller without a valid credential could otherwise make the server buffer a body of any size.
+- The operator lets a resource name a project other than its namespace (`evals.si/project`) only from the release's namespace or namespaces mapped with `operator.projectNamespaces`, since it acts through the API as an owner.
+- The chart's bundled NATS requires a token, and a NetworkPolicy limits its client port to the release's namespace.
+- Trace sources refuse shared address space (100.64.0.0/10, where some clouds serve instance metadata), 0.0.0.0/8 and NAT64 addresses of internal hosts unless listed in `sources.allow_hosts`.
+
 ### Known limits
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.

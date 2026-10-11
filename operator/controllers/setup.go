@@ -9,6 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
 )
 
 // Config configures the controllers Setup adds.
@@ -30,10 +32,20 @@ type Config struct {
 	// secret_key). Empty when the release uses neither.
 	WorkerTLSSecret        string
 	WorkerS3Secret         string
+	WorkerNATSSecret       string
 	NATSMonitoringEndpoint string
 	// Names of what the operator creates start with this (default "evalsi"),
 	// so releases of the chart can share a namespace.
 	NamePrefix string
+	// Projects, by name, that resources in other namespaces than the
+	// project's own may name with the evals.si/project label ("*": every
+	// namespace). Resources in Namespace may name any project.
+	ProjectNamespaces map[string][]string
+}
+
+// Projects is the project policy of the controllers and the webhooks.
+func (c Config) Projects() v1.ProjectPolicy {
+	return v1.ProjectPolicy{Home: c.Namespace, Namespaces: c.ProjectNamespaces}
 }
 
 // childName names an object the operator makes: the prefix (default
@@ -59,12 +71,12 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 			return err
 		}
 		if on("evalrun") {
-			if err := (&EvalRunReconciler{Client: mgr.GetClient(), API: api, PollInterval: cfg.PollInterval}).SetupWithManager(mgr); err != nil {
+			if err := (&EvalRunReconciler{Client: mgr.GetClient(), API: api, Projects: cfg.Projects(), PollInterval: cfg.PollInterval}).SetupWithManager(mgr); err != nil {
 				return err
 			}
 		}
 		if on("onlineevalpolicy") {
-			if err := (&PolicyReconciler{Client: mgr.GetClient(), API: api, StatsInterval: cfg.StatsInterval}).SetupWithManager(mgr); err != nil {
+			if err := (&PolicyReconciler{Client: mgr.GetClient(), API: api, Projects: cfg.Projects(), StatsInterval: cfg.StatsInterval}).SetupWithManager(mgr); err != nil {
 				return err
 			}
 		}
@@ -73,13 +85,13 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 		if on("tracesource") {
 			if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "evals.si", Kind: "TraceSource"}, "v1alpha1"); meta.IsNoMatchError(err) {
 				ctrl.Log.Info("the TraceSource CRD is not installed; apply the evalsi-crds chart's CRDs to manage trace sources", "controller", "tracesource")
-			} else if err := (&TraceSourceReconciler{Client: mgr.GetClient(), API: api, StatsInterval: cfg.StatsInterval}).SetupWithManager(mgr); err != nil {
+			} else if err := (&TraceSourceReconciler{Client: mgr.GetClient(), API: api, Projects: cfg.Projects(), StatsInterval: cfg.StatsInterval}).SetupWithManager(mgr); err != nil {
 				return err
 			}
 		}
 	}
 	if on("evaluator") {
-		if err := (&EvaluatorReconciler{Client: mgr.GetClient(), WorkerConfigMap: cfg.WorkerConfigMap, WorkerTLSSecret: cfg.WorkerTLSSecret, WorkerS3Secret: cfg.WorkerS3Secret, NATSMonitoringEndpoint: cfg.NATSMonitoringEndpoint, NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
+		if err := (&EvaluatorReconciler{Client: mgr.GetClient(), WorkerConfigMap: cfg.WorkerConfigMap, WorkerTLSSecret: cfg.WorkerTLSSecret, WorkerS3Secret: cfg.WorkerS3Secret, WorkerNATSSecret: cfg.WorkerNATSSecret, NATSMonitoringEndpoint: cfg.NATSMonitoringEndpoint, NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
 			return err
 		}
 	}
