@@ -70,8 +70,11 @@ window IDs reconcile a restart after run insertion without inserting it twice.
 
 Both direct OTLP exports and pulled traces use the server's `traces.redaction`
 rules before Evals.si stores or evaluates them. By default, values under
-`password`, `passwd`, `authorization`, `api_key`, `api-key`, `access_token`,
-`refresh_token`, and `client_secret` are replaced with `[REDACTED]`. Key matching
+`password`, `passwd`, `authorization`, `cookie`, `set-cookie`, `token`, `secret`,
+`api_key`, `api-key`, `apikey`, `private_key`, and names ending in `_token`,
+`_secret`, `_password` or `_api_key` (such as `x-api-key`, `id_token` and
+`client_secret`) are replaced with `[REDACTED]`. Token counts such as
+`input_tokens` are not. Key matching
 is case-insensitive and checks the whole key and its final dot-separated
 segment, including nested JSON and record metadata.
 

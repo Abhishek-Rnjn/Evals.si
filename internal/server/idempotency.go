@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -114,33 +113,37 @@ func (g *gate) idempotent(ctx context.Context, req connect.AnyRequest, next conn
 		return response, nil
 	}
 	response, callErr := next(ctx, req)
-	responseType, failure := "", ""
-	var encoded []byte
-	code := 0
 	if callErr != nil {
-		code = int(connect.CodeOf(callErr))
-		failure = fmt.Sprintf("original idempotent request failed with %s; it was not executed again", connect.Code(code))
-		encoded = []byte{}
-	} else {
-		cached := proto.Clone(response.Any().(proto.Message))
-		if credentials, ok := cached.(*evalsiv1alpha1.CreateAPIKeyResponse); ok {
-			credentials.Secret = ""
-		}
-		responseType = string(cached.ProtoReflect().Descriptor().FullName())
-		encoded, err = proto.Marshal(cached)
-		if err != nil {
-			return nil, err
-		}
-		if len(encoded) > 64<<20 {
-			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("operation finished but its response exceeds the idempotency cache limit; reconcile the original operation"))
-		}
+		// A failed call is not an outcome to replay: it may be transient or fixable
+		// (a quota, a dropped connection), so the key is freed for the retry.
+		g.release(ctx, scope, key, fingerprint)
+		return response, callErr
+	}
+	cached := proto.Clone(response.Any().(proto.Message))
+	if credentials, ok := cached.(*evalsiv1alpha1.CreateAPIKeyResponse); ok {
+		credentials.Secret = ""
+	}
+	encoded, err := proto.Marshal(cached)
+	if err != nil {
+		return nil, err
+	}
+	if len(encoded) > 64<<20 {
+		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("operation finished but its response exceeds the idempotency cache limit; reconcile the original operation"))
 	}
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if err := g.store.CompleteIdempotency(finishCtx, scope, key, fingerprint, responseType, encoded, code, failure, time.Now()); err != nil {
+	if err := g.store.CompleteIdempotency(finishCtx, scope, key, fingerprint, string(cached.ProtoReflect().Descriptor().FullName()), encoded, 0, "", time.Now()); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("operation outcome could not be cached; reconcile the original operation before using a new key"))
 	}
-	return response, callErr
+	return response, nil
+}
+
+// release frees a claim after a failed call. If that fails the claim stays
+// until it is reaped, and a retry sees the uncertain-outcome error.
+func (g *gate) release(ctx context.Context, scope, key, fingerprint string) {
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	_ = g.store.ReleaseIdempotency(releaseCtx, scope, key, fingerprint)
 }
 
 type bufferedIdempotentStream struct {
@@ -273,16 +276,14 @@ func (g *gate) idempotentStream(ctx context.Context, conn connect.StreamingHandl
 		}
 		return nil
 	}
-	callErr := next(ctx, stream)
-	code, failure := 0, ""
-	if callErr != nil {
-		code = int(connect.CodeOf(callErr))
-		failure = fmt.Sprintf("original idempotent stream failed with %s; it was not executed again", connect.Code(code))
+	if callErr := next(ctx, stream); callErr != nil {
+		g.release(ctx, scope, key, fingerprint)
+		return callErr
 	}
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if err := g.store.CompleteIdempotency(finishCtx, scope, key, fingerprint, stream.responseType, stream.responses.Bytes(), code, failure, time.Now()); err != nil {
+	if err := g.store.CompleteIdempotency(finishCtx, scope, key, fingerprint, stream.responseType, stream.responses.Bytes(), 0, "", time.Now()); err != nil {
 		return connect.NewError(connect.CodeUnavailable, errors.New("stream outcome could not be cached; reconcile the original operation"))
 	}
-	return callErr
+	return nil
 }

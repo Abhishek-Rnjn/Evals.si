@@ -138,3 +138,20 @@ func TestRedactionMetadataBytesEventsAndUnknownFields(t *testing.T) {
 		}
 	}
 }
+
+func TestRedactionDefaultKeysCoverCommonCredentials(t *testing.T) {
+	redactor, err := NewRedactor(RedactionConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"http.request.header.x-api-key", "http.request.header.cookie", "http.response.header.set-cookie", "token", "gen_ai.openai_api_key", "id_token", "auth.secret", "app.db_password", "proxy-authorization", "vault.private_key"} {
+		if !redactor.matches(key) {
+			t.Errorf("%q is not redacted by default", key)
+		}
+	}
+	for _, key := range []string{"gen_ai.usage.input_tokens", "gen_ai.usage.output_tokens", "llm.max_tokens", "tool.name", "http.method", "session.id"} {
+		if redactor.matches(key) {
+			t.Errorf("%q is redacted by default", key)
+		}
+	}
+}

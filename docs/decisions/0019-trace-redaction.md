@@ -19,8 +19,12 @@ overrides after they execute, before persistence, policy selection, evaluator
 calls, promotion and result callbacks.
 
 Default rules replace values under these case-insensitive keys with
-`[REDACTED]`: `password`, `passwd`, `authorization`, `api_key`, `api-key`,
-`access_token`, `refresh_token`, and `client_secret`. A rule matches a complete
+`[REDACTED]`: `password`, `passwd`, `authorization`, `proxy-authorization`, `cookie`,
+`set-cookie`, `token`, `secret`, `api_key`, `api-key`, `apikey` and `private_key`,
+plus names ending in `_password`, `_token`, `-token`, `_secret`, `-secret`,
+`_api_key`, `-api-key`, `_apikey`, `_private_key` and `-private-key` (so
+`x-api-key`, `id_token` and `client_secret` match). Token counts such as
+`input_tokens` are plural and are not matched. A rule matches a complete
 key or its final dot-separated segment. Configured key globs extend these
 defaults; configured RE2 value patterns and PII classes are optional.
 

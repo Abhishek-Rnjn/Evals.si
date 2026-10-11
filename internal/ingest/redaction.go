@@ -32,11 +32,22 @@ type Redactor struct {
 
 const Redacted = "[REDACTED]"
 
+// defaultKeys are matched, as globs, against a whole attribute or field name
+// and against its last dot-separated segment, so http.request.header.x-api-key
+// matches x-api-key. Token counts (input_tokens) are plural and not matched.
+var defaultKeys = []string{
+	"password", "passwd", "*_password", "*-password",
+	"authorization", "proxy-authorization", "cookie", "set-cookie",
+	"token", "*_token", "*-token", "secret", "*_secret", "*-secret",
+	"api_key", "api-key", "apikey", "*_api_key", "*-api-key", "*_apikey",
+	"private_key", "*_private_key", "*-private-key",
+}
+
 func NewRedactor(config RedactionConfig) (*Redactor, error) {
 	if config.Disabled {
 		return &Redactor{}, nil
 	}
-	keys := []string{"password", "passwd", "authorization", "api_key", "api-key", "access_token", "refresh_token", "client_secret"}
+	keys := append([]string(nil), defaultKeys...)
 	keys = append(keys, config.Keys...)
 	redactor := &Redactor{}
 	for _, key := range keys {

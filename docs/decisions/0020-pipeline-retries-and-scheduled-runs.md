@@ -20,12 +20,15 @@ This avoids claiming exactly-once side effects across remote systems.
 
 Responses are persisted, except generated API-key secrets. The initial key
 creation returns the secret once; a retry returns the same key metadata without
-the secret. Failure replay uses a generic code/message, not arbitrary upstream
-error text. Keyed streams buffer bounded inputs before execution and store
+the secret. A call that returns an error is not an outcome to replay: its claim
+is released, so a retry with the same key runs again (a quota, a dropped
+connection or a store outage must not be cached for 24 hours). Keyed streams buffer bounded inputs before execution and store
 response frames; clients must finish sending before waiting for their results.
 Unkeyed streams retain incremental behavior. Per-scope storage is capped at
 1024 entries and 64 MiB of response data. Completed entries are pruned on writes;
-uncertain claims continue to occupy capacity.
+an uncertain claim (a crash between the side effect and its record) blocks its
+key for six days past its 24-hour expiry, so it is not re-executed by accident,
+and is then pruned so it cannot occupy capacity forever.
 PostgreSQL claims and completions take a shared transaction advisory lock so
 replicas cannot race those limits. Handler execution stays outside the lock;
 cache-write throughput is intentionally serialized for correct accounting.

@@ -143,6 +143,42 @@ func TestIdempotencyUnaryReplayAndConflict(t *testing.T) {
 	}
 }
 
+func TestIdempotencyFailedCallIsRetriedWithTheSameKey(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "idempotency.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	procedure := evalsiv1alpha1connect.EvaluationServiceEvaluateProcedure
+	g := &gate{store: st, rules: map[string]accessRule{procedure: {action: "evaluations.run"}}}
+	var calls atomic.Int64
+	handler := connect.NewUnaryHandler(procedure, func(ctx context.Context, req *connect.Request[evalsiv1alpha1.EvaluateRequest]) (*connect.Response[evalsiv1alpha1.EvaluateResponse], error) {
+		if calls.Add(1) == 1 {
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("quota"))
+		}
+		return connect.NewResponse(&evalsiv1alpha1.EvaluateResponse{Results: []*evalsiv1alpha1.EvaluationResult{{RecordId: "second"}}}), nil
+	}, connect.WithInterceptors(testIdempotencyInterceptor(g)))
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client := connect.NewClient[evalsiv1alpha1.EvaluateRequest, evalsiv1alpha1.EvaluateResponse](server.Client(), server.URL+procedure)
+	request := func() *connect.Request[evalsiv1alpha1.EvaluateRequest] {
+		req := connect.NewRequest(&evalsiv1alpha1.EvaluateRequest{Project: "project"})
+		req.Header().Set("Idempotency-Key", "retry-after-failure")
+		return req
+	}
+	if _, err := client.CallUnary(t.Context(), request()); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("first call: %v", err)
+	}
+	retry, err := client.CallUnary(t.Context(), request())
+	if err != nil || retry.Msg.GetResults()[0].GetRecordId() != "second" || retry.Header().Get("Idempotency-Replayed") != "" || calls.Load() != 2 {
+		t.Fatalf("a failed call was replayed instead of retried: %+v, %v, calls=%d", retry, err, calls.Load())
+	}
+	replay, err := client.CallUnary(t.Context(), request())
+	if err != nil || replay.Header().Get("Idempotency-Replayed") != "true" || calls.Load() != 2 {
+		t.Fatalf("a success was not replayed: %v, calls=%d", err, calls.Load())
+	}
+}
+
 func TestIdempotencyCredentialResponseDoesNotPersistSecret(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "idempotency.db"))
 	if err != nil {

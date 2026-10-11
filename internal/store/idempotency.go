@@ -39,8 +39,14 @@ func (s *Store) BeginIdempotency(ctx context.Context, scope, key, fingerprint st
 			return IdempotencyResult{}, err
 		}
 	}
+	// Completed outcomes expire at their TTL. A claim that never completed (a
+	// crash between the side effect and its record) is kept much longer so it is
+	// not silently re-executed, but it is reaped at last: otherwise such rows
+	// count toward the per-scope cap forever.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM idempotency WHERE (scope, key) IN
-		(SELECT scope, key FROM idempotency WHERE completed = 1 AND expires_ns <= ? ORDER BY expires_ns LIMIT 1000)`, now.UnixNano()); err != nil {
+		(SELECT scope, key FROM idempotency
+		 WHERE (completed = 1 AND expires_ns <= ?) OR (completed = 0 AND expires_ns <= ?)
+		 ORDER BY expires_ns LIMIT 1000)`, now.UnixNano(), now.Add(-UnresolvedClaimRetention).UnixNano()); err != nil {
 		return IdempotencyResult{}, err
 	}
 	var entries, existing int
@@ -73,6 +79,18 @@ func (s *Store) BeginIdempotency(ctx context.Context, scope, key, fingerprint st
 		result.Completed = completed == 1
 	}
 	return result, tx.Commit()
+}
+
+// UnresolvedClaimRetention is how long past its expiry a claim that never
+// completed blocks its key before it is reaped.
+const UnresolvedClaimRetention = 6 * 24 * time.Hour
+
+// ReleaseIdempotency drops a claim whose request failed, so a retry with the
+// same key runs again instead of replaying the failure. Completed outcomes are
+// left alone.
+func (s *Store) ReleaseIdempotency(ctx context.Context, scope, key, fingerprint string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM idempotency WHERE scope = ? AND key = ? AND fingerprint = ? AND completed = 0`, scope, key, fingerprint)
+	return err
 }
 
 func (s *Store) CompleteIdempotency(ctx context.Context, scope, key, fingerprint, responseType string, response []byte, code int, message string, now time.Time) error {

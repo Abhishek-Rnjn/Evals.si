@@ -179,6 +179,40 @@ func TestIdempotencyClaimsConflictExpiryAndUncertainOutcome(t *testing.T) {
 	}
 }
 
+func TestIdempotencyReleaseAndUnresolvedClaimReaper(t *testing.T) {
+	st := open(t)
+	now := time.Now()
+	if first, err := st.BeginIdempotency(t.Context(), "scope", "failed", "fingerprint", now); err != nil || !first.Claimed {
+		t.Fatalf("claim: %+v, %v", first, err)
+	}
+	if err := st.ReleaseIdempotency(t.Context(), "scope", "failed", "fingerprint"); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := st.BeginIdempotency(t.Context(), "scope", "failed", "fingerprint", now); err != nil || !again.Claimed {
+		t.Fatalf("a released key was not claimable: %+v, %v", again, err)
+	}
+	if err := st.CompleteIdempotency(t.Context(), "scope", "failed", "fingerprint", "response", []byte("done"), 0, "", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ReleaseIdempotency(t.Context(), "scope", "failed", "fingerprint"); err != nil {
+		t.Fatal(err)
+	}
+	if replay, err := st.BeginIdempotency(t.Context(), "scope", "failed", "fingerprint", now.Add(time.Hour)); err != nil || !replay.Completed {
+		t.Fatalf("release removed a completed outcome: %+v, %v", replay, err)
+	}
+
+	if first, err := st.BeginIdempotency(t.Context(), "scope", "crashed", "fingerprint", now); err != nil || !first.Claimed {
+		t.Fatalf("claim: %+v, %v", first, err)
+	}
+	day := 24 * time.Hour
+	if held, err := st.BeginIdempotency(t.Context(), "scope", "crashed", "fingerprint", now.Add(2*day)); err != nil || held.Claimed {
+		t.Fatalf("an unresolved claim was re-executed too early: %+v, %v", held, err)
+	}
+	if reaped, err := st.BeginIdempotency(t.Context(), "scope", "crashed", "fingerprint", now.Add(day+UnresolvedClaimRetention+time.Minute)); err != nil || !reaped.Claimed {
+		t.Fatalf("an unresolved claim was never reaped: %+v, %v", reaped, err)
+	}
+}
+
 func TestIdempotencyCapacityPreservesExistingClaims(t *testing.T) {
 	st := open(t)
 	now := time.Now()
