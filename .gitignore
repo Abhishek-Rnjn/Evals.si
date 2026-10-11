@@ -1,6 +1,10 @@
 # Go
 /evalsid
 /bin/
+# `go build ./cmd/...` without -o drops a binary in the working directory
+/evalsi-guest
+/evalsi-operator
+/evalsi-collector
 
 # Python
 __pycache__/
