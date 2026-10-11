@@ -101,6 +101,11 @@ jobs:
           name: python
           path: dist/*
 
+  # PyPI allows one pending trusted publisher per repository, workflow and
+  # environment, so each package publishes from its own environment:
+  #   evalsi          -> environment "pypi"
+  #   evalsi-harness  -> environment "pypi-harness"
+  # Register each on pypi.org with that environment name (docs/RELEASING.md).
   pypi:
     needs: python
     if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
@@ -112,7 +117,25 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: python
-          path: dist
+          path: all
+      - name: Only evalsi
+        run: mkdir dist && mv all/evalsi-[0-9]* dist/ && ls dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  pypi-harness:
+    needs: python
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi-harness
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: python
+          path: all
+      - name: Only evalsi-harness
+        run: mkdir dist && mv all/evalsi_harness-[0-9]* dist/ && ls dist
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   image:
