@@ -27,8 +27,14 @@ type RedactionConfig struct {
 
 type Redactor struct {
 	keys     []string
-	patterns []*regexp.Regexp
-	checks   map[*regexp.Regexp]func(string) bool
+	patterns []valuePattern
+}
+
+// valuePattern masks the matches of a regular expression. A nil mask replaces
+// each whole match; otherwise mask decides what of a match to hide.
+type valuePattern struct {
+	re   *regexp.Regexp
+	mask func(match string) string
 }
 
 const Redacted = "[REDACTED]"
@@ -50,7 +56,7 @@ func NewRedactor(config RedactionConfig) (*Redactor, error) {
 	}
 	keys := append([]string(nil), defaultKeys...)
 	keys = append(keys, config.Keys...)
-	redactor := &Redactor{checks: map[*regexp.Regexp]func(string) bool{}}
+	redactor := &Redactor{}
 	for _, key := range keys {
 		key = strings.ToLower(key)
 		if _, err := path.Match(key, ""); err != nil {
@@ -62,7 +68,7 @@ func NewRedactor(config RedactionConfig) (*Redactor, error) {
 	builtins := map[string]string{
 		"email":       `(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b`,
 		"us-ssn":      `\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b`,
-		"credit-card": `\b(?:[0-9][ -]?){12,18}[0-9]\b`,
+		"credit-card": `\b[0-9](?:[ -]?[0-9]){12,}\b`,
 		"phone":       `\+[1-9][0-9]{6,14}\b|\+[1-9][0-9]{0,2}[ -](?:\([0-9]{2,4}\)|[0-9]{2,4})[ -][0-9]{2,4}[ -][0-9]{2,4}\b|\b[2-9][0-9]{2}[-. ][2-9][0-9]{2}[-. ][0-9]{4}\b|\([2-9][0-9]{2}\) ?[2-9][0-9]{2}[-. ][0-9]{4}\b`,
 	}
 	for _, class := range config.PII {
@@ -70,27 +76,99 @@ func NewRedactor(config RedactionConfig) (*Redactor, error) {
 		if !ok {
 			return nil, fmt.Errorf("trace redaction: unknown PII class")
 		}
-		compiled := regexp.MustCompile(pattern)
-		redactor.patterns = append(redactor.patterns, compiled)
+		entry := valuePattern{re: regexp.MustCompile(pattern)}
 		if class == "credit-card" {
-			redactor.checks[compiled] = validCardNumber
+			entry.mask = maskCardNumbers
 		}
+		redactor.patterns = append(redactor.patterns, entry)
 	}
 	for _, pattern := range patterns {
 		compiled, err := regexp.Compile(pattern)
 		if err != nil {
 			return nil, fmt.Errorf("trace redaction: invalid value regex")
 		}
-		redactor.patterns = append(redactor.patterns, compiled)
+		redactor.patterns = append(redactor.patterns, valuePattern{re: compiled})
 	}
 	return redactor, nil
 }
 
-func validCardNumber(value string) bool {
-	digits := strings.ReplaceAll(strings.ReplaceAll(value, " ", ""), "-", "")
-	if len(digits) < 13 || len(digits) > 19 || digits[0] == '0' {
-		return false
+// maskCardNumbers hides the card numbers in a run of digits (with single
+// spaces or dashes between them). A run that is itself a valid card number is
+// hidden whole. Otherwise a card can still sit inside it next to other digits,
+// such as a CVV or an expiry, so every window with a real issuer prefix and
+// that issuer's length that passes the Luhn check is hidden. Other digit runs
+// (timestamps, IDs, a card number with a typo) are left readable.
+func maskCardNumbers(run string) string {
+	var digits []byte
+	var at []int
+	for index := 0; index < len(run); index++ {
+		if run[index] >= '0' && run[index] <= '9' {
+			digits = append(digits, run[index])
+			at = append(at, index)
+		}
 	}
+	// Longer runs are identifiers and hashes, not a card with extra digits.
+	if len(digits) < 13 || len(digits) > 64 {
+		return run
+	}
+	hidden := make([]bool, len(run))
+	found := false
+	hide := func(from, to int) {
+		for index := at[from]; index <= at[to]; index++ {
+			hidden[index] = true
+		}
+		found = true
+	}
+	if len(digits) <= 19 && digits[0] != '0' && luhnValid(digits) {
+		hide(0, len(digits)-1)
+	}
+	for start := 0; start+13 <= len(digits); start++ {
+		for _, length := range issuerLengths(digits[start:]) {
+			if start+length <= len(digits) && luhnValid(digits[start:start+length]) {
+				hide(start, start+length-1)
+			}
+		}
+	}
+	if !found {
+		return run
+	}
+	var out strings.Builder
+	for index := 0; index < len(run); index++ {
+		if !hidden[index] {
+			out.WriteByte(run[index])
+		} else if index == 0 || !hidden[index-1] {
+			out.WriteString(Redacted)
+		}
+	}
+	return out.String()
+}
+
+// issuerLengths returns the card lengths that a number starting with these
+// digits can have, or none when no major issuer uses the prefix.
+func issuerLengths(digits []byte) []int {
+	prefix := func(length int) int {
+		value := 0
+		for _, digit := range digits[:min(length, len(digits))] {
+			value = value*10 + int(digit-'0')
+		}
+		return value
+	}
+	switch {
+	case digits[0] == '4':
+		return []int{16, 19}
+	case prefix(2) >= 51 && prefix(2) <= 55, prefix(4) >= 2221 && prefix(4) <= 2720:
+		return []int{16}
+	case prefix(2) == 34, prefix(2) == 37:
+		return []int{15}
+	case prefix(2) == 35, prefix(4) == 6011, prefix(2) == 65, prefix(3) >= 644 && prefix(3) <= 649, prefix(3) == 622:
+		return []int{16, 17, 18, 19}
+	case prefix(2) == 36, prefix(2) == 38, prefix(2) == 39, prefix(3) >= 300 && prefix(3) <= 305:
+		return []int{14}
+	}
+	return nil
+}
+
+func luhnValid(digits []byte) bool {
 	total, double := 0, false
 	for index := len(digits) - 1; index >= 0; index-- {
 		digit := int(digits[index] - '0')
@@ -142,9 +220,9 @@ func (redactor *Redactor) text(value string) string {
 	for _, pattern := range redactor.patterns {
 		parts := strings.Split(value, Redacted)
 		for index, part := range parts {
-			parts[index] = pattern.ReplaceAllStringFunc(part, func(match string) string {
-				if check := redactor.checks[pattern]; check != nil && !check(match) {
-					return match
+			parts[index] = pattern.re.ReplaceAllStringFunc(part, func(match string) string {
+				if pattern.mask != nil {
+					return pattern.mask(match)
 				}
 				return Redacted
 			})

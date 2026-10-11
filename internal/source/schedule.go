@@ -49,7 +49,7 @@ func parseSchedule(config *evalsiv1alpha1.PullSchedule) (cron.Schedule, error) {
 	return schedule, nil
 }
 
-func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error {
+func (r *runner) scheduledCycle(ctx context.Context, connector Connector) (err error) {
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return err
@@ -82,6 +82,7 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error 
 	defer cancel()
 	ctx, stopRenewal := r.renewScheduleLease(ctx, lease, owner, 2*time.Minute)
 	defer stopRenewal()
+	defer func() { err = reportLeaseLoss(ctx, err) }()
 	status, err := r.m.st.SourceSchedule(ctx, r.src.GetProject(), r.src.GetName())
 	if err != nil {
 		return err
@@ -160,7 +161,8 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error 
 			return err
 		}
 		if len(traces) < len(selected) {
-			r.log.Warn("scheduled traces disappeared before fetch; skipping", "skipped", len(selected)-len(traces))
+			r.log.Warn("scheduled traces disappeared before fetch; skipping",
+				"skipped", len(selected)-len(traces), "trace_ids", missingTraceIDs(selected, traces, 10))
 		}
 		if err := sleep(ctx, time.Duration(float64(len(traces))/float64(rate)*float64(time.Second))); err != nil {
 			return err
@@ -209,6 +211,32 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error 
 	return r.saveSchedule(ctx, status)
 }
 
+var errLeaseLost = errors.New("scheduled source lease was lost")
+
+// reportLeaseLoss says why a cycle stopped when its lease was lost: the pull
+// then fails with a bare context.Canceled, which looks like a shutdown.
+func reportLeaseLoss(ctx context.Context, err error) error {
+	if err != nil && errors.Is(context.Cause(ctx), errLeaseLost) {
+		return fmt.Errorf("%w: %w", errLeaseLost, err)
+	}
+	return err
+}
+
+// missingTraceIDs names up to limit of the selected traces that were not fetched.
+func missingTraceIDs(selected []Info, fetched []ingest.Trace, limit int) []string {
+	have := make(map[string]bool, len(fetched))
+	for _, trace := range fetched {
+		have[sourceID(trace)] = true
+	}
+	var missing []string
+	for _, info := range selected {
+		if !have[info.ID] && len(missing) < limit {
+			missing = append(missing, info.ID)
+		}
+	}
+	return missing
+}
+
 func (r *runner) renewScheduleLease(ctx context.Context, lease, owner string, ttl time.Duration) (context.Context, func()) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	done := make(chan struct{})
@@ -226,7 +254,7 @@ func (r *runner) renewScheduleLease(ctx context.Context, lease, owner string, tt
 				stop()
 				if err != nil || !acquired {
 					if err == nil {
-						err = errors.New("scheduled source lease was lost")
+						err = errLeaseLost
 					}
 					cancel(err)
 					return

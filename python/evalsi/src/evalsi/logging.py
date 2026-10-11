@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import json
+import logging
+import math
 import os
 import secrets
 import threading
 import time
+import weakref
 from collections import deque
 from collections.abc import Iterable, Mapping
 from concurrent.futures import Future
@@ -22,12 +26,30 @@ class LogError(RuntimeError):
     pass
 
 
+_warnings = logging.getLogger(__name__)
+
+
+def _finite(value: Any) -> Any:
+    """Make non-finite floats text: NaN and Infinity are not valid JSON."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return "NaN" if math.isnan(value) else ("Infinity" if value > 0 else "-Infinity")
+    if isinstance(value, Mapping):
+        return {key: _finite(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_finite(item) for item in value]
+    return value
+
+
 def _json_default(value: Any) -> Any:
     if hasattr(value, "detach"):
         value = value.detach().cpu()
     if hasattr(value, "tolist"):
-        return value.tolist()
+        return _finite(value.tolist())
     raise TypeError(f"cannot log {type(value).__name__}")
+
+
+def _dumps(value: Any) -> str:
+    return json.dumps(_finite(value), default=_json_default, allow_nan=False)
 
 
 class Logger:
@@ -43,9 +65,10 @@ class Logger:
         max_records: int = 1024,
         max_bytes: int = 8 << 20,
         timeout: float = 10.0,
+        exit_timeout: float = 30.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        if min(batch_size, max_records, max_bytes) < 1 or interval <= 0 or timeout <= 0:
+        if min(batch_size, max_records, max_bytes) < 1 or min(interval, timeout, exit_timeout) <= 0:
             raise ValueError("logging limits and timeouts must be positive")
         self.endpoint = endpoint.rstrip("/") + "/v1/traces"
         self.service = service
@@ -53,20 +76,23 @@ class Logger:
         self.interval = interval
         self.max_records = max_records
         self.max_bytes = max_bytes
+        self.exit_timeout = exit_timeout
         self._http = httpx.Client(
             auth=ServerAuth(endpoint, api_key=api_key, token=token),
             timeout=timeout,
             transport=transport,
         )
         self._condition = threading.Condition()
-        self._queue: deque[tuple[bytes, Future[str], str]] = deque()
+        self._queue: deque[tuple[dict[str, Any], int, Future[str], str]] = deque()
+        self._inflight: list[Future[str]] = []
         self._pending = 0
         self._bytes = 0
         self._closed = False
         self._failure: Exception | None = None
         self._thread = threading.Thread(target=self._work, name="evalsi-log", daemon=True)
         self._thread.start()
-        atexit.register(self.close)
+        atexit.register(self._close_at_exit)
+        _live.add(self)
 
     def log(
         self,
@@ -87,30 +113,28 @@ class Logger:
             ("output.value", output),
             ("evalsi.metadata", dict(metadata or {})),
         ):
-            text = value if isinstance(value, str) else json.dumps(value, default=_json_default)
+            text = value if isinstance(value, str) else _dumps(value)
             attributes.append({"key": key, "value": {"stringValue": text}})
-        span = json.dumps(
-            {
-                "traceId": trace_id,
-                "spanId": secrets.token_hex(8),
-                "name": "evalsi.log",
-                "kind": 1,
-                "startTimeUnixNano": timestamp,
-                "endTimeUnixNano": timestamp,
-                "attributes": attributes,
-            },
-            separators=(",", ":"),
-        ).encode()
+        span = {
+            "traceId": trace_id,
+            "spanId": secrets.token_hex(8),
+            "name": "evalsi.log",
+            "kind": 1,
+            "startTimeUnixNano": timestamp,
+            "endTimeUnixNano": timestamp,
+            "attributes": attributes,
+        }
+        size = len(json.dumps(span, separators=(",", ":")))
         future: Future[str] = Future()
         with self._condition:
             if self._closed:
                 future.set_exception(LogError("logger is closed"))
-            elif self._pending >= self.max_records or self._bytes + len(span) > self.max_bytes:
+            elif self._pending >= self.max_records or self._bytes + size > self.max_bytes:
                 future.set_exception(LogError("logging queue capacity exhausted"))
             else:
                 self._pending += 1
-                self._bytes += len(span)
-                self._queue.append((span, future, trace_id))
+                self._bytes += size
+                self._queue.append((span, size, future, trace_id))
                 self._condition.notify_all()
         return future
 
@@ -137,22 +161,26 @@ class Logger:
                 batch = [
                     self._queue.popleft() for _ in range(min(self.batch_size, len(self._queue)))
                 ]
-            active = [item for item in batch if item[1].set_running_or_notify_cancel()]
+            active = [item for item in batch if item[2].set_running_or_notify_cancel()]
             failure: Exception | None = None
             if active:
+                self._inflight = [item[2] for item in active]
                 try:
-                    self._send([json.loads(item[0]) for item in active])
+                    self._send([item[0] for item in active])
                 except Exception as error:
                     failure = error
-                for _, future, trace_id in active:
+                for _, _, future, trace_id in active:
+                    if future.done():  # the logger gave up on it while it was sent
+                        continue
                     if failure is None:
                         future.set_result(trace_id)
                     else:
                         future.set_exception(failure)
+                self._inflight = []
             with self._condition:
                 self._failure = self._failure or failure
-                self._pending -= len(batch)
-                self._bytes -= sum(len(item[0]) for item in batch)
+                self._pending = max(0, self._pending - len(batch))
+                self._bytes = max(0, self._bytes - sum(item[1] for item in batch))
                 self._condition.notify_all()
 
     def _send(self, spans: list[dict[str, Any]]) -> None:
@@ -182,19 +210,58 @@ class Logger:
             self._condition.notify_all()
             if not self._condition.wait_for(lambda: self._pending == 0, timeout=timeout):
                 raise TimeoutError("logging flush timed out")
-            if self._failure is not None:
-                raise self._failure
+            # A failure is reported once, to the flush that sees it. Records that
+            # succeed afterwards must not keep failing every later flush and close.
+            failure, self._failure = self._failure, None
+            if failure is not None:
+                raise failure
 
-    def close(self) -> None:
+    def close(self, timeout: float | None = None) -> None:
+        """Deliver what is queued, then stop. After ``timeout`` seconds the records
+        still queued fail with ``LogError`` instead of keeping the caller waiting."""
         with self._condition:
             if self._closed:
                 return
             self._closed = True
             self._condition.notify_all()
-        self._thread.join()
+        self._thread.join(timeout)
+        atexit.unregister(self._close_at_exit)
+        if self._thread.is_alive():
+            self._abandon("logger closed before every record was delivered")
+            raise LogError("logger closed before every record was delivered")
         self._http.close()
-        atexit.unregister(self.close)
         self.flush()
+
+    def _close_at_exit(self) -> None:
+        # A dead endpoint must not hold a finished program for long, and a failed
+        # batch has already reached its future.
+        try:
+            self.close(timeout=self.exit_timeout)
+        except Exception as error:
+            _warnings.warning("evalsi logging: %s", error)
+
+    def _abandon(self, reason: str) -> None:
+        with self._condition:
+            while self._queue:
+                _, size, future, _ = self._queue.popleft()
+                if not future.done():
+                    future.set_exception(LogError(reason))
+                self._pending = max(0, self._pending - 1)
+                self._bytes = max(0, self._bytes - size)
+            self._condition.notify_all()
+
+    def _orphan(self) -> None:
+        """In a forked child the logging thread does not exist, so nothing queued
+        would ever be sent. Fail it, and refuse new records, rather than hang."""
+        self._condition = threading.Condition()  # a parent thread may have held the old lock
+        self._closed = True
+        self._failure = None
+        reason = "logger was created before fork; configure logging again in the child"
+        for future in [*self._inflight, *(item[2] for item in self._queue)]:
+            if not future.done():
+                future.set_exception(LogError(reason))
+        self._inflight, self._queue = [], deque()
+        self._pending, self._bytes = 0, 0
 
     def __enter__(self) -> Logger:
         return self
@@ -205,13 +272,28 @@ class Logger:
 
 _default: dict[str, Logger] = {}
 _default_lock = threading.Lock()
+_live: weakref.WeakSet[Logger] = weakref.WeakSet()
+
+
+def _after_fork_in_child() -> None:
+    global _default_lock  # noqa: PLW0603
+    _default_lock = threading.Lock()  # the parent's may have been held mid-fork
+    for logger in list(_live):
+        logger._orphan()
+    _default.clear()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_after_fork_in_child)
 
 
 def configure_logging(endpoint: str, **options: Any) -> Logger:
     with _default_lock:
         previous = _default.pop("logger", None)
         if previous is not None:
-            previous.close()
+            # Reconfiguring must work even if the old logger had a failed batch.
+            with contextlib.suppress(Exception):
+                previous.close(timeout=previous.exit_timeout)
         logger = Logger(endpoint, **options)
         _default["logger"] = logger
         return logger

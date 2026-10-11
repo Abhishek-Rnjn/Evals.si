@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -237,5 +238,38 @@ func TestScheduledLeaseRenewsAndLossCancelsPull(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("lease loss did not cancel the pull")
+	}
+}
+
+func TestScheduledWindowNamesSkippedTraces(t *testing.T) {
+	h := newHarness(t, func(source *evalsiv1alpha1.TraceSource) { source.Schedule = scheduleConfig() })
+	h.m.opts.Runs = &scheduledRuns{store: h.st}
+	var logs strings.Builder
+	h.r.log = slog.New(slog.NewTextHandler(&logs, nil))
+	h.fs.set(Info{ID: "deleted-trace", Started: epoch.Add(10 * time.Second)}, Info{ID: "remaining", Started: epoch.Add(20 * time.Second)})
+	h.now = epoch.Add(time.Minute)
+	if err := h.r.scheduledCycle(t.Context(), disappearingTraceConnector{h.fs}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "deleted-trace") || strings.Contains(logs.String(), "remaining") {
+		t.Fatalf("the skipped trace was not named: %s", logs.String())
+	}
+}
+
+func TestLeaseLossIsReportedAsTheCauseOfACancelledCycle(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(t.Context())
+	cancel(errLeaseLost)
+	err := reportLeaseLoss(ctx, context.Canceled)
+	if !errors.Is(err, errLeaseLost) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("the cycle error hides why it stopped: %v", err)
+	}
+	// An ordinary cancellation, or a clean cycle, is left alone.
+	plain, stop := context.WithCancel(t.Context())
+	stop()
+	if got := reportLeaseLoss(plain, context.Canceled); !errors.Is(got, context.Canceled) || errors.Is(got, errLeaseLost) {
+		t.Fatalf("a plain cancellation was relabelled: %v", got)
+	}
+	if reportLeaseLoss(ctx, nil) != nil {
+		t.Fatal("a cycle that finished was reported as failed")
 	}
 }

@@ -207,7 +207,11 @@ trainer = lightning.Trainer(callbacks=[callback])
 ```
 
 The PyTorch hook publishes the state dictionary atomically before evaluation;
-use a unique path for every step. Lightning evaluation starts after the real
+use a unique path for every step. The file gets the mode your umask gives any
+file you create, so a separate evaluation pod under another user can read it.
+Under distributed training (DDP) call it on every rank: only rank zero saves and
+evaluates. Sharded training such as FSDP must gather the full state on rank zero
+before it calls `save`. Lightning evaluation starts after the real
 `ModelCheckpoint` save, on global rank zero, and drains at train end or error.
 Async mode keeps all checkpoints (`save_top_k=-1`, no `save_last`) so a queued
 file cannot be deleted by top-k retention. Both hooks use `CheckpointRunner`;

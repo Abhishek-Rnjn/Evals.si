@@ -432,6 +432,12 @@ type TraceInfo struct {
 
 // ToRecord turns an assembled trace into the record evaluators grade, plus
 // the facts policy expressions select on.
+const (
+	maxSDKMetadataBytes = 64 << 10
+	maxSDKMetadataKeys  = 256
+	maxSDKMetadataKey   = 128
+)
+
 func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 	spans := append([]Span(nil), t.Spans...)
 	sort.SliceStable(spans, func(i, j int) bool {
@@ -507,11 +513,18 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 	if traj.SessionId != "" {
 		meta["session_id"] = traj.SessionId
 	}
+	// Metadata a client logs with evalsi.log: bounded, and never in the server's
+	// own evalsi.* namespace.
 	var sdkMetadata map[string]any
-	if json.Unmarshal([]byte(rootAttrs.str("evalsi.metadata")), &sdkMetadata) == nil {
+	if raw := rootAttrs.str("evalsi.metadata"); len(raw) <= maxSDKMetadataBytes && json.Unmarshal([]byte(raw), &sdkMetadata) == nil {
+		kept := 0
 		for key, value := range sdkMetadata {
+			if len(key) > maxSDKMetadataKey || strings.HasPrefix(key, "evalsi.") || kept >= maxSDKMetadataKeys {
+				continue
+			}
 			if field, err := structpb.NewValue(value); err == nil {
 				record.Metadata[key] = field
+				kept++
 			}
 		}
 	}

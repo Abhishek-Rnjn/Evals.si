@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -48,6 +49,8 @@ func registerDatasetUpload(mux *http.ServeMux, dependencies deps) {
 				datasetHTTPError(writer, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid Idempotency-Key")))
 				return
 			}
+			// A client that sends nothing must not hold one of the few slots for good.
+			_ = http.NewResponseController(writer).SetReadDeadline(time.Now().Add(datasetUploadReadTimeout))
 			select {
 			case spools <- struct{}{}:
 				defer func() { <-spools }()
@@ -96,6 +99,10 @@ func registerDatasetUpload(mux *http.ServeMux, dependencies deps) {
 	})
 }
 
+// datasetUploadReadTimeout bounds reading one dataset upload (64 MiB at about
+// 100 KiB/s).
+const datasetUploadReadTimeout = 10 * time.Minute
+
 func spoolDatasetUpload(input io.Reader) (*os.File, string, error) {
 	spool, err := os.CreateTemp("", "evalsi-http-upload-")
 	if err != nil {
@@ -109,10 +116,15 @@ func spoolDatasetUpload(input io.Reader) (*os.File, string, error) {
 		}
 	}()
 	hash := sha256.New()
-	size, err := io.Copy(io.MultiWriter(spool, hash), io.LimitReader(input, datasets.MaxUploadBytes+1))
+	body := &readFailure{reader: io.LimitReader(input, datasets.MaxUploadBytes+1)}
+	size, err := io.Copy(io.MultiWriter(spool, hash), body)
 	var oversized *http.MaxBytesError
 	if size > datasets.MaxUploadBytes || errors.As(err, &oversized) {
 		return nil, "", connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload exceeds 64 MiB"))
+	}
+	if body.err != nil {
+		// A dropped connection or a truncated body is the client's, not a server fault.
+		return nil, "", connect.NewError(connect.CodeInvalidArgument, errors.New("dataset upload body could not be read"))
 	}
 	if err != nil {
 		return nil, "", err
@@ -122,6 +134,21 @@ func spoolDatasetUpload(input io.Reader) (*os.File, string, error) {
 	}
 	completed = true
 	return spool, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// readFailure remembers an error from the request body, to tell it apart from a
+// failure to write the spool file.
+type readFailure struct {
+	reader io.Reader
+	err    error
+}
+
+func (r *readFailure) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		r.err = err
+	}
+	return n, err
 }
 
 func datasetHTTPError(writer http.ResponseWriter, err error) {

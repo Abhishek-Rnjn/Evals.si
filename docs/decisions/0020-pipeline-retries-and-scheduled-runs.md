@@ -28,7 +28,10 @@ Unkeyed streams retain incremental behavior. Per-scope storage is capped at
 1024 entries and 64 MiB of response data. Completed entries are pruned on writes;
 an uncertain claim (a crash between the side effect and its record) blocks its
 key for six days past its 24-hour expiry, so it is not re-executed by accident,
-and is then pruned so it cannot occupy capacity forever.
+and is then pruned so it cannot occupy capacity forever. A request cleans only
+its own scope, under that scope's lock, so an hourly background pass cleans every
+scope the same way: a scope that is never used again (a retired key or project)
+does not keep its rows and cached responses.
 PostgreSQL claims and completions take a shared transaction advisory lock so
 replicas cannot race those limits. Handler execution stays outside the lock;
 cache-write throughput is intentionally serialized for correct accounting.
