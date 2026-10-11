@@ -2,7 +2,7 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
-Last updated: 2026-10-11 (triage of every row, after the Part C review fixes); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+Last updated: 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 Trace redaction on push and pull is now built and locally regression-tested,
 including source overrides, storage bytes, evaluator queues, result callbacks

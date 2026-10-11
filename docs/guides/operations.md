@@ -129,7 +129,7 @@ diff -r "$BACKUP/objects" "$BACKUP/restored-objects"
 
 Restore external traces, NATS snapshots, configuration, CA/identity Secrets and
 bucket settings as appropriate. Clear only expired leases after they expire;
-do not remove unresolved idempotency claims to force a retry. With the same
+do not remove unresolved idempotency claims to force a retry. (An unresolved claim blocks its key until six days past its 24-hour expiry and is then pruned; an hourly background pass removes expired outcomes in every scope, and logs `idempotency pruning` when it does.) With the same
 image versions, start API, workers and operator, then compare projects, run
 counts, terminal results, source cursors, annotations and dataset checksums.
 Read a known completed run through the authenticated API and run a restored

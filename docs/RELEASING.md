@@ -48,9 +48,11 @@ not live Kubernetes clusters at those versions.
 
 Docker Desktop without Landlock can explicitly use `SKIP_LANDLOCK=1` for the
 local kind job. This defers only Landlock and is not a complete Kubernetes
-verification. Record the deferral and recheck Landlock on AKS with a supported
-kernel and seccomp profile. Do not disable the default CI check. See the
-[verification record](verification/README.md#platform-aware-bundle-recheck-2026-10-10).
+verification of a Mac run. The default amd64 kind job in CI runs the Landlock
+rung; it is skipped on pull requests, so dispatch `ci` on the release commit
+(`workflow_dispatch`) and read the `kubernetes` job, which must end with
+`=== passed`, not the Landlock-deferred message. Do not disable the default CI
+check. See the [verification record](verification/README.md#ci-postgresql-and-browser-recheck-2026-10-11).
 
 ## Maintainer Dry Run
 

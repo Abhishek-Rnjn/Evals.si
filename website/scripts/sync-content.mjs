@@ -22,7 +22,7 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-studio", 13],
-  ["agent-frameworks", 14],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16],
 ];
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
@@ -112,6 +112,7 @@ Evals.si is one entrypoint for evaluating classic ML models, LLMs, RAG systems a
 - [Examples](${BASE}/examples/): runnable configs for runs, agents, guardrails, fine-tuning and more.
 - [Agent frameworks](${BASE}/docs/guides/agent-frameworks/): score LangGraph, CrewAI, OpenAI Agents SDK, LlamaIndex and Claude Agent SDK traces.
 - [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.
+- [Operations](${BASE}/docs/guides/operations/): upgrade policy, backup and restore, runbooks and reference cluster values.
 
 ## Guides
 

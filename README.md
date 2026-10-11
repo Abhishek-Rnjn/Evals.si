@@ -38,11 +38,14 @@ Evals.si grades outputs you already have, runs a model or an agent on a dataset 
 ## Quickstart
 
 Air-gapped bundles export one platform (amd64 by default, arm64 with
-`--platform linux/arm64`) and require Docker 28+. See the
-[Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs) and the
-[partial local kind recheck](docs/verification/README.md#platform-aware-bundle-recheck-2026-10-10);
-Landlock is explicitly deferred to AKS on Docker Desktop using
-`SKIP_LANDLOCK=1`, not claimed verified by that local run.
+`--platform linux/arm64`). Docker 28+ scopes image inspect, save and load to that
+platform; an older Docker is detected and uses the plain commands, which is
+correct for a single-platform bundle on a host of the same architecture. See the
+[Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs). The default
+amd64 kind job, including the Landlock rung, passes in CI
+([record](docs/verification/README.md#ci-postgresql-and-browser-recheck-2026-10-11)).
+Docker Desktop's kernel has no Landlock, so a Mac run uses `SKIP_LANDLOCK=1` and
+does not claim that rung.
 Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).
 
 You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ for you). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, the sandbox for code evaluators needs bubblewrap (see [Development](#development)).
@@ -264,7 +267,7 @@ real CPU PyTorch/Lightning hooks, plugin mounts and native dsh-to-MLflow spans.
 The [final-phase report](docs/verification/PART-C.md) separates verified checks
 from remaining cloud, upgrade and release certification.
 
-The Kubernetes form factor is tested on kind in CI and was verified on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). No release has been tagged yet. [LEFTOVERS](docs/LEFTOVERS.md) lists what is deferred or not yet verified.
+The Kubernetes form factor is tested on kind in CI (amd64, with Landlock) and was verified on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). Reviews of the pipeline and Part C work are fixed and recorded: card numbers next to other digits are masked, a failed idempotent call is retried, `evalsi.log()` reports a failure once, and annotation claims no longer over-claim on PostgreSQL. The web UI has a browser test in CI. No release has been tagged yet; the gates and the dry run are in [RELEASING](docs/RELEASING.md). [LEFTOVERS](docs/LEFTOVERS.md) lists what is deferred or not yet verified, sorted by what each item needs next.
 
 ## Documentation
 
@@ -288,7 +291,7 @@ The Kubernetes form factor is tested on kind in CI and was verified on AKS and a
 | `cmd/evalsi-guest/` | The init and agent inside Firecracker microVMs, and the agent in sandbox pods |
 | `cmd/evalsi-operator/`, `operator/` | The Kubernetes operator: CRD types, controllers, admission webhooks |
 | `deploy/` | Helm charts (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), the air-gapped bundle, the kind e2e |
-| `tests/` | End-to-end and load tests (`e2e`), chart tests (`helm`), trainer tests (`trainers`), framework trace recorders (`frameworks`) |
+| `tests/` | End-to-end and load tests (`e2e`), chart tests (`helm`), trainer tests (`trainers`), checkpoint-hook tests (`training_hooks`), a browser test of the web UI (`ui`), framework trace recorders (`frameworks`) |
 | `examples/` | Runnable examples and the reference demos |
 | `docs/` | Design, decision records, requirements, guides and the verification report |
 | `website/` | The documentation site |
@@ -309,6 +312,8 @@ make operator-gen     # regenerate the CRDs and deepcopy code after editing oper
 For the Kubernetes pieces:
 - **Operator tests** run against a real API server and etcd (envtest). Install its binaries with `setup-envtest` and set `KUBEBUILDER_ASSETS`; without it, those tests skip.
 - **Chart tests** (`tests/helm`) need `helm` on the `PATH`; without it, they skip.
+- **Store tests on PostgreSQL:** set `EVALSI_TEST_POSTGRES_DSN` to run `internal/store` against a real database, as CI does. Locking and concurrency fixes are only proved there.
+- **The browser test of the web UI** (`tests/ui`) runs the real `evalsid` in Chromium: `cd tests/ui && npm ci && npx playwright-core install chromium`, then `EVALSI_UI_WORKER="$PWD/../../python/.venv/bin/python -m evalsi" npm test`. CI runs it as the `ui-browser` job.
 - **The kind e2e** (`deploy/e2e/kind-e2e.sh`) needs Docker, kind, kubectl and helm. It builds the image, makes an air-gapped bundle and installs from it, as the CI `kubernetes` job does.
 - **The load test:** `EVALSI_LOAD=1 go test -run TestLoad -timeout 30m ./tests/e2e/`. `EVALSI_LOAD_SPANS` and `EVALSI_LOAD_RUN_RECORDS` set its sizes, and `EVALSI_LOAD_CLICKHOUSE_URL` runs the trace half against ClickHouse.
 

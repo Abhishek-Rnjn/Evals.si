@@ -119,7 +119,11 @@ test('the UI loads under its Content-Security-Policy and every section renders',
   for (const [section, heading] of Object.entries(sections)) {
     await page.click(`#nav a[data-section="${section}"]`);
     await page.waitForFunction(name => document.querySelector(`#nav a[data-section="${name}"]`)?.classList.contains('active'), section);
-    await page.waitForFunction(() => document.querySelector('#main h1, #main .empty, #main .error'));
+    // The nav link turns active before its view has loaded; wait for the view itself.
+    await page.waitForFunction(() => {
+      const main = document.querySelector('#main');
+      return main && !/^\s*Loading/.test(main.textContent) && main.querySelector('h1, .empty, .error');
+    });
     assert.match(await page.textContent('#main'), heading, `section ${section}`);
   }
 
