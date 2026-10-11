@@ -22,7 +22,7 @@ func TestReferenceClusterValues(t *testing.T) {
 		t.Run(cluster, func(t *testing.T) {
 			chart := filepath.Join("..", "..", "deploy", "helm", "evalsi")
 			values := filepath.Join(chart, "values-"+cluster+".yaml")
-			output, err := exec.Command("helm", "template", "evalsi", chart, "-n", "evalsi", "-f", values).CombinedOutput()
+			output, err := exec.Command(helm(t), "template", "evalsi", chart, "-n", "evalsi", "--kube-version", kubeVersion(), "-f", values).CombinedOutput()
 			if err != nil {
 				t.Fatalf("reference values: %v\n%s", err, output)
 			}
