@@ -107,13 +107,24 @@ Use the server CA through `SSL_CERT_FILE`. Configuration is explicit, or set
 and return futures without waiting for network I/O. PyTorch tensors are detached
 to CPU; batches accept dict records, pandas frames and Hugging Face datasets.
 Queued and in-flight records share limits (1024 records/8 MiB by default).
-Overflow, HTTP failures and partial rejection fail futures; `flush`/`close`
-also raise failures. Normal process exit drains the queue; SIGKILL cannot flush.
+Overflow, HTTP failures and partial rejection fail futures. `flush` and `close`
+raise a failure once, to the call that sees it; records that succeed afterwards
+do not make later calls fail, and `configure_logging` works after a failed
+batch. Normal process exit drains the queue for at most `exit_timeout` seconds
+(30 by default), so a dead endpoint cannot hold a finished program; records not
+sent by then fail their futures. `close(timeout=...)` does the same on demand.
+SIGKILL cannot flush. A forked child (a data-loader worker, say) does not inherit
+the parent's logger: its pending records fail, and `evalsi.log` starts a fresh
+logger there from `EVALSI_OTLP_ENDPOINT`.
+Non-finite metadata values (`nan`, `inf`) are sent as the text `"NaN"`,
+`"Infinity"` and `"-Infinity"`, since JSON has no such numbers.
 The byte cap applies after serialization, not to caller-owned tensors or
 temporary serialization memory. `log_batch` returns one future per input row.
 
 Metadata arrives in the trace's Record after server credential/PII redaction.
-Server-derived service/error fields remain authoritative. `trace_id`, when
+Server-derived service/error fields remain authoritative. The server keeps at
+most 256 keys of at most 128 characters from at most 64 KiB of metadata, and
+ignores keys starting with `evalsi.`, which are reserved. `trace_id`, when
 supplied, is a nonzero 32-character lowercase hexadecimal ID.
 
 **Push.** Point the studio's OpenTelemetry exporter at Evals.si with an `ingest` key bound to the project (OTel GenAI, OpenInference, OpenLLMetry and MLflow conventions are understood):

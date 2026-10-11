@@ -353,7 +353,7 @@ func TestDatasetHTTPSpoolPrivacyAndReadErrors(t *testing.T) {
 	for _, test := range []struct {
 		err  error
 		code int
-	}{{errors.New("broken body"), http.StatusInternalServerError}, {&http.MaxBytesError{Limit: 64 << 20}, http.StatusRequestEntityTooLarge}} {
+	}{{errors.New("broken body"), http.StatusBadRequest}, {&http.MaxBytesError{Limit: 64 << 20}, http.StatusRequestEntityTooLarge}} {
 		if file, _, err := spoolDatasetUpload(uploadFailureReader{test.err}); file != nil || err == nil {
 			t.Fatalf("read failure accepted: %v %v", file, err)
 		} else {

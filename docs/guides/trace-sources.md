@@ -89,7 +89,11 @@ traces:
 
 `keys` adds glob rules to the defaults. `patterns` contains RE2 value regexes.
 `pii` optionally enables `email`, `us-ssn`, `credit-card`, or `phone` heuristic
-detectors; no PII class is enabled by default. Use `disabled: true` only to
+detectors; no PII class is enabled by default. The card detector hides a number
+that passes the Luhn check, and also one that sits next to other digits (a CVV
+or an expiry) when it starts with a real issuer prefix and has that issuer's
+length. A long digit run (over 64 digits), a timestamp or a card with a typo is
+left readable. Use `disabled: true` only to
 explicitly opt out of all redaction. Invalid enabled rules fail startup without
 including their contents in the error.
 

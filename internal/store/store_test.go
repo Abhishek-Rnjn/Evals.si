@@ -452,3 +452,46 @@ func TestDeliveryColumnsAdded(t *testing.T) {
 		t.Errorf("new delivery = %+v, %v", got, err)
 	}
 }
+
+func TestPruneIdempotencySweepsScopesThatWentIdle(t *testing.T) {
+	st := open(t)
+	now := time.Now()
+	count := func() int {
+		var n int
+		if err := st.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM idempotency`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	// Two scopes that are never used again: one finished request, one claim
+	// that never completed. A third finished later and is still valid.
+	for _, scope := range []string{"idle-done", "idle-crashed"} {
+		if first, err := st.BeginIdempotency(t.Context(), scope, "key", "fingerprint", now); err != nil || !first.Claimed {
+			t.Fatalf("claim: %+v, %v", first, err)
+		}
+	}
+	if err := st.CompleteIdempotency(t.Context(), "idle-done", "key", "fingerprint", "response", []byte("cached"), 0, "", now); err != nil {
+		t.Fatal(err)
+	}
+	later := now.Add(23 * time.Hour)
+	if _, err := st.BeginIdempotency(t.Context(), "active", "key", "fingerprint", later); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CompleteIdempotency(t.Context(), "active", "key", "fingerprint", "response", []byte("cached"), 0, "", later); err != nil {
+		t.Fatal(err)
+	}
+
+	day := 24 * time.Hour
+	if n, err := st.PruneIdempotency(t.Context(), now.Add(day-time.Minute)); err != nil || n != 0 || count() != 3 {
+		t.Fatalf("pruned too early: n=%d rows=%d err=%v", n, count(), err)
+	}
+	// The finished request expires at 24h; the others are kept.
+	if n, err := st.PruneIdempotency(t.Context(), now.Add(day+time.Minute)); err != nil || n != 1 || count() != 2 {
+		t.Fatalf("an expired outcome in an idle scope was not swept: n=%d rows=%d err=%v", n, count(), err)
+	}
+	// The active scope's outcome expired by then too. The crashed claim waited
+	// UnresolvedClaimRetention past its expiry, and goes now.
+	if n, err := st.PruneIdempotency(t.Context(), now.Add(day+UnresolvedClaimRetention+time.Minute)); err != nil || n != 2 || count() != 0 {
+		t.Fatalf("an unresolved claim in an idle scope was not swept: n=%d rows=%d err=%v", n, count(), err)
+	}
+}

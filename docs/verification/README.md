@@ -13,14 +13,14 @@ The run used commit `c5a1de9` on 2026-10-09, on three clusters:
 | Cluster | Shape |
 |---------|-------|
 | kind | Local, arm64, kindnet (no NetworkPolicy enforcement), no KVM |
-| AWC | Istio ambient with a forced waypoint and mesh-wide STRICT mTLS, Calico, KVM on every node |
+| Mesh | Istio ambient with a forced waypoint and mesh-wide STRICT mTLS, Calico, KVM on every node |
 | AKS | Ubuntu 24.04, every node tainted, no NetworkPolicy engine |
 
 The report's finding IDs clash with the PRD's own D1–D11, so other documents refer to them as VR-F1…, VR-D1… and VR-R1….
 
 ## Finding status
 
-[PR #12](https://github.com/Abhishek-Rnjn/Evals.si/pull/12) fixed most findings after the run, in commits `033b11c`, `967fdd9` and `8cf4c81`. Those fixes have unit, chart and kind tests. They have not been re-run on AKS or AWC.
+[PR #12](https://github.com/Abhishek-Rnjn/Evals.si/pull/12) fixed most findings after the run, in commits `033b11c`, `967fdd9` and `8cf4c81`. Those fixes have unit, chart and kind tests. They have not been re-run on AKS or the Istio ambient cluster.
 
 | Finding | Status |
 |---------|--------|
@@ -47,8 +47,8 @@ The report's finding IDs clash with the PRD's own D1–D11, so other documents r
 | VR-D15 `mode: bwrap` fails on Ubuntu 24.04 (`RTM_NEWADDR`) | Mitigated: the error names `mode: privileged` and the pod rung, and the [Kubernetes guide](../guides/kubernetes.md#when-bubblewrap-pools-fail-and-when-networkpolicy-is-not-enforced) documents it. The failure itself is the host's |
 | VR-R1 Istio waypoint breaks NATS and pod-rung calls | Chart values and docs (`967fdd9`): `serviceLabels`, pod `labels` |
 | VR-R2 STRICT mTLS blocks admission webhooks | Fixed: `operator.istio.peerAuthentication` renders it (off by default); chart-tested, not re-run on a mesh cluster |
-| bwrap fails where overlayfs lacks idmap mounts (AWC) | Mitigated: same hint and guide section as VR-D15 |
-| Sandbox egress NetworkPolicy not enforced on Calico + Istio ambient (AWC) | Cause still unknown (not our selectors: the policy selects the label the pods carry). Fixed so it is never claimed falsely: the probe runs a canary connection from a sandbox pod and warns, and isolation reports `partial`, when a declared policy is not enforced. Needs a re-run on the mesh cluster ([RECHECK.md](RECHECK.md)) |
+| bwrap fails where overlayfs lacks idmap mounts (the mesh cluster) | Mitigated: same hint and guide section as VR-D15 |
+| Sandbox egress NetworkPolicy not enforced on Calico + Istio ambient (the mesh cluster) | Cause still unknown (not our selectors: the policy selects the label the pods carry). Fixed so it is never claimed falsely: the probe runs a canary connection from a sandbox pod and warns, and isolation reports `partial`, when a declared policy is not enforced. Needs a re-run on the mesh cluster ([RECHECK.md](RECHECK.md)) |
 
 ## Bug findings of 2026-10-10
 

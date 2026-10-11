@@ -270,12 +270,13 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		wg.Add(1)
 		go func() { defer wg.Done(); sourceMgr.Run(bg) }()
 	}
-	wg.Add(5)
+	wg.Add(6)
 	go func() { defer wg.Done(); hooks.Run(bg) }()
 	go func() { defer wg.Done(); assembler.Run(stopAssembler, 250*time.Millisecond) }()
 	go func() { defer wg.Done(); watcher.Run(bg) }()
 	go func() { defer wg.Done(); retain(bg, st, config.Duration(cfg.Traces.Retention), log) }()
 	go func() { defer wg.Done(); auditor.Retain(bg, cfg.Audit.RetentionDuration()) }()
+	go func() { defer wg.Done(); pruneIdempotency(bg, st, log) }()
 	if cfg.Reload != nil {
 		wg.Add(1)
 		go func() { defer wg.Done(); reloadCredentials(bg, cfg, creds, watcher, log) }()
@@ -443,6 +444,25 @@ func reconcileAuthz(ctx context.Context, engine *authz.Engine, log *slog.Logger)
 			if err := engine.Reload(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("reloading access control", "err", err)
 			}
+		}
+	}
+}
+
+// pruneIdempotency drops expired idempotency outcomes from every scope, hourly.
+// A request only cleans its own scope, so scopes that went idle need this.
+func pruneIdempotency(ctx context.Context, st *store.Store, log *slog.Logger) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		if n, err := st.PruneIdempotency(ctx, time.Now()); err != nil {
+			log.Error("idempotency pruning", "err", err)
+		} else if n > 0 {
+			log.Info("idempotency pruning", "deleted", n)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
 		}
 	}
 }

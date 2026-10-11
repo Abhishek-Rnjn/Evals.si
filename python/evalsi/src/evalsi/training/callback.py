@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import os
 import queue
-import tempfile
+import secrets
 import threading
 from pathlib import Path
 from typing import Any, Protocol
@@ -92,6 +92,11 @@ class PyTorchCheckpointHook:
     def save(self, model: Any, path: str | Path, step: int, *, optimizer: Any = None) -> None:
         import torch
 
+        distributed = torch.distributed
+        if distributed.is_available() and distributed.is_initialized() and distributed.get_rank():
+            # Under DDP every rank calls this; one saves and evaluates. (Sharded
+            # training such as FSDP must gather the full state on rank 0 first.)
+            return
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.exists():
@@ -99,7 +104,11 @@ class PyTorchCheckpointHook:
         state = {"state_dict": model.state_dict(), "global_step": step}
         if optimizer is not None:
             state["optimizer_state_dict"] = optimizer.state_dict()
-        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".evalsi-")
+        # mkstemp would create the file owner-only (0600), and the rename would
+        # publish that. Create it with the default mode so the process umask
+        # decides who can read it, as for any file the trainer writes.
+        temporary = str(path.parent / f".evalsi-{secrets.token_hex(8)}")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
         try:
             with os.fdopen(descriptor, "wb") as checkpoint_file:
                 torch.save(state, checkpoint_file)

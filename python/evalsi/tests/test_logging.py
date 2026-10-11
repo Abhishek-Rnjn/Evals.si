@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -120,3 +121,127 @@ def test_invalid_trace_id_and_cancelled_future() -> None:
         future = logger.log("a", "b")
         assert future.cancel()
     assert future.cancelled()
+
+
+def test_a_failed_batch_is_reported_once_and_logging_recovers() -> None:
+    replies = [httpx.Response(503), httpx.Response(200, json={}), httpx.Response(200, json={})]
+
+    def send(request: httpx.Request) -> httpx.Response:
+        return replies.pop(0)
+
+    logger = Logger("http://localhost", transport=httpx.MockTransport(send))
+    first = logger.log("a", "b")
+    with pytest.raises(LogError):
+        first.result(timeout=5)
+    with pytest.raises(LogError):
+        logger.flush(timeout=5)
+    # The server is back: later records succeed and later flushes are clean.
+    assert logger.log("c", "d").result(timeout=5)
+    logger.flush(timeout=5)
+    logger.close()
+
+
+def test_reconfiguring_after_a_failed_batch_does_not_raise() -> None:
+    from evalsi import logging as evalsi_logging
+
+    failing = httpx.MockTransport(lambda request: httpx.Response(503))
+    ok = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+    try:
+        old = evalsi_logging.configure_logging("http://localhost", transport=failing)
+        with pytest.raises(LogError):
+            old.log("a", "b").result(timeout=5)
+        new = evalsi_logging.configure_logging("http://localhost", transport=ok)
+        assert new is not old
+        assert evalsi_logging.log("c", "d").result(timeout=5)
+        evalsi_logging.flush(timeout=5)
+    finally:
+        evalsi_logging._default.pop("logger", None)
+
+
+def test_non_finite_metadata_stays_valid_json() -> None:
+    sent: list[dict[str, object]] = []
+
+    def strict(constant: str) -> object:
+        raise ValueError(f"{constant} is not valid JSON")
+
+    def send(request: httpx.Request) -> httpx.Response:
+        span = json.loads(request.content)["resourceSpans"][0]["scopeSpans"][0]["spans"][0]
+        for attribute in span["attributes"]:
+            if attribute["key"] == "evalsi.metadata":
+                sent.append(json.loads(attribute["value"]["stringValue"], parse_constant=strict))
+        return httpx.Response(200, json={})
+
+    with Logger("http://localhost", transport=httpx.MockTransport(send)) as logger:
+        logger.log(
+            "a",
+            "b",
+            metadata={"loss": float("nan"), "epoch": 3, "scores": [1.0, float("inf")]},
+        ).result(timeout=5)
+    assert sent == [{"loss": "NaN", "epoch": 3, "scores": [1.0, "Infinity"]}]
+
+
+def test_close_gives_up_on_a_dead_endpoint() -> None:
+    import time
+
+    release = threading.Event()
+
+    def stuck(request: httpx.Request) -> httpx.Response:
+        release.wait(30)
+        return httpx.Response(200, json={})
+
+    logger = Logger(
+        "http://localhost", batch_size=1, max_records=8, transport=httpx.MockTransport(stuck)
+    )
+    futures = [logger.log("a", str(index)) for index in range(4)]
+    started = time.monotonic()
+    try:
+        with pytest.raises(LogError):
+            logger.close(timeout=0.5)
+        assert time.monotonic() - started < 5
+        # Records that were never sent fail instead of staying pending forever.
+        assert any(isinstance(future.exception(timeout=1), LogError) for future in futures[1:])
+    finally:
+        release.set()
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs fork")
+def test_a_forked_child_does_not_inherit_a_stuck_logger() -> None:
+    import time
+
+    release = threading.Event()
+
+    def stuck(request: httpx.Request) -> httpx.Response:
+        release.wait(30)
+        return httpx.Response(200, json={})
+
+    logger = Logger("http://localhost", batch_size=1, transport=httpx.MockTransport(stuck))
+    logger.log("a", "b")
+    time.sleep(0.2)
+    pid = os.fork()
+    if pid == 0:  # the child: its logging thread no longer exists
+        code = 1
+        try:
+            try:
+                logger.log("c", "d").result(timeout=2)
+            except LogError:
+                code = 0
+            logger.flush(timeout=3)
+        except BaseException:
+            code = 2
+        os._exit(code)
+    try:
+        deadline = time.monotonic() + 10
+        status = None
+        while time.monotonic() < deadline:
+            done, status = os.waitpid(pid, os.WNOHANG)
+            if done:
+                break
+            time.sleep(0.05)
+        else:
+            os.kill(pid, 9)
+            os.waitpid(pid, 0)
+            pytest.fail("the child hung on the inherited logger")
+        assert os.waitstatus_to_exitcode(status) == 0
+    finally:
+        release.set()
+        logger.close(timeout=2)

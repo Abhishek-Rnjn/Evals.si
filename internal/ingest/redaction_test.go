@@ -2,6 +2,8 @@ package ingest
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -197,5 +199,68 @@ func TestRedactionDefaultKeysCoverCommonCredentials(t *testing.T) {
 		if redactor.matches(key) {
 			t.Errorf("%q is redacted by default", key)
 		}
+	}
+}
+
+func TestCreditCardMaskedNextToOtherDigits(t *testing.T) {
+	redactor, err := NewRedactor(RedactionConfig{PII: []string{"credit-card"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{
+		"card 4111111111111111 123", // a CVV after the number
+		"123 4111111111111111",      // digits before it
+		"4111 1111 1111 1111 123",   // spaced, then a CVV
+		"1234567890123456 4111111111111111",
+		"exp 1226 cvv 123 pan 5500005555555559 ok",
+		"3782 822463 10005 999", // American Express, 15 digits
+	} {
+		got := redactor.Text(value)
+		for _, card := range []string{"4111111111111111", "4111 1111 1111 1111", "5500005555555559", "3782 822463 10005"} {
+			if strings.Contains(value, card) && strings.Contains(got, card) {
+				t.Errorf("%q kept the card number: %q", value, got)
+			}
+		}
+		if !strings.Contains(got, Redacted) {
+			t.Errorf("%q was not masked: %q", value, got)
+		}
+	}
+	// Digit runs that are not cards stay readable, as do near-misses.
+	for _, value := range []string{
+		"at 2026-10-11 12:30:00", "order 1234567890", "id 1699999999999999999",
+		"4111 1111 1111 1112", "typo 4111111111111112 123", "0000000000000000 123",
+	} {
+		if got := redactor.Text(value); got != value {
+			t.Errorf("%q was masked: %q", value, got)
+		}
+	}
+}
+
+func TestSDKMetadataIsBounded(t *testing.T) {
+	record := func(metadata string) map[string]*structpb.Value {
+		trace := Trace{TraceID: "sdk-trace", Spans: []Span{{Span: span(1, 0, "evalsi.log", 0, 1, kv("evalsi.metadata", metadata))}}}
+		r, _ := ToRecord(trace)
+		return r.Metadata
+	}
+	// Keys in the evalsi.* namespace are the server's, not a client's.
+	got := record(`{"epoch":2,"evalsi.tier":"gold","evalsi.policy":"x"}`)
+	if got["epoch"].GetNumberValue() != 2 || got["evalsi.tier"] != nil || got["evalsi.policy"] != nil {
+		t.Fatalf("reserved keys were accepted: %v", got)
+	}
+	// An oversized blob is dropped whole, not stored.
+	if got := record(`{"note":"` + strings.Repeat("x", 70<<10) + `"}`); got["note"] != nil {
+		t.Fatal("oversized metadata was stored")
+	}
+	// Too many keys, or a key that is too long, are dropped.
+	many := map[string]any{}
+	for index := range 300 {
+		many[fmt.Sprintf("k%03d", index)] = index
+	}
+	raw, _ := json.Marshal(many)
+	if got := record(string(raw)); len(got) > 256+4 {
+		t.Fatalf("metadata keeps %d keys", len(got))
+	}
+	if got := record(`{"` + strings.Repeat("k", 200) + `":1,"ok":2}`); got["ok"].GetNumberValue() != 2 || len(got) > 5 {
+		t.Fatalf("long key handling: %v", got)
 	}
 }

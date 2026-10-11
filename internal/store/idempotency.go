@@ -85,6 +85,67 @@ func (s *Store) BeginIdempotency(ctx context.Context, scope, key, fingerprint st
 // completed blocks its key before it is reaped.
 const UnresolvedClaimRetention = 6 * 24 * time.Hour
 
+// PruneIdempotency removes expired outcomes and long-unresolved claims from
+// every scope, and returns how many it removed. BeginIdempotency only cleans
+// the scope it is called for, so a scope that is never used again (a retired
+// key or project) would otherwise keep its rows, and their cached responses,
+// for good. Each scope is cleaned under the same per-scope lock as a request in
+// that scope, so the two never contend for the same rows.
+func (s *Store) PruneIdempotency(ctx context.Context, now time.Time) (int, error) {
+	unresolvedBefore := now.Add(-UnresolvedClaimRetention).UnixNano()
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT scope FROM idempotency
+		WHERE (completed = 1 AND expires_ns <= ?) OR (completed = 0 AND expires_ns <= ?) LIMIT 100`, now.UnixNano(), unresolvedBefore)
+	if err != nil {
+		return 0, err
+	}
+	var scopes []string
+	for rows.Next() {
+		var scope string
+		if err := rows.Scan(&scope); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		scopes = append(scopes, scope)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, scope := range scopes {
+		n, err := s.pruneIdempotencyScope(ctx, scope, now.UnixNano(), unresolvedBefore)
+		if err != nil {
+			return removed, err
+		}
+		removed += n
+	}
+	return removed, nil
+}
+
+func (s *Store) pruneIdempotencyScope(ctx context.Context, scope string, now, unresolvedBefore int64) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if s.db.d == postgresDialect {
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(?, 7266657473690002))`, scope); err != nil {
+			return 0, err
+		}
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM idempotency WHERE (scope, key) IN
+		(SELECT scope, key FROM idempotency
+		 WHERE scope = ? AND ((completed = 1 AND expires_ns <= ?) OR (completed = 0 AND expires_ns <= ?))
+		 ORDER BY expires_ns LIMIT 1000)`, scope, now, unresolvedBefore)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), tx.Commit()
+}
+
 // ReleaseIdempotency drops a claim whose request failed, so a retry with the
 // same key runs again instead of replaying the failure. Completed outcomes are
 // left alone.

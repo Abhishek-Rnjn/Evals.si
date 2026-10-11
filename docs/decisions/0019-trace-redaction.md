@@ -29,7 +29,12 @@ key or its final dot-separated segment. Configured key globs extend these
 defaults; configured RE2 value patterns and PII classes are optional.
 
 PII classes are `email`, `us-ssn`, `credit-card`, and `phone`. They are heuristic
-patterns, not identity validation or a promise of complete PII detection.
+patterns, not identity validation or a promise of complete PII detection. The
+`credit-card` class finds runs of 13 or more digits (single spaces or dashes
+between them) and hides a run that passes the Luhn check. It also hides any
+window inside the run that starts with a real issuer prefix, has that issuer's
+length and passes Luhn, so a card followed or preceded by a CVV or expiry digits
+is not left readable; other runs stay readable, to keep timestamps and IDs.
 Operators may explicitly disable all redaction. Invalid enabled rules refuse
 startup without echoing their contents. Chart users put this configuration
 under `server.config.traces.redaction`; no per-project API is added.
