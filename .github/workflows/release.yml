@@ -264,6 +264,9 @@ jobs:
 
   bundle:
     needs: [version, image]
+    # `approve` is skipped on a dry run, and a skipped job anywhere up the chain
+    # skips a job that has only the default condition. Run whenever the image built.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.image.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
