@@ -353,6 +353,21 @@ jobs:
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
           cd tests/trainers && EVALSID="$RUNNER_TEMP/evalsid" "$RUNNER_TEMP/trainers/bin/python" -m pytest -q
 
+  collector-image:
+    # The release builds this image; build it here so a Dockerfile or
+    # .dockerignore mistake fails a pull request, not the release.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - run: docker buildx build --load -f deploy/collector/Dockerfile -t evalsi-collector:ci .
+      - name: The image carries its configs
+        run: |
+          docker create --name c evalsi-collector:ci
+          docker cp c:/etc/evalsi-collector/config.yaml - >/dev/null
+          docker cp c:/etc/evalsi-collector/config-dev.yaml - >/dev/null
+
   release-check:
     # The release archive builds (static Go binaries and a static
     # bubblewrap) and runs, so a tag cannot find it broken.
