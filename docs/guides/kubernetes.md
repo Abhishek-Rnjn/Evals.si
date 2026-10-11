@@ -134,7 +134,9 @@ On a connected machine, bundle the images and charts (and, with `--with-cli`, wh
 deploy/airgap/bundle.sh --tag 0.4.0 --out evalsi-bundle --with-cli
 ```
 
-New bundles require Docker 28+ for platform-scoped inspect, load and save.
+Docker 28+ scopes inspect, load and save to the bundle's platform. An older
+Docker is detected and uses the plain commands, with a note, which is correct
+for a single-platform bundle on a host of the same architecture.
 The default platform is `linux/amd64`; use `--platform linux/arm64` for arm64
 clusters. Build locally supplied images for that same platform. The bundle
 records it in `platform`, and the installer uses it when loading and exporting
