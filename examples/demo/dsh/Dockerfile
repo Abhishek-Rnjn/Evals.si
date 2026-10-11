@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git ca-certific
     && npm install -g "@deepseek-ai/dsh@${DSH_VERSION}" \
     && npm cache clean --force
 COPY configure.sh /usr/local/bin/dsh-demo-configure
+COPY plugin/package.json plugin/package-lock.json /opt/evalsi-dsh-plugin/
+RUN npm ci --prefix /opt/evalsi-dsh-plugin --omit=dev && npm cache clean --force
+COPY plugin/index.mjs /opt/evalsi-dsh-plugin/index.mjs
 RUN chmod +x /usr/local/bin/dsh-demo-configure
 # A non-root user (the pod rung and Pod Security "restricted" need one) with
 # a home for dsh's state.

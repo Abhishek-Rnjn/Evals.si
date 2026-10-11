@@ -289,6 +289,41 @@ func TestIdempotencyConcurrentCapacity(t *testing.T) {
 	}
 }
 
+func TestIdempotencyScopeIsolation(t *testing.T) {
+	st := open(t)
+	now := time.Now()
+	if _, err := st.BeginIdempotency(t.Context(), "unrelated", "expired", "fingerprint", now.Add(-8*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.BeginIdempotency(t.Context(), "active", "key", "fingerprint", now); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := st.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM idempotency WHERE scope = ?`, "unrelated").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("another scope was reaped without its lock: count=%d err=%v", count, err)
+	}
+	if st.db.d == postgresDialect {
+		tx, err := st.db.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.ExecContext(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended(?, 7266657473690002))`, "blocked"); err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		if _, err := st.BeginIdempotency(ctx, "independent", "key", "fingerprint", now); err != nil {
+			t.Fatalf("unrelated scope blocked: %v", err)
+		}
+		blocked, stop := context.WithTimeout(t.Context(), 100*time.Millisecond)
+		defer stop()
+		if _, err := st.BeginIdempotency(blocked, "blocked", "key", "fingerprint", now); err == nil {
+			t.Fatal("same scope bypassed its advisory lock")
+		}
+	}
+}
+
 func TestOutputsAndResultsAreIdempotent(t *testing.T) {
 	s := open(t)
 	ctx := context.Background()

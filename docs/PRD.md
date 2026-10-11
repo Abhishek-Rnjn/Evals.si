@@ -58,7 +58,7 @@ The Kubernetes form factor and the push and embed doors exist today; the pull do
 | OIDC, API keys, project RBAC, CEL rules, audit log | Built | `internal/auth/`, `internal/authz/` |
 | Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source), Phoenix and self-hosted Langfuse 4.56.0 built and verified for the recorded paths; the rest not built | [trace sources guide](guides/trace-sources.md) |
 | Log and stream sources (Kafka, CloudWatch, Loki, S3 drops) | Not designed | none |
-| `evalsi.log()` SDK call | Designed, not built | DESIGN.md "Path E" |
+| `evalsi.log()` SDK call | Built: bounded async OTLP/HTTP, futures and exit flush | [SDK guide](guides/integrate-an-agent-studio.md#sdk-logging-without-otel) |
 | Remote `Client.evaluate()` helper | Built (E2), with a parity test against a real `evalsid` | `python/evalsi/src/evalsi/client.py` |
 | Scores query API for the studio UI (`/v1alpha1/scores`) | Built (A3) | `internal/watch/service.go` |
 | Release tag, signed images, published charts | Not done | `.github/workflows/release.yml` |
@@ -105,7 +105,7 @@ Until agent-studio-standalone is available for testing, two open-source agent ru
 | DeepSeek Harness | `dsh --profile acp`, Python SDK | ACP and in-process targets |
 | DeepSeek Harness | `dsh web` | Plays the studio UI in the Kubernetes demo |
 
-dsh's OpenTelemetry plugin exports product analytics only, not session traces. Online scoring of live dsh sessions therefore needs a small dsh plugin that exports sessions as OTel GenAI spans (R6).
+dsh's built-in telemetry does not export session traces. The demo includes a separate opt-in GenAI span plugin; native headless MLflow pull/assessment has run on kind (R6).
 
 **Models.** Both agents run on Anthropic models or any OpenAI-compatible endpoint, chosen by environment. CI uses a deterministic mock model, so it needs no key. The judge for rubric-graded tasks is configured separately, as in every install.
 
@@ -126,7 +126,7 @@ dsh's OpenTelemetry plugin exports product analytics only, not session traces. O
 | R3 | Run specs under `examples/demo/`, one per agent and suite, identical in standalone and Kubernetes mode | P0 | Built; six specs, loaded and checked by tests |
 | R4 | Standalone walkthrough: `evalsi run -f ...` embedded, then `--server` against `evalsid serve`, on the bubblewrap rung; report and `/ui/` | P0 | Built; walkthrough in `examples/demo/README.md`, run end to end with the mock model |
 | R5 | Kubernetes walkthrough: the Evals.si charts and a sandbox pool, an MLflow server, the Deep Agents HTTP service and `dsh web` as studio stand-ins, and `kubectl apply` of the `EvalRun`s; scores in `/ui/` and in MLflow | P0 | Built; chart and overlays are chart-tested. Local kind passed chart installation, dataset upload, both agents' small-repo suites and the MLflow sink; browser walkthrough not rechecked ([verification](verification/README.md#platform-aware-bundle-recheck-2026-10-10)) |
-| R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 | Partly: the MLflow half passed with the real service and MLflow 3.17.0 locally and on kind (one trace, two scores written back); the dsh plugin is a gap ([demo](../examples/demo/README.md#online-scoring-from-mlflow-r6)) |
+| R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 | Native headless dsh and Deep Agents loops passed on kind with MLflow 3.17.0 assessment write-back; interactive dsh web export remains unverified ([report](verification/PART-C.md)) |
 | R7 | CI: the kind e2e job runs the small-repo-fix suite for both agents against a mock model | P0 | Built; the kind step passed locally for both agents (task-success 1, 33 trials each); not yet run on CI |
 | R8 | Portability: chart values for storage class, ingress, image registry and node placement; no cloud-specific dependency | P0 | Built; placement values on every pod and Service, overlays for kind, tainted nodes and Istio ambient, chart-tested |
 | R9 | Integration guide `docs/guides/integrate-an-agent-studio.md`, built on these demos and covering the steps agent-studio-standalone will follow: install, connect traces, gate deploys, read scores | P0 | Built |
@@ -197,11 +197,11 @@ Evals.si must install, run and upgrade like any well-behaved cluster service; mo
 | D4 | Bootstrap job that creates projects, API keys and default policies from Helm values and writes keys to Secrets | P0 | Built: `bootstrap.*` values run `evalsi-operator bootstrap` as a post-install and post-upgrade Job ([guide](guides/kubernetes.md#first-state-from-values-the-bootstrap-job)); idempotent; key authentication and survival across an upgrade passed on local arm64 kind ([recheck](verification/README.md#mac-and-ci-recheck-2026-10-11)). The default amd64 kind run, including Landlock, passed in [CI run 119](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38135174954) at `ba2ceff`; Landlock was not attempted on this Mac |
 | D5 | Horizontal scale: API replicas, KEDA-scaled worker pools per evaluator image, sandbox pools | P0 | Built; KEDA untested on a live pool |
 | D6 | Health, readiness, `/metrics`, Grafana dashboard, structured logs, OTel self-tracing | P0 | Built |
-| D7 | Zero-downtime upgrade with forward-only DB migrations and a documented N-1 compatibility rule | P1 | Gap: policy not written |
+| D7 | Zero-downtime upgrade with forward-only DB migrations and a documented N-1 compatibility rule | P1 | Policy written ([operations](guides/operations.md)); no published N-1 pair or zero-downtime certification |
 | D8 | Air-gapped install from one bundle | P1 | Built |
-| D9 | Mount Wasm and Python evaluator plugins from a volume or an init container | P1 | Gap (LEFTOVERS) |
-| D10 | Backup and restore runbook for Postgres and object storage | P1 | Gap |
-| D11 | Reference values for EKS, GKE, AKS, OpenShift and kind | P2 | Gap |
+| D9 | Mount Wasm and Python evaluator plugins from a volume or an init container | P1 | Built and chart-tested ([plugins](guides/plugins.md#kubernetes-mounts)); live plugin execution not certified |
+| D10 | Backup and restore runbook for Postgres and object storage | P1 | Written and exercised on kind: SQL sentinel, object checksums, API readiness; full identity/run recovery remains unverified ([report](verification/PART-C.md)) |
+| D11 | Reference values for EKS, GKE, AKS, OpenShift and kind | P2 | All five render; kind installed; cloud values unverified live ([operations](guides/operations.md)) |
 
 ## Requirements: the three integration modes
 
@@ -215,7 +215,7 @@ All three modes feed the same evaluator catalog and policy engine, so a record g
 | P2 | On-demand `Evaluate` and `EvaluateStream` for records sent in the request | P0 | Built |
 | P3 | Run API: create, watch, cancel, resume, compare, with gates and budgets | P0 | Built |
 | P4 | Webhook callback when a run or a scored trace finishes, signed with HMAC | P0 | Done: `run.finished`, `run.gate_failed`, `trace.scored` (opt-in, one per trace and policy, pushed or pulled), `alert.fired` and `alert.resolved`; `POST /v1alpha1/webhooks` ([guide](guides/webhooks.md)) |
-| P5 | `evalsi.log(input, output, trace_id, metadata)` SDK call for apps without OTel, batched and async | P1 | Gap (DESIGN Path E) |
+| P5 | `evalsi.log(input, output, trace_id, metadata)` SDK call for apps without OTel, batched and async | P1 | Built, SDK tests and real exit flush pass ([report](verification/PART-C.md)) |
 | P6 | Bulk upload: POST a JSONL or Parquet file, or reference an S3 object, as a dataset | P1 | Built: bounded JSONL/Parquet upload, project-confined S3 import and content-addressed publication; local validation and real-worker pipeline tested; live S3 import not certified |
 | P7 | Idempotency key on every write, so retries from customer pipelines never double-score | P1 | Built for API unary/streaming writes, raw uploads and OTLP exports: durable 24h replay, request conflicts and non-reexecutable uncertain claims; generated secrets never replay. MCP tool writes and cross-system exactly-once delivery are not covered |
 
@@ -241,9 +241,9 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 | --- | --- | --- | --- |
 | E1 | In-process `evalsi.evaluate()` and `aevaluate()` with every built-in pack, no server | P0 | Built |
 | E2 | `Client.evaluate(records, evaluators, params)` and `Client.evaluate_stream()` that run on the cluster and return the same `EvaluationResult` type as E1 | P0 | Built: `Client.evaluate()`, `evaluate_async()`, `evaluate_stream()` (gRPC; `evalsi[grpc]`), with a parity test against a real `evalsid` |
-| E3 | Tensor-friendly batching: accept lists of dicts, pandas, or Hugging Face datasets; non-blocking futures so a training step never waits | P1 | Gap |
+| E3 | Tensor-friendly batching: accept lists of dicts, pandas, or Hugging Face datasets; non-blocking futures so a training step never waits | P1 | Built; real tensors/pandas/HF datasets tested; serialization is local and network I/O async ([report](verification/PART-C.md)) |
 | E4 | RL rewards from the cluster Reward Service (TRL, verl, OpenRLHF) | P0 | Built |
-| E5 | Checkpoint evaluation hooks for plain PyTorch and Lightning (not only Hugging Face `TrainerCallback`) | P1 | Gap (LEFTOVERS) |
+| E5 | Checkpoint evaluation hooks for plain PyTorch and Lightning (not only Hugging Face `TrainerCallback`) | P1 | Built; actual CPU framework tests in separate environments ([guide](guides/fine-tuning.md#plain-pytorch-and-lightning)); state-dict serving needs a compatible strategy |
 | E6 | Log results from a local loop to the server as a run, so they show next to cluster runs | P1 | Partly |
 
 ## Architecture and API design

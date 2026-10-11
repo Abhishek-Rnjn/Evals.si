@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -326,6 +327,46 @@ type testServer struct {
 	keys   map[string]string // role name -> plaintext API key
 	signer jose.Signer
 	http   *http.Client
+}
+
+type uploadFailureReader struct{ err error }
+
+func (reader uploadFailureReader) Read([]byte) (int, error) { return 0, reader.err }
+
+func TestDatasetHTTPSpoolPrivacyAndReadErrors(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("TMPDIR", directory)
+	spool, checksum, err := spoolDatasetUpload(strings.NewReader("{}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := spool.Stat()
+	if err != nil || info.Mode().Perm() != 0o600 || checksum != digest([]byte("{}\n")) {
+		t.Fatalf("spool permissions or digest: %v %v", info, err)
+	}
+	raw, err := io.ReadAll(spool)
+	if err != nil || string(raw) != "{}\n" {
+		t.Fatalf("spool was not rewound: %q %v", raw, err)
+	}
+	_ = spool.Close()
+	_ = os.Remove(spool.Name())
+	for _, test := range []struct {
+		err  error
+		code int
+	}{{errors.New("broken body"), http.StatusInternalServerError}, {&http.MaxBytesError{Limit: 64 << 20}, http.StatusRequestEntityTooLarge}} {
+		if file, _, err := spoolDatasetUpload(uploadFailureReader{test.err}); file != nil || err == nil {
+			t.Fatalf("read failure accepted: %v %v", file, err)
+		} else {
+			writer := httptest.NewRecorder()
+			datasetHTTPError(writer, err)
+			if writer.Code != test.code {
+				t.Fatalf("read error classified as %d, want %d", writer.Code, test.code)
+			}
+		}
+	}
+	if entries, err := os.ReadDir(directory); err != nil || len(entries) != 0 {
+		t.Fatalf("failed spool leaked files: %v %v", entries, err)
+	}
 }
 
 func TestDatasetHTTPIdempotencyAndAuthorization(t *testing.T) {

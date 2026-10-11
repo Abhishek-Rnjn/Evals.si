@@ -33,6 +33,16 @@ func (s *Store) AcquireLease(ctx context.Context, name, owner string, ttl time.D
 	return n > 0, err
 }
 
+func (s *Store) RenewLease(ctx context.Context, name, owner string, ttl time.Duration) (bool, error) {
+	now := time.Now()
+	result, err := s.db.ExecContext(ctx, `UPDATE leases SET expires_ns = ? WHERE name = ? AND owner = ? AND expires_ns >= ?`, now.Add(ttl).UnixNano(), name, owner, now.UnixNano())
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count > 0, err
+}
+
 // ReleaseLease gives up a lease, if owner holds it.
 func (s *Store) ReleaseLease(ctx context.Context, name, owner string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM leases WHERE name = ? AND owner = ?`, name, owner)

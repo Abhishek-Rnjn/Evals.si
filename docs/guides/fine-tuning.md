@@ -191,6 +191,31 @@ trainer = GRPOTrainer(..., callbacks=[evalsi_callback(evaluator, stop_on_regress
 
 Each save is evaluated on a background thread, one at a time and in order. With `wait=True` the trainer waits for each evaluation. With `stop_on_regression`, training stops at the next step after a regression is found. Pending evaluations finish before `train()` returns.
 
+## Plain PyTorch and Lightning
+
+```python
+from evalsi.training import PyTorchCheckpointHook, lightning_checkpoint_callback
+
+with PyTorchCheckpointHook(evaluator) as hook:
+  hook.save(model, "checkpoints/step-100.pt", 100, optimizer=optimizer)
+
+callback = lightning_checkpoint_callback(
+  evaluator, dirpath="checkpoints", every_n_train_steps=100,
+  save_on_train_epoch_end=False,
+)
+trainer = lightning.Trainer(callbacks=[callback])
+```
+
+The PyTorch hook publishes the state dictionary atomically before evaluation;
+use a unique path for every step. Lightning evaluation starts after the real
+`ModelCheckpoint` save, on global rank zero, and drains at train end or error.
+Async mode keeps all checkpoints (`save_top_k=-1`, no `save_last`) so a queued
+file cannot be deleted by top-k retention. Both hooks use `CheckpointRunner`;
+`wait=True` evaluates synchronously. An evaluator implements
+`evaluate(checkpoint, step) -> StepResult`. Supply a serving strategy that reads
+state dictionaries: `.pt`/`.ckpt` files are not automatically vLLM models.
+Real CPU save/evaluate tests run in separate PyTorch and Lightning environments.
+
 ## Fine-tuning and RL evaluations
 
 | Concern | How |

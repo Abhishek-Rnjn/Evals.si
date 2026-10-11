@@ -65,13 +65,23 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error 
 		defer cancel()
 		_ = r.m.st.ReleaseLease(releaseCtx, lease, owner)
 	}()
-	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	defer cancel()
 	config := r.src.GetSchedule()
 	schedule, err := parseSchedule(config)
 	if err != nil {
 		return err
 	}
+	limit := int(config.GetMaxRecords())
+	if limit == 0 {
+		limit = 10000
+	}
+	rate := int(r.src.GetPoll().GetMaxRecordsPerSecond())
+	if rate <= 0 {
+		rate = r.m.opts.MaxRate
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute+time.Duration(limit)*time.Second/time.Duration(rate))
+	defer cancel()
+	ctx, stopRenewal := r.renewScheduleLease(ctx, lease, owner, 2*time.Minute)
+	defer stopRenewal()
 	status, err := r.m.st.SourceSchedule(ctx, r.src.GetProject(), r.src.GetName())
 	if err != nil {
 		return err
@@ -122,10 +132,6 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error 
 		}
 		r.compiled = true
 	}
-	limit := int(config.GetMaxRecords())
-	if limit == 0 {
-		limit = 10000
-	}
 	start, cursor := next.Add(-config.GetWindow().AsDuration()), ""
 	var records []*evalsiv1alpha1.Record
 	snapshotBytes := 0
@@ -153,12 +159,8 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error 
 		if err != nil {
 			return err
 		}
-		if len(traces) != len(selected) {
-			return errors.New("connector returned an incomplete scheduled window; retrying without advancing the cursor")
-		}
-		rate := int(r.src.GetPoll().GetMaxRecordsPerSecond())
-		if rate <= 0 {
-			rate = r.m.opts.MaxRate
+		if len(traces) < len(selected) {
+			r.log.Warn("scheduled traces disappeared before fetch; skipping", "skipped", len(selected)-len(traces))
 		}
 		if err := sleep(ctx, time.Duration(float64(len(traces))/float64(rate)*float64(time.Second))); err != nil {
 			return err
@@ -205,6 +207,37 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) error 
 	status.LastPullAt = timestamppb.New(now)
 	status.Pulled += int64(len(records))
 	return r.saveSchedule(ctx, status)
+}
+
+func (r *runner) renewScheduleLease(ctx context.Context, lease, owner string, ttl time.Duration) (context.Context, func()) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(ttl / 3)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				request, stop := context.WithTimeout(ctx, 5*time.Second)
+				acquired, err := r.m.st.RenewLease(request, lease, owner, ttl)
+				stop()
+				if err != nil || !acquired {
+					if err == nil {
+						err = errors.New("scheduled source lease was lost")
+					}
+					cancel(err)
+					return
+				}
+			}
+		}
+	}()
+	return ctx, func() {
+		cancel(nil)
+		<-done
+	}
 }
 
 func (r *runner) saveSchedule(ctx context.Context, status *evalsiv1alpha1.SourceStatus) error {

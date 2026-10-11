@@ -6,6 +6,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 |------|------------|
 | [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md) | The full run: setup, every exit criterion with its evidence, product bugs F1–F6, doc differences D1–D15 and environment problems R1–R2 |
 | [FINAL-RESULTS.md](FINAL-RESULTS.md) | One table of every exit criterion across the three clusters |
+| [PART-C.md](PART-C.md) | M4/M5 requested subset, native dsh integration, review fixes and final-phase verification limits |
 
 The run used commit `c5a1de9` on 2026-10-09, on three clusters:
 

@@ -11,6 +11,13 @@ image:
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 
+plugins:
+  volumes: []
+  volumeMounts: []
+  initContainers: []
+  wasmDirs: []
+  pythonPath: ""
+
 global:
   # Air-gapped installs: pull every image from this registry instead (the
   # bundle pushes them there under the same paths, docker.io/library

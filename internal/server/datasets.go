@@ -1,11 +1,13 @@
 package server
 
 import (
-	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
+	"os"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -24,6 +26,7 @@ func (request datasetUploadRequest) Spec() connect.Spec {
 }
 
 func registerDatasetUpload(mux *http.ServeMux, dependencies deps) {
+	spools := make(chan struct{}, 2)
 	mux.HandleFunc("POST /v1alpha1/datasets/{name}/upload", func(writer http.ResponseWriter, request *http.Request) {
 		config := &evalsiv1alpha1.DatasetUploadConfig{Project: request.URL.Query().Get("project"), Name: request.PathValue("name"), Format: request.URL.Query().Get("format")}
 		ctx, checker, err := dependencies.gate.authenticate(request.Context(), evalsiv1alpha1connect.DatasetServiceUploadDatasetProcedure, "http", request.RemoteAddr, request.Header)
@@ -45,15 +48,24 @@ func registerDatasetUpload(mux *http.ServeMux, dependencies deps) {
 				datasetHTTPError(writer, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid Idempotency-Key")))
 				return
 			}
-			raw, readErr := io.ReadAll(io.LimitReader(request.Body, datasets.MaxUploadBytes+1))
-			if readErr != nil || int64(len(raw)) > datasets.MaxUploadBytes {
-				datasetHTTPError(writer, connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload exceeds 64 MiB")))
+			select {
+			case spools <- struct{}{}:
+				defer func() { <-spools }()
+			default:
+				datasetHTTPError(writer, connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload capacity is busy; retry later")))
 				return
 			}
-			keyed := datasetUploadRequest{Request: connect.NewRequest(&evalsiv1alpha1.ImportDatasetRequest{Config: config, Uri: "sha256:" + digest(raw)})}
+			spool, checksum, readErr := spoolDatasetUpload(request.Body)
+			if readErr != nil {
+				datasetHTTPError(writer, readErr)
+				return
+			}
+			defer os.Remove(spool.Name())
+			defer spool.Close()
+			keyed := datasetUploadRequest{Request: connect.NewRequest(&evalsiv1alpha1.ImportDatasetRequest{Config: config, Uri: "sha256:" + checksum})}
 			keyed.Header().Set("Idempotency-Key", key)
 			response, callErr := dependencies.gate.idempotent(ctx, keyed, func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-				uploaded, err := dependencies.datasets.Put(ctx, config, bytes.NewReader(raw))
+				uploaded, err := dependencies.datasets.Put(ctx, config, spool)
 				if err != nil {
 					return nil, err
 				}
@@ -84,8 +96,40 @@ func registerDatasetUpload(mux *http.ServeMux, dependencies deps) {
 	})
 }
 
+func spoolDatasetUpload(input io.Reader) (*os.File, string, error) {
+	spool, err := os.CreateTemp("", "evalsi-http-upload-")
+	if err != nil {
+		return nil, "", err
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			_ = spool.Close()
+			_ = os.Remove(spool.Name())
+		}
+	}()
+	hash := sha256.New()
+	size, err := io.Copy(io.MultiWriter(spool, hash), io.LimitReader(input, datasets.MaxUploadBytes+1))
+	var oversized *http.MaxBytesError
+	if size > datasets.MaxUploadBytes || errors.As(err, &oversized) {
+		return nil, "", connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload exceeds 64 MiB"))
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return nil, "", err
+	}
+	completed = true
+	return spool, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
 func datasetHTTPError(writer http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
+	var oversized *http.MaxBytesError
+	if errors.As(err, &oversized) {
+		code = http.StatusRequestEntityTooLarge
+	}
 	switch connect.CodeOf(err) {
 	case connect.CodeInvalidArgument:
 		code = http.StatusBadRequest

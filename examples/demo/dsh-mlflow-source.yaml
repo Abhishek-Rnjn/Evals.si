@@ -1,0 +1,13 @@
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata:
+  name: dsh-mlflow
+  labels: {evals.si/project: demo}
+spec:
+  connector: mlflow
+  endpoint: http://evalsi-demo-mlflow:5000
+  locations: [evalsi-demo-dsh]
+  backfill: {since: 24h}
+  poll: {interval: 15s}
+  policies: [dsh-online]
+  writeBack: {enabled: true}

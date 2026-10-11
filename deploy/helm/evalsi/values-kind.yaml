@@ -1,0 +1,15 @@
+server:
+  replicas: 2
+devPostgres:
+  enabled: true
+devMinio:
+  enabled: true
+storage:
+  s3:
+    bucket: evalsi
+sandbox:
+  pool:
+    enabled: true
+    ladder: [pod]
+    pod:
+      networkPolicyEnforced: false

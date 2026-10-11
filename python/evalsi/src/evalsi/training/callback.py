@@ -20,21 +20,27 @@ Pending evaluations finish before ``train()`` returns.
 from __future__ import annotations
 
 import logging
+import os
 import queue
+import tempfile
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from evalsi.training.loop import CheckpointEvaluator, StepResult
 
 logger = logging.getLogger(__name__)
 
 
+class CheckpointEvaluation(Protocol):
+    def evaluate(self, checkpoint: str, step: int) -> StepResult: ...
+
+
 class CheckpointRunner:
     """Evaluates checkpoints one at a time, in order, on a background thread.
     Independent of transformers, so other trainers can drive it."""
 
-    def __init__(self, evaluator: CheckpointEvaluator, *, wait: bool = False) -> None:
+    def __init__(self, evaluator: CheckpointEvaluation, *, wait: bool = False) -> None:
         self.evaluator = evaluator
         self.wait = wait
         self.results: list[StepResult] = []
@@ -75,6 +81,78 @@ class CheckpointRunner:
             self._queue.put(None)
             self._thread.join()
             self._thread = None
+
+
+class PyTorchCheckpointHook:
+    """Atomically save a state dict and evaluate only the published checkpoint."""
+
+    def __init__(self, evaluator: CheckpointEvaluation, *, wait: bool = False) -> None:
+        self.runner = CheckpointRunner(evaluator, wait=wait)
+
+    def save(self, model: Any, path: str | Path, step: int, *, optimizer: Any = None) -> None:
+        import torch
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            raise FileExistsError("use a unique checkpoint path for every step")
+        state = {"state_dict": model.state_dict(), "global_step": step}
+        if optimizer is not None:
+            state["optimizer_state_dict"] = optimizer.state_dict()
+        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix=".evalsi-")
+        try:
+            with os.fdopen(descriptor, "wb") as checkpoint_file:
+                torch.save(state, checkpoint_file)
+                checkpoint_file.flush()
+                os.fsync(checkpoint_file.fileno())
+            os.replace(temporary, path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+        self.runner.submit(str(path), step)
+
+    def close(self) -> None:
+        self.runner.close()
+
+    def __enter__(self) -> PyTorchCheckpointHook:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+def lightning_checkpoint_callback(
+    evaluator: CheckpointEvaluation, *, wait: bool = False, **options: Any
+) -> Any:
+    """A Lightning ModelCheckpoint that evaluates after the actual file save.
+
+    Async evaluations keep every checkpoint: deleting a previous top-k file
+    while its evaluation is queued is unsafe. Supply a serving strategy that
+    understands PyTorch/Lightning state dicts; these files are not vLLM models.
+    """
+    from lightning.pytorch.callbacks import ModelCheckpoint
+
+    options.setdefault("save_top_k", -1)
+    if not wait and (options["save_top_k"] != -1 or options.get("save_last")):
+        raise ValueError("async checkpoint evaluation requires save_top_k=-1 and save_last=False")
+
+    class EvalsiModelCheckpoint(ModelCheckpoint):  # type: ignore[misc]
+        def __init__(self) -> None:
+            super().__init__(**options)
+            self.runner = CheckpointRunner(evaluator, wait=wait)
+
+        def _save_checkpoint(self, trainer: Any, filepath: str) -> None:
+            super()._save_checkpoint(trainer, filepath)
+            if trainer.is_global_zero:
+                self.runner.submit(filepath, int(trainer.global_step))
+
+        def on_train_end(self, trainer: Any, pl_module: Any) -> None:
+            super().on_train_end(trainer, pl_module)
+            self.runner.close()
+
+        def on_exception(self, trainer: Any, pl_module: Any, exception: BaseException) -> None:
+            self.runner.close()
+
+    return EvalsiModelCheckpoint()
 
 
 def evalsi_callback(

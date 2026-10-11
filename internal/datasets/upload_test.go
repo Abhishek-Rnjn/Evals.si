@@ -77,6 +77,28 @@ func TestInvalidUploadDoesNotPublish(t *testing.T) {
 	}
 }
 
+func TestUploadGeneratedIDsAvoidExplicitIDsAndNullIsAbsent(t *testing.T) {
+	service := &Service{Root: t.TempDir()}
+	input := "{\"input\":null,\"output\":null,\"reference\":null}\n{\"id\":\"record-1\"}\n{\"id\":\"record-1-1\"}\n{}\n"
+	first, err := service.Put(t.Context(), uploadConfig("jsonl"), strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(service.Root, first.Path))
+	if err != nil || !bytes.Contains(raw, []byte(`"id":"record-1-2"`)) || !bytes.Contains(raw, []byte(`"id":"record-4"`)) {
+		t.Fatalf("generated IDs collided: %s %v", raw, err)
+	}
+	for _, field := range []string{`"input"`, `"output"`, `"reference"`} {
+		if bytes.Contains(raw, []byte(field)) {
+			t.Fatalf("null was converted into present content: %s", raw)
+		}
+	}
+	retry, err := service.Put(t.Context(), uploadConfig("jsonl"), strings.NewReader(input))
+	if err != nil || first.Sha256 != retry.Sha256 {
+		t.Fatalf("generated IDs were not deterministic: %v", err)
+	}
+}
+
 type zeroReader struct{}
 
 func (zeroReader) Read(output []byte) (int, error) {

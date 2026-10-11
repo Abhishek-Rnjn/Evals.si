@@ -28,6 +28,7 @@ type RedactionConfig struct {
 type Redactor struct {
 	keys     []string
 	patterns []*regexp.Regexp
+	checks   map[*regexp.Regexp]func(string) bool
 }
 
 const Redacted = "[REDACTED]"
@@ -49,7 +50,7 @@ func NewRedactor(config RedactionConfig) (*Redactor, error) {
 	}
 	keys := append([]string(nil), defaultKeys...)
 	keys = append(keys, config.Keys...)
-	redactor := &Redactor{}
+	redactor := &Redactor{checks: map[*regexp.Regexp]func(string) bool{}}
 	for _, key := range keys {
 		key = strings.ToLower(key)
 		if _, err := path.Match(key, ""); err != nil {
@@ -61,15 +62,19 @@ func NewRedactor(config RedactionConfig) (*Redactor, error) {
 	builtins := map[string]string{
 		"email":       `(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b`,
 		"us-ssn":      `\b[0-9]{3}-[0-9]{2}-[0-9]{4}\b`,
-		"credit-card": `\b(?:[0-9][ -]?){13,19}\b`,
-		"phone":       `\+?[0-9][0-9 ().-]{7,}[0-9]`,
+		"credit-card": `\b(?:[0-9][ -]?){12,18}[0-9]\b`,
+		"phone":       `\+[1-9][0-9]{6,14}\b|\+[1-9][0-9]{0,2}[ -](?:\([0-9]{2,4}\)|[0-9]{2,4})[ -][0-9]{2,4}[ -][0-9]{2,4}\b|\b[2-9][0-9]{2}[-. ][2-9][0-9]{2}[-. ][0-9]{4}\b|\([2-9][0-9]{2}\) ?[2-9][0-9]{2}[-. ][0-9]{4}\b`,
 	}
 	for _, class := range config.PII {
 		pattern, ok := builtins[class]
 		if !ok {
 			return nil, fmt.Errorf("trace redaction: unknown PII class")
 		}
-		patterns = append(patterns, pattern)
+		compiled := regexp.MustCompile(pattern)
+		redactor.patterns = append(redactor.patterns, compiled)
+		if class == "credit-card" {
+			redactor.checks[compiled] = validCardNumber
+		}
 	}
 	for _, pattern := range patterns {
 		compiled, err := regexp.Compile(pattern)
@@ -79,6 +84,26 @@ func NewRedactor(config RedactionConfig) (*Redactor, error) {
 		redactor.patterns = append(redactor.patterns, compiled)
 	}
 	return redactor, nil
+}
+
+func validCardNumber(value string) bool {
+	digits := strings.ReplaceAll(strings.ReplaceAll(value, " ", ""), "-", "")
+	if len(digits) < 13 || len(digits) > 19 || digits[0] == '0' {
+		return false
+	}
+	total, double := 0, false
+	for index := len(digits) - 1; index >= 0; index-- {
+		digit := int(digits[index] - '0')
+		if double {
+			digit *= 2
+			if digit > 9 {
+				digit -= 9
+			}
+		}
+		total += digit
+		double = !double
+	}
+	return total%10 == 0
 }
 
 func (redactor *Redactor) matches(key string) bool {
@@ -117,7 +142,12 @@ func (redactor *Redactor) text(value string) string {
 	for _, pattern := range redactor.patterns {
 		parts := strings.Split(value, Redacted)
 		for index, part := range parts {
-			parts[index] = pattern.ReplaceAllLiteralString(part, Redacted)
+			parts[index] = pattern.ReplaceAllStringFunc(part, func(match string) string {
+				if check := redactor.checks[pattern]; check != nil && !check(match) {
+					return match
+				}
+				return Redacted
+			})
 		}
 		value = strings.Join(parts, Redacted)
 	}
@@ -227,10 +257,11 @@ func (redactor *Redactor) message(message protoreflect.Message) {
 }
 
 func (redactor *Redactor) Trace(trace Trace) Trace {
-	if redactor == nil {
+	if redactor == nil || trace.redactedBy == redactor {
 		return trace
 	}
 	result := trace
+	result.redactedBy = redactor
 	if trace.Adjust != nil {
 		result.Adjust = func(record *evalsiv1alpha1.Record, info *TraceInfo) {
 			trace.Adjust(record, info)
@@ -256,6 +287,11 @@ func (redactor *Redactor) Trace(trace Trace) Trace {
 	}
 	result.Spans = make([]Span, len(trace.Spans))
 	for index, span := range trace.Spans {
+		if span.redactedBy == redactor {
+			result.Spans[index] = span
+			continue
+		}
+		span.redactedBy = redactor
 		span.Span = proto.Clone(span.Span).(*tracepb.Span)
 		redactor.Message(span.Span)
 		resource := make(Attrs, len(span.Resource))

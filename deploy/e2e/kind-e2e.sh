@@ -291,6 +291,33 @@ exp="$(curl -s -H "$mlflow_host" "http://127.0.0.1:15000/api/2.0/mlflow/experime
 curl -s -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
   -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$exp"'"}}]}' | tee "$work/mlflow-traces.json" >/dev/null
 grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evals.si assessment on the Deep Agents traces" >&2; exit 1; }
+
+step "R6: native dsh GenAI spans in MLflow, pulled, scored and written back"
+dsh_exp="$(curl -sf -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/2.0/mlflow/experiments/create \
+  -H 'content-type: application/json' -d '{"name":"evalsi-demo-dsh"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment_id"])')"
+kubectl exec -n "$ns" deployment/evalsi-demo-dsh-web -- env \
+  DEMO_OUTER_SANDBOX=true DEMO_OTLP_ENDPOINT=http://evalsi-demo-mlflow:5000/v1/traces \
+  DEMO_MLFLOW_EXPERIMENT_ID="$dsh_exp" \
+  /usr/local/bin/dsh-demo-configure dsh --profile headless --json 'What is 1 + 1? Reply with 2.' > "$work/dsh-session.jsonl"
+kubectl exec -n "$ns" deployment/evalsi-demo-deepagents -- python -c '
+import mlflow
+mlflow.set_tracking_uri("http://evalsi-demo-mlflow:5000")
+experiment = mlflow.get_experiment_by_name("evalsi-demo-dsh")
+traces = mlflow.search_traces(locations=[experiment.experiment_id], return_type="list")
+assert traces, "dsh exported no native spans"
+assert any("What is 1 + 1?" in str(span.attributes.get("input.value")) and span.attributes.get("output.value") for trace in traces for span in trace.data.spans), "dsh lost the task or output"
+print("native dsh traces:", len(traces))'
+kubectl apply -n "$ns" -f "$demo/dsh-online-policy.yaml" -f "$demo/dsh-mlflow-source.yaml"
+for _ in $(seq 1 60); do
+  dsh_scored="$(kubectl get tracesource dsh-mlflow -n "$ns" -o jsonpath='{.status.scored}')"
+  [ "${dsh_scored:-0}" -ge 1 ] && break
+  sleep 5
+done
+kubectl get tracesource dsh-mlflow -n "$ns" -o yaml | tee "$work/dsh-tracesource.yaml"
+[ "${dsh_scored:-0}" -ge 1 ] || { echo "the dsh TraceSource wrote no scores back" >&2; exit 1; }
+curl -sf -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
+  -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$dsh_exp"'"}}]}' > "$work/dsh-mlflow-traces.json"
+grep -q '"source_id": *"evalsi/dsh-online"' "$work/dsh-mlflow-traces.json" || { echo "no Evals.si assessment on native dsh traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
 step "deleting an EvalRun"

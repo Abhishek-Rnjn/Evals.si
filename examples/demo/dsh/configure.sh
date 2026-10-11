@@ -42,5 +42,12 @@ YAML
     mode: danger-full-access
 YAML
   fi
+  if [ -n "${DEMO_OTLP_ENDPOINT:-}" ]; then
+    cat >> "$dir/cordis.patch.yml" <<'YAML'
+- insert:
+    - id: evalsi-genai
+      name: /opt/evalsi-dsh-plugin/index.mjs
+YAML
+  fi
 done
 exec "$@"

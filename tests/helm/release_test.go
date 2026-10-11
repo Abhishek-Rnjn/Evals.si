@@ -17,6 +17,53 @@ var everything = []string{
 	"devMinio.enabled=true", "devClickhouse.enabled=true",
 }
 
+func TestReferenceClusterValues(t *testing.T) {
+	for _, cluster := range []string{"kind", "eks", "gke", "aks", "openshift"} {
+		t.Run(cluster, func(t *testing.T) {
+			chart := filepath.Join("..", "..", "deploy", "helm", "evalsi")
+			values := filepath.Join(chart, "values-"+cluster+".yaml")
+			output, err := exec.Command("helm", "template", "evalsi", chart, "-n", "evalsi", "-f", values).CombinedOutput()
+			if err != nil {
+				t.Fatalf("reference values: %v\n%s", err, output)
+			}
+			for _, required := range []string{"replicas: 2", "ladder:", "- pod"} {
+				if !strings.Contains(string(output), required) {
+					t.Errorf("missing %q in reference chart", required)
+				}
+			}
+		})
+	}
+}
+
+func TestPluginMountsAndInitContainers(t *testing.T) {
+	objects := renderAs(t, "evalsi", "evalsi",
+		"plugins.volumes[0].name=plugins", "plugins.volumes[0].emptyDir.medium=Memory",
+		"plugins.volumeMounts[0].name=plugins", "plugins.volumeMounts[0].mountPath=/opt/evalsi/plugins",
+		"plugins.initContainers[0].name=install-plugins", "plugins.initContainers[0].image=example.com/plugins:1",
+		"plugins.wasmDirs[0]=/opt/evalsi/plugins/wasm", "plugins.pythonPath=/opt/evalsi/plugins/python",
+		"global.imageRegistry=airgap.invalid")
+	for name, spec := range podSpecs(objects) {
+		if name != "Deployment/evalsi" && !strings.HasPrefix(name, "Deployment/evalsi-worker-") {
+			continue
+		}
+		initializers := list(spec["initContainers"])
+		if len(initializers) != 1 || nested(initializers[0].(map[string]any), "image") != "airgap.invalid/plugins:1" {
+			t.Fatalf("%s: missing registry-aware plugin init: %v", name, initializers)
+		}
+		containers := list(spec["containers"])
+		found := false
+		for _, mount := range list(containers[0].(map[string]any)["volumeMounts"]) {
+			value := mount.(map[string]any)
+			if value["name"] == "plugins" {
+				found = value["readOnly"] == true
+			}
+		}
+		if !found {
+			t.Errorf("%s: plugin volume is not mounted read-only", name)
+		}
+	}
+}
+
 func nested(m map[string]any, path ...string) any {
 	var cur any = m
 	for _, p := range path {

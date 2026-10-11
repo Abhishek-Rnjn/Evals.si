@@ -147,6 +147,7 @@ func publishDataset(directory, relative string, input io.Reader) error {
 
 func validateDataset(ctx context.Context, input, output *os.File, format string, size int64) (count int, err error) {
 	seen := map[string]bool{}
+	missing := map[int]int{}
 	var written int64
 	write := func(raw []byte, row int) error {
 		if err := ctx.Err(); err != nil {
@@ -160,9 +161,13 @@ func validateDataset(ctx context.Context, input, output *os.File, format string,
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("row %d: expected a JSON object", row))
 		}
 		for _, field := range []string{"input", "output", "reference"} {
-			var text string
+			var text *string
 			if value, present := fields[field]; present && json.Unmarshal(value, &text) == nil {
-				fields[field], _ = json.Marshal(map[string]string{"text": text})
+				if text == nil {
+					delete(fields, field)
+				} else {
+					fields[field], _ = json.Marshal(map[string]string{"text": *text})
+				}
 			}
 		}
 		raw, err := json.Marshal(fields)
@@ -174,12 +179,12 @@ func validateDataset(ctx context.Context, input, output *os.File, format string,
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("row %d: invalid Record fields", row))
 		}
 		if record.GetId() == "" {
-			record.Id = fmt.Sprintf("record-%d", row)
-		}
-		if seen[record.GetId()] {
+			missing[count] = row
+		} else if seen[record.GetId()] {
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("row %d: duplicate record id", row))
+		} else {
+			seen[record.GetId()] = true
 		}
-		seen[record.GetId()] = true
 		encoded, err := Row(record, nil)
 		if err != nil {
 			return err
@@ -258,7 +263,71 @@ func validateDataset(ctx context.Context, input, output *os.File, format string,
 	if count == 0 {
 		return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("dataset has no records"))
 	}
+	if len(missing) > 0 {
+		if err := assignDatasetIDs(ctx, output, seen, missing); err != nil {
+			return 0, err
+		}
+	}
 	return count, nil
+}
+
+func assignDatasetIDs(ctx context.Context, output *os.File, seen map[string]bool, missing map[int]int) error {
+	canonical, err := os.CreateTemp("", "evalsi-dataset-ids-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(canonical.Name())
+	defer canonical.Close()
+	if _, err := output.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(output)
+	scanner.Buffer(make([]byte, 64<<10), MaxUploadRowBytes+1)
+	var size int64
+	index := 0
+	for scanner.Scan() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		raw := scanner.Bytes()
+		if row, absent := missing[index]; absent {
+			record := &evalsiv1alpha1.Record{}
+			if err := protojson.Unmarshal(raw, record); err != nil {
+				return err
+			}
+			record.Id = fmt.Sprintf("record-%d", row)
+			for suffix := 1; seen[record.Id]; suffix++ {
+				record.Id = fmt.Sprintf("record-%d-%d", row, suffix)
+			}
+			seen[record.Id] = true
+			raw, err = Row(record, nil)
+			if err != nil {
+				return err
+			}
+		}
+		size += int64(len(raw) + 1)
+		if size > MaxUploadBytes || len(raw) > MaxUploadRowBytes {
+			return connect.NewError(connect.CodeResourceExhausted, errors.New("normalized dataset exceeds upload limits"))
+		}
+		if _, err := canonical.Write(append(raw, '\n')); err != nil {
+			return err
+		}
+		index++
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if _, err := canonical.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	if err := output.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := output.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	_, err = io.Copy(output, canonical)
+	return err
 }
 
 func validateParquetPages(input io.ReaderAt, file *parquet.File, size int64) error {

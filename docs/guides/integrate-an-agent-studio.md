@@ -45,7 +45,8 @@ These operations need `datasets.write`; no arbitrary URL or other bucket is read
 The response's `path` is usable as `RunSpec.dataset.path`. Limits are 64 MiB
 uploaded and normalized, 100000 records and 4 MiB per JSONL row/Parquet page.
 Rows must be Record objects; text input/output/reference strings are normalized
-to Content. Missing IDs become `record-<row>`; duplicate IDs are rejected.
+to Content and null stays absent. Missing IDs become `record-<row>` with a
+deterministic suffix when an explicit ID reserves that name; duplicate explicit IDs are rejected.
 Errors name the offending row without echoing raw fields. Publication occurs
 only after validation, and its path contains the normalized content hash.
 There are two conversion slots per replica; capacity refusals are retryable.
@@ -87,6 +88,33 @@ helm install evalsi deploy/helm/evalsi -n studio \
   The keys are written to the Secrets named, once, and kept across upgrades. A credential grant lets a project's runs name a worker's environment variable (for a model key) without the key being in a spec.
 
 ## 2. Connect traces
+
+### SDK logging without OTel
+
+```python
+import evalsi
+
+logger = evalsi.configure_logging("https://evalsi.studio.svc:4318", api_key=ingest_key)
+future = evalsi.log("question", "answer", metadata={"epoch": 2})
+logger.log_batch([{"input": "next question", "output": "next answer"}])
+evalsi.flush(timeout=10)
+trace_id = future.result()
+logger.close()
+```
+
+Use the server CA through `SSL_CERT_FILE`. Configuration is explicit, or set
+`EVALSI_OTLP_ENDPOINT`; no judge is selected or billed. Calls serialize locally
+and return futures without waiting for network I/O. PyTorch tensors are detached
+to CPU; batches accept dict records, pandas frames and Hugging Face datasets.
+Queued and in-flight records share limits (1024 records/8 MiB by default).
+Overflow, HTTP failures and partial rejection fail futures; `flush`/`close`
+also raise failures. Normal process exit drains the queue; SIGKILL cannot flush.
+The byte cap applies after serialization, not to caller-owned tensors or
+temporary serialization memory. `log_batch` returns one future per input row.
+
+Metadata arrives in the trace's Record after server credential/PII redaction.
+Server-derived service/error fields remain authoritative. `trace_id`, when
+supplied, is a nonzero 32-character lowercase hexadecimal ID.
 
 **Push.** Point the studio's OpenTelemetry exporter at Evals.si with an `ingest` key bound to the project (OTel GenAI, OpenInference, OpenLLMetry and MLflow conventions are understood):
 

@@ -63,6 +63,9 @@ deepagents:                 # the Deep Agents service, called over HTTP
 
 dshWeb:                     # dsh's browser UI, the studio's UI stand-in
   enabled: true
+  otlp:
+    endpoint: ""
+    experimentId: ""
   image: ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0
   pullPolicy: IfNotPresent
   resources: {}

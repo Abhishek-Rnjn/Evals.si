@@ -119,8 +119,9 @@ func (a Attrs) int(keys ...string) *int64 {
 
 // Span is one received span with its resource attributes.
 type Span struct {
-	Span     *tracepb.Span
-	Resource Attrs
+	Span       *tracepb.Span
+	Resource   Attrs
+	redactedBy *Redactor
 	// The project the span was ingested into, assigned from the ingest
 	// credential; empty means the default project.
 	Project string
@@ -405,9 +406,10 @@ func ToStep(s Span) *evalsiv1alpha1.Step {
 
 // Trace is an assembled trace.
 type Trace struct {
-	TraceID string
-	Project string
-	Spans   []Span
+	TraceID    string
+	Project    string
+	Spans      []Span
+	redactedBy *Redactor
 	// Adjust, when set, changes the record and the facts policies select on
 	// after the conventions have been read: a trace source's overrides.
 	Adjust func(*evalsiv1alpha1.Record, *TraceInfo)
@@ -504,6 +506,14 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 	meta := map[string]any{"service": info.Service, "span_name": info.Name, "error": info.Error}
 	if traj.SessionId != "" {
 		meta["session_id"] = traj.SessionId
+	}
+	var sdkMetadata map[string]any
+	if json.Unmarshal([]byte(rootAttrs.str("evalsi.metadata")), &sdkMetadata) == nil {
+		for key, value := range sdkMetadata {
+			if field, err := structpb.NewValue(value); err == nil {
+				record.Metadata[key] = field
+			}
+		}
 	}
 	for k, v := range meta {
 		if val, err := structpb.NewValue(v); err == nil {

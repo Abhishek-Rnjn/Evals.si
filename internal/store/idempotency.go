@@ -35,7 +35,7 @@ func (s *Store) BeginIdempotency(ctx context.Context, scope, key, fingerprint st
 	}
 	defer func() { _ = tx.Rollback() }()
 	if s.db.d == postgresDialect {
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(7266657473690002)`); err != nil {
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(?, 7266657473690002))`, scope); err != nil {
 			return IdempotencyResult{}, err
 		}
 	}
@@ -45,8 +45,8 @@ func (s *Store) BeginIdempotency(ctx context.Context, scope, key, fingerprint st
 	// count toward the per-scope cap forever.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM idempotency WHERE (scope, key) IN
 		(SELECT scope, key FROM idempotency
-		 WHERE (completed = 1 AND expires_ns <= ?) OR (completed = 0 AND expires_ns <= ?)
-		 ORDER BY expires_ns LIMIT 1000)`, now.UnixNano(), now.Add(-UnresolvedClaimRetention).UnixNano()); err != nil {
+		 WHERE scope = ? AND ((completed = 1 AND expires_ns <= ?) OR (completed = 0 AND expires_ns <= ?))
+		 ORDER BY expires_ns LIMIT 1000)`, scope, now.UnixNano(), now.Add(-UnresolvedClaimRetention).UnixNano()); err != nil {
 		return IdempotencyResult{}, err
 	}
 	var entries, existing int
@@ -100,7 +100,7 @@ func (s *Store) CompleteIdempotency(ctx context.Context, scope, key, fingerprint
 	}
 	defer func() { _ = tx.Rollback() }()
 	if s.db.d == postgresDialect {
-		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(7266657473690002)`); err != nil {
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(?, 7266657473690002))`, scope); err != nil {
 			return err
 		}
 	}

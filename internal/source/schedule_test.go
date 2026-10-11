@@ -16,6 +16,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/catalog"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
 	runmanager "github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -43,6 +44,27 @@ func (runs *scheduledRuns) CreateRun(ctx context.Context, request *connect.Reque
 
 func scheduleConfig() *evalsiv1alpha1.PullSchedule {
 	return &evalsiv1alpha1.PullSchedule{Cron: "* * * * *", Window: durationpb.New(time.Minute), StartingDeadline: durationpb.New(2 * time.Minute), RunSpec: &evalsiv1alpha1.RunSpec{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "builtin/latency"}}}}
+}
+
+type disappearingTraceConnector struct{ *fakeStore }
+
+func (connector disappearingTraceConnector) Fetch(ctx context.Context, infos []Info) ([]ingest.Trace, error) {
+	return connector.fakeStore.Fetch(ctx, infos[1:])
+}
+
+func TestScheduledWindowSkipsDisappearedTrace(t *testing.T) {
+	h := newHarness(t, func(source *evalsiv1alpha1.TraceSource) { source.Schedule = scheduleConfig() })
+	runs := &scheduledRuns{store: h.st}
+	h.m.opts.Runs = runs
+	h.fs.set(Info{ID: "deleted", Started: epoch.Add(10 * time.Second)}, Info{ID: "remaining", Started: epoch.Add(20 * time.Second)})
+	h.now = epoch.Add(time.Minute)
+	if err := h.r.scheduledCycle(t.Context(), disappearingTraceConnector{h.fs}); err != nil {
+		t.Fatal(err)
+	}
+	status, err := h.st.SourceSchedule(t.Context(), "p", "studio")
+	if err != nil || runs.calls != 1 || status.GetPulled() != 1 || !status.GetLastScheduledAt().AsTime().Equal(h.now) {
+		t.Fatalf("disappeared trace stalled the window: status=%v calls=%d err=%v", status, runs.calls, err)
+	}
 }
 
 func TestScheduledWindowRealWorkerReport(t *testing.T) {
@@ -183,5 +205,37 @@ func TestScheduledWindowLeaseExcludesAnotherReplica(t *testing.T) {
 	}
 	if err := h.cycle(t); err != nil || runs.calls != 1 {
 		t.Fatal("released schedule lease did not permit the window")
+	}
+}
+
+func TestScheduledLeaseRenewsAndLossCancelsPull(t *testing.T) {
+	h := newHarness(t, nil)
+	lease, owner, ttl := "scheduled-source:p/studio", "owner", 120*time.Millisecond
+	if acquired, err := h.st.AcquireLease(t.Context(), lease, owner, ttl); err != nil || !acquired {
+		t.Fatal(err)
+	}
+	ctx, stop := h.r.renewScheduleLease(t.Context(), lease, owner, ttl)
+	defer stop()
+	select {
+	case <-ctx.Done():
+		t.Fatal(context.Cause(ctx))
+	case <-time.After(3 * ttl):
+	}
+	if acquired, err := h.st.AcquireLease(t.Context(), lease, "other", ttl); err != nil || acquired {
+		t.Fatalf("long pull lost lease exclusion: acquired=%v err=%v", acquired, err)
+	}
+	if err := h.st.ReleaseLease(t.Context(), lease, owner); err != nil {
+		t.Fatal(err)
+	}
+	if acquired, err := h.st.AcquireLease(t.Context(), lease, "other", time.Second); err != nil || !acquired {
+		t.Fatal(err)
+	}
+	select {
+	case <-ctx.Done():
+		if context.Cause(ctx).Error() != "scheduled source lease was lost" {
+			t.Fatal(context.Cause(ctx))
+		}
+	case <-time.After(time.Second):
+		t.Fatal("lease loss did not cancel the pull")
 	}
 }

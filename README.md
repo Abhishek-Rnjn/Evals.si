@@ -258,6 +258,12 @@ The roadmap's phases 0 to 6 are built. The current work follows the [product req
 - trace sources for MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10));
 - tested profiles for the five first-cut agent frameworks.
 
+The requested M4/M5 subset adds an [operations runbook](docs/guides/operations.md),
+reference cluster values, bounded asynchronous [SDK logging](docs/guides/integrate-an-agent-studio.md#sdk-logging-without-otel),
+real CPU PyTorch/Lightning hooks, plugin mounts and native dsh-to-MLflow spans.
+The [final-phase report](docs/verification/PART-C.md) separates verified checks
+from remaining cloud, upgrade and release certification.
+
 The Kubernetes form factor is tested on kind in CI and was verified on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). No release has been tagged yet. [LEFTOVERS](docs/LEFTOVERS.md) lists what is deferred or not yet verified.
 
 ## Documentation

@@ -143,7 +143,11 @@ func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTrace
 	}
 	var spans []Span
 	for _, a := range all {
-		spans = append(spans, SpansOfResource(a.rs, a.project, a.labels)...)
+		received := SpansOfResource(a.rs, a.project, a.labels)
+		for index := range received {
+			received[index].redactedBy = r.redactor
+		}
+		spans = append(spans, received...)
 	}
 	resp := &collectortracepb.ExportTraceServiceResponse{}
 	if n := r.assembler.Add(spans); n > 0 {

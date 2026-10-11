@@ -113,6 +113,25 @@ kubectl get tracesource deepagents-mlflow -n evalsi      # PULLED and SCORED cli
 
 The demo MLflow is plain HTTP in the cluster, so `overlays/evalsi-demo.yaml` allows its host (`sources.allowHosts`). Standalone, the same two files work with `evalsi policy apply -f` and `evalsi source apply -f` against `evalsi serve --config evalsi.yaml`, which allows `evalsi-demo-mlflow` too; run the service with `MLFLOW_TRACKING_URI=http://evalsi-demo-mlflow:5000` (and `python3 deepagents/server.py --port 8090`).
 
+The dsh image includes a separate opt-in GenAI session-span exporter. Create an
+MLflow experiment named `evalsi-demo-dsh`, then configure its numeric ID:
+
+```bash
+helm upgrade evalsi-demo examples/demo -n evalsi --reuse-values \
+  --set dshWeb.otlp.endpoint=http://evalsi-demo-mlflow:5000/v1/traces \
+  --set-string dshWeb.otlp.experimentId="$EXPERIMENT_ID"
+kubectl apply -n evalsi -f examples/demo/dsh-online-policy.yaml -f examples/demo/dsh-mlflow-source.yaml
+```
+
+Headless runs set `DEMO_OTLP_ENDPOINT` and `DEMO_MLFLOW_EXPERIMENT_ID` before
+`dsh-demo-configure`. The plugin observes canonical session events and exports
+agent/tool spans through a bounded OTel SDK queue, flushing on session
+persistence and disposal. Enabling it exports prompt/output/tool content: use
+a private destination. Optional `DEMO_OTLP_API_KEY` authenticates the exporter,
+separately from the model key. It changes neither built-in feedback telemetry
+nor standalone sandbox policy. Native headless export/pull/assessment has run
+on kind; interactive web-session export is not yet verified.
+
 ### Any cluster
 
 Every pod and Service the demo chart adds takes `tolerations`, `nodeSelector`, `podLabels`, `serviceLabels` and `imageRegistry` as values (each component can set its own), and the MLflow volume takes `mlflow.persistence.storageClassName`. The overlays show three shapes:
