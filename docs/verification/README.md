@@ -309,10 +309,10 @@ after the fix (5 of 5, 40 rounds each).
 Allowing `'unsafe-inline'` in the Content-Security-Policy makes it fail. Writing
 it found that every page load logged a 404 for `/favicon.ico`; `index.html`
 now names an empty inline icon. Its first runs on a CI runner (the `ui-browser`
-job) split: one passed and one failed. The failure was a race in the test, not
-in the page: a section's nav link turns active before its view has loaded, and
-the test read the "Loading…" placeholder. The test now waits for the view
-itself (6 of 6 local runs pass).
+job) split: one passed and two failed. The failures were a race in the test,
+not in the page: a section's nav link turns active before its view has loaded,
+and the page can render a view again when the project list arrives, so the test
+read the "Loading…" placeholder. The test now waits for the section's heading.
 
 **Not verified.** The per-release sandbox-pool NetworkPolicy is chart-tested
 with two releases but has not run on a cluster that enforces NetworkPolicy
