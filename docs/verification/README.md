@@ -112,11 +112,15 @@ also pass `go test -race ./internal/store ./internal/server ./internal/source`.
 Authenticated HTTP upload replay/conflict and project-admin deletion retry tests
 pass. This does not certify live
 S3 import, cloud connector credentials, production load or new-operation HA
-failover. The final kind recheck did not pass: the old cluster failed during
-installation, and the clean-cluster rerun showed probe timeouts and API
-connection refusals despite successful parity, sandbox unit-test and pod-agent
-EvalRuns. Pods later recovered, but resource pressure remained. Both attempts
-used the approved local Landlock skip, not a Landlock certification.
+failover. Initial kind attempts failed with probe timeouts and API connection
+refusals. After stopping `asf-dev` with user authorization and removing stale
+test fixtures, `CLUSTER=evalsi-items36-clean SKIP_LANDLOCK=1
+deploy/e2e/kind-e2e.sh` exited successfully. Airgap installation, parity,
+webhooks, bootstrap, bubblewrap, pod sandboxes, both reference demos, MLflow
+sink and pull/write-back, restricted namespace operation and static issuer/key
+checks passed. The issuer-discovery denial intentionally times out its rollout
+before verifying fail-closed behavior and recovery. Landlock remains deferred
+on Docker's kernel; this is not complete Kubernetes isolation certification.
 See [the consolidated changes and fixes](CHANGES-2026-10-11.md) for items 1-6,
 the final verification evidence and remaining limits.
 
