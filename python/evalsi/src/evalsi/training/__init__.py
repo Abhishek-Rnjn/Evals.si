@@ -6,6 +6,7 @@
 - :mod:`evalsi.training.callback`: a Hugging Face ``TrainerCallback`` that does it on save.
 """
 
+from evalsi.training.callback import PyTorchCheckpointHook, lightning_checkpoint_callback
 from evalsi.training.checkpoints import Checkpoint, find
 from evalsi.training.loop import (
     BASE,
@@ -26,6 +27,7 @@ __all__ = [
     "Comparison",
     "Endpoint",
     "LoRA",
+    "PyTorchCheckpointHook",
     "RegressionGate",
     "Served",
     "ServingError",
@@ -33,4 +35,5 @@ __all__ = [
     "compare",
     "find",
     "format_curve",
+    "lightning_checkpoint_callback",
 ]

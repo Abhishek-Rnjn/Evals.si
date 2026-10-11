@@ -12,8 +12,11 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,7 +42,183 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
+
+func testIdempotencyInterceptor(g *gate) connect.Interceptor {
+	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			return g.idempotent(ctx, req, next)
+		}
+	})
+}
+
+type testStreamIdempotencyInterceptor struct{ gate *gate }
+
+func (interceptor testStreamIdempotencyInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	return next
+}
+func (interceptor testStreamIdempotencyInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return next
+}
+func (interceptor testStreamIdempotencyInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		return interceptor.gate.idempotentStream(ctx, conn, func(any) error { return nil }, next)
+	}
+}
+
+func TestIdempotencyStreamReplayAndConflict(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "stream.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	procedure := evalsiv1alpha1connect.DatasetServiceUploadDatasetProcedure
+	var calls atomic.Int64
+	handler := connect.NewClientStreamHandler(procedure, func(ctx context.Context, stream *connect.ClientStream[evalsiv1alpha1.UploadDatasetRequest]) (*connect.Response[evalsiv1alpha1.UploadDatasetResponse], error) {
+		calls.Add(1)
+		for stream.Receive() {
+		}
+		if err := stream.Err(); err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&evalsiv1alpha1.UploadDatasetResponse{Path: "stored-once", Records: 1}), nil
+	}, connect.WithInterceptors(testStreamIdempotencyInterceptor{gate: &gate{store: st}}))
+	server := httptest.NewUnstartedServer(handler)
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	t.Cleanup(server.Close)
+	client := connect.NewClient[evalsiv1alpha1.UploadDatasetRequest, evalsiv1alpha1.UploadDatasetResponse](server.Client(), server.URL+procedure, connect.WithGRPC())
+	call := func(payload string) (*connect.Response[evalsiv1alpha1.UploadDatasetResponse], error) {
+		stream := client.CallClientStream(t.Context())
+		stream.RequestHeader().Set("Idempotency-Key", "upload-once")
+		if err := stream.Send(&evalsiv1alpha1.UploadDatasetRequest{Part: &evalsiv1alpha1.UploadDatasetRequest_Data{Data: []byte(payload)}}); err != nil {
+			return nil, err
+		}
+		return stream.CloseAndReceive()
+	}
+	if _, err := call("same"); err != nil {
+		t.Fatal(err)
+	}
+	replay, err := call("same")
+	if err != nil || replay.Msg.GetPath() != "stored-once" || replay.Header().Get("Idempotency-Replayed") != "true" || calls.Load() != 1 {
+		t.Fatalf("stream retry: %+v, %v, calls=%d", replay, err, calls.Load())
+	}
+	if _, err := call("different"); connect.CodeOf(err) != connect.CodeAlreadyExists || calls.Load() != 1 {
+		t.Fatalf("changed stream: %v", err)
+	}
+}
+
+func TestIdempotencyUnaryReplayAndConflict(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "idempotency.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	procedure := evalsiv1alpha1connect.EvaluationServiceEvaluateProcedure
+	g := &gate{store: st, rules: map[string]accessRule{procedure: {action: "evaluations.run"}}}
+	var calls atomic.Int64
+	handler := connect.NewUnaryHandler(procedure, func(ctx context.Context, req *connect.Request[evalsiv1alpha1.EvaluateRequest]) (*connect.Response[evalsiv1alpha1.EvaluateResponse], error) {
+		calls.Add(1)
+		return connect.NewResponse(&evalsiv1alpha1.EvaluateResponse{Results: []*evalsiv1alpha1.EvaluationResult{{RecordId: "once"}}}), nil
+	}, connect.WithInterceptors(testIdempotencyInterceptor(g)))
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client := connect.NewClient[evalsiv1alpha1.EvaluateRequest, evalsiv1alpha1.EvaluateResponse](server.Client(), server.URL+procedure)
+	request := func(project string) *connect.Request[evalsiv1alpha1.EvaluateRequest] {
+		req := connect.NewRequest(&evalsiv1alpha1.EvaluateRequest{Project: project})
+		req.Header().Set("Idempotency-Key", "retry-once")
+		return req
+	}
+	if _, err := client.CallUnary(t.Context(), request("project")); err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := client.CallUnary(t.Context(), request("project"))
+	if err != nil || replayed.Msg.GetResults()[0].GetRecordId() != "once" || replayed.Header().Get("Idempotency-Replayed") != "true" || calls.Load() != 1 {
+		t.Fatal("retry was not replayed without evaluating twice")
+	}
+	changed := request("project")
+	changed.Msg.Judge = "changed"
+	if _, err := client.CallUnary(t.Context(), changed); connect.CodeOf(err) != connect.CodeAlreadyExists || calls.Load() != 1 {
+		t.Fatal("different payload did not conflict before execution")
+	}
+}
+
+func TestIdempotencyFailedCallIsRetriedWithTheSameKey(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "idempotency.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	procedure := evalsiv1alpha1connect.EvaluationServiceEvaluateProcedure
+	g := &gate{store: st, rules: map[string]accessRule{procedure: {action: "evaluations.run"}}}
+	var calls atomic.Int64
+	handler := connect.NewUnaryHandler(procedure, func(ctx context.Context, req *connect.Request[evalsiv1alpha1.EvaluateRequest]) (*connect.Response[evalsiv1alpha1.EvaluateResponse], error) {
+		if calls.Add(1) == 1 {
+			return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("quota"))
+		}
+		return connect.NewResponse(&evalsiv1alpha1.EvaluateResponse{Results: []*evalsiv1alpha1.EvaluationResult{{RecordId: "second"}}}), nil
+	}, connect.WithInterceptors(testIdempotencyInterceptor(g)))
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client := connect.NewClient[evalsiv1alpha1.EvaluateRequest, evalsiv1alpha1.EvaluateResponse](server.Client(), server.URL+procedure)
+	request := func() *connect.Request[evalsiv1alpha1.EvaluateRequest] {
+		req := connect.NewRequest(&evalsiv1alpha1.EvaluateRequest{Project: "project"})
+		req.Header().Set("Idempotency-Key", "retry-after-failure")
+		return req
+	}
+	if _, err := client.CallUnary(t.Context(), request()); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("first call: %v", err)
+	}
+	retry, err := client.CallUnary(t.Context(), request())
+	if err != nil || retry.Msg.GetResults()[0].GetRecordId() != "second" || retry.Header().Get("Idempotency-Replayed") != "" || calls.Load() != 2 {
+		t.Fatalf("a failed call was replayed instead of retried: %+v, %v, calls=%d", retry, err, calls.Load())
+	}
+	replay, err := client.CallUnary(t.Context(), request())
+	if err != nil || replay.Header().Get("Idempotency-Replayed") != "true" || calls.Load() != 2 {
+		t.Fatalf("a success was not replayed: %v, calls=%d", err, calls.Load())
+	}
+}
+
+func TestIdempotencyCredentialResponseDoesNotPersistSecret(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "idempotency.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	procedure := evalsiv1alpha1connect.AuthServiceCreateAPIKeyProcedure
+	g := &gate{store: st, rules: map[string]accessRule{procedure: {action: "access.manage"}}}
+	var calls atomic.Int64
+	handler := connect.NewUnaryHandler(procedure, func(ctx context.Context, req *connect.Request[evalsiv1alpha1.CreateAPIKeyRequest]) (*connect.Response[evalsiv1alpha1.CreateAPIKeyResponse], error) {
+		calls.Add(1)
+		return connect.NewResponse(&evalsiv1alpha1.CreateAPIKeyResponse{Key: &evalsiv1alpha1.APIKey{Name: "created"}, Secret: "one-time-secret"}), nil
+	}, connect.WithInterceptors(testIdempotencyInterceptor(g)))
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	client := connect.NewClient[evalsiv1alpha1.CreateAPIKeyRequest, evalsiv1alpha1.CreateAPIKeyResponse](server.Client(), server.URL+procedure)
+	request := func() *connect.Request[evalsiv1alpha1.CreateAPIKeyRequest] {
+		req := connect.NewRequest(&evalsiv1alpha1.CreateAPIKeyRequest{Name: "created"})
+		req.Header().Set("Idempotency-Key", "create-once")
+		return req
+	}
+	first, err := client.CallUnary(t.Context(), request())
+	if err != nil || first.Msg.GetSecret() != "one-time-secret" {
+		t.Fatal("first response lost its generated credential")
+	}
+	retry, err := client.CallUnary(t.Context(), request())
+	if err != nil || retry.Msg.GetSecret() != "" || retry.Msg.GetKey().GetName() != "created" || calls.Load() != 1 {
+		t.Fatal("retry recreated or replayed the credential")
+	}
+	scope := digest([]byte(auth.PrincipalFrom(t.Context()).ID() + "\x00" + procedure + "\x00"))
+	raw, err := proto.Marshal(request().Msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := st.BeginIdempotency(t.Context(), scope, digest([]byte("create-once")), digest(raw), time.Now())
+	if err != nil || !stored.Completed || bytes.Contains(stored.Response, []byte("one-time-secret")) {
+		t.Fatal("generated credential reached the idempotency store")
+	}
+}
 
 // TestActionTableCoversEveryRPC walks the API's service descriptors: a new
 // RPC cannot ship without saying which permission it needs.
@@ -148,6 +327,127 @@ type testServer struct {
 	keys   map[string]string // role name -> plaintext API key
 	signer jose.Signer
 	http   *http.Client
+}
+
+type uploadFailureReader struct{ err error }
+
+func (reader uploadFailureReader) Read([]byte) (int, error) { return 0, reader.err }
+
+func TestDatasetHTTPSpoolPrivacyAndReadErrors(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("TMPDIR", directory)
+	spool, checksum, err := spoolDatasetUpload(strings.NewReader("{}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := spool.Stat()
+	if err != nil || info.Mode().Perm() != 0o600 || checksum != digest([]byte("{}\n")) {
+		t.Fatalf("spool permissions or digest: %v %v", info, err)
+	}
+	raw, err := io.ReadAll(spool)
+	if err != nil || string(raw) != "{}\n" {
+		t.Fatalf("spool was not rewound: %q %v", raw, err)
+	}
+	_ = spool.Close()
+	_ = os.Remove(spool.Name())
+	for _, test := range []struct {
+		err  error
+		code int
+	}{{errors.New("broken body"), http.StatusInternalServerError}, {&http.MaxBytesError{Limit: 64 << 20}, http.StatusRequestEntityTooLarge}} {
+		if file, _, err := spoolDatasetUpload(uploadFailureReader{test.err}); file != nil || err == nil {
+			t.Fatalf("read failure accepted: %v %v", file, err)
+		} else {
+			writer := httptest.NewRecorder()
+			datasetHTTPError(writer, err)
+			if writer.Code != test.code {
+				t.Fatalf("read error classified as %d, want %d", writer.Code, test.code)
+			}
+		}
+	}
+	if entries, err := os.ReadDir(directory); err != nil || len(entries) != 0 {
+		t.Fatalf("failed spool leaked files: %v %v", entries, err)
+	}
+}
+
+func TestDatasetHTTPIdempotencyAndAuthorization(t *testing.T) {
+	s := startAuthServer(t, func(cfg *config.Config) { cfg.DatasetsDir = t.TempDir() })
+	call := func(role, payload string) (*http.Response, []byte) {
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.url+"/v1alpha1/datasets/test/upload?project=support&format=jsonl", strings.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("Authorization", "Bearer "+s.keys[role])
+		request.Header.Set("Idempotency-Key", "raw-upload")
+		response, err := s.http.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		raw, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response, raw
+	}
+	first, raw := call("admin", "{}\n")
+	if first.StatusCode != http.StatusCreated || !bytes.Contains(raw, []byte("uploaded/support/test/")) {
+		t.Fatalf("upload: %d %s", first.StatusCode, raw)
+	}
+	retry, replay := call("admin", "{}\n")
+	if retry.StatusCode != http.StatusCreated || retry.Header.Get("Idempotency-Replayed") != "true" || !bytes.Equal(raw, replay) {
+		t.Fatalf("retry: %d %s", retry.StatusCode, replay)
+	}
+	if response, _ := call("admin", "{\"id\":\"changed\"}\n"); response.StatusCode != http.StatusConflict {
+		t.Fatalf("conflict: %d", response.StatusCode)
+	}
+	if response, _ := call("viewer", "{}\n"); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("viewer upload: %d", response.StatusCode)
+	}
+	writer := httptest.NewRecorder()
+	datasetHTTPError(writer, connect.NewError(connect.CodeInvalidArgument, errors.New("row 2: invalid Record fields")))
+	if !strings.Contains(writer.Body.String(), "row 2") {
+		t.Fatal("HTTP row error lost its row")
+	}
+}
+
+func TestDeleteRunAuthorizedRetry(t *testing.T) {
+	s := startAuthServer(t, nil)
+	client := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys["admin"]))
+	created, err := client.CreateRun(t.Context(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: &evalsiv1alpha1.RunSpec{
+		Dataset:    &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{Records: []*evalsiv1alpha1.Record{{Id: "one", Output: text("Paris"), Reference: text("Paris")}}}}},
+		Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "exact-match"}},
+	}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Msg.GetRun().GetId()
+	watchRequest := connect.NewRequest(&evalsiv1alpha1.WatchRunRequest{Id: id})
+	watchRequest.Header().Set("Authorization", "Bearer "+s.keys["admin"])
+	stream, err := client.WatchRun(t.Context(), watchRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for stream.Receive() {
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatal(err)
+	}
+	request := func() *connect.Request[evalsiv1alpha1.DeleteRunRequest] {
+		request := connect.NewRequest(&evalsiv1alpha1.DeleteRunRequest{Id: id})
+		request.Header().Set("Idempotency-Key", "delete-once")
+		return request
+	}
+	if _, err := client.DeleteRun(t.Context(), request()); err != nil {
+		t.Fatal(err)
+	}
+	retry, err := client.DeleteRun(t.Context(), request())
+	if err != nil || retry.Header().Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("project-admin deletion replay: %v", err)
+	}
+	other := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys["checkout-runner"]))
+	if _, err := other.DeleteRun(t.Context(), request()); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("cross-project deletion: %v", err)
+	}
 }
 
 func (s *testServer) token(t *testing.T, claims map[string]any) string {

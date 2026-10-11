@@ -68,6 +68,7 @@ The specs name an image (`environment.image`) for the pod rung; on the host, run
 Notes:
 
 - dsh is a Node program that reserves a large address range, so its spec gives the sandbox 4 GiB and `NODE_OPTIONS=--disable-wasm-trap-handler`. A smaller limit makes it abort.
+- The dsh small-repo spec sets `DEMO_OUTER_SANDBOX=true`: its headless profile uses dsh's `danger-full-access` mode inside Evals.si's enforced `namespaced`, deny-network task sandbox. This avoids an unavailable nested sandbox backend on the pod rung. Never set it for an unconfined host process; the launcher defaults it off and leaves Web/TUI profiles unchanged ([decision 0018](../../docs/decisions/0018-dsh-outer-sandbox.md)).
 - `dcode` makes one lookup of pypi.org that the sandbox refuses; it is harmless.
 - The research suites need a judge: set `judges` and `default_judge` in `evalsi.yaml` (there is no default; nothing is billed by surprise).
 - Terminal-Bench 2: `git clone https://github.com/laude-institute/terminal-bench-2 terminal-bench-2` under this directory (it is git-ignored); the specs read `harbor://` from there and install the agent inside each task's image.
@@ -111,6 +112,25 @@ kubectl get tracesource deepagents-mlflow -n evalsi      # PULLED and SCORED cli
 ```
 
 The demo MLflow is plain HTTP in the cluster, so `overlays/evalsi-demo.yaml` allows its host (`sources.allowHosts`). Standalone, the same two files work with `evalsi policy apply -f` and `evalsi source apply -f` against `evalsi serve --config evalsi.yaml`, which allows `evalsi-demo-mlflow` too; run the service with `MLFLOW_TRACKING_URI=http://evalsi-demo-mlflow:5000` (and `python3 deepagents/server.py --port 8090`).
+
+The dsh image includes a separate opt-in GenAI session-span exporter. Create an
+MLflow experiment named `evalsi-demo-dsh`, then configure its numeric ID:
+
+```bash
+helm upgrade evalsi-demo examples/demo -n evalsi --reuse-values \
+  --set dshWeb.otlp.endpoint=http://evalsi-demo-mlflow:5000/v1/traces \
+  --set-string dshWeb.otlp.experimentId="$EXPERIMENT_ID"
+kubectl apply -n evalsi -f examples/demo/dsh-online-policy.yaml -f examples/demo/dsh-mlflow-source.yaml
+```
+
+Headless runs set `DEMO_OTLP_ENDPOINT` and `DEMO_MLFLOW_EXPERIMENT_ID` before
+`dsh-demo-configure`. The plugin observes canonical session events and exports
+agent/tool spans through a bounded OTel SDK queue, flushing on session
+persistence and disposal. Enabling it exports prompt/output/tool content: use
+a private destination. Optional `DEMO_OTLP_API_KEY` authenticates the exporter,
+separately from the model key. It changes neither built-in feedback telemetry
+nor standalone sandbox policy. Native headless export/pull/assessment has run
+on kind; interactive web-session export is not yet verified.
 
 ### Any cluster
 

@@ -19,6 +19,32 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- end }}
 
+{{- define "evalsi.pluginMounts" -}}
+{{- range (default dict .Values.plugins).volumeMounts }}
+- {{ toYaml (mergeOverwrite (deepCopy .) (dict "readOnly" true)) | nindent 2 | trim }}
+{{- end }}
+{{- end }}
+
+{{- define "evalsi.pluginInit" -}}
+{{- $root := . -}}
+{{- $initializers := list -}}
+{{- with (default dict .Values.plugins).initContainers }}
+{{- range . }}
+{{- $mounts := list (dict "name" "tmp" "mountPath" "/tmp") -}}
+{{- range (default dict $root.Values.plugins).volumeMounts -}}
+{{- $mounts = append $mounts (mergeOverwrite (deepCopy .) (dict "readOnly" false)) -}}
+{{- end -}}
+{{- $init := mergeOverwrite (pick . "command" "args" "env" "envFrom" "resources") (dict
+	"name" (required "plugin init container needs a name" .name)
+	"image" (include "evalsi.ref" (dict "root" $root "ref" (required "plugin init container needs an image" .image)))
+	"securityContext" (include "evalsi.restricted" $root | fromYaml)
+	"volumeMounts" $mounts) -}}
+{{- $initializers = append $initializers $init -}}
+{{- end -}}
+{{- toYaml (dict "initContainers" $initializers) -}}
+{{- end }}
+{{- end }}
+
 {{/* An image reference, moved to global.imageRegistry when set: a leading
 registry host is replaced, and a reference already under the registry is
 kept as it is. */}}

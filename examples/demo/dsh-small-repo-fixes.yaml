@@ -30,6 +30,7 @@ spec:
     env:
       DEMO_BASE_URL: http://evalsi-demo-model:8000/v1
       DEMO_MODEL: mock
+      DEMO_OUTER_SANDBOX: "true"
       NODE_OPTIONS: --disable-wasm-trap-handler
       PYTHONDONTWRITEBYTECODE: "1"
       HOME: /tmp/agent-home      # dsh keeps its state under HOME, which the sandbox does not set

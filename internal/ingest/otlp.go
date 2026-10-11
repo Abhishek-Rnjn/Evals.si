@@ -55,9 +55,11 @@ func DefaultAssign(_ context.Context, resource Attrs) (string, map[string]string
 // Receiver accepts OTLP traces over gRPC and HTTP (protobuf or JSON) and
 // hands the spans to an assembler.
 type Receiver struct {
-	assembler *Assembler
-	assign    Assign
-	opts      []connect.HandlerOption
+	assembler  *Assembler
+	assign     Assign
+	opts       []connect.HandlerOption
+	redactor   *Redactor
+	httpExport func(context.Context, *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error)
 	// In a cluster, received spans go to the shared span stream instead of
 	// the local assembler (see Forward).
 	forward Forward
@@ -70,6 +72,12 @@ type Forward func(ctx context.Context, rs *tracepb.ResourceSpans, project string
 
 // SetForward sends spans to forward instead of the local assembler.
 func (r *Receiver) SetForward(f Forward) { r.forward = f }
+
+func (r *Receiver) SetRedactor(redactor *Redactor) { r.redactor = redactor }
+
+func (r *Receiver) SetHTTPExport(export func(context.Context, *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error)) {
+	r.httpExport = export
+}
 
 // SpansOfResource rebuilds the spans of one resource that a Forward sent,
 // for the assembler.
@@ -89,12 +97,13 @@ func NewReceiver(a *Assembler, assign Assign, opts ...connect.HandlerOption) *Re
 	if assign == nil {
 		assign = DefaultAssign
 	}
-	return &Receiver{assembler: a, assign: assign, opts: opts}
+	redactor, _ := NewRedactor(RedactionConfig{})
+	return &Receiver{assembler: a, assign: assign, opts: opts, redactor: redactor}
 }
 
 // Register mounts OTLP/gRPC (TraceService/Export) and OTLP/HTTP (/v1/traces) on mux.
 func (r *Receiver) Register(mux *http.ServeMux) {
-	mux.Handle(TraceExportProcedure, connect.NewUnaryHandler(TraceExportProcedure, r.export, r.opts...))
+	mux.Handle(TraceExportProcedure, connect.NewUnaryHandler(TraceExportProcedure, r.Export, r.opts...))
 	mux.HandleFunc("POST /v1/traces", r.serveHTTP)
 }
 
@@ -114,6 +123,14 @@ func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTrace
 		if err != nil {
 			return nil, err
 		}
+		r.redactor.Message(rs)
+		for key, value := range labels {
+			if r.redactor.matches(key) {
+				labels[key] = Redacted
+			} else {
+				labels[key] = r.redactor.text(value)
+			}
+		}
 		all = append(all, assigned{rs, project, labels})
 	}
 	if r.forward != nil {
@@ -126,7 +143,11 @@ func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTrace
 	}
 	var spans []Span
 	for _, a := range all {
-		spans = append(spans, SpansOfResource(a.rs, a.project, a.labels)...)
+		received := SpansOfResource(a.rs, a.project, a.labels)
+		for index := range received {
+			received[index].redactedBy = r.redactor
+		}
+		spans = append(spans, received...)
 	}
 	resp := &collectortracepb.ExportTraceServiceResponse{}
 	if n := r.assembler.Add(spans); n > 0 {
@@ -138,7 +159,7 @@ func (r *Receiver) accept(ctx context.Context, msg *collectortracepb.ExportTrace
 	return resp, nil
 }
 
-func (r *Receiver) export(ctx context.Context, req *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error) {
+func (r *Receiver) Export(ctx context.Context, req *connect.Request[collectortracepb.ExportTraceServiceRequest]) (*connect.Response[collectortracepb.ExportTraceServiceResponse], error) {
 	resp, err := r.accept(ctx, req.Msg)
 	if err != nil {
 		return nil, err
@@ -177,7 +198,23 @@ func (r *Receiver) serveHTTP(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "decoding OTLP: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	resp, err := r.accept(req.Context(), msg)
+	var resp *collectortracepb.ExportTraceServiceResponse
+	if r.httpExport != nil {
+		request := connect.NewRequest(msg)
+		for key, values := range req.Header {
+			request.Header()[key] = values
+		}
+		response, callErr := r.httpExport(req.Context(), request)
+		err = callErr
+		if err == nil {
+			resp = response.Msg
+			if response.Header().Get("Idempotency-Replayed") != "" {
+				w.Header().Set("Idempotency-Replayed", "true")
+			}
+		}
+	} else {
+		resp, err = r.accept(req.Context(), msg)
+	}
 	if err != nil {
 		status := http.StatusInternalServerError
 		var ce *connect.Error

@@ -65,6 +65,22 @@ func notFound(proj, name string) error {
 
 // Validate checks a source as ApplySource would, grants and endpoint included.
 func (s *Service) Validate(ctx context.Context, src *evalsiv1alpha1.TraceSource) error {
+	if schedule := src.GetSchedule(); schedule != nil {
+		if src.GetWriteBack().GetEnabled() || len(src.GetPolicies()) != 0 || src.GetBackfill() != nil {
+			return invalid("scheduled sources must not set online policies, backfill or write_back; use run sinks for batch results")
+		}
+		if _, err := parseSchedule(schedule); err != nil {
+			return err
+		}
+		if s.mgr.opts.Runs == nil {
+			return invalid("scheduled runs are not configured")
+		}
+		spec := proto.Clone(schedule.GetRunSpec()).(*evalsiv1alpha1.RunSpec)
+		spec.Dataset = &evalsiv1alpha1.DatasetSource{Source: &evalsiv1alpha1.DatasetSource_Inline{Inline: &evalsiv1alpha1.InlineRecords{Records: []*evalsiv1alpha1.Record{{Id: "validation"}}}}}
+		if _, err := s.mgr.opts.Runs.CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: project(src.GetProject()), Spec: spec, ValidateOnly: true})); err != nil {
+			return err
+		}
+	}
 	if !nameRE.MatchString(src.GetName()) {
 		return invalid("source.name must be lowercase letters, digits, '.', '_' or '-' (at most 63 characters)")
 	}
@@ -245,6 +261,9 @@ func (s *Service) BackfillSource(ctx context.Context, req *connect.Request[evals
 	src, err := s.get(ctx, req.Msg.GetProject(), req.Msg.GetName())
 	if err != nil {
 		return nil, err
+	}
+	if src.GetSchedule() != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("scheduled sources do not support backfill"))
 	}
 	var since time.Time
 	switch {

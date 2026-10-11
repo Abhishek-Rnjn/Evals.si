@@ -55,6 +55,26 @@ def test_source_from_doc_rejects_mistakes() -> None:
         source_from_doc({"kind": "TraceSource", "spec": {"connectr": "mlflow"}})
 
 
+def test_scheduled_source_durations() -> None:
+    source = source_from_doc(
+        {
+            "metadata": {"name": "scheduled", "labels": {"evals.si/project": "studio"}},
+            "spec": {
+                "connector": "mlflow",
+                "schedule": {
+                    "cron": "0 * * * *",
+                    "window": "1h",
+                    "startingDeadline": "15m",
+                    "runSpec": {"evaluators": [{"ref": "builtin/latency"}]},
+                },
+            },
+        }
+    )
+    assert source["schedule"]["window"] == "3600s"
+    assert source["schedule"]["startingDeadline"] == "900s"
+    assert source["schedule"]["runSpec"]["evaluators"][0]["ref"] == "builtin/latency"
+
+
 def test_policy_durations(tmp_path: Path) -> None:
     # The integration guide's policy writes window: 1h.
     path = tmp_path / "policy.yaml"

@@ -66,6 +66,11 @@ class RunServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ResumeRunRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ResumeRunResponse.FromString,
                 _registered_method=True)
+        self.DeleteRun = channel.unary_unary(
+                '/evalsi.v1alpha1.RunService/DeleteRun',
+                request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunResponse.FromString,
+                _registered_method=True)
         self.ListRunResults = channel.unary_unary(
                 '/evalsi.v1alpha1.RunService/ListRunResults',
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsRequest.SerializeToString,
@@ -127,6 +132,12 @@ class RunServiceServicer:
     def ResumeRun(self, request, context):
         """Continues an errored or cancelled run, skipping finished tasks.
         """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -193,6 +204,11 @@ def add_RunServiceServicer_to_server(servicer, server):
                     servicer.ResumeRun,
                     request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ResumeRunRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ResumeRunResponse.SerializeToString,
+            ),
+            'DeleteRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteRun,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunResponse.SerializeToString,
             ),
             'ListRunResults': grpc.unary_unary_rpc_method_handler(
                     servicer.ListRunResults,
@@ -379,6 +395,33 @@ class RunService:
             '/evalsi.v1alpha1.RunService/ResumeRun',
             evalsi_dot_v1alpha1_dot_run__service__pb2.ResumeRunRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_run__service__pb2.ResumeRunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.RunService/DeleteRun',
+            evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunResponse.FromString,
             options,
             channel_credentials,
             insecure,

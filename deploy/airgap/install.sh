@@ -64,7 +64,17 @@ target() {
 }
 
 if ! $skip_images; then
-  docker load -q -i "$bundle/images.tar"
+  load_platform=(); save_platform=()
+  if [ -f "$bundle/platform" ]; then
+    platform="$(cat "$bundle/platform")"
+    [ -n "$platform" ] || { echo "the bundle platform is empty" >&2; exit 2; }
+    # Docker 28+ scopes load and save to the platform; an older CLI rejects the flag.
+    if docker load --help 2>&1 | grep -q -- '--platform'; then load_platform=(--platform "$platform"); fi
+    if docker save --help 2>&1 | grep -q -- '--platform'; then save_platform=(--platform "$platform"); fi
+    [ "${#load_platform[@]}" -gt 0 ] && [ "${#save_platform[@]}" -gt 0 ] ||
+      echo "note: this Docker lacks --platform for load or save (Docker 28+ has it); using the plain commands for $platform" >&2
+  fi
+  docker load ${load_platform[@]+"${load_platform[@]}"} -q -i "$bundle/images.tar"
   moved=()
   while read -r img; do
     [ -n "$img" ] || continue
@@ -72,7 +82,7 @@ if ! $skip_images; then
     moved+=("$(target "$img")")
   done < "$bundle/images.txt"
   if [ -n "$kind_cluster" ]; then
-    docker save "${moved[@]}" -o "$bundle/.kind-images.tar"
+    docker save ${save_platform[@]+"${save_platform[@]}"} "${moved[@]}" -o "$bundle/.kind-images.tar"
     kind load image-archive "$bundle/.kind-images.tar" --name "$kind_cluster"
     rm -f "$bundle/.kind-images.tar"
   else

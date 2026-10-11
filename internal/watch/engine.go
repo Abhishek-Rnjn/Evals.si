@@ -46,6 +46,7 @@ type Options struct {
 	// Traces waiting for evaluation; more are dropped and counted.
 	QueueSize int
 	Logger    *slog.Logger
+	Redactor  *ingest.Redactor
 	// Client for alert webhooks.
 	HTTPClient *http.Client
 	// Called with each evaluated trace's results (for sinks); must not block.
@@ -114,6 +115,13 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 	}
 	if opts.HTTPClient == nil {
 		opts.HTTPClient = &http.Client{Timeout: 10 * time.Second}
+	}
+	if opts.Redactor == nil {
+		var err error
+		opts.Redactor, err = ingest.NewRedactor(ingest.RedactionConfig{})
+		if err != nil {
+			return nil, err
+		}
 	}
 	e := &Engine{
 		store: st, eval: eval, opts: opts, log: opts.Logger,
@@ -263,6 +271,7 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 	writes := make([]store.TraceWrite, 0, len(traces))
 	items := make([]item, 0, len(traces))
 	for _, t := range traces {
+		t = e.opts.Redactor.Trace(t)
 		record, info := ingest.ToRecord(t)
 		if info.Project == "" {
 			info.Project = DefaultProject

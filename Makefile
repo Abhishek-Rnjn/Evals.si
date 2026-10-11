@@ -68,4 +68,4 @@ e2e: py-sync
 	cd python/adapters/swebench && uv sync --locked
 	EVALSI_E2E_WORKER="$(CURDIR)/python/.venv/bin/python -m evalsi" \
 	EVALSI_E2E_SWEBENCH_WORKER="$(CURDIR)/python/adapters/swebench/.venv/bin/python -m evalsi" \
-	go test -count=1 ./tests/e2e/
+		go test -count=1 ./tests/e2e/ ./internal/source/

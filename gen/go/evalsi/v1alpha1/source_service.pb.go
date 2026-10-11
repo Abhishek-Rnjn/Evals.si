@@ -124,6 +124,7 @@ type TraceSource struct {
 	UpdatedBy string                 `protobuf:"bytes,21,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
 	// Set by the server; ignored on apply.
 	Status        *SourceStatus `protobuf:"bytes,22,opt,name=status,proto3" json:"status,omitempty"`
+	Schedule      *PullSchedule `protobuf:"bytes,23,opt,name=schedule,proto3" json:"schedule,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -312,6 +313,89 @@ func (x *TraceSource) GetStatus() *SourceStatus {
 	return nil
 }
 
+func (x *TraceSource) GetSchedule() *PullSchedule {
+	if x != nil {
+		return x.Schedule
+	}
+	return nil
+}
+
+type PullSchedule struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Cron             string                 `protobuf:"bytes,1,opt,name=cron,proto3" json:"cron,omitempty"`
+	Window           *durationpb.Duration   `protobuf:"bytes,2,opt,name=window,proto3" json:"window,omitempty"`
+	StartingDeadline *durationpb.Duration   `protobuf:"bytes,3,opt,name=starting_deadline,json=startingDeadline,proto3" json:"starting_deadline,omitempty"`
+	RunSpec          *RunSpec               `protobuf:"bytes,4,opt,name=run_spec,json=runSpec,proto3" json:"run_spec,omitempty"`
+	MaxRecords       int32                  `protobuf:"varint,5,opt,name=max_records,json=maxRecords,proto3" json:"max_records,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *PullSchedule) Reset() {
+	*x = PullSchedule{}
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PullSchedule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PullSchedule) ProtoMessage() {}
+
+func (x *PullSchedule) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PullSchedule.ProtoReflect.Descriptor instead.
+func (*PullSchedule) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PullSchedule) GetCron() string {
+	if x != nil {
+		return x.Cron
+	}
+	return ""
+}
+
+func (x *PullSchedule) GetWindow() *durationpb.Duration {
+	if x != nil {
+		return x.Window
+	}
+	return nil
+}
+
+func (x *PullSchedule) GetStartingDeadline() *durationpb.Duration {
+	if x != nil {
+		return x.StartingDeadline
+	}
+	return nil
+}
+
+func (x *PullSchedule) GetRunSpec() *RunSpec {
+	if x != nil {
+		return x.RunSpec
+	}
+	return nil
+}
+
+func (x *PullSchedule) GetMaxRecords() int32 {
+	if x != nil {
+		return x.MaxRecords
+	}
+	return 0
+}
+
 // Names where the source's credential comes from, never the value. It is
 // checked against the credential grants (decision 0015) for the source's
 // project and endpoint host.
@@ -328,7 +412,7 @@ type SourceCredentials struct {
 
 func (x *SourceCredentials) Reset() {
 	*x = SourceCredentials{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[1]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -340,7 +424,7 @@ func (x *SourceCredentials) String() string {
 func (*SourceCredentials) ProtoMessage() {}
 
 func (x *SourceCredentials) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[1]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -353,7 +437,7 @@ func (x *SourceCredentials) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceCredentials.ProtoReflect.Descriptor instead.
 func (*SourceCredentials) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{1}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SourceCredentials) GetEnv() string {
@@ -380,7 +464,7 @@ type SourceAuth struct {
 
 func (x *SourceAuth) Reset() {
 	*x = SourceAuth{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[2]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -392,7 +476,7 @@ func (x *SourceAuth) String() string {
 func (*SourceAuth) ProtoMessage() {}
 
 func (x *SourceAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[2]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -405,7 +489,7 @@ func (x *SourceAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceAuth.ProtoReflect.Descriptor instead.
 func (*SourceAuth) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{2}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *SourceAuth) GetSigv4() *SourceAuth_SigV4 {
@@ -432,7 +516,7 @@ type Backfill struct {
 
 func (x *Backfill) Reset() {
 	*x = Backfill{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[3]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -444,7 +528,7 @@ func (x *Backfill) String() string {
 func (*Backfill) ProtoMessage() {}
 
 func (x *Backfill) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[3]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -457,7 +541,7 @@ func (x *Backfill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Backfill.ProtoReflect.Descriptor instead.
 func (*Backfill) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{3}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Backfill) GetSince() *durationpb.Duration {
@@ -479,7 +563,7 @@ type Poll struct {
 
 func (x *Poll) Reset() {
 	*x = Poll{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -491,7 +575,7 @@ func (x *Poll) String() string {
 func (*Poll) ProtoMessage() {}
 
 func (x *Poll) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -504,7 +588,7 @@ func (x *Poll) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Poll.ProtoReflect.Descriptor instead.
 func (*Poll) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{4}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Poll) GetInterval() *durationpb.Duration {
@@ -530,7 +614,7 @@ type WriteBack struct {
 
 func (x *WriteBack) Reset() {
 	*x = WriteBack{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -542,7 +626,7 @@ func (x *WriteBack) String() string {
 func (*WriteBack) ProtoMessage() {}
 
 func (x *WriteBack) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -555,7 +639,7 @@ func (x *WriteBack) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteBack.ProtoReflect.Descriptor instead.
 func (*WriteBack) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{5}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WriteBack) GetEnabled() bool {
@@ -581,13 +665,16 @@ type SourceStatus struct {
 	LastErrorAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_error_at,json=lastErrorAt,proto3" json:"last_error_at,omitempty"`
 	LastPullAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=last_pull_at,json=lastPullAt,proto3" json:"last_pull_at,omitempty"`
 	LastWriteBackAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_write_back_at,json=lastWriteBackAt,proto3" json:"last_write_back_at,omitempty"`
+	LastScheduledAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_scheduled_at,json=lastScheduledAt,proto3" json:"last_scheduled_at,omitempty"`
+	LastRunId       string                 `protobuf:"bytes,13,opt,name=last_run_id,json=lastRunId,proto3" json:"last_run_id,omitempty"`
+	MissedWindows   int64                  `protobuf:"varint,14,opt,name=missed_windows,json=missedWindows,proto3" json:"missed_windows,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SourceStatus) Reset() {
 	*x = SourceStatus{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -599,7 +686,7 @@ func (x *SourceStatus) String() string {
 func (*SourceStatus) ProtoMessage() {}
 
 func (x *SourceStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -612,7 +699,7 @@ func (x *SourceStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceStatus.ProtoReflect.Descriptor instead.
 func (*SourceStatus) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{6}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SourceStatus) GetPhase() SourcePhase {
@@ -692,6 +779,27 @@ func (x *SourceStatus) GetLastWriteBackAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *SourceStatus) GetLastScheduledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastScheduledAt
+	}
+	return nil
+}
+
+func (x *SourceStatus) GetLastRunId() string {
+	if x != nil {
+		return x.LastRunId
+	}
+	return ""
+}
+
+func (x *SourceStatus) GetMissedWindows() int64 {
+	if x != nil {
+		return x.MissedWindows
+	}
+	return 0
+}
+
 type ApplySourceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Source        *TraceSource           `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
@@ -702,7 +810,7 @@ type ApplySourceRequest struct {
 
 func (x *ApplySourceRequest) Reset() {
 	*x = ApplySourceRequest{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -714,7 +822,7 @@ func (x *ApplySourceRequest) String() string {
 func (*ApplySourceRequest) ProtoMessage() {}
 
 func (x *ApplySourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -727,7 +835,7 @@ func (x *ApplySourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySourceRequest.ProtoReflect.Descriptor instead.
 func (*ApplySourceRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{7}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ApplySourceRequest) GetSource() *TraceSource {
@@ -753,7 +861,7 @@ type ApplySourceResponse struct {
 
 func (x *ApplySourceResponse) Reset() {
 	*x = ApplySourceResponse{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -765,7 +873,7 @@ func (x *ApplySourceResponse) String() string {
 func (*ApplySourceResponse) ProtoMessage() {}
 
 func (x *ApplySourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -778,7 +886,7 @@ func (x *ApplySourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplySourceResponse.ProtoReflect.Descriptor instead.
 func (*ApplySourceResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{8}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ApplySourceResponse) GetSource() *TraceSource {
@@ -797,7 +905,7 @@ type ListSourcesRequest struct {
 
 func (x *ListSourcesRequest) Reset() {
 	*x = ListSourcesRequest{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -809,7 +917,7 @@ func (x *ListSourcesRequest) String() string {
 func (*ListSourcesRequest) ProtoMessage() {}
 
 func (x *ListSourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -822,7 +930,7 @@ func (x *ListSourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSourcesRequest.ProtoReflect.Descriptor instead.
 func (*ListSourcesRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{9}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ListSourcesRequest) GetProject() string {
@@ -841,7 +949,7 @@ type ListSourcesResponse struct {
 
 func (x *ListSourcesResponse) Reset() {
 	*x = ListSourcesResponse{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -853,7 +961,7 @@ func (x *ListSourcesResponse) String() string {
 func (*ListSourcesResponse) ProtoMessage() {}
 
 func (x *ListSourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -866,7 +974,7 @@ func (x *ListSourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSourcesResponse.ProtoReflect.Descriptor instead.
 func (*ListSourcesResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{10}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListSourcesResponse) GetSources() []*TraceSource {
@@ -886,7 +994,7 @@ type GetSourceRequest struct {
 
 func (x *GetSourceRequest) Reset() {
 	*x = GetSourceRequest{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -898,7 +1006,7 @@ func (x *GetSourceRequest) String() string {
 func (*GetSourceRequest) ProtoMessage() {}
 
 func (x *GetSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -911,7 +1019,7 @@ func (x *GetSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSourceRequest.ProtoReflect.Descriptor instead.
 func (*GetSourceRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{11}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetSourceRequest) GetProject() string {
@@ -937,7 +1045,7 @@ type GetSourceResponse struct {
 
 func (x *GetSourceResponse) Reset() {
 	*x = GetSourceResponse{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[12]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -949,7 +1057,7 @@ func (x *GetSourceResponse) String() string {
 func (*GetSourceResponse) ProtoMessage() {}
 
 func (x *GetSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[12]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -962,7 +1070,7 @@ func (x *GetSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSourceResponse.ProtoReflect.Descriptor instead.
 func (*GetSourceResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{12}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetSourceResponse) GetSource() *TraceSource {
@@ -982,7 +1090,7 @@ type DeleteSourceRequest struct {
 
 func (x *DeleteSourceRequest) Reset() {
 	*x = DeleteSourceRequest{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[13]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -994,7 +1102,7 @@ func (x *DeleteSourceRequest) String() string {
 func (*DeleteSourceRequest) ProtoMessage() {}
 
 func (x *DeleteSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[13]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1007,7 +1115,7 @@ func (x *DeleteSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSourceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSourceRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{13}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DeleteSourceRequest) GetProject() string {
@@ -1032,7 +1140,7 @@ type DeleteSourceResponse struct {
 
 func (x *DeleteSourceResponse) Reset() {
 	*x = DeleteSourceResponse{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1044,7 +1152,7 @@ func (x *DeleteSourceResponse) String() string {
 func (*DeleteSourceResponse) ProtoMessage() {}
 
 func (x *DeleteSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1057,7 +1165,7 @@ func (x *DeleteSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSourceResponse.ProtoReflect.Descriptor instead.
 func (*DeleteSourceResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{14}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{15}
 }
 
 type PauseSourceRequest struct {
@@ -1070,7 +1178,7 @@ type PauseSourceRequest struct {
 
 func (x *PauseSourceRequest) Reset() {
 	*x = PauseSourceRequest{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[15]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1082,7 +1190,7 @@ func (x *PauseSourceRequest) String() string {
 func (*PauseSourceRequest) ProtoMessage() {}
 
 func (x *PauseSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[15]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1095,7 +1203,7 @@ func (x *PauseSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseSourceRequest.ProtoReflect.Descriptor instead.
 func (*PauseSourceRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{15}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PauseSourceRequest) GetProject() string {
@@ -1121,7 +1229,7 @@ type PauseSourceResponse struct {
 
 func (x *PauseSourceResponse) Reset() {
 	*x = PauseSourceResponse{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[16]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1133,7 +1241,7 @@ func (x *PauseSourceResponse) String() string {
 func (*PauseSourceResponse) ProtoMessage() {}
 
 func (x *PauseSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[16]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1146,7 +1254,7 @@ func (x *PauseSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseSourceResponse.ProtoReflect.Descriptor instead.
 func (*PauseSourceResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{16}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PauseSourceResponse) GetSource() *TraceSource {
@@ -1166,7 +1274,7 @@ type ResumeSourceRequest struct {
 
 func (x *ResumeSourceRequest) Reset() {
 	*x = ResumeSourceRequest{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1178,7 +1286,7 @@ func (x *ResumeSourceRequest) String() string {
 func (*ResumeSourceRequest) ProtoMessage() {}
 
 func (x *ResumeSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1191,7 +1299,7 @@ func (x *ResumeSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeSourceRequest.ProtoReflect.Descriptor instead.
 func (*ResumeSourceRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{17}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ResumeSourceRequest) GetProject() string {
@@ -1217,7 +1325,7 @@ type ResumeSourceResponse struct {
 
 func (x *ResumeSourceResponse) Reset() {
 	*x = ResumeSourceResponse{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1229,7 +1337,7 @@ func (x *ResumeSourceResponse) String() string {
 func (*ResumeSourceResponse) ProtoMessage() {}
 
 func (x *ResumeSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1242,7 +1350,7 @@ func (x *ResumeSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeSourceResponse.ProtoReflect.Descriptor instead.
 func (*ResumeSourceResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{18}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ResumeSourceResponse) GetSource() *TraceSource {
@@ -1264,7 +1372,7 @@ type BackfillSourceRequest struct {
 
 func (x *BackfillSourceRequest) Reset() {
 	*x = BackfillSourceRequest{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1276,7 +1384,7 @@ func (x *BackfillSourceRequest) String() string {
 func (*BackfillSourceRequest) ProtoMessage() {}
 
 func (x *BackfillSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1289,7 +1397,7 @@ func (x *BackfillSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackfillSourceRequest.ProtoReflect.Descriptor instead.
 func (*BackfillSourceRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{19}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *BackfillSourceRequest) GetProject() string {
@@ -1322,7 +1430,7 @@ type BackfillSourceResponse struct {
 
 func (x *BackfillSourceResponse) Reset() {
 	*x = BackfillSourceResponse{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1334,7 +1442,7 @@ func (x *BackfillSourceResponse) String() string {
 func (*BackfillSourceResponse) ProtoMessage() {}
 
 func (x *BackfillSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1347,7 +1455,7 @@ func (x *BackfillSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackfillSourceResponse.ProtoReflect.Descriptor instead.
 func (*BackfillSourceResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{20}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *BackfillSourceResponse) GetSource() *TraceSource {
@@ -1368,7 +1476,7 @@ type SourceAuth_SigV4 struct {
 
 func (x *SourceAuth_SigV4) Reset() {
 	*x = SourceAuth_SigV4{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[24]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1380,7 +1488,7 @@ func (x *SourceAuth_SigV4) String() string {
 func (*SourceAuth_SigV4) ProtoMessage() {}
 
 func (x *SourceAuth_SigV4) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[24]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1393,7 +1501,7 @@ func (x *SourceAuth_SigV4) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceAuth_SigV4.ProtoReflect.Descriptor instead.
 func (*SourceAuth_SigV4) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{2, 0}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{3, 0}
 }
 
 func (x *SourceAuth_SigV4) GetService() string {
@@ -1420,7 +1528,7 @@ type SourceAuth_Databricks struct {
 
 func (x *SourceAuth_Databricks) Reset() {
 	*x = SourceAuth_Databricks{}
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[25]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1432,7 +1540,7 @@ func (x *SourceAuth_Databricks) String() string {
 func (*SourceAuth_Databricks) ProtoMessage() {}
 
 func (x *SourceAuth_Databricks) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[25]
+	mi := &file_evalsi_v1alpha1_source_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1445,7 +1553,7 @@ func (x *SourceAuth_Databricks) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SourceAuth_Databricks.ProtoReflect.Descriptor instead.
 func (*SourceAuth_Databricks) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{2, 1}
+	return file_evalsi_v1alpha1_source_service_proto_rawDescGZIP(), []int{3, 1}
 }
 
 func (x *SourceAuth_Databricks) GetSqlWarehouseId() string {
@@ -1459,7 +1567,8 @@ var File_evalsi_v1alpha1_source_service_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_source_service_proto_rawDesc = "" +
 	"\n" +
-	"$evalsi/v1alpha1/source_service.proto\x12\x0fevalsi.v1alpha1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\t\n" +
+	"$evalsi/v1alpha1/source_service.proto\x12\x0fevalsi.v1alpha1\x1a\x19evalsi/v1alpha1/run.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x86\n" +
+	"\n" +
 	"\vTraceSource\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aproject\x18\x02 \x01(\tR\aproject\x12\x1c\n" +
@@ -1486,7 +1595,8 @@ const file_evalsi_v1alpha1_source_service_proto_rawDesc = "" +
 	"updated_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1d\n" +
 	"\n" +
 	"updated_by\x18\x15 \x01(\tR\tupdatedBy\x125\n" +
-	"\x06status\x18\x16 \x01(\v2\x1d.evalsi.v1alpha1.SourceStatusR\x06status\x1a<\n" +
+	"\x06status\x18\x16 \x01(\v2\x1d.evalsi.v1alpha1.SourceStatusR\x06status\x129\n" +
+	"\bschedule\x18\x17 \x01(\v2\x1d.evalsi.v1alpha1.PullScheduleR\bschedule\x1a<\n" +
 	"\x0eOverridesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a>\n" +
@@ -1495,7 +1605,14 @@ const file_evalsi_v1alpha1_source_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"9\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf3\x01\n" +
+	"\fPullSchedule\x12\x12\n" +
+	"\x04cron\x18\x01 \x01(\tR\x04cron\x121\n" +
+	"\x06window\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x06window\x12F\n" +
+	"\x11starting_deadline\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\x10startingDeadline\x123\n" +
+	"\brun_spec\x18\x04 \x01(\v2\x18.evalsi.v1alpha1.RunSpecR\arunSpec\x12\x1f\n" +
+	"\vmax_records\x18\x05 \x01(\x05R\n" +
+	"maxRecords\"9\n" +
 	"\x11SourceCredentials\x12\x10\n" +
 	"\x03env\x18\x01 \x01(\tR\x03env\x12\x12\n" +
 	"\x04file\x18\x02 \x01(\tR\x04file\"\x80\x02\n" +
@@ -1517,7 +1634,7 @@ const file_evalsi_v1alpha1_source_service_proto_rawDesc = "" +
 	"\binterval\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\binterval\x123\n" +
 	"\x16max_records_per_second\x18\x02 \x01(\x05R\x13maxRecordsPerSecond\"%\n" +
 	"\tWriteBack\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\"\xfd\x03\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\"\x8c\x05\n" +
 	"\fSourceStatus\x122\n" +
 	"\x05phase\x18\x01 \x01(\x0e2\x1c.evalsi.v1alpha1.SourcePhaseR\x05phase\x128\n" +
 	"\twatermark\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\twatermark\x12\x1f\n" +
@@ -1533,7 +1650,10 @@ const file_evalsi_v1alpha1_source_service_proto_rawDesc = "" +
 	"\flast_pull_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastPullAt\x12G\n" +
-	"\x12last_write_back_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0flastWriteBackAt\"o\n" +
+	"\x12last_write_back_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0flastWriteBackAt\x12F\n" +
+	"\x11last_scheduled_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\x0flastScheduledAt\x12\x1e\n" +
+	"\vlast_run_id\x18\r \x01(\tR\tlastRunId\x12%\n" +
+	"\x0emissed_windows\x18\x0e \x01(\x03R\rmissedWindows\"o\n" +
 	"\x12ApplySourceRequest\x124\n" +
 	"\x06source\x18\x01 \x01(\v2\x1c.evalsi.v1alpha1.TraceSourceR\x06source\x12#\n" +
 	"\rvalidate_only\x18\x02 \x01(\bR\fvalidateOnly\"K\n" +
@@ -1597,87 +1717,94 @@ func file_evalsi_v1alpha1_source_service_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_v1alpha1_source_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_evalsi_v1alpha1_source_service_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_evalsi_v1alpha1_source_service_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_evalsi_v1alpha1_source_service_proto_goTypes = []any{
 	(SourcePhase)(0),               // 0: evalsi.v1alpha1.SourcePhase
 	(*TraceSource)(nil),            // 1: evalsi.v1alpha1.TraceSource
-	(*SourceCredentials)(nil),      // 2: evalsi.v1alpha1.SourceCredentials
-	(*SourceAuth)(nil),             // 3: evalsi.v1alpha1.SourceAuth
-	(*Backfill)(nil),               // 4: evalsi.v1alpha1.Backfill
-	(*Poll)(nil),                   // 5: evalsi.v1alpha1.Poll
-	(*WriteBack)(nil),              // 6: evalsi.v1alpha1.WriteBack
-	(*SourceStatus)(nil),           // 7: evalsi.v1alpha1.SourceStatus
-	(*ApplySourceRequest)(nil),     // 8: evalsi.v1alpha1.ApplySourceRequest
-	(*ApplySourceResponse)(nil),    // 9: evalsi.v1alpha1.ApplySourceResponse
-	(*ListSourcesRequest)(nil),     // 10: evalsi.v1alpha1.ListSourcesRequest
-	(*ListSourcesResponse)(nil),    // 11: evalsi.v1alpha1.ListSourcesResponse
-	(*GetSourceRequest)(nil),       // 12: evalsi.v1alpha1.GetSourceRequest
-	(*GetSourceResponse)(nil),      // 13: evalsi.v1alpha1.GetSourceResponse
-	(*DeleteSourceRequest)(nil),    // 14: evalsi.v1alpha1.DeleteSourceRequest
-	(*DeleteSourceResponse)(nil),   // 15: evalsi.v1alpha1.DeleteSourceResponse
-	(*PauseSourceRequest)(nil),     // 16: evalsi.v1alpha1.PauseSourceRequest
-	(*PauseSourceResponse)(nil),    // 17: evalsi.v1alpha1.PauseSourceResponse
-	(*ResumeSourceRequest)(nil),    // 18: evalsi.v1alpha1.ResumeSourceRequest
-	(*ResumeSourceResponse)(nil),   // 19: evalsi.v1alpha1.ResumeSourceResponse
-	(*BackfillSourceRequest)(nil),  // 20: evalsi.v1alpha1.BackfillSourceRequest
-	(*BackfillSourceResponse)(nil), // 21: evalsi.v1alpha1.BackfillSourceResponse
-	nil,                            // 22: evalsi.v1alpha1.TraceSource.OverridesEntry
-	nil,                            // 23: evalsi.v1alpha1.TraceSource.TraceLabelsEntry
-	nil,                            // 24: evalsi.v1alpha1.TraceSource.LabelsEntry
-	(*SourceAuth_SigV4)(nil),       // 25: evalsi.v1alpha1.SourceAuth.SigV4
-	(*SourceAuth_Databricks)(nil),  // 26: evalsi.v1alpha1.SourceAuth.Databricks
-	(*durationpb.Duration)(nil),    // 27: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),  // 28: google.protobuf.Timestamp
+	(*PullSchedule)(nil),           // 2: evalsi.v1alpha1.PullSchedule
+	(*SourceCredentials)(nil),      // 3: evalsi.v1alpha1.SourceCredentials
+	(*SourceAuth)(nil),             // 4: evalsi.v1alpha1.SourceAuth
+	(*Backfill)(nil),               // 5: evalsi.v1alpha1.Backfill
+	(*Poll)(nil),                   // 6: evalsi.v1alpha1.Poll
+	(*WriteBack)(nil),              // 7: evalsi.v1alpha1.WriteBack
+	(*SourceStatus)(nil),           // 8: evalsi.v1alpha1.SourceStatus
+	(*ApplySourceRequest)(nil),     // 9: evalsi.v1alpha1.ApplySourceRequest
+	(*ApplySourceResponse)(nil),    // 10: evalsi.v1alpha1.ApplySourceResponse
+	(*ListSourcesRequest)(nil),     // 11: evalsi.v1alpha1.ListSourcesRequest
+	(*ListSourcesResponse)(nil),    // 12: evalsi.v1alpha1.ListSourcesResponse
+	(*GetSourceRequest)(nil),       // 13: evalsi.v1alpha1.GetSourceRequest
+	(*GetSourceResponse)(nil),      // 14: evalsi.v1alpha1.GetSourceResponse
+	(*DeleteSourceRequest)(nil),    // 15: evalsi.v1alpha1.DeleteSourceRequest
+	(*DeleteSourceResponse)(nil),   // 16: evalsi.v1alpha1.DeleteSourceResponse
+	(*PauseSourceRequest)(nil),     // 17: evalsi.v1alpha1.PauseSourceRequest
+	(*PauseSourceResponse)(nil),    // 18: evalsi.v1alpha1.PauseSourceResponse
+	(*ResumeSourceRequest)(nil),    // 19: evalsi.v1alpha1.ResumeSourceRequest
+	(*ResumeSourceResponse)(nil),   // 20: evalsi.v1alpha1.ResumeSourceResponse
+	(*BackfillSourceRequest)(nil),  // 21: evalsi.v1alpha1.BackfillSourceRequest
+	(*BackfillSourceResponse)(nil), // 22: evalsi.v1alpha1.BackfillSourceResponse
+	nil,                            // 23: evalsi.v1alpha1.TraceSource.OverridesEntry
+	nil,                            // 24: evalsi.v1alpha1.TraceSource.TraceLabelsEntry
+	nil,                            // 25: evalsi.v1alpha1.TraceSource.LabelsEntry
+	(*SourceAuth_SigV4)(nil),       // 26: evalsi.v1alpha1.SourceAuth.SigV4
+	(*SourceAuth_Databricks)(nil),  // 27: evalsi.v1alpha1.SourceAuth.Databricks
+	(*durationpb.Duration)(nil),    // 28: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),  // 29: google.protobuf.Timestamp
+	(*RunSpec)(nil),                // 30: evalsi.v1alpha1.RunSpec
 }
 var file_evalsi_v1alpha1_source_service_proto_depIdxs = []int32{
-	2,  // 0: evalsi.v1alpha1.TraceSource.credentials:type_name -> evalsi.v1alpha1.SourceCredentials
-	3,  // 1: evalsi.v1alpha1.TraceSource.auth:type_name -> evalsi.v1alpha1.SourceAuth
-	4,  // 2: evalsi.v1alpha1.TraceSource.backfill:type_name -> evalsi.v1alpha1.Backfill
-	5,  // 3: evalsi.v1alpha1.TraceSource.poll:type_name -> evalsi.v1alpha1.Poll
-	27, // 4: evalsi.v1alpha1.TraceSource.max_trace_duration:type_name -> google.protobuf.Duration
-	27, // 5: evalsi.v1alpha1.TraceSource.max_in_progress_age:type_name -> google.protobuf.Duration
-	22, // 6: evalsi.v1alpha1.TraceSource.overrides:type_name -> evalsi.v1alpha1.TraceSource.OverridesEntry
-	6,  // 7: evalsi.v1alpha1.TraceSource.write_back:type_name -> evalsi.v1alpha1.WriteBack
-	23, // 8: evalsi.v1alpha1.TraceSource.trace_labels:type_name -> evalsi.v1alpha1.TraceSource.TraceLabelsEntry
-	24, // 9: evalsi.v1alpha1.TraceSource.labels:type_name -> evalsi.v1alpha1.TraceSource.LabelsEntry
-	28, // 10: evalsi.v1alpha1.TraceSource.updated_at:type_name -> google.protobuf.Timestamp
-	7,  // 11: evalsi.v1alpha1.TraceSource.status:type_name -> evalsi.v1alpha1.SourceStatus
-	25, // 12: evalsi.v1alpha1.SourceAuth.sigv4:type_name -> evalsi.v1alpha1.SourceAuth.SigV4
-	26, // 13: evalsi.v1alpha1.SourceAuth.databricks:type_name -> evalsi.v1alpha1.SourceAuth.Databricks
-	27, // 14: evalsi.v1alpha1.Backfill.since:type_name -> google.protobuf.Duration
-	27, // 15: evalsi.v1alpha1.Poll.interval:type_name -> google.protobuf.Duration
-	0,  // 16: evalsi.v1alpha1.SourceStatus.phase:type_name -> evalsi.v1alpha1.SourcePhase
-	28, // 17: evalsi.v1alpha1.SourceStatus.watermark:type_name -> google.protobuf.Timestamp
-	28, // 18: evalsi.v1alpha1.SourceStatus.last_error_at:type_name -> google.protobuf.Timestamp
-	28, // 19: evalsi.v1alpha1.SourceStatus.last_pull_at:type_name -> google.protobuf.Timestamp
-	28, // 20: evalsi.v1alpha1.SourceStatus.last_write_back_at:type_name -> google.protobuf.Timestamp
-	1,  // 21: evalsi.v1alpha1.ApplySourceRequest.source:type_name -> evalsi.v1alpha1.TraceSource
-	1,  // 22: evalsi.v1alpha1.ApplySourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
-	1,  // 23: evalsi.v1alpha1.ListSourcesResponse.sources:type_name -> evalsi.v1alpha1.TraceSource
-	1,  // 24: evalsi.v1alpha1.GetSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
-	1,  // 25: evalsi.v1alpha1.PauseSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
-	1,  // 26: evalsi.v1alpha1.ResumeSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
-	28, // 27: evalsi.v1alpha1.BackfillSourceRequest.since:type_name -> google.protobuf.Timestamp
-	1,  // 28: evalsi.v1alpha1.BackfillSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
-	8,  // 29: evalsi.v1alpha1.SourceService.ApplySource:input_type -> evalsi.v1alpha1.ApplySourceRequest
-	10, // 30: evalsi.v1alpha1.SourceService.ListSources:input_type -> evalsi.v1alpha1.ListSourcesRequest
-	12, // 31: evalsi.v1alpha1.SourceService.GetSource:input_type -> evalsi.v1alpha1.GetSourceRequest
-	14, // 32: evalsi.v1alpha1.SourceService.DeleteSource:input_type -> evalsi.v1alpha1.DeleteSourceRequest
-	16, // 33: evalsi.v1alpha1.SourceService.PauseSource:input_type -> evalsi.v1alpha1.PauseSourceRequest
-	18, // 34: evalsi.v1alpha1.SourceService.ResumeSource:input_type -> evalsi.v1alpha1.ResumeSourceRequest
-	20, // 35: evalsi.v1alpha1.SourceService.BackfillSource:input_type -> evalsi.v1alpha1.BackfillSourceRequest
-	9,  // 36: evalsi.v1alpha1.SourceService.ApplySource:output_type -> evalsi.v1alpha1.ApplySourceResponse
-	11, // 37: evalsi.v1alpha1.SourceService.ListSources:output_type -> evalsi.v1alpha1.ListSourcesResponse
-	13, // 38: evalsi.v1alpha1.SourceService.GetSource:output_type -> evalsi.v1alpha1.GetSourceResponse
-	15, // 39: evalsi.v1alpha1.SourceService.DeleteSource:output_type -> evalsi.v1alpha1.DeleteSourceResponse
-	17, // 40: evalsi.v1alpha1.SourceService.PauseSource:output_type -> evalsi.v1alpha1.PauseSourceResponse
-	19, // 41: evalsi.v1alpha1.SourceService.ResumeSource:output_type -> evalsi.v1alpha1.ResumeSourceResponse
-	21, // 42: evalsi.v1alpha1.SourceService.BackfillSource:output_type -> evalsi.v1alpha1.BackfillSourceResponse
-	36, // [36:43] is the sub-list for method output_type
-	29, // [29:36] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	3,  // 0: evalsi.v1alpha1.TraceSource.credentials:type_name -> evalsi.v1alpha1.SourceCredentials
+	4,  // 1: evalsi.v1alpha1.TraceSource.auth:type_name -> evalsi.v1alpha1.SourceAuth
+	5,  // 2: evalsi.v1alpha1.TraceSource.backfill:type_name -> evalsi.v1alpha1.Backfill
+	6,  // 3: evalsi.v1alpha1.TraceSource.poll:type_name -> evalsi.v1alpha1.Poll
+	28, // 4: evalsi.v1alpha1.TraceSource.max_trace_duration:type_name -> google.protobuf.Duration
+	28, // 5: evalsi.v1alpha1.TraceSource.max_in_progress_age:type_name -> google.protobuf.Duration
+	23, // 6: evalsi.v1alpha1.TraceSource.overrides:type_name -> evalsi.v1alpha1.TraceSource.OverridesEntry
+	7,  // 7: evalsi.v1alpha1.TraceSource.write_back:type_name -> evalsi.v1alpha1.WriteBack
+	24, // 8: evalsi.v1alpha1.TraceSource.trace_labels:type_name -> evalsi.v1alpha1.TraceSource.TraceLabelsEntry
+	25, // 9: evalsi.v1alpha1.TraceSource.labels:type_name -> evalsi.v1alpha1.TraceSource.LabelsEntry
+	29, // 10: evalsi.v1alpha1.TraceSource.updated_at:type_name -> google.protobuf.Timestamp
+	8,  // 11: evalsi.v1alpha1.TraceSource.status:type_name -> evalsi.v1alpha1.SourceStatus
+	2,  // 12: evalsi.v1alpha1.TraceSource.schedule:type_name -> evalsi.v1alpha1.PullSchedule
+	28, // 13: evalsi.v1alpha1.PullSchedule.window:type_name -> google.protobuf.Duration
+	28, // 14: evalsi.v1alpha1.PullSchedule.starting_deadline:type_name -> google.protobuf.Duration
+	30, // 15: evalsi.v1alpha1.PullSchedule.run_spec:type_name -> evalsi.v1alpha1.RunSpec
+	26, // 16: evalsi.v1alpha1.SourceAuth.sigv4:type_name -> evalsi.v1alpha1.SourceAuth.SigV4
+	27, // 17: evalsi.v1alpha1.SourceAuth.databricks:type_name -> evalsi.v1alpha1.SourceAuth.Databricks
+	28, // 18: evalsi.v1alpha1.Backfill.since:type_name -> google.protobuf.Duration
+	28, // 19: evalsi.v1alpha1.Poll.interval:type_name -> google.protobuf.Duration
+	0,  // 20: evalsi.v1alpha1.SourceStatus.phase:type_name -> evalsi.v1alpha1.SourcePhase
+	29, // 21: evalsi.v1alpha1.SourceStatus.watermark:type_name -> google.protobuf.Timestamp
+	29, // 22: evalsi.v1alpha1.SourceStatus.last_error_at:type_name -> google.protobuf.Timestamp
+	29, // 23: evalsi.v1alpha1.SourceStatus.last_pull_at:type_name -> google.protobuf.Timestamp
+	29, // 24: evalsi.v1alpha1.SourceStatus.last_write_back_at:type_name -> google.protobuf.Timestamp
+	29, // 25: evalsi.v1alpha1.SourceStatus.last_scheduled_at:type_name -> google.protobuf.Timestamp
+	1,  // 26: evalsi.v1alpha1.ApplySourceRequest.source:type_name -> evalsi.v1alpha1.TraceSource
+	1,  // 27: evalsi.v1alpha1.ApplySourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
+	1,  // 28: evalsi.v1alpha1.ListSourcesResponse.sources:type_name -> evalsi.v1alpha1.TraceSource
+	1,  // 29: evalsi.v1alpha1.GetSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
+	1,  // 30: evalsi.v1alpha1.PauseSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
+	1,  // 31: evalsi.v1alpha1.ResumeSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
+	29, // 32: evalsi.v1alpha1.BackfillSourceRequest.since:type_name -> google.protobuf.Timestamp
+	1,  // 33: evalsi.v1alpha1.BackfillSourceResponse.source:type_name -> evalsi.v1alpha1.TraceSource
+	9,  // 34: evalsi.v1alpha1.SourceService.ApplySource:input_type -> evalsi.v1alpha1.ApplySourceRequest
+	11, // 35: evalsi.v1alpha1.SourceService.ListSources:input_type -> evalsi.v1alpha1.ListSourcesRequest
+	13, // 36: evalsi.v1alpha1.SourceService.GetSource:input_type -> evalsi.v1alpha1.GetSourceRequest
+	15, // 37: evalsi.v1alpha1.SourceService.DeleteSource:input_type -> evalsi.v1alpha1.DeleteSourceRequest
+	17, // 38: evalsi.v1alpha1.SourceService.PauseSource:input_type -> evalsi.v1alpha1.PauseSourceRequest
+	19, // 39: evalsi.v1alpha1.SourceService.ResumeSource:input_type -> evalsi.v1alpha1.ResumeSourceRequest
+	21, // 40: evalsi.v1alpha1.SourceService.BackfillSource:input_type -> evalsi.v1alpha1.BackfillSourceRequest
+	10, // 41: evalsi.v1alpha1.SourceService.ApplySource:output_type -> evalsi.v1alpha1.ApplySourceResponse
+	12, // 42: evalsi.v1alpha1.SourceService.ListSources:output_type -> evalsi.v1alpha1.ListSourcesResponse
+	14, // 43: evalsi.v1alpha1.SourceService.GetSource:output_type -> evalsi.v1alpha1.GetSourceResponse
+	16, // 44: evalsi.v1alpha1.SourceService.DeleteSource:output_type -> evalsi.v1alpha1.DeleteSourceResponse
+	18, // 45: evalsi.v1alpha1.SourceService.PauseSource:output_type -> evalsi.v1alpha1.PauseSourceResponse
+	20, // 46: evalsi.v1alpha1.SourceService.ResumeSource:output_type -> evalsi.v1alpha1.ResumeSourceResponse
+	22, // 47: evalsi.v1alpha1.SourceService.BackfillSource:output_type -> evalsi.v1alpha1.BackfillSourceResponse
+	41, // [41:48] is the sub-list for method output_type
+	34, // [34:41] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_source_service_proto_init() }
@@ -1685,13 +1812,14 @@ func file_evalsi_v1alpha1_source_service_proto_init() {
 	if File_evalsi_v1alpha1_source_service_proto != nil {
 		return
 	}
+	file_evalsi_v1alpha1_run_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_source_service_proto_rawDesc), len(file_evalsi_v1alpha1_source_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

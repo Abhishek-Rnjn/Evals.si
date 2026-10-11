@@ -17,6 +17,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
 	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
@@ -220,7 +221,8 @@ type OTLP struct {
 // Traces configures stored traces.
 type Traces struct {
 	// How long traces and their results are kept, for example 168h.
-	Retention string `json:"retention"`
+	Retention string                 `json:"retention"`
+	Redaction ingest.RedactionConfig `json:"redaction"`
 }
 
 // Config is the whole evalsid configuration.
@@ -435,6 +437,9 @@ var sourceHostRE = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[
 // Validate checks the configuration for mistakes that would only surface later.
 func (c Config) Validate() error {
 	var errs []error
+	if _, err := ingest.NewRedactor(c.Traces.Redaction); err != nil {
+		errs = append(errs, err)
+	}
 	if c.Listen == "" {
 		errs = append(errs, errors.New("listen is required"))
 	}

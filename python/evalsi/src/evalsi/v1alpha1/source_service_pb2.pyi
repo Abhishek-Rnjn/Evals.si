@@ -4,6 +4,7 @@ isort:skip_file
 """
 
 from collections import abc as _abc
+from evalsi.v1alpha1 import run_pb2 as _run_pb2
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import message as _message
@@ -121,6 +122,7 @@ class TraceSource(_message.Message):
     UPDATED_AT_FIELD_NUMBER: _builtins.int
     UPDATED_BY_FIELD_NUMBER: _builtins.int
     STATUS_FIELD_NUMBER: _builtins.int
+    SCHEDULE_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """Lowercase letters, digits, '.', '_' or '-'."""
     project: _builtins.str
@@ -193,6 +195,8 @@ class TraceSource(_message.Message):
     def status(self) -> Global___SourceStatus:
         """Set by the server; ignored on apply."""
 
+    @_builtins.property
+    def schedule(self) -> Global___PullSchedule: ...
     def __init__(
         self,
         *,
@@ -218,13 +222,47 @@ class TraceSource(_message.Message):
         updated_at: _timestamp_pb2.Timestamp | None = ...,
         updated_by: _builtins.str = ...,
         status: Global___SourceStatus | None = ...,
+        schedule: Global___PullSchedule | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["auth", b"auth", "backfill", b"backfill", "credentials", b"credentials", "max_in_progress_age", b"max_in_progress_age", "max_trace_duration", b"max_trace_duration", "poll", b"poll", "status", b"status", "updated_at", b"updated_at", "write_back", b"write_back"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["auth", b"auth", "backfill", b"backfill", "credentials", b"credentials", "max_in_progress_age", b"max_in_progress_age", "max_trace_duration", b"max_trace_duration", "poll", b"poll", "schedule", b"schedule", "status", b"status", "updated_at", b"updated_at", "write_back", b"write_back"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["auth", b"auth", "backfill", b"backfill", "connector", b"connector", "credentials", b"credentials", "endpoint", b"endpoint", "labels", b"labels", "locations", b"locations", "max_in_progress_age", b"max_in_progress_age", "max_trace_duration", b"max_trace_duration", "name", b"name", "overrides", b"overrides", "paused", b"paused", "policies", b"policies", "poll", b"poll", "profile", b"profile", "project", b"project", "status", b"status", "trace_labels", b"trace_labels", "updated_at", b"updated_at", "updated_by", b"updated_by", "variant", b"variant", "write_back", b"write_back"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["auth", b"auth", "backfill", b"backfill", "connector", b"connector", "credentials", b"credentials", "endpoint", b"endpoint", "labels", b"labels", "locations", b"locations", "max_in_progress_age", b"max_in_progress_age", "max_trace_duration", b"max_trace_duration", "name", b"name", "overrides", b"overrides", "paused", b"paused", "policies", b"policies", "poll", b"poll", "profile", b"profile", "project", b"project", "schedule", b"schedule", "status", b"status", "trace_labels", b"trace_labels", "updated_at", b"updated_at", "updated_by", b"updated_by", "variant", b"variant", "write_back", b"write_back"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___TraceSource: _TypeAlias = TraceSource  # noqa: Y015
+
+@_typing.final
+class PullSchedule(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    CRON_FIELD_NUMBER: _builtins.int
+    WINDOW_FIELD_NUMBER: _builtins.int
+    STARTING_DEADLINE_FIELD_NUMBER: _builtins.int
+    RUN_SPEC_FIELD_NUMBER: _builtins.int
+    MAX_RECORDS_FIELD_NUMBER: _builtins.int
+    cron: _builtins.str
+    max_records: _builtins.int
+    @_builtins.property
+    def window(self) -> _duration_pb2.Duration: ...
+    @_builtins.property
+    def starting_deadline(self) -> _duration_pb2.Duration: ...
+    @_builtins.property
+    def run_spec(self) -> _run_pb2.RunSpec: ...
+    def __init__(
+        self,
+        *,
+        cron: _builtins.str = ...,
+        window: _duration_pb2.Duration | None = ...,
+        starting_deadline: _duration_pb2.Duration | None = ...,
+        run_spec: _run_pb2.RunSpec | None = ...,
+        max_records: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["run_spec", b"run_spec", "starting_deadline", b"starting_deadline", "window", b"window"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["cron", b"cron", "max_records", b"max_records", "run_spec", b"run_spec", "starting_deadline", b"starting_deadline", "window", b"window"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___PullSchedule: _TypeAlias = PullSchedule  # noqa: Y015
 
 @_typing.final
 class SourceCredentials(_message.Message):
@@ -389,6 +427,9 @@ class SourceStatus(_message.Message):
     LAST_ERROR_AT_FIELD_NUMBER: _builtins.int
     LAST_PULL_AT_FIELD_NUMBER: _builtins.int
     LAST_WRITE_BACK_AT_FIELD_NUMBER: _builtins.int
+    LAST_SCHEDULED_AT_FIELD_NUMBER: _builtins.int
+    LAST_RUN_ID_FIELD_NUMBER: _builtins.int
+    MISSED_WINDOWS_FIELD_NUMBER: _builtins.int
     phase: Global___SourcePhase.ValueType
     lag_seconds: _builtins.float
     """Now minus the watermark."""
@@ -398,6 +439,8 @@ class SourceStatus(_message.Message):
     pulled: _builtins.int
     scored: _builtins.int
     last_error: _builtins.str
+    last_run_id: _builtins.str
+    missed_windows: _builtins.int
     @_builtins.property
     def watermark(self) -> _timestamp_pb2.Timestamp:
         """Every trace that started before this has been stored and queued."""
@@ -408,6 +451,8 @@ class SourceStatus(_message.Message):
     def last_pull_at(self) -> _timestamp_pb2.Timestamp: ...
     @_builtins.property
     def last_write_back_at(self) -> _timestamp_pb2.Timestamp: ...
+    @_builtins.property
+    def last_scheduled_at(self) -> _timestamp_pb2.Timestamp: ...
     def __init__(
         self,
         *,
@@ -422,10 +467,13 @@ class SourceStatus(_message.Message):
         last_error_at: _timestamp_pb2.Timestamp | None = ...,
         last_pull_at: _timestamp_pb2.Timestamp | None = ...,
         last_write_back_at: _timestamp_pb2.Timestamp | None = ...,
+        last_scheduled_at: _timestamp_pb2.Timestamp | None = ...,
+        last_run_id: _builtins.str = ...,
+        missed_windows: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["last_error_at", b"last_error_at", "last_pull_at", b"last_pull_at", "last_write_back_at", b"last_write_back_at", "watermark", b"watermark"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["last_error_at", b"last_error_at", "last_pull_at", b"last_pull_at", "last_scheduled_at", b"last_scheduled_at", "last_write_back_at", b"last_write_back_at", "watermark", b"watermark"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["deferred", b"deferred", "lag_seconds", b"lag_seconds", "last_error", b"last_error", "last_error_at", b"last_error_at", "last_pull_at", b"last_pull_at", "last_write_back_at", b"last_write_back_at", "phase", b"phase", "pulled", b"pulled", "records_per_second", b"records_per_second", "scored", b"scored", "watermark", b"watermark"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["deferred", b"deferred", "lag_seconds", b"lag_seconds", "last_error", b"last_error", "last_error_at", b"last_error_at", "last_pull_at", b"last_pull_at", "last_run_id", b"last_run_id", "last_scheduled_at", b"last_scheduled_at", "last_write_back_at", b"last_write_back_at", "missed_windows", b"missed_windows", "phase", b"phase", "pulled", b"pulled", "records_per_second", b"records_per_second", "scored", b"scored", "watermark", b"watermark"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___SourceStatus: _TypeAlias = SourceStatus  # noqa: Y015

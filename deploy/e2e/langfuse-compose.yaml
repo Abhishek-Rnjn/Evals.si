@@ -1,0 +1,109 @@
+name: evalsi-langfuse-live
+
+x-environment: &environment
+  DATABASE_URL: postgresql://postgres:${LANGFUSE_TEST_SECRET:?}@postgres:5432/postgres
+  SALT: ${LANGFUSE_TEST_SECRET:?}
+  ENCRYPTION_KEY: ${LANGFUSE_TEST_ENCRYPTION_KEY:?}
+  NEXTAUTH_URL: http://localhost:13001
+  TELEMETRY_ENABLED: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: langfuse
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_TEST_SECRET:?}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_TEST_SECRET:?}
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_TEST_SECRET:?}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_TEST_SECRET:?}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_INGESTION_QUEUE_DELAY_MS: "1000"
+  LANGFUSE_INGESTION_CLICKHOUSE_WRITE_INTERVAL_MS: "1000"
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: ${LANGFUSE_TEST_SECRET:?}
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+    volumes: [postgres-data:/var/lib/postgresql/data]
+  redis:
+    image: redis:7
+    command: [redis-server, --requirepass, "${LANGFUSE_TEST_SECRET:?}", --maxmemory-policy, noeviction]
+    healthcheck:
+      test: [CMD, redis-cli, -a, "${LANGFUSE_TEST_SECRET:?}", ping]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    environment:
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_TEST_SECRET:?}
+    healthcheck:
+      test: [CMD-SHELL, wget -q --spider http://localhost:8123/ping]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+    volumes: [clickhouse-data:/var/lib/clickhouse]
+  minio:
+    image: bitnamilegacy/minio:2025.7.23
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_TEST_SECRET:?}
+      MINIO_DEFAULT_BUCKETS: langfuse
+    healthcheck:
+      test: [CMD-SHELL, curl -fsS http://localhost:9000/minio/health/live]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+    volumes: [minio-data:/bitnami/minio/data]
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.56.0
+    platform: linux/amd64
+    environment: *environment
+    depends_on: &dependencies
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      clickhouse: {condition: service_healthy}
+      minio: {condition: service_healthy}
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4.56.0
+    platform: linux/amd64
+    environment:
+      <<: *environment
+      NEXTAUTH_SECRET: ${LANGFUSE_TEST_SECRET:?}
+      LANGFUSE_INIT_ORG_ID: evalsi-live
+      LANGFUSE_INIT_PROJECT_ID: evalsi-live
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_TEST_PUBLIC_KEY:?}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_TEST_SECRET_KEY:?}
+      LANGFUSE_INIT_USER_EMAIL: live@example.invalid
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_TEST_SECRET:?}
+    ports: ["127.0.0.1:13001:3000"]
+    depends_on: *dependencies
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e 'fetch("http://"+require("os").hostname()+":3000/api/public/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'
+      interval: 5s
+      timeout: 5s
+      retries: 120
+
+volumes:
+  postgres-data:
+  clickhouse-data:
+  minio-data:

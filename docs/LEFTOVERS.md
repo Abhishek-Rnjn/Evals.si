@@ -2,9 +2,35 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
-Last updated: 2026-10-10 (trace sources); before that 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+Last updated: 2026-10-11 (trace redaction); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+
+Trace redaction on push and pull is now built and locally regression-tested,
+including source overrides, storage bytes, evaluator queues, result callbacks
+and error reporting. It has not had a new real-cluster redaction run. See
+[decision 0019](decisions/0019-trace-redaction.md) for defaults and limitations;
+historical stored data and direct Evaluate/offline run inputs are not redacted
+by this incoming-trace boundary.
 
 ## Verified only with stand-ins (needs real infrastructure)
+
+The default amd64 kind job, including Landlock, passed in
+[CI run 119](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38135174954)
+at `ba2ceff` on 2026-10-11. Docker Desktop's kernel does not enable Landlock;
+`SKIP_LANDLOCK=1` remains an explicit local opt-out, not Mac verification of
+that rung. The new AKS recheck has not run.
+
+Langfuse `v4.56.0` passed Compose and in-cluster TraceSource checks, including
+Secret credentials, policy scores, replacement under the same score ID and an
+evalsid-pod NetworkPolicy allow/deny/restore control. The tested images were
+amd64 under emulation; Cloud, TLS, production storage and arm64 images remain
+unverified. See the [run record](verification/README.md#langfuse-live-recheck-2026-10-10).
+
+The [platform-aware bundle recheck](verification/README.md#platform-aware-bundle-recheck-2026-10-10)
+passed arm64 bundle export, kind import and installation, and bootstrap key
+authentication across an upgrade. Later runs passed the demo dataset upload,
+both small-repo suites, MLflow sink and TraceSource loop, and restricted-namespace
+pod-rung code and agent checks. CI run 119 covers Landlock on amd64 kind;
+an opted-out Mac run is not a complete Kubernetes verification.
 
 | Item | Why it is open | Where recorded |
 |------|----------------|----------------|
@@ -13,10 +39,9 @@ Last updated: 2026-10-10 (trace sources); before that 2026-10-09, after the [end
 | Sandbox egress NetworkPolicy on Calico with Istio ambient | The operator's policy did not block a sandbox-labelled pod's egress on such a cluster; the cause is unknown. kind and the AKS cluster tested have no policy engine. The pod rung now verifies a declared policy with a canary connection and reports `partial` isolation and a probe warning when it is not enforced; that check has not run on the mesh cluster. | [verification](verification/README.md) |
 | Admission webhooks under mesh-wide STRICT mTLS | `operator.istio.peerAuthentication` renders the PeerAuthentication (chart-tested); not re-run on a mesh cluster. | [verification](verification/README.md) (VR-R2) |
 | PR #12 fixes on real clusters | The fixes for the verification findings have unit, chart and kind tests, but have not been re-run on AKS or the Istio cluster. | [verification](verification/README.md) |
-| Bundled MinIO and ClickHouse (`devMinio`, `devClickhouse`), the bootstrap Job, and the Helm charts under a second release | Rendered and checked by the chart tests (and the bootstrap logic by unit tests with a fake server and Secrets), but not run on a cluster: the environment that built them had no Docker daemon for kind. `deploy/e2e/kind-e2e.sh` has a bootstrap step (a key from values survives an upgrade) that CI will run. | [D2 and D4 in the PRD](PRD.md), decision 0017 |
-| Redaction of traces on ingest and on pull | The PRD's security section says redaction rules apply on ingest and pull, before storage and before any judge call; evalsid has none for traces (guardrails redact inline, at a gateway). Pushed and pulled traces are stored as sent. | [decision 0016, as built](decisions/0016-trace-source-connectors.md#as-built-2026-10-10) |
-| Trace sources (milestone M3) | Verified here against MLflow 3.17.0 and Phoenix 20.20.0 servers (recorded fixtures, live connector tests, and the full loop with the Python worker). Not verified: Langfuse (built and tested from its pinned OpenAPI spec only; whether a score sent again under the same ID replaces the old one), the Databricks, SageMaker and Azure ML variants (refused as not built), the TraceSource CRD on a real cluster (envtest only), Postgres for the source tables (CI runs the store tests on Postgres), the egress NetworkPolicy and PrometheusRule on a cluster (chart tests only), and the kind e2e step for R6. A trace stored but not yet scored when the server stops is not scored after the restart. | [trace sources guide](guides/trace-sources.md), [decision 0016](decisions/0016-trace-source-connectors.md) |
-| The reference demos (`examples/demo`) | Run end to end here only in embedded and standalone mode with the mock model. Not run: the demo images' builds, the demo chart and its datasets Job (`evalsid datasets put` to S3 is tested against MinIO in CI only), the MLflow sink against a live MLflow server, and the kind e2e step that runs the small-repo-fix suite for both agents. The deep-research and Terminal-Bench 2 suites need a real model and a judge and have never run. R6's MLflow half runs here (the real service and MLflow 3.17.0); its kind e2e step has not run, and the dsh plugin that exports sessions as OTel GenAI spans is not built. | [R1 to R9 in the PRD](PRD.md) |
+| Bundled ClickHouse (`devClickhouse`) and the Helm charts under a second release | Chart-tested, not verified on a cluster. Bundled MinIO and demo dataset upload passed on local kind, as did bootstrap key authentication and survival across an upgrade. | [D2 and D4 in the PRD](PRD.md), decision 0017 |
+| Trace sources (milestone M3) | Verified here against MLflow 3.17.0 and Phoenix 20.20.0 servers (recorded fixtures, live connector tests, and the full loop with the Python worker). R6's MLflow TraceSource CRD and policy loop passed on local kind with Postgres-backed source tables. Langfuse 4.56.0 passed the two-stage check, including in-cluster Secret/Service polling, score replacement and enforced evalsid egress. Databricks numeric experiment/bearer-token artifact downloads are built and contract-tested against pinned client source, not live-verified. Not verified: Langfuse Cloud/TLS/arm64 images and PrometheusRule behaviour on a cluster. Not built: Databricks Unity Catalog/token acquisition, SageMaker and Azure ML. A trace stored but not yet scored when the server stops is not scored after the restart. | [trace sources guide](guides/trace-sources.md), [decision 0016](decisions/0016-trace-source-connectors.md) |
+| The reference demos (`examples/demo`) | Both small-repo suites, MLflow sink and Deep Agents pull passed on kind. Native dsh headless GenAI export/pull/assessment also passed; interactive web export remains unverified. Deep-research and Terminal-Bench 2 need a real model/judge and have never run. | [Part C](verification/PART-C.md), [R1 to R9 in the PRD](PRD.md) |
 | Agent framework mapping profiles | Each first-cut framework was recorded once, with the versions in `tests/frameworks/requirements-*.txt`, against the demo's mock model: one tool call, no parallel calls, no errors, no retries. Not recorded: real model output, a framework's default OpenAI Responses API (the OpenAI Agents fixture uses chat completions, since the mock has no Responses API), CrewAI through LiteLLM, streamed calls with usage, multi-agent crews and handoffs. A new framework version can change its spans; record again when upgrading. | [guide](guides/agent-frameworks.md), PRD scope table |
 | `release.yml` signing, SBOM and chart push | Written and checked as YAML only; the first tag exercises it (`scripts/verify-release.sh` then checks the result). | D1 in the PRD |
 | KEDA scaling a live pool | Only the generated `ScaledObject`s are tested (envtest, chart tests). | §23 Phase 4 limits |
@@ -45,7 +70,9 @@ These were verified only with stand-ins before the [verification run](verificati
 | Per-release isolation of sandbox pools | The sandbox NetworkPolicy selects every pool in the namespace by the shared `evalsi-sandboxd` component label, so two releases' pools can reach each other's sandbox pods. | Decision 0017 |
 | Server-side analytics | `evalsi analyze` loads runs into DuckDB on the client, through the API. It reads every result of the runs it loads, so analysis over thousands of large runs would want a server-side query (ClickHouse already holds the data on Kubernetes). | Decision 0009 |
 | Platform wheels bundling evalsid | Releases publish archives (evalsid, a static bubblewrap), wheels, images, charts and the bundle (`.github/workflows/release.yml`), but no tag has been cut (the signing and SBOM steps have never run), and the wheels do not bundle evalsid as decision 0006 suggests. | Decision 0006 |
-| Deleting or archiving stored runs | `max_stored_runs` refuses runs past it, but there is no `DeleteRun` or run retention: configured retention deletes traces only, and deleting an `EvalRun` keeps its results. The quota error now says to raise the quota; an authorized, audited delete or archive of a run and what it owns (results, outputs, snapshots, pending webhook deliveries) is not built. | [Bug findings F31](verification/BUG-FINDINGS-2026-10-10.md#f31-stored-run-quotas-have-no-supported-recovery-path) |
+| Archiving and automatic run retention | Authorized, audited terminal `DeleteRun` now removes stored records, outputs, results and webhook deliveries and recovers quotas. API authorization metadata remains for 24h retry checks. External sink data and promoted datasets remain; deleting an EvalRun still keeps its server run. Archive and automatic retention are not built. | [Decision 0020](decisions/0020-pipeline-retries-and-scheduled-runs.md), F31 |
+| Known issues from the review of items 3 to 6 | Not fixed yet: a scheduled window fails whole when a connector drops a trace between list and fetch (an empty or deleted trace) instead of skipping it; the fixed 90-second pull cycle and 2-minute lease can make a window near the 10,000-record default time out every attempt; on PostgreSQL every keyed write takes one global advisory lock; redaction runs twice on the OTLP push path; the `phone` and `credit-card` PII patterns match timestamps and numeric IDs (no Luhn check); a dataset row without an id gets `record-N`, which can collide with an explicit id, and a JSON null becomes an empty text; a keyed dataset upload buffers up to 64 MiB in memory and reports any read error as too large. | [Decision 0020](decisions/0020-pipeline-retries-and-scheduled-runs.md), [decision 0019](decisions/0019-trace-redaction.md) |
+| Pipeline and schedule certification | Local API/worker tests cover upload, retry, deletion and scheduled reports. Live S3 imports, new-operation PostgreSQL/HA races, production load, MCP tool idempotency and scheduled source write-back remain uncertified or unsupported. | P6/P7/S9, decision 0020 |
 | Sandbox-time quotas | Per-project quotas cover concurrent and stored runs, daily judge and target tokens, and reward rollouts in flight; sandbox minutes are not metered. Concurrency quotas are per replica. | §17 "Tenancy" |
 | Keyless image signatures | `sandbox.image_signatures` verifies cosign key signatures (`.sig` tags) offline. Keyless (Fulcio certificates, Rekor) and the newer bundle-as-referrer format are not supported, and the verification here is for images that others sign. Our own release workflow now signs its images and charts keyless (cosign verifies them with `scripts/verify-release.sh`), but it has never run: no tag has been cut. | §17 "Other security controls" |
 | Feeding scores back into agentgateway | Quality-aware routing; depends on the gateway's extension points. | §16 "Working with agentgateway" |
@@ -69,7 +96,7 @@ These were verified only with stand-ins before the [verification run](verificati
 | verl and OpenRLHF against real installs | Their entry points (`compute_score`, `compute_score_batch`, `reward_func`, the remote reward-model server) are tested by signature and protocol, not inside a verl or OpenRLHF training run. TRL is tested with a real `GRPOTrainer`. | §23 Phase 5 limits |
 | Reward throughput at the §12 scale | Measured on one 4-vCPU host with bubblewrap; the §12 figure (4,096 rollouts in about 16 s) assumes 256 warm microVMs. Needs a sandbox pool sized for it, and Firecracker warm pools on KVM. | §23 Phase 5 status |
 | Operator-managed checkpoint serving | The operator does not start vLLM per checkpoint; the watcher serves checkpoints itself (vLLM process, LoRA hot-load, endpoint). | Decision 0013 |
-| Trainer hooks besides Hugging Face | Only `TrainerCallback` (Trainer, TRL). Other loops use `CheckpointRunner`, or the watcher with `--stop-file`; Lightning `.ckpt` files need converting before vLLM can serve them. | §12 |
+| Checkpoint model serving | Plain PyTorch and Lightning save/evaluate hooks pass real CPU tests in separate environments. State dictionaries still need a compatible serving strategy; Lightning `.ckpt` files are not directly vLLM models. | [Part C](verification/PART-C.md), §12 |
 | Environment-spec compatibility | `TaskEnv` has its own `reset`/`step`; compatibility with OpenEnv and verifiers-style environments is not evaluated. | §12 |
 
 ## Phase 6: MCP, classic ML and ecosystem
@@ -78,7 +105,7 @@ These were verified only with stand-ins before the [verification run](verificati
 |------|-------|----------------|
 | Guardrails against a live agentgateway | The prompt-guard webhook and ExtMcp protocols are implemented from agentgateway's source and tested against their wire formats; neither was run behind a real gateway. Masks on streamed responses appear not to take effect in agentgateway (blocks do). | §23 Phase 6 limits, guardrails guide |
 | A coding agent product over MCP in CI | The exit test drives `evalsi mcp` with our own MCP client, not with Claude Code, Cursor or another agent. | §23 Phase 6 limits |
-| Wasm plugins on Kubernetes | evalsid loads plugins from `wasm.plugin_dirs`; the Helm chart has no value to mount them (a volume, or an init container that runs `evalsi plugins install`). | Plugins guide |
+| Mounted plugins on Kubernetes | Helm volume/init-container, Wasm directory and PYTHONPATH wiring are chart-tested. A real mounted-plugin evaluator run is not yet certified. | [Plugins guide](guides/plugins.md#kubernetes-mounts) |
 | Wasm evaluators with a judge or the sandbox | Wasm modules have no I/O by design; such evaluators stay Python plugins or images. | Decision 0014 |
 | Hosted Wasm plugins in the index | The index lists the native packs and the adapters; no Wasm plugin is published yet (the example builds from source). | Plugins guide |
 | Browser sign-in for the web UI | The UI takes a pasted API key or `evalsi auth token`; an OIDC login flow in the browser is not built. | Decision 0014 |

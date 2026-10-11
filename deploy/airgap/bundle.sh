@@ -5,7 +5,8 @@
 #   deploy/airgap/bundle.sh --tag 0.4.0 --out evalsi-bundle
 #   tar czf evalsi-bundle.tgz evalsi-bundle      # carry it across
 #
-# Needs docker and helm (and uv for --with-cli). EXTRA_IMAGES adds images
+# Needs Docker and helm (and uv for --with-cli). Docker 28+ scopes inspect and
+# save to the platform; older Docker uses the plain commands. EXTRA_IMAGES adds images
 # (sandbox images your tasks name, for example), space-separated.
 set -euo pipefail
 
@@ -40,17 +41,27 @@ images=(
 # shellcheck disable=SC2206
 images+=(${EXTRA_IMAGES:-})
 
+# Docker 28+ can scope inspect, save and load to one platform; an older CLI
+# rejects the flag. Use it only where this Docker lists it.
+supports_platform() { docker "$@" --help 2>&1 | grep -q -- '--platform'; }
+inspect_platform=(); save_platform=()
+if supports_platform image inspect; then inspect_platform=(--platform "$platform"); fi
+if supports_platform save; then save_platform=(--platform "$platform"); fi
+[ "${#inspect_platform[@]}" -gt 0 ] && [ "${#save_platform[@]}" -gt 0 ] ||
+  echo "note: this Docker lacks --platform for inspect or save (Docker 28+ has it); using the plain commands for $platform" >&2
+
 mkdir -p "$out/charts"
 : > "$out/images.txt"
 for img in "${images[@]}"; do
   # A locally built image (no registry to pull from) is used as is.
-  if ! docker image inspect "$img" >/dev/null 2>&1 || [ "${PULL:-1}" = 1 ]; then
-    docker pull --platform "$platform" "$img" || docker image inspect "$img" >/dev/null
+  if ! docker image inspect ${inspect_platform[@]+"${inspect_platform[@]}"} "$img" >/dev/null 2>&1 || [ "${PULL:-1}" = 1 ]; then
+    docker pull --platform "$platform" "$img" || docker image inspect ${inspect_platform[@]+"${inspect_platform[@]}"} "$img" >/dev/null
   fi
   echo "$img" >> "$out/images.txt"
 done
 echo "saving $(wc -l < "$out/images.txt") images"
-docker save -o "$out/images.tar" "${images[@]}"
+docker save ${save_platform[@]+"${save_platform[@]}"} -o "$out/images.tar" "${images[@]}"
+printf '%s\n' "$platform" > "$out/platform"
 
 for chart in evalsi-crds evalsi evalsi-sandboxd; do
   helm package "$root/deploy/helm/$chart" --app-version "$tag" -d "$out/charts" >/dev/null

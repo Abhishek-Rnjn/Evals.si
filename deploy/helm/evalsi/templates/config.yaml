@@ -85,6 +85,11 @@ unless auth.config turns them off, which contradicts asking for keys. */ -}}
 {{- with $v.sources.maxRecordsPerSecond }}{{ $_ := set $sources "max_records_per_second" . }}{{ end }}
 {{- if $sources }}{{ $_ := set $server "sources" $sources }}{{ end }}
 {{- $server = mergeOverwrite $server (deepCopy $v.server.config) }}
+{{- with (default dict $v.plugins).wasmDirs }}
+{{- $wasm := get $server "wasm" | default dict }}
+{{- $_ := set $wasm "plugin_dirs" . }}
+{{- $_ := set $server "wasm" $wasm }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -110,6 +115,11 @@ data:
   "key_file" "/etc/evalsi/worker-tls/tls.key")) }}
 {{- end }}
 {{- $worker = mergeOverwrite $worker (deepCopy $v.workers.config) }}
+{{- with (default dict $v.plugins).wasmDirs }}
+{{- $wasm := get $worker "wasm" | default dict }}
+{{- $_ := set $wasm "plugin_dirs" . }}
+{{- $_ := set $worker "wasm" $wasm }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap

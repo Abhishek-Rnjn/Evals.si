@@ -29,6 +29,8 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 here="$root/deploy/e2e"
 cluster="${CLUSTER:-evalsi-e2e}"
+skip_landlock="${SKIP_LANDLOCK:-0}"
+case "$skip_landlock" in 0|1) ;; *) echo "SKIP_LANDLOCK must be 0 or 1" >&2; exit 2 ;; esac
 ns=evalsi
 ns2=evalsi-restricted
 registry=airgap.invalid
@@ -106,11 +108,13 @@ mean() {
   kubectl get evalrun "$1" -n "$ns" -o jsonpath="{.status.summaries[?(@.metric==\"$2\")].mean}"
 }
 
-step "image"
-docker build -q -t "ghcr.io/abhishek-rnjn/evalsi:$tag" "$root"
+platform="linux/$(docker version --format '{{.Server.Arch}}')"
+
+step "image ($platform)"
+docker build --platform "$platform" -q -t "ghcr.io/abhishek-rnjn/evalsi:$tag" "$root"
 
 step "air-gapped bundle"
-PULL=0 "$root/deploy/airgap/bundle.sh" --tag "$tag" --out "$work/bundle"
+PULL=0 "$root/deploy/airgap/bundle.sh" --tag "$tag" --platform "$platform" --out "$work/bundle"
 cat "$work/bundle/images.txt"
 
 step "cluster"
@@ -231,8 +235,8 @@ step "the reference demos: the small-repo-fix suite, for both agents, against th
 # grant, S3 for the datasets and an MLflow sink on Evals.si. The suite runs through
 # `kubectl apply` on the pod rung, one run per agent.
 demo="$root/examples/demo"
-docker build -q -t ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 "$demo/dsh"
-docker build -q -t ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0 "$demo/deepagents"
+docker build --platform "$platform" -q -t ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 "$demo/dsh"
+docker build --platform "$platform" -q -t ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0 "$demo/deepagents"
 kind load docker-image --name "$cluster" ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0
 docker rmi -f ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 ghcr.io/abhishek-rnjn/evalsi-demo-deepagents:0.1.0 >/dev/null || true
 docker builder prune -af >/dev/null || true
@@ -240,7 +244,8 @@ docker builder prune -af >/dev/null || true
 kubectl create secret generic evalsi-demo-model-key -n "$ns" --from-literal=key=mock
 evalsi_image="$(kubectl get deploy evalsi -n "$ns" -o jsonpath='{.spec.template.spec.containers[0].image}')"
 helm upgrade evalsi "$chart" -n "$ns" --reuse-values -f "$demo/overlays/evalsi-demo.yaml" --wait --timeout 10m
-helm install evalsi-demo "$demo" -n "$ns" -f "$demo/overlays/kind.yaml" --set datasets.image="$evalsi_image" --wait --timeout 10m
+helm install evalsi-demo "$demo" -n "$ns" -f "$demo/overlays/kind.yaml" \
+  --set datasets.image="$evalsi_image" --set model.image="$registry/python:3.13-slim" --wait --timeout 10m
 kubectl get pods -n "$ns" -l app.kubernetes.io/part-of=evalsi-demo -o wide
 
 kubectl apply -n "$ns" -f "$demo/dsh-small-repo-fixes.yaml" -f "$demo/deepagents-small-repo-fixes.yaml"
@@ -286,6 +291,33 @@ exp="$(curl -s -H "$mlflow_host" "http://127.0.0.1:15000/api/2.0/mlflow/experime
 curl -s -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
   -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$exp"'"}}]}' | tee "$work/mlflow-traces.json" >/dev/null
 grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evals.si assessment on the Deep Agents traces" >&2; exit 1; }
+
+step "R6: native dsh GenAI spans in MLflow, pulled, scored and written back"
+dsh_exp="$(curl -sf -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/2.0/mlflow/experiments/create \
+  -H 'content-type: application/json' -d '{"name":"evalsi-demo-dsh"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment_id"])')"
+kubectl exec -n "$ns" deployment/evalsi-demo-dsh-web -- env \
+  DEMO_OUTER_SANDBOX=true DEMO_OTLP_ENDPOINT=http://evalsi-demo-mlflow:5000/v1/traces \
+  DEMO_MLFLOW_EXPERIMENT_ID="$dsh_exp" \
+  /usr/local/bin/dsh-demo-configure dsh --profile headless --json 'What is 1 + 1? Reply with 2.' > "$work/dsh-session.jsonl"
+kubectl exec -n "$ns" deployment/evalsi-demo-deepagents -- python -c '
+import mlflow
+mlflow.set_tracking_uri("http://evalsi-demo-mlflow:5000")
+experiment = mlflow.get_experiment_by_name("evalsi-demo-dsh")
+traces = mlflow.search_traces(locations=[experiment.experiment_id], return_type="list")
+assert traces, "dsh exported no native spans"
+assert any("What is 1 + 1?" in str(span.attributes.get("input.value")) and span.attributes.get("output.value") for trace in traces for span in trace.data.spans), "dsh lost the task or output"
+print("native dsh traces:", len(traces))'
+kubectl apply -n "$ns" -f "$demo/dsh-online-policy.yaml" -f "$demo/dsh-mlflow-source.yaml"
+for _ in $(seq 1 60); do
+  dsh_scored="$(kubectl get tracesource dsh-mlflow -n "$ns" -o jsonpath='{.status.scored}')"
+  [ "${dsh_scored:-0}" -ge 1 ] && break
+  sleep 5
+done
+kubectl get tracesource dsh-mlflow -n "$ns" -o yaml | tee "$work/dsh-tracesource.yaml"
+[ "${dsh_scored:-0}" -ge 1 ] || { echo "the dsh TraceSource wrote no scores back" >&2; exit 1; }
+curl -sf -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
+  -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$dsh_exp"'"}}]}' > "$work/dsh-mlflow-traces.json"
+grep -q '"source_id": *"evalsi/dsh-online"' "$work/dsh-mlflow-traces.json" || { echo "no Evals.si assessment on native dsh traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
 step "deleting an EvalRun"
@@ -358,13 +390,17 @@ kill "$watcher" 2>/dev/null || true
 sort -u "$work/ns2-pods.txt"
 [ -s "$work/ns2-pods.txt" ] || { echo "no sandbox pods were created in $ns2" >&2; exit 1; }
 
-step "namespace-only: code evaluation on Landlock"
-helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns2" --kube-as-user alice --reuse-values \
-  --set 'sandbox.pool.ladder={landlock}' --wait --timeout 5m
-kubectl rollout status deploy/evalsi-sandbox-pool -n "$ns2" --timeout 3m
-cli "$here/sandbox-run.yaml" "$work/ns2-landlock.json"
-want "$work/ns2-landlock.json" unit-tests 0.5
-kubectl logs -n "$ns2" deploy/evalsi-sandbox-pool --tail=20
+if [ "$skip_landlock" = 1 ]; then
+  step "DEFERRED: Landlock (SKIP_LANDLOCK=1); not verified, rerun on a supported kernel"
+else
+  step "namespace-only: code evaluation on Landlock"
+  helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns2" --kube-as-user alice --reuse-values \
+    --set 'sandbox.pool.ladder={landlock}' --wait --timeout 5m
+  kubectl rollout status deploy/evalsi-sandbox-pool -n "$ns2" --timeout 3m
+  cli "$here/sandbox-run.yaml" "$work/ns2-landlock.json"
+  want "$work/ns2-landlock.json" unit-tests 0.5
+  kubectl logs -n "$ns2" deploy/evalsi-sandbox-pool --tail=20
+fi
 
 step "namespace-only: a static issuer and key set, on a cluster that hides its keys"
 # A hardened cluster removes the grant that lets every service account read
@@ -408,4 +444,8 @@ want "$work/ns2-static.json" unit-tests 0.5
 restore_discovery
 kill "$forward" 2>/dev/null || true
 
-step "passed"
+if [ "$skip_landlock" = 1 ]; then
+  step "passed with Landlock deferred (not a complete Kubernetes verification)"
+else
+  step "passed"
+fi

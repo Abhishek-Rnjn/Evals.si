@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -100,6 +102,12 @@ const (
 func (g *gate) accessRules() map[string]accessRule {
 	catalog := accessRule{action: "catalog.read", anyProject: true}
 	return map[string]accessRule{
+		evalsiv1alpha1connect.DatasetServiceUploadDatasetProcedure: {action: "datasets.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.datasetUploadTargets(msg.(*evalsiv1alpha1.UploadDatasetRequest).GetConfig())
+		}},
+		evalsiv1alpha1connect.DatasetServiceImportDatasetProcedure: {action: "datasets.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.datasetUploadTargets(msg.(*evalsiv1alpha1.ImportDatasetRequest).GetConfig())
+		}},
 		evalsiv1alpha1connect.EvaluationServiceEvaluateProcedure: {action: "evaluations.run", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.EvaluateRequest)
 			return g.evaluateTarget(m.GetProject(), m.GetEvaluators(), m.GetJudge(), len(m.GetRecords()))
@@ -166,6 +174,23 @@ func (g *gate) accessRules() map[string]accessRule {
 		}},
 		evalsiv1alpha1connect.RunServiceResumeRunProcedure: {action: "runs.resume", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.runTargets(ctx, msg.(*evalsiv1alpha1.ResumeRunRequest).GetId())
+		}},
+		evalsiv1alpha1connect.RunServiceDeleteRunProcedure: {action: "runs.delete", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			id := msg.(*evalsiv1alpha1.DeleteRunRequest).GetId()
+			project, raw, err := g.store.DeletedRunResource(ctx, id)
+			if errors.Is(err, store.ErrNotFound) {
+				return g.runTargets(ctx, id)
+			}
+			if err != nil {
+				return nil, err
+			}
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.UseNumber()
+			var resource map[string]any
+			if err := decoder.Decode(&resource); err != nil {
+				return nil, err
+			}
+			return []target{{project: project, name: "run/" + id, resource: restoreResourceNumbers(resource).(map[string]any)}}, nil
 		}},
 
 		evalsiv1alpha1connect.MonitorServiceApplyPolicyProcedure: {action: "policies.write", resolve: g.applyPolicyTargets},
@@ -304,7 +329,20 @@ func (g *gate) accessRules() map[string]accessRule {
 		}},
 		evalsiv1alpha1connect.SourceServiceApplySourceProcedure: {action: "sources.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			src := msg.(*evalsiv1alpha1.ApplySourceRequest).GetSource()
-			return g.applySourceTargets(ctx, src.GetProject(), src.GetName(), src.GetLabels())
+			targets, err := g.applySourceTargets(ctx, src.GetProject(), src.GetName(), src.GetLabels())
+			if err != nil || src.GetSchedule() == nil {
+				return targets, err
+			}
+			runs, err := g.newRunTargets(ctx, src.GetProject(), src.GetSchedule().GetRunSpec(), map[string]string{"source": src.GetName(), "scheduled": "true"}, "run/scheduled")
+			if err != nil {
+				return nil, err
+			}
+			for index := range runs {
+				if runs[index].action == "" {
+					runs[index].action = "runs.create"
+				}
+			}
+			return append(targets, runs...), nil
 		}},
 		evalsiv1alpha1connect.SourceServiceDeleteSourceProcedure: {action: "sources.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.DeleteSourceRequest)
@@ -818,6 +856,33 @@ func projectNames(e *authz.Engine) []string {
 // interceptor is the Connect side of the gate.
 func (g *gate) interceptor() connect.Interceptor { return gateInterceptor{g} }
 
+func (g *gate) datasetUploadTargets(config *evalsiv1alpha1.DatasetUploadConfig) ([]target, error) {
+	if err := datasets.ValidateUpload(config); err != nil {
+		return nil, err
+	}
+	return []target{{project: config.GetProject(), name: "dataset/" + config.GetName(), resource: map[string]any{"dataset": map[string]any{"name": config.GetName()}}}}, nil
+}
+
+func restoreResourceNumbers(value any) any {
+	switch typed := value.(type) {
+	case json.Number:
+		integer, err := typed.Int64()
+		if err == nil {
+			return integer
+		}
+		return typed.String()
+	case map[string]any:
+		for key, member := range typed {
+			typed[key] = restoreResourceNumbers(member)
+		}
+	case []any:
+		for index, member := range typed {
+			typed[index] = restoreResourceNumbers(member)
+		}
+	}
+	return value
+}
+
 type gateInterceptor struct{ g *gate }
 
 func (i gateInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -832,7 +897,7 @@ func (i gateInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		if err := i.g.check(ctx, chk, req.Spec().Procedure, req.Any()); err != nil {
 			return nil, err
 		}
-		return next(ctx, req)
+		return i.g.idempotent(ctx, req, next)
 	}
 }
 
@@ -849,6 +914,11 @@ func (i gateInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc)
 		ctx, chk, err := i.g.authenticate(ctx, proc, conn.Peer().Protocol, conn.Peer().Addr, conn.RequestHeader())
 		if err != nil {
 			return err
+		}
+		if conn.RequestHeader().Get("Idempotency-Key") != "" && !strings.HasSuffix(i.g.rules[proc].action, ".read") {
+			return i.g.idempotentStream(ctx, conn, func(msg any) error {
+				return i.g.check(ctx, chk, proc, msg)
+			}, next)
 		}
 		return next(ctx, &gatedConn{StreamingHandlerConn: conn, check: func(msg any) error {
 			return i.g.check(ctx, chk, proc, msg)

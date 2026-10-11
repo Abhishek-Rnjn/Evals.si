@@ -37,6 +37,34 @@ directory of `EVALSI_PLUGIN_PATH`, or `--dir`. A server loads them from
 server run `evalsi plugins install ... --dir <data_dir>/plugins` and
 restart it.
 
+## Kubernetes mounts
+
+The chart mounts plugin volumes read-only into API and worker pods. Init
+containers can populate an `emptyDir` before either starts:
+
+```yaml
+plugins:
+   volumes: [{name: plugins, emptyDir: {}}]
+   volumeMounts: [{name: plugins, mountPath: /plugins}]
+   wasmDirs: [/plugins/wasm]
+   pythonPath: /plugins/python
+   initContainers:
+      - name: install-plugins
+         image: registry.example.com/evalsi-plugins@sha256:<digest>
+         command: [sh, -ec]
+         args: ["cp -R /opt/plugins/. /plugins/"]
+```
+
+Prefer a pinned, prebuilt plugin image for air-gapped installs; no startup
+download is needed. Include that image in your bundle. `global.imageRegistry`
+rewrites the init image, and it inherits the pod's placement and restricted
+security settings. Init mounts are writable; workload mounts are read-only.
+Use separate `wasm` and `python` directories; native Python dependencies must
+match the worker image's Python ABI. `pythonPath` adds module discovery, not
+automatic registration: Python packages still need the existing pack/entry-point
+configuration. Render tests cover this wiring; live plugin execution is not yet
+certified.
+
 ## Wasm evaluators
 
 A Wasm evaluator is a WebAssembly module. It runs inside evalsid with no

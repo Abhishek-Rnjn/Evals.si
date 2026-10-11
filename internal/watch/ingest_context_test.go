@@ -1,16 +1,110 @@
 package watch
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 )
+
+func TestRedactionBeforeStorageEvaluationSinksAndLogs(t *testing.T) {
+	for _, mode := range []string{"push", "pull"} {
+		t.Run(mode, func(t *testing.T) {
+			h := newHarness(t)
+			var logs bytes.Buffer
+			h.e.log = slog.New(slog.NewTextHandler(&logs, nil))
+			redactor, err := ingest.NewRedactor(ingest.RedactionConfig{Patterns: []string{"private-sentinel"}, PII: []string{"email"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			h.e.opts.Redactor = redactor
+			policy := &evalsiv1alpha1.OnlineEvalPolicy{Name: "redaction", Project: DefaultProject, Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}
+			if _, err := h.e.ApplyPolicy(t.Context(), connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy})); err != nil {
+				t.Fatal(err)
+			}
+			assertSafe := func(raw []byte) {
+				t.Helper()
+				for _, secret := range []string{"private-sentinel", "raw-password", "person@example.invalid"} {
+					if bytes.Contains(raw, []byte(secret)) {
+						t.Fatal("raw trace value escaped redaction")
+					}
+				}
+			}
+			sunk := false
+			h.e.opts.OnResults = func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
+				sunk = true
+				raw, err := protojson.Marshal(record)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertSafe(raw)
+				assertSafe([]byte(info.Service))
+			}
+			input := trace(1, "private-sentinel", `{"password":"raw-password","message":"person@example.invalid private-sentinel"}`, false)
+			if mode == "pull" {
+				input.Adjust = func(record *evalsiv1alpha1.Record, info *ingest.TraceInfo) {
+					record.GetOutput().Kind = &evalsiv1alpha1.Content_Text{Text: "private-sentinel"}
+					info.Service = "private-sentinel"
+				}
+			}
+			if mode == "push" {
+				h.e.Ingest(input)
+			} else if err := h.e.IngestBatchContext(t.Context(), []ingest.Trace{input}, nil); err != nil {
+				t.Fatal(err)
+			}
+			summary, record, err := h.st.GetTrace(t.Context(), DefaultProject, input.TraceID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, message := range []proto.Message{summary, record} {
+				raw, err := protojson.Marshal(message)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertSafe(raw)
+			}
+			queued := <-h.e.queue
+			if strings.Contains(queued.record.GetOutput().GetText(), "raw-password") {
+				t.Fatal("worker input was not redacted")
+			}
+			h.e.process(t.Context(), []item{queued})
+			if !sunk {
+				t.Fatal("sink callback did not run")
+			}
+			files, err := filepath.Glob(filepath.Join(h.dir, "evalsi.db*"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, file := range files {
+				raw, err := os.ReadFile(file)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertSafe(raw)
+			}
+			if err := h.st.Close(); err != nil {
+				t.Fatal(err)
+			}
+			h.e.Ingest(input)
+			if logs.Len() == 0 {
+				t.Fatal("storage failure did not exercise logging")
+			}
+			assertSafe(logs.Bytes())
+		})
+	}
+}
 
 // A trace source advances its watermark only when IngestBatchContext returns
 // nil, so it must report what IngestBatch swallows and wait where IngestBatch

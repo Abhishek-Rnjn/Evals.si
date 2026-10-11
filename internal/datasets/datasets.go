@@ -42,7 +42,7 @@ func Path(project, name string) string {
 // was promoted from, or "" when it is not a promotion.
 func ProjectOf(rel string) string {
 	parts := strings.Split(path.Clean(filepath.ToSlash(rel)), "/")
-	if len(parts) >= 3 && parts[0] == PromotedDir {
+	if len(parts) >= 3 && (parts[0] == PromotedDir || parts[0] == "uploaded") {
 		return parts[1]
 	}
 	return ""

@@ -1,0 +1,10 @@
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: dsh-online
+  labels: {evals.si/project: demo}
+spec:
+  selector: 'labels["source"] == "dsh-mlflow"'
+  stages:
+    - evaluators: [{ref: tool-errors}, {ref: loop-detection}]
+  window: 1h

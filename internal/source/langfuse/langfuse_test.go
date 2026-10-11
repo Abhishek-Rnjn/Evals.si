@@ -1,16 +1,26 @@
 package langfuse
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	collectortrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
+	"google.golang.org/protobuf/proto"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
@@ -107,6 +117,127 @@ func root(id string, start time.Duration, ended bool) map[string]any {
 		o["endTime"] = ts(start + time.Second)
 	}
 	return o
+}
+
+func TestLiveLangfuse(t *testing.T) {
+	endpoint := os.Getenv("EVALSI_TEST_LANGFUSE_URL")
+	if endpoint == "" {
+		t.Skip("set EVALSI_TEST_LANGFUSE_URL for the opt-in live check")
+	}
+	token := os.Getenv("EVALSI_TEST_LANGFUSE_CREDENTIAL")
+	if token == "" {
+		t.Fatal("EVALSI_TEST_LANGFUSE_CREDENTIAL is required for the live check")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	defer cancel()
+	live, err := Factory(&evalsiv1alpha1.TraceSource{
+		Connector: "langfuse", Endpoint: endpoint, Locations: []string{"production"},
+	}, token, &http.Client{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := live.(*connector)
+	started := time.Now().UTC().Add(-time.Minute)
+	identifier := make([]byte, 16)
+	if _, err := rand.Read(identifier); err != nil {
+		t.Fatal(err)
+	}
+	liveID := hex.EncodeToString(identifier)
+	spans := []*tracepb.Span{}
+	for index, kind := range []string{"agent", "generation", "tool"} {
+		span := &tracepb.Span{
+			TraceId: identifier, SpanId: idBytes(liveID+kind, 8), Name: "live-" + kind,
+			StartTimeUnixNano: uint64(started.Add(time.Duration(index) * time.Second).UnixNano()),
+			EndTimeUnixNano:   uint64(started.Add(time.Duration(index+1) * time.Second).UnixNano()),
+			Attributes: []*commonpb.KeyValue{
+				str("langfuse.observation.type", kind), str("langfuse.environment", "production"),
+				str("langfuse.observation.input", "question"), str("langfuse.observation.output", "answer"),
+				str("langfuse.observation.metadata.evalsi.label.workflow", "live-check"),
+			},
+		}
+		if index > 0 {
+			span.ParentSpanId = spans[0].SpanId
+		}
+		if kind == "generation" {
+			span.Attributes = append(span.Attributes, str("gen_ai.request.model", "fixture-model"), str("langfuse.observation.usage_details", `{"input":21,"output":4,"total":25}`))
+		}
+		if kind == "tool" {
+			span.Status = &tracepb.Status{Code: tracepb.Status_STATUS_CODE_ERROR, Message: "fixture timeout"}
+		}
+		spans = append(spans, span)
+	}
+	raw, err := proto.Marshal(&collectortrace.ExportTraceServiceRequest{ResourceSpans: []*tracepb.ResourceSpans{{ScopeSpans: []*tracepb.ScopeSpans{{Spans: spans}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"/api/public/otel/v1/traces", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/x-protobuf")
+	request.Header.Set("Authorization", client.auth)
+	request.Header.Set("x-langfuse-ingestion-version", "4")
+	response, err := client.client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil || response.StatusCode >= 300 {
+		t.Fatalf("ingestion: HTTP %d, %v: %.500s", response.StatusCode, err, body)
+	}
+	var found source.Info
+	for found.ID == "" {
+		listed, err := live.List(ctx, source.ListRequest{Since: started.Add(-time.Minute)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, info := range listed.Infos {
+			if info.ID == liveID {
+				found = info
+			}
+		}
+		if found.ID == "" {
+			select {
+			case <-ctx.Done():
+				t.Fatal("ingested trace never appeared", ctx.Err())
+			case <-time.After(time.Second):
+			}
+		}
+	}
+	fetched, err := live.Fetch(ctx, []source.Info{found})
+	if err != nil || len(fetched) != 1 || len(fetched[0].Spans) != 3 {
+		t.Fatalf("fetch: %v, %v", fetched, err)
+	}
+	for _, value := range []float64{0.5, 1} {
+		written, err := live.WriteBack(ctx, []source.Score{{TraceID: liveID, Policy: "live-check", Metric: "live-score", Value: value}}, nil)
+		if err != nil || len(written) != 1 {
+			t.Fatalf("write-back: %v, %v", written, err)
+		}
+		for {
+			var scores struct {
+				Data []struct {
+					ID    string  `json:"id"`
+					Value float64 `json:"value"`
+				} `json:"data"`
+			}
+			err := client.call(ctx, http.MethodGet, "/api/public/v3/scores", url.Values{"id": {written[0].RemoteID}}, nil, &scores)
+			if err == nil && len(scores.Data) == 1 && scores.Data[0].ID == written[0].RemoteID && scores.Data[0].Value == value {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatalf("score read-back: %v, %v", scores, err)
+			case <-time.After(time.Second):
+			}
+		}
+	}
+	if filename := os.Getenv("EVALSI_TEST_LANGFUSE_TRACE_ID_FILE"); filename != "" {
+		if err := os.WriteFile(filename, []byte(liveID), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Log("OTLP ingestion, authenticated listing, three-span pull and score replacement passed")
 }
 
 func TestListReadsWholeWindowsOldestFirst(t *testing.T) {

@@ -194,6 +194,26 @@ type errTest string
 
 func (e errTest) Error() string { return string(e) }
 
+func TestScheduledSourceRefusesManualBackfill(t *testing.T) {
+	svc, h := newService(t)
+	src, err := h.st.GetSource(t.Context(), "p", "studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.Schedule = scheduleConfig()
+	if err := h.st.PutSource(t.Context(), src); err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.BackfillSource(t.Context(), connect.NewRequest(&evalsiv1alpha1.BackfillSourceRequest{Project: "p", Name: "studio", Since: timestamppb.New(h.now.Add(-time.Hour))}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("scheduled backfill: %v", err)
+	}
+	state, err := h.st.SourceState(t.Context(), "p", "studio")
+	if err != nil || !state.BackfillFrom.IsZero() {
+		t.Fatalf("refused backfill changed state: %+v, %v", state, err)
+	}
+}
+
 func TestPauseResumeBackfillDelete(t *testing.T) {
 	svc, h := newService(t)
 	ctx := context.Background()

@@ -84,6 +84,30 @@ def test_datasets_named_by_specs_exist() -> None:
                 assert (DEMO / line.removeprefix("path: ")).exists(), f"{spec.name}: {line}"
 
 
+@pytest.mark.parametrize("outer", ["false", "true"])
+def test_dsh_outer_sandbox_is_explicit_and_headless_only(tmp_path: Path, outer: str) -> None:
+    import os
+
+    subprocess.run(
+        ["sh", str(DEMO / "dsh" / "configure.sh"), "true"],
+        env={
+            **os.environ,
+            "DSH_HOME": str(tmp_path),
+            "DEMO_BASE_URL": "http://localhost:8000/v1",
+            "DEMO_OUTER_SANDBOX": outer,
+        },
+        check=True,
+    )
+    for profile in ("headless", "web", "tui"):
+        patch = (tmp_path / "profiles" / profile / "cordis.patch.yml").read_text()
+        assert ("mode: danger-full-access" in patch) == (outer == "true" and profile == "headless")
+    import yaml
+
+    spec = yaml.safe_load((DEMO / "dsh-small-repo-fixes.yaml").read_text())["spec"]
+    assert spec["environment"]["sandbox"]["min_isolation"] == "namespaced"
+    assert spec["environment"]["sandbox"]["network"] == "deny"
+
+
 def test_spec_commands_are_installed_in_their_images() -> None:
     """A spec that runs a demo image calls a command that image installs: the
     standalone walkthrough installs the launchers by hand, so only the image

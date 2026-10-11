@@ -647,6 +647,10 @@ func (in *TraceSourceStatus) DeepCopyInto(out *TraceSourceStatus) {
 		in, out := &in.LastWriteBack, &out.LastWriteBack
 		*out = (*in).DeepCopy()
 	}
+	if in.LastScheduled != nil {
+		in, out := &in.LastScheduled, &out.LastScheduled
+		*out = (*in).DeepCopy()
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))

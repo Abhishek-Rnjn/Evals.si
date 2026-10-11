@@ -112,6 +112,9 @@ The Job signs in with its own service account's token, projected for the install
 
 ### High availability
 
+For the upgrade compatibility policy, maintenance-window backups and restores,
+and reference cluster values, see [operations](operations.md).
+
 Every `evalsid` replica serves the API and OTLP ingest. The run scheduler and the policy engine run on one replica at a time, under database leases: when a replica stops, another adopts its runs (resuming them, never double-counting) and takes over the policy engine. Workers pull from the work queues, so a worker that dies mid-task loses nothing: its task is redelivered after the ack wait. The operator runs with leader election when it has more than one replica.
 
 ### Installing a release, and verifying it
@@ -133,6 +136,16 @@ On a connected machine, bundle the images and charts (and, with `--with-cli`, wh
 ```bash
 deploy/airgap/bundle.sh --tag 0.4.0 --out evalsi-bundle --with-cli
 ```
+
+Docker 28+ scopes inspect, load and save to the bundle's platform. An older
+Docker is detected and uses the plain commands, with a note, which is correct
+for a single-platform bundle on a host of the same architecture.
+The default platform is `linux/amd64`; use `--platform linux/arm64` for arm64
+clusters. Build locally supplied images for that same platform. The bundle
+records it in `platform`, and the installer uses it when loading and exporting
+retagged images for kind, so unloaded variants cannot leave dangling manifest
+references. Older bundles without that file retain their previous behavior.
+The kind job selects the local Docker daemon's architecture.
 
 Across the gap, push the images to your registry and install pulling only from it:
 
@@ -301,6 +314,18 @@ The `kubernetes` job ([`deploy/e2e/kind-e2e.sh`](../../deploy/e2e/kind-e2e.sh)) 
 - a namespace-only install works for a user who is only `admin` of a namespace that enforces Pod Security `restricted`: it installs with no cluster-scoped object, and code evaluation and an agent run, through the CLI, pass on the chart's pod-rung pool and then on Landlock.
 
 The operator is also tested against a real API server and etcd (envtest), and the charts by rendering them and loading every `evalsi.yaml` they produce through `evalsid`'s config validation.
+
+For Docker Desktop kernels without Landlock, explicitly defer only that step:
+
+```bash
+SKIP_LANDLOCK=1 deploy/e2e/kind-e2e.sh
+```
+
+The default remains `SKIP_LANDLOCK=0`, including CI. The opt-out leaves the
+namespace-only sandbox pool on the pod rung, still runs the denied issuer
+discovery and static-key recovery checks, and prints that Landlock was deferred.
+It is not a complete Kubernetes verification. Recheck Landlock on AKS with a
+supported kernel and seccomp profile before claiming that rung verified.
 
 ## Dashboards
 

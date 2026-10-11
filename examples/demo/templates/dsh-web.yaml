@@ -47,6 +47,10 @@ spec:
             - localhost
           ports: [{name: http, containerPort: 8080}]
           env:
+            {{- with $d.otlp.endpoint }}
+            - {name: DEMO_OTLP_ENDPOINT, value: {{ . | quote }}}
+            - {name: DEMO_MLFLOW_EXPERIMENT_ID, value: {{ $d.otlp.experimentId | quote }}}
+            {{- end }}
             - name: POD_IP
               valueFrom: {fieldRef: {fieldPath: status.podIP}}
             - {name: DEMO_BASE_URL, value: {{ include "demo.modelURL" . | quote }}}

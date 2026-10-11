@@ -22,6 +22,7 @@ from evalsi.evaluator import (
     evaluator,
 )
 from evalsi.judges import JudgeConfig
+from evalsi.logging import Logger, configure_logging, flush, log
 from evalsi.registry import Pack, Registry
 from evalsi.results import EvalResult, MetricSummary
 from evalsi.runner import aevaluate, evaluate
@@ -47,6 +48,7 @@ __all__ = [
     "EvaluationResult",
     "EvaluatorConfigError",
     "JudgeConfig",
+    "Logger",
     "Message",
     "MetricSpec",
     "MetricSummary",
@@ -67,6 +69,9 @@ __all__ = [
     "Usage",
     "__version__",
     "aevaluate",
+    "configure_logging",
     "evaluate",
     "evaluator",
+    "flush",
+    "log",
 ]

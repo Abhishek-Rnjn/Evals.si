@@ -2,6 +2,9 @@ package helm
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -12,6 +15,53 @@ var everything = []string{
 	"grafana.dashboard.enabled=true", "operator.istio.peerAuthentication=true",
 	"workers.pools.gpu.replicas=1", "server.persistence.enabled=true",
 	"devMinio.enabled=true", "devClickhouse.enabled=true",
+}
+
+func TestReferenceClusterValues(t *testing.T) {
+	for _, cluster := range []string{"kind", "eks", "gke", "aks", "openshift"} {
+		t.Run(cluster, func(t *testing.T) {
+			chart := filepath.Join("..", "..", "deploy", "helm", "evalsi")
+			values := filepath.Join(chart, "values-"+cluster+".yaml")
+			output, err := exec.Command(helm(t), "template", "evalsi", chart, "-n", "evalsi", "--kube-version", kubeVersion(), "-f", values).CombinedOutput()
+			if err != nil {
+				t.Fatalf("reference values: %v\n%s", err, output)
+			}
+			for _, required := range []string{"replicas: 2", "ladder:", "- pod"} {
+				if !strings.Contains(string(output), required) {
+					t.Errorf("missing %q in reference chart", required)
+				}
+			}
+		})
+	}
+}
+
+func TestPluginMountsAndInitContainers(t *testing.T) {
+	objects := renderAs(t, "evalsi", "evalsi",
+		"plugins.volumes[0].name=plugins", "plugins.volumes[0].emptyDir.medium=Memory",
+		"plugins.volumeMounts[0].name=plugins", "plugins.volumeMounts[0].mountPath=/opt/evalsi/plugins",
+		"plugins.initContainers[0].name=install-plugins", "plugins.initContainers[0].image=example.com/plugins:1",
+		"plugins.wasmDirs[0]=/opt/evalsi/plugins/wasm", "plugins.pythonPath=/opt/evalsi/plugins/python",
+		"global.imageRegistry=airgap.invalid")
+	for name, spec := range podSpecs(objects) {
+		if name != "Deployment/evalsi" && !strings.HasPrefix(name, "Deployment/evalsi-worker-") {
+			continue
+		}
+		initializers := list(spec["initContainers"])
+		if len(initializers) != 1 || nested(initializers[0].(map[string]any), "image") != "airgap.invalid/plugins:1" {
+			t.Fatalf("%s: missing registry-aware plugin init: %v", name, initializers)
+		}
+		containers := list(spec["containers"])
+		found := false
+		for _, mount := range list(containers[0].(map[string]any)["volumeMounts"]) {
+			value := mount.(map[string]any)
+			if value["name"] == "plugins" {
+				found = value["readOnly"] == true
+			}
+		}
+		if !found {
+			t.Errorf("%s: plugin volume is not mounted read-only", name)
+		}
+	}
 }
 
 func nested(m map[string]any, path ...string) any {
@@ -241,5 +291,162 @@ func TestStorageDependenciesBundledOrExternal(t *testing.T) {
 	ext := load(t, find(t, external, "ConfigMap", "evalsi"))
 	if ext.Storage.S3.Endpoint != "s3.example.com:9000" || ext.Storage.ClickHouse.URL != "http://ch.infra.svc:8123" || ext.Cluster.URL != "nats://nats.infra.svc:4222" {
 		t.Errorf("external: %+v / %+v / %s", ext.Storage.S3, ext.Storage.ClickHouse, ext.Cluster.URL)
+	}
+}
+
+func TestKindLandlockDeferral(t *testing.T) {
+	source, err := os.ReadFile("../../deploy/e2e/kind-e2e.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, block, ok := strings.Cut(string(source), "if [ \"$skip_landlock\" = 1 ]; then")
+	if !ok {
+		t.Fatal("missing explicit Landlock opt-out")
+	}
+	block, _, ok = strings.Cut(block, "step \"namespace-only: a static issuer")
+	if !ok {
+		t.Fatal("Landlock deferral must end before authentication checks")
+	}
+	for _, test := range []struct {
+		name, skip, helmExit string
+		wantError            bool
+	}{
+		{name: "default"},
+		{name: "explicit default", skip: "0"},
+		{name: "deferred", skip: "1"},
+		{name: "default failure", helmExit: "1", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("SKIP_LANDLOCK", test.skip)
+			t.Setenv("HELM_EXIT", test.helmExit)
+			probe := `set -e
+skip_landlock="${SKIP_LANDLOCK:-0}"
+work=/tmp/bundle
+here=/tmp/specs
+ns2=evalsi-restricted
+step() { printf '%s\n' "$*"; }
+helm() { printf 'helm\n'; return "${HELM_EXIT:-0}"; }
+kubectl() { printf 'kubectl\n'; }
+cli() { printf 'cli\n'; }
+want() { printf 'want %s %s\n' "$2" "$3"; }
+if [ "$skip_landlock" = 1 ]; then` + block
+			out, err := exec.Command("bash", "-c", probe).CombinedOutput()
+			if (err != nil) != test.wantError {
+				t.Fatalf("error %v, want failure %v: %s", err, test.wantError, out)
+			}
+			if test.skip == "1" {
+				if !strings.Contains(string(out), "DEFERRED: Landlock") || strings.Contains(string(out), "helm\n") || strings.Contains(string(out), "cli\n") {
+					t.Fatalf("deferred Landlock ran or was not reported: %s", out)
+				}
+			} else if !test.wantError && !strings.Contains(string(out), "want unit-tests 0.5") {
+				t.Fatalf("default omitted the Landlock scoring check: %s", out)
+			}
+		})
+	}
+}
+
+func TestAirgapBundlePlatform(t *testing.T) {
+	for _, test := range []struct {
+		name, platform, failure string
+		oldDocker               bool
+	}{
+		{name: "default", platform: "linux/amd64"},
+		{name: "arm64", platform: "linux/arm64"},
+		{name: "missing platform", platform: "linux/arm64", failure: "inspect"},
+		{name: "export failure", platform: "linux/arm64", failure: "save"},
+		{name: "docker without platform flags", platform: "linux/amd64", oldDocker: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			calls := filepath.Join(dir, "calls")
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("CALLS", calls)
+			t.Setenv("FAILURE", test.failure)
+			t.Setenv("PULL", "0")
+			t.Setenv("OLD_DOCKER", map[bool]string{false: "0", true: "1"}[test.oldDocker])
+			mock := `#!/bin/sh
+command="${0##*/}"
+printf '%s %s\n' "$command" "$*" >> "$CALLS"
+if [ "$command" = docker ]; then
+  case " $* " in
+    *" --help "*)
+      # An older Docker's help does not list --platform for these commands.
+      [ "$OLD_DOCKER" = 1 ] || echo "      --platform string   Set platform"
+      exit 0 ;;
+  esac
+  if [ "$OLD_DOCKER" = 1 ] && [ "$1" != pull ]; then
+    # Older Docker: inspect, save and load reject --platform (pull accepts it).
+    for a in "$@"; do
+      if [ "$a" = --platform ]; then echo "unknown flag: --platform" >&2; exit 125; fi
+    done
+  fi
+  if [ "$FAILURE" = inspect ] && { [ "$1" = image ] || [ "$1" = pull ]; }; then exit 1; fi
+  if [ "$1" = save ]; then
+    [ "$FAILURE" != save ] || exit 1
+    while [ "$#" -gt 0 ]; do
+      if [ "$1" = -o ]; then : > "$2"; break; fi
+      shift
+    done
+  fi
+fi
+`
+			for _, name := range []string{"docker", "helm", "kind", "kubectl"} {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(mock), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			bundle := filepath.Join(dir, "bundle")
+			args := []string{"../../deploy/airgap/bundle.sh", "--tag", "e2e", "--out", bundle}
+			if test.name != "default" {
+				args = append(args, "--platform", test.platform)
+			}
+			out, err := exec.Command("bash", args...).CombinedOutput()
+			if test.failure != "" {
+				if err == nil {
+					t.Fatalf("bundle accepted %s: %s", test.failure, out)
+				}
+				if _, err := os.Stat(filepath.Join(bundle, "platform")); !os.IsNotExist(err) {
+					t.Fatalf("failed export recorded a platform: %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("bundle: %v\n%s", err, out)
+			}
+			platform, err := os.ReadFile(filepath.Join(bundle, "platform"))
+			if err != nil || string(platform) != test.platform+"\n" {
+				t.Fatalf("platform %q: %v", platform, err)
+			}
+			out, err = exec.Command("bash", filepath.Join(bundle, "install.sh"), "--kind", "test", "--registry", "airgap.invalid").CombinedOutput()
+			if err != nil {
+				t.Fatalf("install: %v\n%s", err, out)
+			}
+			log, err := os.ReadFile(calls)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wants := []string{
+				"docker image inspect --platform " + test.platform,
+				"docker save --platform " + test.platform + " -o " + bundle + "/images.tar",
+				"docker load --platform " + test.platform + " -q -i " + bundle + "/images.tar",
+				"docker save --platform " + test.platform + " airgap.invalid/",
+				"kind load image-archive " + bundle + "/.kind-images.tar --name test",
+			}
+			if test.oldDocker {
+				wants = []string{
+					"docker save -o " + bundle + "/images.tar",
+					"docker load -q -i " + bundle + "/images.tar",
+					"kind load image-archive " + bundle + "/.kind-images.tar --name test",
+				}
+				if strings.Contains(string(log), "docker image inspect --platform") || strings.Contains(string(log), "docker load --platform") {
+					t.Errorf("an older Docker was given --platform:\n%s", log)
+				}
+			}
+			for _, want := range wants {
+				if !strings.Contains(string(log), want) {
+					t.Errorf("missing %q:\n%s", want, log)
+				}
+			}
+		})
 	}
 }

@@ -40,6 +40,7 @@ var Permissions = []Permission{
 	{Name: "runs.create", Description: "Start runs. Spends target and judge budget and may run code.", Audited: true},
 	{Name: "runs.cancel", Description: "Cancel runs.", Audited: true},
 	{Name: "runs.resume", Description: "Resume cancelled or errored runs.", Audited: true},
+	{Name: "runs.delete", Description: "Delete inactive terminal runs and their stored records and results.", Audited: true},
 	{Name: "policies.read", Description: "Read online policies and their statistics."},
 	{Name: "policies.write", Description: "Apply and delete online policies, including dataset promotion.", Audited: true},
 	{Name: "traces.read", Description: "Read ingested traces and their online results."},

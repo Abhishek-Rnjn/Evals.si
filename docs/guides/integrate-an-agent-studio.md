@@ -12,6 +12,52 @@ Evals.si has three doors, and a studio can use any mix:
 
 ## 1. Install beside the studio
 
+### Pipeline writes and datasets
+
+Send `Idempotency-Key` on retryable API writes. The same authenticated principal,
+operation and payload replay the stored outcome for 24 hours; a changed payload
+under the same key conflicts. Permissions are checked again on every retry.
+An unavailable response saying the outcome is uncertain requires reconciliation
+of the original operation, not a new key. Generated API-key secrets are returned
+only on the first successful call, never persisted for replay.
+
+Python callers can pass `idempotency_key` to `Client.call`, `create_run`,
+`delete_run` and `import_dataset`. Keyed gRPC write streams are bounded to 64 MiB
+and 100001 messages and require the sender to close its input before reading
+responses; omit the header for incremental streaming. Responses are bounded to
+64 MiB, and each principal/operation scope holds at most 1024 keys and 64 MiB of
+response data. An unfinished claim remains reserved until reconciled.
+
+```bash
+evalsi dataset upload qa.jsonl --name qa --project studio --server "$URL"
+evalsi dataset import s3://evalsi/datasets/incoming/studio/qa.parquet \
+  --name qa --project studio --format parquet --server "$URL"
+evalsi delete-run "$RUN_ID" --yes --server "$URL"
+```
+
+Upload JSONL or Parquet with
+`POST /v1alpha1/datasets/<name>/upload?project=studio&format=jsonl`; its body is the
+file, not multipart. The Connect/gRPC `DatasetService.UploadDataset` begins with
+a config message followed by data messages. `ImportDataset` takes `config` and
+an S3 `uri` under the configured dataset root's `incoming/<project>/` prefix.
+These operations need `datasets.write`; no arbitrary URL or other bucket is read.
+
+The response's `path` is usable as `RunSpec.dataset.path`. Limits are 64 MiB
+uploaded and normalized, 100000 records and 4 MiB per JSONL row/Parquet page.
+Rows must be Record objects; text input/output/reference strings are normalized
+to Content and null stays absent. Missing IDs become `record-<row>` with a
+deterministic suffix when an explicit ID reserves that name; duplicate explicit IDs are rejected.
+Errors name the offending row without echoing raw fields. Publication occurs
+only after validation, and its path contains the normalized content hash.
+There are two conversion slots per replica; capacity refusals are retryable.
+
+`DeleteRun`, also `DELETE /v1alpha1/runs/<id>`, requires `runs.delete` (admin by
+default). Pending/running or actively leased runs are refused. Terminal deletion
+removes records, outputs, results and queued webhook deliveries and recovers the
+stored-run quota. Only authorization metadata remains for 24-hour retries.
+Data already delivered to external sinks, source datasets and promoted datasets
+remain; deleting an EvalRun CR does not invoke this API.
+
 Evals.si installs from its own charts, in the studio's namespace or its own. Every name starts with the release name, so releases can share a namespace ([Names](kubernetes.md#names-and-installing-beside-other-charts)).
 
 ```bash
@@ -42,6 +88,33 @@ helm install evalsi deploy/helm/evalsi -n studio \
   The keys are written to the Secrets named, once, and kept across upgrades. A credential grant lets a project's runs name a worker's environment variable (for a model key) without the key being in a spec.
 
 ## 2. Connect traces
+
+### SDK logging without OTel
+
+```python
+import evalsi
+
+logger = evalsi.configure_logging("https://evalsi.studio.svc:4318", api_key=ingest_key)
+future = evalsi.log("question", "answer", metadata={"epoch": 2})
+logger.log_batch([{"input": "next question", "output": "next answer"}])
+evalsi.flush(timeout=10)
+trace_id = future.result()
+logger.close()
+```
+
+Use the server CA through `SSL_CERT_FILE`. Configuration is explicit, or set
+`EVALSI_OTLP_ENDPOINT`; no judge is selected or billed. Calls serialize locally
+and return futures without waiting for network I/O. PyTorch tensors are detached
+to CPU; batches accept dict records, pandas frames and Hugging Face datasets.
+Queued and in-flight records share limits (1024 records/8 MiB by default).
+Overflow, HTTP failures and partial rejection fail futures; `flush`/`close`
+also raise failures. Normal process exit drains the queue; SIGKILL cannot flush.
+The byte cap applies after serialization, not to caller-owned tensors or
+temporary serialization memory. `log_batch` returns one future per input row.
+
+Metadata arrives in the trace's Record after server credential/PII redaction.
+Server-derived service/error fields remain authoritative. `trace_id`, when
+supplied, is a nonzero 32-character lowercase hexadecimal ID.
 
 **Push.** Point the studio's OpenTelemetry exporter at Evals.si with an `ingest` key bound to the project (OTel GenAI, OpenInference, OpenLLMetry and MLflow conventions are understood):
 

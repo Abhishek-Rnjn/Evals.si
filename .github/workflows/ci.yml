@@ -96,6 +96,14 @@ jobs:
           # Both sandbox rungs must work here; skipping them would hide regressions.
           EVALSI_REQUIRE_SANDBOX: "1"
           EVALSI_REQUIRE_HELM: "1"
+      - name: Charts on Kubernetes 1.34, 1.36 and 1.37
+        env:
+          EVALSI_REQUIRE_HELM: "1"
+        run: |
+          for version in 1.34.0 1.36.0 1.37.0; do
+            echo "Kubernetes capabilities: $version"
+            EVALSI_TEST_KUBE_VERSION="$version" go test -count=1 ./tests/helm
+          done
       - name: cgroup limits (as root, in a cgroup v2 directory with memory and pids)
         run: |
           go test -c -o "$RUNNER_TEMP/sandbox.test" ./internal/sandbox
@@ -242,6 +250,51 @@ jobs:
           EVALSI_E2E_S3_ENDPOINT: 127.0.0.1:9000
           EVALSI_E2E_S3_ACCESS_KEY: evalsi
           EVALSI_E2E_S3_SECRET_KEY: evalsi-secret
+
+  checkpoint-hooks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [pytorch, lightning]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Isolated CPU framework environment
+        run: |
+          uv venv -p 3.11 "$RUNNER_TEMP/checkpoints"
+          uv pip install --python "$RUNNER_TEMP/checkpoints/bin/python" torch==2.14.1 pytest==9.1.1 -e python/evalsi
+          if [ '${{ matrix.framework }}' = lightning ]; then
+            uv pip install --python "$RUNNER_TEMP/checkpoints/bin/python" lightning==2.6.6
+          else
+            uv pip install --python "$RUNNER_TEMP/checkpoints/bin/python" pandas==2.3.3 datasets==4.4.2
+          fi
+      - name: Real checkpoint and tensor logging tests
+        run: |
+          "$RUNNER_TEMP/checkpoints/bin/python" -m pytest -q \
+            tests/training_hooks/test_checkpoint_hooks.py::test_real_${{ matrix.framework }}_checkpoint_hook \
+            tests/training_hooks/test_checkpoint_hooks.py::test_real_tensor_logging
+          if [ '${{ matrix.framework }}' = pytorch ]; then
+            "$RUNNER_TEMP/checkpoints/bin/python" -m pytest -q tests/training_hooks/test_checkpoint_hooks.py::test_real_pandas_and_huggingface_batches
+          fi
+
+  dsh-plugin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: examples/demo/dsh/plugin
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: examples/demo/dsh/plugin/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --audit-level=moderate
 
   trainers:
     # Phase 5's exit criterion at CPU scale: TRL GRPO trains a tiny model

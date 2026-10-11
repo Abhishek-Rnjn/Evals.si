@@ -67,11 +67,13 @@ def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     config = work / "evalsi.yaml"
+    (work / "datasets").mkdir()
     config.write_text(
         json.dumps(
             {
                 "listen": f"127.0.0.1:{port}",
                 "data_dir": str(work / "data"),
+                "datasets_dir": str(work / "datasets"),
                 "worker": {"command": [sys.executable, "-m", "evalsi"], "no_cache": True},
             }
         )
@@ -155,6 +157,26 @@ def test_evaluate_matches_in_process(server: str) -> None:
     _assert_same(remote, local)
     assert remote.metric("exact-match").ci is not None
     assert remote.manifest["dataset"]["sha256"] == local.manifest["dataset"]["sha256"]
+
+
+def test_upload_retry_run_and_delete(server: str, tmp_path: Path) -> None:
+    source = tmp_path / "pipeline.jsonl"
+    source.write_text(json.dumps({"id": "one", "output": "Paris", "reference": "Paris"}) + "\n")
+    with Client(server) as client:
+        uploaded = client.upload_dataset(str(source), name="pipeline", project="default")
+        assert int(uploaded["records"]) == 1
+        spec = {"dataset": {"path": uploaded["path"]}, "evaluators": [{"ref": "exact-match"}]}
+        first = client.create_run(spec, project="default", idempotency_key="pipeline-create")
+        retry = client.create_run(spec, project="default", idempotency_key="pipeline-create")
+        assert first["id"] == retry["id"]
+        for _ in client.watch_run(first["id"]):
+            pass
+        finished = client.get_run(first["id"])
+        assert finished["status"] == "RUN_STATUS_SUCCEEDED"
+        assert len(client.list_run_results(first["id"])["results"]) == 1
+        client.delete_run(first["id"])
+        with pytest.raises(ServerError, match="not_found"):
+            client.get_run(first["id"])
 
 
 def test_evaluate_options_match_in_process(server: str) -> None:

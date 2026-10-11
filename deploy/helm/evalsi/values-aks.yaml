@@ -1,0 +1,17 @@
+server:
+  replicas: 2
+storage:
+  postgres:
+    dsnSecret: {name: evalsi-postgres, key: dsn}
+  s3:
+    endpoint: s3.example.invalid
+    bucket: replace-with-your-bucket
+    credentialsSecret: evalsi-s3
+nats:
+  storageClassName: managed-csi
+sandbox:
+  pool:
+    enabled: true
+    ladder: [pod]
+    pod:
+      networkPolicyEnforced: false

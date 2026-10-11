@@ -31,6 +31,7 @@ spec:
     spec:
       serviceAccountName: {{ $fn }}-worker
       securityContext: {{- include "evalsi.podSecurity" $ | nindent 8 }}
+      {{- include "evalsi.pluginInit" $ | nindent 6 }}
       {{- with $v.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -48,6 +49,9 @@ spec:
           imagePullPolicy: {{ $v.image.pullPolicy }}
           args: [worker, --config, /etc/evalsi/evalsi.yaml, --pools, {{ $pool }}, --concurrency, {{ $p.concurrency | quote }}]
           env:
+            {{- with (default dict $v.plugins).pythonPath }}
+            - {name: PYTHONPATH, value: {{ . | quote }}}
+            {{- end }}
             {{- if $st.s3.credentialsSecret }}
             - name: EVALSI_S3_ACCESS_KEY
               valueFrom: {secretKeyRef: {name: {{ $st.s3.credentialsSecret }}, key: access_key}}
@@ -61,6 +65,7 @@ spec:
           securityContext: {{- include "evalsi.restricted" $ | nindent 12 }}
           resources: {{- toYaml ($p.resources | default dict) | nindent 12 }}
           volumeMounts:
+            {{- include "evalsi.pluginMounts" $ | nindent 12 }}
             - {name: config, mountPath: /etc/evalsi, readOnly: true}
             {{- if $sandboxAddress }}
             - {name: worker-tls, mountPath: /etc/evalsi/worker-tls, readOnly: true}
@@ -68,6 +73,9 @@ spec:
             - {name: home, mountPath: /var/lib/evalsi}
             - {name: tmp, mountPath: /tmp}
       volumes:
+        {{- with (default dict $v.plugins).volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         - name: config
           configMap: {name: {{ $fn }}-worker}
         {{- if $sandboxAddress }}

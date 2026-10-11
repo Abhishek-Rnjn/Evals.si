@@ -297,6 +297,32 @@ class ResumeRunResponse(_message.Message):
 Global___ResumeRunResponse: _TypeAlias = ResumeRunResponse  # noqa: Y015
 
 @_typing.final
+class DeleteRunRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["id", b"id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___DeleteRunRequest: _TypeAlias = DeleteRunRequest  # noqa: Y015
+
+@_typing.final
+class DeleteRunResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+Global___DeleteRunResponse: _TypeAlias = DeleteRunResponse  # noqa: Y015
+
+@_typing.final
 class ListRunResultsRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

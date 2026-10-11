@@ -1,0 +1,19 @@
+server:
+  replicas: 2
+storage:
+  postgres:
+    dsnSecret: {name: evalsi-postgres, key: dsn}
+  s3:
+    endpoint: s3.us-east-1.amazonaws.com
+    bucket: replace-with-your-bucket
+    region: us-east-1
+    credentialsSecret: evalsi-s3
+    pathStyle: false
+nats:
+  storageClassName: gp3
+sandbox:
+  pool:
+    enabled: true
+    ladder: [pod]
+    pod:
+      networkPolicyEnforced: false

@@ -17,6 +17,7 @@ service RunService {
   rpc CancelRun(CancelRunRequest) returns (CancelRunResponse);
   // Continues an errored or cancelled run, skipping finished tasks.
   rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
+  rpc DeleteRun(DeleteRunRequest) returns (DeleteRunResponse);
   rpc ListRunResults(ListRunResultsRequest) returns (ListRunResultsResponse);
   // Paired comparison of two runs over the records they share.
   rpc CompareRuns(CompareRunsRequest) returns (CompareRunsResponse);
@@ -95,6 +96,12 @@ message ResumeRunRequest {
 message ResumeRunResponse {
   Run run = 1;
 }
+
+message DeleteRunRequest {
+  string id = 1;
+}
+
+message DeleteRunResponse {}
 
 message ListRunResultsRequest {
   string run_id = 1;

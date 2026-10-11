@@ -45,6 +45,7 @@ spec:
     spec:
       serviceAccountName: {{ $fn }}
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
+      {{- include "evalsi.pluginInit" . | nindent 6 }}
       {{- with $v.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -60,6 +61,9 @@ spec:
             - {name: otlp-http, containerPort: 4318}
             {{- end }}
           env:
+            {{- with (default dict $v.plugins).pythonPath }}
+            - {name: PYTHONPATH, value: {{ . | quote }}}
+            {{- end }}
             {{- include "evalsi.storageEnv" . | nindent 12 }}
             {{- with $v.server.env }}{{ toYaml . | nindent 12 }}{{ end }}
           {{- with $v.server.envFrom }}
@@ -75,6 +79,7 @@ spec:
           securityContext: {{- include "evalsi.restricted" . | nindent 12 }}
           resources: {{- toYaml $v.server.resources | nindent 12 }}
           volumeMounts:
+            {{- include "evalsi.pluginMounts" . | nindent 12 }}
             - {name: config, mountPath: /etc/evalsi, readOnly: true}
             {{- if $v.server.tls }}
             - {name: tls, mountPath: /etc/evalsi/tls, readOnly: true}
@@ -90,6 +95,9 @@ spec:
             - {name: source-secret-{{ $i }}, mountPath: /etc/evalsi/sources/{{ $s }}, readOnly: true}
             {{- end }}
       volumes:
+        {{- with (default dict $v.plugins).volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- if and $v.auth.kubernetes.enabled $v.auth.kubernetes.jwksConfigMap }}
         - name: jwks
           configMap: {name: {{ $v.auth.kubernetes.jwksConfigMap }}}

@@ -116,6 +116,12 @@ func mirrorSource(dst *v1.TraceSourceStatus, src *evalsiv1alpha1.SourceStatus) {
 		phase = phase[:1] + strings.ToLower(phase[1:])
 	}
 	dst.Phase = phase
+	dst.LastScheduled = nil
+	if src.GetLastScheduledAt().IsValid() {
+		timestamp := metav1.NewTime(src.GetLastScheduledAt().AsTime())
+		dst.LastScheduled = &timestamp
+	}
+	dst.LastRunID, dst.MissedWindows = src.GetLastRunId(), src.GetMissedWindows()
 	dst.Watermark, dst.LastWriteBack = nil, nil
 	if src.GetWatermark().IsValid() {
 		t := metav1.NewTime(src.GetWatermark().AsTime())

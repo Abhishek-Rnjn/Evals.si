@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS sources (
   project TEXT NOT NULL, name TEXT NOT NULL, body BLOB NOT NULL, updated_ns INTEGER NOT NULL,
   PRIMARY KEY (project, name)
 );
+CREATE TABLE IF NOT EXISTS source_schedules (
+	project TEXT NOT NULL, source TEXT NOT NULL, body BLOB NOT NULL,
+	PRIMARY KEY (project, source)
+);
 CREATE TABLE IF NOT EXISTS source_state (
   project TEXT NOT NULL, source TEXT NOT NULL,
   watermark_ns INTEGER NOT NULL, backfill_from_ns INTEGER NOT NULL,
@@ -42,6 +46,24 @@ CREATE TABLE IF NOT EXISTS source_writes (
   PRIMARY KEY (project, source, trace_id, metric)
 );
 `
+
+func (s *Store) SourceSchedule(ctx context.Context, project, source string) (*evalsiv1alpha1.SourceStatus, error) {
+	var raw []byte
+	if err := s.db.QueryRowContext(ctx, `SELECT body FROM source_schedules WHERE project = ? AND source = ?`, project, source).Scan(&raw); err != nil {
+		if isNoRows(err) {
+			return &evalsiv1alpha1.SourceStatus{}, nil
+		}
+		return nil, err
+	}
+	status := &evalsiv1alpha1.SourceStatus{}
+	return status, proto.Unmarshal(raw, status)
+}
+
+func (s *Store) PutSourceSchedule(ctx context.Context, project, source string, status *evalsiv1alpha1.SourceStatus) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO source_schedules (project, source, body) VALUES (?, ?, ?)
+		ON CONFLICT (project, source) DO UPDATE SET body = excluded.body`, project, source, marshal(status))
+	return err
+}
 
 // PutSource creates or replaces a source. Its status is not stored here: it
 // is assembled from SourceState when read.
@@ -113,7 +135,7 @@ func (s *Store) DeleteSource(ctx context.Context, project, name string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	for _, table := range []string{"source_state", "source_seen", "source_writes"} {
+	for _, table := range []string{"source_state", "source_seen", "source_writes", "source_schedules"} {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE project = ? AND source = ?`, project, name); err != nil {
 			return err
 		}
