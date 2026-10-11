@@ -1,6 +1,6 @@
 apiVersion: v2
 name: evalsi-demo
-description: The reference demos' stand-ins for an agent studio, beside an Evals.si install - a mock model, the Deep Agents service, dsh web, MLflow, and the datasets uploaded to Evals.si's S3. Not for production.
+description: The reference demos' stand-ins for an agent harness, beside an Evals.si install - a mock model, the Deep Agents service, dsh web, MLflow, and the datasets uploaded to Evals.si's S3. Not for production.
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

@@ -4,7 +4,7 @@
 
 ## Context
 
-The charts used fixed names (`evalsi-operator`, `evalsi-worker`, `evalsi-sandbox-tls`...): "one install per namespace", and the other two charts referred to those names. The product requirement D2 asks the opposite: the chart installs beside others (agent-studio-standalone, agent-sandbox), in any namespace, so a second release, or another chart with a Service called `evalsi`, must not collide. The verification run also used releases named `ev` and `ev-ns`, where the fixed names ignored the release.
+The charts used fixed names (`evalsi-operator`, `evalsi-worker`, `evalsi-sandbox-tls`...): "one install per namespace", and the other two charts referred to those names. The product requirement D2 asks the opposite: the chart installs beside others (agent harness, agent-sandbox), in any namespace, so a second release, or another chart with a Service called `evalsi`, must not collide. The verification run also used releases named `ev` and `ev-ns`, where the fixed names ignored the release.
 
 Changing every name would break existing installs, whose Deployment selectors cannot change on upgrade, and every document that uses the short names.
 

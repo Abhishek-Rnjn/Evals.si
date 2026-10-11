@@ -108,7 +108,7 @@ func runner(srv *server, secrets Secrets) *Runner {
 }
 
 const sample = `{
-  "projects": [{"name": "studio", "description": "agent-studio"}],
+  "projects": [{"name": "studio", "description": "agent harness"}],
   "api_keys": [{"name": "studio-ingest", "roles": {"studio": ["ingest"]}, "secret": {"name": "studio-evalsi-key"}}],
   "policies": [{"name": "studio-quality", "project": "studio", "sampling": {"rate": 1}}],
   "webhooks": [{"name": "studio-ci", "project": "studio", "url": "https://studio.example.com/hooks", "events": ["run.finished"], "secret": {"name": "studio-webhook"}}]

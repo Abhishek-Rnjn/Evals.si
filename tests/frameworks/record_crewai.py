@@ -1,5 +1,5 @@
 """CrewAI, traced three ways: MLflow's autolog exported over OTLP (the
-agent-studio path), OpenInference, or OpenLLMetry.
+agent harness path), OpenInference, or OpenLLMetry.
 
     python record_crewai.py mlflow|openinference|openllmetry
 """
