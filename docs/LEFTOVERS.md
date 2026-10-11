@@ -2,7 +2,7 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
-Last updated: 2026-10-11 (triage of every row, after the Part C review fixes); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+Last updated: 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 Trace redaction on push and pull is now built and locally regression-tested,
 including source overrides, storage bytes, evaluator queues, result callbacks
@@ -13,15 +13,15 @@ by this incoming-trace boundary.
 
 ## Triage (2026-10-11)
 
-47 rows are open (the four rows under "Verified on real clusters" are done). Each is in exactly one
+45 rows are open (the four rows under "Verified on real clusters" are done). Each is in exactly one
 category, by what it needs next. The rows that can be checked against the code, the chart and the CI
 workflow were; the rows that describe a real cluster are taken as written, since they need that
 cluster to re-check.
 
 | Category | Rows | What closes it |
 |----------|------|----------------|
-| **Buildable now** (17) | Bundled ClickHouse and a second release (the kind job installs neither); trace sources: SageMaker, Azure ML and Databricks Unity Catalog connectors; per-release isolation of sandbox pools (the egress policy selects every pool by the shared `evalsi-sandboxd` label); server-side analytics; platform wheels bundling evalsid; archiving and automatic run retention; sandbox-time quotas; verl and OpenRLHF against real installs (a CI job like `trainers`); operator-managed checkpoint serving; environment-spec compatibility; a coding agent product over MCP in CI; a real mounted-plugin evaluator run on kind; hosted Wasm plugins in the index; browser sign-in for the web UI; annotating in the browser; a browser test of the UI in CI (Chromium is available to CI); annotation claims under concurrent Postgres writers | Code and tests, in this repository |
-| **Needs infrastructure or access** (14) | Firecracker with the stock image; sandbox egress NetworkPolicy on Calico with Istio ambient; admission webhooks under STRICT mTLS; PR #12 fixes on AKS and the Istio cluster; the reference demos' deep-research and Terminal-Bench 2 suites (a real model and judge); agent framework mapping profiles (real model output); KEDA on a live pool; several-node NATS; 10k concurrent agent trials; real SWE-bench Verified images; Kata Containers; pipeline and schedule certification (live S3, PostgreSQL HA, production load); reward throughput at the §12 scale; guardrails behind a real agentgateway | A sized or specific cluster, a model key, or access you control |
+| **Buildable now** (14) | Bundled ClickHouse and a second release (the kind job installs neither); trace sources: SageMaker, Azure ML and Databricks Unity Catalog connectors; server-side analytics; platform wheels bundling evalsid; archiving and automatic run retention; sandbox-time quotas; verl and OpenRLHF against real installs (a CI job like `trainers`); operator-managed checkpoint serving; environment-spec compatibility; a coding agent product over MCP in CI; a real mounted-plugin evaluator run on kind; hosted Wasm plugins in the index; browser sign-in for the web UI; annotating in the browser | Code and tests, in this repository |
+| **Needs infrastructure or access** (15) | Firecracker with the stock image; sandbox egress NetworkPolicy on Calico with Istio ambient; admission webhooks under STRICT mTLS; PR #12 fixes on AKS and the Istio cluster; the reference demos' deep-research and Terminal-Bench 2 suites (a real model and judge); agent framework mapping profiles (real model output); KEDA on a live pool; several-node NATS; 10k concurrent agent trials; real SWE-bench Verified images; Kata Containers; pipeline and schedule certification (live S3, PostgreSQL HA, production load); reward throughput at the §12 scale; guardrails behind a real agentgateway; per-release sandbox-pool isolation on a cluster that enforces NetworkPolicy | A sized or specific cluster, a model key, or access you control |
 | **Known limit, not planned** (11) | User-namespaced bubblewrap pools (a host limit); cgroup v2 limits in an unprivileged container; the limits left after the reviews; separate process roles; pod-rung snapshots; Firecracker egress through a tap device; the four benchmark gaps (BFCL memory and web search, tau2's own user, multi-stage Terminal-Bench tasks, FrontierCode and CursorBench); Wasm evaluators with a judge or the sandbox | Revisit only if a user needs it |
 | **Needs a decision** (3) | Webhook URLs open to internal addresses (they are how the server reaches in-cluster services); feeding scores back into agentgateway (depends on its extension points); checkpoint model serving (which serving strategy to support) | A product choice, then it becomes buildable |
 | **Waiting on the first release tag** (2) | `release.yml` signing, SBOM and chart push; our own keyless signatures (verifying other people's keyless images is a separate, buildable gap) | The tag push, then `scripts/verify-release.sh` |
@@ -82,7 +82,7 @@ These were verified only with stand-ins before the [verification run](verificati
 | Item | Notes | Where recorded |
 |------|-------|----------------|
 | Webhook URLs open to internal addresses | Run, trace and alert events are built ([webhooks guide](guides/webhooks.md)). Webhook URLs are not restricted to public addresses: the server dials whatever an admin sets, which is how it reaches in-cluster services. `trace.scored` has no filter of its own (a policy's selector and sampling bound it), and is not load-tested at the PRD's 10k traces/min. | P4 in the PRD |
-| Per-release isolation of sandbox pools | The sandbox NetworkPolicy selects every pool in the namespace by the shared `evalsi-sandboxd` component label, so two releases' pools can reach each other's sandbox pods. | Decision 0017 |
+| Per-release isolation of sandbox pools | Built: each release's pool pods are selected by a policy that names only its own pool, and the general policy covers only pods with no pool label (the pods of shared SandboxClass pools). Chart-tested with two releases; not verified on a cluster that enforces NetworkPolicy, which kind does not. SandboxClass pools stay shared by design. | Decision 0017 |
 | Server-side analytics | `evalsi analyze` loads runs into DuckDB on the client, through the API. It reads every result of the runs it loads, so analysis over thousands of large runs would want a server-side query (ClickHouse already holds the data on Kubernetes). | Decision 0009 |
 | Platform wheels bundling evalsid | Releases publish archives (evalsid, a static bubblewrap), wheels, images, charts and the bundle (`.github/workflows/release.yml`), but no tag has been cut (the signing and SBOM steps have never run), and the wheels do not bundle evalsid as decision 0006 suggests. | Decision 0006 |
 | Archiving and automatic run retention | Authorized, audited terminal `DeleteRun` now removes stored records, outputs, results and webhook deliveries and recovers quotas. API authorization metadata remains for 24h retry checks. External sink data and promoted datasets remain; deleting an EvalRun still keeps its server run. Archive and automatic retention are not built. | [Decision 0020](decisions/0020-pipeline-retries-and-scheduled-runs.md), F31 |
@@ -125,6 +125,4 @@ These were verified only with stand-ins before the [verification run](verificati
 | Hosted Wasm plugins in the index | The index lists the native packs and the adapters; no Wasm plugin is published yet (the example builds from source). | Plugins guide |
 | Browser sign-in for the web UI | The UI takes a pasted API key or `evalsi auth token`; an OIDC login flow in the browser is not built. | Decision 0014 |
 | Annotating in the browser | The UI is read-only; annotators use `evalsi annotate start` or the API. | Decision 0014 |
-| A browser test of the UI in CI | Go tests cover serving, headers and text-only rendering; the pages were checked in Chromium by hand. | §23 Phase 6 limits |
-| Annotation claims under concurrent Postgres writers | Two annotators claiming the last slot at the same moment can over-claim an item, which costs at most one extra answer. | `internal/store/annotations.go` |
 

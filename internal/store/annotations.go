@@ -191,8 +191,9 @@ func (s *Store) GetItem(ctx context.Context, project, queue, id string) (*evalsi
 
 // ClaimItem leases the caller the next item it has not answered whose
 // answers plus other annotators' live claims are fewer than need (an item
-// it already holds comes first). Under concurrent claims on Postgres an
-// item can briefly be over-claimed, which costs at most an extra answer.
+// it already holds comes first). The chosen item is locked and its room is
+// checked again under the lock, so two annotators claiming the last slot at
+// once cannot both get it.
 func (s *Store) ClaimItem(ctx context.Context, project, queue, annotator string, need int, lease time.Duration, now time.Time) (*evalsiv1alpha1.AnnotationItem, int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -226,20 +227,36 @@ func (s *Store) ClaimItem(ctx context.Context, project, queue, annotator string,
 	if err := rows.Close(); err != nil {
 		return nil, 0, err
 	}
-	if len(ids) == 0 {
-		return nil, 0, tx.Commit()
+	for _, id := range ids {
+		// Lock the item (the same way SaveAnnotation does), then count again: on
+		// PostgreSQL the first count could not see a claim another transaction
+		// had made but not yet committed.
+		if _, err := tx.ExecContext(ctx, `UPDATE annotation_items SET annotations = annotations WHERE id = ?`, id); err != nil {
+			return nil, 0, err
+		}
+		var room bool
+		if err := tx.QueryRowContext(ctx,
+			`SELECT done = 0 AND (EXISTS (SELECT 1 FROM annotation_claims c WHERE c.item_id = i.id AND c.annotator = ?)
+			        OR i.annotations + (SELECT COUNT(*) FROM annotation_claims c WHERE c.item_id = i.id) < ?)
+			 FROM annotation_items i WHERE i.id = ?`, annotator, need, id).Scan(&room); err != nil {
+			return nil, 0, err
+		}
+		if !room {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO annotation_claims (item_id, annotator, project, queue, until_ns) VALUES (?, ?, ?, ?, ?)
+			 ON CONFLICT (item_id, annotator) DO UPDATE SET until_ns = excluded.until_ns`,
+			id, annotator, project, queue, now.Add(lease).UnixNano()); err != nil {
+			return nil, 0, err
+		}
+		it, err := s.item(ctx, tx, id)
+		if err != nil {
+			return nil, 0, err
+		}
+		return it, int64(len(ids)), tx.Commit()
 	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO annotation_claims (item_id, annotator, project, queue, until_ns) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT (item_id, annotator) DO UPDATE SET until_ns = excluded.until_ns`,
-		ids[0], annotator, project, queue, now.Add(lease).UnixNano()); err != nil {
-		return nil, 0, err
-	}
-	it, err := s.item(ctx, tx, ids[0])
-	if err != nil {
-		return nil, 0, err
-	}
-	return it, int64(len(ids)), tx.Commit()
+	return nil, 0, tx.Commit()
 }
 
 // SaveAnnotation records (or replaces) an annotator's answer to an item,

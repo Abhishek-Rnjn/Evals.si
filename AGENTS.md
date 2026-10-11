@@ -36,6 +36,7 @@ Verification findings are named VR-F1…, VR-D1…, VR-R1… so they don't clash
 | `python/adapters/` | Framework and benchmark adapters, each in its own environment |
 | `deploy/helm/` | Charts: `evalsi`, `evalsi-crds`, `evalsi-sandboxd`. Chart tests are in `tests/helm` |
 | `deploy/e2e/kind-e2e.sh` | The kind end-to-end job CI runs |
+| `tests/ui` | A browser test of the web UI (Playwright, the real `evalsid`); the `ui-browser` CI job |
 | `examples/` | Run specs, policies and configs used by the docs and tests |
 | `website/` | The documentation site (Astro Starlight) |
 
@@ -46,7 +47,9 @@ Run what CI runs (`.github/workflows/ci.yml`) and make it pass before you push:
 - `make check`: gofmt, go vet, go test, ruff, ruff format --check, mypy, pytest, buf lint and buf format. CI also runs `go test -race ./...`.
 - `make adapters-check` when you touch `python/adapters/`.
 - `make e2e` for server and worker changes.
-- `deploy/e2e/kind-e2e.sh` for chart, operator and demo changes, when Docker is available. Say so when you could not run it.
+- `deploy/e2e/kind-e2e.sh` for chart, operator and demo changes, when Docker is available. Say so when you could not run it. CI's `kubernetes` job is skipped on pull requests: dispatch `ci` on the branch (`workflow_dispatch`) to run it.
+- `EVALSI_TEST_POSTGRES_DSN=... go test -race ./internal/store/...` for store changes that touch locking, transactions or concurrency; SQLite cannot show those races.
+- `tests/ui` (`npm test`) when you touch `internal/webui`.
 
 Never skip, disable or weaken a test to get green.
 

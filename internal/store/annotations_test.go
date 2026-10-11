@@ -141,3 +141,41 @@ func TestConcurrentAnswersAreCounted(t *testing.T) {
 		t.Errorf("after %d concurrent answers: annotations=%d done=%v", n, it.GetAnnotations(), it.GetDone())
 	}
 }
+
+// Two annotators claiming an item's last slot at the same moment must not both
+// get it. On PostgreSQL each transaction otherwise counts the live claims
+// without the other's uncommitted one (CI runs this package on PostgreSQL).
+func TestConcurrentClaimsDoNotOverClaimTheLastSlot(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	const annotators, rounds = 8, 40
+	now := time.Unix(1_700_000_000, 0)
+	for round := range rounds {
+		queue := fmt.Sprintf("q%d", round)
+		if err := s.CreateQueue(ctx, &evalsiv1alpha1.AnnotationQueue{Name: queue, Project: "p", AnnotationsPerItem: 1}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.AddItems(ctx, "p", queue, []*evalsiv1alpha1.AnnotationItem{{Record: &evalsiv1alpha1.Record{Id: "only"}}}); err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		results := make(chan bool, annotators)
+		for who := range annotators {
+			go func() {
+				<-start
+				item, _, err := s.ClaimItem(ctx, "p", queue, fmt.Sprintf("annotator-%d", who), 1, time.Minute, now)
+				results <- err == nil && item != nil
+			}()
+		}
+		close(start)
+		won := 0
+		for range annotators {
+			if <-results {
+				won++
+			}
+		}
+		if won != 1 {
+			t.Fatalf("round %d: %d annotators got the one slot", round, won)
+		}
+	}
+}

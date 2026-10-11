@@ -275,6 +275,50 @@ verification. Live GitHub settings and PyPI trusted publishers have not been
 audited in this recheck: the local CLI has no github.com login. No release
 workflow was dispatched, no tag was pushed and no release was published.
 
+## CI, PostgreSQL and browser recheck (2026-10-11)
+
+What the dispatched `ci` runs (the `kubernetes` job is skipped on pull requests,
+so these are `workflow_dispatch` runs on the branch), a local PostgreSQL and a
+local Chromium showed, in order. Run numbers are the repository's Actions run
+numbers.
+
+| Run | Commit | Result |
+|-----|--------|--------|
+| 117 | `6dfadff` (items 1 to 6 as the local agent left them) | Every job passed except `kubernetes`. It failed in the air-gapped bundle step: the runner's Docker rejects `docker image inspect --platform` (`unknown flag`), `bundle.sh` read that as "image missing", tried to pull the locally built image from the registry and was denied. `release.yml` runs the same step, so a tag would have failed there too |
+| 119 | `ba2ceff` | Passed, including `kubernetes`, which ended `=== passed` with the Landlock step run (CI does not set `SKIP_LANDLOCK`). The fix: `bundle.sh` and `install.sh` use `--platform` for inspect, save and load only where that Docker's help lists it. A chart test with a Docker that rejects the flag fails on the previous scripts with the CI error |
+| 125 | `33fded9` (Part C and the first test fix) | `kubernetes` failed once at "namespace-only: code evaluation on Landlock": both evaluations failed with `SandboxError: UNAVAILABLE ... connect() timed out` to the sandbox pool's Service, seconds after `helm upgrade` replaced the pool pod. One re-run of the failed job passed. The cause was not established; Part C had added steps to the same job. If it recurs, wait for the pool to be ready after the rollout in `kind-e2e.sh` |
+| 126 | `e2afb2b` (`main`, after PR 24) | Passed |
+| 127 | `94afa48` (the review fixes below) | Passed, including `kubernetes` |
+
+The review of the Part C commit found five things to fix before a tag, and they
+are fixed with a test that fails on the previous code: a card number next to
+other digits was not masked; a failed `evalsi.log()` batch was re-reported by
+every later flush; non-finite metadata was dropped without an error;
+checkpoints were published owner-only; and the PyTorch hook ran on every rank.
+The smaller findings are fixed too (see the LEFTOVERS row and the commit
+message).
+
+**PostgreSQL.** `internal/store` ran against a local PostgreSQL 16 through
+`EVALSI_TEST_POSTGRES_DSN`, with `-race`: it passes, including the per-scope
+idempotency lock and `PruneIdempotency`, which had only run on SQLite before.
+The annotation over-claim was reproduced there first (eight annotators claiming
+one item's single slot: two winners in round 1, in 3 of 3 runs) and passes
+after the fix (5 of 5, 40 rounds each).
+
+**Browser.** `tests/ui` runs the real `evalsid` in a local Chromium and passes.
+Allowing `'unsafe-inline'` in the Content-Security-Policy makes it fail. Writing
+it found that every page load logged a 404 for `/favicon.ico`; `index.html`
+now names an empty inline icon. Its first runs on a CI runner (the `ui-browser`
+job) split: one passed and two failed. The failures were a race in the test,
+not in the page: a section's nav link turns active before its view has loaded,
+and the page can render a view again when the project list arrives, so the test
+read the "Loading…" placeholder. The test now waits for the section's heading.
+
+**Not verified.** The per-release sandbox-pool NetworkPolicy is chart-tested
+with two releases but has not run on a cluster that enforces NetworkPolicy
+(kind does not). The race fix has not been seen on a CI runner until the pull
+request that adds it is green.
+
 ## Langfuse live recheck (2026-10-10)
 
 Both stages passed against Langfuse `v4.56.0` (release dated 2026-10-09).

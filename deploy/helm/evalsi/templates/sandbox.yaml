@@ -31,6 +31,11 @@ subjects:
 ---
 # Sandbox pods talk to their pool and nothing else: the pool reaches their
 # agent, and their only way out is the pool's logging egress proxy.
+#
+# Policies add up, so a policy that names every evalsi-sandboxd would let one
+# release's pool reach another's pods. Pods of a pool this chart runs carry
+# evals.si/sandbox-pool and are covered by their own release's policy below.
+# This one covers the rest (the pods of SandboxClass pools, which are shared).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -38,7 +43,9 @@ metadata:
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 spec:
   podSelector:
-    matchLabels: {evals.si/sandbox: "true"}
+    matchExpressions:
+      - {key: evals.si/sandbox, operator: In, values: ["true"]}
+      - {key: evals.si/sandbox-pool, operator: DoesNotExist}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -47,5 +54,25 @@ spec:
   egress:
     - to:
         - podSelector: {matchLabels: {app.kubernetes.io/name: evalsi-sandboxd}}
+{{- if and .Values.sandbox.pool.enabled (has "pod" .Values.sandbox.pool.ladder) }}
+---
+# This release's own pool, and only it, for the pods that pool creates.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fn }}-sandbox-pool-pods
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {evals.si/sandbox: "true", evals.si/sandbox-pool: {{ $fn }}-sandbox-pool}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: {{ $fn }}-sandbox-pool}}
+      ports: [{port: 7070, protocol: TCP}]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: evalsi-sandboxd, app.kubernetes.io/instance: {{ $fn }}-sandbox-pool}}
+{{- end }}
 {{- end }}
 {{- end }}

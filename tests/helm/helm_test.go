@@ -573,3 +573,49 @@ func TestDashboardMetricsExist(t *testing.T) {
 		t.Error("the chart's dashboard ConfigMap does not carry the dashboard")
 	}
 }
+
+// Two releases in one namespace each run a sandbox pool. A pool's pods may be
+// reached only by that pool, and may reach only that pool: policies add up, so
+// every policy that selects a release's pool pods must name its own pool, never
+// every evalsi-sandboxd. (SandboxClass pools are the shared kind: their pods carry
+// no pool label and stay under the general policy.)
+func TestSandboxPoolsOfTwoReleasesAreIsolated(t *testing.T) {
+	pool := []string{"sandbox.pool.enabled=true", "sandbox.pool.ladder={pod}"}
+	for _, release := range []string{"alpha", "beta"} {
+		fn := release + "-evalsi" // the chart's full name for this release
+		objs := renderAs(t, release, "evalsi", pool...)
+		found := false
+		for _, o := range objs {
+			if o.Kind != "NetworkPolicy" {
+				continue
+			}
+			spec := toYAML(t, o.Spec)
+			if o.Metadata.Name == fn+"-sandbox-pool-pods" {
+				found = true
+				for _, want := range []string{"evals.si/sandbox-pool: " + fn + "-sandbox-pool", "app.kubernetes.io/instance: " + fn + "-sandbox-pool"} {
+					if !strings.Contains(spec, want) {
+						t.Errorf("%s: pool policy lacks %q:\n%s", release, want, spec)
+					}
+				}
+			}
+			// No policy of this release may let one pool's pods talk to every
+			// evalsi-sandboxd; the only unscoped one is for pods with no pool label.
+			if strings.Contains(spec, "app.kubernetes.io/name: evalsi-sandboxd") && !strings.Contains(spec, "app.kubernetes.io/instance: "+fn+"-sandbox-pool") &&
+				!strings.Contains(spec, "DoesNotExist") {
+				t.Errorf("%s: %s selects every sandbox pool:\n%s", release, o.Metadata.Name, spec)
+			}
+			if o.Metadata.Name == fn+"-sandbox-pods" && !strings.Contains(spec, "DoesNotExist") {
+				t.Errorf("%s: the general policy still selects pool pods:\n%s", release, spec)
+			}
+		}
+		if !found {
+			t.Errorf("%s has no policy for its own pool's pods", release)
+		}
+	}
+	// Without a pool of its own, only the general policy renders.
+	for _, o := range find2(render(t, "evalsi"), "NetworkPolicy") {
+		if strings.HasSuffix(o.Metadata.Name, "-sandbox-pool-pods") {
+			t.Errorf("a pool policy rendered without a pool: %s", o.Metadata.Name)
+		}
+	}
+}
