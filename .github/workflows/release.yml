@@ -31,6 +31,9 @@ concurrency:
 env:
   # A tag publishes; a manual run builds everything and publishes nothing.
   PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
+  # The image builds would otherwise upload *.dockerbuild build records as
+  # artifacts; nothing uses them and they are not release files.
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
   version:
@@ -306,7 +309,11 @@ jobs:
 
   release:
     needs: [version, binaries, python, image, collector, charts, bundle]
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A dry run gathers and checksums the release files too, so that step is
+    # exercised before a tag; only the GitHub release itself needs a tag.
+    # `approve` is skipped on a dry run, which would skip a job that has only the
+    # default condition, so the needed jobs are named instead.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.binaries.result == 'success' && needs.python.result == 'success' && needs.image.result == 'success' && needs.collector.result == 'success' && needs.charts.result == 'success' && needs.bundle.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -315,8 +322,12 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - run: cd dist && sha256sum * > SHA256SUMS
+          # Only what belongs on the release. Downloading every artifact also
+          # fetched the build records, which failed on the first tag run.
+          pattern: "{binaries-*,python,charts,bundle,sbom-*}"
+      - run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
       - uses: softprops/action-gh-release@v2
+        if: env.PUBLISH == 'true'
         with:
           files: dist/*
           generate_release_notes: true
