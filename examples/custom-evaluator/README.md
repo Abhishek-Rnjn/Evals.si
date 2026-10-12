@@ -9,6 +9,7 @@ checks that a RAG answer's `[n]` citations each point at a retrieved passage.
 | [`test_valid_citations.py`](test_valid_citations.py) | Unit tests and an end-to-end run |
 | [`data.jsonl`](data.jsonl) | Four records: good, dangling citation, uncited, no context |
 | [`run.py`](run.py) | Runs it and prints the results |
+| [`pyproject.toml`](pyproject.toml) | Packages it and registers the pack by entry point |
 
 ```bash
 cd python/evalsi
@@ -29,13 +30,12 @@ valid-citations: 0.33 over 3 scored, 1 skipped
 
 ```python
 @evaluator(
-    name="acme/valid-citations",          # namespaced: <owner>/<name>
+    name="acme/valid-citations",  # namespaced: <owner>/<name>
     version="1.0.0",
     requires=Requirements(output=True, context=True),
     outputs=[MetricSpec("valid-citations", ScoreType.PASSED, higher_is_better=True)],
 )
-def valid_citations(record: Record, *, min_citations: int = 1) -> Score:
-    ...
+def valid_citations(record: Record, *, min_citations: int = 1) -> Score: ...
 ```
 
 - **Params** are the keyword-only arguments. `min_citations` defaults to 1;
@@ -55,16 +55,15 @@ def valid_citations(record: Record, *, min_citations: int = 1) -> Score:
 
 - **Python**: pass the object to `evalsi.evaluate(data, [valid_citations])`.
 - **By name** (`evalsi eval --evaluators acme/valid-citations`, servers,
-  online policies): put it in a `Pack` and register the pack under the
-  `evalsi.packs` entry-point group in your package's `pyproject.toml`:
+  online policies): this example is already a package. `valid_citations.py`
+  ends with a `Pack`, and `pyproject.toml` registers it under the
+  `evalsi.packs` entry-point group. Install it next to evalsi:
 
-  ```python
-  PACK = Pack(name="acme", description="Acme checks.", evaluators=[valid_citations])
-  ```
-
-  ```toml
-  [project.entry-points."evalsi.packs"]
-  acme = "acme_evals:PACK"
+  ```bash
+  pip install ./examples/custom-evaluator
+  evalsi catalog --pack acme
+  evalsi eval --data examples/custom-evaluator/data.jsonl --evaluators acme/valid-citations \
+    --param valid-citations.min_citations=2
   ```
 
 - **Sandboxed and shareable**: write it as a Wasm plugin instead, see

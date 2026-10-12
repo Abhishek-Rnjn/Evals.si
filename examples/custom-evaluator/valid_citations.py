@@ -10,7 +10,16 @@ from __future__ import annotations
 
 import re
 
-from evalsi import MetricSpec, Record, Requirements, Score, ScoreType, SkipRecord, evaluator
+from evalsi import (
+    MetricSpec,
+    Pack,
+    Record,
+    Requirements,
+    Score,
+    ScoreType,
+    SkipRecord,
+    evaluator,
+)
 
 _MARKER = re.compile(r"\[(\d+)\]")
 
@@ -45,3 +54,8 @@ def valid_citations(record: Record, *, min_citations: int = 1) -> Score:
             explanation=f"{len(cited)} citation(s), expected at least {min_citations}",
         )
     return Score(passed=True, explanation=f"{len(cited)} valid citation(s)")
+
+
+# A pack makes the evaluator available by name (`--evaluators acme/valid-citations`,
+# servers, online policies) once this package is installed; see pyproject.toml.
+PACK = Pack(name="acme", description="Acme checks.", evaluators=[valid_citations])

@@ -14,7 +14,7 @@ const guides = [
 ];
 const examples = [
   "quickstart", "runs", "agents", "watch", "sources", "guardrails", "annotation",
-  "finetuning", "wasm", "auth", "server", "ci",
+  "finetuning", "custom-evaluator", "wasm", "auth", "server", "ci",
 ];
 
 export default defineConfig({
