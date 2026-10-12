@@ -1,6 +1,6 @@
 # evalsi
 
-The Python SDK and CLI for [Evals.si](https://github.com/abhishek-rnjn/evals.si): one entrypoint for evaluating ML models, LLMs and agents.
+The Python SDK and CLI for [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si): one entrypoint for evaluating ML models, LLMs and agents.
 
 ```bash
 pip install evalsi                 # core

@@ -35,18 +35,17 @@ Evals.si grades outputs you already have, runs a model or an agent on a dataset 
 - **Fails closed.** Untrusted code runs in Firecracker microVMs where available, else bubblewrap or Landlock, else hardened pods, and never with weaker isolation than asked.
 - **Runs in your environment.** A single binary, or Helm charts and an operator with CRDs. Self-hosted and air-gappable, with your own models, storage, identity and secrets.
 
-## Quickstart
+## Install
 
-Air-gapped bundles export one platform (amd64 by default, arm64 with
-`--platform linux/arm64`). Docker 28+ scopes image inspect, save and load to that
-platform; an older Docker is detected and uses the plain commands, which is
-correct for a single-platform bundle on a host of the same architecture. See the
-[Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs). The default
-amd64 kind job, including the Landlock rung, passes in CI
-([record](docs/verification/README.md#ci-postgresql-and-browser-recheck-2026-10-11)).
-Docker Desktop's kernel has no Landlock, so a Mac run uses `SKIP_LANDLOCK=1` and
-does not claim that rung.
-Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).
+Each release publishes (see the [Kubernetes guide](docs/guides/kubernetes.md#installing-a-release-and-verifying-it) to verify the signatures):
+
+- **Server and CLI binaries:** Linux amd64 and arm64 archives on the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases).
+- **Python:** `pip install evalsi` (SDK and CLI) and `pip install evalsi-harness` (the agent harness), when published to PyPI for the release; the wheels are always attached to the release.
+- **Kubernetes:** multi-architecture images at `ghcr.io/abhishek-rnjn/evalsi` and the three Helm charts as OCI artifacts, `oci://ghcr.io/abhishek-rnjn/charts/evalsi`, `evalsi-crds` and `evalsi-sandboxd`.
+
+To try it from source, use the quickstart below.
+
+## Quickstart
 
 You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ for you). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, the sandbox for code evaluators needs bubblewrap (see [Development](#development)).
 
@@ -254,20 +253,15 @@ The Go server owns the API, runs, ingest, policies, auth and storage; evaluators
 
 ## Project status
 
-The roadmap's phases 0 to 6 are built. The current work follows the [product requirements](docs/PRD.md) for running Evals.si as a service in customers' own clusters. Built so far:
-- the remote client;
-- webhooks;
-- the reference demos;
-- trace sources for MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10));
-- tested profiles for the five first-cut agent frameworks.
+Evals.si is pre-1.0 (`0.1.0` is the first release). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
 
-The requested M4/M5 subset adds an [operations runbook](docs/guides/operations.md),
-reference cluster values, bounded asynchronous [SDK logging](docs/guides/integrate-an-agent-harness.md#sdk-logging-without-otel),
-real CPU PyTorch/Lightning hooks, plugin mounts and native dsh-to-MLflow spans.
-The [final-phase report](docs/verification/PART-C.md) separates verified checks
-from remaining cloud, upgrade and release certification.
+What is verified, in short:
+- **Kubernetes:** end-to-end on kind in every CI run (amd64, with Landlock), and on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). EKS and GKE have not been run.
+- **Trace sources:** MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10)), and tested profiles for five agent frameworks.
+- **Web UI:** a browser test runs in CI.
+- **Air-gapped bundles:** one platform per bundle (amd64 by default, `--platform linux/arm64` for arm64); see the [Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs).
 
-The Kubernetes form factor is tested on kind in CI (amd64, with Landlock) and was verified on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). Reviews of the pipeline and Part C work are fixed and recorded: card numbers next to other digits are masked, a failed idempotent call is retried, `evalsi.log()` reports a failure once, and annotation claims no longer over-claim on PostgreSQL. The web UI has a browser test in CI. No release has been tagged yet; the gates and the dry run are in [RELEASING](docs/RELEASING.md). [LEFTOVERS](docs/LEFTOVERS.md) lists what is deferred or not yet verified, sorted by what each item needs next.
+What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md), sorted by what each item needs next. Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).
 
 ## Documentation
 

@@ -13,7 +13,7 @@ components a GenAI pipeline needs:
 - health checks.
 
 ```bash
-docker build -f deploy/collector/Dockerfile -t evalsi-collector .     # or ghcr.io/<owner>/evalsi-collector:<version>
+docker build -f deploy/collector/Dockerfile -t evalsi-collector .     # or ghcr.io/abhishek-rnjn/evalsi-collector:<version>
 
 # To an evalsid with TLS and authentication (an API key, or a service-account token):
 docker run -p 4317:4317 -p 4318:4318 \

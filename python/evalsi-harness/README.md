@@ -1,6 +1,6 @@
 # evalsi-harness
 
-The light built-in agent harness for [Evals.si](https://github.com/abhishek-rnjn/evals.si).
+The light built-in agent harness for [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si).
 It drives an agent through a task in an Evals.si sandbox and grades the end state.
 
 It runs either of these:
