@@ -23,4 +23,4 @@ The API starts at `v1alpha1` because it will change. `v1` is reserved for when w
 ## Consequences
 
 - The design plan's references to a Go binary called `evalsi` now mean `evalsid`.
-- Platform wheels may bundle `evalsid` later, the way some Python tools ship native binaries.
+- Platform wheels bundle `evalsid` and `bwrap` for Linux amd64 and arm64 ([decision 0024](0024-platform-wheels.md)).

@@ -97,6 +97,12 @@ def _parser() -> argparse.ArgumentParser:
     srv.add_argument("args", nargs=argparse.REMAINDER, help="arguments passed to evalsid serve")
     srv.set_defaults(func=_cmd_serve)
 
+    where = sub.add_parser(
+        "evalsid-path",
+        help="print the evalsid this install uses (EVALSID, the platform wheel's, else PATH)",
+    )
+    where.set_defaults(func=_cmd_evalsid_path)
+
     ver = sub.add_parser("version", help="print the version")
     ver.set_defaults(func=_cmd_version)
     return parser
@@ -312,17 +318,29 @@ def _cmd_worker(args: argparse.Namespace) -> int:
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
-    import shutil
+    from evalsi._binaries import evalsid_path
 
-    binary = os.environ.get("EVALSID") or shutil.which("evalsid")
+    binary = evalsid_path()
     if not binary:
         raise ValueError(
-            "evalsid is not installed. Build it with `go build ./cmd/evalsid` and put it on "
-            "PATH, or set EVALSID to its path."
+            "evalsid is not installed. Install a platform wheel of evalsi (Linux, amd64 or "
+            "arm64), or build it with `go build ./cmd/evalsid` and put it on PATH, or set "
+            "EVALSID to its path."
         )
     passthrough = [a for a in args.args if a != "--"] if args.args[:1] == ["--"] else args.args
     os.execv(binary, [binary, "serve", *passthrough])
     return 0  # pragma: no cover - execv does not return
+
+
+def _cmd_evalsid_path(_args: argparse.Namespace) -> int:
+    from evalsi._binaries import evalsid_path
+
+    binary = evalsid_path()
+    if not binary:
+        print("error: no evalsid: install a platform wheel, or set EVALSID", file=sys.stderr)
+        return 1
+    print(binary)
+    return 0
 
 
 def _cmd_version(_args: argparse.Namespace) -> int:
