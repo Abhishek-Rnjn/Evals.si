@@ -14,9 +14,22 @@ CREATE TABLE IF NOT EXISTS quota_usage (
 );
 `
 
+// sandboxSchema counts sandboxed work per project and UTC day, in
+// milliseconds. It is its own table so databases that already hold
+// quota_usage gain it without a column migration.
+const sandboxSchema = `
+CREATE TABLE IF NOT EXISTS quota_sandbox (
+  project TEXT NOT NULL, day TEXT NOT NULL,
+  sandbox_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (project, day)
+);
+`
+
 // Usage is what a project used on one day.
 type Usage struct {
 	JudgeTokens, TargetTokens int64
+	// Wall-clock milliseconds of sandboxed work (agent tasks, code evaluators).
+	SandboxMillis int64
 }
 
 // AddUsage adds to a project's usage for day (YYYY-MM-DD, UTC) and returns
@@ -30,6 +43,14 @@ func (s *Store) AddUsage(ctx context.Context, project, day string, add Usage) (U
 		project, day, add.JudgeTokens, add.TargetTokens); err != nil {
 		return Usage{}, err
 	}
+	if add.SandboxMillis != 0 {
+		if _, err := s.db.ExecContext(ctx,
+			`INSERT INTO quota_sandbox (project, day, sandbox_ms) VALUES (?, ?, ?)
+			 ON CONFLICT (project, day) DO UPDATE SET sandbox_ms = quota_sandbox.sandbox_ms + excluded.sandbox_ms`,
+			project, day, add.SandboxMillis); err != nil {
+			return Usage{}, err
+		}
+	}
 	return s.UsageOn(ctx, project, day)
 }
 
@@ -39,6 +60,12 @@ func (s *Store) UsageOn(ctx context.Context, project, day string) (Usage, error)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(SUM(judge_tokens), 0), COALESCE(SUM(target_tokens), 0) FROM quota_usage WHERE project = ? AND day = ?`,
 		project, day).Scan(&u.JudgeTokens, &u.TargetTokens)
+	if err != nil {
+		return u, err
+	}
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(sandbox_ms), 0) FROM quota_sandbox WHERE project = ? AND day = ?`,
+		project, day).Scan(&u.SandboxMillis)
 	return u, err
 }
 

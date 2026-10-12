@@ -78,6 +78,90 @@ func TestQuotaDailyJudgeTokens(t *testing.T) {
 	}
 }
 
+// Sandbox time counts the duration of sandbox-pool evaluators toward the
+// project's day, stops the run that passes the quota, and refuses new runs
+// until tomorrow.
+func TestQuotaDailySandboxSecondsCountEvaluators(t *testing.T) {
+	day := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	now := day
+	h := quotaHarness(t, config.Quotas{
+		Default:  config.QuotaLimits{SandboxSecondsPerDay: 3},
+		Projects: map[string]config.QuotaLimits{"big": {SandboxSecondsPerDay: 1000}},
+	}, func() time.Time { return now })
+	h.worker.sandboxedDuration = 2 * time.Second
+	spec := func() *evalsiv1alpha1.RunSpec {
+		return &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy"), Evaluators: refs("test/sandboxed")}
+	}
+	// 2 seconds: under the quota of 3.
+	first, err := h.tryCreate("p", spec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run := h.wait(t, first.GetId()); run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED {
+		t.Fatalf("first run: %v %s", run.GetStatus(), run.GetError())
+	}
+	if used, _ := h.st.UsageOn(context.Background(), "p", "2026-10-06"); used.SandboxMillis != 2000 {
+		t.Fatalf("counted %d ms, want 2000", used.SandboxMillis)
+	}
+	// 4 in all: the second run stops once the project is over.
+	second, err := h.tryCreate("p", spec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := h.wait(t, second.GetId())
+	if run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR || !strings.Contains(run.GetError(), "sandbox_seconds_per_day 3") {
+		t.Fatalf("second run: %v %q", run.GetStatus(), run.GetError())
+	}
+	if _, err := h.tryCreate("p", spec()); connect.CodeOf(err) != connect.CodeResourceExhausted || !strings.Contains(err.Error(), "sandbox_seconds_per_day") {
+		t.Fatalf("want ResourceExhausted naming the quota, got %v", err)
+	}
+	// Another project has its own quota, and tomorrow is a new day.
+	if _, err := h.tryCreate("big", spec()); err != nil {
+		t.Fatal(err)
+	}
+	now = day.Add(24 * time.Hour)
+	if _, err := h.tryCreate("p", spec()); err != nil {
+		t.Fatalf("a new day: %v", err)
+	}
+}
+
+// An evaluator that does not run in the sandbox costs no sandbox time, however long it takes.
+func TestQuotaSandboxSecondsIgnoreOtherEvaluators(t *testing.T) {
+	h := quotaHarness(t, config.Quotas{Default: config.QuotaLimits{SandboxSecondsPerDay: 1}}, nil)
+	h.worker.sandboxedDuration = 5 * time.Second // only test/sandboxed reports it; exact-match does not
+	run := h.wait(t, mustCreate(t, h, &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy", "easy"), Evaluators: refs("exact-match")}).GetId())
+	if run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED {
+		t.Fatalf("%v %s", run.GetStatus(), run.GetError())
+	}
+	if used, _ := h.st.UsageOn(context.Background(), "p", h.m.today()); used.SandboxMillis != 0 {
+		t.Fatalf("counted %d ms", used.SandboxMillis)
+	}
+}
+
+func mustCreate(t *testing.T, h *harness, spec *evalsiv1alpha1.RunSpec) *evalsiv1alpha1.Run {
+	t.Helper()
+	run, err := h.tryCreate("p", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run
+}
+
+// An agent task counts from its start to its end, and a run that passes the
+// quota stops.
+func TestQuotaDailySandboxSecondsCountAgentTasks(t *testing.T) {
+	h := quotaHarness(t, config.Quotas{Default: config.QuotaLimits{SandboxSecondsPerDay: 2}}, nil)
+	h.worker.taskDelay = 400 * time.Millisecond
+	// Six tasks (three records, two trials) of 0.4s each is 2.4s of sandboxed work.
+	run := h.wait(t, mustCreate(t, h, agentSpec("pass", "pass", "pass")).GetId())
+	if run.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR || !strings.Contains(run.GetError(), "sandbox_seconds_per_day 2") {
+		t.Fatalf("%v %q", run.GetStatus(), run.GetError())
+	}
+	if used, _ := h.st.UsageOn(context.Background(), "p", h.m.today()); used.SandboxMillis < 2000 {
+		t.Fatalf("counted %d ms, want at least 2000", used.SandboxMillis)
+	}
+}
+
 func TestQuotaStoredRuns(t *testing.T) {
 	h := quotaHarness(t, config.Quotas{Default: config.QuotaLimits{MaxStoredRuns: 1}}, nil)
 	spec := &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy"), Evaluators: refs("exact-match")}
@@ -141,6 +225,9 @@ func TestQuotaLimitsInheritTheDefault(t *testing.T) {
 	q := config.Quotas{
 		Default:  config.QuotaLimits{MaxConcurrentRuns: 2, JudgeTokensPerDay: 10},
 		Projects: map[string]config.QuotaLimits{"x": {JudgeTokensPerDay: 99}},
+	}
+	if l := (config.Quotas{Default: config.QuotaLimits{SandboxSecondsPerDay: 60}, Projects: map[string]config.QuotaLimits{"x": {SandboxSecondsPerDay: 5}}}); l.For("x").SandboxSecondsPerDay != 5 || l.For("y").SandboxSecondsPerDay != 60 {
+		t.Errorf("sandbox seconds do not inherit: %+v", l)
 	}
 	if l := q.For("x"); l.MaxConcurrentRuns != 2 || l.JudgeTokensPerDay != 99 {
 		t.Errorf("x: %+v", l)

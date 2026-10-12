@@ -160,6 +160,10 @@ type QuotaLimits struct {
 	// (the model under evaluation, or the agent's model).
 	JudgeTokensPerDay  int64 `json:"judge_tokens_per_day,omitempty"`
 	TargetTokensPerDay int64 `json:"target_tokens_per_day,omitempty"`
+	// Seconds of sandboxed work per UTC day across the project's runs: an
+	// agent task counts from its start to its end, and a code evaluator for
+	// as long as it ran. Parallel work adds up, as core-seconds do.
+	SandboxSecondsPerDay int64 `json:"sandbox_seconds_per_day,omitempty"`
 	// Reward Service rollouts being scored at once; further calls wait. Per replica.
 	MaxRewardRollouts int `json:"max_reward_rollouts,omitempty"`
 }
@@ -183,15 +187,23 @@ func (q Quotas) For(project string) QuotaLimits {
 	if p.TargetTokensPerDay != 0 {
 		l.TargetTokensPerDay = p.TargetTokensPerDay
 	}
+	if p.SandboxSecondsPerDay != 0 {
+		l.SandboxSecondsPerDay = p.SandboxSecondsPerDay
+	}
 	if p.MaxRewardRollouts != 0 {
 		l.MaxRewardRollouts = p.MaxRewardRollouts
 	}
 	return l
 }
 
+// DailyLimited reports whether a daily quota (tokens or sandbox time) applies.
+func (l QuotaLimits) DailyLimited() bool {
+	return l.JudgeTokensPerDay > 0 || l.TargetTokensPerDay > 0 || l.SandboxSecondsPerDay > 0
+}
+
 func (l QuotaLimits) valid() bool {
 	return l.MaxConcurrentRuns >= 0 && l.MaxStoredRuns >= 0 && l.JudgeTokensPerDay >= 0 &&
-		l.TargetTokensPerDay >= 0 && l.MaxRewardRollouts >= 0
+		l.TargetTokensPerDay >= 0 && l.SandboxSecondsPerDay >= 0 && l.MaxRewardRollouts >= 0
 }
 
 // Runs tunes the Run door.
