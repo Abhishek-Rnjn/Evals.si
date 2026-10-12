@@ -17,7 +17,11 @@ harbor = "evalsi_harness.benchmarks.harbor:load_harbor"
 terminal-bench = "evalsi_harness.benchmarks.harbor:load_terminal_bench"
 
 [project.urls]
-Repository = "https://github.com/abhishek-rnjn/evals.si"
+Homepage = "https://abhishek-rnjn.github.io/Evals.si/"
+Documentation = "https://abhishek-rnjn.github.io/Evals.si/"
+Repository = "https://github.com/Abhishek-Rnjn/Evals.si"
+Issues = "https://github.com/Abhishek-Rnjn/Evals.si/issues"
+Changelog = "https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling>=1.25"]
