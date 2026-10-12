@@ -154,6 +154,7 @@ func TestEvalsiChart(t *testing.T) {
 			"server.replicas=3", "storage.postgres.dsnSecret.name=pg",
 			"storage.clickhouse.url=https://clickhouse:8443", "storage.clickhouse.passwordSecret.name=ch",
 			"storage.s3.bucket=evals", "storage.s3.credentialsSecret=s3", "keda.enabled=true",
+			"keda.natsServerMonitoringEndpoint=nats.nats.svc:8222",
 			"sandbox.address=tls://evalsi-sandboxd.evalsi.svc:7443", "operator.sandboxClasses=true",
 			"nats.url=nats://nats.nats.svc:4222", "nats.streamReplicas=3", "global.imageRegistry=registry.internal:5000",
 		},
@@ -213,6 +214,32 @@ func TestEvalsiChart(t *testing.T) {
 	cmd := exec.Command(helm(t), "template", "t", filepath.Join(charts, "evalsi"), "--kube-version", kubeVersion(), "--set", "server.replicas=2")
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "needs storage.postgres") {
 		t.Errorf("replicas without postgres: %v %s", err, out)
+	}
+}
+
+func TestKEDAExternalNATSMonitoringEndpoint(t *testing.T) {
+	objects := render(t, "evalsi", "keda.enabled=true", "nats.url=nats://external-nats:4222",
+		"keda.natsServerMonitoringEndpoint=external-nats:8222")
+	found := false
+	for _, resource := range objects {
+		if resource.Kind != "ScaledObject" {
+			continue
+		}
+		found = true
+		triggers := list(resource.Spec["triggers"])
+		endpoint := nested(triggers[0].(map[string]any), "metadata", "natsServerMonitoringEndpoint")
+		if endpoint != "external-nats:8222" {
+			t.Errorf("%s: external NATS monitor endpoint = %v", resource.Metadata.Name, endpoint)
+		}
+	}
+	if !found {
+		t.Fatal("no worker ScaledObjects rendered")
+	}
+	command := exec.Command(helm(t), "template", "evalsi", filepath.Join(charts, "evalsi"),
+		"--set", "keda.enabled=true", "--set", "nats.url=nats://external-nats:4222")
+	output, err := command.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "keda.natsServerMonitoringEndpoint is required") {
+		t.Fatalf("external NATS without a monitor endpoint: %v %s", err, output)
 	}
 }
 
