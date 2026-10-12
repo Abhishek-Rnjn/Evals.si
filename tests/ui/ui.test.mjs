@@ -186,3 +186,68 @@ test('with authentication on, the UI asks for a credential and accepts only a va
   assert.deepEqual(unexpected, []);
   await page.close();
 });
+
+test('an annotator answers and skips items in the browser', async () => {
+  const url = await startServer('annotate');
+  const call = async (method, route, body) => {
+    const resp = await fetch(`${url}${route}`, {
+      method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await resp.text();
+    assert.ok(resp.ok, `${method} ${route}: ${resp.status} ${text}`);
+    return text ? JSON.parse(text) : {};
+  };
+  await call('POST', '/v1alpha1/queues', {
+    name: 'helpfulness', project: 'default', instructions: 'Judge the reply, not the tone.',
+    questions: [
+      { name: 'good', prompt: 'Is the reply good?', kind: 'QUESTION_KIND_PASS_FAIL' },
+      { name: 'score', prompt: 'How helpful?', kind: 'QUESTION_KIND_SCORE', min: 1, max: 5 },
+      { name: 'kind', prompt: 'What kind of reply?', kind: 'QUESTION_KIND_LABEL', options: ['answer', 'refusal'] },
+      { name: 'notes', prompt: 'Notes', kind: 'QUESTION_KIND_TEXT', optional: true },
+    ],
+  });
+  await call('POST', '/v1alpha1/queues/helpfulness/items', {
+    project: 'default',
+    records: { records: [
+      { id: 'r1', input: { text: 'What is 2+2?' }, output: { text: '<b>4</b>' } },
+      { id: 'r2', input: { text: 'Capital of France?' }, output: { text: 'Paris' } },
+    ] },
+  });
+
+  const page = await browser.newPage();
+  const problems = watch(page);
+  await page.goto(`${url}/ui/#/queues/helpfulness/annotate`);
+  await page.waitForSelector('form.annotate');
+  assert.match(await page.textContent('#main'), /Judge the reply, not the tone\./);
+  // Content is text, never markup.
+  assert.match(await page.textContent('#main'), /<b>4<\/b>/);
+  assert.equal(await page.locator('#main b').count(), 0);
+
+  // An incomplete form is not sent.
+  await page.click('form.annotate button[type="submit"]');
+  assert.match(await page.textContent('form.annotate .error'), /an answer is needed/);
+
+  await page.check('input[value="pass"]');
+  await page.fill('input[type="number"]', '9');
+  await page.check('input[value="answer"]');
+  await page.click('form.annotate button[type="submit"]');
+  assert.match(await page.textContent('form.annotate .error'), /from 1 to 5/);
+  await page.fill('input[type="number"]', '4');
+  await page.fill('textarea[aria-label="comment"]', 'looks right');
+  await page.click('form.annotate button[type="submit"]');
+
+  // The second item is skipped, which leaves nothing for this annotator.
+  await page.waitForFunction(() => document.querySelector('form.annotate .sub')?.textContent.includes('1 answered'));
+  await page.click('text=Skip this item');
+  await page.waitForSelector('text=Nothing left for you');
+
+  const { annotations } = await call('GET', '/v1alpha1/queues/helpfulness/annotations?project=default');
+  const answered = annotations.filter(a => !a.skipped);
+  assert.equal(annotations.length, 2);
+  assert.equal(answered.length, 1);
+  assert.equal(answered[0].comment, 'looks right');
+  assert.deepEqual(answered[0].answers.map(a => a.question), ['good', 'score', 'kind']);
+  assert.equal(answered[0].answers[1].number, 4);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
