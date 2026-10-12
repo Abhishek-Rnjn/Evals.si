@@ -63,7 +63,11 @@ Use separate `wasm` and `python` directories; native Python dependencies must
 match the worker image's Python ABI. `pythonPath` adds module discovery, not
 automatic registration: Python packages still need the existing pack/entry-point
 configuration. Render tests cover this wiring; live plugin execution is not yet
-certified.
+certified across every path. [Bounded EKS checks](../verification/EKS-2026-10-12.md)
+passed a chart-mounted Python pack through the live API/CPU worker and an
+init-populated read-only Wasm volume in the stock runtime image, including a
+wrong-pin rejection. Distributed API Wasm execution and every native dependency
+ABI remain unverified.
 
 ## Wasm evaluators
 
