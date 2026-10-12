@@ -182,6 +182,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		LeaseTTL:      optDuration(cfg.Runs.LeaseTTL),
 		AdoptInterval: optDuration(cfg.Runs.AdoptInterval),
 		Quotas:        cfg.Quotas,
+		Retention:     cfg.Runs,
 		TraceScores: func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64 {
 			return watcher.TraceScores(policy, results)
 		},
@@ -271,7 +272,8 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		wg.Add(1)
 		go func() { defer wg.Done(); sourceMgr.Run(bg) }()
 	}
-	wg.Add(6)
+	wg.Add(7)
+	go func() { defer wg.Done(); runManager.Retain(bg, time.Hour) }()
 	go func() { defer wg.Done(); hooks.Run(bg) }()
 	go func() { defer wg.Done(); assembler.Run(stopAssembler, 250*time.Millisecond) }()
 	go func() { defer wg.Done(); watcher.Run(bg) }()

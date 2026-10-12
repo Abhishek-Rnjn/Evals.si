@@ -215,6 +215,27 @@ type Runs struct {
 	// from replicas that stopped (default 10s).
 	LeaseTTL      string `json:"lease_ttl,omitempty"`
 	AdoptInterval string `json:"adopt_interval,omitempty"`
+	// How long finished runs are kept, for example 2160h: older ones are
+	// deleted (records, outputs, results), as DeleteRun does, hourly. Empty or
+	// 0 keeps them forever. A run labelled evalsi.keep=true is never deleted.
+	Retention string `json:"retention,omitempty"`
+	// Retention for particular projects, replacing the default; "0" keeps a
+	// project's runs forever.
+	ProjectRetention map[string]string `json:"project_retention,omitempty"`
+}
+
+// KeepLabel exempts a run from retention when set to "true".
+const KeepLabel = "evalsi.keep"
+
+// RetentionFor is how long a project's finished runs are kept; 0 is forever.
+// The values were checked by Validate.
+func (r Runs) RetentionFor(project string) time.Duration {
+	v, ok := r.ProjectRetention[project]
+	if !ok {
+		v = r.Retention
+	}
+	d, _ := time.ParseDuration(v)
+	return max(d, 0)
 }
 
 // OTLP configures trace ingestion. OTLP is always served on the main port
@@ -494,6 +515,16 @@ func (c Config) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 		}
 	}
+	for name, d := range map[string]string{"runs.retention": c.Runs.Retention} {
+		if err := validRetention(name, d); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	for project, d := range c.Runs.ProjectRetention {
+		if err := validRetention("runs.project_retention."+project, d); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	if c.DataDir == "" {
 		errs = append(errs, errors.New("data_dir is required"))
 	}
@@ -614,4 +645,20 @@ func (c Config) validateAccess() []error {
 		errs = append(errs, errors.New("rbac and authorization need an auth section; without one nothing would be enforced"))
 	}
 	return errs
+}
+
+// validRetention accepts an empty value, "0", or a positive duration of at
+// least an hour (retention runs hourly).
+func validRetention(name, v string) error {
+	if v == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if d < 0 || (d > 0 && d < time.Hour) {
+		return fmt.Errorf("%s must be 0 or at least 1h, got %s", name, v)
+	}
+	return nil
 }

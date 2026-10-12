@@ -321,6 +321,51 @@ func (s *Store) ListRuns(ctx context.Context, projects []string, pageSize int, p
 	return runs, next, rows.Err()
 }
 
+// RunProjects lists the projects that have runs.
+func (s *Store) RunProjects(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT project FROM runs ORDER BY project`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// RunsCreatedBefore lists a project's runs created before t, oldest first,
+// after the run (afterCreated, afterID) when afterID is set: a keyset cursor,
+// so a caller can walk past runs it chose to keep while others are deleted.
+func (s *Store) RunsCreatedBefore(ctx context.Context, project string, t time.Time, afterCreated int64, afterID string, limit int) ([]*evalsiv1alpha1.Run, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT run FROM runs WHERE project = ? AND created_at < ? AND (created_at > ? OR (created_at = ? AND id > ?))
+		 ORDER BY created_at, id LIMIT ?`,
+		project, t.UnixNano(), afterCreated, afterCreated, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*evalsiv1alpha1.Run
+	for rows.Next() {
+		var blob []byte
+		if err := rows.Scan(&blob); err != nil {
+			return nil, err
+		}
+		run, err := unmarshalRun(blob)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, rows.Err()
+}
+
 // RunsWithStatus lists every run in one of the given states (used at startup).
 func (s *Store) RunsWithStatus(ctx context.Context, statuses ...evalsiv1alpha1.RunStatus) ([]*evalsiv1alpha1.Run, error) {
 	want := map[evalsiv1alpha1.RunStatus]bool{}

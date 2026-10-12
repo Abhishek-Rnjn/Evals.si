@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 )
@@ -193,5 +194,37 @@ judges:
 	j := cfg.WorkerJudges()["claude"]
 	if j.Projects != nil || j.Model != "m" {
 		t.Fatalf("worker judge = %+v; want the judge without projects", j)
+	}
+}
+
+func TestRunRetention(t *testing.T) {
+	cfg, err := Load(write(t, `
+auth: {mode: none}
+runs:
+  retention: 720h
+  project_retention: {research: 8760h, scratch: 24h, audit: "0"}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for project, want := range map[string]time.Duration{
+		"support": 720 * time.Hour, "research": 8760 * time.Hour, "scratch": 24 * time.Hour, "audit": 0,
+	} {
+		if got := cfg.Runs.RetentionFor(project); got != want {
+			t.Errorf("%s: %s, want %s", project, got, want)
+		}
+	}
+	if got := (Runs{}).RetentionFor("any"); got != 0 {
+		t.Errorf("unset retention is %s, want forever", got)
+	}
+	for name, body := range map[string]string{
+		"not a duration": "runs: {retention: soon}",
+		"too short":      "runs: {retention: 10m}",
+		"negative":       "runs: {retention: -24h}",
+		"project":        "runs: {project_retention: {a: 1m}}",
+	} {
+		if _, err := Load(write(t, "auth: {mode: none}\n"+body)); err == nil || !strings.Contains(err.Error(), "retention") {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
