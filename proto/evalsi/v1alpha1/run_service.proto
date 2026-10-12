@@ -18,6 +18,11 @@ service RunService {
   // Continues an errored or cancelled run, skipping finished tasks.
   rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
   rpc DeleteRun(DeleteRunRequest) returns (DeleteRunResponse);
+  // Drops a finished run's records, outputs, results and webhook deliveries
+  // and keeps the run itself: its spec, status, summaries, gates and usage.
+  // An archived run cannot be resumed, compared, promoted or listed for
+  // results; it can still be read, and deleted. Archiving twice is harmless.
+  rpc ArchiveRun(ArchiveRunRequest) returns (ArchiveRunResponse);
   rpc ListRunResults(ListRunResultsRequest) returns (ListRunResultsResponse);
   // Paired comparison of two runs over the records they share.
   rpc CompareRuns(CompareRunsRequest) returns (CompareRunsResponse);
@@ -106,6 +111,14 @@ message DeleteRunRequest {
 }
 
 message DeleteRunResponse {}
+
+message ArchiveRunRequest {
+  string id = 1;
+}
+
+message ArchiveRunResponse {
+  Run run = 1;
+}
 
 message ListRunResultsRequest {
   string run_id = 1;

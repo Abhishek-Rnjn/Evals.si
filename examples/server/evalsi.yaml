@@ -77,6 +77,10 @@ runs:
   # outputs, results). A run labelled evalsi.keep=true is never deleted. Unset: keep forever.
   # retention: 2160h
   # project_retention: {research: 8760h, audit: "0"}   # "0": that project's runs are kept
+  # Finished runs older than this are archived hourly (ArchiveRun): records and results go,
+  # the summary stays until retention deletes it. Must be shorter than retention.
+  # archive_after: 168h
+  # project_archive_after: {audit: "0"}                # "0": never archived
 
 # OTLP is always served on the main port (gRPC TraceService/Export and HTTP
 # POST /v1/traces). These also open the standard ports for SDK defaults.

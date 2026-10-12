@@ -28,6 +28,7 @@ import (
 //	GET    /v1alpha1/runs/{run_id}/results     RunService.ListRunResults
 //	POST   /v1alpha1/runs:compare              RunService.CompareRuns
 //	POST   /v1alpha1/runs:slice                RunService.SliceRuns
+//	POST   /v1alpha1/runs/{id}:archive         RunService.ArchiveRun
 //	POST   /v1alpha1/runs/{run_id}:promote     RunService.PromoteResults
 //	POST   /v1alpha1/runs:shadow               RunService.CreateShadowReplay
 //	POST   /v1alpha1/policies                  MonitorService.ApplyPolicy (body: the policy)
@@ -103,6 +104,7 @@ func restRules() []*annotations.HttpRule {
 		rule("RunService.CreateRun", http.MethodPost, v+"/runs", "*"),
 		rule("RunService.ListRuns", http.MethodGet, v+"/runs", ""),
 		rule("RunService.GetRun", http.MethodGet, v+"/runs/{id}", ""),
+		rule("RunService.ArchiveRun", http.MethodPost, v+"/runs/{id}:archive", "*"),
 		rule("RunService.DeleteRun", http.MethodDelete, v+"/runs/{id}", ""),
 		rule("RunService.CancelRun", http.MethodPost, v+"/runs/{id}:cancel", "*"),
 		rule("RunService.ResumeRun", http.MethodPost, v+"/runs/{id}:resume", "*"),

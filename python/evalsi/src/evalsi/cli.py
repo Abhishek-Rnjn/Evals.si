@@ -174,6 +174,15 @@ def _add_run(sub: Any) -> None:
     add_credential_args(delete)
     delete.set_defaults(func=_cmd_delete_run)
 
+    archive = sub.add_parser(
+        "archive-run", help="drop a finished server run's records and results, keeping its summary"
+    )
+    archive.add_argument("id")
+    archive.add_argument("--server", required=True)
+    archive.add_argument("--yes", action="store_true", required=True)
+    add_credential_args(archive)
+    archive.set_defaults(func=_cmd_archive_run)
+
     dataset = sub.add_parser("dataset", help="upload or import server datasets")
     actions = dataset.add_subparsers(dest="action", required=True)
     for action in ("upload", "import"):
@@ -197,6 +206,19 @@ def _cmd_delete_run(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"deleted: {args.id}")
+    return 0
+
+
+def _cmd_archive_run(args: argparse.Namespace) -> int:
+    from evalsi.client import ServerError
+
+    try:
+        with server_client(args) as client:
+            run = client.archive_run(args.id)
+    except ServerError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"archived: {args.id} ({run.get('archivedAt', '')})")
     return 0
 
 

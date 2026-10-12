@@ -47,6 +47,7 @@ func TestRESTRoutes(t *testing.T) {
 		{"GET", "/v1alpha1/runs?project=p&page_size=5", "", "RunService/ListRuns", "project", "p"},
 		{"GET", "/v1alpha1/runs/run-1", "", "RunService/GetRun", "id", "run-1"},
 		{"DELETE", "/v1alpha1/runs/run-1", "", "RunService/DeleteRun", "id", "run-1"},
+		{"POST", "/v1alpha1/runs/run-1:archive", "{}", "RunService/ArchiveRun", "id", "run-1"},
 		{"POST", "/v1alpha1/runs/run-1:cancel", "{}", "RunService/CancelRun", "id", "run-1"},
 		{"POST", "/v1alpha1/runs/run-1:resume", "{}", "RunService/ResumeRun", "id", "run-1"},
 		{"GET", "/v1alpha1/runs/run-1/results?evaluator=em", "", "RunService/ListRunResults", "runId", "run-1"},

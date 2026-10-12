@@ -1265,3 +1265,66 @@ func TestSliceRunsHonoursRunAccess(t *testing.T) {
 		t.Errorf("anonymous: %v", err)
 	}
 }
+
+// Archiving needs the permission deleting does (runs.delete, held by admins,
+// not by runners or viewers), and an archived run stays readable while its
+// results are gone.
+func TestArchiveRunPermission(t *testing.T) {
+	s := startAuthServer(t, nil)
+	ctx := context.Background()
+	runsAs := func(who string) evalsiv1alpha1connect.RunServiceClient {
+		return evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys[who]))
+	}
+	created, err := runsAs("runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Spec: runSpec("qwen3")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Msg.GetRun().GetId()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		got, err := runsAs("admin").GetRun(ctx, connect.NewRequest(&evalsiv1alpha1.GetRunRequest{Id: id}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st := got.Msg.GetRun().GetStatus(); st == evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED || st == evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR || st == evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("run %v", got.Msg.GetRun())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	for _, who := range []string{"viewer", "runner", "checkout-viewer"} {
+		if _, err := runsAs(who).ArchiveRun(ctx, connect.NewRequest(&evalsiv1alpha1.ArchiveRunRequest{Id: id})); codeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("%s archiving: %v", who, err)
+		}
+	}
+	resp, err := runsAs("admin").ArchiveRun(ctx, connect.NewRequest(&evalsiv1alpha1.ArchiveRunRequest{Id: id}))
+	if err != nil || resp.Msg.GetRun().GetArchivedAt() == nil {
+		t.Fatalf("admin archiving: %v, %v", resp, err)
+	}
+	if got, err := runsAs("viewer").GetRun(ctx, connect.NewRequest(&evalsiv1alpha1.GetRunRequest{Id: id})); err != nil || got.Msg.GetRun().GetArchivedAt() == nil {
+		t.Errorf("an archived run is still readable: %v, %v", got, err)
+	}
+	if _, err := runsAs("viewer").ListRunResults(ctx, connect.NewRequest(&evalsiv1alpha1.ListRunResultsRequest{RunId: id})); codeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("results of an archived run: %v", err)
+	}
+	// The archive is in the audit log.
+	events, err := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["owner"])).ListAuditEvents(ctx, connect.NewRequest(&evalsiv1alpha1.ListAuditEventsRequest{Action: "runs.delete"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var allowed, denied int
+	for _, ev := range events.Msg.GetEvents() {
+		if ev.GetResource() == "run/"+id {
+			if ev.GetAllowed() {
+				allowed++
+			} else {
+				denied++
+			}
+		}
+	}
+	if allowed != 1 || denied != 3 {
+		t.Errorf("audit: %d allowed, %d denied; want 1 and 3", allowed, denied)
+	}
+}

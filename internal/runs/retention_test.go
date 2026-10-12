@@ -48,7 +48,7 @@ func TestRetentionDeletesOnlyExpiredFinishedRuns(t *testing.T) {
 	// The window straddles the cutoff: it was created before it but finished after it.
 	add("straddles", "support", done, 30*day+time.Minute, nil)
 
-	n, err := h.m.retainOnce(ctx)
+	n, _, err := h.m.retainOnce(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestRetentionDeletesOnlyExpiredFinishedRuns(t *testing.T) {
 	if recs, err := h.st.Records(ctx, "old"); err == nil && len(recs) != 0 {
 		t.Errorf("records of a deleted run remain: %d", len(recs))
 	}
-	if n, err := h.m.retainOnce(ctx); err != nil || n != 0 {
+	if n, _, err := h.m.retainOnce(ctx); err != nil || n != 0 {
 		t.Errorf("second pass: %d %v", n, err)
 	}
 }
@@ -94,7 +94,7 @@ func TestRetentionWalksPastRunsItKeeps(t *testing.T) {
 	if err := h.st.CreateRun(ctx, run, nil); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := h.m.retainOnce(ctx); err != nil || n != 1 {
+	if n, _, err := h.m.retainOnce(ctx); err != nil || n != 1 {
 		t.Fatalf("deleted %d, %v", n, err)
 	}
 }

@@ -177,6 +177,10 @@ func (g *gate) accessRules() map[string]accessRule {
 		evalsiv1alpha1connect.RunServiceResumeRunProcedure: {action: "runs.resume", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.runTargets(ctx, msg.(*evalsiv1alpha1.ResumeRunRequest).GetId())
 		}},
+		// Archiving drops what deleting does, so it takes the same permission.
+		evalsiv1alpha1connect.RunServiceArchiveRunProcedure: {action: "runs.delete", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.runTargets(ctx, msg.(*evalsiv1alpha1.ArchiveRunRequest).GetId())
+		}},
 		evalsiv1alpha1connect.RunServiceDeleteRunProcedure: {action: "runs.delete", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			id := msg.(*evalsiv1alpha1.DeleteRunRequest).GetId()
 			project, raw, err := g.store.DeletedRunResource(ctx, id)

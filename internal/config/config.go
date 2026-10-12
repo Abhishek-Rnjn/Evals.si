@@ -222,6 +222,26 @@ type Runs struct {
 	// Retention for particular projects, replacing the default; "0" keeps a
 	// project's runs forever.
 	ProjectRetention map[string]string `json:"project_retention,omitempty"`
+	// How long finished runs keep their records and results: older ones are
+	// archived (ArchiveRun: only the run's summary stays), hourly, and are
+	// deleted later by retention if that is set. Empty or 0 never archives. It
+	// must be shorter than the retention it is combined with. evalsi.keep=true
+	// exempts a run.
+	ArchiveAfter string `json:"archive_after,omitempty"`
+	// ArchiveAfter for particular projects, replacing the default; "0" never
+	// archives a project's runs.
+	ProjectArchiveAfter map[string]string `json:"project_archive_after,omitempty"`
+}
+
+// ArchiveAfterFor is how long a project's finished runs keep their results;
+// 0 is forever. The values were checked by Validate.
+func (r Runs) ArchiveAfterFor(project string) time.Duration {
+	v, ok := r.ProjectArchiveAfter[project]
+	if !ok {
+		v = r.ArchiveAfter
+	}
+	d, _ := time.ParseDuration(v)
+	return max(d, 0)
 }
 
 // KeepLabel exempts a run from retention when set to "true".
@@ -520,6 +540,26 @@ func (c Config) Validate() error {
 			errs = append(errs, err)
 		}
 	}
+	if err := validRetention("runs.archive_after", c.Runs.ArchiveAfter); err != nil {
+		errs = append(errs, err)
+	}
+	for project, d := range c.Runs.ProjectArchiveAfter {
+		if err := validRetention("runs.project_archive_after."+project, d); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	projects := map[string]bool{"": true}
+	for p := range c.Runs.ProjectRetention {
+		projects[p] = true
+	}
+	for p := range c.Runs.ProjectArchiveAfter {
+		projects[p] = true
+	}
+	for p := range projects {
+		if a, r := c.Runs.ArchiveAfterFor(p), c.Runs.RetentionFor(p); a > 0 && r > 0 && a >= r {
+			errs = append(errs, fmt.Errorf("runs: archive_after (%s) must be shorter than retention (%s)%s", a, r, forProject(p)))
+		}
+	}
 	for project, d := range c.Runs.ProjectRetention {
 		if err := validRetention("runs.project_retention."+project, d); err != nil {
 			errs = append(errs, err)
@@ -645,6 +685,13 @@ func (c Config) validateAccess() []error {
 		errs = append(errs, errors.New("rbac and authorization need an auth section; without one nothing would be enforced"))
 	}
 	return errs
+}
+
+func forProject(p string) string {
+	if p == "" {
+		return ""
+	}
+	return " for project " + p
 }
 
 // validRetention accepts an empty value, "0", or a positive duration of at

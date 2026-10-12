@@ -153,7 +153,8 @@ def test_hosted_wasm_plugin_installs_from_the_repo_index(
     beside it, whose pins match: the manifest by the index's, the module by the
     manifest's. ``scripts/publish-wasm-example.sh`` re-pins them."""
     entry = find(load_index([str(REPO_INDEX)]), "example/text-checks")
-    assert entry.kind == "wasm" and entry.tier == "community"
+    assert entry.kind == "wasm"
+    assert entry.tier == "community"
     dest = install(entry, tmp_path / "plugins")
     assert "example__text-checks" in dest
     monkeypatch.setenv("EVALSI_PLUGIN_PATH", str(tmp_path / "plugins"))

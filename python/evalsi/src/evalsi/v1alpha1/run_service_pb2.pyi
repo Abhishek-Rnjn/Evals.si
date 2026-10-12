@@ -323,6 +323,41 @@ class DeleteRunResponse(_message.Message):
 Global___DeleteRunResponse: _TypeAlias = DeleteRunResponse  # noqa: Y015
 
 @_typing.final
+class ArchiveRunRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ID_FIELD_NUMBER: _builtins.int
+    id: _builtins.str
+    def __init__(
+        self,
+        *,
+        id: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["id", b"id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ArchiveRunRequest: _TypeAlias = ArchiveRunRequest  # noqa: Y015
+
+@_typing.final
+class ArchiveRunResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RUN_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def run(self) -> _run_pb2.Run: ...
+    def __init__(
+        self,
+        *,
+        run: _run_pb2.Run | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["run", b"run"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["run", b"run"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ArchiveRunResponse: _TypeAlias = ArchiveRunResponse  # noqa: Y015
+
+@_typing.final
 class ListRunResultsRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

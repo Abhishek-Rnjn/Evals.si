@@ -257,12 +257,12 @@
       fmt(g.value), el("span", { class: g.passed ? "pass" : "fail" }, g.passed ? "pass" : "FAIL"), g.reason || "",
     ]);
     const usage = (u) => (u ? `${u.inputTokens || 0} in, ${u.outputTokens || 0} out${u.costUsd ? `, $${Number(u.costUsd).toFixed(4)}` : ""}` : "");
-    const results = el("div", {}, el("p", { class: "sub" }, "Loading results…"));
+    const results = el("div", {}, el("p", { class: "sub" }, run.archivedAt ? "This run was archived: its records and results are gone; the summary above remains." : "Loading results…"));
     show(
       el("h1", {}, run.name || run.id, " ", el("span", { class: `status-${run.status}` }, `(${enumName(run.status, "RUN_STATUS_")})`)),
       el("div", { class: "card" }, kv([
         ["ID", el("code", {}, run.id)], ["Project", run.project], ["Created", when(run.createdAt)], ["By", run.createdBy],
-        ["Finished", when(run.finishedAt)], ["Target", spec.target ? `${spec.target.connector || ""} ${spec.target.model || ""}` : ""],
+        ["Finished", when(run.finishedAt)], ["Archived", run.archivedAt ? when(run.archivedAt) : ""], ["Target", spec.target ? `${spec.target.connector || ""} ${spec.target.model || ""}` : ""],
         ["Records", run.records], ["Progress", run.progress ? `${run.progress.done || 0}/${run.progress.total || 0}` : ""],
         ["Target usage", usage(run.targetUsage)], ["Judge usage", usage(run.judgeUsage)],
         ["Dataset sha256", run.datasetSha256 ? el("code", {}, run.datasetSha256) : ""], ["Labels", chips(run.labels)],
@@ -273,7 +273,7 @@
       gates.length ? el("h2", {}, "Gates") : null, gates.length ? table(["Metric", "Stat", "Bound", "Value", "", "Reason"], gates, [3]) : null,
       el("h2", {}, "Records"), results,
     );
-    loadResults(run, results).catch((err) => results.replaceChildren(el("p", { class: "error" }, String(err.message || err))));
+    if (!run.archivedAt) loadResults(run, results).catch((err) => results.replaceChildren(el("p", { class: "error" }, String(err.message || err))));
   }
 
   async function loadResults(run, box) {

@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Run archiving.** `RunService.ArchiveRun` (`POST /v1alpha1/runs/{id}:archive`, `evalsi archive-run`) drops a finished run's records, outputs, results and webhook deliveries and keeps its summary, spec, gates and usage (`Run.archived_at`). `runs.archive_after` and `runs.project_archive_after` do it automatically, hourly, before `runs.retention` deletes. Automatic deletes and archives now write audit events (`system:retention`). Archived runs refuse resume, compare, promote, results and dataset-from-run, and the web UI says so. It needs `runs.delete`.
 - **A hosted Wasm plugin.** The default plugin index lists `example/text-checks` (JSON validity, word limit and distinct-output checks, compiled to Wasm), with its manifest and module committed under `plugins/wasm/text-checks`, so `evalsi plugins install example/text-checks` works without building anything. A manifest path in an index is relative to the index. `scripts/publish-wasm-example.sh` rebuilds and re-pins it, and tests fail when the pins drift.
 - **Server-side slicing.** `RunService.SliceRuns` (`POST /v1alpha1/runs:slice`) computes a metric per run and per record metadata value on the server, over the runs the caller may read, and returns the rows `evalsi analyze slice` computes after downloading every result. `evalsi analyze slice --server URL --on-server` uses it. Both implementations are checked against one fixture. `analyze query` (SQL) stays on the client.
 - **Web UI: annotate and sign in from the browser.** A queue page has an **Annotate** button that takes the next item, asks the queue's questions and submits or skips, with the run's scores hidden unless asked for. When `auth.cli_login` names an identity provider, the sign-in page offers it (authorization code with PKCE; evalsid makes the provider metadata and token requests, keeps no secret or refresh token, and talks only to the configured provider). `auth.cli_login.ui_client_id` names the UI's own public client, and `/.well-known/evalsi-auth` gains `ui_login`.
@@ -16,7 +17,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
-- `RunService` gains `SliceRuns` (`v1alpha1`, additive).
+- `RunService` gains `SliceRuns` and `ArchiveRun`, and `Run` gains `archived_at` (`v1alpha1`, additive).
 - `auth.sigv4` gains `arn` and `auth.databricks` gains `client_id` (`v1alpha1`, additive).
 
 ### Fixed

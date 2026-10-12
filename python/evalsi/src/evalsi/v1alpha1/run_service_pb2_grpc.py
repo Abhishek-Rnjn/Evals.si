@@ -71,6 +71,11 @@ class RunServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunResponse.FromString,
                 _registered_method=True)
+        self.ArchiveRun = channel.unary_unary(
+                '/evalsi.v1alpha1.RunService/ArchiveRun',
+                request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ArchiveRunRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ArchiveRunResponse.FromString,
+                _registered_method=True)
         self.ListRunResults = channel.unary_unary(
                 '/evalsi.v1alpha1.RunService/ListRunResults',
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsRequest.SerializeToString,
@@ -143,6 +148,16 @@ class RunServiceServicer:
 
     def DeleteRun(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ArchiveRun(self, request, context):
+        """Drops a finished run's records, outputs, results and webhook deliveries
+        and keeps the run itself: its spec, status, summaries, gates and usage.
+        An archived run cannot be resumed, compared, promoted or listed for
+        results; it can still be read, and deleted. Archiving twice is harmless.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -223,6 +238,11 @@ def add_RunServiceServicer_to_server(servicer, server):
                     servicer.DeleteRun,
                     request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunResponse.SerializeToString,
+            ),
+            'ArchiveRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.ArchiveRun,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ArchiveRunRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ArchiveRunResponse.SerializeToString,
             ),
             'ListRunResults': grpc.unary_unary_rpc_method_handler(
                     servicer.ListRunResults,
@@ -441,6 +461,33 @@ class RunService:
             '/evalsi.v1alpha1.RunService/DeleteRun',
             evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_run__service__pb2.DeleteRunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ArchiveRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.RunService/ArchiveRun',
+            evalsi_dot_v1alpha1_dot_run__service__pb2.ArchiveRunRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_run__service__pb2.ArchiveRunResponse.FromString,
             options,
             channel_credentials,
             insecure,

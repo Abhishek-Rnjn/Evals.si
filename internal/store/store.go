@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	_ "modernc.org/sqlite" // database/sql driver "sqlite"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
@@ -255,6 +256,56 @@ func (s *Store) DeleteRun(ctx context.Context, id string, resource ...[]byte) er
 		return err
 	}
 	return tx.Commit()
+}
+
+// ArchiveRun drops a finished run's records, outputs, results and webhook
+// deliveries and keeps the run, marked archived at the given time: the same
+// conditions as DeleteRun. Archiving an archived run returns it unchanged.
+func (s *Store) ArchiveRun(ctx context.Context, id string, at time.Time) (*evalsiv1alpha1.Run, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var blob []byte
+	if err := tx.QueryRowContext(ctx, `SELECT run FROM runs WHERE id = ?`, id).Scan(&blob); err != nil {
+		if isNoRows(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	run, err := unmarshalRun(blob)
+	if err != nil {
+		return nil, err
+	}
+	switch run.GetStatus() {
+	case evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED, evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED,
+		evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR, evalsiv1alpha1.RunStatus_RUN_STATUS_CANCELLED:
+	default:
+		return nil, ErrRunActive
+	}
+	if run.GetArchivedAt() != nil {
+		return run, nil
+	}
+	run.ArchivedAt = timestamppb.New(at)
+	// The row changes only if the run is as read and no replica holds its lease.
+	result, err := tx.ExecContext(ctx, `UPDATE runs SET run = ? WHERE id = ? AND run = ?
+		AND NOT EXISTS (SELECT 1 FROM leases WHERE name = ? AND expires_ns >= ?)`,
+		marshal(run), id, blob, "run:"+id, time.Now().UnixNano())
+	if err != nil {
+		return nil, err
+	}
+	if count, err := result.RowsAffected(); err != nil {
+		return nil, err
+	} else if count == 0 {
+		return nil, ErrRunActive
+	}
+	for _, table := range []string{"run_records", "run_outputs", "run_results", "webhook_deliveries"} {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE run_id = ?", id); err != nil {
+			return nil, err
+		}
+	}
+	return run, tx.Commit()
 }
 
 func (s *Store) DeletedRunResource(ctx context.Context, id string) (project string, resource []byte, err error) {
