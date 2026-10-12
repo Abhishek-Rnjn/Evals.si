@@ -169,6 +169,8 @@ func (g *gate) accessRules() map[string]accessRule {
 			return g.runTargets(ctx, m.GetBaselineRunId(), m.GetCandidateRunId())
 		}},
 		evalsiv1alpha1connect.RunServiceListRunsProcedure: {action: "runs.read", filtered: true},
+		// The service checks each run it slices, as ListRuns does.
+		evalsiv1alpha1connect.RunServiceSliceRunsProcedure: {action: "runs.read", filtered: true},
 		evalsiv1alpha1connect.RunServiceCancelRunProcedure: {action: "runs.cancel", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.runTargets(ctx, msg.(*evalsiv1alpha1.CancelRunRequest).GetId())
 		}},

@@ -1,6 +1,6 @@
 # 0009. Standalone storage and scheduling: SQLite and an in-process scheduler
 
-- **Status:** Accepted, 2026-10-05 (Phase 1). Phase 4 added NATS JetStream, PostgreSQL and ClickHouse for Kubernetes as planned; standalone is unchanged. DuckDB arrived after Phase 5, client-side: `evalsi analyze` loads runs through the API (or from results files) into DuckDB for cross-run queries, so it works the same over every backend and needs nothing in `evalsid`.
+- **Status:** Accepted, 2026-10-05 (Phase 1). Phase 4 added NATS JetStream, PostgreSQL and ClickHouse for Kubernetes as planned; standalone is unchanged. DuckDB arrived after Phase 5, client-side: `evalsi analyze` loads runs through the API (or from results files) into DuckDB for cross-run queries, so it works the same over every backend and needs nothing in `evalsid`. [Decision 0022](0022-server-side-slicing.md) adds a server-side slice.
 
 ## Context
 

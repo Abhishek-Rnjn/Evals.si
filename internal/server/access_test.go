@@ -487,6 +487,7 @@ func startAuthServer(t *testing.T, mutate func(*config.Config)) *testServer {
 		"key-admin":       {"support": {"key-admin"}},
 		"blind-runner":    {"support": {"blind-runner"}},
 		"checkout-runner": {"checkout": {"runner"}},
+		"app-x-reader":    {"support": {"app-x-reader"}},
 	}
 	var keys []auth.ConfigKey
 	for name, r := range roles {
@@ -510,6 +511,8 @@ func startAuthServer(t *testing.T, mutate func(*config.Config)) *testServer {
 			{Name: "prompt-engineer", Inherits: []string{"viewer"}, Permissions: []string{"evaluations.run", "runs.create"},
 				Condition: `!has(resource.target) || resource.target.model in ["qwen3"]`},
 			{Name: "key-admin", Permissions: []string{"access.manage", "runs.read"}},
+			// Reads only the runs labelled app=x.
+			{Name: "app-x-reader", Permissions: []string{"runs.read"}, Condition: `"app" in resource.labels && resource.labels.app == "x"`},
 			// Starts runs but may not read production traces.
 			{Name: "blind-runner", Permissions: []string{"runs.create", "runs.read", "evaluations.run"}},
 		},
@@ -1195,5 +1198,70 @@ func TestTraceDatasetsUseTraceReadRules(t *testing.T) {
 	// No readable trace in the service: nothing to evaluate, and no run.
 	if _, err := create(keys["public-traces"], "private", false); codeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("a service none of whose traces the caller may read: %v", err)
+	}
+}
+
+// SliceRuns reads results the way GetRun does: only runs the caller may read
+// contribute, whichever way they are selected, and a forbidden run named by id
+// looks like a missing one.
+func TestSliceRunsHonoursRunAccess(t *testing.T) {
+	s := startAuthServer(t, nil)
+	ctx := context.Background()
+	runsAs := func(who string) evalsiv1alpha1connect.RunServiceClient {
+		return evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys[who]))
+	}
+	create := func(project, app string) string {
+		t.Helper()
+		who := map[string]string{"support": "runner", "checkout": "checkout-runner"}[project]
+		spec := runSpec("qwen3")
+		spec.Target.BaseUrl, spec.Target.ApiKeyEnv = "https://models.example/v1", credentials.None // needs no grant
+		resp, err := runsAs(who).CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: project, Spec: spec, Labels: map[string]string{"app": app}}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.Msg.GetRun().GetId()
+	}
+	x, y, other := create("support", "x"), create("support", "y"), create("checkout", "x")
+	slice := func(who string, req *evalsiv1alpha1.SliceRunsRequest) (*evalsiv1alpha1.SliceRunsResponse, error) {
+		req.Metric, req.By = "em", "topic"
+		resp, err := runsAs(who).SliceRuns(ctx, connect.NewRequest(req))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Msg, nil
+	}
+	for who, want := range map[string]int32{"owner": 3, "viewer": 2, "app-x-reader": 1, "checkout-viewer": 1, "ingest": 0} {
+		resp, err := slice(who, &evalsiv1alpha1.SliceRunsRequest{})
+		if err != nil || resp.GetRuns() != want {
+			t.Errorf("%s slices %d runs, %v; want %d", who, resp.GetRuns(), err, want)
+		}
+	}
+	// Naming a run does not widen what a caller reads.
+	for who, tc := range map[string]struct {
+		id string
+		ok bool
+	}{
+		"viewer":          {y, true},
+		"app-x-reader":    {x, true},
+		"checkout-viewer": {other, true},
+	} {
+		if _, err := slice(who, &evalsiv1alpha1.SliceRunsRequest{RunIds: []string{tc.id}}); (err == nil) != tc.ok {
+			t.Errorf("%s slicing its own run: %v", who, err)
+		}
+	}
+	for _, tc := range []struct{ who, id string }{{"app-x-reader", y}, {"app-x-reader", other}, {"checkout-viewer", x}, {"viewer", other}} {
+		_, err := slice(tc.who, &evalsiv1alpha1.SliceRunsRequest{RunIds: []string{tc.id}})
+		_, missing := slice(tc.who, &evalsiv1alpha1.SliceRunsRequest{RunIds: []string{"no-such-run"}})
+		if codeOf(err) != connect.CodeNotFound || codeOf(missing) != connect.CodeNotFound {
+			t.Errorf("%s slicing %s: %v (a missing run: %v), want NotFound for both", tc.who, tc.id, err, missing)
+		}
+	}
+	// Narrowing to a project the caller cannot read finds nothing.
+	if resp, err := slice("checkout-viewer", &evalsiv1alpha1.SliceRunsRequest{Project: "support"}); err != nil || resp.GetRuns() != 0 {
+		t.Errorf("a project the caller cannot read: %d runs, %v", resp.GetRuns(), err)
+	}
+	// Without a credential nothing is read.
+	if _, err := slice("", &evalsiv1alpha1.SliceRunsRequest{}); codeOf(err) != connect.CodeUnauthenticated {
+		t.Errorf("anonymous: %v", err)
 	}
 }

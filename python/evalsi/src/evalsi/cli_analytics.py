@@ -26,6 +26,11 @@ def add_analytics_commands(sub: Any) -> None:
     sl.add_argument("metric")
     sl.add_argument("--by", required=True, help="a record metadata field (dotted path)")
     sl.add_argument("--level", type=float, default=0.95, choices=[0.9, 0.95, 0.99])
+    sl.add_argument(
+        "--on-server",
+        action="store_true",
+        help="compute the slice on the server (needs --server) instead of downloading every result",
+    )
     sl.set_defaults(func=_cmd_slice)
     for p in (q, sl):
         src = p.add_argument_group("runs to load")
@@ -41,7 +46,12 @@ def add_analytics_commands(sub: Any) -> None:
         src.add_argument(
             "--label", action="append", default=[], help="only runs with label k=v (repeatable)"
         )
-        src.add_argument("--limit", type=int, default=50, help="newest runs to load (default 50)")
+        src.add_argument(
+            "--limit",
+            type=int,
+            default=None,
+            help="newest runs to load (default 50; at most 500 with --on-server)",
+        )
         src.add_argument(
             "--db",
             default=":memory:",
@@ -62,15 +72,13 @@ def _warehouse(args: argparse.Namespace) -> Any:
     if args.server:
         from evalsi.cli import server_client
 
-        labels = {}
-        for kv in args.label:
-            k, sep, v = kv.partition("=")
-            if not sep:
-                raise ValueError(f"--label {kv!r}: use key=value")
-            labels[k] = v
         with server_client(args) as client:
             wh.add_server_runs(
-                client, project=args.project, labels=labels, run_ids=args.run, limit=args.limit
+                client,
+                project=args.project,
+                labels=_labels(args.label),
+                run_ids=args.run,
+                limit=args.limit or 50,
             )
     return wh
 
@@ -95,7 +103,58 @@ def _cmd_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def _labels(pairs: list[str]) -> dict[str, str]:
+    labels = {}
+    for kv in pairs:
+        k, sep, v = kv.partition("=")
+        if not sep:
+            raise ValueError(f"--label {kv!r}: use key=value")
+        labels[k] = v
+    return labels
+
+
+def _server_slice(args: argparse.Namespace) -> tuple[list[str], list[tuple[Any, ...]]]:
+    """The slice the server computes: the same numbers as the local one, over
+    the runs the caller may read, without downloading any result."""
+    from evalsi.cli import server_client
+
+    if not args.server:
+        raise ValueError("--on-server needs --server")
+    if args.results or args.db != ":memory:":
+        raise ValueError("--on-server reads the server's runs: drop --results and --db")
+    with server_client(args) as client:
+        out = client.slice_runs(
+            args.metric,
+            args.by,
+            project=args.project,
+            labels=_labels(args.label),
+            run_ids=args.run,
+            limit=args.limit or 0,
+            level=args.level,
+        )
+    rows = [
+        (
+            r.get("runId", ""),
+            r.get("runName", ""),
+            r.get("key", ""),
+            int(r.get("n", 0)),
+            r.get("mean", 0.0),
+            r.get("low"),
+            r.get("high"),
+        )
+        for r in out.get("rows", [])
+    ]
+    return ["run_id", "run", args.by, "n", "mean", "low", "high"], rows
+
+
 def _cmd_slice(args: argparse.Namespace) -> int:
+    if args.on_server:
+        columns, rows = _server_slice(args)
+        if not rows:
+            print(f"no scores for {args.metric}", file=sys.stderr)
+            return 1
+        _print(args, columns, rows)
+        return 0
     with _warehouse(args) as wh:
         columns, rows = wh.slice(args.metric, args.by, level=args.level)
     if not rows:

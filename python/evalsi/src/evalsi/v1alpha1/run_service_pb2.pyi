@@ -398,6 +398,139 @@ class CompareRunsRequest(_message.Message):
 Global___CompareRunsRequest: _TypeAlias = CompareRunsRequest  # noqa: Y015
 
 @_typing.final
+class SliceRunsRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class LabelsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    RUN_IDS_FIELD_NUMBER: _builtins.int
+    PROJECT_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
+    LIMIT_FIELD_NUMBER: _builtins.int
+    METRIC_FIELD_NUMBER: _builtins.int
+    BY_FIELD_NUMBER: _builtins.int
+    CONFIDENCE_LEVEL_FIELD_NUMBER: _builtins.int
+    project: _builtins.str
+    limit: _builtins.int
+    """Newest runs to include when run_ids is empty. Defaults to 50; at most 500."""
+    metric: _builtins.str
+    """"<evaluator>" or "<evaluator>.<score name>", as in a run's summary."""
+    by: _builtins.str
+    """A record metadata field, as a dotted path. Records without it are
+    grouped under "(none)".
+    """
+    confidence_level: _builtins.float
+    """0.9, 0.95 or 0.99. Defaults to 0.95."""
+    @_builtins.property
+    def run_ids(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """The runs to slice: these, else the newest `limit` runs of `project`
+        (every project the caller may read when empty) that carry all `labels`.
+        """
+
+    @_builtins.property
+    def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    def __init__(
+        self,
+        *,
+        run_ids: _abc.Iterable[_builtins.str] | None = ...,
+        project: _builtins.str = ...,
+        labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        limit: _builtins.int = ...,
+        metric: _builtins.str = ...,
+        by: _builtins.str = ...,
+        confidence_level: _builtins.float = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["by", b"by", "confidence_level", b"confidence_level", "labels", b"labels", "limit", b"limit", "metric", b"metric", "project", b"project", "run_ids", b"run_ids"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___SliceRunsRequest: _TypeAlias = SliceRunsRequest  # noqa: Y015
+
+@_typing.final
+class SliceRow(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RUN_ID_FIELD_NUMBER: _builtins.int
+    RUN_NAME_FIELD_NUMBER: _builtins.int
+    KEY_FIELD_NUMBER: _builtins.int
+    N_FIELD_NUMBER: _builtins.int
+    MEAN_FIELD_NUMBER: _builtins.int
+    LOW_FIELD_NUMBER: _builtins.int
+    HIGH_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
+    run_name: _builtins.str
+    key: _builtins.str
+    """The value of the metadata field (a string, number or boolean as text)."""
+    n: _builtins.int
+    """Scored values."""
+    mean: _builtins.float
+    low: _builtins.float
+    """A normal-approximation interval; unset with fewer than two values."""
+    high: _builtins.float
+    def __init__(
+        self,
+        *,
+        run_id: _builtins.str = ...,
+        run_name: _builtins.str = ...,
+        key: _builtins.str = ...,
+        n: _builtins.int = ...,
+        mean: _builtins.float = ...,
+        low: _builtins.float | None = ...,
+        high: _builtins.float | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_high", b"_high", "_low", b"_low", "high", b"high", "low", b"low"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_high", b"_high", "_low", b"_low", "high", b"high", "key", b"key", "low", b"low", "mean", b"mean", "n", b"n", "run_id", b"run_id", "run_name", b"run_name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+    _WhichOneofReturnType__high: _TypeAlias = _typing.Literal["high"]  # noqa: Y015
+    _WhichOneofArgType__high: _TypeAlias = _typing.Literal["_high", b"_high"]  # noqa: Y015
+    _WhichOneofReturnType__low: _TypeAlias = _typing.Literal["low"]  # noqa: Y015
+    _WhichOneofArgType__low: _TypeAlias = _typing.Literal["_low", b"_low"]  # noqa: Y015
+    @_typing.overload
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__high) -> _WhichOneofReturnType__high | None: ...
+    @_typing.overload
+    def WhichOneof(self, oneof_group: _WhichOneofArgType__low) -> _WhichOneofReturnType__low | None: ...
+
+Global___SliceRow: _TypeAlias = SliceRow  # noqa: Y015
+
+@_typing.final
+class SliceRunsResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    ROWS_FIELD_NUMBER: _builtins.int
+    RUNS_FIELD_NUMBER: _builtins.int
+    runs: _builtins.int
+    """Runs the slice covered."""
+    @_builtins.property
+    def rows(self) -> _containers.RepeatedCompositeFieldContainer[Global___SliceRow]:
+        """Ordered by key, then run creation time, then run id."""
+
+    def __init__(
+        self,
+        *,
+        rows: _abc.Iterable[Global___SliceRow] | None = ...,
+        runs: _builtins.int = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["rows", b"rows", "runs", b"runs"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___SliceRunsResponse: _TypeAlias = SliceRunsResponse  # noqa: Y015
+
+@_typing.final
 class MetricComparison(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 

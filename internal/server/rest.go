@@ -27,6 +27,7 @@ import (
 //	POST   /v1alpha1/runs/{id}:resume          RunService.ResumeRun
 //	GET    /v1alpha1/runs/{run_id}/results     RunService.ListRunResults
 //	POST   /v1alpha1/runs:compare              RunService.CompareRuns
+//	POST   /v1alpha1/runs:slice                RunService.SliceRuns
 //	POST   /v1alpha1/runs/{run_id}:promote     RunService.PromoteResults
 //	POST   /v1alpha1/runs:shadow               RunService.CreateShadowReplay
 //	POST   /v1alpha1/policies                  MonitorService.ApplyPolicy (body: the policy)
@@ -107,6 +108,7 @@ func restRules() []*annotations.HttpRule {
 		rule("RunService.ResumeRun", http.MethodPost, v+"/runs/{id}:resume", "*"),
 		rule("RunService.ListRunResults", http.MethodGet, v+"/runs/{run_id}/results", ""),
 		rule("RunService.CompareRuns", http.MethodPost, v+"/runs:compare", "*"),
+		rule("RunService.SliceRuns", http.MethodPost, v+"/runs:slice", "*"),
 		rule("RunService.PromoteResults", http.MethodPost, v+"/runs/{run_id}:promote", "*"),
 		rule("RunService.CreateShadowReplay", http.MethodPost, v+"/runs:shadow", "*"),
 		rule("MonitorService.ApplyPolicy", http.MethodPost, v+"/policies", "policy"),

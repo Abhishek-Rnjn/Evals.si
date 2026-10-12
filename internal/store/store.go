@@ -519,6 +519,35 @@ func (s *Store) ResultKeys(ctx context.Context, runID string) (map[Key]bool, err
 	return out, rows.Err()
 }
 
+// EachResult calls fn for every stored result of a run, in no particular
+// order, decoding one row at a time. Aggregations use it: it is one scan,
+// where paging through Results sorts the whole run for every page.
+func (s *Store) EachResult(ctx context.Context, runID string, fn func(Result) error) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT record_idx, trial, eval_idx, result FROM run_results WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		var r Result
+		var blob []byte
+		if err := rows.Scan(&r.RecordIdx, &r.Trial, &r.EvalIdx, &blob); err != nil {
+			return err
+		}
+		r.Result = &evalsiv1alpha1.EvaluationResult{}
+		if err := proto.Unmarshal(blob, r.Result); err != nil {
+			return err
+		}
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 // Results returns a run's results ordered by trial, record, evaluator, with
 // dataset-scope results last in each trial. evaluator filters when non-empty.
 func (s *Store) Results(ctx context.Context, runID, evaluator string, limit, offset int) ([]Result, error) {

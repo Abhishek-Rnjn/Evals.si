@@ -540,6 +540,15 @@ uv run evalsi analyze query "select model, avg(value) from scores join runs usin
 
 `analyze` loads runs into three tables, `runs`, `scores` and `records`, which you can query with SQL or slice by record metadata.
 
+With many or large runs, let the server do the slice instead of downloading every result:
+
+```bash
+uv run evalsi analyze slice exact-match --by category --server $URL --project support \
+  --label suite=nightly --limit 100 --on-server
+```
+
+`--on-server` calls `RunService.SliceRuns` and prints the same columns and numbers as the local slice. It covers the runs the caller may read (the newest `--limit`, 50 by default and at most 500, or the `--run` ids), and refuses a slice of more than 10,000 rows (runs times values of the field). It needs a server that has the RPC; `analyze query` always runs on the client.
+
 ## 11. Fine-tuning and RL
 
 Full detail is in the [fine-tuning and RL guide](fine-tuning.md).

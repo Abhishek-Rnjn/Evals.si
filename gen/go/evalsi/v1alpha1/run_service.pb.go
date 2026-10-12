@@ -945,6 +945,254 @@ func (x *CompareRunsRequest) GetConfidenceLevel() float64 {
 	return 0
 }
 
+type SliceRunsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The runs to slice: these, else the newest `limit` runs of `project`
+	// (every project the caller may read when empty) that carry all `labels`.
+	RunIds  []string          `protobuf:"bytes,1,rep,name=run_ids,json=runIds,proto3" json:"run_ids,omitempty"`
+	Project string            `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
+	Labels  map[string]string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Newest runs to include when run_ids is empty. Defaults to 50; at most 500.
+	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// "<evaluator>" or "<evaluator>.<score name>", as in a run's summary.
+	Metric string `protobuf:"bytes,5,opt,name=metric,proto3" json:"metric,omitempty"`
+	// A record metadata field, as a dotted path. Records without it are
+	// grouped under "(none)".
+	By string `protobuf:"bytes,6,opt,name=by,proto3" json:"by,omitempty"`
+	// 0.9, 0.95 or 0.99. Defaults to 0.95.
+	ConfidenceLevel float64 `protobuf:"fixed64,7,opt,name=confidence_level,json=confidenceLevel,proto3" json:"confidence_level,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SliceRunsRequest) Reset() {
+	*x = SliceRunsRequest{}
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SliceRunsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SliceRunsRequest) ProtoMessage() {}
+
+func (x *SliceRunsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SliceRunsRequest.ProtoReflect.Descriptor instead.
+func (*SliceRunsRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SliceRunsRequest) GetRunIds() []string {
+	if x != nil {
+		return x.RunIds
+	}
+	return nil
+}
+
+func (x *SliceRunsRequest) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *SliceRunsRequest) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *SliceRunsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *SliceRunsRequest) GetMetric() string {
+	if x != nil {
+		return x.Metric
+	}
+	return ""
+}
+
+func (x *SliceRunsRequest) GetBy() string {
+	if x != nil {
+		return x.By
+	}
+	return ""
+}
+
+func (x *SliceRunsRequest) GetConfidenceLevel() float64 {
+	if x != nil {
+		return x.ConfidenceLevel
+	}
+	return 0
+}
+
+type SliceRow struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	RunId   string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	RunName string                 `protobuf:"bytes,2,opt,name=run_name,json=runName,proto3" json:"run_name,omitempty"`
+	// The value of the metadata field (a string, number or boolean as text).
+	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	// Scored values.
+	N    int64   `protobuf:"varint,4,opt,name=n,proto3" json:"n,omitempty"`
+	Mean float64 `protobuf:"fixed64,5,opt,name=mean,proto3" json:"mean,omitempty"`
+	// A normal-approximation interval; unset with fewer than two values.
+	Low           *float64 `protobuf:"fixed64,6,opt,name=low,proto3,oneof" json:"low,omitempty"`
+	High          *float64 `protobuf:"fixed64,7,opt,name=high,proto3,oneof" json:"high,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SliceRow) Reset() {
+	*x = SliceRow{}
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SliceRow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SliceRow) ProtoMessage() {}
+
+func (x *SliceRow) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SliceRow.ProtoReflect.Descriptor instead.
+func (*SliceRow) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *SliceRow) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *SliceRow) GetRunName() string {
+	if x != nil {
+		return x.RunName
+	}
+	return ""
+}
+
+func (x *SliceRow) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *SliceRow) GetN() int64 {
+	if x != nil {
+		return x.N
+	}
+	return 0
+}
+
+func (x *SliceRow) GetMean() float64 {
+	if x != nil {
+		return x.Mean
+	}
+	return 0
+}
+
+func (x *SliceRow) GetLow() float64 {
+	if x != nil && x.Low != nil {
+		return *x.Low
+	}
+	return 0
+}
+
+func (x *SliceRow) GetHigh() float64 {
+	if x != nil && x.High != nil {
+		return *x.High
+	}
+	return 0
+}
+
+type SliceRunsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Ordered by key, then run creation time, then run id.
+	Rows []*SliceRow `protobuf:"bytes,1,rep,name=rows,proto3" json:"rows,omitempty"`
+	// Runs the slice covered.
+	Runs          int32 `protobuf:"varint,2,opt,name=runs,proto3" json:"runs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SliceRunsResponse) Reset() {
+	*x = SliceRunsResponse{}
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SliceRunsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SliceRunsResponse) ProtoMessage() {}
+
+func (x *SliceRunsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SliceRunsResponse.ProtoReflect.Descriptor instead.
+func (*SliceRunsResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SliceRunsResponse) GetRows() []*SliceRow {
+	if x != nil {
+		return x.Rows
+	}
+	return nil
+}
+
+func (x *SliceRunsResponse) GetRuns() int32 {
+	if x != nil {
+		return x.Runs
+	}
+	return 0
+}
+
 type MetricComparison struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metric        string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
@@ -962,7 +1210,7 @@ type MetricComparison struct {
 
 func (x *MetricComparison) Reset() {
 	*x = MetricComparison{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -974,7 +1222,7 @@ func (x *MetricComparison) String() string {
 func (*MetricComparison) ProtoMessage() {}
 
 func (x *MetricComparison) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -987,7 +1235,7 @@ func (x *MetricComparison) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricComparison.ProtoReflect.Descriptor instead.
 func (*MetricComparison) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{17}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *MetricComparison) GetMetric() string {
@@ -1048,7 +1296,7 @@ type CompareRunsResponse struct {
 
 func (x *CompareRunsResponse) Reset() {
 	*x = CompareRunsResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1060,7 +1308,7 @@ func (x *CompareRunsResponse) String() string {
 func (*CompareRunsResponse) ProtoMessage() {}
 
 func (x *CompareRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1073,7 +1321,7 @@ func (x *CompareRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompareRunsResponse.ProtoReflect.Descriptor instead.
 func (*CompareRunsResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{18}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CompareRunsResponse) GetComparisons() []*MetricComparison {
@@ -1101,7 +1349,7 @@ type PromoteResultsRequest struct {
 
 func (x *PromoteResultsRequest) Reset() {
 	*x = PromoteResultsRequest{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1113,7 +1361,7 @@ func (x *PromoteResultsRequest) String() string {
 func (*PromoteResultsRequest) ProtoMessage() {}
 
 func (x *PromoteResultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1126,7 +1374,7 @@ func (x *PromoteResultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteResultsRequest.ProtoReflect.Descriptor instead.
 func (*PromoteResultsRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{19}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *PromoteResultsRequest) GetRunId() string {
@@ -1168,7 +1416,7 @@ type PromoteResultsResponse struct {
 
 func (x *PromoteResultsResponse) Reset() {
 	*x = PromoteResultsResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1180,7 +1428,7 @@ func (x *PromoteResultsResponse) String() string {
 func (*PromoteResultsResponse) ProtoMessage() {}
 
 func (x *PromoteResultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1193,7 +1441,7 @@ func (x *PromoteResultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteResultsResponse.ProtoReflect.Descriptor instead.
 func (*PromoteResultsResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{20}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *PromoteResultsResponse) GetPromoted() int64 {
@@ -1225,7 +1473,7 @@ type CreateShadowReplayRequest struct {
 
 func (x *CreateShadowReplayRequest) Reset() {
 	*x = CreateShadowReplayRequest{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1237,7 +1485,7 @@ func (x *CreateShadowReplayRequest) String() string {
 func (*CreateShadowReplayRequest) ProtoMessage() {}
 
 func (x *CreateShadowReplayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1250,7 +1498,7 @@ func (x *CreateShadowReplayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateShadowReplayRequest.ProtoReflect.Descriptor instead.
 func (*CreateShadowReplayRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{21}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CreateShadowReplayRequest) GetName() string {
@@ -1291,7 +1539,7 @@ type CreateShadowReplayResponse struct {
 
 func (x *CreateShadowReplayResponse) Reset() {
 	*x = CreateShadowReplayResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1303,7 +1551,7 @@ func (x *CreateShadowReplayResponse) String() string {
 func (*CreateShadowReplayResponse) ProtoMessage() {}
 
 func (x *CreateShadowReplayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1316,7 +1564,7 @@ func (x *CreateShadowReplayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateShadowReplayResponse.ProtoReflect.Descriptor instead.
 func (*CreateShadowReplayResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{22}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateShadowReplayResponse) GetBaseline() *Run {
@@ -1393,7 +1641,31 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\x12CompareRunsRequest\x12&\n" +
 	"\x0fbaseline_run_id\x18\x01 \x01(\tR\rbaselineRunId\x12(\n" +
 	"\x10candidate_run_id\x18\x02 \x01(\tR\x0ecandidateRunId\x12)\n" +
-	"\x10confidence_level\x18\x03 \x01(\x01R\x0fconfidenceLevel\"\xc2\x02\n" +
+	"\x10confidence_level\x18\x03 \x01(\x01R\x0fconfidenceLevel\"\xb0\x02\n" +
+	"\x10SliceRunsRequest\x12\x17\n" +
+	"\arun_ids\x18\x01 \x03(\tR\x06runIds\x12\x18\n" +
+	"\aproject\x18\x02 \x01(\tR\aproject\x12E\n" +
+	"\x06labels\x18\x03 \x03(\v2-.evalsi.v1alpha1.SliceRunsRequest.LabelsEntryR\x06labels\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06metric\x18\x05 \x01(\tR\x06metric\x12\x0e\n" +
+	"\x02by\x18\x06 \x01(\tR\x02by\x12)\n" +
+	"\x10confidence_level\x18\a \x01(\x01R\x0fconfidenceLevel\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb1\x01\n" +
+	"\bSliceRow\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x19\n" +
+	"\brun_name\x18\x02 \x01(\tR\arunName\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12\f\n" +
+	"\x01n\x18\x04 \x01(\x03R\x01n\x12\x12\n" +
+	"\x04mean\x18\x05 \x01(\x01R\x04mean\x12\x15\n" +
+	"\x03low\x18\x06 \x01(\x01H\x00R\x03low\x88\x01\x01\x12\x17\n" +
+	"\x04high\x18\a \x01(\x01H\x01R\x04high\x88\x01\x01B\x06\n" +
+	"\x04_lowB\a\n" +
+	"\x05_high\"V\n" +
+	"\x11SliceRunsResponse\x12-\n" +
+	"\x04rows\x18\x01 \x03(\v2\x19.evalsi.v1alpha1.SliceRowR\x04rows\x12\x12\n" +
+	"\x04runs\x18\x02 \x01(\x05R\x04runs\"\xc2\x02\n" +
 	"\x10MetricComparison\x12\x16\n" +
 	"\x06metric\x18\x01 \x01(\tR\x06metric\x12(\n" +
 	"\rbaseline_mean\x18\x02 \x01(\x01H\x00R\fbaselineMean\x88\x01\x01\x12*\n" +
@@ -1425,7 +1697,7 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x82\x01\n" +
 	"\x1aCreateShadowReplayResponse\x120\n" +
 	"\bbaseline\x18\x01 \x01(\v2\x14.evalsi.v1alpha1.RunR\bbaseline\x122\n" +
-	"\tcandidate\x18\x02 \x01(\v2\x14.evalsi.v1alpha1.RunR\tcandidate2\xda\a\n" +
+	"\tcandidate\x18\x02 \x01(\v2\x14.evalsi.v1alpha1.RunR\tcandidate2\xae\b\n" +
 	"\n" +
 	"RunService\x12R\n" +
 	"\tCreateRun\x12!.evalsi.v1alpha1.CreateRunRequest\x1a\".evalsi.v1alpha1.CreateRunResponse\x12I\n" +
@@ -1436,7 +1708,8 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\tResumeRun\x12!.evalsi.v1alpha1.ResumeRunRequest\x1a\".evalsi.v1alpha1.ResumeRunResponse\x12R\n" +
 	"\tDeleteRun\x12!.evalsi.v1alpha1.DeleteRunRequest\x1a\".evalsi.v1alpha1.DeleteRunResponse\x12a\n" +
 	"\x0eListRunResults\x12&.evalsi.v1alpha1.ListRunResultsRequest\x1a'.evalsi.v1alpha1.ListRunResultsResponse\x12X\n" +
-	"\vCompareRuns\x12#.evalsi.v1alpha1.CompareRunsRequest\x1a$.evalsi.v1alpha1.CompareRunsResponse\x12a\n" +
+	"\vCompareRuns\x12#.evalsi.v1alpha1.CompareRunsRequest\x1a$.evalsi.v1alpha1.CompareRunsResponse\x12R\n" +
+	"\tSliceRuns\x12!.evalsi.v1alpha1.SliceRunsRequest\x1a\".evalsi.v1alpha1.SliceRunsResponse\x12a\n" +
 	"\x0ePromoteResults\x12&.evalsi.v1alpha1.PromoteResultsRequest\x1a'.evalsi.v1alpha1.PromoteResultsResponse\x12m\n" +
 	"\x12CreateShadowReplay\x12*.evalsi.v1alpha1.CreateShadowReplayRequest\x1a+.evalsi.v1alpha1.CreateShadowReplayResponseB\xcc\x01\n" +
 	"\x13com.evalsi.v1alpha1B\x0fRunServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
@@ -1453,7 +1726,7 @@ func file_evalsi_v1alpha1_run_service_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_run_service_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_run_service_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_evalsi_v1alpha1_run_service_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_evalsi_v1alpha1_run_service_proto_goTypes = []any{
 	(*CreateRunRequest)(nil),           // 0: evalsi.v1alpha1.CreateRunRequest
 	(*CreateRunResponse)(nil),          // 1: evalsi.v1alpha1.CreateRunResponse
@@ -1472,67 +1745,75 @@ var file_evalsi_v1alpha1_run_service_proto_goTypes = []any{
 	(*ListRunResultsRequest)(nil),      // 14: evalsi.v1alpha1.ListRunResultsRequest
 	(*ListRunResultsResponse)(nil),     // 15: evalsi.v1alpha1.ListRunResultsResponse
 	(*CompareRunsRequest)(nil),         // 16: evalsi.v1alpha1.CompareRunsRequest
-	(*MetricComparison)(nil),           // 17: evalsi.v1alpha1.MetricComparison
-	(*CompareRunsResponse)(nil),        // 18: evalsi.v1alpha1.CompareRunsResponse
-	(*PromoteResultsRequest)(nil),      // 19: evalsi.v1alpha1.PromoteResultsRequest
-	(*PromoteResultsResponse)(nil),     // 20: evalsi.v1alpha1.PromoteResultsResponse
-	(*CreateShadowReplayRequest)(nil),  // 21: evalsi.v1alpha1.CreateShadowReplayRequest
-	(*CreateShadowReplayResponse)(nil), // 22: evalsi.v1alpha1.CreateShadowReplayResponse
-	nil,                                // 23: evalsi.v1alpha1.CreateRunRequest.LabelsEntry
-	nil,                                // 24: evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
-	(*RunSpec)(nil),                    // 25: evalsi.v1alpha1.RunSpec
-	(*Run)(nil),                        // 26: evalsi.v1alpha1.Run
-	(*Progress)(nil),                   // 27: evalsi.v1alpha1.Progress
-	(*EvaluationResult)(nil),           // 28: evalsi.v1alpha1.EvaluationResult
-	(*Record)(nil),                     // 29: evalsi.v1alpha1.Record
-	(*ConfidenceInterval)(nil),         // 30: evalsi.v1alpha1.ConfidenceInterval
+	(*SliceRunsRequest)(nil),           // 17: evalsi.v1alpha1.SliceRunsRequest
+	(*SliceRow)(nil),                   // 18: evalsi.v1alpha1.SliceRow
+	(*SliceRunsResponse)(nil),          // 19: evalsi.v1alpha1.SliceRunsResponse
+	(*MetricComparison)(nil),           // 20: evalsi.v1alpha1.MetricComparison
+	(*CompareRunsResponse)(nil),        // 21: evalsi.v1alpha1.CompareRunsResponse
+	(*PromoteResultsRequest)(nil),      // 22: evalsi.v1alpha1.PromoteResultsRequest
+	(*PromoteResultsResponse)(nil),     // 23: evalsi.v1alpha1.PromoteResultsResponse
+	(*CreateShadowReplayRequest)(nil),  // 24: evalsi.v1alpha1.CreateShadowReplayRequest
+	(*CreateShadowReplayResponse)(nil), // 25: evalsi.v1alpha1.CreateShadowReplayResponse
+	nil,                                // 26: evalsi.v1alpha1.CreateRunRequest.LabelsEntry
+	nil,                                // 27: evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
+	nil,                                // 28: evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
+	(*RunSpec)(nil),                    // 29: evalsi.v1alpha1.RunSpec
+	(*Run)(nil),                        // 30: evalsi.v1alpha1.Run
+	(*Progress)(nil),                   // 31: evalsi.v1alpha1.Progress
+	(*EvaluationResult)(nil),           // 32: evalsi.v1alpha1.EvaluationResult
+	(*Record)(nil),                     // 33: evalsi.v1alpha1.Record
+	(*ConfidenceInterval)(nil),         // 34: evalsi.v1alpha1.ConfidenceInterval
 }
 var file_evalsi_v1alpha1_run_service_proto_depIdxs = []int32{
-	25, // 0: evalsi.v1alpha1.CreateRunRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
-	23, // 1: evalsi.v1alpha1.CreateRunRequest.labels:type_name -> evalsi.v1alpha1.CreateRunRequest.LabelsEntry
-	26, // 2: evalsi.v1alpha1.CreateRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	26, // 3: evalsi.v1alpha1.GetRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	26, // 4: evalsi.v1alpha1.ListRunsResponse.runs:type_name -> evalsi.v1alpha1.Run
-	26, // 5: evalsi.v1alpha1.WatchRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	27, // 6: evalsi.v1alpha1.WatchRunResponse.progress:type_name -> evalsi.v1alpha1.Progress
-	28, // 7: evalsi.v1alpha1.WatchRunResponse.result:type_name -> evalsi.v1alpha1.EvaluationResult
-	26, // 8: evalsi.v1alpha1.CancelRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	26, // 9: evalsi.v1alpha1.ResumeRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	28, // 10: evalsi.v1alpha1.ListRunResultsResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	29, // 11: evalsi.v1alpha1.ListRunResultsResponse.records:type_name -> evalsi.v1alpha1.Record
-	30, // 12: evalsi.v1alpha1.MetricComparison.diff_ci:type_name -> evalsi.v1alpha1.ConfidenceInterval
-	17, // 13: evalsi.v1alpha1.CompareRunsResponse.comparisons:type_name -> evalsi.v1alpha1.MetricComparison
-	25, // 14: evalsi.v1alpha1.CreateShadowReplayRequest.candidate:type_name -> evalsi.v1alpha1.RunSpec
-	24, // 15: evalsi.v1alpha1.CreateShadowReplayRequest.labels:type_name -> evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
-	26, // 16: evalsi.v1alpha1.CreateShadowReplayResponse.baseline:type_name -> evalsi.v1alpha1.Run
-	26, // 17: evalsi.v1alpha1.CreateShadowReplayResponse.candidate:type_name -> evalsi.v1alpha1.Run
-	0,  // 18: evalsi.v1alpha1.RunService.CreateRun:input_type -> evalsi.v1alpha1.CreateRunRequest
-	2,  // 19: evalsi.v1alpha1.RunService.GetRun:input_type -> evalsi.v1alpha1.GetRunRequest
-	4,  // 20: evalsi.v1alpha1.RunService.ListRuns:input_type -> evalsi.v1alpha1.ListRunsRequest
-	6,  // 21: evalsi.v1alpha1.RunService.WatchRun:input_type -> evalsi.v1alpha1.WatchRunRequest
-	8,  // 22: evalsi.v1alpha1.RunService.CancelRun:input_type -> evalsi.v1alpha1.CancelRunRequest
-	10, // 23: evalsi.v1alpha1.RunService.ResumeRun:input_type -> evalsi.v1alpha1.ResumeRunRequest
-	12, // 24: evalsi.v1alpha1.RunService.DeleteRun:input_type -> evalsi.v1alpha1.DeleteRunRequest
-	14, // 25: evalsi.v1alpha1.RunService.ListRunResults:input_type -> evalsi.v1alpha1.ListRunResultsRequest
-	16, // 26: evalsi.v1alpha1.RunService.CompareRuns:input_type -> evalsi.v1alpha1.CompareRunsRequest
-	19, // 27: evalsi.v1alpha1.RunService.PromoteResults:input_type -> evalsi.v1alpha1.PromoteResultsRequest
-	21, // 28: evalsi.v1alpha1.RunService.CreateShadowReplay:input_type -> evalsi.v1alpha1.CreateShadowReplayRequest
-	1,  // 29: evalsi.v1alpha1.RunService.CreateRun:output_type -> evalsi.v1alpha1.CreateRunResponse
-	3,  // 30: evalsi.v1alpha1.RunService.GetRun:output_type -> evalsi.v1alpha1.GetRunResponse
-	5,  // 31: evalsi.v1alpha1.RunService.ListRuns:output_type -> evalsi.v1alpha1.ListRunsResponse
-	7,  // 32: evalsi.v1alpha1.RunService.WatchRun:output_type -> evalsi.v1alpha1.WatchRunResponse
-	9,  // 33: evalsi.v1alpha1.RunService.CancelRun:output_type -> evalsi.v1alpha1.CancelRunResponse
-	11, // 34: evalsi.v1alpha1.RunService.ResumeRun:output_type -> evalsi.v1alpha1.ResumeRunResponse
-	13, // 35: evalsi.v1alpha1.RunService.DeleteRun:output_type -> evalsi.v1alpha1.DeleteRunResponse
-	15, // 36: evalsi.v1alpha1.RunService.ListRunResults:output_type -> evalsi.v1alpha1.ListRunResultsResponse
-	18, // 37: evalsi.v1alpha1.RunService.CompareRuns:output_type -> evalsi.v1alpha1.CompareRunsResponse
-	20, // 38: evalsi.v1alpha1.RunService.PromoteResults:output_type -> evalsi.v1alpha1.PromoteResultsResponse
-	22, // 39: evalsi.v1alpha1.RunService.CreateShadowReplay:output_type -> evalsi.v1alpha1.CreateShadowReplayResponse
-	29, // [29:40] is the sub-list for method output_type
-	18, // [18:29] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	29, // 0: evalsi.v1alpha1.CreateRunRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
+	26, // 1: evalsi.v1alpha1.CreateRunRequest.labels:type_name -> evalsi.v1alpha1.CreateRunRequest.LabelsEntry
+	30, // 2: evalsi.v1alpha1.CreateRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	30, // 3: evalsi.v1alpha1.GetRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	30, // 4: evalsi.v1alpha1.ListRunsResponse.runs:type_name -> evalsi.v1alpha1.Run
+	30, // 5: evalsi.v1alpha1.WatchRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	31, // 6: evalsi.v1alpha1.WatchRunResponse.progress:type_name -> evalsi.v1alpha1.Progress
+	32, // 7: evalsi.v1alpha1.WatchRunResponse.result:type_name -> evalsi.v1alpha1.EvaluationResult
+	30, // 8: evalsi.v1alpha1.CancelRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	30, // 9: evalsi.v1alpha1.ResumeRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	32, // 10: evalsi.v1alpha1.ListRunResultsResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	33, // 11: evalsi.v1alpha1.ListRunResultsResponse.records:type_name -> evalsi.v1alpha1.Record
+	27, // 12: evalsi.v1alpha1.SliceRunsRequest.labels:type_name -> evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
+	18, // 13: evalsi.v1alpha1.SliceRunsResponse.rows:type_name -> evalsi.v1alpha1.SliceRow
+	34, // 14: evalsi.v1alpha1.MetricComparison.diff_ci:type_name -> evalsi.v1alpha1.ConfidenceInterval
+	20, // 15: evalsi.v1alpha1.CompareRunsResponse.comparisons:type_name -> evalsi.v1alpha1.MetricComparison
+	29, // 16: evalsi.v1alpha1.CreateShadowReplayRequest.candidate:type_name -> evalsi.v1alpha1.RunSpec
+	28, // 17: evalsi.v1alpha1.CreateShadowReplayRequest.labels:type_name -> evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
+	30, // 18: evalsi.v1alpha1.CreateShadowReplayResponse.baseline:type_name -> evalsi.v1alpha1.Run
+	30, // 19: evalsi.v1alpha1.CreateShadowReplayResponse.candidate:type_name -> evalsi.v1alpha1.Run
+	0,  // 20: evalsi.v1alpha1.RunService.CreateRun:input_type -> evalsi.v1alpha1.CreateRunRequest
+	2,  // 21: evalsi.v1alpha1.RunService.GetRun:input_type -> evalsi.v1alpha1.GetRunRequest
+	4,  // 22: evalsi.v1alpha1.RunService.ListRuns:input_type -> evalsi.v1alpha1.ListRunsRequest
+	6,  // 23: evalsi.v1alpha1.RunService.WatchRun:input_type -> evalsi.v1alpha1.WatchRunRequest
+	8,  // 24: evalsi.v1alpha1.RunService.CancelRun:input_type -> evalsi.v1alpha1.CancelRunRequest
+	10, // 25: evalsi.v1alpha1.RunService.ResumeRun:input_type -> evalsi.v1alpha1.ResumeRunRequest
+	12, // 26: evalsi.v1alpha1.RunService.DeleteRun:input_type -> evalsi.v1alpha1.DeleteRunRequest
+	14, // 27: evalsi.v1alpha1.RunService.ListRunResults:input_type -> evalsi.v1alpha1.ListRunResultsRequest
+	16, // 28: evalsi.v1alpha1.RunService.CompareRuns:input_type -> evalsi.v1alpha1.CompareRunsRequest
+	17, // 29: evalsi.v1alpha1.RunService.SliceRuns:input_type -> evalsi.v1alpha1.SliceRunsRequest
+	22, // 30: evalsi.v1alpha1.RunService.PromoteResults:input_type -> evalsi.v1alpha1.PromoteResultsRequest
+	24, // 31: evalsi.v1alpha1.RunService.CreateShadowReplay:input_type -> evalsi.v1alpha1.CreateShadowReplayRequest
+	1,  // 32: evalsi.v1alpha1.RunService.CreateRun:output_type -> evalsi.v1alpha1.CreateRunResponse
+	3,  // 33: evalsi.v1alpha1.RunService.GetRun:output_type -> evalsi.v1alpha1.GetRunResponse
+	5,  // 34: evalsi.v1alpha1.RunService.ListRuns:output_type -> evalsi.v1alpha1.ListRunsResponse
+	7,  // 35: evalsi.v1alpha1.RunService.WatchRun:output_type -> evalsi.v1alpha1.WatchRunResponse
+	9,  // 36: evalsi.v1alpha1.RunService.CancelRun:output_type -> evalsi.v1alpha1.CancelRunResponse
+	11, // 37: evalsi.v1alpha1.RunService.ResumeRun:output_type -> evalsi.v1alpha1.ResumeRunResponse
+	13, // 38: evalsi.v1alpha1.RunService.DeleteRun:output_type -> evalsi.v1alpha1.DeleteRunResponse
+	15, // 39: evalsi.v1alpha1.RunService.ListRunResults:output_type -> evalsi.v1alpha1.ListRunResultsResponse
+	21, // 40: evalsi.v1alpha1.RunService.CompareRuns:output_type -> evalsi.v1alpha1.CompareRunsResponse
+	19, // 41: evalsi.v1alpha1.RunService.SliceRuns:output_type -> evalsi.v1alpha1.SliceRunsResponse
+	23, // 42: evalsi.v1alpha1.RunService.PromoteResults:output_type -> evalsi.v1alpha1.PromoteResultsResponse
+	25, // 43: evalsi.v1alpha1.RunService.CreateShadowReplay:output_type -> evalsi.v1alpha1.CreateShadowReplayResponse
+	32, // [32:44] is the sub-list for method output_type
+	20, // [20:32] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_service_proto_init() }
@@ -1548,14 +1829,15 @@ func file_evalsi_v1alpha1_run_service_proto_init() {
 		(*WatchRunResponse_Progress)(nil),
 		(*WatchRunResponse_Result)(nil),
 	}
-	file_evalsi_v1alpha1_run_service_proto_msgTypes[17].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_run_service_proto_msgTypes[18].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_run_service_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_run_service_proto_rawDesc), len(file_evalsi_v1alpha1_run_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
