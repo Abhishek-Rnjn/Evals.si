@@ -113,3 +113,11 @@ artifact digests and exact checks that passed in the verification record.
 If publication or verification fails, report the failed job/artifact and keep
 the release unverified. Do not move a published tag or overwrite its artifacts;
 fix forward under a separately approved version.
+
+## Lessons from v0.1.0
+
+- **Tag rules.** The deployment rule on the `release`, `pypi` and `pypi-harness` environments must be a **tag** rule (`v*`). A branch rule with the same pattern rejects every tag run.
+- **What a dry run does not cover.** Signing, GHCR pushes, the `release` job and PyPI run only on a tag. The first tag run found a login bug in the chart signing step that no dry run could. Treat each of those steps as untested until a tag run passes it.
+- **Known issue: the `release` job.** It downloads every artifact in the run, including the Docker build records (`*.dockerbuild`), and that download fails. For v0.1.0 the GitHub release was created by hand from the run's artifacts. Before the next release, limit the download to the artifacts that belong on the release (`binaries-*`, `python`, `charts`, `bundle`, `sbom-*`) and stop the build action from uploading build records, then dry-run the change.
+- **Moving a tag.** Moving an unreleased tag is acceptable only before anything is published. A PyPI version can never be uploaded again, so once the PyPI jobs have run, fix forward under a new version and never re-run the workflow for the same tag.
+- **No macOS `sha256sum`.** Use `shasum -a 256` to create or check `SHA256SUMS` on macOS.
