@@ -85,6 +85,8 @@ Notes:
 
 Add whichever you use.
 
+The web UI signs in through the same provider. Register a public client with the redirect URI `https://<server>/ui/` and set `cli_login.ui_client_id` to it (it defaults to `client_id`); see [the web UI guide](web-ui.md#signing-in).
+
 ### Keycloak
 
 ```yaml

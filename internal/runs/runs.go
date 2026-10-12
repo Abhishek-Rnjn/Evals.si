@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -627,6 +628,10 @@ func (m *Manager) publish(a *activeRun, ev *evalsiv1alpha1.WatchRunResponse) {
 type execution struct {
 	// Tokens already counted toward the project's daily quota.
 	countedJudge, countedTarget int64
+	// Milliseconds of sandboxed work this run has done, and how many of them
+	// are already counted toward the project's day.
+	sandboxMillis  atomic.Int64
+	countedSandbox int64
 
 	m       *Manager
 	a       *activeRun
@@ -980,6 +985,9 @@ func (ex *execution) save(ctx context.Context, batch []store.Result) error {
 	for _, r := range batch {
 		ex.keys[store.Key{RecordIdx: r.RecordIdx, Trial: r.Trial, EvalIdx: r.EvalIdx}] = true
 		ex.addJudgeUsage(r.Result)
+		if r.EvalIdx >= 0 && r.EvalIdx < len(ex.insts) && ex.insts[r.EvalIdx].Manifest.GetScheduling().GetPool() == "sandbox" {
+			ex.addSandbox(r.Result.GetDuration().AsDuration())
+		}
 		ex.m.publish(ex.a, &evalsiv1alpha1.WatchRunResponse{Event: &evalsiv1alpha1.WatchRunResponse_Result{Result: r.Result}})
 	}
 	if err := ex.progress(ctx, len(batch)); err != nil {
@@ -1324,9 +1332,12 @@ func (ex *execution) runTasks(ctx context.Context, trial int) error {
 	g.SetLimit(ex.m.opts.Evaluate.Parallelism)
 	for _, i := range missing {
 		g.Go(func() error {
+			started := time.Now()
 			res, err := ex.m.worker.RunTask(gctx, &pluginv1alpha1.RunTaskRequest{
 				Spec: spec, Record: ex.records[i], Trial: int32(trial), RunId: ex.run.GetId(),
 			}, nil)
+			// An agent task runs in a sandbox from start to end, whether it succeeds or not.
+			ex.addSandbox(time.Since(started))
 			if err != nil {
 				return fmt.Errorf("agent task %s: %w", ex.records[i].GetId(), err)
 			}

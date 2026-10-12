@@ -147,6 +147,7 @@ quotas:
 #   max_stored_runs: 10000        # CreateRun fails past it
 #   judge_tokens_per_day: 5000000 # UTC day, across the project's runs
 #   target_tokens_per_day: 20000000
+#   sandbox_seconds_per_day: 36000 # UTC day: agent tasks (start to end) and code evaluators, summed
 #   max_reward_rollouts: 8192     # Reward Service rollouts in flight (per replica)
 # projects:
 #   research: {judge_tokens_per_day: 50000000}
