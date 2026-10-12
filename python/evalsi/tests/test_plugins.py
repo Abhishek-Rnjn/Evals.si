@@ -144,3 +144,18 @@ def test_cli(
     assert main(["plugins", "remove", "acme/checks"]) == 0
     assert not (plugins / "acme__checks").exists()
     assert main(["plugins", "remove", "acme/checks"]) == 1
+
+
+def test_hosted_wasm_plugin_installs_from_the_repo_index(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The index's example/text-checks entry resolves to the files committed
+    beside it, whose pins match: the manifest by the index's, the module by the
+    manifest's. ``scripts/publish-wasm-example.sh`` re-pins them."""
+    entry = find(load_index([str(REPO_INDEX)]), "example/text-checks")
+    assert entry.kind == "wasm" and entry.tier == "community"
+    dest = install(entry, tmp_path / "plugins")
+    assert "example__text-checks" in dest
+    monkeypatch.setenv("EVALSI_PLUGIN_PATH", str(tmp_path / "plugins"))
+    [pack] = discover_wasm_packs()
+    assert [e.spec.name for e in pack.evaluators] == list(entry.evaluators)
