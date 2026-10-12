@@ -135,6 +135,7 @@ const examples = [
   { dir: "guardrails", title: "Inline guardrails", desc: "Block or flag model output through agentgateway before it reaches users.", guide: "/docs/guides/guardrails/" },
   { dir: "annotation", title: "Human annotation queues", desc: "Collect human labels and measure agreement alongside automated scores.", guide: "/docs/guides/annotation/" },
   { dir: "finetuning", title: "Fine-tuning and RL rewards", desc: "Evaluators as RL rewards, and checkpoint checks for forgetting and safety regressions.", guide: "/docs/guides/fine-tuning/" },
+  { dir: "custom-evaluator", title: "Custom Python evaluator", desc: "Write your own evaluator as a decorated function, test it, and install it as a pack so it runs by name.", guide: "/docs/guides/plugins/" },
   { dir: "wasm", title: "Wasm evaluator plugin", desc: "Write an evaluator in Go, compile it to Wasm and publish it through the plugin index.", guide: "/docs/guides/plugins/" },
   { dir: "auth", title: "Identity and access control", desc: "Server config with OIDC, API keys and project-scoped roles.", guide: "/docs/guides/identity/" },
   { dir: "server", title: "Server configuration", desc: "A baseline evalsid configuration.", guide: "/docs/get-started/" },

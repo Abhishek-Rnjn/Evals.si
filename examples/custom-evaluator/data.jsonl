@@ -1,0 +1,4 @@
+{"id": "good", "input": "What is the capital of France?", "output": "Paris is the capital of France [1]. It lies on the Seine [2].", "context": ["Paris is the capital and largest city of France.", "The Seine flows through Paris."]}
+{"id": "dangling", "input": "Who wrote Hamlet?", "output": "Shakespeare wrote Hamlet [3].", "context": ["Hamlet is a tragedy by William Shakespeare."]}
+{"id": "uncited", "input": "How tall is Everest?", "output": "Mount Everest is 8,849 metres tall.", "context": ["Mount Everest's height is 8,849 m."]}
+{"id": "no-context", "input": "Say hi", "output": "Hi [1]"}
