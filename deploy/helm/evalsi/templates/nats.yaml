@@ -1,6 +1,21 @@
 {{- if not .Values.nats.url }}
 {{- $fn := include "evalsi.fullname" $ -}}
 {{- $v := .Values }}
+{{- $nauth := default dict $v.nats.auth }}
+{{- if not $nauth.existingSecret }}
+{{- $secret := printf "%s-nats-auth" $fn }}
+{{- /* The token survives upgrades: an existing Secret keeps its value. */ -}}
+{{- $old := lookup "v1" "Secret" .Release.Namespace $secret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secret }}
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+type: Opaque
+data:
+  token: {{ if and $old $old.data (index $old.data "token") }}{{ index $old.data "token" }}{{ else }}{{ randAlphaNum 48 | b64enc }}{{ end }}
+---
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -26,7 +41,12 @@ spec:
       containers:
         - name: nats
           image: {{ include "evalsi.ref" (dict "root" . "ref" $v.nats.image) }}
-          args: [--jetstream, --store_dir, /data, --http_port, "8222", --port, "4222"]
+          # Every client needs the token: workers run what a task says, so
+          # nobody else in the cluster may publish one.
+          args: [--jetstream, --store_dir, /data, --http_port, "8222", --port, "4222", --auth, $(NATS_TOKEN)]
+          env:
+            - name: NATS_TOKEN
+              valueFrom: {secretKeyRef: {name: {{ include "evalsi.natsAuthSecret" . }}, key: token}}
           ports:
             - {name: client, containerPort: 4222}
             - {name: monitor, containerPort: 8222}
@@ -59,4 +79,28 @@ spec:
   ports:
     - {name: client, port: 4222, targetPort: client}
     - {name: monitor, port: 8222, targetPort: monitor}
+{{- $np := default dict $v.nats.networkPolicy }}
+{{- if or (not (hasKey $np "enabled")) $np.enabled }}
+---
+# NATS clients are this release's pods: the client port takes connections
+# from this namespace (and nats.networkPolicy.from) only. The monitoring
+# port stays open for KEDA's JetStream scaler.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $fn }}-nats
+  labels: {{- include "evalsi.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-nats}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        {{- with $np.from }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports: [{port: 4222, protocol: TCP}]
+    - ports: [{port: 8222, protocol: TCP}]
+{{- end }}
 {{- end }}

@@ -40,10 +40,12 @@ type EvaluatorReconciler struct {
 	WorkerConfigMap string
 	// Secrets workers using WorkerConfigMap need, as the chart's workers
 	// get them: the client certificate for remote sandbox pools (mounted at
-	// /etc/evalsi/worker-tls) and S3 credentials (access_key, secret_key).
-	// An Evaluator with its own ConfigMap brings its own, through env.
-	WorkerTLSSecret string
-	WorkerS3Secret  string
+	// /etc/evalsi/worker-tls), S3 credentials (access_key, secret_key) and
+	// the NATS token (token, as EVALSI_NATS_TOKEN). An Evaluator with its
+	// own ConfigMap brings its own, through env.
+	WorkerTLSSecret  string
+	WorkerS3Secret   string
+	WorkerNATSSecret string
 	// Names of the Deployments it makes start with this (default "evalsi").
 	NamePrefix string
 	// NATS's monitoring endpoint (host:8222), which KEDA's JetStream scaler reads.
@@ -140,7 +142,8 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 }
 
 // addReleaseSecrets gives a worker on the release's default ConfigMap what
-// that config refers to: the sandbox client certificate and S3 credentials.
+// that config refers to: the sandbox client certificate, S3 credentials and
+// the NATS token.
 func (r *EvaluatorReconciler) addReleaseSecrets(pod *corev1.PodTemplateSpec, c *corev1.Container) {
 	if r.WorkerTLSSecret != "" {
 		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: "worker-tls", MountPath: configMount + "/worker-tls", ReadOnly: true})
@@ -160,7 +163,16 @@ func (r *EvaluatorReconciler) addReleaseSecrets(pod *corev1.PodTemplateSpec, c *
 			{Name: "EVALSI_S3_SECRET_KEY", ValueFrom: secret("secret_key")},
 		}, c.Env...)
 	}
+	if r.WorkerNATSSecret != "" {
+		c.Env = append([]corev1.EnvVar{{Name: NATSTokenEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: r.WorkerNATSSecret}, Key: "token",
+		}}}}, c.Env...)
+	}
 }
+
+// NATSTokenEnv holds the NATS token of the chart's bundled NATS, which the
+// release's worker config names in cluster.token_env.
+const NATSTokenEnv = "EVALSI_NATS_TOKEN"
 
 // scaledObject scales the Deployment on the backlog of the pools'
 // consumers, one trigger per pool.

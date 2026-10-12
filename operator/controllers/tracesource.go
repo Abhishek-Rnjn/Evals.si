@@ -24,6 +24,8 @@ import (
 type TraceSourceReconciler struct {
 	client.Client
 	API *API
+	// Which projects a resource's namespace may name.
+	Projects v1.ProjectPolicy
 	// How often status is refreshed; default 30s.
 	StatsInterval time.Duration
 }
@@ -36,9 +38,11 @@ func (r *TraceSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if err := r.Get(ctx, req.NamespacedName, s); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	project := Project(s)
+	project, projectErr := r.Projects.Project(s)
 	if !s.DeletionTimestamp.IsZero() {
-		if s.Status.Name != "" {
+		// A project the namespace may not name was never applied to: there
+		// is nothing of this resource's to delete there.
+		if s.Status.Name != "" && projectErr == nil {
 			_, err := r.API.Sources.DeleteSource(ctx, connect.NewRequest(&evalsiv1alpha1.DeleteSourceRequest{Project: project, Name: s.Status.Name}))
 			if err != nil && connect.CodeOf(err) != connect.CodeNotFound && !permanent(err) {
 				return ctrl.Result{}, err
@@ -53,6 +57,11 @@ func (r *TraceSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		if err := r.Update(ctx, s); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+	if projectErr != nil {
+		s.Status.ObservedGeneration, s.Status.AppliedMetadata = s.Generation, appliedMetadata(s)
+		meta.SetStatusCondition(&s.Status.Conditions, metav1.Condition{Type: "Synced", Status: metav1.ConditionFalse, Reason: "Forbidden", Message: projectErr.Error(), ObservedGeneration: s.Generation})
+		return ctrl.Result{}, r.Status().Update(ctx, s)
 	}
 	synced := meta.IsStatusConditionTrue(s.Status.Conditions, "Synced")
 	if !synced || s.Status.ObservedGeneration != s.Generation || s.Status.AppliedMetadata != appliedMetadata(s) {

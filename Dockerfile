@@ -29,6 +29,11 @@ COPY python/pyproject.toml python/uv.lock ./
 COPY python/evalsi evalsi
 COPY python/evalsi-harness evalsi-harness
 ENV UV_PROJECT_ENVIRONMENT=/opt/evalsi/venv UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+# A release build stamps the Python packages with the same version as the
+# binaries (scripts/set-python-version.sh), as the release's wheels are.
+ARG VERSION=0.0.0-dev
+COPY scripts/set-python-version.sh /usr/local/bin/set-python-version
+RUN if [ "$VERSION" != "0.0.0-dev" ]; then set-python-version "$VERSION" .; fi
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --all-packages --no-editable \
       --extra server --extra anthropic --extra jsonschema

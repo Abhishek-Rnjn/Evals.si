@@ -2,7 +2,7 @@
 # Builds an air-gapped bundle on a connected machine: every image the charts
 # use, the charts, and (with --with-cli) wheels for the evalsi CLI.
 #
-#   deploy/airgap/bundle.sh --tag 0.4.0 --out evalsi-bundle
+#   deploy/airgap/bundle.sh --tag 0.1.0 --out evalsi-bundle
 #   tar czf evalsi-bundle.tgz evalsi-bundle      # carry it across
 #
 # Needs Docker and helm (and uv for --with-cli). Docker 28+ scopes inspect and

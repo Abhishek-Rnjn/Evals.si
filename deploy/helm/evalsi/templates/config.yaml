@@ -5,6 +5,7 @@
 {{- fail "server.replicas above 1 needs storage.postgres (or devPostgres for a trial)" }}
 {{- end }}
 {{- $cluster := dict "url" (include "evalsi.natsURL" .) "replicas" (int $v.nats.streamReplicas) -}}
+{{- if include "evalsi.natsAuthSecret" . }}{{ $_ := set $cluster "token_env" "EVALSI_NATS_TOKEN" }}{{ end }}
 
 {{- /* evalsid serve */ -}}
 {{- $storage := dict -}}

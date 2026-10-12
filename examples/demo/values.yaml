@@ -97,7 +97,7 @@ datasets:
   # The Evals.si image (the evalsid in it does the upload), and the workers'
   # ConfigMap (it holds the S3 settings) and the S3 credentials Secret of an
   # Evals.si release named evalsi.
-  image: ghcr.io/abhishek-rnjn/evalsi:0.4.0
+  image: ghcr.io/abhishek-rnjn/evalsi:0.1.0
   configMap: evalsi-worker
   s3CredentialsSecret: evalsi-dev-minio    # keys access_key and secret_key
   resources: {}

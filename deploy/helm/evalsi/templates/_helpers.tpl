@@ -72,6 +72,22 @@ kept as it is. */}}
 {{- default (printf "nats://%s-nats.%s.svc:4222" (include "evalsi.fullname" .) .Release.Namespace) .Values.nats.url -}}
 {{- end }}
 
+{{/* The Secret holding the bundled NATS's token (key token); empty with an
+external NATS (nats.url), whose credentials go in server.config. */}}
+{{- define "evalsi.natsAuthSecret" -}}
+{{- if not .Values.nats.url -}}
+{{- default (printf "%s-nats-auth" (include "evalsi.fullname" .)) (default dict .Values.nats.auth).existingSecret -}}
+{{- end -}}
+{{- end }}
+
+{{/* The bundled NATS's token as an env var, for every process that connects. */}}
+{{- define "evalsi.natsTokenEnv" -}}
+{{- with include "evalsi.natsAuthSecret" . }}
+- name: EVALSI_NATS_TOKEN
+  valueFrom: {secretKeyRef: {name: {{ . }}, key: token}}
+{{- end }}
+{{- end }}
+
 {{- define "evalsi.serverURL" -}}
 {{- printf "%s://%s.%s.svc:8080" (ternary "https" "http" .Values.server.tls) (include "evalsi.fullname" .) .Release.Namespace -}}
 {{- end }}

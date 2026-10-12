@@ -136,7 +136,7 @@ The script checks that each artifact was signed by `.github/workflows/release.ym
 On a connected machine, bundle the images and charts (and, with `--with-cli`, wheels for the CLI):
 
 ```bash
-deploy/airgap/bundle.sh --tag 0.4.0 --out evalsi-bundle --with-cli
+deploy/airgap/bundle.sh --tag 0.1.0 --out evalsi-bundle --with-cli
 ```
 
 Docker 28+ scopes inspect, load and save to the bundle's platform. An older
@@ -170,7 +170,7 @@ kubectl get evalruns -n evalsi
 kubectl wait evalrun/capitals -n evalsi --for=condition=Succeeded --timeout=30m
 ```
 
-- The project is the `evals.si/project` label, else the namespace. The operator creates the project when the server does not know it.
+- The project is the `evals.si/project` label, else the namespace. The operator creates the project when the server does not know it. It acts through the API as an owner, so the label may name a project other than the namespace only for resources in the release's namespace, or in namespaces mapped to that project with `operator.projectNamespaces` (for example `{support: [team-a]}`; `["*"]` for every namespace). Any other label is refused at admission, and by the controllers when the webhooks are off.
 - The spec cannot change after creation (apply a new `EvalRun`); deleting the resource cancels the run, and its results stay on the server.
 - `Succeeded` means every gate passed; `Failed`, that a gate failed; `Error`, that the run could not finish (resume it through the API, `RunService.ResumeRun`).
 
@@ -256,7 +256,7 @@ What each chart creates, and who has to install it.
 | `evalsi-worker` | Nothing: no API token is mounted | Workers talk only to `evalsid`, NATS and the sandbox pools |
 | `evalsi` | Nothing beyond what every service account has | `evalsid` reads the cluster's service-account issuer and keys (`/.well-known/openid-configuration`, `/openid/v1/jwks`), which Kubernetes grants all service accounts through `system:service-account-issuer-discovery` |
 
-The operator watches only its own namespace unless `operator.allNamespaces` is set. Every pod the chart runs meets Pod Security `restricted`: non-root, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp, read-only root filesystems.
+The operator watches only its own namespace unless `operator.allNamespaces` is set. The bundled NATS requires a token: the chart keeps it in the `<release>-nats-auth` Secret (or `nats.auth.existingSecret`), gives it to `evalsid`, the workers and the operator's `Evaluator`s, and lets only pods in its namespace reach NATS's client port (`nats.networkPolicy`). Workers run what a task on NATS says, so nothing else may publish one. With an external NATS (`nats.url`), set its credentials under `server.config.cluster` (`creds_file`, `token_env` or `tls`). Every pod the chart runs meets Pod Security `restricted`: non-root, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp, read-only root filesystems.
 
 **`evalsi-crds` (a cluster admin, once).**
 

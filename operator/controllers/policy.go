@@ -23,6 +23,8 @@ import (
 type PolicyReconciler struct {
 	client.Client
 	API *API
+	// Which projects a resource's namespace may name.
+	Projects v1.ProjectPolicy
 	// How often counters are refreshed; default 30s.
 	StatsInterval time.Duration
 }
@@ -89,7 +91,10 @@ func (r *PolicyReconciler) apply(ctx context.Context, p *v1.OnlineEvalPolicy, na
 	if err != nil {
 		return fail("Invalid", err)
 	}
-	project := Project(p)
+	project, err := r.Projects.Project(p)
+	if err != nil {
+		return fail("Forbidden", err)
+	}
 	// Refuse to take over another project's policy of the same name.
 	list, err := r.API.Monitor.ListPolicies(ctx, connect.NewRequest(&evalsiv1alpha1.ListPoliciesRequest{}))
 	if err != nil {

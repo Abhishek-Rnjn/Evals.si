@@ -652,6 +652,49 @@ func TestUnauthenticatedSurfaces(t *testing.T) {
 
 type emptyMsg = structpb.Struct
 
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+// Connect reads a unary request whole before the gate's interceptor runs.
+// A request whose credential was rejected is cut off after a few KiB, and
+// any other at MaxMessageBytes, instead of being buffered whole.
+func TestOversizedRequests(t *testing.T) {
+	s := startAuthServer(t, nil)
+	for name, tc := range map[string]struct {
+		cred string
+		size int64
+	}{
+		"no credential":    {"", rejectedBodyBytes * 4},
+		"invalid key":      {"evk_bogus", rejectedBodyBytes * 4},
+		"valid key":        {s.keys["owner"], MaxMessageBytes + 1<<20},
+		"valid key, small": {s.keys["owner"], 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodPost, s.url+evalsiv1alpha1connect.EvaluationServiceEvaluateProcedure, io.LimitReader(zeros{}, tc.size))
+			req.Header.Set("Content-Type", "application/proto")
+			if tc.cred != "" {
+				req.Header.Set("Authorization", "Bearer "+tc.cred)
+			}
+			resp, err := s.http.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			if want := "resource_exhausted"; tc.size > 0 && !strings.Contains(string(body), want) {
+				t.Fatalf("status %d: %s, want %s", resp.StatusCode, body, want)
+			}
+			if tc.size == 0 && strings.Contains(string(body), "resource_exhausted") {
+				t.Fatalf("an empty request was refused for its size: %s", body)
+			}
+		})
+	}
+}
+
 func TestPermissionMatrix(t *testing.T) {
 	s := startAuthServer(t, nil)
 	ctx := context.Background()

@@ -148,6 +148,18 @@ nats:
   # Extra Service labels. NATS speaks first, which a mesh waypoint breaks:
   # under Istio ambient set istio.io/use-waypoint: none.
   serviceLabels: {}
+  # The bundled NATS requires a token, which every evalsi process (and the
+  # operator's Evaluators) reads from a Secret (key token). The chart makes
+  # <release>-nats-auth and keeps its value across upgrades; with GitOps
+  # tools that render without cluster access (no lookup), create the Secret
+  # yourself and name it here so the token does not change on every render.
+  auth:
+    existingSecret: ""
+  # Only pods in this namespace (and these extra NetworkPolicy peers, for
+  # example Evaluators in other namespaces) may reach the client port.
+  networkPolicy:
+    enabled: true
+    from: []
 
 auth:
   # Accept the cluster's service-account tokens (the operator, CI jobs,
@@ -254,6 +266,11 @@ operator:
   # and certificate).
   webhooks: true
   createProjects: true
+  # The operator calls evalsid as an owner, so a resource's evals.si/project
+  # label may name another project than its namespace only from this
+  # release's namespace or from the namespaces mapped to that project here
+  # ("*": every namespace). For example: {support: [team-a, team-b]}.
+  projectNamespaces: {}
   istio:
     # Render a PeerAuthentication that lets the API server reach the admission
     # webhooks (port 9443 PERMISSIVE) under mesh-wide STRICT mTLS. Off by

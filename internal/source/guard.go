@@ -69,8 +69,43 @@ func (g *Guard) resolve(ctx context.Context, host string) ([]net.IP, error) {
 }
 
 func internalIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified() || ip.IsInterfaceLocalMulticast()
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || ip.IsInterfaceLocalMulticast() {
+		return true
+	}
+	for _, n := range internalNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	// NAT64 addresses reach the IPv4 address in their last four bytes.
+	for _, n := range nat64Nets {
+		if n.Contains(ip) && len(ip) == net.IPv6len {
+			return internalIP(net.IP(ip[12:16]))
+		}
+	}
+	return false
+}
+
+// internalNets are internal ranges the net.IP predicates leave out:
+// "this network" (0.0.0.0/8, which Linux routes to the host) and shared
+// address space (100.64.0.0/10: carrier NAT, and some clouds' metadata
+// service, such as 100.100.100.200).
+var internalNets = mustCIDRs("0.0.0.0/8", "100.64.0.0/10")
+
+// nat64Nets are the NAT64 prefixes: the well-known one and the local-use one.
+var nat64Nets = mustCIDRs("64:ff9b::/96", "64:ff9b:1::/48")
+
+func mustCIDRs(cidrs ...string) []*net.IPNet {
+	out := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		_, n, err := net.ParseCIDR(c)
+		if err != nil {
+			panic(err)
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 // Client is an HTTP client whose every request, redirect hops included, goes

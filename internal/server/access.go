@@ -856,6 +856,35 @@ func projectNames(e *authz.Engine) []string {
 // interceptor is the Connect side of the gate.
 func (g *gate) interceptor() connect.Interceptor { return gateInterceptor{g} }
 
+// MaxMessageBytes bounds one RPC message (after decompression). Connect reads
+// a unary request whole before any interceptor runs, so without a bound an
+// unauthenticated caller could make the server buffer a body of any size
+// before the gate rejects it. It matches the idempotency cache's limit.
+const MaxMessageBytes = 64 << 20
+
+// rejectedBodyBytes bounds what is read of a request whose credential was
+// already rejected: enough for the protocol to parse a small message and
+// answer Unauthenticated, too little to buffer.
+const rejectedBodyBytes = 64 << 10
+
+// boundRejected caps the body of a request whose credential authentication
+// rejected. Every enforcement point refuses such a request, so its body only
+// matters to the protocol's error; this keeps a caller without a valid
+// credential from making the server read up to MaxMessageBytes per request.
+func boundRejected(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if auth.FromContext(r.Context()).Err != nil && r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, rejectedBodyBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// handlerOptions are the options of every Connect handler behind the gate.
+func (g *gate) handlerOptions() connect.HandlerOption {
+	return connect.WithHandlerOptions(connect.WithInterceptors(g.interceptor()), connect.WithReadMaxBytes(MaxMessageBytes))
+}
+
 func (g *gate) datasetUploadTargets(config *evalsiv1alpha1.DatasetUploadConfig) ([]target, error) {
 	if err := datasets.ValidateUpload(config); err != nil {
 		return nil, err

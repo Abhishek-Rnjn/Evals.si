@@ -92,8 +92,10 @@ git tag -a v0.1.0 REVIEWED_COMMIT -m "Evals.si v0.1.0"
 git push origin v0.1.0
 ```
 
-Wait for the tag-triggered workflow, including PyPI if enabled. The GitHub
-release job does not depend on the separate PyPI job; check both outcomes.
+Wait for the tag-triggered workflow, including PyPI if enabled. The PyPI
+jobs wait for the approval and for every build (archives, images, charts,
+bundle), since a PyPI version can never be uploaded again; the GitHub
+release job does not depend on them, so check both outcomes.
 Download the release assets and validate `SHA256SUMS` from their directory:
 
 ```bash

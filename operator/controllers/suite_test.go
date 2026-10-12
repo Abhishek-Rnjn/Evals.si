@@ -213,6 +213,9 @@ func (f *fakeAPI) DeleteSource(_ context.Context, req *connect.Request[evalsiv1a
 	return connect.NewResponse(&evalsiv1alpha1.DeleteSourceResponse{}), nil
 }
 
+// The example resources in team-a name these projects.
+var testProjectNamespaces = map[string][]string{"quickstart": {"team-a"}, "support": {"team-a"}}
+
 type env struct {
 	api   *fakeAPI
 	admin client.Client
@@ -272,7 +275,8 @@ func start(t *testing.T) *env {
 		API:     APIConfig{URL: srv.URL, TokenFile: tokenFile, CreateProjects: true}, PollInterval: 200 * time.Millisecond, StatsInterval: 200 * time.Millisecond,
 		Namespace: "evalsi", Image: "ghcr.io/abhishek-rnjn/evalsi:test", SandboxTLSSecret: "sandbox-tls",
 		SandboxAllowClients: []string{"spiffe://evals.si/ns/evalsi/sa/evalsi-worker"}, SandboxServiceAccount: "evalsi-sandboxd",
-		WorkerConfigMap: "evalsi-worker", WorkerTLSSecret: "evalsi-worker-tls", WorkerS3Secret: "evalsi-s3", NATSMonitoringEndpoint: "evalsi-nats.evalsi.svc:8222",
+		WorkerConfigMap: "evalsi-worker", WorkerTLSSecret: "evalsi-worker-tls", WorkerS3Secret: "evalsi-s3", WorkerNATSSecret: "evalsi-nats-auth", NATSMonitoringEndpoint: "evalsi-nats.evalsi.svc:8222",
+		ProjectNamespaces: testProjectNamespaces,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +284,7 @@ func start(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalsiwebhook.Register(mgr.GetWebhookServer(), remote)
+	evalsiwebhook.Register(mgr.GetWebhookServer(), remote, v1.ProjectPolicy{Home: "evalsi", Namespaces: testProjectNamespaces})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {

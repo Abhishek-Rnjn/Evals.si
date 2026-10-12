@@ -247,6 +247,47 @@ func TestEvalsiChartSchedulingAndLabels(t *testing.T) {
 	}
 }
 
+// The bundled NATS takes connections only with the release's token, from
+// this namespace: workers run whatever a task on it says.
+func TestBundledNATSRequiresAToken(t *testing.T) {
+	objs := render(t, "evalsi")
+	find(t, objs, "Secret", "evalsi-nats-auth")
+	find(t, objs, "NetworkPolicy", "evalsi-nats")
+	if nats := toYAML(t, find(t, objs, "StatefulSet", "evalsi-nats").Spec); !strings.Contains(nats, "--auth") || !strings.Contains(nats, "evalsi-nats-auth") {
+		t.Errorf("NATS without a token: %s", nats)
+	}
+	for _, cm := range []string{"evalsi", "evalsi-worker"} {
+		if c := load(t, find(t, objs, "ConfigMap", cm)).Cluster; c.TokenEnv != "EVALSI_NATS_TOKEN" {
+			t.Errorf("%s: cluster %+v", cm, c)
+		}
+	}
+	for _, d := range []string{"evalsi", "evalsi-worker-cpu", "evalsi-worker-judge"} {
+		if spec := toYAML(t, find(t, objs, "Deployment", d).Spec); !strings.Contains(spec, "EVALSI_NATS_TOKEN") {
+			t.Errorf("%s has no NATS token", d)
+		}
+	}
+	if op := toYAML(t, find(t, objs, "Deployment", "evalsi-operator").Spec); !strings.Contains(op, "--worker-nats-secret=evalsi-nats-auth") {
+		t.Errorf("operator: %s", op)
+	}
+	// An external NATS brings its own credentials (server.config).
+	external := render(t, "evalsi", "nats.url=nats://nats.nats.svc:4222")
+	for _, o := range external {
+		if o.Kind == "Secret" && o.Metadata.Name == "evalsi-nats-auth" || o.Kind == "NetworkPolicy" && o.Metadata.Name == "evalsi-nats" {
+			t.Errorf("%s %s with an external NATS", o.Kind, o.Metadata.Name)
+		}
+	}
+	if c := load(t, find(t, external, "ConfigMap", "evalsi")).Cluster; c.TokenEnv != "" {
+		t.Errorf("external NATS: %+v", c)
+	}
+}
+
+func TestOperatorProjectNamespaces(t *testing.T) {
+	op := toYAML(t, find(t, render(t, "evalsi", "operator.projectNamespaces.support={team-a,team-b}"), "Deployment", "evalsi-operator").Spec)
+	if !strings.Contains(op, "--project-namespaces=support=team-a,team-b") {
+		t.Errorf("operator: %s", op)
+	}
+}
+
 func TestOperatorPeerAuthentication(t *testing.T) {
 	for _, o := range find2(render(t, "evalsi"), "PeerAuthentication") {
 		t.Errorf("PeerAuthentication rendered by default: %s", o.Metadata.Name)
