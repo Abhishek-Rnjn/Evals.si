@@ -1,8 +1,9 @@
-// Evals.si web UI: a read-only view over evalsid's REST API.
+// Evals.si web UI: a view over evalsid's REST API.
 //
 // Everything shown comes from /v1alpha1/... with the viewer's credential,
-// so it shows exactly what that credential may read. Values are always
-// rendered as text (textContent), never as HTML.
+// so it shows exactly what that credential may read. Annotators can also
+// answer queue items, which the API allows only with the annotate permission.
+// Values are always rendered as text (textContent), never as HTML.
 "use strict";
 
 (() => {
@@ -21,6 +22,7 @@
   let token = store.get("sessionStorage", "evalsi.token");
   let project = store.get("localStorage", "evalsi.project") || "";
   let authEnabled = true;
+  let uiLogin = false; // the server names an identity provider the UI can sign in with
 
   // ---- DOM helpers ----
   function el(tag, attrs, ...children) {
@@ -119,24 +121,95 @@
   }
 
   // ---- sign-in ----
-  function signIn(reason) {
+  // With an identity provider configured on the server (auth.cli_login), the
+  // browser signs in with the authorization code flow and PKCE: it sends the
+  // person to the provider, and on return evalsid exchanges the code (the
+  // browser cannot call the provider's token endpoint under the CSP). No
+  // secret is involved: the client is public and the verifier never leaves
+  // this tab except in that exchange.
+  const redirectURI = () => `${window.location.origin}/ui/`;
+  const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+
+  async function loginConfig() {
+    if (!uiLogin) return null;
+    try {
+      const resp = await fetch("/ui/login/config", { headers: { Accept: "application/json" }, credentials: "omit" });
+      if (!resp.ok || !(resp.headers.get("Content-Type") || "").includes("json")) return null;
+      return await resp.json();
+    } catch { return null; }
+  }
+
+  async function beginLogin(cfg) {
+    if (!window.crypto?.subtle) {
+      throw new Error("Signing in needs a secure page: use https, or localhost. You can paste a token instead.");
+    }
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+    const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+    store.set("sessionStorage", "evalsi.login", JSON.stringify({ state, verifier, hash: window.location.hash }));
+    const url = new URL(cfg.authorization_endpoint);
+    const params = {
+      response_type: "code", client_id: cfg.client_id, redirect_uri: redirectURI(), scope: (cfg.scopes || []).join(" "),
+      state, code_challenge: challenge, code_challenge_method: "S256", audience: cfg.audience,
+    };
+    for (const [k, v] of Object.entries(params)) if (v) url.searchParams.set(k, v);
+    window.location.assign(url.toString());
+  }
+
+  // The provider sent the person back with ?code=...&state=... (or ?error=...).
+  // Returns a message when it did not work, and null once signed in.
+  async function finishLogin() {
+    const query = new URLSearchParams(window.location.search);
+    let saved = null;
+    try { saved = JSON.parse(store.get("sessionStorage", "evalsi.login") || "null"); } catch { /* treated as missing */ }
+    store.set("sessionStorage", "evalsi.login", null);
+    // Take the one-time code out of the address bar and history.
+    window.history.replaceState(null, "", `${window.location.pathname}${saved?.hash || ""}`);
+    // An error comes back with the state too (RFC 6749 4.1.2.1): a response this
+    // tab did not ask for is not trusted, and does not cancel a login in progress.
+    if (!saved || !query.get("state") || query.get("state") !== saved.state) {
+      if (saved) store.set("sessionStorage", "evalsi.login", JSON.stringify(saved));
+      return "The sign-in response did not match this browser tab's request. Try again.";
+    }
+    if (query.get("error")) {
+      return `The identity provider refused the sign-in: ${query.get("error_description") || query.get("error")}`;
+    }
+    try {
+      const out = await post("/ui/login/token", { code: query.get("code"), code_verifier: saved.verifier, redirect_uri: redirectURI() });
+      // The same token the CLI sends: the ID token if there is one.
+      token = out.idToken || out.id_token || out.accessToken || out.access_token || null;
+      store.set("sessionStorage", "evalsi.token", token);
+      return token ? null : "The identity provider returned no token.";
+    } catch (err) {
+      return `Sign-in failed: ${err.message || err}`;
+    }
+  }
+
+  async function signIn(reason) {
+    const cfg = await loginConfig();
     const input = el("input", { type: "password", autocomplete: "off", placeholder: "evk_... or a JWT", "aria-label": "API key or token" });
+    const slot = el("div");
+    const setError = (message) => slot.replaceChildren(el("p", { class: "error", role: "alert" }, message));
+    if (reason) setError(reason);
+    const paste = el("form", {
+      class: "inline",
+      onsubmit: (e) => {
+        e.preventDefault();
+        token = input.value.trim();
+        store.set("sessionStorage", "evalsi.token", token || null);
+        start();
+      },
+    }, input, el("button", { class: cfg ? null : "primary", type: "submit" }, "Sign in"));
+    const pasteHelp = el("p", {}, "Paste an API key, or the token from ", el("code", {}, "evalsi auth token --server " + window.location.origin),
+      ". It is kept for this browser tab only.");
+    const sso = cfg ? el("p", {}, el("button", {
+      class: "primary", type: "button", id: "sso",
+      onclick: () => beginLogin(cfg).catch((err) => setError(err.message || String(err))),
+    }, "Sign in with your identity provider")) : null;
     show(el("div", { class: "card signin" },
-      el("h1", {}, "Sign in"),
-      reason ? el("p", { class: "error" }, reason) : null,
-      el("p", {}, "Paste an API key, or the token from ", el("code", {}, "evalsi auth token --server " + window.location.origin),
-        ". It is kept for this browser tab only."),
-      el("form", {
-        class: "inline",
-        onsubmit: (e) => {
-          e.preventDefault();
-          token = input.value.trim();
-          store.set("sessionStorage", "evalsi.token", token || null);
-          start();
-        },
-      }, input, el("button", { class: "primary", type: "submit" }, "Sign in")),
-    ));
-    input.focus();
+      el("h1", {}, "Sign in"), slot, sso,
+      cfg ? el("details", {}, el("summary", {}, "Use an API key or token instead"), pasteHelp, paste) : [pasteHelp, paste]));
+    (cfg ? document.getElementById("sso") : input).focus();
   }
 
   // ---- views ----
@@ -300,7 +373,7 @@
   async function viewQueues() {
     const resp = await api("/v1alpha1/queues", { project });
     show(el("h1", {}, "Annotation queues"),
-      el("p", { class: "sub" }, "Annotators work through queues with ", el("code", {}, "evalsi annotate start"), "."),
+      el("p", { class: "sub" }, "Open a queue to annotate in the browser, or use ", el("code", {}, "evalsi annotate start"), "."),
       table(["Queue", "Questions", "Answers per item", "Description"], (resp.queues || []).map((q) => [
         el("a", { href: `#/queues/${encodeURIComponent(q.name)}` }, q.name),
         (q.questions || []).map((x) => el("span", { class: "chip" }, `${x.name} (${enumName(x.kind, "QUESTION_KIND_")})`)),
@@ -311,6 +384,7 @@
   async function viewQueue(name) {
     const s = await api(`/v1alpha1/queues/${encodeURIComponent(name)}/stats`, { project });
     show(el("h1", {}, name),
+      el("p", {}, el("a", { class: "button", href: `#/queues/${encodeURIComponent(name)}/annotate` }, "Annotate")),
       el("div", { class: "card" }, kv([
         ["Items", `${s.done || 0} of ${s.items || 0} done`], ["Answers", s.annotations || "0"], ["Skipped", s.skipped || "0"],
         ["Annotators", chips(s.annotators)],
@@ -324,6 +398,140 @@
           return [el("code", {}, q.question), sum.n || "–", fmt(sum.mean), interval(sum.ci), ciBar(sum),
             fmt(q.interAnnotatorAlpha), q.multiplyAnnotated || "0", vs, chips(q.labelCounts)];
         }), [1, 2, 5, 6]));
+  }
+
+
+  // ---- annotating ----
+  // One item at a time: NextItem holds it for this annotator, and
+  // SubmitAnnotation answers or skips it. The source run's scores are hidden
+  // unless asked for, since they can bias the answers.
+  function trajectoryView(steps) {
+    if (!steps || !steps.length) return null;
+    return el("details", {}, el("summary", {}, `trajectory: ${steps.length} step(s)`),
+      el("ol", {}, steps.map((st) => el("li", {},
+        el("strong", {}, enumName(st.type, "STEP_TYPE_") || "step"), " ", st.name || "",
+        ...[["input", st.input], ["output", st.output]].filter(([, c]) => c)
+          .map(([label, c]) => [el("div", { class: "sub" }, label), el("pre", { class: "content" }, contentText(c))]),
+        st.error ? el("pre", { class: "content error" }, st.error) : null))));
+  }
+
+  // The widget for one question and a function reading its answer: an Answer,
+  // null when an optional question is left blank, or an Error to show.
+  function questionControl(q) {
+    const name = q.name;
+    const kind = String(q.kind || "").replace("QUESTION_KIND_", "");
+    const label = el("label", { class: "q-prompt" }, q.prompt || name, q.optional ? el("span", { class: "sub" }, " (optional)") : null);
+    const group = (type, options) => {
+      const id = `q-${name}`;
+      const inputs = options.map(([value, text]) => el("label", { class: "choice" },
+        el("input", { type, name: id, value }), " ", text));
+      return { inputs, node: el("div", { class: "choices", role: "group", "aria-label": q.prompt || name }, inputs) };
+    };
+    let node, read;
+    if (kind === "PASS_FAIL") {
+      const g = group("radio", [["pass", "Pass"], ["fail", "Fail"]]);
+      node = g.node;
+      read = () => {
+        const on = g.inputs.map((l) => l.firstChild).find((i) => i.checked);
+        return on ? { question: name, passed: on.value === "pass" } : null;
+      };
+    } else if (kind === "LABEL") {
+      const g = group("radio", (q.options || []).map((o) => [o, o]));
+      node = g.node;
+      read = () => {
+        const on = g.inputs.map((l) => l.firstChild).find((i) => i.checked);
+        return on ? { question: name, label: on.value } : null;
+      };
+    } else if (kind === "SCORE") {
+      const lo = Number(q.min ?? 0), hi = Number(q.max ?? 0);
+      const input = el("input", { type: "number", step: "any", min: lo, max: hi, "aria-label": q.prompt || name });
+      node = el("div", {}, input, " ", el("span", { class: "sub" }, `${lo} to ${hi}`));
+      read = () => {
+        if (input.value.trim() === "") return null;
+        const v = Number(input.value);
+        if (Number.isNaN(v) || v < lo || v > hi) return new Error(`${name}: enter a number from ${lo} to ${hi}`);
+        return { question: name, number: v };
+      };
+    } else {
+      const input = el("textarea", { rows: 3, "aria-label": q.prompt || name });
+      node = input;
+      read = () => (input.value.trim() === "" ? null : { question: name, text: input.value });
+    }
+    const answer = () => {
+      const a = read();
+      if (a === null && !q.optional) return new Error(`${name}: an answer is needed (or skip the item)`);
+      return a;
+    };
+    return { node: el("div", { class: "question" }, label, node), answer };
+  }
+
+  async function viewAnnotate(name) {
+    const { queue } = await api(`/v1alpha1/queues/${encodeURIComponent(name)}`, { project });
+    let answered = 0;
+    const holder = el("div");
+    show(el("h1", {}, "Annotate ", el("a", { href: `#/queues/${encodeURIComponent(name)}` }, name)),
+      queue.instructions ? el("div", { class: "card" }, el("pre", { class: "content" }, queue.instructions)) : null,
+      holder);
+
+    async function next() {
+      holder.replaceChildren(el("p", { class: "sub" }, "Fetching the next item…"));
+      const resp = await post(`/v1alpha1/queues/${encodeURIComponent(name)}:next`, { project, queue: name });
+      const item = resp.item;
+      if (!item) {
+        holder.replaceChildren(el("div", { class: "card" }, el("h2", {}, "Nothing left for you"),
+          el("p", {}, `${answered} answered in this session.`),
+          el("p", {}, el("a", { href: `#/queues/${encodeURIComponent(name)}` }, "Back to the queue"))));
+        return;
+      }
+      const rec = item.record || {};
+      const error = el("p", { class: "error", role: "alert" });
+      const controls = (queue.questions || []).map(questionControl);
+      const comment = el("textarea", { rows: 2, "aria-label": "comment" });
+      const scores = el("div", { hidden: true }, kv(Object.entries(item.runScores || {}).sort().map(([k, v]) => [k, fmt(v)])));
+      const showScores = el("input", { type: "checkbox", onchange: (e) => { scores.hidden = !e.target.checked; } });
+      const buttons = [];
+      const send = async (skip) => {
+        error.textContent = "";
+        const answers = [];
+        if (!skip) {
+          for (const c of controls) {
+            const a = c.answer();
+            if (a instanceof Error) { error.textContent = a.message; return; }
+            if (a) answers.push(a);
+          }
+        }
+        buttons.forEach((b) => { b.disabled = true; });
+        try {
+          await post(`/v1alpha1/queues/${encodeURIComponent(name)}/annotations`,
+            { project, queue: name, itemId: item.id, answers, comment: skip ? "" : comment.value.trim(), skip });
+        } catch (err) {
+          buttons.forEach((b) => { b.disabled = false; });
+          if (err instanceof APIError && err.status !== 401 && err.status !== 403) {
+            error.textContent = err.message + " The item may have been taken back; skip to move on.";
+            return;
+          }
+          throw err;
+        }
+        if (!skip) answered += 1;
+        await next();
+      };
+      buttons.push(
+        el("button", { class: "primary", type: "submit" }, "Submit"),
+        el("button", { type: "button", onclick: () => send(true).catch(failed) }, "Skip this item"));
+      holder.replaceChildren(el("form", { class: "annotate", novalidate: true, onsubmit: (e) => { e.preventDefault(); send(false).catch(failed); } },
+        el("p", { class: "sub" }, `${resp.remaining || 1} left for you · item `, el("code", {}, item.id), ` · ${answered} answered`),
+        ...[["input", rec.input], ["output", rec.output], ["reference", rec.reference]].filter(([, c]) => c)
+          .map(([label, c]) => el("div", { class: "card" }, el("div", { class: "sub" }, label), el("pre", { class: "content" }, contentText(c)))),
+        ...(rec.context || []).map((c, i) => el("div", { class: "card" }, el("div", { class: "sub" }, `context ${i + 1}`), el("pre", { class: "content" }, contentText(c)))),
+        trajectoryView(rec.trajectory?.steps),
+        Object.keys(item.runScores || {}).length ? el("p", {}, el("label", {}, showScores, " Show the run's scores (they can bias answers)"), scores) : null,
+        ...controls.map((c) => c.node),
+        el("div", { class: "question" }, el("label", { class: "q-prompt" }, "Comment ", el("span", { class: "sub" }, "(optional)")), comment),
+        error, el("p", {}, buttons)));
+      const first = holder.querySelector("input, textarea, select");
+      if (first) first.focus();
+    }
+    await next();
   }
 
   async function viewGuardrails() {
@@ -395,6 +603,7 @@
     [/^\/compare$/, viewCompare, "compare"],
     [/^\/policies\/(.+)$/, viewPolicy, "policies"],
     [/^\/policies$/, viewPolicies, "policies"],
+    [/^\/queues\/([^/]+)\/annotate$/, viewAnnotate, "queues"],
     [/^\/queues\/(.+)$/, viewQueue, "queues"],
     [/^\/queues$/, viewQueues, "queues"],
     [/^\/guardrails$/, viewGuardrails, "guardrails"],
@@ -419,7 +628,14 @@
     try {
       const doc = await api("/.well-known/evalsi-auth");
       authEnabled = doc.auth_enabled !== false;
+      uiLogin = doc.ui_login === true;
     } catch { authEnabled = true; }
+    // Back from the identity provider.
+    const returned = new URLSearchParams(window.location.search);
+    if ((returned.has("code") || returned.has("error")) && window.location.pathname.endsWith("/ui/")) {
+      const problem = await finishLogin();
+      if (problem) return signIn(problem);
+    }
     const signout = document.getElementById("signout");
     signout.hidden = !authEnabled || !token;
     signout.onclick = () => { token = null; store.set("sessionStorage", "evalsi.token", null); start(); };
