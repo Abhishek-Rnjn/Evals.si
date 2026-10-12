@@ -173,7 +173,8 @@ test('with authentication on, the UI asks for a credential and accepts only a va
   await fillAndSubmit(secret);
   await page.waitForFunction(() => document.getElementById('whoami').textContent.trim() !== '');
   assert.match(await page.textContent('#whoami'), /ui-test/);
-  assert.equal(await page.locator('.signin').count(), 0);
+  // whoami is set before the first view replaces the sign-in card.
+  await page.waitForSelector('.signin', { state: 'detached' });
   assert.ok(await page.locator('#project option').count() >= 1);
 
   // The credential lives in this tab's sessionStorage only, and signing out forgets it.
@@ -212,7 +213,8 @@ test('an annotator answers and skips items in the browser', async () => {
     project: 'default',
     records: { records: [
       { id: 'r1', input: { text: 'What is 2+2?' }, output: { text: '<b>4</b>' } },
-      { id: 'r2', input: { text: 'Capital of France?' }, output: { text: 'Paris' } },
+      { id: 'r2', input: { text: 'Capital of France?' }, output: { text: 'Paris' },
+        trajectory: { steps: [{ type: 'STEP_TYPE_TOOL', name: 'search', input: { text: 'france capital' }, output: { text: `${'long '.repeat(200)}END` } }] } },
     ] },
   });
 
@@ -237,6 +239,11 @@ test('an annotator answers and skips items in the browser', async () => {
   await page.fill('input[type="number"]', '4');
   await page.fill('textarea[aria-label="comment"]', 'looks right');
   await page.click('form.annotate button[type="submit"]');
+
+  // The second item has a long tool result in its trajectory, shown whole.
+  await page.waitForSelector('text=trajectory: 1 step');
+  await page.click('summary:has-text("trajectory")');
+  assert.match(await page.textContent('form.annotate details'), /long long long.*END/s);
 
   // The second item is skipped, which leaves nothing for this annotator.
   await page.waitForFunction(() => document.querySelector('form.annotate .sub')?.textContent.includes('1 answered'));
@@ -364,6 +371,14 @@ test('the UI signs in through the identity provider with PKCE', async () => {
   await page.click('#sso');
   await page.waitForSelector('.signin .error');
   assert.match(await page.textContent('.signin .error'), /refused the sign-in: not for you/);
+
+  // A forged error is not shown as the provider's word, and a forged response
+  // does not cancel a login in progress.
+  idp.deny = false;
+  await page.goto(`${url}/ui/?error=access_denied&error_description=Call+support+on+555&state=forged`);
+  await page.waitForSelector('.signin .error');
+  assert.match(await page.textContent('.signin .error'), /did not match/);
+  assert.doesNotMatch(await page.textContent('#main'), /555/);
 
   // A response this tab did not ask for is not trusted.
   await page.goto(`${url}/ui/?code=planted&state=forged`);

@@ -36,7 +36,11 @@ type Login struct {
 	mu      sync.Mutex
 	meta    *metadata
 	fetched time.Time
-	slots   chan struct{}
+	// The last failed read, remembered briefly so a burst of requests while the
+	// provider is down shares one attempt instead of queueing for their own.
+	failure  error
+	failedAt time.Time
+	slots    chan struct{}
 }
 
 type metadata struct {
@@ -47,6 +51,10 @@ type metadata struct {
 
 // metadataTTL is how long the provider's endpoints are remembered.
 const metadataTTL = time.Hour
+
+// failureTTL is how long a failed read of the provider's metadata is reported
+// again without trying again.
+const failureTTL = 10 * time.Second
 
 // maxExchanges bounds the token requests in flight at once.
 const maxExchanges = 8
@@ -197,13 +205,30 @@ func (l *Login) token(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// discover reads the provider's metadata, at most once an hour.
+// discover reads the provider's metadata, at most once an hour, and after a
+// failure at most once every failureTTL. Callers wait for one attempt and share
+// its outcome.
 func (l *Login) discover(ctx context.Context) (*metadata, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.meta != nil && time.Since(l.fetched) < metadataTTL {
 		return l.meta, nil
 	}
+	if l.failure != nil && time.Since(l.failedAt) < failureTTL {
+		return nil, l.failure
+	}
+	m, err := l.fetch(ctx)
+	switch {
+	case err == nil:
+		l.meta, l.fetched, l.failure = m, time.Now(), nil
+	case ctx.Err() == nil:
+		// A caller that gave up says nothing about the provider.
+		l.failure, l.failedAt = err, time.Now()
+	}
+	return m, err
+}
+
+func (l *Login) fetch(ctx context.Context) (*metadata, error) {
 	issuer := strings.TrimRight(l.Issuer, "/")
 	if err := checkEndpoint(issuer); err != nil {
 		return nil, fmt.Errorf("issuer: %w", err)
@@ -237,8 +262,7 @@ func (l *Login) discover(ctx context.Context) (*metadata, error) {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	l.meta, l.fetched = &m, time.Now()
-	return l.meta, nil
+	return &m, nil
 }
 
 // checkEndpoint accepts an https URL, or http only to a loopback address (a

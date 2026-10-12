@@ -197,3 +197,44 @@ func TestLoginRefusesAProviderThatIsNotWhatWasConfigured(t *testing.T) {
 		}
 	}
 }
+
+// While the provider is down, a burst of requests shares one attempt instead of
+// each making its own, and the provider is tried again after failureTTL.
+func TestLoginSharesAFailedDiscoveryBriefly(t *testing.T) {
+	var attempts atomic.Int32
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer down.Close()
+	l := &Login{Issuer: down.URL, ClientID: "evalsi-ui"}
+	mux := http.NewServeMux()
+	RegisterLogin(mux, l)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	for i := 0; i < 5; i++ {
+		resp, err := http.Get(srv.URL + "/ui/login/config")
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadGateway {
+			t.Fatalf("status %d", resp.StatusCode)
+		}
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("%d attempts for five requests", attempts.Load())
+	}
+	// After the pause the provider is tried again.
+	l.mu.Lock()
+	l.failedAt = l.failedAt.Add(-2 * failureTTL)
+	l.mu.Unlock()
+	resp, err := http.Get(srv.URL + "/ui/login/config")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if attempts.Load() != 2 {
+		t.Fatalf("%d attempts after the pause", attempts.Load())
+	}
+}

@@ -165,11 +165,14 @@
     store.set("sessionStorage", "evalsi.login", null);
     // Take the one-time code out of the address bar and history.
     window.history.replaceState(null, "", `${window.location.pathname}${saved?.hash || ""}`);
+    // An error comes back with the state too (RFC 6749 4.1.2.1): a response this
+    // tab did not ask for is not trusted, and does not cancel a login in progress.
+    if (!saved || !query.get("state") || query.get("state") !== saved.state) {
+      if (saved) store.set("sessionStorage", "evalsi.login", JSON.stringify(saved));
+      return "The sign-in response did not match this browser tab's request. Try again.";
+    }
     if (query.get("error")) {
       return `The identity provider refused the sign-in: ${query.get("error_description") || query.get("error")}`;
-    }
-    if (!saved || !query.get("state") || query.get("state") !== saved.state) {
-      return "The sign-in response did not match this browser tab's request. Try again.";
     }
     try {
       const out = await post("/ui/login/token", { code: query.get("code"), code_verifier: saved.verifier, redirect_uri: redirectURI() });
@@ -408,8 +411,8 @@
       el("ol", {}, steps.map((st) => el("li", {},
         el("strong", {}, enumName(st.type, "STEP_TYPE_") || "step"), " ", st.name || "",
         ...[["input", st.input], ["output", st.output]].filter(([, c]) => c)
-          .map(([label, c]) => el("div", {}, el("span", { class: "sub" }, label + ": "), short(contentText(c), 400))),
-        st.error ? el("div", { class: "error" }, short(st.error, 400)) : null))));
+          .map(([label, c]) => [el("div", { class: "sub" }, label), el("pre", { class: "content" }, contentText(c))]),
+        st.error ? el("pre", { class: "content error" }, st.error) : null))));
   }
 
   // The widget for one question and a function reading its answer: an Answer,
