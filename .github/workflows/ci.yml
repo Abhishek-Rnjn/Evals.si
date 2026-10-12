@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+  # No path filter on pull requests: the ruleset requires these checks, and a
+  # check that never runs leaves a docs-only pull request unable to merge.
   pull_request:
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   # Also how to run the heavy jobs below on a branch: Actions > ci > Run workflow.
   workflow_dispatch:
 
