@@ -354,6 +354,28 @@ jobs:
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
           cd tests/trainers && EVALSID="$RUNNER_TEMP/evalsid" "$RUNNER_TEMP/trainers/bin/python" -m pytest -q
 
+  envspecs:
+    # The task environments as OpenEnv and verifiers environments, against the
+    # real packages at the versions the adapters were written for (each has
+    # its own dependency tree, so each gets its own environment).
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: OpenEnv
+        run: |
+          uv venv -p 3.12 "$RUNNER_TEMP/openenv"
+          grep -E '^(openenv-core|pytest)==' tests/envspecs/requirements.txt \
+            | VIRTUAL_ENV="$RUNNER_TEMP/openenv" uv pip install -r - -e python/evalsi -e python/evalsi-harness
+          cd tests/envspecs && "$RUNNER_TEMP/openenv/bin/python" -m pytest -q test_openenv.py
+      - name: verifiers
+        run: |
+          uv venv -p 3.12 "$RUNNER_TEMP/verifiers"
+          grep -E '^(verifiers|pytest)==' tests/envspecs/requirements.txt \
+            | VIRTUAL_ENV="$RUNNER_TEMP/verifiers" uv pip install -r - -e python/evalsi -e python/evalsi-harness
+          cd tests/envspecs && "$RUNNER_TEMP/verifiers/bin/python" -m pytest -q test_verifiers.py
+
   collector-image:
     # The release builds this image; build it here so a Dockerfile or
     # .dockerignore mistake fails a pull request, not the release.

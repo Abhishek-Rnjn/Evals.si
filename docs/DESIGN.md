@@ -1672,7 +1672,7 @@ Deviations from the plan:
 - Checkpoints are served by the evaluating process (the watcher, the callback or `evalsi checkpoints`), not by the operator.
 - Early-stop signals reach the trainer only through the Hugging Face callback.
 - The reward specs' `sandbox` section takes `minIsolation` only; warm-pool sizes belong to the sandbox pools (§13), not to rewards.
-- Environment-spec compatibility (OpenEnv, verifiers) was not evaluated; `TaskEnv` has its own `reset`/`step`.
+- Environment-spec compatibility (OpenEnv, verifiers) was not evaluated in Phase 5; `TaskEnv` has its own `reset`/`step`. It is now: `evalsi_harness.envspecs` presents the same tasks as an OpenEnv `Environment` and a verifiers `StatefulToolEnv`, tested against the real packages.
 
 During the load test, correct programs failed under overload: wall-clock timeouts expired while about 130 sandboxes shared 4 vCPUs. Local sandboxes are now capped at the CPU count (`EVALSI_SANDBOX_CONCURRENCY`).
 

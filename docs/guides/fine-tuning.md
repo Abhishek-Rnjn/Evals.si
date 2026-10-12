@@ -135,6 +135,23 @@ rewards:
 
 Setup is snapshotted once per environment, so `reset` is a restore on rungs that snapshot.
 
+#### As an OpenEnv or verifiers environment
+
+The same tasks can be handed to trainers that speak other environment specs, so one task definition serves evaluation here and training there (`pip install 'evalsi-harness[openenv]'` or `'[verifiers]'`):
+
+```python
+from evalsi_harness.envspecs.openenv import TaskOpenEnv, TaskAction, create_task_app
+env = TaskOpenEnv([(record, spec)])             # an openenv Environment
+obs = env.reset(seed=0)                          # obs.instruction
+obs = env.step(TaskAction(tool="submit"))        # obs.done, obs.reward
+app = create_task_app([(record, spec)])          # an OpenEnv server (WebSocket sessions)
+
+from evalsi_harness.envspecs.verifiers import load_environment
+vf_env = load_environment([(record, spec)])      # a verifiers StatefulToolEnv
+```
+
+Both give the model `bash`, `read_file`, `write_file` and `submit`, and reward the checker's score when the episode ends. In OpenEnv the reward is `None` until then; in verifiers a checker that cannot run raises an `InfraError` that ends the rollout with `state["error"]` set, rather than scoring 0. They are written against `openenv-core` 0.3 and `verifiers` 0.3 and tested against those installs in CI (`tests/envspecs`), including a full verifiers rollout against a scripted chat server. Each verifiers rollout owns its `TaskEnv` and so pays the environment's setup itself; OpenEnv's HTTP `/reset` and `/step` endpoints are stateless by design, so use its WebSocket session.
+
 ## Evaluating checkpoints
 
 ```bash
