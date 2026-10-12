@@ -52,6 +52,8 @@ const (
 	RunServiceListRunResultsProcedure = "/evalsi.v1alpha1.RunService/ListRunResults"
 	// RunServiceCompareRunsProcedure is the fully-qualified name of the RunService's CompareRuns RPC.
 	RunServiceCompareRunsProcedure = "/evalsi.v1alpha1.RunService/CompareRuns"
+	// RunServiceSliceRunsProcedure is the fully-qualified name of the RunService's SliceRuns RPC.
+	RunServiceSliceRunsProcedure = "/evalsi.v1alpha1.RunService/SliceRuns"
 	// RunServicePromoteResultsProcedure is the fully-qualified name of the RunService's PromoteResults
 	// RPC.
 	RunServicePromoteResultsProcedure = "/evalsi.v1alpha1.RunService/PromoteResults"
@@ -74,6 +76,10 @@ type RunServiceClient interface {
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
+	// A metric per run and per value of a record metadata field, computed on
+	// the server over the runs the caller may read: the numbers
+	// `evalsi analyze slice` computes after downloading every result.
+	SliceRuns(context.Context, *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error)
 	// Appends a run's records that match a condition (failures, typically) to
 	// a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
 	PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error)
@@ -148,6 +154,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("CompareRuns")),
 			connect.WithClientOptions(opts...),
 		),
+		sliceRuns: connect.NewClient[v1alpha1.SliceRunsRequest, v1alpha1.SliceRunsResponse](
+			httpClient,
+			baseURL+RunServiceSliceRunsProcedure,
+			connect.WithSchema(runServiceMethods.ByName("SliceRuns")),
+			connect.WithClientOptions(opts...),
+		),
 		promoteResults: connect.NewClient[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse](
 			httpClient,
 			baseURL+RunServicePromoteResultsProcedure,
@@ -174,6 +186,7 @@ type runServiceClient struct {
 	deleteRun          *connect.Client[v1alpha1.DeleteRunRequest, v1alpha1.DeleteRunResponse]
 	listRunResults     *connect.Client[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse]
 	compareRuns        *connect.Client[v1alpha1.CompareRunsRequest, v1alpha1.CompareRunsResponse]
+	sliceRuns          *connect.Client[v1alpha1.SliceRunsRequest, v1alpha1.SliceRunsResponse]
 	promoteResults     *connect.Client[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse]
 	createShadowReplay *connect.Client[v1alpha1.CreateShadowReplayRequest, v1alpha1.CreateShadowReplayResponse]
 }
@@ -223,6 +236,11 @@ func (c *runServiceClient) CompareRuns(ctx context.Context, req *connect.Request
 	return c.compareRuns.CallUnary(ctx, req)
 }
 
+// SliceRuns calls evalsi.v1alpha1.RunService.SliceRuns.
+func (c *runServiceClient) SliceRuns(ctx context.Context, req *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error) {
+	return c.sliceRuns.CallUnary(ctx, req)
+}
+
 // PromoteResults calls evalsi.v1alpha1.RunService.PromoteResults.
 func (c *runServiceClient) PromoteResults(ctx context.Context, req *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error) {
 	return c.promoteResults.CallUnary(ctx, req)
@@ -247,6 +265,10 @@ type RunServiceHandler interface {
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
+	// A metric per run and per value of a record metadata field, computed on
+	// the server over the runs the caller may read: the numbers
+	// `evalsi analyze slice` computes after downloading every result.
+	SliceRuns(context.Context, *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error)
 	// Appends a run's records that match a condition (failures, typically) to
 	// a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
 	PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error)
@@ -317,6 +339,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("CompareRuns")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceSliceRunsHandler := connect.NewUnaryHandler(
+		RunServiceSliceRunsProcedure,
+		svc.SliceRuns,
+		connect.WithSchema(runServiceMethods.ByName("SliceRuns")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServicePromoteResultsHandler := connect.NewUnaryHandler(
 		RunServicePromoteResultsProcedure,
 		svc.PromoteResults,
@@ -349,6 +377,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceListRunResultsHandler.ServeHTTP(w, r)
 		case RunServiceCompareRunsProcedure:
 			runServiceCompareRunsHandler.ServeHTTP(w, r)
+		case RunServiceSliceRunsProcedure:
+			runServiceSliceRunsHandler.ServeHTTP(w, r)
 		case RunServicePromoteResultsProcedure:
 			runServicePromoteResultsHandler.ServeHTTP(w, r)
 		case RunServiceCreateShadowReplayProcedure:
@@ -396,6 +426,10 @@ func (UnimplementedRunServiceHandler) ListRunResults(context.Context, *connect.R
 
 func (UnimplementedRunServiceHandler) CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.CompareRuns is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) SliceRuns(context.Context, *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.SliceRuns is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error) {

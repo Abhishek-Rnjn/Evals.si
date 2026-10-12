@@ -25,5 +25,6 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0019](0019-trace-redaction.md) | Server-owned trace redaction before push/pull persistence and evaluation, including source overrides | Accepted, implemented |
 | [0020](0020-pipeline-retries-and-scheduled-runs.md) | Durable keyed retries without secret replay, bounded dataset publication, terminal deletion and scheduled batch windows | Accepted, implemented |
 | [0021](0021-sandbox-time-quotas.md) | Sandbox time is a daily per-project quota (`sandbox_seconds_per_day`), metered in the run manager from agent task and sandbox-pool evaluator wall time | Accepted, implemented |
+| [0022](0022-server-side-slicing.md) | Cross-run slices are computed on the server (`SliceRuns`), in Go over each run's stored results; arbitrary SQL stays on the client | Accepted, implemented |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

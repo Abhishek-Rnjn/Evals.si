@@ -81,6 +81,11 @@ class RunServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsResponse.FromString,
                 _registered_method=True)
+        self.SliceRuns = channel.unary_unary(
+                '/evalsi.v1alpha1.RunService/SliceRuns',
+                request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.SliceRunsRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.SliceRunsResponse.FromString,
+                _registered_method=True)
         self.PromoteResults = channel.unary_unary(
                 '/evalsi.v1alpha1.RunService/PromoteResults',
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.PromoteResultsRequest.SerializeToString,
@@ -155,6 +160,15 @@ class RunServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SliceRuns(self, request, context):
+        """A metric per run and per value of a record metadata field, computed on
+        the server over the runs the caller may read: the numbers
+        `evalsi analyze slice` computes after downloading every result.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def PromoteResults(self, request, context):
         """Appends a run's records that match a condition (failures, typically) to
         a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
@@ -219,6 +233,11 @@ def add_RunServiceServicer_to_server(servicer, server):
                     servicer.CompareRuns,
                     request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsResponse.SerializeToString,
+            ),
+            'SliceRuns': grpc.unary_unary_rpc_method_handler(
+                    servicer.SliceRuns,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.SliceRunsRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.SliceRunsResponse.SerializeToString,
             ),
             'PromoteResults': grpc.unary_unary_rpc_method_handler(
                     servicer.PromoteResults,
@@ -476,6 +495,33 @@ class RunService:
             '/evalsi.v1alpha1.RunService/CompareRuns',
             evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SliceRuns(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.RunService/SliceRuns',
+            evalsi_dot_v1alpha1_dot_run__service__pb2.SliceRunsRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_run__service__pb2.SliceRunsResponse.FromString,
             options,
             channel_credentials,
             insecure,

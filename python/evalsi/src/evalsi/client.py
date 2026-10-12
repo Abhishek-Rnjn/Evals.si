@@ -319,6 +319,30 @@ class Client:
         comparisons: list[dict[str, Any]] = out.get("comparisons", [])
         return comparisons
 
+    def slice_runs(
+        self,
+        metric: str,
+        by: str,
+        *,
+        project: str = "",
+        labels: dict[str, str] | None = None,
+        run_ids: list[str] | None = None,
+        limit: int = 0,
+        level: float = 0.95,
+    ) -> dict[str, Any]:
+        """A metric per run and per value of a record metadata field, computed
+        on the server (``RunService.SliceRuns``): ``{"rows": [...], "runs": n}``."""
+        body: dict[str, Any] = {
+            "metric": metric,
+            "by": by,
+            "project": project,
+            "labels": labels or {},
+            "runIds": run_ids or [],
+            "limit": limit,
+            "confidenceLevel": level,
+        }
+        return self.call("RunService", "SliceRuns", body)
+
     def promote_results(
         self, run_id: str, dataset: str, when: str, *, include_outputs: bool = False
     ) -> dict[str, Any]:

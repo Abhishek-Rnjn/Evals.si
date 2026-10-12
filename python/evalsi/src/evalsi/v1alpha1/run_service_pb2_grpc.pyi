@@ -47,6 +47,11 @@ class RunServiceStub:
     ListRunResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]
     CompareRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]
     """Paired comparison of two runs over the records they share."""
+    SliceRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.SliceRunsRequest, _run_service_pb2.SliceRunsResponse]
+    """A metric per run and per value of a record metadata field, computed on
+    the server over the runs the caller may read: the numbers
+    `evalsi analyze slice` computes after downloading every result.
+    """
     PromoteResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.PromoteResultsRequest, _run_service_pb2.PromoteResultsResponse]
     """Appends a run's records that match a condition (failures, typically) to
     a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
@@ -76,6 +81,11 @@ class RunServiceAsyncStub(RunServiceStub):
     ListRunResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]  # type: ignore[assignment]
     CompareRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]  # type: ignore[assignment]
     """Paired comparison of two runs over the records they share."""
+    SliceRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.SliceRunsRequest, _run_service_pb2.SliceRunsResponse]  # type: ignore[assignment]
+    """A metric per run and per value of a record metadata field, computed on
+    the server over the runs the caller may read: the numbers
+    `evalsi analyze slice` computes after downloading every result.
+    """
     PromoteResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.PromoteResultsRequest, _run_service_pb2.PromoteResultsResponse]  # type: ignore[assignment]
     """Appends a run's records that match a condition (failures, typically) to
     a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
@@ -156,6 +166,17 @@ class RunServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_run_service_pb2.CompareRunsResponse, _abc.Awaitable[_run_service_pb2.CompareRunsResponse]]:
         """Paired comparison of two runs over the records they share."""
+
+    @_abc_1.abstractmethod
+    def SliceRuns(
+        self,
+        request: _run_service_pb2.SliceRunsRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.SliceRunsResponse, _abc.Awaitable[_run_service_pb2.SliceRunsResponse]]:
+        """A metric per run and per value of a record metadata field, computed on
+        the server over the runs the caller may read: the numbers
+        `evalsi analyze slice` computes after downloading every result.
+        """
 
     @_abc_1.abstractmethod
     def PromoteResults(
