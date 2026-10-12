@@ -37,9 +37,12 @@ type fakeWorker struct {
 	taskCalls     atomic.Int64
 	evaluateCalls atomic.Int64
 	judgeTokens   int64
-	mu            sync.Mutex
-	flaky         map[string]int
-	release       chan struct{}
+	// How long an agent task takes, and the duration test/sandboxed reports
+	// (a sandbox-pool evaluator), for the sandbox-time quota.
+	taskDelay, sandboxedDuration time.Duration
+	mu                           sync.Mutex
+	flaky                        map[string]int
+	release                      chan struct{}
 }
 
 func newFake() *fakeWorker {
@@ -80,6 +83,7 @@ func (f *fakeWorker) Generate(_ context.Context, req *pluginv1alpha1.GenerateReq
 // pass on even trials, and "crash" ones cannot run (an infrastructure error).
 func (f *fakeWorker) RunTask(_ context.Context, req *pluginv1alpha1.RunTaskRequest, _ func(*harnessv1alpha1.TrajectoryEvent)) (*pluginv1alpha1.TaskResult, error) {
 	f.taskCalls.Add(1)
+	time.Sleep(f.taskDelay)
 	rec := proto.Clone(req.GetRecord()).(*evalsiv1alpha1.Record)
 	in := rec.GetInput().GetText()
 	if in == "crash" {
@@ -116,6 +120,9 @@ func (f *fakeWorker) Evaluate(ctx context.Context, req *pluginv1alpha1.EvaluateR
 	resp := &pluginv1alpha1.EvaluateResponse{BatchId: req.GetBatchId()}
 	for _, r := range req.GetRecords() {
 		res := &evalsiv1alpha1.EvaluationResult{RecordId: r.GetId(), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}
+		if req.GetEvaluator() == "test/sandboxed" {
+			res.Duration = durationpb.New(f.sandboxedDuration)
+		}
 		score := &evalsiv1alpha1.Score{Name: catalog.ShortName(req.GetEvaluator())}
 		if req.GetEvaluator() == "builtin/task-success" {
 			score.Value = &evalsiv1alpha1.Score_Passed{Passed: r.GetCheck().GetPassed()}
@@ -152,6 +159,10 @@ func manifests() []*evalsiv1alpha1.EvaluatorManifest {
 			ParamsSchema: emptySchema()},
 		{Name: "test/slow", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
 			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "slow", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}},
+			ParamsSchema: emptySchema()},
+		{Name: "test/sandboxed", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_RECORD,
+			Scheduling:   &evalsiv1alpha1.Scheduling{Pool: "sandbox"},
+			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "sandboxed", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}},
 			ParamsSchema: emptySchema()},
 		{Name: "test/count", Version: "1.0.0", Scope: evalsiv1alpha1.Scope_SCOPE_DATASET,
 			Outputs:      []*evalsiv1alpha1.MetricSpec{{Name: "count", Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_NUMBER}},
