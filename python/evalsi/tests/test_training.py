@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import stat
 import sys
 import threading
@@ -27,6 +28,7 @@ from evalsi.training import (
 from evalsi.training.callback import CheckpointRunner
 from evalsi.training.checkpoints import localize
 from evalsi.training.loop import StepResult
+from evalsi.training.serving import Operator, resource_name
 
 QUESTIONS = [(f"q{i}", f"What is {i} + {i}?", str(2 * i)) for i in range(12)]
 
@@ -508,3 +510,148 @@ def test_unfinished_server_runs_never_pass(
     # Saved results from before status was recorded are finished embedded runs.
     old = StepResult.from_dict({"training_run": "t", "step": "1", "checkpoint": ""})
     assert old.passed
+
+
+FAKE_KUBECTL = """\
+import json, os, sys
+log = os.environ["KUBECTL_LOG"]
+args = sys.argv[1:]
+with open(log, "a") as f:
+    f.write(json.dumps({"args": args, "stdin": sys.stdin.read() if "-" in args else ""}) + "\\n")
+verb = args[2]
+if verb == "wait" and os.environ.get("KUBECTL_FAIL") == "wait":
+    sys.stderr.write("error: timed out waiting for the condition")
+    sys.exit(1)
+if verb == "get":
+    status = {"endpoint": "http://evalsi-ckpt-x.ns.svc:8000/v1", "servedModelName": "run-3"}
+    print(json.dumps({"status": status if os.environ.get("KUBECTL_FAIL") != "endpoint" else {}}))
+"""
+
+
+def _kubectl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[str, Path]:
+    script = tmp_path / "kubectl"
+    script.write_text(f"#!{sys.executable}\n{FAKE_KUBECTL}")
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    log = tmp_path / "kubectl.log"
+    monkeypatch.setenv("KUBECTL_LOG", str(log))
+    return str(script), log
+
+
+def _calls(log: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in log.read_text().splitlines()]
+
+
+def test_operator_serving_applies_waits_reads_and_deletes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kubectl, log = _kubectl(tmp_path, monkeypatch)
+    operator = Operator(
+        "team-a",
+        "vllm/vllm-openai:v0.11.0",
+        claim="ckpts",
+        args=["--max-model-len", "4096"],
+        resources={"nvidia.com/gpu": "1"},
+        api_key_secret="vllm-key",
+        kubectl=kubectl,
+        timeout_s=120,
+    )
+    with operator.serve("run-1/checkpoint-200", "run-3") as served:
+        assert (served.base_url, served.model) == ("http://evalsi-ckpt-x.ns.svc:8000/v1", "run-3")
+        assert len(_calls(log)) == 3  # applied, waited, read; not yet deleted
+    applied, waited, read, deleted = _calls(log)
+    assert applied["args"][:4] == ["--namespace", "team-a", "apply", "-f"]
+    manifest = json.loads(applied["stdin"])
+    assert manifest["kind"] == "CheckpointServer"
+    assert manifest["metadata"]["name"] == "run-3"
+    assert manifest["spec"] == {
+        "image": "vllm/vllm-openai:v0.11.0",
+        "model": "/checkpoints/run-1/checkpoint-200",
+        "servedModelName": "run-3",
+        "checkpointClaim": "ckpts",
+        "args": ["--max-model-len", "4096"],
+        "resources": {"limits": {"nvidia.com/gpu": "1"}},
+        "apiKeySecret": "vllm-key",
+    }
+    assert waited["args"][2:] == [
+        "wait",
+        "--for=condition=Ready",
+        "checkpointservers.evals.si/run-3",
+        "--timeout=120s",
+    ]
+    assert read["args"][2:4] == ["get", "checkpointservers.evals.si/run-3"]
+    assert deleted["args"][2:] == [
+        "delete",
+        "checkpointservers.evals.si/run-3",
+        "--ignore-not-found",
+        "--wait=false",
+    ]
+
+
+def test_operator_serving_deletes_what_it_made_when_it_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kubectl, log = _kubectl(tmp_path, monkeypatch)
+    operator = Operator("ns", "vllm:1", kubectl=kubectl)
+    monkeypatch.setenv("KUBECTL_FAIL", "wait")
+    with (
+        pytest.raises(ServingError, match="timed out waiting"),
+        operator.serve("/c/step-1", "step-1"),
+    ):
+        pass
+    assert [c["args"][2] for c in _calls(log)] == ["apply", "wait", "delete"]
+    log.unlink()
+    monkeypatch.setenv("KUBECTL_FAIL", "endpoint")
+    with (
+        pytest.raises(ServingError, match="reports no endpoint"),
+        operator.serve("/c/step-1", "step-1"),
+    ):
+        pass
+    assert _calls(log)[-1]["args"][2] == "delete"
+    # An error in the evaluation itself still deletes it.
+    log.unlink()
+    monkeypatch.delenv("KUBECTL_FAIL")
+    with pytest.raises(RuntimeError, match="boom"), operator.serve("/c/step-1", "step-1"):
+        raise RuntimeError("boom")
+    assert _calls(log)[-1]["args"][2] == "delete"
+    with (
+        pytest.raises(ServingError, match="no-such-kubectl"),
+        Operator("ns", "vllm:1", kubectl="no-such-kubectl").serve("a", "a"),
+    ):
+        pass
+
+
+def test_resource_names_are_dns_labels() -> None:
+    assert resource_name("run-3") == "run-3"
+    assert resource_name("checkpoint-200") == "checkpoint-200"
+    odd = resource_name("Step_200/final")
+    assert re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", odd)
+    assert len(odd) <= 49
+    assert odd != resource_name("step-200-final")  # the hash tells them apart
+    assert resource_name("///").startswith("ckpt-")
+
+
+def test_cli_serve_operator_flags() -> None:
+    import argparse
+
+    from evalsi.cli_training import _serving
+
+    def args(**kw: Any) -> argparse.Namespace:
+        base: dict[str, Any] = {
+            "serve": "operator",
+            "namespace": "ns",
+            "image": "vllm:1",
+            "checkpoint_claim": "pvc",
+            "gpus": "2",
+            "api_key_secret": "key",
+            "vllm_arg": ["--dtype", "bfloat16"],
+        }
+        return argparse.Namespace(**{**base, **kw})
+
+    op = _serving(args())
+    assert isinstance(op, Operator)
+    assert (op.namespace, op.image, op.claim) == ("ns", "vllm:1", "pvc")
+    assert op.resources == {"nvidia.com/gpu": "2"}
+    assert (op.api_key_secret, list(op.args)) == ("key", ["--dtype", "bfloat16"])
+    assert _serving(args(gpus="")).resources == {}
+    with pytest.raises(ValueError, match="--namespace and --image"):
+        _serving(args(image=None))

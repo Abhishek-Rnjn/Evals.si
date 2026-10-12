@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Operator-managed checkpoint serving.** A `CheckpointServer` resource (`kubectl get checkpointservers`) has the operator run vLLM for a checkpoint: a Deployment and Service, the endpoint and readiness in the status, optional PVC of checkpoints, LoRA mode and API-key Secret. `evalsi checkpoints watch|eval --serve operator` creates one per checkpoint through `kubectl` and deletes it afterwards. Tested with a fake client and a fake `kubectl`; not yet run on a cluster.
 - **Platform wheels that bundle `evalsid`.** The release builds `evalsi` wheels for Linux amd64 and arm64 (`py3-none-manylinux_2_17_*`) that carry `evalsid` and the static `bwrap` in `evalsi/_bin`, the same release as the package. `evalsi serve`, code evaluators and Wasm plugins look for `evalsid` in `EVALSID`, then the bundle, then `PATH`; `evalsi evalsid-path` prints the one in use. The pure-Python wheel and sdist remain; `pip install --no-binary evalsi evalsi` builds the pure package. CI builds a platform wheel from the real archive, installs it and runs its sandbox.
 - **Task environments as OpenEnv and verifiers environments.** `evalsi_harness.envspecs.openenv` (`TaskOpenEnv`, `create_task_app`) and `evalsi_harness.envspecs.verifiers` (`load_environment`) present the tasks agent runs evaluate as an OpenEnv `Environment` and a verifiers `StatefulToolEnv`, rewarded by the task's checker. Install with the `openenv` or `verifiers` extra of `evalsi-harness`; a CI job tests both against the real packages.
 - **Run archiving.** `RunService.ArchiveRun` (`POST /v1alpha1/runs/{id}:archive`, `evalsi archive-run`) drops a finished run's records, outputs, results and webhook deliveries and keeps its summary, spec, gates and usage (`Run.archived_at`). `runs.archive_after` and `runs.project_archive_after` do it automatically, hourly, before `runs.retention` deletes. Automatic deletes and archives now write audit events (`system:retention`). Archived runs refuse resume, compare, promote, results and dataset-from-run, and the web UI says so. It needs `runs.delete`.
@@ -19,7 +20,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
-- `RunService` gains `SliceRuns` and `ArchiveRun`, and `Run` gains `archived_at` (`v1alpha1`, additive).
+- New `CheckpointServer` custom resource (`evals.si/v1alpha1`); apply the `evalsi-crds` chart's new CRD on upgrade. `RunService` gains `SliceRuns` and `ArchiveRun`, and `Run` gains `archived_at` (`v1alpha1`, additive).
 - `auth.sigv4` gains `arn` and `auth.databricks` gains `client_id` (`v1alpha1`, additive).
 
 ### Fixed

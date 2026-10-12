@@ -27,4 +27,4 @@ Phase 5 makes evaluators usable as RL rewards and evaluates checkpoints as a mod
 - The same verifier code grades evaluation runs and training rollouts, so there is no gap between what was optimised and what is reported.
 - Composition changes must touch both implementations and the vectors; the vectors make a mismatch a test failure.
 - Embedded checkpoint results live in files under a log directory; with a server they are labelled runs, so access rules, audit and `CompareRuns` apply.
-- Kubernetes users run the checkpoint watcher as a Job or beside the trainer; an operator-managed serving resource is a leftover.
+- Kubernetes users run the checkpoint watcher as a Job or beside the trainer. The operator can now serve checkpoints too ([decision 0025](0025-operator-checkpoint-serving.md)); serving by the evaluating process stays the default.

@@ -32,6 +32,7 @@ rules:
 - apiGroups:
   - evals.si
   resources:
+  - checkpointservers
   - evalruns
   - evaluators
   - onlineevalpolicies
@@ -46,6 +47,7 @@ rules:
 - apiGroups:
   - evals.si
   resources:
+  - checkpointservers/status
   - evalruns/finalizers
   - evalruns/status
   - evaluators/status

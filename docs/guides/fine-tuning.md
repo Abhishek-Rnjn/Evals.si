@@ -175,6 +175,19 @@ base  0.712                ok
 300   0.641 (-0.071!)      regressed
 ```
 
+### Serving checkpoints with the operator
+
+On Kubernetes the watcher can ask the [operator](kubernetes.md) for a vLLM per checkpoint instead of starting one itself. Run it in the cluster (a Job, or beside the trainer), with `kubectl` and permission to manage `checkpointservers` in the namespace:
+
+```bash
+evalsi checkpoints watch /checkpoints/run-1 -f forgetting.yaml --training-run grpo-1 \
+  --serve operator --namespace evalsi --image vllm/vllm-openai:v0.11.0 \
+  --checkpoint-claim run-1-checkpoints --gpus 1
+```
+
+For each checkpoint it applies a `CheckpointServer`, waits for `Ready`, evaluates against `status.endpoint` and deletes the resource, which frees the GPUs. For LoRA adapters, create one `CheckpointServer` with `lora: true` for the base model and use `--serve lora --base-url <its endpoint>` as before. The endpoint is a cluster-internal Service address.
+
+
 `*` marks a significant change, `!` a regression.
 
 **Serving.** The run spec's target is pointed at the served checkpoint. Three strategies:

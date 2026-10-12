@@ -16,10 +16,10 @@ rules:
   {{- end }}
   {{- if .Values.operator.allNamespaces }}
   - apiGroups: [evals.si]
-    resources: [evalruns, onlineevalpolicies, tracesources, evaluators]
+    resources: [evalruns, onlineevalpolicies, tracesources, evaluators, checkpointservers]
     verbs: [get, list, watch, update, patch]
   - apiGroups: [evals.si]
-    resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, tracesources/status, tracesources/finalizers, evaluators/status]
+    resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, tracesources/status, tracesources/finalizers, evaluators/status, checkpointservers/status]
     verbs: [get, update, patch]
   - apiGroups: [apps]
     resources: [deployments]
@@ -49,7 +49,7 @@ metadata:
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
 rules:
   - apiGroups: [evals.si]
-    resources: [evalruns, onlineevalpolicies, evaluators]
+    resources: [evalruns, onlineevalpolicies, evaluators, checkpointservers]
     verbs: [get, list, watch, create, update, patch, delete]
 ---
 # A TraceSource makes evalsid read another system and write scores to it, so
@@ -74,5 +74,5 @@ metadata:
     rbac.authorization.k8s.io/aggregate-to-view: "true"
 rules:
   - apiGroups: [evals.si]
-    resources: [evalruns, onlineevalpolicies, tracesources, evaluators, sandboxclasses]
+    resources: [evalruns, onlineevalpolicies, tracesources, evaluators, checkpointservers, sandboxclasses]
     verbs: [get, list, watch]
