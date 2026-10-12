@@ -35,6 +35,21 @@ func TestReferenceClusterValues(t *testing.T) {
 	}
 }
 
+func TestServerDrainsBeforeTermination(t *testing.T) {
+	server := podSpecs(render(t, "evalsi"))["Deployment/evalsi"]
+	containers := list(server["containers"])
+	if len(containers) != 1 {
+		t.Fatalf("expected one API container, got %d", len(containers))
+	}
+	container := containers[0].(map[string]any)
+	if seconds := nested(container, "lifecycle", "preStop", "sleep", "seconds"); seconds != float64(10) {
+		t.Fatalf("API must serve for 10 seconds while endpoint removal propagates, got %v", seconds)
+	}
+	if grace := server["terminationGracePeriodSeconds"]; grace != float64(30) {
+		t.Fatalf("termination grace must cover endpoint drain and HTTP shutdown, got %v", grace)
+	}
+}
+
 func TestPluginMountsAndInitContainers(t *testing.T) {
 	objects := renderAs(t, "evalsi", "evalsi",
 		"plugins.volumes[0].name=plugins", "plugins.volumes[0].emptyDir.medium=Memory",
