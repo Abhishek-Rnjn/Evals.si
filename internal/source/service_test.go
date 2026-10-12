@@ -299,3 +299,20 @@ func TestApplySourceValidatesBeforeTheCredentialIsRead(t *testing.T) {
 		t.Fatalf("tokens %q", got)
 	}
 }
+
+// A malformed credential reference is reported as that, not as whatever the
+// connector makes of a missing credential.
+func TestApplySourceReportsABadCredentialReferenceFirst(t *testing.T) {
+	svc, h := newService(t)
+	h.m.opts.Factories["mlflow"] = func(*evalsiv1alpha1.TraceSource, string, *http.Client) (Connector, error) {
+		return nil, errTest("the connector's own complaint")
+	}
+	src := &evalsiv1alpha1.TraceSource{
+		Name: "studio", Project: "p", Connector: "mlflow", Endpoint: "http://store:5000", Locations: []string{"1"},
+		Credentials: &evalsiv1alpha1.SourceCredentials{Env: "A", File: "b/c"},
+	}
+	_, err := apply(t, svc, src, true)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "source.credentials") {
+		t.Fatalf("got %v", err)
+	}
+}

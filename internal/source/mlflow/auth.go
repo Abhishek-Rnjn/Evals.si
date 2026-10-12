@@ -20,10 +20,10 @@ import (
 // request's body, which a signature covers.
 type authorizer interface {
 	Authorize(ctx context.Context, req *http.Request, body []byte) error
-	// Rejected is called when the store refused the credential (HTTP 401), so
-	// the next Authorize obtains a fresh one. It reports whether a retry can
-	// help.
-	Rejected() bool
+	// Rejected is called when the store refused the credential on sent (HTTP
+	// 401), so the next Authorize obtains a fresh one. It reports whether a
+	// retry can help.
+	Rejected(sent *http.Request) bool
 }
 
 // bearer sends a fixed token: an open-source server's token, or a Databricks
@@ -37,7 +37,7 @@ func (b bearer) Authorize(_ context.Context, req *http.Request, _ []byte) error 
 	return nil
 }
 
-func (bearer) Rejected() bool { return false }
+func (bearer) Rejected(*http.Request) bool { return false }
 
 // oauthClient exchanges a service principal's client ID and secret for an
 // access token (the OAuth client-credentials grant) and keeps it until just
@@ -101,12 +101,17 @@ func (o *oauthClient) Authorize(ctx context.Context, req *http.Request, _ []byte
 	return nil
 }
 
-// Rejected drops the cached token: it was revoked, or the clock skewed.
-func (o *oauthClient) Rejected() bool {
+// Rejected drops the cached token the store refused: it was revoked, or the
+// clock skewed. A token another runner has already replaced is kept, so a late
+// 401 for the old one does not cost a new exchange.
+func (o *oauthClient) Rejected(sent *http.Request) bool {
+	refused := strings.TrimPrefix(sent.Header.Get("Authorization"), "Bearer ")
 	_, e := o.entry()
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.token = ""
+	if e.token == refused {
+		e.token = ""
+	}
 	return true
 }
 
@@ -176,7 +181,9 @@ func parseAWSCredentials(s string) (awsCredentials, error) {
 	var c awsCredentials
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&c); err != nil || c.AccessKeyID == "" || c.SecretAccessKey == "" {
+	// One object and nothing after it: a second one would be signed with
+	// silently ignored.
+	if err := dec.Decode(&c); err != nil || dec.More() || c.AccessKeyID == "" || c.SecretAccessKey == "" {
 		return awsCredentials{}, fmt.Errorf("mlflow sagemaker: the credential must be a JSON object with access_key_id and secret_access_key (and session_token for temporary credentials)")
 	}
 	return c, nil
@@ -194,7 +201,7 @@ type sigV4 struct {
 	now     func() time.Time
 }
 
-func (s *sigV4) Rejected() bool { return false }
+func (s *sigV4) Rejected(*http.Request) bool { return false }
 
 func (s *sigV4) Authorize(_ context.Context, req *http.Request, body []byte) error {
 	t := s.now().UTC()

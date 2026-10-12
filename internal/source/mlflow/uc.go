@@ -36,6 +36,11 @@ func (c *connector) databricks(u *url.URL, token string) error {
 	}
 	auth := c.src.GetAuth().GetDatabricks()
 	if id := auth.GetClientId(); id != "" {
+		// The secret goes in HTTP Basic authentication; the generic endpoint
+		// guard allows plain HTTP to listed hosts, which a workspace never needs.
+		if u.Scheme != "https" {
+			return fmt.Errorf("mlflow databricks: auth.databricks.client_id sends the service principal's secret to the workspace, so endpoint must be https")
+		}
 		c.auth = &oauthClient{
 			tokenURL: u.Scheme + "://" + u.Host + "/oidc/v1/token", clientID: id, secret: token,
 			scope: "all-apis", client: c.client, now: time.Now,

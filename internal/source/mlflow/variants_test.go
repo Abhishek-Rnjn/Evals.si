@@ -130,6 +130,8 @@ func TestSageMakerFactoryChecks(t *testing.T) {
 		"no credential":  {sagemakerSource(serverARN, host), "", "access_key_id"},
 		"bare key":       {sagemakerSource(serverARN, host), "AKIDEXAMPLE", "access_key_id"},
 		"unknown field":  {sagemakerSource(serverARN, host), `{"access_key_id":"a","secret_access_key":"b","profile":"c"}`, "access_key_id"},
+		"two objects":    {sagemakerSource(serverARN, host), `{"access_key_id":"a","secret_access_key":"b"}{"access_key_id":"c","secret_access_key":"d"}`, "access_key_id"},
+		"trailing text":  {sagemakerSource(serverARN, host), `{"access_key_id":"a","secret_access_key":"b"} extra`, "access_key_id"},
 	} {
 		if err := ok(c.src, c.token); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v", name, err)
@@ -582,5 +584,43 @@ func TestSignedQueryEncodesSpacesAsPercent20(t *testing.T) {
 	_, _ = c.List(context.Background(), source.ListRequest{Since: time.Now(), Limit: 1}) // the name is unknown; the request is what matters
 	if raw != "experiment_name=studio%20agents%2Bv2" {
 		t.Fatalf("query on the wire %q", raw)
+	}
+}
+
+// The secret goes in HTTP Basic authentication, so a plain-HTTP endpoint is
+// refused even where the endpoint guard would allow the host.
+func TestDatabricksServicePrincipalNeedsHTTPS(t *testing.T) {
+	src := &evalsiv1alpha1.TraceSource{
+		Variant: "databricks", Endpoint: "http://workspace.internal:8080", Locations: []string{"1"},
+		Auth: &evalsiv1alpha1.SourceAuth{Databricks: &evalsiv1alpha1.SourceAuth_Databricks{ClientId: "sp"}},
+	}
+	if _, err := Factory(src, "secret", http.DefaultClient); err == nil || !strings.Contains(err.Error(), "must be https") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// A late 401 for a token another runner has already replaced must not erase
+// the newer one.
+func TestLateRejectionKeepsANewerToken(t *testing.T) {
+	f := &fakeWorkspace{}
+	c, _ := workspace(t, f, nil)
+	list := func() {
+		t.Helper()
+		if _, err := c.List(context.Background(), source.ListRequest{Since: time.Now(), Limit: 10}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list() // access-1
+	stale, _ := http.NewRequest(http.MethodGet, "https://workspace.invalid", nil)
+	stale.Header.Set("Authorization", "Bearer access-1")
+	f.reject = "access-1"
+	list() // refused, replaced by access-2
+	if f.tokens != 2 {
+		t.Fatalf("%d token requests", f.tokens)
+	}
+	c.auth.Rejected(stale) // a slow response for access-1 arrives late
+	list()
+	if f.tokens != 2 {
+		t.Fatalf("a late 401 for the old token cost a new exchange (%d token requests)", f.tokens)
 	}
 }

@@ -124,7 +124,7 @@ func (c *connector) call(ctx context.Context, method, path string, query url.Val
 		err = c.do(req, out)
 		// A refused token may only have expired: get a new one, once.
 		var ae *apiError
-		if attempt == 0 && errors.As(err, &ae) && ae.Status == http.StatusUnauthorized && c.auth.Rejected() {
+		if attempt == 0 && errors.As(err, &ae) && ae.Status == http.StatusUnauthorized && c.auth.Rejected(req) {
 			continue
 		}
 		return err
