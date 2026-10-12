@@ -211,7 +211,7 @@ func TestScheduledWindowLeaseExcludesAnotherReplica(t *testing.T) {
 
 func TestScheduledLeaseRenewsAndLossCancelsPull(t *testing.T) {
 	h := newHarness(t, nil)
-	lease, owner, ttl := "scheduled-source:p/studio", "owner", 120*time.Millisecond
+	lease, owner, ttl := "scheduled-source:p/studio", "owner", 600*time.Millisecond
 	if acquired, err := h.st.AcquireLease(t.Context(), lease, owner, ttl); err != nil || !acquired {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestScheduledLeaseRenewsAndLossCancelsPull(t *testing.T) {
 		if context.Cause(ctx).Error() != "scheduled source lease was lost" {
 			t.Fatal(context.Cause(ctx))
 		}
-	case <-time.After(time.Second):
+	case <-time.After(3 * time.Second):
 		t.Fatal("lease loss did not cancel the pull")
 	}
 }

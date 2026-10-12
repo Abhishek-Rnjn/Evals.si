@@ -79,7 +79,8 @@ The local arm64 bundle check is not proof of the released amd64 bundle.
 
 A successful dry run does not prove registry pushes, keyless signatures, the
 published SBOM attestation, GitHub release creation or PyPI trusted publishing:
-those jobs or steps are skipped without a tag. No release is marked published
+those jobs or steps are skipped without a tag. (The dry run does gather and
+checksum the release files.) No release is marked published
 or signature-verified on dry-run evidence.
 
 ## Authorized Publication
@@ -118,6 +119,6 @@ fix forward under a separately approved version.
 
 - **Tag rules.** The deployment rule on the `release`, `pypi` and `pypi-harness` environments must be a **tag** rule (`v*`). A branch rule with the same pattern rejects every tag run.
 - **What a dry run does not cover.** Signing, GHCR pushes, the `release` job and PyPI run only on a tag. The first tag run found a login bug in the chart signing step that no dry run could. Treat each of those steps as untested until a tag run passes it.
-- **Known issue: the `release` job.** It downloads every artifact in the run, including the Docker build records (`*.dockerbuild`), and that download fails. For v0.1.0 the GitHub release was created by hand from the run's artifacts. Before the next release, limit the download to the artifacts that belong on the release (`binaries-*`, `python`, `charts`, `bundle`, `sbom-*`) and stop the build action from uploading build records, then dry-run the change.
+- **The `release` job.** It used to download every artifact in the run, including the Docker build records (`*.dockerbuild`), and that download failed; for v0.1.0 the GitHub release was created by hand from the run's artifacts. It now downloads only the release files (`binaries-*`, `python`, `charts`, `bundle`, `sbom-*`), the build action no longer uploads build records, and a dry run gathers and checksums the files too. The fix has run on a dry run but not yet on a tag, so check the release assets after the next tag run.
 - **Moving a tag.** Moving an unreleased tag is acceptable only before anything is published. A PyPI version can never be uploaded again, so once the PyPI jobs have run, fix forward under a new version and never re-run the workflow for the same tag.
 - **No macOS `sha256sum`.** Use `shasum -a 256` to create or check `SHA256SUMS` on macOS.
