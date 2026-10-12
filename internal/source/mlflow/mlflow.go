@@ -37,38 +37,46 @@ const labelPrefix = "evalsi.label."
 
 type connector struct {
 	base   string
-	token  string
+	auth   authorizer
 	client *http.Client
 	src    *evalsiv1alpha1.TraceSource
+	// headers go on every request: SageMaker routes by tracking-server ARN.
+	headers map[string]string
+	// ucSchemas are the Databricks Unity Catalog locations ("catalog.schema")
+	// when the source reads those instead of experiments.
+	ucSchemas []string
+	warehouse string
+	// pollEvery is how often a long-running Unity Catalog search is polled.
+	pollEvery time.Duration
 }
 
 // Factory builds the connector for a source with connector "mlflow".
 func Factory(src *evalsiv1alpha1.TraceSource, token string, client *http.Client) (source.Connector, error) {
-	switch v := src.GetVariant(); v {
-	case "", "oss":
-	case "databricks":
-		if token == "" {
-			return nil, fmt.Errorf("mlflow databricks: a workspace bearer token is required")
-		}
-		if src.GetAuth().GetDatabricks().GetSqlWarehouseId() != "" {
-			return nil, fmt.Errorf("mlflow databricks: Unity Catalog SQL warehouse tracing is not built; use experiment locations")
-		}
-		for _, location := range src.GetLocations() {
-			if _, err := strconv.ParseUint(location, 10, 64); err != nil {
-				return nil, fmt.Errorf("mlflow databricks: only numeric experiment IDs are supported; Unity Catalog locations and experiment names are not built")
-			}
-		}
-	default:
-		return nil, fmt.Errorf("mlflow variant %q is not built (decision 0016): only \"oss\" and experiment-scoped \"databricks\" are", v)
-	}
-	if len(src.GetLocations()) == 0 {
-		return nil, fmt.Errorf("mlflow: locations must list at least one experiment ID or name")
-	}
 	u, err := url.Parse(src.GetEndpoint())
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("mlflow: endpoint must be an http(s) URL, got %q", src.GetEndpoint())
 	}
-	return &connector{base: strings.TrimRight(src.GetEndpoint(), "/"), token: token, client: client, src: src}, nil
+	c := &connector{base: strings.TrimRight(src.GetEndpoint(), "/"), auth: bearer(token), client: client, src: src, pollEvery: time.Second}
+	switch v := src.GetVariant(); v {
+	case "", "oss":
+	case "databricks":
+		if err := c.databricks(u, token); err != nil {
+			return nil, err
+		}
+	case "sagemaker":
+		if err := c.sagemaker(u, token); err != nil {
+			return nil, err
+		}
+	case "azureml":
+		return nil, fmt.Errorf("mlflow azureml: Azure ML's MLflow server does not implement the MLflow 3 trace API this connector reads " +
+			"(azureml-mlflow 1.62.0 answers \"V3 API not implemented yet\"); read the traces from a store that does, or send them over OTLP")
+	default:
+		return nil, fmt.Errorf("mlflow variant %q is unknown: \"oss\", \"databricks\" and \"sagemaker\" are built", v)
+	}
+	if len(src.GetLocations()) == 0 {
+		return nil, fmt.Errorf("mlflow: locations must list at least one experiment ID or name")
+	}
+	return c, nil
 }
 
 type apiError struct {
@@ -82,28 +90,48 @@ func (e *apiError) Error() string {
 }
 
 func (c *connector) call(ctx context.Context, method, path string, query url.Values, body, out any) error {
-	var rd io.Reader
+	var raw []byte
 	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
+		var err error
+		if raw, err = json.Marshal(body); err != nil {
 			return err
 		}
-		rd = bytes.NewReader(raw)
 	}
 	u := c.base + path
 	if len(query) > 0 {
-		u += "?" + query.Encode()
+		// A space goes as %20, not +: a signature covers the query as a verifier
+		// decodes it, and the SageMaker client does the same.
+		u += "?" + strings.ReplaceAll(query.Encode(), "+", "%20")
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, rd)
-	if err != nil {
+	for attempt := 0; ; attempt++ {
+		var rd io.Reader
+		if raw != nil {
+			rd = bytes.NewReader(raw)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, u, rd)
+		if err != nil {
+			return err
+		}
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		for k, v := range c.headers {
+			req.Header.Set(k, v)
+		}
+		if err := c.auth.Authorize(ctx, req, raw); err != nil {
+			return err
+		}
+		err = c.do(req, out)
+		// A refused token may only have expired: get a new one, once.
+		var ae *apiError
+		if attempt == 0 && errors.As(err, &ae) && ae.Status == http.StatusUnauthorized && c.auth.Rejected(req) {
+			continue
+		}
 		return err
 	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
+}
+
+func (c *connector) do(req *http.Request, out any) error {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return err
@@ -145,6 +173,10 @@ type traceInfo struct {
 		Experiment struct {
 			ID string `json:"experiment_id"`
 		} `json:"mlflow_experiment"`
+		UCSchema struct {
+			Catalog string `json:"catalog_name"`
+			Schema  string `json:"schema_name"`
+		} `json:"uc_schema"`
 	} `json:"trace_location"`
 	Assessments []assessment `json:"assessments"`
 }
@@ -161,6 +193,9 @@ type assessment struct {
 // oldest first. MLflow indexes a trace by its start time but only knows of it
 // once it ends (decision 0016, item 15), which is why the manager reads back.
 func (c *connector) List(ctx context.Context, req source.ListRequest) (source.ListResult, error) {
+	if len(c.ucSchemas) > 0 {
+		return c.listUC(ctx, req)
+	}
 	ids, err := c.experimentIDs(ctx)
 	if err != nil {
 		return source.ListResult{}, err
@@ -235,6 +270,9 @@ func digest(t traceInfo) string {
 
 // Fetch gets the spans of the listed traces.
 func (c *connector) Fetch(ctx context.Context, infos []source.Info) ([]ingest.Trace, error) {
+	if len(c.ucSchemas) > 0 {
+		return c.fetchUC(ctx, infos)
+	}
 	if c.src.GetVariant() == "databricks" {
 		return c.fetchDatabricks(ctx, infos)
 	}
@@ -475,30 +513,11 @@ func (c *connector) WriteBack(ctx context.Context, scores []source.Score, prior 
 				}
 			}
 		}
-		feedback := map[string]any{"value": s.Value}
 		var err error
 		if remote != "" {
-			a := map[string]any{"assessment_id": remote, "trace_id": s.TraceID, "assessment_name": s.Metric, "feedback": feedback, "rationale": s.Rationale}
-			err = c.call(ctx, http.MethodPatch, "/api/3.0/mlflow/traces/"+url.PathEscape(s.TraceID)+"/assessments/"+url.PathEscape(remote), nil,
-				map[string]any{"assessment": a, "update_mask": "feedback,rationale"}, nil)
+			err = c.updateAssessment(ctx, s, remote)
 		} else {
-			kind := "CODE"
-			if s.Judged {
-				kind = "LLM_JUDGE"
-			}
-			a := map[string]any{
-				"assessment_name": s.Metric, "trace_id": s.TraceID, "feedback": feedback,
-				"source":   map[string]any{"source_type": kind, "source_id": sourceID},
-				"metadata": map[string]string{"evalsi.policy": s.Policy, "evalsi.evaluator": s.Evaluator},
-			}
-			if s.Rationale != "" {
-				a["rationale"] = s.Rationale
-			}
-			var created struct {
-				Assessment assessment `json:"assessment"`
-			}
-			err = c.call(ctx, http.MethodPost, "/api/3.0/mlflow/traces/"+url.PathEscape(s.TraceID)+"/assessments", nil, map[string]any{"assessment": a}, &created)
-			remote = created.Assessment.ID
+			remote, err = c.createAssessment(ctx, s, sourceID)
 		}
 		var ae *apiError
 		if errors.As(err, &ae) && ae.Status == http.StatusNotFound {
@@ -512,8 +531,46 @@ func (c *connector) WriteBack(ctx context.Context, scores []source.Score, prior 
 	return done, nil
 }
 
+// updateAssessment changes the value and rationale of an assessment written
+// earlier.
+func (c *connector) updateAssessment(ctx context.Context, s source.Score, remote string) error {
+	if len(c.ucSchemas) > 0 {
+		return c.updateAssessmentUC(ctx, s, remote)
+	}
+	a := map[string]any{"assessment_id": remote, "trace_id": s.TraceID, "assessment_name": s.Metric, "feedback": map[string]any{"value": s.Value}, "rationale": s.Rationale}
+	return c.call(ctx, http.MethodPatch, "/api/3.0/mlflow/traces/"+url.PathEscape(s.TraceID)+"/assessments/"+url.PathEscape(remote), nil,
+		map[string]any{"assessment": a, "update_mask": "feedback,rationale"}, nil)
+}
+
+// createAssessment adds a feedback assessment and returns its ID.
+func (c *connector) createAssessment(ctx context.Context, s source.Score, sourceID string) (string, error) {
+	kind := "CODE"
+	if s.Judged {
+		kind = "LLM_JUDGE"
+	}
+	a := map[string]any{
+		"assessment_name": s.Metric, "trace_id": s.TraceID, "feedback": map[string]any{"value": s.Value},
+		"source":   map[string]any{"source_type": kind, "source_id": sourceID},
+		"metadata": map[string]string{"evalsi.policy": s.Policy, "evalsi.evaluator": s.Evaluator},
+	}
+	if s.Rationale != "" {
+		a["rationale"] = s.Rationale
+	}
+	var created struct {
+		Assessment assessment `json:"assessment"`
+	}
+	if len(c.ucSchemas) > 0 {
+		return c.createAssessmentUC(ctx, s.TraceID, a)
+	}
+	err := c.call(ctx, http.MethodPost, "/api/3.0/mlflow/traces/"+url.PathEscape(s.TraceID)+"/assessments", nil, map[string]any{"assessment": a}, &created)
+	return created.Assessment.ID, err
+}
+
 // assessments reads the assessments already on a trace.
 func (c *connector) assessments(ctx context.Context, traceID string) ([]assessment, error) {
+	if len(c.ucSchemas) > 0 {
+		return c.assessmentsUC(ctx, traceID)
+	}
 	var resp struct {
 		Trace struct {
 			Info traceInfo `json:"trace_info"`

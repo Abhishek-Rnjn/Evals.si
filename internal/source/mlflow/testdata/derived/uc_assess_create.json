@@ -1,0 +1,21 @@
+{
+  "assessment_id": "a-uc-1",
+  "assessment_name": "task-success",
+  "trace_id": "f864e522377586ed0a722b8a01c9a611",
+  "trace_location": {
+    "type": "UC_SCHEMA",
+    "uc_schema": {
+      "catalog_name": "main",
+      "schema_name": "agents"
+    }
+  },
+  "source": {
+    "source_type": "CODE",
+    "source_id": "evalsi/studio-agents"
+  },
+  "feedback": {
+    "value": 1.0
+  },
+  "rationale": "all tests pass",
+  "valid": true
+}

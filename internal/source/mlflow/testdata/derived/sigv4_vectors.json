@@ -1,0 +1,31 @@
+[
+  {
+    "name": "post-search-session-token",
+    "method": "POST",
+    "url": "https://us-east-1.experiments.sagemaker.aws/api/3.0/mlflow/traces/search",
+    "body": "{\"locations\":[],\"max_results\":10}",
+    "token": "FQoGZXIvYXdzEXAMPLE",
+    "region": "us-east-1",
+    "service": "sagemaker-mlflow",
+    "headers": {
+      "x-mlflow-sm-tracking-server-arn": "arn:aws:sagemaker:us-east-1:123456789012:mlflow-tracking-server/studio",
+      "Content-Type": "application/json"
+    },
+    "amz_date": "20261012T073000Z",
+    "authorization": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20261012/us-east-1/sagemaker-mlflow/aws4_request, SignedHeaders=content-type;host;x-amz-content-sha256;x-amz-date;x-amz-security-token;x-mlflow-sm-tracking-server-arn, Signature=e5e0ae6e7ea306401c3ae66eefe308f5e369bfec4e85f3e61c83f4e8f58fda30"
+  },
+  {
+    "name": "get-query-no-token",
+    "method": "GET",
+    "url": "https://eu-west-1.experiments.sagemaker.aws/api/3.0/mlflow/traces/batchGet?trace_ids=tr-b&trace_ids=tr-a%20c",
+    "body": "",
+    "token": null,
+    "region": "eu-west-1",
+    "service": "sagemaker",
+    "headers": {
+      "x-sm-mlflow-app-arn": "arn:aws:sagemaker:eu-west-1:123456789012:mlflow-app/app-1"
+    },
+    "amz_date": "20261012T073000Z",
+    "authorization": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20261012/eu-west-1/sagemaker/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date;x-sm-mlflow-app-arn, Signature=4decc9c48d1b49ce09fbaa3c3573902a9c4a650cbd58e8da602d318b56e40571"
+  }
+]

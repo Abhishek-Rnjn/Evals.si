@@ -1,0 +1,29 @@
+{
+  "name": "operations/search-1",
+  "done": true,
+  "response": {
+    "trace_infos": [
+      {
+        "trace_id": "f864e522377586ed0a722b8a01c9a611",
+        "trace_location": {
+          "type": "UC_SCHEMA",
+          "uc_schema": {
+            "catalog_name": "main",
+            "schema_name": "agents"
+          }
+        },
+        "request_time": "2026-10-09T17:40:31.612Z",
+        "execution_duration": "0.196s",
+        "state": "OK",
+        "trace_metadata": {
+          "mlflow.trace.sizeStats": "{\"total_size_bytes\": 2575, \"num_spans\": 3, \"max\": 725, \"p25\": 523, \"p50\": 542, \"p75\": 633}",
+          "mlflow.trace.sizeBytes": "2575"
+        },
+        "tags": {
+          "mlflow.traceName": "agent"
+        }
+      }
+    ],
+    "next_page_token": ""
+  }
+}

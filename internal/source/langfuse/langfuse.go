@@ -71,7 +71,7 @@ func Factory(src *evalsiv1alpha1.TraceSource, token string, client *http.Client)
 	if len(src.GetLocations()) == 1 {
 		c.environment = src.GetLocations()[0]
 	}
-	if token != "" {
+	if token != "" && token != source.ValidationToken {
 		if !strings.Contains(token, ":") {
 			return nil, fmt.Errorf("langfuse: the credential must be <public key>:<secret key>")
 		}
