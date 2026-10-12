@@ -754,6 +754,94 @@ func (*DeleteRunResponse) Descriptor() ([]byte, []int) {
 	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{13}
 }
 
+type ArchiveRunRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveRunRequest) Reset() {
+	*x = ArchiveRunRequest{}
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveRunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveRunRequest) ProtoMessage() {}
+
+func (x *ArchiveRunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveRunRequest.ProtoReflect.Descriptor instead.
+func (*ArchiveRunRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ArchiveRunRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type ArchiveRunResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Run           *Run                   `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArchiveRunResponse) Reset() {
+	*x = ArchiveRunResponse{}
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArchiveRunResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArchiveRunResponse) ProtoMessage() {}
+
+func (x *ArchiveRunResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArchiveRunResponse.ProtoReflect.Descriptor instead.
+func (*ArchiveRunResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ArchiveRunResponse) GetRun() *Run {
+	if x != nil {
+		return x.Run
+	}
+	return nil
+}
+
 type ListRunResultsRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RunId     string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -767,7 +855,7 @@ type ListRunResultsRequest struct {
 
 func (x *ListRunResultsRequest) Reset() {
 	*x = ListRunResultsRequest{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -779,7 +867,7 @@ func (x *ListRunResultsRequest) String() string {
 func (*ListRunResultsRequest) ProtoMessage() {}
 
 func (x *ListRunResultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -792,7 +880,7 @@ func (x *ListRunResultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunResultsRequest.ProtoReflect.Descriptor instead.
 func (*ListRunResultsRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{14}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListRunResultsRequest) GetRunId() string {
@@ -835,7 +923,7 @@ type ListRunResultsResponse struct {
 
 func (x *ListRunResultsResponse) Reset() {
 	*x = ListRunResultsResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[15]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -847,7 +935,7 @@ func (x *ListRunResultsResponse) String() string {
 func (*ListRunResultsResponse) ProtoMessage() {}
 
 func (x *ListRunResultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[15]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -860,7 +948,7 @@ func (x *ListRunResultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunResultsResponse.ProtoReflect.Descriptor instead.
 func (*ListRunResultsResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{15}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListRunResultsResponse) GetResults() []*EvaluationResult {
@@ -896,7 +984,7 @@ type CompareRunsRequest struct {
 
 func (x *CompareRunsRequest) Reset() {
 	*x = CompareRunsRequest{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[16]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -908,7 +996,7 @@ func (x *CompareRunsRequest) String() string {
 func (*CompareRunsRequest) ProtoMessage() {}
 
 func (x *CompareRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[16]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -921,7 +1009,7 @@ func (x *CompareRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompareRunsRequest.ProtoReflect.Descriptor instead.
 func (*CompareRunsRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{16}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CompareRunsRequest) GetBaselineRunId() string {
@@ -967,7 +1055,7 @@ type SliceRunsRequest struct {
 
 func (x *SliceRunsRequest) Reset() {
 	*x = SliceRunsRequest{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -979,7 +1067,7 @@ func (x *SliceRunsRequest) String() string {
 func (*SliceRunsRequest) ProtoMessage() {}
 
 func (x *SliceRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -992,7 +1080,7 @@ func (x *SliceRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SliceRunsRequest.ProtoReflect.Descriptor instead.
 func (*SliceRunsRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{17}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SliceRunsRequest) GetRunIds() []string {
@@ -1062,7 +1150,7 @@ type SliceRow struct {
 
 func (x *SliceRow) Reset() {
 	*x = SliceRow{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1074,7 +1162,7 @@ func (x *SliceRow) String() string {
 func (*SliceRow) ProtoMessage() {}
 
 func (x *SliceRow) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1087,7 +1175,7 @@ func (x *SliceRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SliceRow.ProtoReflect.Descriptor instead.
 func (*SliceRow) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{18}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SliceRow) GetRunId() string {
@@ -1151,7 +1239,7 @@ type SliceRunsResponse struct {
 
 func (x *SliceRunsResponse) Reset() {
 	*x = SliceRunsResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1163,7 +1251,7 @@ func (x *SliceRunsResponse) String() string {
 func (*SliceRunsResponse) ProtoMessage() {}
 
 func (x *SliceRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1176,7 +1264,7 @@ func (x *SliceRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SliceRunsResponse.ProtoReflect.Descriptor instead.
 func (*SliceRunsResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{19}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SliceRunsResponse) GetRows() []*SliceRow {
@@ -1210,7 +1298,7 @@ type MetricComparison struct {
 
 func (x *MetricComparison) Reset() {
 	*x = MetricComparison{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1222,7 +1310,7 @@ func (x *MetricComparison) String() string {
 func (*MetricComparison) ProtoMessage() {}
 
 func (x *MetricComparison) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1235,7 +1323,7 @@ func (x *MetricComparison) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricComparison.ProtoReflect.Descriptor instead.
 func (*MetricComparison) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{20}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *MetricComparison) GetMetric() string {
@@ -1296,7 +1384,7 @@ type CompareRunsResponse struct {
 
 func (x *CompareRunsResponse) Reset() {
 	*x = CompareRunsResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1308,7 +1396,7 @@ func (x *CompareRunsResponse) String() string {
 func (*CompareRunsResponse) ProtoMessage() {}
 
 func (x *CompareRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1321,7 +1409,7 @@ func (x *CompareRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompareRunsResponse.ProtoReflect.Descriptor instead.
 func (*CompareRunsResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{21}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CompareRunsResponse) GetComparisons() []*MetricComparison {
@@ -1349,7 +1437,7 @@ type PromoteResultsRequest struct {
 
 func (x *PromoteResultsRequest) Reset() {
 	*x = PromoteResultsRequest{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1361,7 +1449,7 @@ func (x *PromoteResultsRequest) String() string {
 func (*PromoteResultsRequest) ProtoMessage() {}
 
 func (x *PromoteResultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[22]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1374,7 +1462,7 @@ func (x *PromoteResultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteResultsRequest.ProtoReflect.Descriptor instead.
 func (*PromoteResultsRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{22}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PromoteResultsRequest) GetRunId() string {
@@ -1416,7 +1504,7 @@ type PromoteResultsResponse struct {
 
 func (x *PromoteResultsResponse) Reset() {
 	*x = PromoteResultsResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[23]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1428,7 +1516,7 @@ func (x *PromoteResultsResponse) String() string {
 func (*PromoteResultsResponse) ProtoMessage() {}
 
 func (x *PromoteResultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[23]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1441,7 +1529,7 @@ func (x *PromoteResultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteResultsResponse.ProtoReflect.Descriptor instead.
 func (*PromoteResultsResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{23}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PromoteResultsResponse) GetPromoted() int64 {
@@ -1473,7 +1561,7 @@ type CreateShadowReplayRequest struct {
 
 func (x *CreateShadowReplayRequest) Reset() {
 	*x = CreateShadowReplayRequest{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[24]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1485,7 +1573,7 @@ func (x *CreateShadowReplayRequest) String() string {
 func (*CreateShadowReplayRequest) ProtoMessage() {}
 
 func (x *CreateShadowReplayRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[24]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1498,7 +1586,7 @@ func (x *CreateShadowReplayRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateShadowReplayRequest.ProtoReflect.Descriptor instead.
 func (*CreateShadowReplayRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{24}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CreateShadowReplayRequest) GetName() string {
@@ -1539,7 +1627,7 @@ type CreateShadowReplayResponse struct {
 
 func (x *CreateShadowReplayResponse) Reset() {
 	*x = CreateShadowReplayResponse{}
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[25]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1551,7 +1639,7 @@ func (x *CreateShadowReplayResponse) String() string {
 func (*CreateShadowReplayResponse) ProtoMessage() {}
 
 func (x *CreateShadowReplayResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[25]
+	mi := &file_evalsi_v1alpha1_run_service_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1564,7 +1652,7 @@ func (x *CreateShadowReplayResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateShadowReplayResponse.ProtoReflect.Descriptor instead.
 func (*CreateShadowReplayResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{25}
+	return file_evalsi_v1alpha1_run_service_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CreateShadowReplayResponse) GetBaseline() *Run {
@@ -1627,7 +1715,11 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\x03run\x18\x01 \x01(\v2\x14.evalsi.v1alpha1.RunR\x03run\"\"\n" +
 	"\x10DeleteRunRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x13\n" +
-	"\x11DeleteRunResponse\"\x88\x01\n" +
+	"\x11DeleteRunResponse\"#\n" +
+	"\x11ArchiveRunRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"<\n" +
+	"\x12ArchiveRunResponse\x12&\n" +
+	"\x03run\x18\x01 \x01(\v2\x14.evalsi.v1alpha1.RunR\x03run\"\x88\x01\n" +
 	"\x15ListRunResultsRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -1697,7 +1789,7 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x82\x01\n" +
 	"\x1aCreateShadowReplayResponse\x120\n" +
 	"\bbaseline\x18\x01 \x01(\v2\x14.evalsi.v1alpha1.RunR\bbaseline\x122\n" +
-	"\tcandidate\x18\x02 \x01(\v2\x14.evalsi.v1alpha1.RunR\tcandidate2\xae\b\n" +
+	"\tcandidate\x18\x02 \x01(\v2\x14.evalsi.v1alpha1.RunR\tcandidate2\x85\t\n" +
 	"\n" +
 	"RunService\x12R\n" +
 	"\tCreateRun\x12!.evalsi.v1alpha1.CreateRunRequest\x1a\".evalsi.v1alpha1.CreateRunResponse\x12I\n" +
@@ -1706,7 +1798,9 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\bWatchRun\x12 .evalsi.v1alpha1.WatchRunRequest\x1a!.evalsi.v1alpha1.WatchRunResponse0\x01\x12R\n" +
 	"\tCancelRun\x12!.evalsi.v1alpha1.CancelRunRequest\x1a\".evalsi.v1alpha1.CancelRunResponse\x12R\n" +
 	"\tResumeRun\x12!.evalsi.v1alpha1.ResumeRunRequest\x1a\".evalsi.v1alpha1.ResumeRunResponse\x12R\n" +
-	"\tDeleteRun\x12!.evalsi.v1alpha1.DeleteRunRequest\x1a\".evalsi.v1alpha1.DeleteRunResponse\x12a\n" +
+	"\tDeleteRun\x12!.evalsi.v1alpha1.DeleteRunRequest\x1a\".evalsi.v1alpha1.DeleteRunResponse\x12U\n" +
+	"\n" +
+	"ArchiveRun\x12\".evalsi.v1alpha1.ArchiveRunRequest\x1a#.evalsi.v1alpha1.ArchiveRunResponse\x12a\n" +
 	"\x0eListRunResults\x12&.evalsi.v1alpha1.ListRunResultsRequest\x1a'.evalsi.v1alpha1.ListRunResultsResponse\x12X\n" +
 	"\vCompareRuns\x12#.evalsi.v1alpha1.CompareRunsRequest\x1a$.evalsi.v1alpha1.CompareRunsResponse\x12R\n" +
 	"\tSliceRuns\x12!.evalsi.v1alpha1.SliceRunsRequest\x1a\".evalsi.v1alpha1.SliceRunsResponse\x12a\n" +
@@ -1726,7 +1820,7 @@ func file_evalsi_v1alpha1_run_service_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_run_service_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_run_service_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_evalsi_v1alpha1_run_service_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_evalsi_v1alpha1_run_service_proto_goTypes = []any{
 	(*CreateRunRequest)(nil),           // 0: evalsi.v1alpha1.CreateRunRequest
 	(*CreateRunResponse)(nil),          // 1: evalsi.v1alpha1.CreateRunResponse
@@ -1742,78 +1836,83 @@ var file_evalsi_v1alpha1_run_service_proto_goTypes = []any{
 	(*ResumeRunResponse)(nil),          // 11: evalsi.v1alpha1.ResumeRunResponse
 	(*DeleteRunRequest)(nil),           // 12: evalsi.v1alpha1.DeleteRunRequest
 	(*DeleteRunResponse)(nil),          // 13: evalsi.v1alpha1.DeleteRunResponse
-	(*ListRunResultsRequest)(nil),      // 14: evalsi.v1alpha1.ListRunResultsRequest
-	(*ListRunResultsResponse)(nil),     // 15: evalsi.v1alpha1.ListRunResultsResponse
-	(*CompareRunsRequest)(nil),         // 16: evalsi.v1alpha1.CompareRunsRequest
-	(*SliceRunsRequest)(nil),           // 17: evalsi.v1alpha1.SliceRunsRequest
-	(*SliceRow)(nil),                   // 18: evalsi.v1alpha1.SliceRow
-	(*SliceRunsResponse)(nil),          // 19: evalsi.v1alpha1.SliceRunsResponse
-	(*MetricComparison)(nil),           // 20: evalsi.v1alpha1.MetricComparison
-	(*CompareRunsResponse)(nil),        // 21: evalsi.v1alpha1.CompareRunsResponse
-	(*PromoteResultsRequest)(nil),      // 22: evalsi.v1alpha1.PromoteResultsRequest
-	(*PromoteResultsResponse)(nil),     // 23: evalsi.v1alpha1.PromoteResultsResponse
-	(*CreateShadowReplayRequest)(nil),  // 24: evalsi.v1alpha1.CreateShadowReplayRequest
-	(*CreateShadowReplayResponse)(nil), // 25: evalsi.v1alpha1.CreateShadowReplayResponse
-	nil,                                // 26: evalsi.v1alpha1.CreateRunRequest.LabelsEntry
-	nil,                                // 27: evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
-	nil,                                // 28: evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
-	(*RunSpec)(nil),                    // 29: evalsi.v1alpha1.RunSpec
-	(*Run)(nil),                        // 30: evalsi.v1alpha1.Run
-	(*Progress)(nil),                   // 31: evalsi.v1alpha1.Progress
-	(*EvaluationResult)(nil),           // 32: evalsi.v1alpha1.EvaluationResult
-	(*Record)(nil),                     // 33: evalsi.v1alpha1.Record
-	(*ConfidenceInterval)(nil),         // 34: evalsi.v1alpha1.ConfidenceInterval
+	(*ArchiveRunRequest)(nil),          // 14: evalsi.v1alpha1.ArchiveRunRequest
+	(*ArchiveRunResponse)(nil),         // 15: evalsi.v1alpha1.ArchiveRunResponse
+	(*ListRunResultsRequest)(nil),      // 16: evalsi.v1alpha1.ListRunResultsRequest
+	(*ListRunResultsResponse)(nil),     // 17: evalsi.v1alpha1.ListRunResultsResponse
+	(*CompareRunsRequest)(nil),         // 18: evalsi.v1alpha1.CompareRunsRequest
+	(*SliceRunsRequest)(nil),           // 19: evalsi.v1alpha1.SliceRunsRequest
+	(*SliceRow)(nil),                   // 20: evalsi.v1alpha1.SliceRow
+	(*SliceRunsResponse)(nil),          // 21: evalsi.v1alpha1.SliceRunsResponse
+	(*MetricComparison)(nil),           // 22: evalsi.v1alpha1.MetricComparison
+	(*CompareRunsResponse)(nil),        // 23: evalsi.v1alpha1.CompareRunsResponse
+	(*PromoteResultsRequest)(nil),      // 24: evalsi.v1alpha1.PromoteResultsRequest
+	(*PromoteResultsResponse)(nil),     // 25: evalsi.v1alpha1.PromoteResultsResponse
+	(*CreateShadowReplayRequest)(nil),  // 26: evalsi.v1alpha1.CreateShadowReplayRequest
+	(*CreateShadowReplayResponse)(nil), // 27: evalsi.v1alpha1.CreateShadowReplayResponse
+	nil,                                // 28: evalsi.v1alpha1.CreateRunRequest.LabelsEntry
+	nil,                                // 29: evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
+	nil,                                // 30: evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
+	(*RunSpec)(nil),                    // 31: evalsi.v1alpha1.RunSpec
+	(*Run)(nil),                        // 32: evalsi.v1alpha1.Run
+	(*Progress)(nil),                   // 33: evalsi.v1alpha1.Progress
+	(*EvaluationResult)(nil),           // 34: evalsi.v1alpha1.EvaluationResult
+	(*Record)(nil),                     // 35: evalsi.v1alpha1.Record
+	(*ConfidenceInterval)(nil),         // 36: evalsi.v1alpha1.ConfidenceInterval
 }
 var file_evalsi_v1alpha1_run_service_proto_depIdxs = []int32{
-	29, // 0: evalsi.v1alpha1.CreateRunRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
-	26, // 1: evalsi.v1alpha1.CreateRunRequest.labels:type_name -> evalsi.v1alpha1.CreateRunRequest.LabelsEntry
-	30, // 2: evalsi.v1alpha1.CreateRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	30, // 3: evalsi.v1alpha1.GetRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	30, // 4: evalsi.v1alpha1.ListRunsResponse.runs:type_name -> evalsi.v1alpha1.Run
-	30, // 5: evalsi.v1alpha1.WatchRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	31, // 6: evalsi.v1alpha1.WatchRunResponse.progress:type_name -> evalsi.v1alpha1.Progress
-	32, // 7: evalsi.v1alpha1.WatchRunResponse.result:type_name -> evalsi.v1alpha1.EvaluationResult
-	30, // 8: evalsi.v1alpha1.CancelRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	30, // 9: evalsi.v1alpha1.ResumeRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	32, // 10: evalsi.v1alpha1.ListRunResultsResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	33, // 11: evalsi.v1alpha1.ListRunResultsResponse.records:type_name -> evalsi.v1alpha1.Record
-	27, // 12: evalsi.v1alpha1.SliceRunsRequest.labels:type_name -> evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
-	18, // 13: evalsi.v1alpha1.SliceRunsResponse.rows:type_name -> evalsi.v1alpha1.SliceRow
-	34, // 14: evalsi.v1alpha1.MetricComparison.diff_ci:type_name -> evalsi.v1alpha1.ConfidenceInterval
-	20, // 15: evalsi.v1alpha1.CompareRunsResponse.comparisons:type_name -> evalsi.v1alpha1.MetricComparison
-	29, // 16: evalsi.v1alpha1.CreateShadowReplayRequest.candidate:type_name -> evalsi.v1alpha1.RunSpec
-	28, // 17: evalsi.v1alpha1.CreateShadowReplayRequest.labels:type_name -> evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
-	30, // 18: evalsi.v1alpha1.CreateShadowReplayResponse.baseline:type_name -> evalsi.v1alpha1.Run
-	30, // 19: evalsi.v1alpha1.CreateShadowReplayResponse.candidate:type_name -> evalsi.v1alpha1.Run
-	0,  // 20: evalsi.v1alpha1.RunService.CreateRun:input_type -> evalsi.v1alpha1.CreateRunRequest
-	2,  // 21: evalsi.v1alpha1.RunService.GetRun:input_type -> evalsi.v1alpha1.GetRunRequest
-	4,  // 22: evalsi.v1alpha1.RunService.ListRuns:input_type -> evalsi.v1alpha1.ListRunsRequest
-	6,  // 23: evalsi.v1alpha1.RunService.WatchRun:input_type -> evalsi.v1alpha1.WatchRunRequest
-	8,  // 24: evalsi.v1alpha1.RunService.CancelRun:input_type -> evalsi.v1alpha1.CancelRunRequest
-	10, // 25: evalsi.v1alpha1.RunService.ResumeRun:input_type -> evalsi.v1alpha1.ResumeRunRequest
-	12, // 26: evalsi.v1alpha1.RunService.DeleteRun:input_type -> evalsi.v1alpha1.DeleteRunRequest
-	14, // 27: evalsi.v1alpha1.RunService.ListRunResults:input_type -> evalsi.v1alpha1.ListRunResultsRequest
-	16, // 28: evalsi.v1alpha1.RunService.CompareRuns:input_type -> evalsi.v1alpha1.CompareRunsRequest
-	17, // 29: evalsi.v1alpha1.RunService.SliceRuns:input_type -> evalsi.v1alpha1.SliceRunsRequest
-	22, // 30: evalsi.v1alpha1.RunService.PromoteResults:input_type -> evalsi.v1alpha1.PromoteResultsRequest
-	24, // 31: evalsi.v1alpha1.RunService.CreateShadowReplay:input_type -> evalsi.v1alpha1.CreateShadowReplayRequest
-	1,  // 32: evalsi.v1alpha1.RunService.CreateRun:output_type -> evalsi.v1alpha1.CreateRunResponse
-	3,  // 33: evalsi.v1alpha1.RunService.GetRun:output_type -> evalsi.v1alpha1.GetRunResponse
-	5,  // 34: evalsi.v1alpha1.RunService.ListRuns:output_type -> evalsi.v1alpha1.ListRunsResponse
-	7,  // 35: evalsi.v1alpha1.RunService.WatchRun:output_type -> evalsi.v1alpha1.WatchRunResponse
-	9,  // 36: evalsi.v1alpha1.RunService.CancelRun:output_type -> evalsi.v1alpha1.CancelRunResponse
-	11, // 37: evalsi.v1alpha1.RunService.ResumeRun:output_type -> evalsi.v1alpha1.ResumeRunResponse
-	13, // 38: evalsi.v1alpha1.RunService.DeleteRun:output_type -> evalsi.v1alpha1.DeleteRunResponse
-	15, // 39: evalsi.v1alpha1.RunService.ListRunResults:output_type -> evalsi.v1alpha1.ListRunResultsResponse
-	21, // 40: evalsi.v1alpha1.RunService.CompareRuns:output_type -> evalsi.v1alpha1.CompareRunsResponse
-	19, // 41: evalsi.v1alpha1.RunService.SliceRuns:output_type -> evalsi.v1alpha1.SliceRunsResponse
-	23, // 42: evalsi.v1alpha1.RunService.PromoteResults:output_type -> evalsi.v1alpha1.PromoteResultsResponse
-	25, // 43: evalsi.v1alpha1.RunService.CreateShadowReplay:output_type -> evalsi.v1alpha1.CreateShadowReplayResponse
-	32, // [32:44] is the sub-list for method output_type
-	20, // [20:32] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	31, // 0: evalsi.v1alpha1.CreateRunRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
+	28, // 1: evalsi.v1alpha1.CreateRunRequest.labels:type_name -> evalsi.v1alpha1.CreateRunRequest.LabelsEntry
+	32, // 2: evalsi.v1alpha1.CreateRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	32, // 3: evalsi.v1alpha1.GetRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	32, // 4: evalsi.v1alpha1.ListRunsResponse.runs:type_name -> evalsi.v1alpha1.Run
+	32, // 5: evalsi.v1alpha1.WatchRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	33, // 6: evalsi.v1alpha1.WatchRunResponse.progress:type_name -> evalsi.v1alpha1.Progress
+	34, // 7: evalsi.v1alpha1.WatchRunResponse.result:type_name -> evalsi.v1alpha1.EvaluationResult
+	32, // 8: evalsi.v1alpha1.CancelRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	32, // 9: evalsi.v1alpha1.ResumeRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	32, // 10: evalsi.v1alpha1.ArchiveRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	34, // 11: evalsi.v1alpha1.ListRunResultsResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	35, // 12: evalsi.v1alpha1.ListRunResultsResponse.records:type_name -> evalsi.v1alpha1.Record
+	29, // 13: evalsi.v1alpha1.SliceRunsRequest.labels:type_name -> evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
+	20, // 14: evalsi.v1alpha1.SliceRunsResponse.rows:type_name -> evalsi.v1alpha1.SliceRow
+	36, // 15: evalsi.v1alpha1.MetricComparison.diff_ci:type_name -> evalsi.v1alpha1.ConfidenceInterval
+	22, // 16: evalsi.v1alpha1.CompareRunsResponse.comparisons:type_name -> evalsi.v1alpha1.MetricComparison
+	31, // 17: evalsi.v1alpha1.CreateShadowReplayRequest.candidate:type_name -> evalsi.v1alpha1.RunSpec
+	30, // 18: evalsi.v1alpha1.CreateShadowReplayRequest.labels:type_name -> evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
+	32, // 19: evalsi.v1alpha1.CreateShadowReplayResponse.baseline:type_name -> evalsi.v1alpha1.Run
+	32, // 20: evalsi.v1alpha1.CreateShadowReplayResponse.candidate:type_name -> evalsi.v1alpha1.Run
+	0,  // 21: evalsi.v1alpha1.RunService.CreateRun:input_type -> evalsi.v1alpha1.CreateRunRequest
+	2,  // 22: evalsi.v1alpha1.RunService.GetRun:input_type -> evalsi.v1alpha1.GetRunRequest
+	4,  // 23: evalsi.v1alpha1.RunService.ListRuns:input_type -> evalsi.v1alpha1.ListRunsRequest
+	6,  // 24: evalsi.v1alpha1.RunService.WatchRun:input_type -> evalsi.v1alpha1.WatchRunRequest
+	8,  // 25: evalsi.v1alpha1.RunService.CancelRun:input_type -> evalsi.v1alpha1.CancelRunRequest
+	10, // 26: evalsi.v1alpha1.RunService.ResumeRun:input_type -> evalsi.v1alpha1.ResumeRunRequest
+	12, // 27: evalsi.v1alpha1.RunService.DeleteRun:input_type -> evalsi.v1alpha1.DeleteRunRequest
+	14, // 28: evalsi.v1alpha1.RunService.ArchiveRun:input_type -> evalsi.v1alpha1.ArchiveRunRequest
+	16, // 29: evalsi.v1alpha1.RunService.ListRunResults:input_type -> evalsi.v1alpha1.ListRunResultsRequest
+	18, // 30: evalsi.v1alpha1.RunService.CompareRuns:input_type -> evalsi.v1alpha1.CompareRunsRequest
+	19, // 31: evalsi.v1alpha1.RunService.SliceRuns:input_type -> evalsi.v1alpha1.SliceRunsRequest
+	24, // 32: evalsi.v1alpha1.RunService.PromoteResults:input_type -> evalsi.v1alpha1.PromoteResultsRequest
+	26, // 33: evalsi.v1alpha1.RunService.CreateShadowReplay:input_type -> evalsi.v1alpha1.CreateShadowReplayRequest
+	1,  // 34: evalsi.v1alpha1.RunService.CreateRun:output_type -> evalsi.v1alpha1.CreateRunResponse
+	3,  // 35: evalsi.v1alpha1.RunService.GetRun:output_type -> evalsi.v1alpha1.GetRunResponse
+	5,  // 36: evalsi.v1alpha1.RunService.ListRuns:output_type -> evalsi.v1alpha1.ListRunsResponse
+	7,  // 37: evalsi.v1alpha1.RunService.WatchRun:output_type -> evalsi.v1alpha1.WatchRunResponse
+	9,  // 38: evalsi.v1alpha1.RunService.CancelRun:output_type -> evalsi.v1alpha1.CancelRunResponse
+	11, // 39: evalsi.v1alpha1.RunService.ResumeRun:output_type -> evalsi.v1alpha1.ResumeRunResponse
+	13, // 40: evalsi.v1alpha1.RunService.DeleteRun:output_type -> evalsi.v1alpha1.DeleteRunResponse
+	15, // 41: evalsi.v1alpha1.RunService.ArchiveRun:output_type -> evalsi.v1alpha1.ArchiveRunResponse
+	17, // 42: evalsi.v1alpha1.RunService.ListRunResults:output_type -> evalsi.v1alpha1.ListRunResultsResponse
+	23, // 43: evalsi.v1alpha1.RunService.CompareRuns:output_type -> evalsi.v1alpha1.CompareRunsResponse
+	21, // 44: evalsi.v1alpha1.RunService.SliceRuns:output_type -> evalsi.v1alpha1.SliceRunsResponse
+	25, // 45: evalsi.v1alpha1.RunService.PromoteResults:output_type -> evalsi.v1alpha1.PromoteResultsResponse
+	27, // 46: evalsi.v1alpha1.RunService.CreateShadowReplay:output_type -> evalsi.v1alpha1.CreateShadowReplayResponse
+	34, // [34:47] is the sub-list for method output_type
+	21, // [21:34] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_service_proto_init() }
@@ -1829,15 +1928,15 @@ func file_evalsi_v1alpha1_run_service_proto_init() {
 		(*WatchRunResponse_Progress)(nil),
 		(*WatchRunResponse_Result)(nil),
 	}
-	file_evalsi_v1alpha1_run_service_proto_msgTypes[18].OneofWrappers = []any{}
 	file_evalsi_v1alpha1_run_service_proto_msgTypes[20].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_run_service_proto_msgTypes[22].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_run_service_proto_rawDesc), len(file_evalsi_v1alpha1_run_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   29,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

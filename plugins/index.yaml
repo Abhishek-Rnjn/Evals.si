@@ -121,3 +121,18 @@ plugins:
     homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/taubench
     python:
       requirement: "evalsi-adapter-taubench @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/taubench"
+  # A hosted Wasm plugin: the manifest and module live next to this file
+  # (plugins/wasm/text-checks), so a manifest path is relative to the index
+  # that lists it. Built from examples/wasm/text-checks by
+  # scripts/publish-wasm-example.sh, which re-pins both files below.
+  - name: example/text-checks
+    version: 1.0.0
+    tier: community
+    kind: wasm
+    description: Deterministic text checks (JSON validity, word limits, distinct outputs), compiled to Wasm.
+    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/examples/wasm/text-checks
+    license: Apache-2.0
+    evaluators: [example/json-valid, example/word-limit, example/distinct-outputs]
+    wasm:
+      manifest: wasm/text-checks/evalsi-plugin.yaml
+      sha256: e0f8fa93711dfb82e27290770814e70ba57fbbfd3c1237b30f7ea288efe441b7

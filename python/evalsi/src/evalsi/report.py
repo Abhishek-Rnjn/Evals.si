@@ -189,7 +189,8 @@ def from_server(client: Any, run_id: str, examples: int = 5) -> Report:
     results: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
     token = ""
-    while True:
+    # An archived run keeps its summaries and gates; its results are gone.
+    while not run.get("archivedAt"):
         page = client.list_run_results(run_id, page_token=token)
         results += page.get("results", [])
         records += page.get("records", [])
@@ -208,6 +209,7 @@ def from_server(client: Any, run_id: str, examples: int = 5) -> Report:
         "created by": run.get("createdBy"),
         "created": run.get("createdAt"),
         "finished": run.get("finishedAt"),
+        "archived": run.get("archivedAt"),
     }
     gates = [
         {

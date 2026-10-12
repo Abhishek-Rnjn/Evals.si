@@ -89,6 +89,9 @@ func (m *Manager) runRecords(ctx context.Context, src *evalsiv1alpha1.RunOutputs
 	if err != nil {
 		return nil, invalid("spec.dataset.run: no run %q", src.GetRunId())
 	}
+	if run.GetArchivedAt() != nil {
+		return nil, invalid("spec.dataset.run: run %q was archived; its records are gone", src.GetRunId())
+	}
 	records, err := m.store.Records(ctx, run.GetId())
 	if err != nil {
 		return nil, err
@@ -185,6 +188,9 @@ type Match struct {
 // empty), in run order: the first matching trial of each record, or every
 // matching trial with allTrials.
 func (m *Manager) MatchRecords(ctx context.Context, run *evalsiv1alpha1.Run, when string, allTrials bool) ([]Match, error) {
+	if err := errArchived(run); err != nil {
+		return nil, err
+	}
 	var prog cel.Program
 	if when != "" {
 		var err error

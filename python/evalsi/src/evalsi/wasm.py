@@ -7,9 +7,9 @@ discovery off), or by default under ``~/.evalsi/plugins``, where
 ``evalsi plugins install`` puts them.
 
 Discovery reads only the manifests. Scoring goes through one long-lived
-``evalsid wasm serve`` process per Python process (found through
-``EVALSID`` or ``PATH``), which verifies and compiles each module on first
-use; Wasm evaluators therefore score the same here as on a server.
+``evalsid wasm serve`` process per Python process (found through ``EVALSID``,
+the platform wheel's bundled binary or ``PATH``), which verifies and compiles each
+module on first use; Wasm evaluators therefore score the same here as on a server.
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import asyncio
 import inspect
 import json
 import os
-import shutil
 import subprocess
 import threading
 from concurrent.futures import Future
@@ -27,6 +26,7 @@ from typing import IO, Any
 
 from google.protobuf import json_format
 
+from evalsi._binaries import evalsid_path
 from evalsi.evaluator import (
     EvaluatorConfigError,
     EvaluatorDef,
@@ -249,8 +249,11 @@ def service() -> Service:
     global _service  # noqa: PLW0603 - one evalsid per process
     with _service_lock:
         if _service is None or _service._proc.poll() is not None:
-            binary = os.environ.get("EVALSID") or shutil.which("evalsid")
+            binary = evalsid_path()
             if not binary:
-                raise WasmError("Wasm evaluators need evalsid: put it on PATH, or set EVALSID")
+                raise WasmError(
+                    "Wasm evaluators need evalsid: install a platform wheel, put it on PATH, "
+                    "or set EVALSID"
+                )
             _service = Service([binary, "wasm", "serve"])
         return _service

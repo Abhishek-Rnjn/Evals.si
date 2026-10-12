@@ -65,8 +65,28 @@ finished before the cutoff (or, with no finish time, were created before it),
 in the same way as `DeleteRun`, so the stored-run quota is recovered. Runs that
 are pending, running or leased are never touched, and neither is a run
 labelled `evalsi.keep: "true"`. Data already delivered to external sinks, and
-source and promoted datasets, remain. Each pass that deletes something logs
-`run retention` with the count; no audit event is written per run.
+source and promoted datasets, remain. Each automatic delete writes an audit
+event (`runs.delete`, principal `system:retention`), and each pass logs
+`run retention` with the counts.
+
+### Archive instead of delete
+
+`ArchiveRun` (`POST /v1alpha1/runs/{id}:archive`, `evalsi archive-run ID --server URL --yes`)
+drops a finished run's records, outputs, results and queued webhook deliveries
+and keeps the run: its spec, status, metric summaries, gates, usage and labels,
+now with `archived_at` set. It needs the permission `DeleteRun` needs
+(`runs.delete`) and has the same refusals for runs that are not finished. An
+archived run can still be read (`GetRun`, the web UI's run page, `evalsi
+report --server` shows its summary only) and deleted, but results, `ResumeRun`, `CompareRuns`,
+`PromoteResults`, shadow replays and annotation queues sourced from it answer
+`FailedPrecondition` saying it was archived, and `SliceRuns` skips it. It still
+counts toward the stored-run quota until it is deleted.
+
+To archive automatically, set `runs.archive_after` (for example `168h`) and, per
+project, `runs.project_archive_after` (`"0"` never archives). It must be shorter
+than the retention it sits with, so a run goes whole, then summary-only, then
+away. Each pass checks every older run once an hour; `evalsi.keep: "true"`
+exempts a run, and each archive writes a `runs.archive` audit event.
 
 Evals.si installs from its own charts, in the agent harness's namespace or its own. Every name starts with the release name, so releases can share a namespace ([Names](kubernetes.md#names-and-installing-beside-other-charts)).
 

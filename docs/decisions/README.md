@@ -26,5 +26,8 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0020](0020-pipeline-retries-and-scheduled-runs.md) | Durable keyed retries without secret replay, bounded dataset publication, terminal deletion and scheduled batch windows | Accepted, implemented |
 | [0021](0021-sandbox-time-quotas.md) | Sandbox time is a daily per-project quota (`sandbox_seconds_per_day`), metered in the run manager from agent task and sandbox-pool evaluator wall time | Accepted, implemented |
 | [0022](0022-server-side-slicing.md) | Cross-run slices are computed on the server (`SliceRuns`), in Go over each run's stored results; arbitrary SQL stays on the client | Accepted, implemented |
+| [0023](0023-run-archiving.md) | Archiving keeps a run's summary and drops its records, outputs and results; `runs.archive_after` does it automatically, and automatic deletes and archives are audited | Accepted, implemented |
+| [0024](0024-platform-wheels.md) | `evalsi` ships Linux platform wheels that bundle `evalsid` and `bwrap`; `EVALSID`, then the bundle, then `PATH` | Accepted, implemented |
+| [0025](0025-operator-checkpoint-serving.md) | A `CheckpointServer` resource has the operator run vLLM for a checkpoint; the watcher creates and deletes one per checkpoint through `kubectl` | Accepted, implemented; not yet run on a GPU cluster |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

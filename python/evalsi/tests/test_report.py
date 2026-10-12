@@ -143,3 +143,24 @@ def test_embedded_results_files_record_each_outputs_trial(tmp_path: Path) -> Non
         record_trials=[0, 1],
     )
     assert [r["provenance"]["run"]["trial"] for r in result.to_dict()["records"]] == [0, 1]
+
+
+def test_server_report_of_an_archived_run_is_its_summary() -> None:
+    from evalsi.report import from_server, to_markdown
+
+    class Client:
+        def get_run(self, run_id: str) -> dict[str, Any]:
+            return {
+                "id": run_id,
+                "name": "nightly",
+                "status": "RUN_STATUS_SUCCEEDED",
+                "archivedAt": "2026-10-12T00:00:00Z",
+                "summaries": [{"metric": "exact-match", "n": "10", "mean": 0.8}],
+            }
+
+        def list_run_results(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+            raise AssertionError("an archived run has no results to list")
+
+    report = from_server(Client(), "run-1")
+    assert report.meta["archived"] == "2026-10-12T00:00:00Z"
+    assert "exact-match" in to_markdown(report)

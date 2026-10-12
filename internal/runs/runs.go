@@ -70,6 +70,8 @@ type Options struct {
 	Quotas config.Quotas
 	// How long finished runs are kept (see Manager.Retain).
 	Retention config.Runs
+	// Records an audit event; nil records none. Automatic deletes and archives use it.
+	Audit func(context.Context, *evalsiv1alpha1.AuditEvent)
 	// The time, for daily quotas; time.Now when nil (tests set it).
 	Now func() time.Time
 }
@@ -1212,6 +1214,9 @@ func (m *Manager) ResumeRun(ctx context.Context, req *connect.Request[evalsiv1al
 	if err != nil {
 		return nil, err
 	}
+	if err := errArchived(run); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	_, running := m.active[run.GetId()]
 	m.mu.Unlock()
@@ -1262,10 +1267,60 @@ func (m *Manager) DeleteRun(ctx context.Context, req *connect.Request[evalsiv1al
 	return connect.NewResponse(&evalsiv1alpha1.DeleteRunResponse{}), nil
 }
 
+// ArchiveRun drops a finished run's records, outputs, results and webhook
+// deliveries and keeps its summary (see Store.ArchiveRun).
+func (m *Manager) ArchiveRun(ctx context.Context, req *connect.Request[evalsiv1alpha1.ArchiveRunRequest]) (*connect.Response[evalsiv1alpha1.ArchiveRunResponse], error) {
+	run, _, err := m.archive(ctx, req.Msg.GetId())
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&evalsiv1alpha1.ArchiveRunResponse{Run: run}), nil
+}
+
+// archive archives one run unless it is active here or on another replica.
+// It reports whether this call archived it (false: it already was).
+func (m *Manager) archive(ctx context.Context, id string) (*evalsiv1alpha1.Run, bool, error) {
+	m.admit.Lock()
+	defer m.admit.Unlock()
+	m.mu.Lock()
+	_, active := m.active[id]
+	m.mu.Unlock()
+	if active {
+		return nil, false, connect.NewError(connect.CodeFailedPrecondition, store.ErrRunActive)
+	}
+	before, err := m.get(ctx, id)
+	if err != nil {
+		return nil, false, err
+	}
+	run, err := m.store.ArchiveRun(ctx, id, m.opts.Now())
+	switch {
+	case errors.Is(err, store.ErrRunActive):
+		return nil, false, connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, store.ErrNotFound):
+		return nil, false, connect.NewError(connect.CodeNotFound, err)
+	case err != nil:
+		return nil, false, err
+	}
+	return run, before.GetArchivedAt() == nil, nil
+}
+
+// errArchived is the answer to a request that needs what archiving removed.
+func errArchived(run *evalsiv1alpha1.Run) error {
+	if run.GetArchivedAt() == nil {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition,
+		fmt.Errorf("run %s was archived at %s: its records and results are gone; its summary remains", run.GetId(), run.GetArchivedAt().AsTime().Format(time.RFC3339)))
+}
+
 // ListRunResults pages through a run's results with the graded records.
 func (m *Manager) ListRunResults(ctx context.Context, req *connect.Request[evalsiv1alpha1.ListRunResultsRequest]) (*connect.Response[evalsiv1alpha1.ListRunResultsResponse], error) {
 	id := req.Msg.GetRunId()
-	if _, err := m.get(ctx, id); err != nil {
+	run, err := m.get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := errArchived(run); err != nil {
 		return nil, err
 	}
 	size := int(req.Msg.GetPageSize())

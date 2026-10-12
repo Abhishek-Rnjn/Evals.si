@@ -208,6 +208,12 @@ variables.
        sha256: <sha256 of that manifest file>
    ```
 
+   A manifest path in an index is relative to the index that lists it, so
+   an index can host the files beside itself. The default index does: its
+   `example/text-checks` entry (the [example](../../examples/wasm/text-checks)
+   below, built for you) installs from `plugins/wasm/text-checks`, and
+   `scripts/publish-wasm-example.sh` rebuilds and re-pins it.
+
 3. **Open a pull request.** A new version is a new entry; `install` picks
    the newest unless you ask for `name@version`.
 

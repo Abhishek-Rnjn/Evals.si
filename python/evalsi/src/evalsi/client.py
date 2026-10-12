@@ -273,6 +273,12 @@ class Client:
     def resume_run(self, run_id: str) -> dict[str, Any]:
         return self._run("ResumeRun", {"id": run_id})
 
+    def archive_run(self, run_id: str) -> dict[str, Any]:
+        """Drop a finished run's records and results, keeping its summary."""
+        out: dict[str, Any] = self.call("RunService", "ArchiveRun", {"id": run_id})
+        run: dict[str, Any] = out.get("run", {})
+        return run
+
     def delete_run(self, run_id: str, *, idempotency_key: str | None = None) -> None:
         self.call("RunService", "DeleteRun", {"id": run_id}, idempotency_key=idempotency_key)
 

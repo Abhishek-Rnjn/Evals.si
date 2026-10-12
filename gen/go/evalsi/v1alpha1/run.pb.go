@@ -990,7 +990,10 @@ type Run struct {
 	// Labels for access rules, for example app, env or team.
 	Labels map[string]string `protobuf:"bytes,17,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// The principal that created the run, for example "user:corp/1234" or "key:ci".
-	CreatedBy     string `protobuf:"bytes,18,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreatedBy string `protobuf:"bytes,18,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// Set when the run was archived: its records, outputs and results are gone
+	// and what is left is this summary (spec, status, summaries, gates, usage).
+	ArchivedAt    *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=archived_at,json=archivedAt,proto3" json:"archived_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1151,6 +1154,13 @@ func (x *Run) GetCreatedBy() string {
 	return ""
 }
 
+func (x *Run) GetArchivedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ArchivedAt
+	}
+	return nil
+}
+
 var File_evalsi_v1alpha1_run_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
@@ -1227,7 +1237,7 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x10max_judge_tokens\x18\x02 \x01(\x03R\x0emaxJudgeTokens\"4\n" +
 	"\bProgress\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x12\n" +
-	"\x04done\x18\x02 \x01(\x03R\x04done\"\xdf\x06\n" +
+	"\x04done\x18\x02 \x01(\x03R\x04done\"\x9c\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -1252,7 +1262,9 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\arecords\x18\x10 \x01(\x03R\arecords\x128\n" +
 	"\x06labels\x18\x11 \x03(\v2 .evalsi.v1alpha1.Run.LabelsEntryR\x06labels\x12\x1d\n" +
 	"\n" +
-	"created_by\x18\x12 \x01(\tR\tcreatedBy\x1a9\n" +
+	"created_by\x18\x12 \x01(\tR\tcreatedBy\x12;\n" +
+	"\varchived_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"archivedAt\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*f\n" +
@@ -1341,11 +1353,12 @@ var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	24, // 25: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
 	24, // 26: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
 	14, // 27: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
-	28, // [28:28] is the sub-list for method output_type
-	28, // [28:28] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	22, // 28: evalsi.v1alpha1.Run.archived_at:type_name -> google.protobuf.Timestamp
+	29, // [29:29] is the sub-list for method output_type
+	29, // [29:29] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_proto_init() }

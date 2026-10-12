@@ -205,8 +205,13 @@ class Warehouse:
         return self.add_results(json.loads(p.read_text(encoding="utf-8")), run_id="")
 
     def add_server_run(self, client: Any, run: Mapping[str, Any]) -> str:
-        """A server run (as ``GetRun``/``ListRuns`` return it), with its results."""
+        """A server run (as ``GetRun``/``ListRuns`` return it), with its results.
+        An archived run has none left and cannot be loaded."""
         run_id = str(run.get("id", ""))
+        if run.get("archivedAt"):
+            raise ValueError(
+                f"run {run_id} was archived at {run['archivedAt']}: its results are gone"
+            )
         results: list[dict[str, Any]] = []
         records: list[dict[str, Any]] = []
         token = ""
@@ -240,7 +245,8 @@ class Warehouse:
         run_ids: Sequence[str] = (),
         limit: int = 50,
     ) -> list[str]:
-        """The newest ``limit`` runs of a project (with these labels), or the given runs."""
+        """The newest ``limit`` runs of a project (with these labels), or the given runs.
+        Archived runs, which have no results, are left out of the newest; naming one is an error."""
         if run_ids:
             return [self.add_server_run(client, client.get_run(r)) for r in run_ids]
         loaded: list[str] = []
@@ -248,6 +254,8 @@ class Warehouse:
         while len(loaded) < limit:
             page = client.list_runs(project=project, page_token=token)
             for run in page.get("runs", []):
+                if run.get("archivedAt"):
+                    continue
                 have = run.get("labels") or {}
                 if labels and any(have.get(k) != v for k, v in labels.items()):
                     continue

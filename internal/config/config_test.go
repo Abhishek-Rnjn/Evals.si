@@ -228,3 +228,36 @@ runs:
 		}
 	}
 }
+
+func TestRunArchiveAfter(t *testing.T) {
+	cfg, err := Load(write(t, `
+auth: {mode: none}
+runs:
+  archive_after: 168h
+  project_archive_after: {research: 720h, audit: "0"}
+  retention: 2160h
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for project, want := range map[string]time.Duration{"support": 168 * time.Hour, "research": 720 * time.Hour, "audit": 0} {
+		if got := cfg.Runs.ArchiveAfterFor(project); got != want {
+			t.Errorf("%s: %s, want %s", project, got, want)
+		}
+	}
+	for name, body := range map[string]string{
+		"not a duration":          "runs: {archive_after: soon}",
+		"too short":               "runs: {archive_after: 10m}",
+		"project":                 "runs: {project_archive_after: {a: 1m}}",
+		"after retention":         "runs: {archive_after: 720h, retention: 720h}",
+		"project after retention": "runs: {retention: 720h, project_archive_after: {a: 1000h}}",
+	} {
+		if _, err := Load(write(t, "auth: {mode: none}\n"+body)); err == nil || !strings.Contains(err.Error(), "archive_after") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// A project that never deletes can archive whenever it likes.
+	if _, err := Load(write(t, "auth: {mode: none}\nruns: {retention: 720h, archive_after: 24h, project_retention: {r: \"0\"}, project_archive_after: {r: 2000h}}")); err != nil {
+		t.Errorf("per-project override: %v", err)
+	}
+}

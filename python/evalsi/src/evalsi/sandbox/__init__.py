@@ -3,8 +3,9 @@
 The sandbox lives in the Go daemon: ``evalsid sandbox run`` takes a JSON
 request on stdin, runs it under the strongest isolation rung available
 (bubblewrap, then Landlock) and prints the result. Workers started by evalsid
-find it through ``EVALSID`` and ``EVALSI_SANDBOX``; elsewhere ``evalsid`` must
-be on PATH. There is no unconfined fallback: without a sandbox, code
+find it through ``EVALSID`` and ``EVALSI_SANDBOX``; elsewhere ``evalsid`` is the
+one bundled in the platform wheel, else the one on PATH (see
+:mod:`evalsi._binaries`). There is no unconfined fallback: without a sandbox, code
 evaluators fail with ``SandboxError``, an infrastructure error that is never
 scored as the model's failure.
 """
@@ -14,9 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 from dataclasses import dataclass, field
 from typing import Any
+
+from evalsi._binaries import evalsid_path
 
 
 class SandboxError(RuntimeError):
@@ -41,11 +43,12 @@ class SandboxResult:
 
 
 def sandbox_binary() -> str:
-    binary = os.environ.get("EVALSID") or shutil.which("evalsid")
+    binary = evalsid_path()
     if not binary:
         raise SandboxError(
             "no sandbox: code evaluators run commands through `evalsid sandbox run`, and "
-            "evalsid is not on PATH (set EVALSID, or run under `evalsi serve`)"
+            "evalsid is neither bundled in this install nor on PATH (set EVALSID, install a "
+            "platform wheel, or run under `evalsi serve`)"
         )
     return binary
 

@@ -123,7 +123,7 @@ func (m *Manager) SliceRuns(ctx context.Context, req *connect.Request[evalsiv1al
 }
 
 // sliceRuns selects the runs: the ones named, or the newest that carry the
-// labels. Either way a run the caller may not read is not there; naming one
+// labels. Archived runs have no results left and are skipped. Either way a run the caller may not read is not there; naming one
 // fails as GetRun on a missing run does, so the two look alike.
 func (m *Manager) sliceRuns(ctx context.Context, r *evalsiv1alpha1.SliceRunsRequest) ([]*evalsiv1alpha1.Run, error) {
 	readable := func(run *evalsiv1alpha1.Run) bool {
@@ -147,7 +147,9 @@ func (m *Manager) sliceRuns(ctx context.Context, r *evalsiv1alpha1.SliceRunsRequ
 			if !readable(run) {
 				return nil, connect.NewError(connect.CodeNotFound, errors.New("no run "+strconv.Quote(id)))
 			}
-			out = append(out, run)
+			if run.GetArchivedAt() == nil {
+				out = append(out, run)
+			}
 		}
 		return out, nil
 	}
@@ -174,7 +176,7 @@ func (m *Manager) sliceRuns(ctx context.Context, r *evalsiv1alpha1.SliceRunsRequ
 			return nil, invalid("%v", err)
 		}
 		for _, run := range page {
-			if len(out) < limit && hasLabels(run, r.GetLabels()) && readable(run) {
+			if len(out) < limit && run.GetArchivedAt() == nil && hasLabels(run, r.GetLabels()) && readable(run) {
 				out = append(out, run)
 			}
 		}

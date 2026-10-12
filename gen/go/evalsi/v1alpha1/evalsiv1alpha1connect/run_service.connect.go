@@ -47,6 +47,8 @@ const (
 	RunServiceResumeRunProcedure = "/evalsi.v1alpha1.RunService/ResumeRun"
 	// RunServiceDeleteRunProcedure is the fully-qualified name of the RunService's DeleteRun RPC.
 	RunServiceDeleteRunProcedure = "/evalsi.v1alpha1.RunService/DeleteRun"
+	// RunServiceArchiveRunProcedure is the fully-qualified name of the RunService's ArchiveRun RPC.
+	RunServiceArchiveRunProcedure = "/evalsi.v1alpha1.RunService/ArchiveRun"
 	// RunServiceListRunResultsProcedure is the fully-qualified name of the RunService's ListRunResults
 	// RPC.
 	RunServiceListRunResultsProcedure = "/evalsi.v1alpha1.RunService/ListRunResults"
@@ -73,6 +75,11 @@ type RunServiceClient interface {
 	// Continues an errored or cancelled run, skipping finished tasks.
 	ResumeRun(context.Context, *connect.Request[v1alpha1.ResumeRunRequest]) (*connect.Response[v1alpha1.ResumeRunResponse], error)
 	DeleteRun(context.Context, *connect.Request[v1alpha1.DeleteRunRequest]) (*connect.Response[v1alpha1.DeleteRunResponse], error)
+	// Drops a finished run's records, outputs, results and webhook deliveries
+	// and keeps the run itself: its spec, status, summaries, gates and usage.
+	// An archived run cannot be resumed, compared, promoted or listed for
+	// results; it can still be read, and deleted. Archiving twice is harmless.
+	ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error)
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
@@ -142,6 +149,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("DeleteRun")),
 			connect.WithClientOptions(opts...),
 		),
+		archiveRun: connect.NewClient[v1alpha1.ArchiveRunRequest, v1alpha1.ArchiveRunResponse](
+			httpClient,
+			baseURL+RunServiceArchiveRunProcedure,
+			connect.WithSchema(runServiceMethods.ByName("ArchiveRun")),
+			connect.WithClientOptions(opts...),
+		),
 		listRunResults: connect.NewClient[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse](
 			httpClient,
 			baseURL+RunServiceListRunResultsProcedure,
@@ -184,6 +197,7 @@ type runServiceClient struct {
 	cancelRun          *connect.Client[v1alpha1.CancelRunRequest, v1alpha1.CancelRunResponse]
 	resumeRun          *connect.Client[v1alpha1.ResumeRunRequest, v1alpha1.ResumeRunResponse]
 	deleteRun          *connect.Client[v1alpha1.DeleteRunRequest, v1alpha1.DeleteRunResponse]
+	archiveRun         *connect.Client[v1alpha1.ArchiveRunRequest, v1alpha1.ArchiveRunResponse]
 	listRunResults     *connect.Client[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse]
 	compareRuns        *connect.Client[v1alpha1.CompareRunsRequest, v1alpha1.CompareRunsResponse]
 	sliceRuns          *connect.Client[v1alpha1.SliceRunsRequest, v1alpha1.SliceRunsResponse]
@@ -226,6 +240,11 @@ func (c *runServiceClient) DeleteRun(ctx context.Context, req *connect.Request[v
 	return c.deleteRun.CallUnary(ctx, req)
 }
 
+// ArchiveRun calls evalsi.v1alpha1.RunService.ArchiveRun.
+func (c *runServiceClient) ArchiveRun(ctx context.Context, req *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error) {
+	return c.archiveRun.CallUnary(ctx, req)
+}
+
 // ListRunResults calls evalsi.v1alpha1.RunService.ListRunResults.
 func (c *runServiceClient) ListRunResults(ctx context.Context, req *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error) {
 	return c.listRunResults.CallUnary(ctx, req)
@@ -262,6 +281,11 @@ type RunServiceHandler interface {
 	// Continues an errored or cancelled run, skipping finished tasks.
 	ResumeRun(context.Context, *connect.Request[v1alpha1.ResumeRunRequest]) (*connect.Response[v1alpha1.ResumeRunResponse], error)
 	DeleteRun(context.Context, *connect.Request[v1alpha1.DeleteRunRequest]) (*connect.Response[v1alpha1.DeleteRunResponse], error)
+	// Drops a finished run's records, outputs, results and webhook deliveries
+	// and keeps the run itself: its spec, status, summaries, gates and usage.
+	// An archived run cannot be resumed, compared, promoted or listed for
+	// results; it can still be read, and deleted. Archiving twice is harmless.
+	ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error)
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
@@ -327,6 +351,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("DeleteRun")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceArchiveRunHandler := connect.NewUnaryHandler(
+		RunServiceArchiveRunProcedure,
+		svc.ArchiveRun,
+		connect.WithSchema(runServiceMethods.ByName("ArchiveRun")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServiceListRunResultsHandler := connect.NewUnaryHandler(
 		RunServiceListRunResultsProcedure,
 		svc.ListRunResults,
@@ -373,6 +403,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceResumeRunHandler.ServeHTTP(w, r)
 		case RunServiceDeleteRunProcedure:
 			runServiceDeleteRunHandler.ServeHTTP(w, r)
+		case RunServiceArchiveRunProcedure:
+			runServiceArchiveRunHandler.ServeHTTP(w, r)
 		case RunServiceListRunResultsProcedure:
 			runServiceListRunResultsHandler.ServeHTTP(w, r)
 		case RunServiceCompareRunsProcedure:
@@ -418,6 +450,10 @@ func (UnimplementedRunServiceHandler) ResumeRun(context.Context, *connect.Reques
 
 func (UnimplementedRunServiceHandler) DeleteRun(context.Context, *connect.Request[v1alpha1.DeleteRunRequest]) (*connect.Response[v1alpha1.DeleteRunResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.DeleteRun is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.ArchiveRun is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error) {

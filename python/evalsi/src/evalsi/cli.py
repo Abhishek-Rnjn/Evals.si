@@ -97,6 +97,12 @@ def _parser() -> argparse.ArgumentParser:
     srv.add_argument("args", nargs=argparse.REMAINDER, help="arguments passed to evalsid serve")
     srv.set_defaults(func=_cmd_serve)
 
+    where = sub.add_parser(
+        "evalsid-path",
+        help="print the evalsid this install uses (EVALSID, the platform wheel's, else PATH)",
+    )
+    where.set_defaults(func=_cmd_evalsid_path)
+
     ver = sub.add_parser("version", help="print the version")
     ver.set_defaults(func=_cmd_version)
     return parser
@@ -174,6 +180,15 @@ def _add_run(sub: Any) -> None:
     add_credential_args(delete)
     delete.set_defaults(func=_cmd_delete_run)
 
+    archive = sub.add_parser(
+        "archive-run", help="drop a finished server run's records and results, keeping its summary"
+    )
+    archive.add_argument("id")
+    archive.add_argument("--server", required=True)
+    archive.add_argument("--yes", action="store_true", required=True)
+    add_credential_args(archive)
+    archive.set_defaults(func=_cmd_archive_run)
+
     dataset = sub.add_parser("dataset", help="upload or import server datasets")
     actions = dataset.add_subparsers(dest="action", required=True)
     for action in ("upload", "import"):
@@ -197,6 +212,19 @@ def _cmd_delete_run(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"deleted: {args.id}")
+    return 0
+
+
+def _cmd_archive_run(args: argparse.Namespace) -> int:
+    from evalsi.client import ServerError
+
+    try:
+        with server_client(args) as client:
+            run = client.archive_run(args.id)
+    except ServerError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"archived: {args.id} ({run.get('archivedAt', '')})")
     return 0
 
 
@@ -290,17 +318,29 @@ def _cmd_worker(args: argparse.Namespace) -> int:
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
-    import shutil
+    from evalsi._binaries import evalsid_path
 
-    binary = os.environ.get("EVALSID") or shutil.which("evalsid")
+    binary = evalsid_path()
     if not binary:
         raise ValueError(
-            "evalsid is not installed. Build it with `go build ./cmd/evalsid` and put it on "
-            "PATH, or set EVALSID to its path."
+            "evalsid is not installed. Install a platform wheel of evalsi (Linux, amd64 or "
+            "arm64), or build it with `go build ./cmd/evalsid` and put it on PATH, or set "
+            "EVALSID to its path."
         )
     passthrough = [a for a in args.args if a != "--"] if args.args[:1] == ["--"] else args.args
     os.execv(binary, [binary, "serve", *passthrough])
     return 0  # pragma: no cover - execv does not return
+
+
+def _cmd_evalsid_path(_args: argparse.Namespace) -> int:
+    from evalsi._binaries import evalsid_path
+
+    binary = evalsid_path()
+    if not binary:
+        print("error: no evalsid: install a platform wheel, or set EVALSID", file=sys.stderr)
+        return 1
+    print(binary)
+    return 0
 
 
 def _cmd_version(_args: argparse.Namespace) -> int:
