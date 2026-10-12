@@ -1274,7 +1274,7 @@ Evals.si/
 │   ├── evaluation/, runs/         # Score and Run: run lifecycle, trials, gates, budgets, leases
 │   ├── mcp/                       # the /mcp endpoint (streamable HTTP, MCP authorization)
 │   ├── annotate/, guardrail/      # human annotation queues; inline guardrails and agentgateway's protocols
-│   ├── wasmeval/, webui/          # Wasm evaluator plugins (wazero); the read-only web UI
+│   ├── wasmeval/, webui/          # Wasm evaluator plugins (wazero); the web UI
 │   ├── rewards/                   # RewardService: reward composition, score cache, back-pressure
 │   ├── ingest/, watch/            # OTLP receiver, mappers, trace assembly; online policies
 │   ├── cluster/                   # NATS JetStream work queues and the worker role
@@ -1312,7 +1312,7 @@ The `evalsi-collector` distribution is in `deploy/collector`, and the release wo
 |---|----------|--------------------------------|
 | D1 | The first users are **agent builders, agent platform builders and LLM app developers** | Agent evaluation leads the roadmap: online over traces first, then offline runs, with agentgateway integration early. Classic ML packs and RL move later (§3, §23). For platform builders, the API and policy-as-code are first-class: everything the CLI does is an API call. |
 | D2 | **Go core, Python runtime** | §6, §20 |
-| D3 | **No web UI for now** | Reports, Grafana dashboards, the CLI, and write-back to MLflow, Langfuse or Phoenix (§19). Revisited in Phase 6: a minimal read-only UI is embedded in evalsid ([decision 0014](decisions/0014-mcp-guardrails-plugins-ui.md)). |
+| D3 | **No web UI for now** | Reports, Grafana dashboards, the CLI, and write-back to MLflow, Langfuse or Phoenix (§19). Revisited in Phase 6: a minimal UI is embedded in evalsid ([decision 0014](decisions/0014-mcp-guardrails-plugins-ui.md)). |
 | D5 | **Self-hosted in the client's environment now**; a hosted multi-tenant service later, when there is compute for it | §16 "Runs in the client's environment"; `project_id` and a reserved `tenant_id` on every stored key from day one |
 | D6 | Sandbox ladder: **Firecracker when available, otherwise static bubblewrap or Landlock (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod**, always failing closed | §13 |
 | D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
@@ -1700,7 +1700,7 @@ During the load test, correct programs failed under overload: wall-clock timeout
    - WASI command modules pinned by sha256, run in evalsid on wazero: no filesystem, network or environment, a fixed clock, seeded randomness, and per-plugin memory and time caps. The ABI is JSON over stdio; `pkg/wasmplugin` is a Go SDK.
    - Wasm evaluators work wherever evaluators do, on a server and in Python (through `evalsid wasm serve`), with the same scores.
    - The index (`plugins/index.yaml`) and `evalsi plugins`; tiers (native, wrapped, community) in the catalog.
-7. **The web UI** ([guide](guides/web-ui.md)). A read-only UI at `/ui/`: runs, comparisons, policies, annotation queues, guardrails and the catalog, read through the REST API with the viewer's credential.
+7. **The web UI** ([guide](guides/web-ui.md)). A UI at `/ui/`: runs, comparisons, policies, annotation queues, guardrails and the catalog, read through the REST API with the viewer's credential. Annotators can answer queue items in it, and it signs in through the configured identity provider (decision 0014, update of 2026-10-12).
 
 The exit criterion: **a coding agent evaluates its own changes locally over MCP.** `tests/test_mcp.py` drives `evalsi mcp` as a subprocess through `evalsi_harness`'s MCP client, the way a coding agent's MCP client does: it runs a spec, changes the target, runs it again, and gets the regression comparison back. The same tools are served by evalsid at `/mcp`.
 
@@ -1712,7 +1712,7 @@ Limits of that verification:
 
 Deviations from the plan:
 
-- Annotation is answered with the CLI or the API; the web UI is read-only.
+- Annotation is answered with the CLI, the API or the web UI.
 - Wasm evaluators cannot use a judge or the sandbox.
 
 ## 24. Risks and mitigations

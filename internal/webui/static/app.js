@@ -22,6 +22,7 @@
   let token = store.get("sessionStorage", "evalsi.token");
   let project = store.get("localStorage", "evalsi.project") || "";
   let authEnabled = true;
+  let uiLogin = false; // the server names an identity provider the UI can sign in with
 
   // ---- DOM helpers ----
   function el(tag, attrs, ...children) {
@@ -120,24 +121,92 @@
   }
 
   // ---- sign-in ----
-  function signIn(reason) {
+  // With an identity provider configured on the server (auth.cli_login), the
+  // browser signs in with the authorization code flow and PKCE: it sends the
+  // person to the provider, and on return evalsid exchanges the code (the
+  // browser cannot call the provider's token endpoint under the CSP). No
+  // secret is involved: the client is public and the verifier never leaves
+  // this tab except in that exchange.
+  const redirectURI = () => `${window.location.origin}/ui/`;
+  const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+
+  async function loginConfig() {
+    if (!uiLogin) return null;
+    try {
+      const resp = await fetch("/ui/login/config", { headers: { Accept: "application/json" }, credentials: "omit" });
+      if (!resp.ok || !(resp.headers.get("Content-Type") || "").includes("json")) return null;
+      return await resp.json();
+    } catch { return null; }
+  }
+
+  async function beginLogin(cfg) {
+    if (!window.crypto?.subtle) {
+      throw new Error("Signing in needs a secure page: use https, or localhost. You can paste a token instead.");
+    }
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+    const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+    store.set("sessionStorage", "evalsi.login", JSON.stringify({ state, verifier, hash: window.location.hash }));
+    const url = new URL(cfg.authorization_endpoint);
+    const params = {
+      response_type: "code", client_id: cfg.client_id, redirect_uri: redirectURI(), scope: (cfg.scopes || []).join(" "),
+      state, code_challenge: challenge, code_challenge_method: "S256", audience: cfg.audience,
+    };
+    for (const [k, v] of Object.entries(params)) if (v) url.searchParams.set(k, v);
+    window.location.assign(url.toString());
+  }
+
+  // The provider sent the person back with ?code=...&state=... (or ?error=...).
+  // Returns a message when it did not work, and null once signed in.
+  async function finishLogin() {
+    const query = new URLSearchParams(window.location.search);
+    let saved = null;
+    try { saved = JSON.parse(store.get("sessionStorage", "evalsi.login") || "null"); } catch { /* treated as missing */ }
+    store.set("sessionStorage", "evalsi.login", null);
+    // Take the one-time code out of the address bar and history.
+    window.history.replaceState(null, "", `${window.location.pathname}${saved?.hash || ""}`);
+    if (query.get("error")) {
+      return `The identity provider refused the sign-in: ${query.get("error_description") || query.get("error")}`;
+    }
+    if (!saved || !query.get("state") || query.get("state") !== saved.state) {
+      return "The sign-in response did not match this browser tab's request. Try again.";
+    }
+    try {
+      const out = await post("/ui/login/token", { code: query.get("code"), code_verifier: saved.verifier, redirect_uri: redirectURI() });
+      // The same token the CLI sends: the ID token if there is one.
+      token = out.idToken || out.id_token || out.accessToken || out.access_token || null;
+      store.set("sessionStorage", "evalsi.token", token);
+      return token ? null : "The identity provider returned no token.";
+    } catch (err) {
+      return `Sign-in failed: ${err.message || err}`;
+    }
+  }
+
+  async function signIn(reason) {
+    const cfg = await loginConfig();
     const input = el("input", { type: "password", autocomplete: "off", placeholder: "evk_... or a JWT", "aria-label": "API key or token" });
+    const slot = el("div");
+    const setError = (message) => slot.replaceChildren(el("p", { class: "error", role: "alert" }, message));
+    if (reason) setError(reason);
+    const paste = el("form", {
+      class: "inline",
+      onsubmit: (e) => {
+        e.preventDefault();
+        token = input.value.trim();
+        store.set("sessionStorage", "evalsi.token", token || null);
+        start();
+      },
+    }, input, el("button", { class: cfg ? null : "primary", type: "submit" }, "Sign in"));
+    const pasteHelp = el("p", {}, "Paste an API key, or the token from ", el("code", {}, "evalsi auth token --server " + window.location.origin),
+      ". It is kept for this browser tab only.");
+    const sso = cfg ? el("p", {}, el("button", {
+      class: "primary", type: "button", id: "sso",
+      onclick: () => beginLogin(cfg).catch((err) => setError(err.message || String(err))),
+    }, "Sign in with your identity provider")) : null;
     show(el("div", { class: "card signin" },
-      el("h1", {}, "Sign in"),
-      reason ? el("p", { class: "error" }, reason) : null,
-      el("p", {}, "Paste an API key, or the token from ", el("code", {}, "evalsi auth token --server " + window.location.origin),
-        ". It is kept for this browser tab only."),
-      el("form", {
-        class: "inline",
-        onsubmit: (e) => {
-          e.preventDefault();
-          token = input.value.trim();
-          store.set("sessionStorage", "evalsi.token", token || null);
-          start();
-        },
-      }, input, el("button", { class: "primary", type: "submit" }, "Sign in")),
-    ));
-    input.focus();
+      el("h1", {}, "Sign in"), slot, sso,
+      cfg ? el("details", {}, el("summary", {}, "Use an API key or token instead"), pasteHelp, paste) : [pasteHelp, paste]));
+    (cfg ? document.getElementById("sso") : input).focus();
   }
 
   // ---- views ----
@@ -556,7 +625,14 @@
     try {
       const doc = await api("/.well-known/evalsi-auth");
       authEnabled = doc.auth_enabled !== false;
+      uiLogin = doc.ui_login === true;
     } catch { authEnabled = true; }
+    // Back from the identity provider.
+    const returned = new URLSearchParams(window.location.search);
+    if ((returned.has("code") || returned.has("error")) && window.location.pathname.endsWith("/ui/")) {
+      const problem = await finishLogin();
+      if (problem) return signIn(problem);
+    }
     const signout = document.getElementById("signout");
     signout.hidden = !authEnabled || !token;
     signout.onclick = () => { token = null; store.set("sessionStorage", "evalsi.token", null); start(); };

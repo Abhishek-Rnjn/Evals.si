@@ -1,5 +1,5 @@
-// Package webui serves the read-only web UI: static files, embedded in the
-// binary, that read evalsid's REST API with the viewer's own credential.
+// Package webui serves the web UI: static files, embedded in the binary, that
+// call evalsid's REST API with the viewer's own credential.
 // The files hold no data, so they are served without authentication; every
 // API call they make goes through the gate like any other client's.
 package webui

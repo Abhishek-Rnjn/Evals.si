@@ -194,6 +194,10 @@ type CLILogin struct {
 	ClientID string   `json:"client_id"`
 	Scopes   []string `json:"scopes,omitempty"`
 	Audience string   `json:"audience,omitempty"`
+	// The client the web UI signs in with, if not ClientID: a public client
+	// whose redirect URI is <server>/ui/. Also advertised, so the UI can offer
+	// "Sign in" instead of a pasted token.
+	UIClientID string `json:"ui_client_id,omitempty"`
 }
 
 // Enabled reports whether requests are authenticated at all.
