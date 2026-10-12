@@ -250,7 +250,10 @@ jobs:
         if: env.PUBLISH == 'true'
         run: |
           owner="${{ needs.version.outputs.owner }}"
+          # helm keeps its own credentials, which cosign does not read: log in
+          # for both, or the signature push is refused as unauthenticated.
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
           for c in dist/*.tgz; do
             name="$(basename "$c" .tgz)"; name="${name%-${{ needs.version.outputs.version }}}"
             digest="$(helm push "$c" "oci://ghcr.io/$owner/charts" 2>&1 | tee /dev/stderr | sed -n 's/^Digest: //p')"
@@ -268,8 +271,17 @@ jobs:
     # skips a job that has only the default condition. Run whenever the image built.
     if: ${{ !cancelled() && needs.version.result == 'success' && needs.image.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read   # pulls the image the image job published
     steps:
       - uses: actions/checkout@v7
+      - uses: docker/login-action@v3
+        if: env.PUBLISH == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: astral-sh/setup-uv@v7
       - uses: azure/setup-helm@v4
         with:
