@@ -2,7 +2,7 @@
 # Verifies a release's signatures: the images and the OCI charts were signed by
 # this repository's release workflow (keyless cosign, GitHub's OIDC identity).
 #
-#   scripts/verify-release.sh 0.5.0 [owner]
+#   scripts/verify-release.sh 0.1.0 [owner]
 #
 # Needs cosign. Prints what it checked; exits non-zero on the first failure.
 set -euo pipefail

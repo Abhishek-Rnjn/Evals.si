@@ -423,3 +423,47 @@ remain unsupported.
 After these edits, `PATH="/tmp/evalsi-check-tools:$PATH" TMPDIR=/tmp make check`,
 `TMPDIR=/tmp go test -race ./...` and `TMPDIR=/tmp make e2e` passed. Python
 reported 456 passed and 3 existing skips; the real-worker e2e took 43.59s.
+
+## v0.1.0 release record (2026-10-12)
+
+The first release. Tag `v0.1.0` points at `8cf72ba3b4e1677604d996422f9bf003091101d7`
+(the merge of PR #37). The tag run is
+[38216988824](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38216988824); the
+`release` environment approved the build and the `pypi` and `pypi-harness`
+environments approved the two PyPI uploads. The GitHub release was published at
+10:06 UTC.
+
+Gates on this exact commit before the tag:
+
+| Gate | Result |
+|------|--------|
+| Push CI, [run 163](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38204587582) | Passed, including `kubernetes` (kind, with Landlock). The `go` job failed once on `TestScheduledLeaseRenewsAndLossCancelsPull`, a timing-sensitive test (a 120 ms lease on a loaded runner); it passed on re-run with no change |
+| Release dry run, [run 38204589953](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38204589953) | Passed: archives, Python, charts, image, collector and the amd64 bundle. `approve`, `pypi`, `pypi-harness` and `release` are skipped on a dry run |
+
+What the tag run published:
+
+| Artifact | Where | Digest |
+|----------|-------|--------|
+| Image | `ghcr.io/abhishek-rnjn/evalsi:0.1.0` (also `latest`) | `sha256:58574fb2…2046d34` |
+| Collector image | `ghcr.io/abhishek-rnjn/evalsi-collector:0.1.0` (also `latest`) | `sha256:037431fa…cfad7` |
+| Charts | `oci://ghcr.io/abhishek-rnjn/charts/{evalsi,evalsi-crds,evalsi-sandboxd}:0.1.0` | `c1a78e06…`, `d206e171…`, `3eb04d52…` |
+| Python | PyPI `evalsi` 0.1.0 and `evalsi-harness` 0.1.0 (wheel and sdist each) | |
+| Release assets | Linux amd64 and arm64 archives, the amd64 bundle, the Python files, the three charts, the SPDX SBOM and `SHA256SUMS` (12 files) | |
+
+Checked after publication:
+
+- Each image and chart has a cosign signature tag (`sha256-<digest>.sig`) on GHCR for the digest its `0.1.0` tag resolves to; the image also has the SBOM attestation (`.att`). All five packages can be pulled anonymously.
+- `SHA256SUMS` agrees with GitHub's recorded SHA-256 for all 11 files it lists, and the four PyPI files have the same hashes as the release's wheels and sdists.
+- In a clean virtual environment, `pip install evalsi==0.1.0 evalsi-harness==0.1.0` installed, both report 0.1.0, and `evalsi eval` ran.
+- The released amd64 archive runs: `evalsid version` prints `0.1.0 (api evalsi.v1alpha1)` and the bundled `bwrap` reports 0.11.0.
+
+Not checked:
+
+- `scripts/verify-release.sh 0.1.0` (the cryptographic cosign verification of the signatures and the SBOM attestation) was not run. The environment that checked the rest could not reach Sigstore's trust-root server, so a maintainer must run it.
+- A chart install from the OCI charts on a cluster, an import of the published bundle, the arm64 archive and the arm64 image.
+
+Problems the tag run found, and what was done:
+
+1. The first tag push failed at `approve` ("Tag … is not allowed to deploy to release"): the environment's `v*` rule had been added as a branch rule. It was changed to a tag rule. Nothing had run.
+2. The second tag run failed in `charts`: `helm registry login` keeps credentials that cosign does not read, so the signature push was refused. The dry run cannot reach that step. Fixed in [PR #37](https://github.com/Abhishek-Rnjn/Evals.si/pull/37). That run was cancelled, `v0.1.0` was moved to the fixed commit before anything was released, and the final run overwrote the `0.1.0` tags it had touched.
+3. In the final run the `release` job failed in `actions/download-artifact`: it downloads every artifact in the run, including the two `*.dockerbuild` build records, and those downloads failed after retries. The release was created by hand with `gh release create` from the run's own artifacts (the same files the job attaches, without the build records), with `SHA256SUMS` computed on the maintainer's machine. The GitHub release's auto-generated notes list every pull request title as written. The workflow fix is still to do (see [RELEASING](../RELEASING.md#lessons-from-v010)).

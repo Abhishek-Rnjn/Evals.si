@@ -17,7 +17,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - Applying a Databricks trace source failed validation because the connector was built before its credential was read.
 
-## [0.1.0] - first release
+## [0.1.0] - 2026-10-12
 
 The first public release. Evals.si is a self-hosted evaluation service: one set of evaluators for scoring outputs you have, running a model or agent on a dataset, watching live traces, and rewarding RL training.
 
