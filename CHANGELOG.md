@@ -8,7 +8,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - **Custom evaluator example.** `examples/custom-evaluator` is a tested, installable Python evaluator pack (`acme/valid-citations`) that runs by name through the `evalsi.packs` entry point, and it is listed on the website's examples page.
 
-## [0.1.0] - first release
+## [0.1.0] - 2026-10-12
 
 The first public release. Evals.si is a self-hosted evaluation service: one set of evaluators for scoring outputs you have, running a model or agent on a dataset, watching live traces, and rewarding RL training.
 
