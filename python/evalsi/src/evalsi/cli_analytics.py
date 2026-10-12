@@ -47,7 +47,10 @@ def add_analytics_commands(sub: Any) -> None:
             "--label", action="append", default=[], help="only runs with label k=v (repeatable)"
         )
         src.add_argument(
-            "--limit", type=int, default=None, help="newest runs to load (default 50, at most 500)"
+            "--limit",
+            type=int,
+            default=None,
+            help="newest runs to load (default 50; at most 500 with --on-server)",
         )
         src.add_argument(
             "--db",

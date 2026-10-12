@@ -547,7 +547,7 @@ uv run evalsi analyze slice exact-match --by category --server $URL --project su
   --label suite=nightly --limit 100 --on-server
 ```
 
-`--on-server` calls `RunService.SliceRuns` and prints the same columns and numbers as the local slice. It covers the runs the caller may read (the newest `--limit`, 50 by default and at most 500, or the `--run` ids), and refuses a field with more than 10,000 distinct values. It needs a server that has the RPC; `analyze query` always runs on the client.
+`--on-server` calls `RunService.SliceRuns` and prints the same columns and numbers as the local slice. It covers the runs the caller may read (the newest `--limit`, 50 by default and at most 500, or the `--run` ids), and refuses a slice of more than 10,000 rows (runs times values of the field). It needs a server that has the RPC; `analyze query` always runs on the client.
 
 ## 11. Fine-tuning and RL
 

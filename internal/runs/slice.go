@@ -21,10 +21,9 @@ import (
 const (
 	sliceDefaultRuns = 50
 	sliceMaxRuns     = 500
-	// A slice by a field with many values (a record id, say) would answer with
-	// a row for each; past this many groups the request is refused.
+	// A slice answers with a row for each run and field value; past this many
+	// rows (a record id as the field, say) the request is refused.
 	sliceMaxGroups = 10000
-	slicePage      = 1000
 	sliceNone      = "(none)"
 )
 
@@ -207,23 +206,9 @@ func (m *Manager) sliceRun(ctx context.Context, run *evalsiv1alpha1.Run, metric 
 	if err != nil {
 		return err
 	}
-	for offset := 0; ; offset += slicePage {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		page, err := m.store.Results(ctx, run.GetId(), "", slicePage, offset)
-		if err != nil {
-			return err
-		}
-		for _, sr := range page {
-			if err := addScores(run.GetId(), sr, metric, path, records, outputs, stats); err != nil {
-				return err
-			}
-		}
-		if len(page) < slicePage {
-			return nil
-		}
-	}
+	return m.store.EachResult(ctx, run.GetId(), func(sr store.Result) error {
+		return addScores(run.GetId(), sr, metric, path, records, outputs, stats)
+	})
 }
 
 func addScores(runID string, sr store.Result, metric string, path []string, records []*evalsiv1alpha1.Record, outputs map[[2]int]store.Output, stats map[sliceKey]*welford) error {
@@ -259,7 +244,7 @@ func addScores(runID string, sr store.Result, metric string, path []string, reco
 		w := stats[k]
 		if w == nil {
 			if len(stats) >= sliceMaxGroups {
-				return invalid("more than %d groups; slice by a field with fewer values", sliceMaxGroups)
+				return invalid("more than %d rows (runs times values of the field); slice fewer runs or a field with fewer values", sliceMaxGroups)
 			}
 			w = &welford{}
 			stats[k] = w

@@ -15,6 +15,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
+- `RunService` gains `SliceRuns` (`v1alpha1`, additive).
 - `auth.sigv4` gains `arn` and `auth.databricks` gains `client_id` (`v1alpha1`, additive).
 
 ### Fixed
