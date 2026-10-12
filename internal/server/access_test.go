@@ -32,6 +32,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
 	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
@@ -1326,5 +1327,43 @@ func TestArchiveRunPermission(t *testing.T) {
 	}
 	if allowed != 1 || denied != 3 {
 		t.Errorf("audit: %d allowed, %d denied; want 1 and 3", allowed, denied)
+	}
+}
+
+// The server's retention janitor audits what it archives and deletes: the run
+// manager is given the auditor.
+func TestRetentionAuditsAutomaticArchiving(t *testing.T) {
+	old := time.Now().Add(-72 * time.Hour)
+	s := startAuthServer(t, func(cfg *config.Config) {
+		cfg.Runs.ArchiveAfter = "24h"
+		st, err := store.Open(filepath.Join(cfg.DataDir, "evalsi.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer st.Close()
+		run := &evalsiv1alpha1.Run{
+			Id: "old-run", Project: "support", Status: evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED,
+			CreatedAt: timestamppb.New(old), FinishedAt: timestamppb.New(old.Add(time.Hour)),
+		}
+		if err := st.CreateRun(context.Background(), run, []*evalsiv1alpha1.Record{{Id: "r"}}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	ctx := context.Background()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		events, err := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["owner"])).ListAuditEvents(ctx, connect.NewRequest(&evalsiv1alpha1.ListAuditEventsRequest{Action: "runs.archive"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ev := range events.Msg.GetEvents() {
+			if ev.GetResource() == "run/old-run" && ev.GetPrincipal() == "system:retention" && ev.GetAllowed() && ev.GetProject() == "support" {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no audit event for the archived run: %v", events.Msg.GetEvents())
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

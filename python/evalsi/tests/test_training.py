@@ -522,6 +522,12 @@ verb = args[2]
 if verb == "wait" and os.environ.get("KUBECTL_FAIL") == "wait":
     sys.stderr.write("error: timed out waiting for the condition")
     sys.exit(1)
+if verb == "delete":
+    failures = int(os.environ.get("KUBECTL_DELETE_FAILURES", "0"))
+    deletes = sum(1 for line in open(log) if '"delete"' in line)
+    if deletes <= failures:
+        sys.stderr.write("error: connection refused")
+        sys.exit(1)
 if verb == "get":
     status = {"endpoint": "http://evalsi-ckpt-x.ns.svc:8000/v1", "servedModelName": "run-3"}
     print(json.dumps({"status": status if os.environ.get("KUBECTL_FAIL") != "endpoint" else {}}))
@@ -591,7 +597,7 @@ def test_operator_serving_deletes_what_it_made_when_it_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     kubectl, log = _kubectl(tmp_path, monkeypatch)
-    operator = Operator("ns", "vllm:1", kubectl=kubectl)
+    operator = Operator("ns", "vllm:1", kubectl=kubectl, delete_backoff_s=0)
     monkeypatch.setenv("KUBECTL_FAIL", "wait")
     with (
         pytest.raises(ServingError, match="timed out waiting"),
@@ -655,3 +661,36 @@ def test_cli_serve_operator_flags() -> None:
     assert _serving(args(gpus="")).resources == {}
     with pytest.raises(ValueError, match="--namespace and --image"):
         _serving(args(image=None))
+
+
+def test_operator_serving_retries_the_delete_and_reports_a_server_left_behind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kubectl, log = _kubectl(tmp_path, monkeypatch)
+    operator = Operator("ns", "vllm:1", kubectl=kubectl, delete_backoff_s=0)
+
+    def deletes() -> int:
+        return sum(1 for c in _calls(log) if c["args"][2] == "delete")
+
+    # A transient failure is retried and the evaluation is unaffected.
+    monkeypatch.setenv("KUBECTL_DELETE_FAILURES", "2")
+    with operator.serve("/c/step-1", "step-1"):
+        pass
+    assert deletes() == 3
+    log.unlink()
+
+    # A delete that keeps failing is an error after a good evaluation: the
+    # server is holding GPUs, and nobody else will delete it.
+    monkeypatch.setenv("KUBECTL_DELETE_FAILURES", "99")
+    with (
+        pytest.raises(ServingError, match=r"could not delete .* by hand"),
+        operator.serve("/c/step-1", "step-1"),
+    ):
+        pass
+    assert deletes() == 3
+    log.unlink()
+
+    # After a failed evaluation the evaluation's error stays the error, with the leak noted.
+    with pytest.raises(RuntimeError, match="boom") as caught, operator.serve("/c/step-1", "step-1"):
+        raise RuntimeError("boom")
+    assert any("left running" in note for note in caught.value.__notes__)

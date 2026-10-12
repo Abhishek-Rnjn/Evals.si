@@ -87,11 +87,20 @@ func (r *CheckpointServerReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	cs.Status.ReadyReplicas = dep.Status.ReadyReplicas
 	cs.Status.ObservedGeneration = cs.Generation
 	ready := metav1.Condition{Type: "Ready", Status: metav1.ConditionFalse, Reason: "Loading", Message: "vLLM is loading the model", ObservedGeneration: cs.Generation}
-	if dep.Status.ReadyReplicas > 0 {
+	if deploymentCurrentAndReady(dep) {
 		ready.Status, ready.Reason, ready.Message = metav1.ConditionTrue, "Serving", "vLLM answers /health"
 	}
 	meta.SetStatusCondition(&cs.Status.Conditions, ready)
 	return ctrl.Result{}, r.Status().Update(ctx, cs)
+}
+
+// deploymentCurrentAndReady reports whether the Deployment has rolled out its
+// current spec and a replica of it passes the readiness probe. Right after a
+// spec change the status still describes the previous revision, whose
+// replicas are ready: that must not read as the new model being served.
+func deploymentCurrentAndReady(dep *appsv1.Deployment) bool {
+	want := ptr.Deref(dep.Spec.Replicas, 1)
+	return dep.Status.ObservedGeneration >= dep.Generation && dep.Status.UpdatedReplicas >= want && dep.Status.ReadyReplicas > 0
 }
 
 // serverPod is the pod template of a CheckpointServer.

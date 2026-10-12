@@ -19,13 +19,16 @@ Built against ``openenv-core`` 0.3: an ``Environment`` whose ``reset`` and
 checker score at the end of the episode, ``None`` until then and when the
 checker cannot run), and whose ``state`` has an episode id and a step count.
 The OpenEnv server runs the ``*_async`` methods when they are overridden, on
-its own event loop; the synchronous ones run on a loop of their own. Use one
-kind per instance.
+its own event loop, and calls ``close`` when a session ends: it destroys the
+sandbox on a fresh loop, so a client that disconnects before ``submit`` does
+not leave one running. The synchronous methods run on a loop of their own. Use
+one kind per instance; async users can also ``await env.aclose()``.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from collections.abc import Coroutine, Mapping, Sequence
 from typing import Any, TypeVar
@@ -164,11 +167,25 @@ class TaskOpenEnv(Environment[TaskAction, TaskObservation, TaskState]):
             info=result.info,
         )
 
+    async def aclose(self) -> None:
+        """Destroy the sandbox and release the sandbox client (for async users)."""
+        await self._env.close()
+
     def close(self) -> None:
+        """Called by the OpenEnv server when a session ends (on a worker thread),
+        or by you after the synchronous methods. Whatever loop the episode ran
+        on, its sandbox is destroyed."""
         if self._loop is not None:
             self._loop.run(self._env.close())
             self._loop.close()
             self._loop = None
+            return
+        # The asynchronous methods ran on the caller's loop, which is not ours
+        # to enter: clean up on a fresh one, where a failure is logged, not raised.
+        try:
+            asyncio.run(self._env.close())
+        except Exception:
+            logging.getLogger(__name__).exception("closing the task environment")
 
     # -- internals -------------------------------------------------------------
 

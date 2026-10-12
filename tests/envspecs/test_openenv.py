@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import time
+from typing import Any
 
 import pytest
 
@@ -86,7 +88,7 @@ def test_the_async_interface_runs_on_the_callers_loop() -> None:
             TaskAction(tool="bash", arguments={"command": "echo done > notes.txt"})
         )
         assert (await env.step_async(TaskAction(tool="submit"))).reward == 1.0
-        await env._env.close()
+        await env.aclose()
 
     asyncio.run(go())
 
@@ -113,3 +115,55 @@ def test_served_as_an_openenv_app() -> None:
             # A bad action is rejected by OpenEnv's own validation, not by the adapter.
             ws.send_json({"type": "step", "data": {"nope": 1}})
             assert ws.receive_json()["type"] == "error"
+
+
+class TrackingClient(LocalSandboxClient):
+    """Remembers every sandbox it hands out, to see which were destroyed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.sandboxes: list[Any] = []
+
+    async def create(self, spec: Any = None) -> Any:
+        sandbox = await super().create(spec)
+        self.sandboxes.append(sandbox)
+        return sandbox
+
+    async def restore(self, snapshot_id: str, **kwargs: Any) -> Any:
+        sandbox = await super().restore(snapshot_id, **kwargs)
+        self.sandboxes.append(sandbox)
+        return sandbox
+
+    def live(self) -> list[Any]:
+        return [sb for sb in self.sandboxes if sb.root.exists()]
+
+
+def test_closing_after_async_use_destroys_the_sandbox() -> None:
+    """The OpenEnv server calls close() when a session ends, whatever loop ran it."""
+    client = TrackingClient()
+
+    async def go() -> TaskOpenEnv:
+        env = TaskOpenEnv([task()], client=client)
+        await env.reset_async(seed=0)
+        await env.step_async(TaskAction(tool="bash", arguments={"command": "true"}))
+        return env
+
+    env = asyncio.run(go())
+    assert client.live(), "the episode's sandbox is still there"
+    env.close()  # from a thread with no loop, as the server calls it
+    assert client.live() == []
+
+
+def test_a_client_that_disconnects_before_submit_leaves_no_sandbox() -> None:
+    client = TrackingClient()
+    app = create_task_app([task()], client=client)
+    with TestClient(app) as http:
+        with http.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "reset", "data": {"seed": 0}})
+            ws.receive_json()
+            assert client.live()
+        # The session closed with the connection.
+        deadline = time.monotonic() + 10
+        while client.live() and time.monotonic() < deadline:
+            time.sleep(0.1)
+    assert client.live() == []

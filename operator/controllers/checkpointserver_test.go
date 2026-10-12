@@ -126,7 +126,7 @@ func TestCheckpointServerRunsVLLM(t *testing.T) {
 	}
 
 	// Once a replica passes the readiness probe it is Ready.
-	dep.Status.ReadyReplicas = 1
+	dep.Status.ReadyReplicas, dep.Status.UpdatedReplicas = 1, 1
 	if err := c.Status().Update(ctx, dep); err != nil {
 		t.Fatal(err)
 	}
@@ -205,3 +205,59 @@ func TestCheckpointServerFollowsItsSpec(t *testing.T) {
 }
 
 func resourceQuantity(s string) resource.Quantity { return resource.MustParse(s) }
+
+// After a spec change the Deployment's status still describes the old
+// revision: replicas of the old model are ready, but the new one is not.
+func TestCheckpointServerIsNotReadyUntilTheNewRevisionRolledOut(t *testing.T) {
+	cs := &v1.CheckpointServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "ns"},
+		Spec:       v1.CheckpointServerSpec{Image: "vllm:1", Model: "a"},
+	}
+	r, c := checkpointReconciler(t, cs)
+	reconcile(t, r, "ns", "m")
+	ctx := context.Background()
+	key := client.ObjectKey{Namespace: "ns", Name: "evalsi-ckpt-m"}
+	dep := &appsv1.Deployment{}
+	if err := c.Get(ctx, key, dep); err != nil {
+		t.Fatal(err)
+	}
+	// Generation 2 is the new spec; the controller of Deployments has seen
+	// generation 1 only, whose replica is ready.
+	dep.Generation = 2
+	if err := c.Update(ctx, dep); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Get(ctx, key, dep); err != nil {
+		t.Fatal(err)
+	}
+	dep.Status = appsv1.DeploymentStatus{ObservedGeneration: 1, ReadyReplicas: 1, UpdatedReplicas: 1}
+	if err := c.Status().Update(ctx, dep); err != nil {
+		t.Fatal(err)
+	}
+	ready := func() bool {
+		reconcile(t, r, "ns", "m")
+		got := &v1.CheckpointServer{}
+		if err := c.Get(ctx, client.ObjectKeyFromObject(cs), got); err != nil {
+			t.Fatal(err)
+		}
+		return meta.IsStatusConditionTrue(got.Status.Conditions, "Ready")
+	}
+	if ready() {
+		t.Error("Ready on the previous revision's replica")
+	}
+	// The new revision is observed but its replica has not started.
+	dep.Status = appsv1.DeploymentStatus{ObservedGeneration: 2, UpdatedReplicas: 1, ReadyReplicas: 0}
+	if err := c.Status().Update(ctx, dep); err != nil {
+		t.Fatal(err)
+	}
+	if ready() {
+		t.Error("Ready before any replica of the new revision is")
+	}
+	dep.Status = appsv1.DeploymentStatus{ObservedGeneration: 2, UpdatedReplicas: 1, ReadyReplicas: 1}
+	if err := c.Status().Update(ctx, dep); err != nil {
+		t.Fatal(err)
+	}
+	if !ready() {
+		t.Error("not Ready once the new revision's replica is")
+	}
+}

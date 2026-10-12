@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import os
 import re
 import socket
@@ -30,6 +31,8 @@ from pathlib import Path
 from typing import Protocol
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -190,6 +193,8 @@ class Operator:
     api_key_secret: str = ""
     kubectl: str = "kubectl"
     timeout_s: float = 1800.0
+    delete_attempts: int = 3
+    delete_backoff_s: float = 2.0
 
     def _kubectl(self, *argv: str, stdin: str = "") -> str:
         command = [self.kubectl, "--namespace", self.namespace, *argv]
@@ -243,8 +248,28 @@ class Operator:
             if not endpoint:
                 raise ServingError(f"{resource} is Ready but reports no endpoint")
             yield Served(endpoint, status.get("servedModelName") or name)
-        finally:
-            # Free the GPUs even when the evaluation failed; a failed delete is
-            # the operator's garbage collection to find, not the evaluation's error.
-            with contextlib.suppress(ServingError):
+        except BaseException as exc:
+            # The evaluation's own error stays the error; a server left behind
+            # is said so on it and in the log.
+            try:
+                self._delete(resource)
+            except ServingError as leak:
+                exc.add_note(f"and the CheckpointServer was left running: {leak}")
+                logger.error("checkpoint server not deleted: %s", leak)
+            raise
+        self._delete(resource)
+
+    def _delete(self, resource: str) -> None:
+        """Delete the resource, retrying: nothing else collects a server that
+        is left behind, and it holds its GPUs until someone does."""
+        for attempt in range(self.delete_attempts):
+            try:
                 self._kubectl("delete", resource, "--ignore-not-found", "--wait=false")
+                return
+            except ServingError as exc:
+                if attempt == self.delete_attempts - 1:
+                    raise ServingError(
+                        f"could not delete {resource} after {self.delete_attempts} attempts "
+                        f"(delete it by hand, it holds its GPUs): {exc}"
+                    ) from exc
+                time.sleep(self.delete_backoff_s * 2**attempt)
