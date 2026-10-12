@@ -67,6 +67,8 @@ type Options struct {
 	AdoptInterval time.Duration
 	// Per-project limits (concurrent and stored runs, daily tokens).
 	Quotas config.Quotas
+	// How long finished runs are kept (see Manager.Retain).
+	Retention config.Runs
 	// The time, for daily quotas; time.Now when nil (tests set it).
 	Now func() time.Time
 }

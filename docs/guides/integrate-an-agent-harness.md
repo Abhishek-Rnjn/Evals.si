@@ -58,6 +58,16 @@ stored-run quota. Only authorization metadata remains for 24-hour retries.
 Data already delivered to external sinks, source datasets and promoted datasets
 remain; deleting an EvalRun CR does not invoke this API.
 
+To delete finished runs automatically, set `runs.retention` (for example
+`2160h`, 90 days) and, per project, `runs.project_retention` (`"0"` keeps a
+project's runs forever). Every hour, each replica deletes the runs that
+finished before the cutoff (or, with no finish time, were created before it),
+in the same way as `DeleteRun`, so the stored-run quota is recovered. Runs that
+are pending, running or leased are never touched, and neither is a run
+labelled `evalsi.keep: "true"`. Data already delivered to external sinks, and
+source and promoted datasets, remain. Each pass that deletes something logs
+`run retention` with the count; no audit event is written per run.
+
 Evals.si installs from its own charts, in the agent harness's namespace or its own. Every name starts with the release name, so releases can share a namespace ([Names](kubernetes.md#names-and-installing-beside-other-charts)).
 
 ```bash

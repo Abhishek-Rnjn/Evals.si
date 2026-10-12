@@ -68,10 +68,21 @@ limit. Empty windows advance the cursor without creating an empty run.
 - Scheduled sources reject online policies, backfill and automatic source
   write-back. Batch results use normal run reports and configured run sinks.
 - Deleting a Kubernetes EvalRun still preserves its server run; explicit API
-  deletion is separate. Archive/automatic run retention remain deferred.
+  deletion is separate. Automatic run retention was added later (below); archiving remains deferred.
 - Local tests cover real-worker dataset/run/deletion pipelines and scheduled
   reports, plus cursor restart, deadline and overlap behavior. PostgreSQL 17
   regressions also verify simultaneous cache capacity claims and run deletion.
   These tests do not
   certify cloud connector credentials, production load or cluster failover of
   these new operations.
+
+## Update (2026-10-12): automatic run retention
+
+`runs.retention` and `runs.project_retention` delete finished runs past their age, hourly, on every replica. Decisions:
+
+- **It is `DeleteRun`'s deletion**, not a second one: the same store transaction (records, outputs, results, webhook deliveries, lease), so the quota is recovered and an active or leased run is refused by the same checks. Replicas race harmlessly: a run deleted twice is "not found".
+- **Age counts from when the run finished**, else from when it was created. A run that is not in a final state never expires.
+- **Exemption is a label**, `evalsi.keep: "true"`, set when the run is created or labelled, rather than a per-run API: it needs no new surface, and it survives restarts.
+- **Per project**, with `"0"` meaning forever for a project whose default is not. A minimum of one hour, since the pass is hourly.
+- **No tombstone and no audit event**: nobody asked the API, so there is no request to retry-authorize, and the deletion is logged (`run retention`, with the count) rather than audited per run. Add an audit event if a deployment needs per-run proof of deletion.
+- **The query walks past what it keeps** with a keyset cursor, so a page of kept or unfinished old runs cannot hide the expired ones behind it.
