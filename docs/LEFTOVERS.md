@@ -2,7 +2,7 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
-Last updated: 2026-10-12 (server-side slicing built, the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+Last updated: 2026-10-12 (server-side slicing, run archiving, environment specs, platform wheels, operator checkpoint serving and a hosted Wasm plugin built; the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 Trace redaction on push and pull is now built and locally regression-tested,
 including source overrides, storage bytes, evaluator queues, result callbacks
@@ -13,7 +13,7 @@ by this incoming-trace boundary.
 
 ## Triage (2026-10-11)
 
-43 rows are open (the four rows under "Verified on real clusters" are done). Each is in exactly one
+37 rows are open as of the last update (43 at the triage; the four rows under "Verified on real clusters" are done). Each is in exactly one
 category, by what it needs next. The rows that can be checked against the code, the chart and the CI
 workflow were; the rows that describe a real cluster are taken as written, since they need that
 cluster to re-check.
