@@ -95,8 +95,13 @@ func (s *Service) Validate(ctx context.Context, src *evalsiv1alpha1.TraceSource)
 	if err := CheckEndpoint(src.GetEndpoint(), s.opts.AllowHosts); err != nil {
 		return invalid("%v", err)
 	}
-	// The connector knows its own variants and locations.
-	if _, err := factory(src, "", http.DefaultClient); err != nil {
+	// The connector knows its own variants and locations. The credential is
+	// read when it connects.
+	token := ""
+	if _, ok, _ := credentials.SourceUse(src); ok {
+		token = ValidationToken
+	}
+	if _, err := factory(src, token, http.DefaultClient); err != nil {
 		return invalid("%v", err)
 	}
 	if use, ok, err := credentials.SourceUse(src); err != nil {

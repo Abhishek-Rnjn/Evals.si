@@ -286,9 +286,9 @@ func TestThrottlingBecomesRetryAfter(t *testing.T) {
 }
 
 func TestVariantsAndLocationsAreChecked(t *testing.T) {
-	for _, v := range []string{"sagemaker", "azureml", "other"} {
+	for v, want := range map[string]string{"azureml": "V3 API not implemented", "other": "unknown"} {
 		_, err := Factory(&evalsiv1alpha1.TraceSource{Variant: v, Endpoint: "http://x", Locations: []string{"1"}}, "", nil)
-		if err == nil || !strings.Contains(err.Error(), "not built") {
+		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("variant %q: %v", v, err)
 		}
 	}

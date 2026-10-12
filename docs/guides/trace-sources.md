@@ -10,14 +10,45 @@ A pulled trace is an ordinary trace of the source's project. It is stored, shown
 | Arize Phoenix | `GET /v1/projects/{project}/traces`, spans by trace ID | Trace annotations with an `identifier`, which Phoenix upserts | Phoenix 20.20.0 |
 | Langfuse | `GET /api/public/v2/observations` (the real-time read path) | Scores, replaced under the same ID | Self-hosted 4.56.0: [Compose and in-cluster verification](../verification/README.md#langfuse-live-recheck-2026-10-10) |
 | Databricks MLflow experiments | V3 search and trace metadata; signed HTTPS artifact download | V3 feedback assessments | Contract-tested against pinned MLflow 3.17.0 source; not live-verified |
+| Databricks Unity Catalog schemas | V4 `search-long-running`, polled; spans with the V4 `batchGet` | V4 feedback assessments on the SQL warehouse | Built from pinned MLflow 3.17.0 source and tested against derived fixtures; not live-verified |
+| SageMaker managed MLflow (tracking server or app) | The open-source calls, signed with AWS Signature Version 4 | The open-source assessments | Built from the pinned `sagemaker-mlflow` 0.5.0 source and tested against botocore signatures; not live-verified, and whether the managed server serves the MLflow 3 trace API is unconfirmed |
 
-For Databricks, set `connector: mlflow`, `variant: databricks`, the workspace
-HTTPS URL, a workspace bearer token in `credentials`, and numeric experiment
-IDs in `locations`. Both workspace and signed artifact requests use the source
-host guard. Artifact requests use only the download headers returned by the
-workspace, never its bearer token, and refuse redirects. Egress must allow the
-artifact storage endpoint too. Unity Catalog, SQL warehouse tracing, experiment
-names, token acquisition/refresh, SageMaker and Azure ML remain unsupported.
+### Databricks
+
+Set `connector: mlflow`, `variant: databricks` and the workspace HTTPS URL as `endpoint`. `locations` is either numeric experiment IDs or Unity Catalog schemas written `catalog.schema`, not both in one source (MLflow's own client refuses the mix; make two sources). Table-prefix locations and experiment names are not built.
+
+- **Experiments** read through the V3 search, with spans from the trace's signed artifact download. Artifact requests use only the download headers the workspace returns, never the bearer token, and refuse redirects. Egress must allow the artifact storage endpoint too.
+- **Unity Catalog schemas** are searched on a SQL warehouse: set `auth.databricks.sql_warehouse_id`. The search is a long-running operation that the connector polls (up to five minutes a cycle, then the manager tries again). A trace's ID in Evals.si is `catalog.schema/<trace id>`, which is what the V4 API addresses it by.
+- **Credential.** Either a personal access token or bearer token, or a service principal: set `auth.databricks.client_id`, and the credential is the principal's OAuth secret. Evals.si exchanges it for an access token (client-credentials grant, scope `all-apis`) at the workspace's own `/oidc/v1/token`, caches it until a minute before it expires, and gets a new one once if the workspace answers 401. The token endpoint is always the source's own endpoint host, so the credential grant for that host covers the exchange; the secret goes nowhere else.
+
+```yaml
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata: {name: lakehouse-agents}
+spec:
+  connector: mlflow
+  variant: databricks
+  endpoint: https://adb-1234567890123456.7.azuredatabricks.net
+  locations: [main.agents]
+  credentials: {env: DATABRICKS_SP_SECRET}
+  auth: {databricks: {clientId: 0d9e2f3a-aaaa-bbbb-cccc-1234567890ab, sqlWarehouseId: 4a1b2c3d4e5f6a7b}}
+```
+
+### SageMaker
+
+Set `variant: sagemaker`, the region's endpoint (`https://<region>.experiments.sagemaker.aws` for a tracking server, `https://mlflow.sagemaker.<region>.app.aws` for an MLflow app) and `auth.sigv4.arn`, the ARN of the tracking server or app. Requests are signed with AWS Signature Version 4 (service `sagemaker-mlflow` for a tracking server, `sagemaker` for an app, region from the ARN) and carry the ARN in the routing header the `sagemaker-mlflow` client sends. The rest is the open-source MLflow API. The endpoint must be an `https` AWS host (`*.sagemaker.aws`, `*.app.aws` or `*.amazonaws.com`, which covers a VPC endpoint), because the signature must not go to anything else.
+
+The credential is a JSON object, since a source has one credential value:
+
+```json
+{"access_key_id": "AKIA...", "secret_access_key": "...", "session_token": "only for temporary credentials"}
+```
+
+It is granted and stored like any other credential. **Evals.si does not use the server's own AWS identity (IRSA, pod identity, instance profile) for a source**: a project editor could then have the server sign requests as its role, past the credential grants. Use an IAM user, or a role whose temporary credentials you refresh into the Secret, limited to the one tracking server.
+
+### Azure ML
+
+`variant: azureml` is refused when you apply the source. Azure ML's MLflow endpoint is not an MLflow 3 server: the `azureml-mlflow` 1.62.0 client builds its tracking store on the MLflow 2 API (`/mlflow/v2.0`) and notes "V3 API not implemented yet" for MLflow 3, and the trace search, `batchGet` and assessment calls are all `/api/3.0`. Send those traces over OTLP, or read them from a store that does implement it.
 
 ## Scheduled batch reports
 
@@ -136,7 +167,7 @@ The server makes the requests, from where it runs. So a project admin cannot poi
       - {env: "file:mlflow-token/token", projects: [studio]}
   ```
 
-  A file is read again at each use, so a rotated Secret takes effect without a restart. On Kubernetes, list the Secret in `sources.secrets` and the chart mounts it where `file:` names look (`sources.dir`). MLflow takes the value as a bearer token, Phoenix as its API key (bearer), Langfuse as `<public key>:<secret key>`.
+  A file is read again at each use, so a rotated Secret takes effect without a restart. On Kubernetes, list the Secret in `sources.secrets` and the chart mounts it where `file:` names look (`sources.dir`). MLflow takes the value as a bearer token (a Databricks service principal's OAuth secret with `auth.databricks.client_id`; a JSON object of AWS keys for SageMaker), Phoenix as its API key (bearer), Langfuse as `<public key>:<secret key>`.
 
 Creating and changing sources needs `sources.write`, which only the `admin` role holds: a source makes the server read another system and write to it. `sources.read` lets admins list them and see their status.
 
@@ -235,6 +266,7 @@ On Kubernetes, `networkPolicy.egress.enabled` adds an egress NetworkPolicy for t
 
 ## Not covered yet
 
-- Databricks live verification, Unity Catalog and automatic token acquisition; SageMaker and Azure ML variants.
+- Live verification of Databricks (experiments and Unity Catalog), OAuth token acquisition and SageMaker. These are built from the pinned client source and tested against derived fixtures; a real workspace or tracking server can still differ. The V4 filter and ordering syntax for Unity Catalog, and whether a SageMaker server serves the MLflow 3 trace API, are the two assumptions most worth checking first.
+- Databricks table-prefix locations and experiment names, ambient AWS credentials for SageMaker, and an Azure ML variant (the server has no trace API to read).
 - Langfuse Cloud, TLS deployments, production persistence and arm64 images. Self-hosted 4.56.0 score replacement, Secret/Service pulls and enforced evalsid egress passed the recorded in-cluster check.
 - LangSmith, ClickHouse, Tempo and Kafka sources (milestone M5).

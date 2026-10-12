@@ -35,8 +35,9 @@ message TraceSource {
   string project = 2;
   // "mlflow". "langfuse" and "phoenix" follow.
   string connector = 3;
-  // How the store is reached. MLflow: "oss" (the default). "databricks",
-  // "sagemaker" and "azureml" are accepted names that are refused until built.
+  // How the store is reached. MLflow: "oss" (the default), "databricks" or
+  // "sagemaker". "azureml" is a known name that is refused: its MLflow
+  // server does not implement the trace API.
   string variant = 4;
   // The store's base URL, for example http://mlflow.studio:5000.
   string endpoint = 5;
@@ -96,15 +97,27 @@ message SourceCredentials {
 }
 
 message SourceAuth {
-  // SageMaker managed MLflow signs requests with AWS Signature Version 4.
+  // SageMaker managed MLflow signs requests with AWS Signature Version 4. The
+  // credential (SourceCredentials) is a JSON object with access_key_id,
+  // secret_access_key and, for temporary credentials, session_token.
   message SigV4 {
+    // Optional: derived from the ARN ("sagemaker-mlflow" for a tracking
+    // server, "sagemaker" for an MLflow app).
     string service = 1;
+    // Optional: derived from the ARN.
     string region = 2;
+    // The ARN of the MLflow tracking server or app, sent in the routing header.
+    string arn = 3;
   }
   SigV4 sigv4 = 1;
-  // Databricks UC-schema search runs on a SQL warehouse.
   message Databricks {
+    // Unity Catalog trace locations (catalog.schema) are searched on a SQL
+    // warehouse.
     string sql_warehouse_id = 1;
+    // A service principal's OAuth client ID. The credential is then its OAuth
+    // secret, exchanged at the workspace's own token endpoint; without a
+    // client ID the credential is a personal access token or bearer token.
+    string client_id = 2;
   }
   Databricks databricks = 2;
 }

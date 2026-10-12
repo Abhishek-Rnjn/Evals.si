@@ -1,0 +1,8 @@
+{
+  "name": "operations/search-1",
+  "done": true,
+  "error": {
+    "error_code": "INVALID_PARAMETER_VALUE",
+    "message": "Could not resolve a SQL warehouse ID"
+  }
+}

@@ -6,7 +6,16 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **MLflow variants for Databricks Unity Catalog and SageMaker.** A `databricks` source can read Unity Catalog schemas (`catalog.schema` locations on a SQL warehouse) as well as experiments, and can sign in as a service principal (`auth.databricks.client_id`, the credential is its OAuth secret). A `sagemaker` source reads a managed MLflow tracking server or app with AWS Signature Version 4 (`auth.sigv4.arn`, the credential is a JSON object of AWS keys; the server's own AWS identity is never used). Both are built from the pinned client source and tested against derived fixtures; neither has run against a real workspace or tracking server. `variant: azureml` is refused with the reason: Azure ML's MLflow server has no MLflow 3 trace API.
 - **Custom evaluator example.** `examples/custom-evaluator` is a tested, installable Python evaluator pack (`acme/valid-citations`) that runs by name through the `evalsi.packs` entry point, and it is listed on the website's examples page.
+
+### Changed
+
+- `auth.sigv4` gains `arn` and `auth.databricks` gains `client_id` (`v1alpha1`, additive).
+
+### Fixed
+
+- Applying a Databricks trace source failed validation because the connector was built before its credential was read.
 
 ## [0.1.0] - first release
 

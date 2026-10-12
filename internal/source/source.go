@@ -87,8 +87,14 @@ type Connector interface {
 	WriteBack(ctx context.Context, scores []Score, prior map[store.WriteKey]store.SourceWrite) ([]store.SourceWrite, error)
 }
 
+// ValidationToken stands in for the credential when a source is only being
+// validated (on apply), before its credential is read. A connector checks the
+// source's shape then and the credential's content when it connects.
+const ValidationToken = "\x00validation"
+
 // Factory builds a connector for a source. token is the resolved credential
-// ("" when the source names none).
+// ("" when the source names none, ValidationToken when it names one that has
+// not been read).
 type Factory func(src *evalsiv1alpha1.TraceSource, token string, client *http.Client) (Connector, error)
 
 // RetryAfterError is a store asking to be left alone for a while (HTTP 429 or

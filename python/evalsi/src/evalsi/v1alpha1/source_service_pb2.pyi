@@ -129,8 +129,9 @@ class TraceSource(_message.Message):
     connector: _builtins.str
     """"mlflow". "langfuse" and "phoenix" follow."""
     variant: _builtins.str
-    """How the store is reached. MLflow: "oss" (the default). "databricks",
-    "sagemaker" and "azureml" are accepted names that are refused until built.
+    """How the store is reached. MLflow: "oss" (the default), "databricks" or
+    "sagemaker". "azureml" is a known name that is refused: its MLflow
+    server does not implement the trace API.
     """
     endpoint: _builtins.str
     """The store's base URL, for example http://mlflow.studio:5000."""
@@ -298,37 +299,56 @@ class SourceAuth(_message.Message):
 
     @_typing.final
     class SigV4(_message.Message):
-        """SageMaker managed MLflow signs requests with AWS Signature Version 4."""
+        """SageMaker managed MLflow signs requests with AWS Signature Version 4. The
+        credential (SourceCredentials) is a JSON object with access_key_id,
+        secret_access_key and, for temporary credentials, session_token.
+        """
 
         DESCRIPTOR: _descriptor.Descriptor
 
         SERVICE_FIELD_NUMBER: _builtins.int
         REGION_FIELD_NUMBER: _builtins.int
+        ARN_FIELD_NUMBER: _builtins.int
         service: _builtins.str
+        """Optional: derived from the ARN ("sagemaker-mlflow" for a tracking
+        server, "sagemaker" for an MLflow app).
+        """
         region: _builtins.str
+        """Optional: derived from the ARN."""
+        arn: _builtins.str
+        """The ARN of the MLflow tracking server or app, sent in the routing header."""
         def __init__(
             self,
             *,
             service: _builtins.str = ...,
             region: _builtins.str = ...,
+            arn: _builtins.str = ...,
         ) -> None: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["region", b"region", "service", b"service"]  # noqa: Y015
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["arn", b"arn", "region", b"region", "service", b"service"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
     @_typing.final
     class Databricks(_message.Message):
-        """Databricks UC-schema search runs on a SQL warehouse."""
-
         DESCRIPTOR: _descriptor.Descriptor
 
         SQL_WAREHOUSE_ID_FIELD_NUMBER: _builtins.int
+        CLIENT_ID_FIELD_NUMBER: _builtins.int
         sql_warehouse_id: _builtins.str
+        """Unity Catalog trace locations (catalog.schema) are searched on a SQL
+        warehouse.
+        """
+        client_id: _builtins.str
+        """A service principal's OAuth client ID. The credential is then its OAuth
+        secret, exchanged at the workspace's own token endpoint; without a
+        client ID the credential is a personal access token or bearer token.
+        """
         def __init__(
             self,
             *,
             sql_warehouse_id: _builtins.str = ...,
+            client_id: _builtins.str = ...,
         ) -> None: ...
-        _ClearFieldArgType: _TypeAlias = _typing.Literal["sql_warehouse_id", b"sql_warehouse_id"]  # noqa: Y015
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["client_id", b"client_id", "sql_warehouse_id", b"sql_warehouse_id"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
     SIGV4_FIELD_NUMBER: _builtins.int

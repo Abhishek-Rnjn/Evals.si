@@ -86,8 +86,9 @@ type TraceSource struct {
 	Project string `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
 	// "mlflow". "langfuse" and "phoenix" follow.
 	Connector string `protobuf:"bytes,3,opt,name=connector,proto3" json:"connector,omitempty"`
-	// How the store is reached. MLflow: "oss" (the default). "databricks",
-	// "sagemaker" and "azureml" are accepted names that are refused until built.
+	// How the store is reached. MLflow: "oss" (the default), "databricks" or
+	// "sagemaker". "azureml" is a known name that is refused: its MLflow
+	// server does not implement the trace API.
 	Variant string `protobuf:"bytes,4,opt,name=variant,proto3" json:"variant,omitempty"`
 	// The store's base URL, for example http://mlflow.studio:5000.
 	Endpoint string `protobuf:"bytes,5,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
@@ -1465,11 +1466,18 @@ func (x *BackfillSourceResponse) GetSource() *TraceSource {
 	return nil
 }
 
-// SageMaker managed MLflow signs requests with AWS Signature Version 4.
+// SageMaker managed MLflow signs requests with AWS Signature Version 4. The
+// credential (SourceCredentials) is a JSON object with access_key_id,
+// secret_access_key and, for temporary credentials, session_token.
 type SourceAuth_SigV4 struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Service       string                 `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	Region        string                 `protobuf:"bytes,2,opt,name=region,proto3" json:"region,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Optional: derived from the ARN ("sagemaker-mlflow" for a tracking
+	// server, "sagemaker" for an MLflow app).
+	Service string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	// Optional: derived from the ARN.
+	Region string `protobuf:"bytes,2,opt,name=region,proto3" json:"region,omitempty"`
+	// The ARN of the MLflow tracking server or app, sent in the routing header.
+	Arn           string `protobuf:"bytes,3,opt,name=arn,proto3" json:"arn,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1518,12 +1526,24 @@ func (x *SourceAuth_SigV4) GetRegion() string {
 	return ""
 }
 
-// Databricks UC-schema search runs on a SQL warehouse.
+func (x *SourceAuth_SigV4) GetArn() string {
+	if x != nil {
+		return x.Arn
+	}
+	return ""
+}
+
 type SourceAuth_Databricks struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SqlWarehouseId string                 `protobuf:"bytes,1,opt,name=sql_warehouse_id,json=sqlWarehouseId,proto3" json:"sql_warehouse_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unity Catalog trace locations (catalog.schema) are searched on a SQL
+	// warehouse.
+	SqlWarehouseId string `protobuf:"bytes,1,opt,name=sql_warehouse_id,json=sqlWarehouseId,proto3" json:"sql_warehouse_id,omitempty"`
+	// A service principal's OAuth client ID. The credential is then its OAuth
+	// secret, exchanged at the workspace's own token endpoint; without a
+	// client ID the credential is a personal access token or bearer token.
+	ClientId      string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SourceAuth_Databricks) Reset() {
@@ -1559,6 +1579,13 @@ func (*SourceAuth_Databricks) Descriptor() ([]byte, []int) {
 func (x *SourceAuth_Databricks) GetSqlWarehouseId() string {
 	if x != nil {
 		return x.SqlWarehouseId
+	}
+	return ""
+}
+
+func (x *SourceAuth_Databricks) GetClientId() string {
+	if x != nil {
+		return x.ClientId
 	}
 	return ""
 }
@@ -1615,19 +1642,21 @@ const file_evalsi_v1alpha1_source_service_proto_rawDesc = "" +
 	"maxRecords\"9\n" +
 	"\x11SourceCredentials\x12\x10\n" +
 	"\x03env\x18\x01 \x01(\tR\x03env\x12\x12\n" +
-	"\x04file\x18\x02 \x01(\tR\x04file\"\x80\x02\n" +
+	"\x04file\x18\x02 \x01(\tR\x04file\"\xaf\x02\n" +
 	"\n" +
 	"SourceAuth\x127\n" +
 	"\x05sigv4\x18\x01 \x01(\v2!.evalsi.v1alpha1.SourceAuth.SigV4R\x05sigv4\x12F\n" +
 	"\n" +
 	"databricks\x18\x02 \x01(\v2&.evalsi.v1alpha1.SourceAuth.DatabricksR\n" +
-	"databricks\x1a9\n" +
+	"databricks\x1aK\n" +
 	"\x05SigV4\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
-	"\x06region\x18\x02 \x01(\tR\x06region\x1a6\n" +
+	"\x06region\x18\x02 \x01(\tR\x06region\x12\x10\n" +
+	"\x03arn\x18\x03 \x01(\tR\x03arn\x1aS\n" +
 	"\n" +
 	"Databricks\x12(\n" +
-	"\x10sql_warehouse_id\x18\x01 \x01(\tR\x0esqlWarehouseId\";\n" +
+	"\x10sql_warehouse_id\x18\x01 \x01(\tR\x0esqlWarehouseId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\";\n" +
 	"\bBackfill\x12/\n" +
 	"\x05since\x18\x01 \x01(\v2\x19.google.protobuf.DurationR\x05since\"r\n" +
 	"\x04Poll\x125\n" +
