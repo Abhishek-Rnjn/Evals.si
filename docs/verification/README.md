@@ -455,15 +455,15 @@ Checked after publication:
 - Each image and chart has a cosign signature tag (`sha256-<digest>.sig`) on GHCR for the digest its `0.1.0` tag resolves to; the image also has the SBOM attestation (`.att`). All five packages can be pulled anonymously.
 - `SHA256SUMS` agrees with GitHub's recorded SHA-256 for all 11 files it lists, and the four PyPI files have the same hashes as the release's wheels and sdists.
 - In a clean virtual environment, `pip install evalsi==0.1.0 evalsi-harness==0.1.0` installed, both report 0.1.0, and `evalsi eval` ran.
+- A maintainer ran `scripts/verify-release.sh 0.1.0` after publication (cosign, from outside the environment that made the checks above); it reported that all signatures were verified. The script checks both images and the three OCI charts against the release workflow's identity at the tag `v0.1.0`, and the SPDX SBOM attestation of the `evalsi` image.
 - The released amd64 archive runs: `evalsid version` prints `0.1.0 (api evalsi.v1alpha1)` and the bundled `bwrap` reports 0.11.0.
 
 Not checked:
 
-- `scripts/verify-release.sh 0.1.0` (the cryptographic cosign verification of the signatures and the SBOM attestation) was not run. The environment that checked the rest could not reach Sigstore's trust-root server, so a maintainer must run it.
 - A chart install from the OCI charts on a cluster, an import of the published bundle, the arm64 archive and the arm64 image.
 
 Problems the tag run found, and what was done:
 
 1. The first tag push failed at `approve` ("Tag … is not allowed to deploy to release"): the environment's `v*` rule had been added as a branch rule. It was changed to a tag rule. Nothing had run.
 2. The second tag run failed in `charts`: `helm registry login` keeps credentials that cosign does not read, so the signature push was refused. The dry run cannot reach that step. Fixed in [PR #37](https://github.com/Abhishek-Rnjn/Evals.si/pull/37). That run was cancelled, `v0.1.0` was moved to the fixed commit before anything was released, and the final run overwrote the `0.1.0` tags it had touched.
-3. In the final run the `release` job failed in `actions/download-artifact`: it downloads every artifact in the run, including the two `*.dockerbuild` build records, and those downloads failed after retries. The release was created by hand with `gh release create` from the run's own artifacts (the same files the job attaches, without the build records), with `SHA256SUMS` computed on the maintainer's machine. The GitHub release's auto-generated notes list every pull request title as written. The workflow fix is still to do (see [RELEASING](../RELEASING.md#lessons-from-v010)).
+3. In the final run the `release` job failed in `actions/download-artifact`: it downloads every artifact in the run, including the two `*.dockerbuild` build records, and those downloads failed after retries. The release was created by hand with `gh release create` from the run's own artifacts (the same files the job attaches, without the build records), with `SHA256SUMS` computed on the maintainer's machine. The auto-generated release notes listed every pull request title as written, so a maintainer replaced them with the changelog's 0.1.0 section. The workflow fix is in [PR #41](https://github.com/Abhishek-Rnjn/Evals.si/pull/41) (see [RELEASING](../RELEASING.md#lessons-from-v010)).

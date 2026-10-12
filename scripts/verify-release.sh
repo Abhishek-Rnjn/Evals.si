@@ -4,7 +4,8 @@
 #
 #   scripts/verify-release.sh 0.1.0 [owner]
 #
-# Needs cosign. Prints what it checked; exits non-zero on the first failure.
+# Needs cosign (on macOS: brew install cosign) and network access to GHCR and to
+# Sigstore's trust root. Prints what it checked; exits non-zero on the first failure.
 set -euo pipefail
 
 version="${1:?usage: verify-release.sh VERSION [OWNER]}"
