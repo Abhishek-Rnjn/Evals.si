@@ -40,10 +40,14 @@ func (b bearer) Authorize(_ context.Context, req *http.Request, _ []byte) error 
 func (bearer) Rejected() bool { return false }
 
 // oauthClient exchanges a service principal's client ID and secret for an
-// access token (the OAuth client-credentials grant) and caches it until just
+// access token (the OAuth client-credentials grant) and keeps it until just
 // before it expires. The token endpoint is fixed by the caller from the
 // source's endpoint, never from the store's responses, so the secret goes only
 // where the credential grant already allows.
+//
+// The manager builds a source's connector afresh each cycle, so tokens are kept
+// in a process-wide cache, keyed by endpoint, client ID and a hash of the secret:
+// a rotated secret is a new key and never reuses the old token.
 type oauthClient struct {
 	tokenURL string
 	clientID string
@@ -51,14 +55,42 @@ type oauthClient struct {
 	scope    string
 	client   *http.Client
 	now      func() time.Time
+}
 
-	mu      sync.Mutex
+type cachedToken struct {
+	mu      sync.Mutex // held while the token is exchanged, so concurrent callers share one exchange
 	token   string
 	expires time.Time
 }
 
+var (
+	tokensMu sync.Mutex
+	tokens   = map[string]*cachedToken{}
+)
+
 // refreshSkew is how long before expiry a cached token is replaced.
 const refreshSkew = time.Minute
+
+func (o *oauthClient) entry() (string, *cachedToken) {
+	key := o.tokenURL + "\x00" + o.clientID + "\x00" + o.scope + "\x00" + sha256Hex([]byte(o.secret))
+	tokensMu.Lock()
+	defer tokensMu.Unlock()
+	e := tokens[key]
+	if e == nil {
+		// Forget what has expired, so rotated secrets do not accumulate.
+		for k, old := range tokens {
+			if old.mu.TryLock() {
+				if old.token == "" || !o.now().Before(old.expires) {
+					delete(tokens, k)
+				}
+				old.mu.Unlock()
+			}
+		}
+		e = &cachedToken{}
+		tokens[key] = e
+	}
+	return key, e
+}
 
 func (o *oauthClient) Authorize(ctx context.Context, req *http.Request, _ []byte) error {
 	token, err := o.get(ctx)
@@ -71,17 +103,19 @@ func (o *oauthClient) Authorize(ctx context.Context, req *http.Request, _ []byte
 
 // Rejected drops the cached token: it was revoked, or the clock skewed.
 func (o *oauthClient) Rejected() bool {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.token = ""
+	_, e := o.entry()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.token = ""
 	return true
 }
 
 func (o *oauthClient) get(ctx context.Context) (string, error) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.token != "" && o.now().Add(refreshSkew).Before(o.expires) {
-		return o.token, nil
+	_, e := o.entry()
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.token != "" && o.now().Add(refreshSkew).Before(e.expires) {
+		return e.token, nil
 	}
 	form := url.Values{"grant_type": {"client_credentials"}, "scope": {o.scope}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.tokenURL, strings.NewReader(form.Encode()))
@@ -116,9 +150,9 @@ func (o *oauthClient) get(ctx context.Context) (string, error) {
 		}
 		return "", fmt.Errorf("mlflow: token endpoint answered HTTP %d: %s", resp.StatusCode, msg)
 	}
-	o.token = out.Token
-	o.expires = o.now().Add(time.Duration(out.ExpiresIn) * time.Second)
-	return o.token, nil
+	e.token = out.Token
+	e.expires = o.now().Add(time.Duration(out.ExpiresIn) * time.Second)
+	return e.token, nil
 }
 
 // urlError drops the URL from a transport error, so a message does not repeat

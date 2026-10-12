@@ -275,3 +275,27 @@ func TestPauseResumeBackfillDelete(t *testing.T) {
 		t.Fatalf("second delete: %v", err)
 	}
 }
+
+// Validation happens before the credential is read: the factory gets the
+// ValidationToken when the source names one and "" when it names none, and a
+// connector must accept it.
+func TestApplySourceValidatesBeforeTheCredentialIsRead(t *testing.T) {
+	svc, h := newService(t)
+	svc.opts.Credentials = credentials.NewPolicy(credentials.Settings{})
+	var got []string
+	h.m.opts.Factories["mlflow"] = func(_ *evalsiv1alpha1.TraceSource, token string, _ *http.Client) (Connector, error) {
+		got = append(got, token)
+		return h.fs, nil
+	}
+	src := &evalsiv1alpha1.TraceSource{Name: "studio", Project: "p", Connector: "mlflow", Endpoint: "http://store:5000", Locations: []string{"1"}}
+	if _, err := apply(t, svc, src, true); err != nil {
+		t.Fatal(err)
+	}
+	src.Credentials = &evalsiv1alpha1.SourceCredentials{Env: "STUDIO_TOKEN"}
+	if _, err := apply(t, svc, src, true); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "" || got[1] != ValidationToken {
+		t.Fatalf("tokens %q", got)
+	}
+}

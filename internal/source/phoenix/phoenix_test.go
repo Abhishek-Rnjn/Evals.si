@@ -210,3 +210,12 @@ func TestAgainstALiveServer(t *testing.T) {
 		}
 	}
 }
+
+// Apply validates a source before its credential is read, with
+// source.ValidationToken in place of the API key.
+func TestFactoryAcceptsTheValidationToken(t *testing.T) {
+	src := &evalsiv1alpha1.TraceSource{Endpoint: "https://phoenix.example.com", Locations: []string{"default"}}
+	if _, err := Factory(src, source.ValidationToken, http.DefaultClient); err != nil {
+		t.Fatal(err)
+	}
+}

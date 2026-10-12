@@ -359,3 +359,15 @@ func TestFactoryChecks(t *testing.T) {
 		}
 	}
 }
+
+// Apply validates a source before its credential is read, with
+// source.ValidationToken in place of the <public key>:<secret key> pair.
+func TestFactoryAcceptsTheValidationToken(t *testing.T) {
+	src := &evalsiv1alpha1.TraceSource{Endpoint: "https://langfuse.example.com"}
+	if _, err := Factory(src, source.ValidationToken, http.DefaultClient); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Factory(src, "no-colon", http.DefaultClient); err == nil {
+		t.Fatal("a malformed credential was accepted")
+	}
+}

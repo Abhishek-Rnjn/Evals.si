@@ -99,7 +99,9 @@ func (c *connector) call(ctx context.Context, method, path string, query url.Val
 	}
 	u := c.base + path
 	if len(query) > 0 {
-		u += "?" + query.Encode()
+		// A space goes as %20, not +: a signature covers the query as a verifier
+		// decodes it, and the SageMaker client does the same.
+		u += "?" + strings.ReplaceAll(query.Encode(), "+", "%20")
 	}
 	for attempt := 0; ; attempt++ {
 		var rd io.Reader

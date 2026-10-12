@@ -530,3 +530,57 @@ func TestDatabricksLocationsAreChecked(t *testing.T) {
 		t.Errorf("validation: %v", err)
 	}
 }
+
+// The manager builds a source's connector each cycle, so the token must
+// outlive the connector. A rotated secret must not reuse the old secret's token.
+func TestDatabricksTokenOutlivesTheConnector(t *testing.T) {
+	f := &fakeWorkspace{}
+	first, srv := workspace(t, f, nil)
+	if _, err := first.List(context.Background(), source.ListRequest{Since: time.Now(), Limit: 10}); err != nil {
+		t.Fatal(err)
+	}
+	build := func(secret string) *connector {
+		c, err := Factory(first.src, secret, srv.Client())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.(*connector)
+	}
+	again := build("sp-secret/&=")
+	if _, err := again.List(context.Background(), source.ListRequest{Since: time.Now(), Limit: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if f.tokens != 1 {
+		t.Fatalf("%d token requests for a rebuilt connector", f.tokens)
+	}
+	rotated := build("a-new-secret")
+	if _, err := rotated.List(context.Background(), source.ListRequest{Since: time.Now(), Limit: 10}); err != nil {
+		t.Fatal(err)
+	}
+	if f.tokens != 2 {
+		t.Fatalf("a rotated secret used the old secret's token (%d token requests)", f.tokens)
+	}
+}
+
+// A space in a query goes as %20, which is how the signature covers it.
+func TestSignedQueryEncodesSpacesAsPercent20(t *testing.T) {
+	var raw string
+	f := &fakeMLflow{t: t}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "get-by-name") {
+			raw = r.URL.RawQuery
+		}
+		f.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	src := sagemakerSource(serverARN, "https://us-east-1.experiments.sagemaker.aws")
+	src.Locations = []string{"studio agents+v2"}
+	c, err := Factory(src, awsKey, rewrite(srv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = c.List(context.Background(), source.ListRequest{Since: time.Now(), Limit: 1}) // the name is unknown; the request is what matters
+	if raw != "experiment_name=studio%20agents%2Bv2" {
+		t.Fatalf("query on the wire %q", raw)
+	}
+}
