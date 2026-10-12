@@ -1,5 +1,9 @@
 {{- $fn := include "evalsi.fullname" $ -}}
 {{- $v := .Values }}
+{{- $natsMonitor := default (printf "%s-nats.%s.svc:8222" $fn .Release.Namespace) $v.keda.natsServerMonitoringEndpoint }}
+{{- if and $v.keda.enabled $v.nats.url }}
+{{- $natsMonitor = required "keda.natsServerMonitoringEndpoint is required with external NATS" $v.keda.natsServerMonitoringEndpoint }}
+{{- end }}
 {{- $st := include "evalsi.storage" . | fromJson }}
 {{- $sandboxAddress := include "evalsi.sandboxAddress" . }}
 apiVersion: v1
@@ -109,7 +113,7 @@ spec:
   triggers:
     - type: nats-jetstream
       metadata:
-        natsServerMonitoringEndpoint: {{ printf "%s-nats.%s.svc:8222" $fn $.Release.Namespace | quote }}
+        natsServerMonitoringEndpoint: {{ $natsMonitor | quote }}
         account: "$G"
         stream: EVALSI_WORK
         consumer: pool-{{ $pool }}
