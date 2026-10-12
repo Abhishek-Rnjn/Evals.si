@@ -31,6 +31,7 @@ pages.set("docs/decisions/README.md", "/docs/decisions/");
 const decisions = (await fs.readdir(path.join(root, "docs/decisions"))).filter((f) => /^\d{4}-.*\.md$/.test(f)).sort();
 for (const f of decisions) pages.set(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
 pages.set("README.md", "/docs/get-started/");
+pages.set("CHANGELOG.md", "/docs/changelog/");
 
 // ---- link rewriting ---------------------------------------------------------
 const siteHref = (route, frag) => `${BASE}${route}${frag ? "#" + frag : ""}`;
@@ -82,8 +83,9 @@ await importDoc("docs/DESIGN.md", "/docs/architecture/", { title: "Architecture 
 await importDoc("docs/LEFTOVERS.md", "/docs/roadmap/", { title: "Roadmap and open leftovers" });
 await importDoc("docs/decisions/README.md", "/docs/decisions/", { title: "Decision records" });
 for (const f of decisions) await importDoc(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
+await importDoc("CHANGELOG.md", "/docs/changelog/", { description: "What changed in each Evals.si release." });
 
-// Get started: the README's quickstart, then its tour of the features
+// Get started: the README's install options and quickstart, then its tour of the features
 {
   const readme = await read("README.md");
   const section = (h) => {
@@ -92,7 +94,7 @@ for (const f of decisions) await importDoc(`docs/decisions/${f}`, `/docs/decisio
     const next = readme.indexOf("\n## ", start + 4);
     return readme.slice(start + `\n## ${h}\n`.length, next === -1 ? undefined : next);
   };
-  const body = section("Quickstart") + "\n## A tour\n" + section("A tour");
+  const body = "\n## Install\n" + section("Install") + "\n## Quickstart\n" + section("Quickstart") + "\n## A tour\n" + section("A tour");
   const intro = "Install, grade your first outputs, run evaluators from Python or as a server, then take a tour of runs, agents and online evaluation.\n";
   let fixed = await rewriteLinks(intro + body, "README.md");
   // In-page anchors that point at README sections not imported here go to GitHub.
@@ -108,7 +110,8 @@ Evals.si is one entrypoint for evaluating classic ML models, LLMs, RAG systems a
 
 ## Start here
 
-- [Get started](${BASE}/docs/get-started/): install and run your first evaluation in a minute.
+- [Get started](${BASE}/docs/get-started/): install (PyPI, release binaries, charts) and run your first evaluation in a minute.
+- [Changelog](${BASE}/docs/changelog/): what changed in each release.
 - [Examples](${BASE}/examples/): runnable configs for runs, agents, guardrails, fine-tuning and more.
 - [Agent frameworks](${BASE}/docs/guides/agent-frameworks/): score LangGraph, CrewAI, OpenAI Agents SDK, LlamaIndex and Claude Agent SDK traces.
 - [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.

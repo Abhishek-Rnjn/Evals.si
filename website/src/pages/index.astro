@@ -26,13 +26,14 @@ const ecosystem = [
 ];
 
 const tabs = [
-  { label: "CLI", lang: "bash", code: `# Install and grade outputs you already have
-cd python && uv sync --all-packages
-uv run evalsi eval --data qa.jsonl \\
+  { label: "CLI", lang: "bash", code: `# Install from PyPI and grade outputs you already have
+pip install evalsi
+evalsi eval --data qa.jsonl \\
   --evaluators exact-match,numeric-match,latency
 
 # Add a judge: any OpenAI-compatible server, or Claude
-uv run evalsi eval --data qa.jsonl --evaluators llm-judge \\
+pip install 'evalsi[anthropic]'
+evalsi eval --data qa.jsonl --evaluators llm-judge \\
   --judge-provider anthropic --judge-model claude-opus-5-5` },
   { label: "Python", lang: "python", code: `import evalsi
 from evalsi import Record, Score, evaluator
@@ -137,6 +138,11 @@ const extras = [
             <GithubIcon /> Star on GitHub
           </a>
         </div>
+        <p class="animate-fade-up mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-sm text-neutral-500 [animation-delay:280ms]">
+          <code class="rounded-md border border-neutral-200 bg-white/60 px-2 py-1 font-mono text-[13px] text-neutral-700 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300">pip install evalsi</code>
+          <a class="underline-offset-4 hover:text-neutral-900 hover:underline dark:hover:text-white" href={`${repo}/releases/latest`}>Latest release</a>
+          <a class="underline-offset-4 hover:text-neutral-900 hover:underline dark:hover:text-white" href={doc("/docs/changelog/")}>Changelog</a>
+        </p>
 
         <!-- Terminal -->
         <div class="animate-fade-up relative mx-auto mt-16 max-w-3xl [animation-delay:320ms]">
@@ -258,6 +264,8 @@ latency        6  <span class="text-indigo-600 font-medium">517.500</span>  [276
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/docs/get-started/")}>Docs</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/examples/")}>Examples</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/integrations/")}>Integrations</a>
+        <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/docs/changelog/")}>Changelog</a>
+        <a class="hover:text-neutral-900 dark:hover:text-white" href={`${repo}/releases`}>Releases</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={repo}>GitHub</a>
       </nav>
     </div>

@@ -45,6 +45,10 @@ export default defineConfig({
           { label: "Overview", slug: "docs" },
           { label: "Get started", slug: "docs/get-started" },
         ] },
+        { label: "Releases", items: [
+          { label: "Changelog", slug: "docs/changelog" },
+          { label: "GitHub releases", link: "https://github.com/Abhishek-Rnjn/Evals.si/releases" },
+        ] },
         { label: "Integrations", items: [
           { label: "Overview", slug: "integrations" },
           { label: "agentgateway", slug: "integrations/agentgateway" },
