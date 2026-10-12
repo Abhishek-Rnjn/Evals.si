@@ -327,3 +327,13 @@ def test_slice_on_the_server(monkeypatch: Any, capsys: Any) -> None:
     assert "--on-server needs --server" in capsys.readouterr().err
     assert main([*base, "--on-server", "--results", "x.json"]) == 1
     assert "drop --results" in capsys.readouterr().err
+
+
+def test_archived_server_runs_are_skipped_when_listing_and_refused_by_name() -> None:
+    client = FakeClient()
+    client.runs[1]["archivedAt"] = "2026-10-12T00:00:00Z"
+    with Warehouse() as wh:
+        # Newest first from the fake is run-0, run-1, ...; run-1 has no results left.
+        assert wh.add_server_runs(client, limit=3) == ["run-0", "run-2", "run-3"]
+        with pytest.raises(ValueError, match="run-1 was archived"):
+            wh.add_server_runs(client, run_ids=["run-1"])

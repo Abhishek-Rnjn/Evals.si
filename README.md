@@ -40,7 +40,7 @@ Evals.si grades outputs you already have, runs a model or an agent on a dataset 
 Each release publishes (see the [Kubernetes guide](docs/guides/kubernetes.md#installing-a-release-and-verifying-it) to verify the signatures):
 
 - **Server and CLI binaries:** Linux amd64 and arm64 archives on the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases).
-- **Python:** `pip install evalsi` (SDK and CLI) and `pip install evalsi-harness` (the agent harness) from PyPI; the same wheels and sdists are attached to the release. On Linux (amd64, arm64) `evalsi` installs a platform wheel that also carries `evalsid` and its sandbox's `bwrap` (`evalsi serve` and code evaluators then need nothing else); elsewhere you get the pure-Python wheel and a separate `evalsid`.
+- **Python:** `pip install evalsi` (SDK and CLI) and `pip install evalsi-harness` (the agent harness) from PyPI; the same wheels and sdists are attached to the release. Releases after v0.1.0 also publish Linux (amd64, arm64) platform wheels that carry `evalsid` and its sandbox's `bwrap`, so `evalsi serve` and code evaluators need nothing else; v0.1.0 and other platforms get the pure-Python wheel and a separate `evalsid`.
 - **Kubernetes:** multi-architecture images at `ghcr.io/abhishek-rnjn/evalsi` and the three Helm charts as OCI artifacts, `oci://ghcr.io/abhishek-rnjn/charts/evalsi`, `evalsi-crds` and `evalsi-sandboxd`.
 
 To try it from source, use the quickstart below.

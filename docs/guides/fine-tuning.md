@@ -137,7 +137,7 @@ Setup is snapshotted once per environment, so `reset` is a restore on rungs that
 
 #### As an OpenEnv or verifiers environment
 
-The same tasks can be handed to trainers that speak other environment specs, so one task definition serves evaluation here and training there (`pip install 'evalsi-harness[openenv]'` or `'[verifiers]'`):
+The same tasks can be handed to trainers that speak other environment specs, so one task definition serves evaluation here and training there (`pip install openenv-core==0.3.0` or `verifiers==0.3.1`, the versions tested):
 
 ```python
 from evalsi_harness.envspecs.openenv import TaskOpenEnv, TaskAction, create_task_app

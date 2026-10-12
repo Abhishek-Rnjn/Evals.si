@@ -36,7 +36,7 @@ try:
     from openenv.core.env_server.types import Action, Observation, State
 except ImportError as exc:  # pragma: no cover - depends on the install
     raise ImportError(
-        "evalsi_harness.envspecs.openenv needs openenv-core: pip install 'evalsi-harness[openenv]'"
+        "evalsi_harness.envspecs.openenv needs openenv-core: pip install openenv-core==0.3.0"
     ) from exc
 
 from pydantic import Field

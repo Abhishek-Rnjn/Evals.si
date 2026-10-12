@@ -413,8 +413,8 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: A platform wheel bundles it, and an install of it finds and runs it
         run: |
-          # The wheel's version is PEP 440 (0.0.0rc1) and the archive's tag form is 0.0.0-rc1.
-          scripts/set-python-version.sh 0.0.0rc1 python
+          # The tag form 0.0.0-rc1 builds the PEP 440 wheel 0.0.0rc1.
+          scripts/set-python-version.sh 0.0.0-rc1 python
           (cd python && uv build --package evalsi --wheel -o ../wheels)
           cp dist/evalsi_0.0.0-ci_linux_amd64.tar.gz dist/evalsi_0.0.0-rc1_linux_amd64.tar.gz
           python3 scripts/platform_wheel.py wheels/evalsi-0.0.0rc1-py3-none-any.whl \

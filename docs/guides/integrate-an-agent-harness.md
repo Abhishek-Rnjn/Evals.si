@@ -77,7 +77,7 @@ and keeps the run: its spec, status, metric summaries, gates, usage and labels,
 now with `archived_at` set. It needs the permission `DeleteRun` needs
 (`runs.delete`) and has the same refusals for runs that are not finished. An
 archived run can still be read (`GetRun`, the web UI's run page, `evalsi
-report`'s summary figures) and deleted, but results, `ResumeRun`, `CompareRuns`,
+report --server` shows its summary only) and deleted, but results, `ResumeRun`, `CompareRuns`,
 `PromoteResults`, shadow replays and annotation queues sourced from it answer
 `FailedPrecondition` saying it was archived, and `SliceRuns` skips it. It still
 counts toward the stored-run quota until it is deleted.

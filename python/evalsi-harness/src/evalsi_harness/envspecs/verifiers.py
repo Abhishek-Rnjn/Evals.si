@@ -29,7 +29,7 @@ try:
     from datasets import Dataset
 except ImportError as exc:  # pragma: no cover - depends on the install
     raise ImportError(
-        "evalsi_harness.envspecs.verifiers needs verifiers: pip install 'evalsi-harness[verifiers]'"
+        "evalsi_harness.envspecs.verifiers needs verifiers: pip install verifiers==0.3.1"
     ) from exc
 
 from evalsi.types import Record

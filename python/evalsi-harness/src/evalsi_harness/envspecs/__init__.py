@@ -7,6 +7,7 @@ as an `OpenEnv <https://github.com/meta-pytorch/OpenEnv>`_ ``Environment``
 <https://github.com/PrimeIntellect-ai/verifiers>`_ ``StatefulToolEnv``
 (:mod:`evalsi_harness.envspecs.verifiers`), so one task definition serves
 evaluation here and training there. Each needs its package
-(``pip install 'evalsi-harness[openenv]'`` or ``'[verifiers]'``) and is
+(``pip install openenv-core==0.3.0`` or ``verifiers==0.3.1``, the versions
+they are tested against) and is
 imported only when asked for.
 """

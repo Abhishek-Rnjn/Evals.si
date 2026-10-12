@@ -157,6 +157,14 @@ def test_hosted_wasm_plugin_installs_from_the_repo_index(
     assert entry.tier == "community"
     dest = install(entry, tmp_path / "plugins")
     assert "example__text-checks" in dest
+    # Served from the default index's URL, the relative paths resolve beside it.
+    from evalsi.plugins import DEFAULT_INDEX, _resolve
+
+    base = "https://raw.githubusercontent.com/abhishek-rnjn/evals.si/main/plugins/"
+    assert base + "index.yaml" == DEFAULT_INDEX
+    assert _resolve("wasm/text-checks/evalsi-plugin.yaml", DEFAULT_INDEX) == (
+        base + "wasm/text-checks/evalsi-plugin.yaml"
+    )
     monkeypatch.setenv("EVALSI_PLUGIN_PATH", str(tmp_path / "plugins"))
     [pack] = discover_wasm_packs()
     assert [e.spec.name for e in pack.evaluators] == list(entry.evaluators)
