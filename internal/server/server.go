@@ -4,6 +4,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -638,14 +639,26 @@ func Handler(d deps) http.Handler {
 	})
 	// The read-only web UI: static files, public; the data they show comes
 	// from the API with the viewer's credential.
+	uiLogin := false
 	if !d.ui.Disabled {
 		webui.Register(mux)
+		// Signing in from the browser, when the server names a provider.
+		if l := d.authn.CLILogin(); l != nil && l.Issuer != "" {
+			uiLogin = true
+			webui.RegisterLogin(mux, &webui.Login{
+				Issuer: l.Issuer, Audience: l.Audience, Scopes: l.Scopes,
+				ClientID: cmp.Or(l.UIClientID, l.ClientID),
+			})
+		}
 	}
 	// What `evalsi login` needs; public by design.
 	mux.HandleFunc("GET /.well-known/evalsi-auth", func(w http.ResponseWriter, _ *http.Request) {
 		doc := map[string]any{"auth_enabled": d.authn.Enabled()}
 		if l := d.authn.CLILogin(); l != nil {
 			doc["issuer"], doc["client_id"], doc["scopes"], doc["audience"] = l.Issuer, l.ClientID, l.Scopes, l.Audience
+		}
+		if uiLogin {
+			doc["ui_login"] = true // the UI offers "Sign in" (see /ui/login/config)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(doc)

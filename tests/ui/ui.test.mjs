@@ -8,6 +8,8 @@
 //   EVALSID            a built evalsid; by default the test builds one
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { createHash, createSign, generateKeyPairSync, randomBytes } from 'node:crypto';
+import http from 'node:http';
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
@@ -171,7 +173,8 @@ test('with authentication on, the UI asks for a credential and accepts only a va
   await fillAndSubmit(secret);
   await page.waitForFunction(() => document.getElementById('whoami').textContent.trim() !== '');
   assert.match(await page.textContent('#whoami'), /ui-test/);
-  assert.equal(await page.locator('.signin').count(), 0);
+  // whoami is set before the first view replaces the sign-in card.
+  await page.waitForSelector('.signin', { state: 'detached' });
   assert.ok(await page.locator('#project option').count() >= 1);
 
   // The credential lives in this tab's sessionStorage only, and signing out forgets it.
@@ -183,6 +186,210 @@ test('with authentication on, the UI asks for a credential and accepts only a va
 
   // The 401 from the wrong key is the one expected failed request; nothing else.
   const unexpected = problems.filter(problem => !/401|Unauthorized/i.test(problem));
+  assert.deepEqual(unexpected, []);
+  await page.close();
+});
+
+test('an annotator answers and skips items in the browser', async () => {
+  const url = await startServer('annotate');
+  const call = async (method, route, body) => {
+    const resp = await fetch(`${url}${route}`, {
+      method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await resp.text();
+    assert.ok(resp.ok, `${method} ${route}: ${resp.status} ${text}`);
+    return text ? JSON.parse(text) : {};
+  };
+  await call('POST', '/v1alpha1/queues', {
+    name: 'helpfulness', project: 'default', instructions: 'Judge the reply, not the tone.',
+    questions: [
+      { name: 'good', prompt: 'Is the reply good?', kind: 'QUESTION_KIND_PASS_FAIL' },
+      { name: 'score', prompt: 'How helpful?', kind: 'QUESTION_KIND_SCORE', min: 1, max: 5 },
+      { name: 'kind', prompt: 'What kind of reply?', kind: 'QUESTION_KIND_LABEL', options: ['answer', 'refusal'] },
+      { name: 'notes', prompt: 'Notes', kind: 'QUESTION_KIND_TEXT', optional: true },
+    ],
+  });
+  await call('POST', '/v1alpha1/queues/helpfulness/items', {
+    project: 'default',
+    records: { records: [
+      { id: 'r1', input: { text: 'What is 2+2?' }, output: { text: '<b>4</b>' } },
+      { id: 'r2', input: { text: 'Capital of France?' }, output: { text: 'Paris' },
+        trajectory: { steps: [{ type: 'STEP_TYPE_TOOL', name: 'search', input: { text: 'france capital' }, output: { text: `${'long '.repeat(200)}END` } }] } },
+    ] },
+  });
+
+  const page = await browser.newPage();
+  const problems = watch(page);
+  await page.goto(`${url}/ui/#/queues/helpfulness/annotate`);
+  await page.waitForSelector('form.annotate');
+  assert.match(await page.textContent('#main'), /Judge the reply, not the tone\./);
+  // Content is text, never markup.
+  assert.match(await page.textContent('#main'), /<b>4<\/b>/);
+  assert.equal(await page.locator('#main b').count(), 0);
+
+  // An incomplete form is not sent.
+  await page.click('form.annotate button[type="submit"]');
+  assert.match(await page.textContent('form.annotate .error'), /an answer is needed/);
+
+  await page.check('input[value="pass"]');
+  await page.fill('input[type="number"]', '9');
+  await page.check('input[value="answer"]');
+  await page.click('form.annotate button[type="submit"]');
+  assert.match(await page.textContent('form.annotate .error'), /from 1 to 5/);
+  await page.fill('input[type="number"]', '4');
+  await page.fill('textarea[aria-label="comment"]', 'looks right');
+  await page.click('form.annotate button[type="submit"]');
+
+  // The second item has a long tool result in its trajectory, shown whole.
+  await page.waitForSelector('text=trajectory: 1 step');
+  await page.click('summary:has-text("trajectory")');
+  assert.match(await page.textContent('form.annotate details'), /long long long.*END/s);
+
+  // The second item is skipped, which leaves nothing for this annotator.
+  await page.waitForFunction(() => document.querySelector('form.annotate .sub')?.textContent.includes('1 answered'));
+  await page.click('text=Skip this item');
+  await page.waitForSelector('text=Nothing left for you');
+
+  const { annotations } = await call('GET', '/v1alpha1/queues/helpfulness/annotations?project=default');
+  const answered = annotations.filter(a => !a.skipped);
+  assert.equal(annotations.length, 2);
+  assert.equal(answered.length, 1);
+  assert.equal(answered[0].comment, 'looks right');
+  assert.deepEqual(answered[0].answers.map(a => a.question), ['good', 'score', 'kind']);
+  assert.equal(answered[0].answers[1].number, 4);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+// A minimal OpenID provider: authorization code with PKCE, ES256 ID tokens and a
+// JWKS, on a loopback port. It checks what a real provider would: the S256
+// challenge matches the verifier, and a code works once.
+async function startProvider() {
+  const port = await freePort();
+  const issuer = `http://127.0.0.1:${port}`;
+  const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const b64 = value => Buffer.from(value).toString('base64url');
+  const codes = new Map();
+  const provider = { issuer, deny: false, tokenRequests: [], authorizeRequests: [] };
+  const idToken = () => {
+    const now = Math.floor(Date.now() / 1000);
+    const head = b64(JSON.stringify({ alg: 'ES256', kid: 'k1', typ: 'JWT' }));
+    const body = b64(JSON.stringify({
+      iss: issuer, aud: 'evalsi-ui', sub: 'alice', email: 'alice@example.com', name: 'Alice', iat: now, exp: now + 600,
+    }));
+    const sig = createSign('SHA256').update(`${head}.${body}`).sign({ key: privateKey, dsaEncoding: 'ieee-p1363' });
+    return `${head}.${body}.${b64(sig)}`;
+  };
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, issuer);
+    const json = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(value)); };
+    if (url.pathname === '/.well-known/openid-configuration') {
+      return json(200, { issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`, jwks_uri: `${issuer}/jwks` });
+    }
+    if (url.pathname === '/jwks') return json(200, { keys: [{ ...publicKey.export({ format: 'jwk' }), kid: 'k1', alg: 'ES256', use: 'sig' }] });
+    if (url.pathname === '/authorize') {
+      const q = url.searchParams;
+      provider.authorizeRequests.push(Object.fromEntries(q));
+      const back = new URL(q.get('redirect_uri'));
+      back.searchParams.set('state', q.get('state'));
+      if (provider.deny) {
+        back.searchParams.set('error', 'access_denied');
+        back.searchParams.set('error_description', 'not for you');
+      } else {
+        assert.equal(q.get('response_type'), 'code');
+        assert.equal(q.get('code_challenge_method'), 'S256');
+        const code = randomBytes(8).toString('hex');
+        codes.set(code, { challenge: q.get('code_challenge'), redirect: q.get('redirect_uri'), client: q.get('client_id') });
+        back.searchParams.set('code', code);
+      }
+      res.writeHead(302, { Location: back.toString() });
+      return res.end();
+    }
+    if (url.pathname === '/token' && req.method === 'POST') {
+      let raw = '';
+      req.on('data', chunk => { raw += chunk; });
+      req.on('end', () => {
+        const form = new URLSearchParams(raw);
+        provider.tokenRequests.push(Object.fromEntries(form));
+        const entry = codes.get(form.get('code'));
+        codes.delete(form.get('code'));
+        const verifier = createHash('sha256').update(form.get('code_verifier') ?? '').digest('base64url');
+        if (!entry || entry.challenge !== verifier || entry.redirect !== form.get('redirect_uri') || entry.client !== form.get('client_id')) {
+          return json(400, { error: 'invalid_grant', error_description: 'bad code or verifier' });
+        }
+        return json(200, { id_token: idToken(), access_token: 'opaque-access', refresh_token: 'r', token_type: 'Bearer', expires_in: 600 });
+      });
+      return undefined;
+    }
+    res.writeHead(404);
+    return res.end();
+  });
+  await new Promise(resolve => server.listen(port, '127.0.0.1', resolve));
+  servers.push({ kill: () => server.close() });
+  return provider;
+}
+
+test('the UI signs in through the identity provider with PKCE', async () => {
+  const idp = await startProvider();
+  const url = await startServer('oidc', [
+    'auth:', '  jwt:', '    providers:',
+    `      - {name: idp, issuer: "${idp.issuer}", audiences: [evalsi-ui], jwks: {url: "${idp.issuer}/jwks", allow_insecure: true}}`,
+    `  cli_login: {issuer: "${idp.issuer}", client_id: evalsi-cli, ui_client_id: evalsi-ui, scopes: [openid, email, offline_access]}`,
+  ].join('\n'));
+  const page = await browser.newPage();
+  const problems = watch(page);
+  await page.goto(`${url}/ui/#/policies`);
+  await page.waitForSelector('#sso');
+
+  await page.click('#sso');
+  await page.waitForFunction(() => document.getElementById('whoami').textContent.includes('alice'));
+  // Back on the page it left, with the one-time code out of the address bar.
+  const here = new URL(page.url());
+  assert.equal(here.search, '');
+  assert.equal(here.hash, '#/policies');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('evalsi.login')), null);
+  const token = await page.evaluate(() => sessionStorage.getItem('evalsi.token'));
+  assert.equal(token.split('.').length, 3, 'the ID token is the credential');
+  assert.equal(await page.evaluate(() => localStorage.getItem('evalsi.token')), null);
+
+  // What the browser asked the provider for, and what evalsid exchanged.
+  const ask = idp.authorizeRequests[0];
+  assert.equal(ask.client_id, 'evalsi-ui');
+  assert.equal(ask.redirect_uri, `${url}/ui/`);
+  assert.equal(ask.scope, 'openid email', 'a browser tab asks for no refresh token');
+  assert.match(ask.code_challenge, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(idp.tokenRequests[0].grant_type, 'authorization_code');
+  assert.equal(idp.tokenRequests[0].client_secret, undefined);
+
+  // Signing out forgets it, and signing in again works.
+  await page.click('#signout');
+  await page.waitForSelector('#sso');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('evalsi.token')), null);
+
+  // A provider that refuses is reported, not retried.
+  idp.deny = true;
+  await page.click('#sso');
+  await page.waitForSelector('.signin .error');
+  assert.match(await page.textContent('.signin .error'), /refused the sign-in: not for you/);
+
+  // A forged error is not shown as the provider's word, and a forged response
+  // does not cancel a login in progress.
+  idp.deny = false;
+  await page.goto(`${url}/ui/?error=access_denied&error_description=Call+support+on+555&state=forged`);
+  await page.waitForSelector('.signin .error');
+  assert.match(await page.textContent('.signin .error'), /did not match/);
+  assert.doesNotMatch(await page.textContent('#main'), /555/);
+
+  // A response this tab did not ask for is not trusted.
+  await page.goto(`${url}/ui/?code=planted&state=forged`);
+  await page.waitForSelector('.signin .error');
+  assert.match(await page.textContent('.signin .error'), /did not match/);
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('evalsi.token')), null);
+
+  // The pasted-token path stays available.
+  await page.locator('.signin summary').click();
+  assert.equal(await page.locator('input[aria-label="API key or token"]').isVisible(), true);
+  const unexpected = problems.filter(problem => !/40[13]|Unauthorized|Forbidden/i.test(problem));
   assert.deepEqual(unexpected, []);
   await page.close();
 });

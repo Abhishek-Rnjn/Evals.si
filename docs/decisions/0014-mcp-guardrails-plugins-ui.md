@@ -44,3 +44,8 @@ Each of these brings code or traffic we do not control into the server.
 - **What Wasm evaluators cannot do:** use a judge or the sandbox. Those stay Python plugins, or images.
 - **Signing in to the UI:** the UI has no browser OIDC login of its own. A viewer pastes an API key or the token from `evalsi auth token`. A login flow is follow-up work.
 - **Annotation:** a browser front end for annotators is follow-up work.
+
+## Update (2026-10-12): the UI can sign in and annotate
+
+- **Annotating** is built, in the browser, on the same `NextItem` and `SubmitAnnotation` calls the CLI uses. It is the only write the UI makes: the permission check, leases and audit log are the API's, so the UI adds no access of its own. Point 6's "Out of scope" now excludes only creating runs and applying policies or guardrails.
+- **Browser sign-in** is built as the authorization code flow with PKCE, run by the page. evalsid makes the two requests the page cannot (provider metadata and the token exchange), because the CSP's `connect-src 'self'` stays as it is and providers rarely allow cross-origin token requests. The endpoints (`GET /ui/login/config`, `POST /ui/login/token`) are public, fixed to the one provider and client in `auth.cli_login`, take only an authorization code with its verifier and a `/ui/` redirect URI, hold no secret, drop the refresh token, and refuse a provider that is not `https` (or loopback) or whose metadata names another issuer. The credential is the ID token, as `evalsi login` sends it. A tab does not refresh: it signs in again. The UI's own client is `auth.cli_login.ui_client_id`.

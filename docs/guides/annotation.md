@@ -60,6 +60,8 @@ share the work, and nobody answers the same item twice. In the prompt,
 `s` skips an item (a skip does not count as an answer) and `q` stops.
 Answering an item again replaces your earlier answer.
 
+The [web UI](web-ui.md#annotating) offers the same flow in the browser: open the queue and choose **Annotate**.
+
 The same flow is available over the API (`NextItem`, then
 `SubmitAnnotation`), so labelling tools can be built on it. It is also
 available over REST: `POST /v1alpha1/queues/{queue}:next` and
