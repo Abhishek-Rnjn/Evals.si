@@ -361,6 +361,30 @@ jobs:
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
           cd tests/trainers && EVALSID="$RUNNER_TEMP/evalsid" "$RUNNER_TEMP/trainers/bin/python" -m pytest -q
 
+  rlframeworks:
+    # Evals.si rewards inside verl and OpenRLHF themselves: verl's reward
+    # managers load the reward through custom_reward_function, and OpenRLHF's
+    # rollout executor calls it as a --remote_rm_url file and over HTTP. No
+    # training (that needs GPUs); everything from a finished rollout to the
+    # reward tensor is the frameworks' own code.
+    # Heavy: runs on main and on demand (workflow_dispatch), not on every pull
+    # request push, to save runner minutes.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Framework environment
+        run: |
+          uv venv -p 3.12 "$RUNNER_TEMP/rl"
+          export VIRTUAL_ENV="$RUNNER_TEMP/rl"
+          uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install -r tests/rlframeworks/requirements.txt -e python/evalsi
+          uv pip install --no-deps openrlhf==0.11.2
+      - name: verl and OpenRLHF with Evals.si rewards
+        run: cd tests/rlframeworks && "$RUNNER_TEMP/rl/bin/python" -m pytest -q
+
   envspecs:
     # The task environments as OpenEnv and verifiers environments, against the
     # real packages at the versions the adapters were written for (each has
@@ -382,6 +406,35 @@ jobs:
           grep -E '^(verifiers|pytest)==' tests/envspecs/requirements.txt \
             | VIRTUAL_ENV="$RUNNER_TEMP/verifiers" uv pip install -r - -e python/evalsi -e python/evalsi-harness
           cd tests/envspecs && "$RUNNER_TEMP/verifiers/bin/python" -m pytest -q test_verifiers.py
+
+  mcp-agent:
+    # Phase 6's exit test with a real coding agent: Claude Code, headless,
+    # drives `evalsi mcp` to run a spec, and the job checks the tool call, the
+    # results file and the reported score (tests/mcp-agent/run.sh). It calls a
+    # model, so it runs on main and on demand, and only when the repository has
+    # an ANTHROPIC_API_KEY secret; without one it says so and passes.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - if: env.ANTHROPIC_API_KEY == ''
+        run: 'echo "::notice::mcp-agent skipped, the repository has no ANTHROPIC_API_KEY secret"'
+      - if: env.ANTHROPIC_API_KEY != ''
+        uses: actions/checkout@v7
+      - if: env.ANTHROPIC_API_KEY != ''
+        uses: astral-sh/setup-uv@v7
+      - if: env.ANTHROPIC_API_KEY != ''
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - if: env.ANTHROPIC_API_KEY != ''
+        run: npm install -g @anthropic-ai/claude-code@2.1.296
+      - if: env.ANTHROPIC_API_KEY != ''
+        run: cd python && uv sync --all-packages
+      - if: env.ANTHROPIC_API_KEY != ''
+        run: tests/mcp-agent/run.sh
 
   collector-image:
     # The release builds this image; build it here so a Dockerfile or

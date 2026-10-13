@@ -699,6 +699,31 @@ func TestOversizedRequests(t *testing.T) {
 	}
 }
 
+// Importing a run evaluated elsewhere is creating one: runners in their
+// project only, and the run records who imported it.
+func TestImportRunPermissions(t *testing.T) {
+	s := startAuthServer(t, nil)
+	ctx := context.Background()
+	runsAs := func(who string) evalsiv1alpha1connect.RunServiceClient {
+		return evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys[who]))
+	}
+	imported := func(project string) *evalsiv1alpha1.ImportRunRequest {
+		return &evalsiv1alpha1.ImportRunRequest{
+			Project: project, Name: "local", Spec: &evalsiv1alpha1.RunSpec{Evaluators: []*evalsiv1alpha1.EvaluatorRef{{Ref: "exact-match"}}},
+			Records: []*evalsiv1alpha1.Record{{Id: "a"}},
+			Results: []*evalsiv1alpha1.EvaluationResult{{RecordId: "a", Evaluator: "exact-match", Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}},
+		}
+	}
+	if got, err := runsAs("runner").ImportRun(ctx, connect.NewRequest(imported("support"))); err != nil || got.Msg.GetRun().GetCreatedBy() != "key:runner" || !got.Msg.GetRun().GetImported() {
+		t.Errorf("runner importing a run: %v, %v", got, err)
+	}
+	for who, project := range map[string]string{"viewer": "support", "runner": "checkout", "ingest": "support"} {
+		if _, err := runsAs(who).ImportRun(ctx, connect.NewRequest(imported(project))); codeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("%s importing a run into %s: err = %v", who, project, err)
+		}
+	}
+}
+
 func TestPermissionMatrix(t *testing.T) {
 	s := startAuthServer(t, nil)
 	ctx := context.Background()
@@ -723,6 +748,7 @@ func TestPermissionMatrix(t *testing.T) {
 	if _, err := runsAs("runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "nope", Spec: runSpec("qwen3")})); codeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("unknown project: %v", err)
 	}
+
 	// Reads: the project's viewers yes, other projects' no (and a forbidden run looks missing).
 	if _, err := runsAs("viewer").GetRun(ctx, connect.NewRequest(&evalsiv1alpha1.GetRunRequest{Id: run.GetId()})); err != nil {
 		t.Errorf("viewer GetRun: %v", err)

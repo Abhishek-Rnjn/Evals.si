@@ -519,6 +519,7 @@ class Run(_message.Message):
     LABELS_FIELD_NUMBER: _builtins.int
     CREATED_BY_FIELD_NUMBER: _builtins.int
     ARCHIVED_AT_FIELD_NUMBER: _builtins.int
+    IMPORTED_FIELD_NUMBER: _builtins.int
     id: _builtins.str
     name: _builtins.str
     project: _builtins.str
@@ -529,6 +530,10 @@ class Run(_message.Message):
     records: _builtins.int
     created_by: _builtins.str
     """The principal that created the run, for example "user:corp/1234" or "key:ci"."""
+    imported: _builtins.bool
+    """The run was evaluated elsewhere and stored with ImportRun: its results
+    are as it was sent them, and it cannot be resumed.
+    """
     @_builtins.property
     def spec(self) -> Global___RunSpec: ...
     @_builtins.property
@@ -581,10 +586,11 @@ class Run(_message.Message):
         labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         created_by: _builtins.str = ...,
         archived_at: _timestamp_pb2.Timestamp | None = ...,
+        imported: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["archived_at", b"archived_at", "created_at", b"created_at", "finished_at", b"finished_at", "judge_usage", b"judge_usage", "progress", b"progress", "spec", b"spec", "started_at", b"started_at", "target_usage", b"target_usage"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["archived_at", b"archived_at", "created_at", b"created_at", "created_by", b"created_by", "dataset_sha256", b"dataset_sha256", "error", b"error", "finished_at", b"finished_at", "gates", b"gates", "id", b"id", "judge_usage", b"judge_usage", "labels", b"labels", "name", b"name", "progress", b"progress", "project", b"project", "records", b"records", "spec", b"spec", "started_at", b"started_at", "status", b"status", "summaries", b"summaries", "target_usage", b"target_usage"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["archived_at", b"archived_at", "created_at", b"created_at", "created_by", b"created_by", "dataset_sha256", b"dataset_sha256", "error", b"error", "finished_at", b"finished_at", "gates", b"gates", "id", b"id", "imported", b"imported", "judge_usage", b"judge_usage", "labels", b"labels", "name", b"name", "progress", b"progress", "project", b"project", "records", b"records", "spec", b"spec", "started_at", b"started_at", "status", b"status", "summaries", b"summaries", "target_usage", b"target_usage"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Run: _TypeAlias = Run  # noqa: Y015

@@ -16,7 +16,7 @@ import (
 
 // perRecord maps metric -> record id -> mean value over trials.
 func (m *Manager) perRecord(ctx context.Context, run *evalsiv1alpha1.Run) (map[string]map[string]float64, []string, error) {
-	insts, err := m.engine.Bind(run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
+	insts, err := m.scoredBy(run)
 	if err != nil {
 		return nil, nil, err
 	}

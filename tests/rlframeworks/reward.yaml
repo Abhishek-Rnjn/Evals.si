@@ -1,0 +1,8 @@
+# The reward the verl and OpenRLHF tests train on: 1 when the completion is
+# the reference answer, 0 otherwise.
+apiVersion: evals.si/v1alpha1
+kind: RewardSpec
+metadata: {name: exact-answer}
+spec:
+  components:
+    - {ref: builtin/exact-match, name: correct, weight: 1.0}

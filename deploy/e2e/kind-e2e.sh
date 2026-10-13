@@ -364,6 +364,33 @@ kill "$pf" 2>/dev/null || true
 head -c 2000 "$work/m2-scores.json"; echo
 grep -q '"studio-default"' "$work/m2-scores.json" || { echo "the default policy scored no execution of the deployed release" >&2; exit 1; }
 
+step "M3: a 30-day backfill from MLflow, then the pull lag of live traces"
+# scripts/measure-trace-source.py seeds the demo MLflow with traces spread over
+# 30 days, applies a source for them, times the backfill, then sends live
+# traces and times each one until it is scored. M3's target is p95 under 2
+# minutes; the numbers are in the log.
+kubectl apply -n "$ns" -f "$here/m3-policy.yaml"
+kubectl wait onlineevalpolicy/m3-policy -n "$ns" --for=condition=Synced --timeout=2m
+kubectl get secret evalsi-server-tls -n "$ns" -o jsonpath='{.data.ca\.crt}' | base64 -d > "$work/ca.crt"
+kubectl port-forward -n "$ns" svc/evalsi-demo-mlflow 15000:5000 >/dev/null 2>&1 &
+pf_mlflow=$!
+kubectl port-forward -n "$ns" svc/evalsi 18083:8080 >/dev/null 2>&1 &
+pf=$!
+sleep 3
+measure() {
+  (cd "$root/python" && uv run --no-sync python ../scripts/measure-trace-source.py "$@" \
+    --mlflow http://127.0.0.1:15000 --host-header localhost:5000 --experiment m3-backfill)
+}
+measure seed --count 300 --days 30
+(
+  export SSL_CERT_FILE="$work/ca.crt"
+  EVALSI_TOKEN="$(kubectl create token evalsi-operator -n "$ns" --audience evals.si)"
+  export EVALSI_TOKEN
+  measure measure --server https://localhost:18083 --source-file "$here/m3-source.yaml" \
+    --expect 300 --live 20 --every 2 --timeout 600 --max-p95-seconds 120
+) | tee "$work/m3.json"
+kill "$pf" "$pf_mlflow" 2>/dev/null || true
+
 step "deleting an EvalRun"
 kubectl delete evalrun parity -n "$ns" --wait --timeout=1m
 

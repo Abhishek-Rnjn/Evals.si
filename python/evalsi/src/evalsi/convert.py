@@ -345,6 +345,38 @@ _KINDS_BACK = {
 }
 
 
+_KINDS = {v: k for k, v in _KINDS_BACK.items()}
+
+
+def summary_to_proto(summary: MetricSummary) -> score_pb2.MetricSummary:
+    """A metric summary as the server stores it (ImportRun)."""
+    msg = score_pb2.MetricSummary(
+        metric=summary.metric,
+        evaluator=summary.evaluator,
+        kind=_KINDS.get(summary.kind, score_pb2.METRIC_KIND_NUMBER),
+        n=summary.n,
+        skipped=summary.skipped,
+        errors=summary.errors,
+        labels=dict(summary.labels),
+    )
+    if summary.mean is not None:
+        msg.mean = summary.mean
+    if summary.std is not None:
+        msg.std = summary.std
+    if summary.ci is not None:
+        msg.ci.CopyFrom(
+            score_pb2.ConfidenceInterval(
+                low=summary.ci.low,
+                high=summary.ci.high,
+                level=summary.ci.level,
+                method=summary.ci.method,
+            )
+        )
+    if summary.clusters is not None:
+        msg.clusters = summary.clusters
+    return msg
+
+
 def summary_from_proto(msg: score_pb2.MetricSummary) -> MetricSummary:
     """A server-computed metric summary, as the in-process runner would report it."""
     return MetricSummary(

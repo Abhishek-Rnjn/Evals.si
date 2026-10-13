@@ -176,3 +176,15 @@ def test_duration_is_fixed_point(given: str, want: str) -> None:
     from evalsi.runspec import _duration
 
     assert _duration(given) == want
+
+
+@pytest.mark.parametrize(
+    "name", ["harness-default", "harness-safety", "harness-quality", "harness-cost"]
+)
+def test_agent_harness_policy_templates_load(name: str) -> None:
+    root = Path(__file__).resolve().parents[3]
+    policy = load_policy(str(root / "examples" / "watch" / f"{name}.yaml"))
+    assert policy["name"] == name
+    assert policy["project"] == "studio"
+    # Every template scores production executions that name their workflow.
+    assert policy["selector"] == '"workflow" in labels && labels["stage"] == "production"'

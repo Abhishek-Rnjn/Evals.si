@@ -180,4 +180,7 @@ message Run {
   // Set when the run was archived: its records, outputs and results are gone
   // and what is left is this summary (spec, status, summaries, gates, usage).
   google.protobuf.Timestamp archived_at = 19;
+  // The run was evaluated elsewhere and stored with ImportRun: its results
+  // are as it was sent them, and it cannot be resumed.
+  bool imported = 20;
 }

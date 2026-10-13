@@ -250,6 +250,23 @@ file cannot be deleted by top-k retention. Both hooks use `CheckpointRunner`;
 state dictionaries: `.pt`/`.ckpt` files are not automatically vLLM models.
 Real CPU save/evaluate tests run in separate PyTorch and Lightning environments.
 
+## Logging a local loop to the server
+
+An evaluation run in your own process (`evalsi.evaluate()`, an embedded `evalsi run`, a checkpoint hook) can be stored on the server as a finished run, so it shows beside the cluster's runs in the web UI, `evalsi report` and `CompareRuns`:
+
+```python
+import evalsi
+from evalsi.client import Client
+
+result = evalsi.evaluate(records, ["exact-match", my_function_evaluator])
+with Client("https://evalsi.example.com") as client:
+    run = client.log_run(result, name=f"step-{step}", labels={"loop": "sft"},
+                         gates=[{"metric": "exact-match", "min": 0.8}])
+print(run["status"])   # RUN_STATUS_FAILED when a gate failed
+```
+
+Nothing is evaluated again: the server (`RunService.ImportRun`, `POST /v1alpha1/runs:import`) stores the records, results and summaries it is sent, checks the gates against those summaries, and sends `run.finished` and `run.gate_failed` webhooks as for its own runs. The evaluators may be ones the server does not have, such as a function in your script. An imported run has `imported: true` and cannot be resumed. Importing needs `runs.create` in the project, as creating a run does. At most 100000 records and a million results go in one import; a run's outputs keep one record per id, with every trial's results.
+
 ## Fine-tuning and RL evaluations
 
 | Concern | How |
@@ -269,5 +286,9 @@ Real CPU save/evaluate tests run in separate PyTorch and Lightning environments.
   - Code rewards are scored in the real sandbox.
   - The callback evaluates every checkpoint.
   - It checks the wiring, not learning: a randomly initialised model's outputs fail every test.
+- **The CI `rlframeworks` job** runs Evals.si rewards inside verl 0.9.1 and OpenRLHF 0.11.2 themselves, on CPU.
+  - verl loads `evalsi/rewards/verl.py` through `custom_reward_function`, and its `NaiveRewardManager` and `BatchRewardManager` score a rollout batch with it.
+  - OpenRLHF's single-turn rollout executor calls the reward both as a `--remote_rm_url` file and over HTTP from `evalsi rewards serve`.
+  - No training runs: that needs GPUs and an inference engine. The generation engine is a stand-in, and OpenRLHF is installed without its GPU dependencies (flash-attn, deepspeed).
 - **The e2e suite** scores the same code rollouts in-process and through the Reward Service, on the real sandbox, and checks that they agree.
 - **The load test** measures the Reward Service on a GRPO step's worth of rollouts.

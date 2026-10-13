@@ -9,6 +9,7 @@ from evalsi.v1alpha1 import run_pb2 as _run_pb2
 from evalsi.v1alpha1 import score_pb2 as _score_pb2
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
 import builtins as _builtins
 import sys
@@ -759,3 +760,112 @@ class CreateShadowReplayResponse(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CreateShadowReplayResponse: _TypeAlias = CreateShadowReplayResponse  # noqa: Y015
+
+@_typing.final
+class ImportRunRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class LabelsEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    NAME_FIELD_NUMBER: _builtins.int
+    PROJECT_FIELD_NUMBER: _builtins.int
+    LABELS_FIELD_NUMBER: _builtins.int
+    SPEC_FIELD_NUMBER: _builtins.int
+    RECORDS_FIELD_NUMBER: _builtins.int
+    RESULTS_FIELD_NUMBER: _builtins.int
+    SUMMARIES_FIELD_NUMBER: _builtins.int
+    STARTED_AT_FIELD_NUMBER: _builtins.int
+    FINISHED_AT_FIELD_NUMBER: _builtins.int
+    TARGET_USAGE_FIELD_NUMBER: _builtins.int
+    JUDGE_USAGE_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    project: _builtins.str
+    @_builtins.property
+    def labels(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Labels for access rules. Callers can only set labels their roles allow."""
+
+    @_builtins.property
+    def spec(self) -> _run_pb2.RunSpec:
+        """What was evaluated: its evaluators, gates, trials and summary options.
+        The dataset source and target may be left out.
+        """
+
+    @_builtins.property
+    def records(self) -> _containers.RepeatedCompositeFieldContainer[_record_pb2.Record]:
+        """The records evaluated, each with a distinct id."""
+
+    @_builtins.property
+    def results(self) -> _containers.RepeatedCompositeFieldContainer[_score_pb2.EvaluationResult]:
+        """Every result, each naming a record above by id."""
+
+    @_builtins.property
+    def summaries(self) -> _containers.RepeatedCompositeFieldContainer[_score_pb2.MetricSummary]:
+        """The metric summaries computed where the evaluation ran."""
+
+    @_builtins.property
+    def started_at(self) -> _timestamp_pb2.Timestamp:
+        """When the evaluation ran; both default to now."""
+
+    @_builtins.property
+    def finished_at(self) -> _timestamp_pb2.Timestamp: ...
+    @_builtins.property
+    def target_usage(self) -> _record_pb2.Usage:
+        """What the evaluated system and the judges used."""
+
+    @_builtins.property
+    def judge_usage(self) -> _record_pb2.Usage: ...
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        project: _builtins.str = ...,
+        labels: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        spec: _run_pb2.RunSpec | None = ...,
+        records: _abc.Iterable[_record_pb2.Record] | None = ...,
+        results: _abc.Iterable[_score_pb2.EvaluationResult] | None = ...,
+        summaries: _abc.Iterable[_score_pb2.MetricSummary] | None = ...,
+        started_at: _timestamp_pb2.Timestamp | None = ...,
+        finished_at: _timestamp_pb2.Timestamp | None = ...,
+        target_usage: _record_pb2.Usage | None = ...,
+        judge_usage: _record_pb2.Usage | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["finished_at", b"finished_at", "judge_usage", b"judge_usage", "spec", b"spec", "started_at", b"started_at", "target_usage", b"target_usage"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["finished_at", b"finished_at", "judge_usage", b"judge_usage", "labels", b"labels", "name", b"name", "project", b"project", "records", b"records", "results", b"results", "spec", b"spec", "started_at", b"started_at", "summaries", b"summaries", "target_usage", b"target_usage"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ImportRunRequest: _TypeAlias = ImportRunRequest  # noqa: Y015
+
+@_typing.final
+class ImportRunResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RUN_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def run(self) -> _run_pb2.Run: ...
+    def __init__(
+        self,
+        *,
+        run: _run_pb2.Run | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["run", b"run"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["run", b"run"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ImportRunResponse: _TypeAlias = ImportRunResponse  # noqa: Y015

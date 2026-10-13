@@ -137,6 +137,12 @@ func (g *gate) accessRules() map[string]accessRule {
 			m := msg.(*evalsiv1alpha1.CreateRunRequest)
 			return g.newRunTargets(ctx, m.GetProject(), m.GetSpec(), m.GetLabels(), "run/new")
 		}},
+		// An imported run is a new run as a created one is, judged by the spec
+		// and labels it is stored with.
+		evalsiv1alpha1connect.RunServiceImportRunProcedure: {action: "runs.create", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			m := msg.(*evalsiv1alpha1.ImportRunRequest)
+			return g.newRunTargets(ctx, m.GetProject(), m.GetSpec(), m.GetLabels(), "run/import")
+		}},
 		evalsiv1alpha1connect.RunServiceCreateShadowReplayProcedure: {action: "runs.create", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.CreateShadowReplayRequest)
 			return g.newRunTargets(ctx, m.GetProject(), m.GetCandidate(), m.GetLabels(), "shadow/new")

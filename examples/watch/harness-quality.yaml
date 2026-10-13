@@ -1,0 +1,37 @@
+# Agent harness templates (3 of 4): task quality, judged. A sample of each
+# workflow's executions (and every one that errored) is graded by your judge,
+# only after cheap checks pass, so a looping agent is not billed for. Needs a
+# judge: set default_judge in the server's config, or name one under spec
+# (judge: <name>). There is no default judge, and the server refuses this
+# policy until it has one.
+#
+#   evalsi policy apply -f examples/watch/harness-quality.yaml --server $URL
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: harness-quality
+  labels: {evals.si/project: studio}
+spec:
+  selector: '"workflow" in labels && labels["stage"] == "production"'
+  # judge: claude                     # one of the server's judges
+  sampling:
+    rate: 0.1
+    always: ["error"]
+  stages:
+    - evaluators:
+        - {ref: builtin/loop-detection}
+    - when: 'scores["loop-detection"] == 1.0'
+      evaluators:
+        - {ref: builtin/goal-completion}   # did the trajectory reach the user's goal
+        - ref: builtin/llm-judge
+          name: answer-quality
+          params:
+            rubric: >-
+              The final answer does what the user asked, is correct, and says
+              so when it could not finish.
+  window: 1h
+  alerts:
+    - {metric: answer-quality, below: 0.7, min_samples: 20}
+  promote:
+    when: 'scores["answer-quality"] < 0.5'
+    dataset: harness-regressions

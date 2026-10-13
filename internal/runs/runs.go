@@ -1217,6 +1217,9 @@ func (m *Manager) ResumeRun(ctx context.Context, req *connect.Request[evalsiv1al
 	if err := errArchived(run); err != nil {
 		return nil, err
 	}
+	if run.GetImported() {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("run %s was imported: it was evaluated elsewhere, so there is nothing here to resume", run.GetId()))
+	}
 	m.mu.Lock()
 	_, running := m.active[run.GetId()]
 	m.mu.Unlock()

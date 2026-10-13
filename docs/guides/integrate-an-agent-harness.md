@@ -95,7 +95,9 @@ spec:
   window: 1h
 ```
 
-`kubectl apply` it, or `evalsi policy apply -f`. Evaluators that need a judge model say so and are skipped, not scored zero, when none is configured.
+`kubectl apply` it, or `evalsi policy apply -f`. A policy whose evaluators need a judge is refused until the server has one (`default_judge`, or `judge:` in the policy).
+
+Four templates for a harness's deployed workflows are in [`examples/watch`](../../examples/watch): `harness-default` (tool errors, loops, latency, tokens, on every production execution), `harness-safety` (PII and secrets, with alerts), `harness-quality` (a judged sample, after cheap checks) and `harness-cost` (cost and steps per execution). Each selects production traces that name their workflow.
 
 ### SDK logging without OTel
 
@@ -149,6 +151,15 @@ until phase=$(kubectl get evalrun small-repo-fixes -n studio -o jsonpath='{.stat
 [ "$phase" = Succeeded ]                             # Failed: a gate did not pass
 ```
 
+A pipeline that has the API but not `kubectl` uses `evalsi gate`, which runs a spec for one release and exits as `evalsi run` does (0 pass, 3 gate failed, 1 error):
+
+```bash
+evalsi gate -f support-bot-gate.yaml --server $URL --release v7 \
+  --target-url http://support-bot-v7.studio.svc:8080/invoke     # the candidate
+```
+
+A release is gated once: rerunning the same release (a pipeline retry) returns the same run, and the same release with a changed spec (`--set trials=5`, say) is refused, for the server's 24-hour idempotency window. The run carries the label `release`.
+
 A spec's `gates` turn metrics into a verdict (`task-success.pass^3 >= 0.8` means three trials in a row must pass in at least 80% of tasks). A failed gate makes `evalsi run` exit 3 and the `EvalRun` phase `Failed`, which blocks a pipeline step with no extra code. From a service, use the API or a webhook instead of a pipeline ([webhooks](webhooks.md)): `run.gate_failed` is sent when a run ends with a failed gate, signed with HMAC, so the agent harness can mark the deployment blocked.
 
 The demo plays this whole step for one workflow: [`deploy/deploy.sh`](../../examples/demo/deploy/deploy.sh) stages a release as a candidate Service, runs [its gate](../../examples/demo/research-assistant-gate.yaml) against it, and moves production to the release only when the run Succeeds; a regressed release exits 3 and production stays where it was ([walkthrough](../../examples/demo/README.md#every-deployed-workflow-scored-and-a-gate-on-every-deploy-m2)). The kind e2e job runs it.
@@ -186,6 +197,7 @@ Runs execute the agent in a sandbox per trial (the pod rung on Kubernetes), with
   Pass `next_page_token` back as `page_token` for the next page; a page can be shorter than `page_size` while a token is set. A caller sees only the traces its `traces.read` grant covers, including service- and label-scoped grants, so an agent harness key can be limited to its own workflows. Link each entry to `/ui/` for the trajectory.
 
   To be told instead of asking, subscribe a webhook to `trace.scored`: one signed delivery per scored execution and policy, with the same summary and results ([webhooks](webhooks.md)). `alert.fired` tells the agent harness when a workflow's quality drops below a policy's alert threshold.
+- **Raw traces, for debugging and regression sets.** `evalsi traces list` shows what was ingested, `evalsi traces get <trace id>` one trace's record (the trajectory the evaluators saw) and its scores, and `evalsi traces export --labels workflow=support-bot -o traces.jsonl` writes them as dataset records: a regression set for the next gate, a fixture for a mapping profile, or what to look at when an execution was skipped instead of scored.
 - **The API and CLI.** `evalsi report <run id> --server $URL -o report.html`, or the `RunService` API (`ListRunResults`) for a gate run's results. Live-traffic scores for a policy as a window: `evalsi policy stats studio-agents`.
 
 ## 5. Pipeline writes, datasets and retention

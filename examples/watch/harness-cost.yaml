@@ -1,0 +1,21 @@
+# Agent harness templates (4 of 4): cost and steps per execution. What each
+# execution spent, from the cost its trace reports (usage.cost_usd; an
+# execution whose trace has none is skipped for cost, not scored zero), and
+# whether it stayed within a step budget, with an alert when the hourly mean
+# cost climbs.
+#
+#   evalsi policy apply -f examples/watch/harness-cost.yaml --server $URL
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: harness-cost
+  labels: {evals.si/project: studio}
+spec:
+  selector: '"workflow" in labels && labels["stage"] == "production"'
+  stages:
+    - evaluators:
+        - {ref: builtin/cost}
+        - {ref: builtin/step-budget, params: {max_steps: 30}}
+  window: 1h
+  alerts:
+    - {metric: cost, above: 0.25, min_samples: 20}   # USD per execution

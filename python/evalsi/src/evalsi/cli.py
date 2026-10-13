@@ -51,6 +51,7 @@ def _parser() -> argparse.ArgumentParser:
 
     _add_eval(sub)
     _add_run(sub)
+    _add_gate(sub)
     _add_policy(sub)
     from evalsi.cli_analytics import add_analytics_commands
     from evalsi.cli_annotate import add_annotate_commands
@@ -62,6 +63,7 @@ def _parser() -> argparse.ArgumentParser:
     from evalsi.cli_plugins import add_plugin_commands
     from evalsi.cli_rewards import add_report_command, add_rewards_commands
     from evalsi.cli_sources import add_source_commands
+    from evalsi.cli_traces import add_trace_commands
     from evalsi.cli_training import add_training_commands
 
     add_auth_commands(sub)
@@ -74,6 +76,7 @@ def _parser() -> argparse.ArgumentParser:
     add_annotate_commands(sub)
     add_guardrail_commands(sub)
     add_source_commands(sub)
+    add_trace_commands(sub)
     add_plugin_commands(sub)
     add_credentials_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
@@ -200,6 +203,40 @@ def _add_run(sub: Any) -> None:
         command.add_argument("--server", required=True)
         add_credential_args(command)
         command.set_defaults(func=_cmd_dataset)
+
+
+def _add_gate(sub: Any) -> None:
+    gate = sub.add_parser(
+        "gate",
+        help="a deploy gate: run a spec on a server for one release, exit 0 pass, 3 fail",
+        description=(
+            "Run a spec on a server as the gate for one release of what it evaluates, "
+            "wait for it, and exit 0 when its gates pass, 3 when one fails and 1 on an "
+            "error. A release is gated once: running the same release again (a pipeline "
+            "retry) returns the same run, and the same release with a changed spec is "
+            "refused, for 24 hours (the server's idempotency window)."
+        ),
+    )
+    gate.add_argument("-f", "--file", required=True, help="the run spec")
+    gate.add_argument("--server", required=True, help="evalsid URL")
+    gate.add_argument(
+        "--release", required=True, help="the release being gated, e.g. v7 or a commit"
+    )
+    gate.add_argument(
+        "--target-url",
+        help="the candidate's URL: replaces target.agent.http.url or target.http.url",
+    )
+    gate.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="PATH=VALUE",
+        help="set a spec field by dotted path (VALUE is YAML), e.g. trials=5; repeatable",
+    )
+    gate.add_argument("--format", choices=["table", "json"], default="table")
+    gate.add_argument("--quiet", action="store_true", help="no progress output")
+    add_credential_args(gate)
+    gate.set_defaults(func=_cmd_gate, no_wait=False)
 
 
 def _cmd_delete_run(args: argparse.Namespace) -> int:
@@ -625,7 +662,78 @@ def summary_from_json(s: dict[str, Any]) -> Any:
     )
 
 
-def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
+def _set_path(doc: dict[str, Any], path: str, value: Any) -> None:
+    node = doc
+    *parents, last = path.split(".")
+    for key in parents:
+        child = node.get(key)
+        if not isinstance(child, dict):
+            child = node[key] = {}
+        node = child
+    node[last] = value
+
+
+def gated_spec(
+    spec: dict[str, Any], *, target_url: str | None, sets: Sequence[str]
+) -> dict[str, Any]:
+    """The spec with the gate's overrides applied (a copy)."""
+    import copy
+
+    import yaml
+
+    out = copy.deepcopy(spec)
+    if target_url:
+        target = out.get("target") or {}
+        http = (target.get("agent") or {}).get("http") or target.get("http")
+        if not isinstance(http, dict):
+            raise ValueError("--target-url needs an HTTP target (target.agent.http or target.http)")
+        http["url"] = target_url
+    for item in sets:
+        path, sep, raw = item.partition("=")
+        if not sep or not path:
+            raise ValueError(f"--set takes PATH=VALUE, not {item!r}")
+        _set_path(out, path, yaml.safe_load(raw))
+    return out
+
+
+def gate_key(project: str, name: str, release: str) -> str:
+    """The idempotency key a release's gate run is created with."""
+    import hashlib
+
+    raw = "\x00".join(["evalsi-gate", project, name, release]).encode()
+    return "gate-" + hashlib.sha256(raw).hexdigest()[:48]
+
+
+def _cmd_gate(args: argparse.Namespace) -> int:
+    from dataclasses import replace
+
+    from google.protobuf import json_format
+
+    from evalsi.runspec import load_spec, spec_to_dict
+    from evalsi.v1alpha1 import run_pb2
+
+    run_file = load_spec(args.file)
+    spec = gated_spec(spec_to_dict(run_file.spec), target_url=args.target_url, sets=args.set)
+    try:
+        message = json_format.ParseDict(spec, run_pb2.RunSpec())
+    except json_format.ParseError as exc:
+        raise ValueError(f"{args.file}: the spec after --set is invalid: {exc}") from exc
+    run_file = replace(run_file, spec=message, labels={**run_file.labels, "release": args.release})
+    return _run_on_server(
+        args,
+        run_file,
+        idempotency_key=gate_key(run_file.project, run_file.name, args.release),
+        release=args.release,
+    )
+
+
+def _run_on_server(
+    args: argparse.Namespace,
+    run_file: Any,
+    *,
+    idempotency_key: str | None = None,
+    release: str = "",
+) -> int:
     from evalsi.client import ServerError
     from evalsi.results import EvalResult
     from evalsi.runspec import spec_to_dict
@@ -637,6 +745,7 @@ def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
                 name=run_file.name,
                 project=run_file.project,
                 labels=run_file.labels,
+                idempotency_key=idempotency_key,
             )
             if args.no_wait:
                 print(run["id"])
@@ -656,7 +765,14 @@ def _run_on_server(args: argparse.Namespace, run_file: Any) -> int:
             if show:
                 print(file=sys.stderr)
         except ServerError as exc:
-            print(f"error: {exc}", file=sys.stderr)
+            if release and exc.code == "already_exists":
+                print(
+                    f"error: release {release} was already gated with a different spec; "
+                    "gate it as a new release",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"error: {exc}", file=sys.stderr)
             return 1
     status = run.get("status", "")
     if args.format == "json":
