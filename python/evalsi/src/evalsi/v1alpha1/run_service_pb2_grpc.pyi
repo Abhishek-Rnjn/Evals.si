@@ -67,6 +67,14 @@ class RunServiceStub:
     dataset, an earlier run) against a candidate and scores the recorded
     outputs the same way, as two runs to compare with CompareRuns.
     """
+    ImportRun: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ImportRunRequest, _run_service_pb2.ImportRunResponse]
+    """Stores a run whose evaluation already happened elsewhere (in-process in
+    a training loop, a notebook or a script: evalsi.evaluate()), so it shows
+    beside the server's own runs and can be compared with them. Nothing is
+    evaluated on the server: it keeps the records, results and summaries it
+    is sent, checks the spec's gates against the summaries, and stores the
+    run as finished.
+    """
 
 @_typing.type_check_only
 class RunServiceAsyncStub(RunServiceStub):
@@ -106,6 +114,14 @@ class RunServiceAsyncStub(RunServiceStub):
     """Shadow replay: re-runs recorded inputs (production traces, a promoted
     dataset, an earlier run) against a candidate and scores the recorded
     outputs the same way, as two runs to compare with CompareRuns.
+    """
+    ImportRun: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ImportRunRequest, _run_service_pb2.ImportRunResponse]  # type: ignore[assignment]
+    """Stores a run whose evaluation already happened elsewhere (in-process in
+    a training loop, a notebook or a script: evalsi.evaluate()), so it shows
+    beside the server's own runs and can be compared with them. Nothing is
+    evaluated on the server: it keeps the records, results and summaries it
+    is sent, checks the spec's gates against the summaries, and stores the
+    run as finished.
     """
 
 class RunServiceServicer(metaclass=_abc_1.ABCMeta):
@@ -221,6 +237,20 @@ class RunServiceServicer(metaclass=_abc_1.ABCMeta):
         """Shadow replay: re-runs recorded inputs (production traces, a promoted
         dataset, an earlier run) against a candidate and scores the recorded
         outputs the same way, as two runs to compare with CompareRuns.
+        """
+
+    @_abc_1.abstractmethod
+    def ImportRun(
+        self,
+        request: _run_service_pb2.ImportRunRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.ImportRunResponse, _abc.Awaitable[_run_service_pb2.ImportRunResponse]]:
+        """Stores a run whose evaluation already happened elsewhere (in-process in
+        a training loop, a notebook or a script: evalsi.evaluate()), so it shows
+        beside the server's own runs and can be compared with them. Nothing is
+        evaluated on the server: it keeps the records, results and summaries it
+        is sent, checks the spec's gates against the summaries, and stores the
+        run as finished.
         """
 
 def add_RunServiceServicer_to_server(servicer: RunServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

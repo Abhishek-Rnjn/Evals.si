@@ -37,6 +37,68 @@ class ServerError(RuntimeError):
         self.message = message
 
 
+def import_run_body(
+    result: EvalResult,
+    *,
+    name: str,
+    project: str = "",
+    labels: Mapping[str, str] | None = None,
+    gates: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """The ``ImportRun`` request for a result evaluated in this process."""
+    from google.protobuf import json_format
+
+    from evalsi.convert import record_to_proto, result_to_proto, summary_to_proto
+    from evalsi.v1alpha1 import run_pb2
+
+    manifest = result.manifest
+    embedded = manifest.get("spec") or {}
+    evaluators = [
+        {"ref": e.get("ref", ""), "name": e.get("name", ""), "params": e.get("params") or {}}
+        for e in manifest.get("evaluators") or []
+    ]
+    spec: dict[str, Any] = {
+        # Params are recorded as text where JSON cannot hold them (a callable).
+        "evaluators": json.loads(json.dumps(evaluators, default=str)),
+        "gates": list(gates) if gates is not None else embedded.get("gates", []),
+    }
+    trials = int(manifest.get("trials") or embedded.get("trials") or 1)
+    if trials > 1:
+        spec["trials"] = trials
+    summary = manifest.get("summary") or {}
+    options = {
+        "confidenceLevel": summary.get("confidence_level"),
+        "clusterBy": summary.get("cluster_by"),
+    }
+    if summary.get("ci_method") == "bootstrap":
+        options["ciMethod"] = "CI_METHOD_BOOTSTRAP"
+    options = {k: v for k, v in options.items() if v not in (None, "")}
+    if options:
+        spec["summary"] = options
+    try:
+        checked = json_format.ParseDict(spec, run_pb2.RunSpec())
+    except json_format.ParseError as exc:
+        raise ValueError(f"the run cannot be stored: {exc}") from exc
+    # A run's outputs repeat a record id once per trial; the server keeps one
+    # record per id, and every trial's results.
+    records: dict[str, Any] = {}
+    for record in result.records:
+        records.setdefault(record.id, record)
+    body: dict[str, Any] = {
+        "name": name,
+        "project": project,
+        "labels": dict(labels or {}),
+        "spec": json_format.MessageToDict(checked),
+        "records": [json_format.MessageToDict(record_to_proto(r)) for r in records.values()],
+        "results": [json_format.MessageToDict(result_to_proto(r)) for r in result.results],
+        "summaries": [json_format.MessageToDict(summary_to_proto(s)) for s in result.summaries],
+    }
+    for key, field in (("started_at", "startedAt"), ("finished_at", "finishedAt")):
+        if manifest.get(key):
+            body[field] = manifest[key]
+    return body
+
+
 class Client:
     def __init__(
         self,
@@ -242,6 +304,29 @@ class Client:
         body = {"name": name, "project": project, "spec": spec, "labels": labels or {}}
         run: dict[str, Any] = self.call(
             "RunService", "CreateRun", body, idempotency_key=idempotency_key
+        )["run"]
+        return run
+
+    def log_run(
+        self,
+        result: EvalResult,
+        *,
+        name: str,
+        project: str = "",
+        labels: dict[str, str] | None = None,
+        gates: Sequence[Mapping[str, Any]] | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Store a result evaluated in this process (``evalsi.evaluate()``, an
+        embedded run, a training loop's checkpoint evaluation) as a finished
+        run on the server, beside its own runs: it lists, reports, compares
+        and fires webhooks like them. Nothing is evaluated again. ``gates``
+        (``{"metric": ..., "min": ...}``) are checked by the server against the
+        summaries; an embedded run's own gates are used when not given.
+        Returns the stored run, whose status is failed when a gate failed."""
+        body = import_run_body(result, name=name, project=project, labels=labels, gates=gates)
+        run: dict[str, Any] = self.call(
+            "RunService", "ImportRun", body, idempotency_key=idempotency_key
         )["run"]
         return run
 

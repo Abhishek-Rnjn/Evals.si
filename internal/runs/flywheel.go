@@ -198,7 +198,7 @@ func (m *Manager) MatchRecords(ctx context.Context, run *evalsiv1alpha1.Run, whe
 			return nil, err
 		}
 	}
-	insts, err := m.engine.Bind(run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
+	insts, err := m.scoredBy(run)
 	if err != nil {
 		return nil, err
 	}

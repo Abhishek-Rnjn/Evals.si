@@ -5,6 +5,7 @@ package evalsi.v1alpha1;
 import "evalsi/v1alpha1/record.proto";
 import "evalsi/v1alpha1/run.proto";
 import "evalsi/v1alpha1/score.proto";
+import "google/protobuf/timestamp.proto";
 
 // RunService manages offline runs: create, follow, cancel, resume, compare.
 // Runs are durable; every finished task is stored, so a resumed run skips it.
@@ -37,6 +38,13 @@ service RunService {
   // dataset, an earlier run) against a candidate and scores the recorded
   // outputs the same way, as two runs to compare with CompareRuns.
   rpc CreateShadowReplay(CreateShadowReplayRequest) returns (CreateShadowReplayResponse);
+  // Stores a run whose evaluation already happened elsewhere (in-process in
+  // a training loop, a notebook or a script: evalsi.evaluate()), so it shows
+  // beside the server's own runs and can be compared with them. Nothing is
+  // evaluated on the server: it keeps the records, results and summaries it
+  // is sent, checks the spec's gates against the summaries, and stores the
+  // run as finished.
+  rpc ImportRun(ImportRunRequest) returns (ImportRunResponse);
 }
 
 message CreateRunRequest {
@@ -227,4 +235,30 @@ message CreateShadowReplayRequest {
 message CreateShadowReplayResponse {
   Run baseline = 1;
   Run candidate = 2;
+}
+
+message ImportRunRequest {
+  string name = 1;
+  string project = 2;
+  // Labels for access rules. Callers can only set labels their roles allow.
+  map<string, string> labels = 3;
+  // What was evaluated: its evaluators, gates, trials and summary options.
+  // The dataset source and target may be left out.
+  RunSpec spec = 4;
+  // The records evaluated, each with a distinct id.
+  repeated Record records = 5;
+  // Every result, each naming a record above by id.
+  repeated EvaluationResult results = 6;
+  // The metric summaries computed where the evaluation ran.
+  repeated MetricSummary summaries = 7;
+  // When the evaluation ran; both default to now.
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp finished_at = 9;
+  // What the evaluated system and the judges used.
+  Usage target_usage = 10;
+  Usage judge_usage = 11;
+}
+
+message ImportRunResponse {
+  Run run = 1;
 }

@@ -993,7 +993,10 @@ type Run struct {
 	CreatedBy string `protobuf:"bytes,18,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	// Set when the run was archived: its records, outputs and results are gone
 	// and what is left is this summary (spec, status, summaries, gates, usage).
-	ArchivedAt    *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=archived_at,json=archivedAt,proto3" json:"archived_at,omitempty"`
+	ArchivedAt *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=archived_at,json=archivedAt,proto3" json:"archived_at,omitempty"`
+	// The run was evaluated elsewhere and stored with ImportRun: its results
+	// are as it was sent them, and it cannot be resumed.
+	Imported      bool `protobuf:"varint,20,opt,name=imported,proto3" json:"imported,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1161,6 +1164,13 @@ func (x *Run) GetArchivedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Run) GetImported() bool {
+	if x != nil {
+		return x.Imported
+	}
+	return false
+}
+
 var File_evalsi_v1alpha1_run_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
@@ -1237,7 +1247,7 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x10max_judge_tokens\x18\x02 \x01(\x03R\x0emaxJudgeTokens\"4\n" +
 	"\bProgress\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x12\n" +
-	"\x04done\x18\x02 \x01(\x03R\x04done\"\x9c\a\n" +
+	"\x04done\x18\x02 \x01(\x03R\x04done\"\xb8\a\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -1264,7 +1274,8 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x12 \x01(\tR\tcreatedBy\x12;\n" +
 	"\varchived_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"archivedAt\x1a9\n" +
+	"archivedAt\x12\x1a\n" +
+	"\bimported\x18\x14 \x01(\bR\bimported\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*f\n" +

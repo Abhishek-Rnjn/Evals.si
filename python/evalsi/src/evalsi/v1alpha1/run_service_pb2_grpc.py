@@ -101,6 +101,11 @@ class RunServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayResponse.FromString,
                 _registered_method=True)
+        self.ImportRun = channel.unary_unary(
+                '/evalsi.v1alpha1.RunService/ImportRun',
+                request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ImportRunRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ImportRunResponse.FromString,
+                _registered_method=True)
 
 
 class RunServiceServicer:
@@ -201,6 +206,18 @@ class RunServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ImportRun(self, request, context):
+        """Stores a run whose evaluation already happened elsewhere (in-process in
+        a training loop, a notebook or a script: evalsi.evaluate()), so it shows
+        beside the server's own runs and can be compared with them. Nothing is
+        evaluated on the server: it keeps the records, results and summaries it
+        is sent, checks the spec's gates against the summaries, and stores the
+        run as finished.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RunServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -268,6 +285,11 @@ def add_RunServiceServicer_to_server(servicer, server):
                     servicer.CreateShadowReplay,
                     request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayResponse.SerializeToString,
+            ),
+            'ImportRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.ImportRun,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ImportRunRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ImportRunResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -623,6 +645,33 @@ class RunService:
             '/evalsi.v1alpha1.RunService/CreateShadowReplay',
             evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_run__service__pb2.CreateShadowReplayResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ImportRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.RunService/ImportRun',
+            evalsi_dot_v1alpha1_dot_run__service__pb2.ImportRunRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_run__service__pb2.ImportRunResponse.FromString,
             options,
             channel_credentials,
             insecure,

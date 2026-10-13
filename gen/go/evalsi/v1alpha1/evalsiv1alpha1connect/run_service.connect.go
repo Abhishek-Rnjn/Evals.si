@@ -62,6 +62,8 @@ const (
 	// RunServiceCreateShadowReplayProcedure is the fully-qualified name of the RunService's
 	// CreateShadowReplay RPC.
 	RunServiceCreateShadowReplayProcedure = "/evalsi.v1alpha1.RunService/CreateShadowReplay"
+	// RunServiceImportRunProcedure is the fully-qualified name of the RunService's ImportRun RPC.
+	RunServiceImportRunProcedure = "/evalsi.v1alpha1.RunService/ImportRun"
 )
 
 // RunServiceClient is a client for the evalsi.v1alpha1.RunService service.
@@ -94,6 +96,13 @@ type RunServiceClient interface {
 	// dataset, an earlier run) against a candidate and scores the recorded
 	// outputs the same way, as two runs to compare with CompareRuns.
 	CreateShadowReplay(context.Context, *connect.Request[v1alpha1.CreateShadowReplayRequest]) (*connect.Response[v1alpha1.CreateShadowReplayResponse], error)
+	// Stores a run whose evaluation already happened elsewhere (in-process in
+	// a training loop, a notebook or a script: evalsi.evaluate()), so it shows
+	// beside the server's own runs and can be compared with them. Nothing is
+	// evaluated on the server: it keeps the records, results and summaries it
+	// is sent, checks the spec's gates against the summaries, and stores the
+	// run as finished.
+	ImportRun(context.Context, *connect.Request[v1alpha1.ImportRunRequest]) (*connect.Response[v1alpha1.ImportRunResponse], error)
 }
 
 // NewRunServiceClient constructs a client for the evalsi.v1alpha1.RunService service. By default,
@@ -185,6 +194,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("CreateShadowReplay")),
 			connect.WithClientOptions(opts...),
 		),
+		importRun: connect.NewClient[v1alpha1.ImportRunRequest, v1alpha1.ImportRunResponse](
+			httpClient,
+			baseURL+RunServiceImportRunProcedure,
+			connect.WithSchema(runServiceMethods.ByName("ImportRun")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -203,6 +218,7 @@ type runServiceClient struct {
 	sliceRuns          *connect.Client[v1alpha1.SliceRunsRequest, v1alpha1.SliceRunsResponse]
 	promoteResults     *connect.Client[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse]
 	createShadowReplay *connect.Client[v1alpha1.CreateShadowReplayRequest, v1alpha1.CreateShadowReplayResponse]
+	importRun          *connect.Client[v1alpha1.ImportRunRequest, v1alpha1.ImportRunResponse]
 }
 
 // CreateRun calls evalsi.v1alpha1.RunService.CreateRun.
@@ -270,6 +286,11 @@ func (c *runServiceClient) CreateShadowReplay(ctx context.Context, req *connect.
 	return c.createShadowReplay.CallUnary(ctx, req)
 }
 
+// ImportRun calls evalsi.v1alpha1.RunService.ImportRun.
+func (c *runServiceClient) ImportRun(ctx context.Context, req *connect.Request[v1alpha1.ImportRunRequest]) (*connect.Response[v1alpha1.ImportRunResponse], error) {
+	return c.importRun.CallUnary(ctx, req)
+}
+
 // RunServiceHandler is an implementation of the evalsi.v1alpha1.RunService service.
 type RunServiceHandler interface {
 	CreateRun(context.Context, *connect.Request[v1alpha1.CreateRunRequest]) (*connect.Response[v1alpha1.CreateRunResponse], error)
@@ -300,6 +321,13 @@ type RunServiceHandler interface {
 	// dataset, an earlier run) against a candidate and scores the recorded
 	// outputs the same way, as two runs to compare with CompareRuns.
 	CreateShadowReplay(context.Context, *connect.Request[v1alpha1.CreateShadowReplayRequest]) (*connect.Response[v1alpha1.CreateShadowReplayResponse], error)
+	// Stores a run whose evaluation already happened elsewhere (in-process in
+	// a training loop, a notebook or a script: evalsi.evaluate()), so it shows
+	// beside the server's own runs and can be compared with them. Nothing is
+	// evaluated on the server: it keeps the records, results and summaries it
+	// is sent, checks the spec's gates against the summaries, and stores the
+	// run as finished.
+	ImportRun(context.Context, *connect.Request[v1alpha1.ImportRunRequest]) (*connect.Response[v1alpha1.ImportRunResponse], error)
 }
 
 // NewRunServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -387,6 +415,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("CreateShadowReplay")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceImportRunHandler := connect.NewUnaryHandler(
+		RunServiceImportRunProcedure,
+		svc.ImportRun,
+		connect.WithSchema(runServiceMethods.ByName("ImportRun")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/evalsi.v1alpha1.RunService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RunServiceCreateRunProcedure:
@@ -415,6 +449,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServicePromoteResultsHandler.ServeHTTP(w, r)
 		case RunServiceCreateShadowReplayProcedure:
 			runServiceCreateShadowReplayHandler.ServeHTTP(w, r)
+		case RunServiceImportRunProcedure:
+			runServiceImportRunHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -474,4 +510,8 @@ func (UnimplementedRunServiceHandler) PromoteResults(context.Context, *connect.R
 
 func (UnimplementedRunServiceHandler) CreateShadowReplay(context.Context, *connect.Request[v1alpha1.CreateShadowReplayRequest]) (*connect.Response[v1alpha1.CreateShadowReplayResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.CreateShadowReplay is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) ImportRun(context.Context, *connect.Request[v1alpha1.ImportRunRequest]) (*connect.Response[v1alpha1.ImportRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.ImportRun is not implemented"))
 }

@@ -53,6 +53,7 @@ func TestRESTRoutes(t *testing.T) {
 		{"GET", "/v1alpha1/runs/run-1/results?evaluator=em", "", "RunService/ListRunResults", "runId", "run-1"},
 		{"POST", "/v1alpha1/runs:compare", `{"baseline_run_id": "a"}`, "RunService/CompareRuns", "baseline_run_id", "a"},
 		{"POST", "/v1alpha1/runs:slice", `{"metric": "em", "by": "topic"}`, "RunService/SliceRuns", "metric", "em"},
+		{"POST", "/v1alpha1/runs:import", `{"name": "local"}`, "RunService/ImportRun", "name", "local"},
 		{"POST", "/v1alpha1/policies", `{"name": "prod"}`, "MonitorService/ApplyPolicy", "", ""},
 		{"GET", "/v1alpha1/policies", "", "MonitorService/ListPolicies", "", ""},
 		{"DELETE", "/v1alpha1/policies/prod", "", "MonitorService/DeletePolicy", "name", "prod"},
