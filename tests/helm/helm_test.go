@@ -368,7 +368,7 @@ func TestSandboxdChart(t *testing.T) {
 // The chart ships the CRDs controller-gen writes (make operator-gen).
 func TestCRDsAreCurrent(t *testing.T) {
 	generated, _ := filepath.Glob("../../operator/config/crd/*.yaml")
-	if len(generated) != 5 {
+	if len(generated) != 6 {
 		t.Fatalf("%d CRDs", len(generated))
 	}
 	for _, g := range generated {

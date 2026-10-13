@@ -388,6 +388,97 @@ func init() {
 		&OnlineEvalPolicy{}, &OnlineEvalPolicyList{},
 		&TraceSource{}, &TraceSourceList{},
 		&Evaluator{}, &EvaluatorList{},
+		&CheckpointServer{}, &CheckpointServerList{},
 		&SandboxClass{}, &SandboxClassList{},
 	)
+}
+
+// CheckpointServer serves a model checkpoint (or a base model that takes
+// LoRA adapters) with vLLM: the operator runs a Deployment and a Service and
+// reports the OpenAI-compatible endpoint in the status. A checkpoint watcher
+// points a run's target at that endpoint (evalsi checkpoints ... --serve
+// operator creates and deletes one per checkpoint).
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=evckpt
+// +kubebuilder:printcolumn:name="Model",type=string,JSONPath=`.spec.model`
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.status.endpoint`
+// +kubebuilder:printcolumn:name="Ready",type=integer,JSONPath=`.status.readyReplicas`
+type CheckpointServer struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   CheckpointServerSpec   `json:"spec"`
+	Status CheckpointServerStatus `json:"status,omitempty"`
+}
+
+type CheckpointServerSpec struct {
+	// The vLLM image; its entrypoint must take `vllm serve` arguments (as
+	// vllm/vllm-openai does) unless command says otherwise.
+	// +kubebuilder:validation:MinLength=1
+	Image string `json:"image"`
+	// What to serve: a path inside the container (under the mounted
+	// checkpoint volume, for example /checkpoints/run-1/step-200) or a model
+	// id vLLM can fetch.
+	// +kubebuilder:validation:MinLength=1
+	Model string `json:"model"`
+	// The name clients use as the request's model; default the resource's name.
+	// +optional
+	ServedModelName string `json:"servedModelName,omitempty"`
+	// A PersistentVolumeClaim with the checkpoints, mounted read-only at
+	// /checkpoints.
+	// +optional
+	CheckpointClaim string `json:"checkpointClaim,omitempty"`
+	// Serve a base model that accepts LoRA adapters loaded at runtime
+	// (--enable-lora and VLLM_ALLOW_RUNTIME_LORA_UPDATING=True), which the
+	// checkpoint watcher's lora strategy loads each checkpoint into.
+	// +optional
+	LoRA bool `json:"lora,omitempty"`
+	// The server's port; default 8000.
+	// +optional
+	Port int32 `json:"port,omitempty"`
+	// Replicas; default 1.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+	// Replaces the image's entrypoint.
+	// +optional
+	Command []string `json:"command,omitempty"`
+	// More `vllm serve` arguments, after the ones the operator sets.
+	// +optional
+	Args []string `json:"args,omitempty"`
+	// A Secret with the key api-key: the server then requires it as a bearer
+	// token (VLLM_API_KEY), and clients get it from the same Secret.
+	// +optional
+	APIKeySecret string `json:"apiKeySecret,omitempty"`
+	// +optional
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+}
+
+type CheckpointServerStatus struct {
+	// The OpenAI-compatible base URL inside the cluster, for example
+	// http://evalsi-ckpt-step-200.team-a.svc:8000/v1.
+	Endpoint string `json:"endpoint,omitempty"`
+	// The model name to request.
+	ServedModelName    string `json:"servedModelName,omitempty"`
+	ReadyReplicas      int32  `json:"readyReplicas,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+type CheckpointServerList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []CheckpointServer `json:"items"`
 }

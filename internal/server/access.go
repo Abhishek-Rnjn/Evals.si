@@ -169,11 +169,17 @@ func (g *gate) accessRules() map[string]accessRule {
 			return g.runTargets(ctx, m.GetBaselineRunId(), m.GetCandidateRunId())
 		}},
 		evalsiv1alpha1connect.RunServiceListRunsProcedure: {action: "runs.read", filtered: true},
+		// The service checks each run it slices, as ListRuns does.
+		evalsiv1alpha1connect.RunServiceSliceRunsProcedure: {action: "runs.read", filtered: true},
 		evalsiv1alpha1connect.RunServiceCancelRunProcedure: {action: "runs.cancel", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.runTargets(ctx, msg.(*evalsiv1alpha1.CancelRunRequest).GetId())
 		}},
 		evalsiv1alpha1connect.RunServiceResumeRunProcedure: {action: "runs.resume", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.runTargets(ctx, msg.(*evalsiv1alpha1.ResumeRunRequest).GetId())
+		}},
+		// Archiving drops what deleting does, so it takes the same permission.
+		evalsiv1alpha1connect.RunServiceArchiveRunProcedure: {action: "runs.delete", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.runTargets(ctx, msg.(*evalsiv1alpha1.ArchiveRunRequest).GetId())
 		}},
 		evalsiv1alpha1connect.RunServiceDeleteRunProcedure: {action: "runs.delete", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			id := msg.(*evalsiv1alpha1.DeleteRunRequest).GetId()

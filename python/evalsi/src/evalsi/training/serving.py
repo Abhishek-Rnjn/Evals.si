@@ -9,12 +9,19 @@ for the length of one evaluation:
   (started with ``--enable-lora`` and ``VLLM_ALLOW_RUNTIME_LORA_UPDATING=True``)
   and unloads it afterwards, so one base-model server serves every step.
 - :class:`Endpoint` uses a model that is already served.
+- :class:`Operator` asks the Evals.si Kubernetes operator for a vLLM
+  (a ``CheckpointServer``) per checkpoint, through ``kubectl``, and deletes it
+  afterwards.
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import json
+import logging
 import os
+import re
 import socket
 import subprocess
 import time
@@ -24,6 +31,8 @@ from pathlib import Path
 from typing import Protocol
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -150,3 +159,117 @@ class VLLM:
                     return
             time.sleep(1)
         raise ServingError(f"vllm did not answer within {self.startup_timeout_s:g}s (log: {log})")
+
+
+def resource_name(name: str) -> str:
+    """A DNS-1123 label for a checkpoint's name (``checkpoint-200``, ``step_200``...),
+    stable for the same name and distinct for names that differ only in characters
+    a label cannot hold."""
+    label = re.sub(r"[^a-z0-9-]+", "-", name.lower()).strip("-")[:40].strip("-")
+    if label == name:
+        return label
+    return f"{label or 'ckpt'}-{hashlib.sha256(name.encode()).hexdigest()[:8]}"
+
+
+@dataclass
+class Operator:
+    """Serve each checkpoint as a ``CheckpointServer`` the operator reconciles.
+
+    ``kubectl`` (its current context and ``namespace``) applies the resource,
+    waits for it to be Ready and reads its endpoint from the status; the
+    resource is deleted when the evaluation is done. The endpoint is a
+    cluster-internal Service address, so the process that evaluates (the
+    checkpoint watcher as a Job, or beside the trainer) must run in the cluster.
+    A checkpoint is a path under ``checkpoint_root`` (where ``claim`` is mounted
+    by the operator) or an absolute path.
+    """
+
+    namespace: str
+    image: str
+    claim: str = ""
+    checkpoint_root: str = "/checkpoints"
+    args: Sequence[str] = ()
+    resources: dict[str, str] = field(default_factory=dict)
+    api_key_secret: str = ""
+    kubectl: str = "kubectl"
+    timeout_s: float = 1800.0
+    delete_attempts: int = 3
+    delete_backoff_s: float = 2.0
+
+    def _kubectl(self, *argv: str, stdin: str = "") -> str:
+        command = [self.kubectl, "--namespace", self.namespace, *argv]
+        try:
+            done = subprocess.run(
+                command,
+                input=stdin,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=self.timeout_s + 60,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ServingError(f"{self.kubectl}: {exc}") from exc
+        if done.returncode != 0:
+            raise ServingError(f"{' '.join(command[:4])}...: {done.stderr.strip()[-500:]}")
+        return done.stdout
+
+    def manifest(self, checkpoint: str, name: str) -> dict[str, object]:
+        model = checkpoint if checkpoint.startswith("/") else f"{self.checkpoint_root}/{checkpoint}"
+        spec: dict[str, object] = {"image": self.image, "model": model, "servedModelName": name}
+        if self.claim:
+            spec["checkpointClaim"] = self.claim
+        if self.args:
+            spec["args"] = list(self.args)
+        if self.resources:
+            spec["resources"] = {"limits": dict(self.resources)}
+        if self.api_key_secret:
+            spec["apiKeySecret"] = self.api_key_secret
+        return {
+            "apiVersion": "evals.si/v1alpha1",
+            "kind": "CheckpointServer",
+            "metadata": {
+                "name": resource_name(name),
+                "labels": {"app.kubernetes.io/managed-by": "evalsi"},
+            },
+            "spec": spec,
+        }
+
+    @contextlib.contextmanager
+    def serve(self, checkpoint: str, name: str) -> Iterator[Served]:
+        manifest = self.manifest(checkpoint, name)
+        resource = f"checkpointservers.evals.si/{resource_name(name)}"
+        self._kubectl("apply", "-f", "-", stdin=json.dumps(manifest))
+        try:
+            self._kubectl(
+                "wait", "--for=condition=Ready", resource, f"--timeout={int(self.timeout_s)}s"
+            )
+            status = json.loads(self._kubectl("get", resource, "-o", "json")).get("status", {})
+            endpoint = status.get("endpoint")
+            if not endpoint:
+                raise ServingError(f"{resource} is Ready but reports no endpoint")
+            yield Served(endpoint, status.get("servedModelName") or name)
+        except BaseException as exc:
+            # The evaluation's own error stays the error; a server left behind
+            # is said so on it and in the log.
+            try:
+                self._delete(resource)
+            except ServingError as leak:
+                exc.add_note(f"and the CheckpointServer was left running: {leak}")
+                logger.error("checkpoint server not deleted: %s", leak)
+            raise
+        self._delete(resource)
+
+    def _delete(self, resource: str) -> None:
+        """Delete the resource, retrying: nothing else collects a server that
+        is left behind, and it holds its GPUs until someone does."""
+        for attempt in range(self.delete_attempts):
+            try:
+                self._kubectl("delete", resource, "--ignore-not-found", "--wait=false")
+                return
+            except ServingError as exc:
+                if attempt == self.delete_attempts - 1:
+                    raise ServingError(
+                        f"could not delete {resource} after {self.delete_attempts} attempts "
+                        f"(delete it by hand, it holds its GPUs): {exc}"
+                    ) from exc
+                time.sleep(self.delete_backoff_s * 2**attempt)

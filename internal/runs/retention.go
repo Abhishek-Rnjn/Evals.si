@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"connectrpc.com/connect"
+
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -14,7 +16,9 @@ import (
 const retentionPage = 200
 
 // Retain deletes finished runs older than their project's retention (runs.retention
-// and runs.project_retention), every interval until ctx is done. A run counts from
+// and runs.project_retention) and archives those older than runs.archive_after
+// (and runs.project_archive_after), every interval until ctx is done. Each
+// automatic delete or archive leaves an audit event. A run counts from
 // when it finished, else when it was created. Deletion is DeleteRun's: records,
 // outputs, results and webhook deliveries go, and the project's stored-run quota
 // is freed. A run that is not finished, or is labelled evalsi.keep=true, stays.
@@ -23,10 +27,10 @@ func (m *Manager) Retain(ctx context.Context, interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-		if n, err := m.retainOnce(ctx); err != nil && ctx.Err() == nil {
+		if deleted, archived, err := m.retainOnce(ctx); err != nil && ctx.Err() == nil {
 			m.log.Error("run retention", "err", err)
-		} else if n > 0 {
-			m.log.Info("run retention", "deleted", n)
+		} else if deleted+archived > 0 {
+			m.log.Info("run retention", "deleted", deleted, "archived", archived)
 		}
 		select {
 		case <-ctx.Done():
@@ -36,51 +40,58 @@ func (m *Manager) Retain(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// retainOnce makes one pass and returns how many runs it deleted.
-func (m *Manager) retainOnce(ctx context.Context) (int, error) {
+// retainOnce makes one pass over every project and returns how many runs it
+// deleted and archived. Deleting comes first, so a run due for both is deleted.
+func (m *Manager) retainOnce(ctx context.Context) (deleted, archived int, err error) {
 	projects, err := m.store.RunProjects(ctx)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	deleted := 0
 	for _, project := range projects {
-		keep := m.opts.Retention.RetentionFor(project)
-		if keep <= 0 {
-			continue
+		if keep := m.opts.Retention.RetentionFor(project); keep > 0 {
+			n, err := m.retainProject(ctx, project, m.opts.Now().Add(-keep), m.retire)
+			deleted += n
+			if err != nil {
+				return deleted, archived, err
+			}
 		}
-		n, err := m.retainProject(ctx, project, m.opts.Now().Add(-keep))
-		deleted += n
-		if err != nil {
-			return deleted, err
+		if after := m.opts.Retention.ArchiveAfterFor(project); after > 0 {
+			n, err := m.retainProject(ctx, project, m.opts.Now().Add(-after), m.retireToSummary)
+			archived += n
+			if err != nil {
+				return deleted, archived, err
+			}
 		}
 	}
-	return deleted, nil
+	return deleted, archived, nil
 }
 
-func (m *Manager) retainProject(ctx context.Context, project string, cutoff time.Time) (int, error) {
-	deleted := 0
+// retainProject applies act to the project's expired runs and counts those it
+// acted on.
+func (m *Manager) retainProject(ctx context.Context, project string, cutoff time.Time, act func(context.Context, *evalsiv1alpha1.Run, time.Time) (bool, error)) (int, error) {
+	done := 0
 	var afterCreated int64
 	afterID := ""
 	for {
 		page, err := m.store.RunsCreatedBefore(ctx, project, cutoff, afterCreated, afterID, retentionPage)
 		if err != nil {
-			return deleted, err
+			return done, err
 		}
 		for _, run := range page {
 			afterCreated, afterID = run.GetCreatedAt().AsTime().UnixNano(), run.GetId()
 			if !expired(run, cutoff) {
 				continue
 			}
-			ok, err := m.retire(ctx, run.GetId())
+			ok, err := act(ctx, run, cutoff)
 			if err != nil {
-				return deleted, err
+				return done, err
 			}
 			if ok {
-				deleted++
+				done++
 			}
 		}
 		if len(page) < retentionPage {
-			return deleted, nil
+			return done, nil
 		}
 	}
 }
@@ -104,7 +115,8 @@ func expired(run *evalsiv1alpha1.Run, cutoff time.Time) bool {
 }
 
 // retire deletes one run unless it is active (here or on another replica) or already gone.
-func (m *Manager) retire(ctx context.Context, id string) (bool, error) {
+func (m *Manager) retire(ctx context.Context, run *evalsiv1alpha1.Run, cutoff time.Time) (bool, error) {
+	id := run.GetId()
 	m.admit.Lock()
 	defer m.admit.Unlock()
 	m.mu.Lock()
@@ -115,10 +127,45 @@ func (m *Manager) retire(ctx context.Context, id string) (bool, error) {
 	}
 	switch err := m.store.DeleteRun(ctx, id); {
 	case err == nil:
+		m.auditRetention(ctx, run, "runs.delete", cutoff)
 		return true, nil
 	case errors.Is(err, store.ErrRunActive), errors.Is(err, store.ErrNotFound):
 		return false, nil
 	default:
 		return false, err
 	}
+}
+
+// retireToSummary archives one run unless it already is, is active, or is gone.
+func (m *Manager) retireToSummary(ctx context.Context, run *evalsiv1alpha1.Run, cutoff time.Time) (bool, error) {
+	if run.GetArchivedAt() != nil {
+		return false, nil
+	}
+	_, did, err := m.archive(ctx, run.GetId())
+	switch {
+	case err == nil:
+		if did {
+			m.auditRetention(ctx, run, "runs.archive", cutoff)
+		}
+		return did, nil
+	case connect.CodeOf(err) == connect.CodeFailedPrecondition, connect.CodeOf(err) == connect.CodeNotFound:
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+// auditRetention records an automatic delete or archive: the same event a
+// caller's DeleteRun or ArchiveRun leaves, with the system as the principal.
+func (m *Manager) auditRetention(ctx context.Context, run *evalsiv1alpha1.Run, action string, cutoff time.Time) {
+	if m.opts.Audit == nil {
+		return
+	}
+	m.opts.Audit(ctx, &evalsiv1alpha1.AuditEvent{
+		Principal: "system:retention", Action: action, Project: run.GetProject(),
+		Resource: "run/" + run.GetId(), Allowed: true,
+		Reason:    "run retention",
+		Procedure: "runs.Retain",
+		Detail:    "finished before " + cutoff.UTC().Format(time.RFC3339),
+	})
 }

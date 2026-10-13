@@ -53,6 +53,15 @@ files = ["evalsi/src", "evalsi/tests", "evalsi-harness/src", "evalsi-harness/tes
 module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*", "sympy", "sympy.*", "math_verify", "torch", "lightning", "lightning.*", "transformers", "transformers.*", "trl", "trl.*", "fsspec", "fsspec.*"]
 ignore_missing_imports = true
 
+# The environment specs the envspecs adapters target are optional installs.
+[[tool.mypy.overrides]]
+module = ["openenv", "openenv.*", "verifiers", "verifiers.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["evalsi_harness.envspecs.*"]
+disallow_subclassing_any = false
+
 # Generated code is typed through its .pyi stubs; do not check the .py bodies.
 [[tool.mypy.overrides]]
 module = [

@@ -63,7 +63,7 @@ uv run evalsi catalog --pack core     # one pack
 evalsid sandbox probe                 # which sandbox rungs work on this machine
 ```
 
-In your own project, `pip install evalsi` gives you the CLI and SDK. Add the `anthropic` extra for the Claude judge or target, `server` for `evalsi serve`, and `analytics` for DuckDB analysis (`pip install 'evalsi[analytics]'`).
+In your own project, `pip install evalsi` gives you the CLI and SDK. From the first release after v0.1.0, on Linux (amd64 and arm64) it is a platform wheel that also carries the `evalsid` server and its static bubblewrap, same release as the package: `evalsi serve`, code evaluators and Wasm plugins use it with nothing else installed (`evalsi evalsid-path` prints where it is). `EVALSID` still wins, so you can point at another build; v0.1.0 and other platforms (macOS, Windows) get the pure-Python wheel and need `evalsid` on `PATH` or in `EVALSID`. Add the `anthropic` extra for the Claude judge or target, `server` for `evalsi serve`, and `analytics` for DuckDB analysis (`pip install 'evalsi[analytics]'`).
 
 ## 3. Score: grade outputs you already have
 
@@ -539,6 +539,15 @@ uv run evalsi analyze query "select model, avg(value) from scores join runs usin
 ```
 
 `analyze` loads runs into three tables, `runs`, `scores` and `records`, which you can query with SQL or slice by record metadata.
+
+With many or large runs, let the server do the slice instead of downloading every result:
+
+```bash
+uv run evalsi analyze slice exact-match --by category --server $URL --project support \
+  --label suite=nightly --limit 100 --on-server
+```
+
+`--on-server` calls `RunService.SliceRuns` and prints the same columns and numbers as the local slice. It covers the runs the caller may read (the newest `--limit`, 50 by default and at most 500, or the `--run` ids), and refuses a slice of more than 10,000 rows (runs times values of the field). It needs a server that has the RPC; `analyze query` always runs on the client.
 
 ## 11. Fine-tuning and RL
 

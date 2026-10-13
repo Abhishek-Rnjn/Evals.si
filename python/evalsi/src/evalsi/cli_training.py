@@ -78,7 +78,7 @@ def _common(p: argparse.ArgumentParser, *, serving: bool) -> None:
     )
     if serving:
         s = p.add_argument_group("serving the checkpoint")
-        s.add_argument("--serve", choices=["vllm", "lora", "endpoint"], default="vllm")
+        s.add_argument("--serve", choices=["vllm", "lora", "endpoint", "operator"], default="vllm")
         s.add_argument(
             "--base-url", help="lora: the running vLLM; endpoint: the served model's URL"
         )
@@ -87,11 +87,21 @@ def _common(p: argparse.ArgumentParser, *, serving: bool) -> None:
         s.add_argument(
             "--vllm-arg", action="append", default=[], help="extra `vllm serve` argument"
         )
+        k = p.add_argument_group("serving with the operator (--serve operator)")
+        k.add_argument("--namespace", help="the namespace for the CheckpointServers")
+        k.add_argument("--image", help="the vLLM image")
+        k.add_argument("--checkpoint-claim", default="", help="a PVC with the checkpoints")
+        k.add_argument(
+            "--gpus", default="", help="GPUs per server (resource nvidia.com/gpu); empty: none"
+        )
+        k.add_argument(
+            "--api-key-secret", default="", help="a Secret with api-key: the server requires it"
+        )
     add_credential_args(p)
 
 
 def _serving(args: argparse.Namespace) -> Any:
-    from evalsi.training import VLLM, Endpoint, LoRA
+    from evalsi.training import VLLM, Endpoint, LoRA, Operator
 
     if args.serve == "lora":
         if not args.base_url:
@@ -101,6 +111,17 @@ def _serving(args: argparse.Namespace) -> Any:
         if not args.base_url or not args.model:
             raise ValueError("--serve endpoint needs --base-url and --model")
         return Endpoint(args.base_url, args.model)
+    if args.serve == "operator":
+        if not args.namespace or not args.image:
+            raise ValueError("--serve operator needs --namespace and --image")
+        return Operator(
+            args.namespace,
+            args.image,
+            claim=args.checkpoint_claim,
+            args=args.vllm_arg,
+            resources={"nvidia.com/gpu": args.gpus} if args.gpus else {},
+            api_key_secret=args.api_key_secret,
+        )
     return VLLM(args=args.vllm_arg, log_dir=args.log_dir)
 
 

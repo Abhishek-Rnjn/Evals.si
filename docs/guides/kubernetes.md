@@ -3,7 +3,7 @@
 Evals.si on Kubernetes is the same `evalsid` as standalone, split into roles and run by the [operator](#the-operator-and-its-resources). Run specs and policies are the same files: what `evalsi run -f` takes, `kubectl apply -f` takes. This is Phase 4 of the [roadmap](../DESIGN.md#23-roadmap).
 
 ```text
-  kubectl apply (EvalRun, OnlineEvalPolicy, TraceSource, Evaluator, SandboxClass)
+  kubectl apply (EvalRun, OnlineEvalPolicy, TraceSource, Evaluator, CheckpointServer, SandboxClass)
                                    │
                           ┌────────▼─────────┐  admission webhooks: validate specs,
                           │  evalsi-operator │  record who created each resource
@@ -192,6 +192,21 @@ spec:
 ```
 
 Without `spec.configMap`, the worker uses the release's worker config and gets what that config refers to, like the chart's own workers: the sandbox client certificate (`<release>-worker-tls`, when `sandbox.address` is set) and the S3 credentials (`storage.s3.credentialsSecret`, or the dev MinIO's). With your own `configMap`, supply credentials through `spec.env`. The root filesystem stays read-only; the worker's home (`/var/lib/evalsi`, its judge cache) and `/tmp` are writable.
+
+**`CheckpointServer`** serves a model checkpoint with vLLM: the operator runs a Deployment (one pod per replica, `Recreate` so a new pod finds the GPUs free, `/dev/shm` as memory, a startup probe that allows 30 minutes to load) and a Service, and writes the OpenAI-compatible URL into `status.endpoint` and `Ready` into its conditions (`kubectl get checkpointservers`). `spec.checkpointClaim` mounts a PVC read-only at `/checkpoints`; `spec.model` is a path under it (or a model id); `spec.lora: true` serves a base model that accepts adapters loaded at runtime; `spec.apiKeySecret` (key `api-key`) makes the server require a bearer token. The [checkpoint watcher](fine-tuning.md#serving-checkpoints-with-the-operator) creates one per checkpoint and deletes it afterwards.
+
+```yaml
+apiVersion: evals.si/v1alpha1
+kind: CheckpointServer
+metadata: {name: step-200, namespace: evalsi}
+spec:
+  image: vllm/vllm-openai:v0.11.0
+  model: /checkpoints/run-1/checkpoint-200
+  checkpointClaim: run-1-checkpoints
+  resources: {limits: {nvidia.com/gpu: "1"}}
+```
+
+It runs arbitrary images with GPUs, so, like `Evaluator`, it is in the aggregated edit role. An operator from before the `CheckpointServer` CRD keeps running without it: apply `deploy/helm/evalsi-crds/crds/evals.si_checkpointservers.yaml` when upgrading.
 
 **`SandboxClass`** (cluster-scoped) is a sandbox pool: the isolation ladder, the minimum level, and the rungs' settings. The operator runs `evalsi-sandbox-<name>` (a Deployment and its Service) and writes the address workers use into `status.address`. Point `sandbox.address` at it. Because the kind is cluster-scoped, reconciling it needs a ClusterRoleBinding, so it is opt-in: set `operator.sandboxClasses=true` on both the `evalsi-crds` and the `evalsi` charts (or use the `evalsi` chart's own pool, `sandbox.pool`, which needs no cluster permission).
 

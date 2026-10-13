@@ -3,7 +3,8 @@ name: release
 # Publishes a release from a tag (v0.5.0 releases version 0.5.0):
 # - archives per architecture: static evalsid, evalsi-guest, evalsi-operator
 #   and a static bubblewrap (scripts/release-binaries.sh);
-# - Python wheels and sdists for evalsi and evalsi-harness (and PyPI, when the
+# - Python wheels and sdists for evalsi and evalsi-harness, and platform wheels
+#   of evalsi that bundle evalsid and bwrap for linux amd64 and arm64 (and PyPI, when the
 #   repository variable PUBLISH_PYPI is "true" and trusted publishing is set up);
 # - the images, multi-architecture, to ghcr.io/<owner>/evalsi:<version> and
 #   ghcr.io/<owner>/evalsi-collector:<version>, each with BuildKit provenance
@@ -101,6 +102,42 @@ jobs:
           name: python
           path: dist/*
 
+  wheels:
+    # Platform wheels of evalsi: the pure wheel plus that architecture's
+    # evalsid and static bubblewrap in evalsi/_bin (scripts/platform_wheel.py).
+    # pip prefers one on a matching Linux machine; the pure wheel stays for
+    # everything else.
+    needs: [version, python, binaries]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v5
+        with:
+          name: python
+          path: pure
+      - uses: actions/download-artifact@v5
+        with:
+          name: binaries-${{ matrix.arch }}
+          path: archive
+      - name: Build
+        run: |
+          python3 scripts/platform_wheel.py pure/evalsi-[0-9]*-py3-none-any.whl \
+            archive/evalsi_${{ needs.version.outputs.version }}_linux_${{ matrix.arch }}.tar.gz dist
+      - name: The amd64 wheel installs and its evalsid runs
+        if: matrix.arch == 'amd64'
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install -q dist/*.whl
+          /tmp/venv/bin/evalsi evalsid-path
+          "$(/tmp/venv/bin/evalsi evalsid-path)" version | grep -q "${{ needs.version.outputs.version }}"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: wheels-${{ matrix.arch }}
+          path: dist/*.whl
+
   # PyPI allows one pending trusted publisher per repository, workflow and
   # environment, so each package publishes from its own environment:
   #   evalsi          -> environment "pypi"
@@ -109,7 +146,7 @@ jobs:
   # A PyPI version can never be uploaded again, so these wait for the
   # release approval and for every other build to succeed first.
   pypi:
-    needs: [python, approve, binaries, image, collector, charts, bundle]
+    needs: [python, wheels, approve, binaries, image, collector, charts, bundle]
     if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
     runs-on: ubuntu-latest
     environment: pypi
@@ -119,6 +156,11 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: python
+          path: all
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: wheels-*
+          merge-multiple: true
           path: all
       - name: Only evalsi
         run: mkdir dist && mv all/evalsi-[0-9]* dist/ && ls dist
@@ -308,12 +350,12 @@ jobs:
           path: evalsi-bundle-*.tgz
 
   release:
-    needs: [version, binaries, python, image, collector, charts, bundle]
+    needs: [version, binaries, python, wheels, image, collector, charts, bundle]
     # A dry run gathers and checksums the release files too, so that step is
     # exercised before a tag; only the GitHub release itself needs a tag.
     # `approve` is skipped on a dry run, which would skip a job that has only the
     # default condition, so the needed jobs are named instead.
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.binaries.result == 'success' && needs.python.result == 'success' && needs.image.result == 'success' && needs.collector.result == 'success' && needs.charts.result == 'success' && needs.bundle.result == 'success' }}
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.binaries.result == 'success' && needs.python.result == 'success' && needs.wheels.result == 'success' && needs.image.result == 'success' && needs.collector.result == 'success' && needs.charts.result == 'success' && needs.bundle.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -324,7 +366,7 @@ jobs:
           merge-multiple: true
           # Only what belongs on the release. Downloading every artifact also
           # fetched the build records, which failed on the first tag run.
-          pattern: "{binaries-*,python,charts,bundle,sbom-*}"
+          pattern: "{binaries-*,python,wheels-*,charts,bundle,sbom-*}"
       - run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
       - uses: softprops/action-gh-release@v2
         if: env.PUBLISH == 'true'

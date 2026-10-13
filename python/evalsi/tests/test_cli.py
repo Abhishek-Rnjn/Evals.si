@@ -144,3 +144,27 @@ def test_load_policy(tmp_path: Path) -> None:
     bad.write_text("kind: OnlineEvalPolicy\nspec: {selectr: x}\n")
     with pytest.raises(ValueError, match="invalid policy"):
         load_policy(str(bad))
+
+
+def test_archive_run_command(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    seen: list[str] = []
+
+    class Server:
+        def __enter__(self) -> Server:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def archive_run(self, run_id: str) -> dict[str, str]:
+            seen.append(run_id)
+            return {"id": run_id, "archivedAt": "2026-10-12T00:00:00Z"}
+
+    monkeypatch.setattr("evalsi.cli.server_client", lambda args: Server())
+    assert main(["archive-run", "run-1", "--server", "http://s", "--yes"]) == 0
+    assert seen == ["run-1"]
+    assert "archived: run-1 (2026-10-12T00:00:00Z)" in capsys.readouterr().out
+    with pytest.raises(SystemExit):  # --yes is required
+        main(["archive-run", "run-1", "--server", "http://s"])

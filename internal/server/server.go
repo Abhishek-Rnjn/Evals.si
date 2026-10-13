@@ -183,6 +183,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		AdoptInterval: optDuration(cfg.Runs.AdoptInterval),
 		Quotas:        cfg.Quotas,
 		Retention:     cfg.Runs,
+		Audit:         auditor.Record,
 		TraceScores: func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64 {
 			return watcher.TraceScores(policy, results)
 		},

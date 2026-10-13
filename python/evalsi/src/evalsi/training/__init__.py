@@ -1,6 +1,7 @@
 """The checkpoint evaluation loop: evaluate checkpoints as a model trains.
 
-- :mod:`evalsi.training.serving`: serve a checkpoint (vLLM, LoRA hot-load, an endpoint).
+- :mod:`evalsi.training.serving`: serve a checkpoint (vLLM, LoRA hot-load, an endpoint,
+  or a CheckpointServer the Kubernetes operator runs).
 - :mod:`evalsi.training.checkpoints`: find checkpoints a trainer wrote.
 - :mod:`evalsi.training.loop`: run a spec per checkpoint, learning curves, regression gates.
 - :mod:`evalsi.training.callback`: a Hugging Face ``TrainerCallback`` that does it on save.
@@ -17,7 +18,7 @@ from evalsi.training.loop import (
     compare,
     format_curve,
 )
-from evalsi.training.serving import VLLM, Endpoint, LoRA, Served, ServingError
+from evalsi.training.serving import VLLM, Endpoint, LoRA, Operator, Served, ServingError
 
 __all__ = [
     "BASE",
@@ -27,6 +28,7 @@ __all__ = [
     "Comparison",
     "Endpoint",
     "LoRA",
+    "Operator",
     "PyTorchCheckpointHook",
     "RegressionGate",
     "Served",

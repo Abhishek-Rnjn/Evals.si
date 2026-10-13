@@ -18,9 +18,18 @@ service RunService {
   // Continues an errored or cancelled run, skipping finished tasks.
   rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
   rpc DeleteRun(DeleteRunRequest) returns (DeleteRunResponse);
+  // Drops a finished run's records, outputs, results and webhook deliveries
+  // and keeps the run itself: its spec, status, summaries, gates and usage.
+  // An archived run cannot be resumed, compared, promoted or listed for
+  // results; it can still be read, and deleted. Archiving twice is harmless.
+  rpc ArchiveRun(ArchiveRunRequest) returns (ArchiveRunResponse);
   rpc ListRunResults(ListRunResultsRequest) returns (ListRunResultsResponse);
   // Paired comparison of two runs over the records they share.
   rpc CompareRuns(CompareRunsRequest) returns (CompareRunsResponse);
+  // A metric per run and per value of a record metadata field, computed on
+  // the server over the runs the caller may read: the numbers
+  // `evalsi analyze slice` computes after downloading every result.
+  rpc SliceRuns(SliceRunsRequest) returns (SliceRunsResponse);
   // Appends a run's records that match a condition (failures, typically) to
   // a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
   rpc PromoteResults(PromoteResultsRequest) returns (PromoteResultsResponse);
@@ -103,6 +112,14 @@ message DeleteRunRequest {
 
 message DeleteRunResponse {}
 
+message ArchiveRunRequest {
+  string id = 1;
+}
+
+message ArchiveRunResponse {
+  Run run = 1;
+}
+
 message ListRunResultsRequest {
   string run_id = 1;
   int32 page_size = 2;
@@ -123,6 +140,43 @@ message CompareRunsRequest {
   string candidate_run_id = 2;
   // Defaults to 0.95.
   double confidence_level = 3;
+}
+
+message SliceRunsRequest {
+  // The runs to slice: these, else the newest `limit` runs of `project`
+  // (every project the caller may read when empty) that carry all `labels`.
+  repeated string run_ids = 1;
+  string project = 2;
+  map<string, string> labels = 3;
+  // Newest runs to include when run_ids is empty. Defaults to 50; at most 500.
+  int32 limit = 4;
+  // "<evaluator>" or "<evaluator>.<score name>", as in a run's summary.
+  string metric = 5;
+  // A record metadata field, as a dotted path. Records without it are
+  // grouped under "(none)".
+  string by = 6;
+  // 0.9, 0.95 or 0.99. Defaults to 0.95.
+  double confidence_level = 7;
+}
+
+message SliceRow {
+  string run_id = 1;
+  string run_name = 2;
+  // The value of the metadata field (a string, number or boolean as text).
+  string key = 3;
+  // Scored values.
+  int64 n = 4;
+  double mean = 5;
+  // A normal-approximation interval; unset with fewer than two values.
+  optional double low = 6;
+  optional double high = 7;
+}
+
+message SliceRunsResponse {
+  // Ordered by key, then run creation time, then run id.
+  repeated SliceRow rows = 1;
+  // Runs the slice covered.
+  int32 runs = 2;
 }
 
 message MetricComparison {

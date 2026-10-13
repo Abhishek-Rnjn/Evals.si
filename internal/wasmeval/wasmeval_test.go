@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -244,5 +245,33 @@ func TestWorker(t *testing.T) {
 		if !strings.Contains(strings.ReplaceAll(got, " ", ""), strings.ReplaceAll(want, " ", "")) {
 			t.Errorf("serve output lacks %s:\n%s", want, got)
 		}
+	}
+}
+
+// The plugin hosted in plugins/wasm/text-checks (the one the index lists)
+// loads against its pins, scores, and is built from the example's source: its
+// manifest differs from the example's only in the module pin.
+func TestHostedPlugin(t *testing.T) {
+	hosted := "../../plugins/wasm/text-checks/evalsi-plugin.yaml"
+	h := host(t)
+	ctx := context.Background()
+	if _, err := h.Load(ctx, hosted); err != nil {
+		t.Fatalf("the hosted plugin does not load (run scripts/publish-wasm-example.sh): %v", err)
+	}
+	params, _ := structpb.NewStruct(map[string]any{"max_words": 2})
+	resp, err := h.Evaluate(ctx, &pluginv1alpha1.EvaluateRequest{Evaluator: "example/word-limit", Params: params,
+		Records: []*evalsiv1alpha1.Record{{Id: "a", Output: text("one two")}, {Id: "b", Output: text("one two three")}}})
+	if err != nil || !resp.GetResults()[0].GetScores()[0].GetPassed() || resp.GetResults()[1].GetScores()[0].GetPassed() {
+		t.Errorf("word-limit: %v %v", resp, err)
+	}
+	unpinned := func(path string) string {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return regexp.MustCompile(`(?m)^(\s+sha256: )[0-9a-f]{64}.*$`).ReplaceAllString(string(raw), "${1}")
+	}
+	if unpinned(hosted) != unpinned("../../examples/wasm/text-checks/evalsi-plugin.yaml") {
+		t.Error("the hosted manifest differs from the example's: run scripts/publish-wasm-example.sh")
 	}
 }

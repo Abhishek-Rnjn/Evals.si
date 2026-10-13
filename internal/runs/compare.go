@@ -86,6 +86,11 @@ func (m *Manager) CompareRuns(ctx context.Context, req *connect.Request[evalsiv1
 	if err != nil {
 		return nil, err
 	}
+	for _, run := range []*evalsiv1alpha1.Run{base, cand} {
+		if err := errArchived(run); err != nil {
+			return nil, err
+		}
+	}
 	b, order, err := m.perRecord(ctx, base)
 	if err != nil {
 		return nil, err

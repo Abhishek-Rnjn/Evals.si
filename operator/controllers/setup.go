@@ -15,7 +15,7 @@ import (
 
 // Config configures the controllers Setup adds.
 type Config struct {
-	// Controllers to run: evalrun, onlineevalpolicy, tracesource, evaluator, sandboxclass.
+	// Controllers to run: evalrun, onlineevalpolicy, tracesource, evaluator, sandboxclass, checkpointserver.
 	Enabled               []string
 	API                   APIConfig
 	PollInterval          time.Duration
@@ -61,7 +61,7 @@ func childName(prefix, what, name string) string {
 func Setup(mgr ctrl.Manager, cfg Config) error {
 	on := func(name string) bool { return slices.Contains(cfg.Enabled, name) }
 	for _, name := range cfg.Enabled {
-		if !slices.Contains([]string{"evalrun", "onlineevalpolicy", "tracesource", "evaluator", "sandboxclass"}, name) {
+		if !slices.Contains([]string{"evalrun", "onlineevalpolicy", "tracesource", "evaluator", "sandboxclass", "checkpointserver"}, name) {
 			return fmt.Errorf("unknown controller %q", name)
 		}
 	}
@@ -92,6 +92,15 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 	}
 	if on("evaluator") {
 		if err := (&EvaluatorReconciler{Client: mgr.GetClient(), WorkerConfigMap: cfg.WorkerConfigMap, WorkerTLSSecret: cfg.WorkerTLSSecret, WorkerS3Secret: cfg.WorkerS3Secret, WorkerNATSSecret: cfg.WorkerNATSSecret, NATSMonitoringEndpoint: cfg.NATSMonitoringEndpoint, NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
+			return err
+		}
+	}
+	if on("checkpointserver") {
+		// Helm does not upgrade CRDs: an evalsi-crds release older than the
+		// CheckpointServer CRD leaves it out, and the operator runs without it.
+		if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "evals.si", Kind: "CheckpointServer"}, "v1alpha1"); meta.IsNoMatchError(err) {
+			ctrl.Log.Info("the CheckpointServer CRD is not installed; apply the evalsi-crds chart's CRDs to serve checkpoints", "controller", "checkpointserver")
+		} else if err := (&CheckpointServerReconciler{Client: mgr.GetClient(), NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
 			return err
 		}
 	}

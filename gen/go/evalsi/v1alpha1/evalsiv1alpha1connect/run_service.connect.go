@@ -47,11 +47,15 @@ const (
 	RunServiceResumeRunProcedure = "/evalsi.v1alpha1.RunService/ResumeRun"
 	// RunServiceDeleteRunProcedure is the fully-qualified name of the RunService's DeleteRun RPC.
 	RunServiceDeleteRunProcedure = "/evalsi.v1alpha1.RunService/DeleteRun"
+	// RunServiceArchiveRunProcedure is the fully-qualified name of the RunService's ArchiveRun RPC.
+	RunServiceArchiveRunProcedure = "/evalsi.v1alpha1.RunService/ArchiveRun"
 	// RunServiceListRunResultsProcedure is the fully-qualified name of the RunService's ListRunResults
 	// RPC.
 	RunServiceListRunResultsProcedure = "/evalsi.v1alpha1.RunService/ListRunResults"
 	// RunServiceCompareRunsProcedure is the fully-qualified name of the RunService's CompareRuns RPC.
 	RunServiceCompareRunsProcedure = "/evalsi.v1alpha1.RunService/CompareRuns"
+	// RunServiceSliceRunsProcedure is the fully-qualified name of the RunService's SliceRuns RPC.
+	RunServiceSliceRunsProcedure = "/evalsi.v1alpha1.RunService/SliceRuns"
 	// RunServicePromoteResultsProcedure is the fully-qualified name of the RunService's PromoteResults
 	// RPC.
 	RunServicePromoteResultsProcedure = "/evalsi.v1alpha1.RunService/PromoteResults"
@@ -71,9 +75,18 @@ type RunServiceClient interface {
 	// Continues an errored or cancelled run, skipping finished tasks.
 	ResumeRun(context.Context, *connect.Request[v1alpha1.ResumeRunRequest]) (*connect.Response[v1alpha1.ResumeRunResponse], error)
 	DeleteRun(context.Context, *connect.Request[v1alpha1.DeleteRunRequest]) (*connect.Response[v1alpha1.DeleteRunResponse], error)
+	// Drops a finished run's records, outputs, results and webhook deliveries
+	// and keeps the run itself: its spec, status, summaries, gates and usage.
+	// An archived run cannot be resumed, compared, promoted or listed for
+	// results; it can still be read, and deleted. Archiving twice is harmless.
+	ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error)
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
+	// A metric per run and per value of a record metadata field, computed on
+	// the server over the runs the caller may read: the numbers
+	// `evalsi analyze slice` computes after downloading every result.
+	SliceRuns(context.Context, *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error)
 	// Appends a run's records that match a condition (failures, typically) to
 	// a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
 	PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error)
@@ -136,6 +149,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("DeleteRun")),
 			connect.WithClientOptions(opts...),
 		),
+		archiveRun: connect.NewClient[v1alpha1.ArchiveRunRequest, v1alpha1.ArchiveRunResponse](
+			httpClient,
+			baseURL+RunServiceArchiveRunProcedure,
+			connect.WithSchema(runServiceMethods.ByName("ArchiveRun")),
+			connect.WithClientOptions(opts...),
+		),
 		listRunResults: connect.NewClient[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse](
 			httpClient,
 			baseURL+RunServiceListRunResultsProcedure,
@@ -146,6 +165,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+RunServiceCompareRunsProcedure,
 			connect.WithSchema(runServiceMethods.ByName("CompareRuns")),
+			connect.WithClientOptions(opts...),
+		),
+		sliceRuns: connect.NewClient[v1alpha1.SliceRunsRequest, v1alpha1.SliceRunsResponse](
+			httpClient,
+			baseURL+RunServiceSliceRunsProcedure,
+			connect.WithSchema(runServiceMethods.ByName("SliceRuns")),
 			connect.WithClientOptions(opts...),
 		),
 		promoteResults: connect.NewClient[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse](
@@ -172,8 +197,10 @@ type runServiceClient struct {
 	cancelRun          *connect.Client[v1alpha1.CancelRunRequest, v1alpha1.CancelRunResponse]
 	resumeRun          *connect.Client[v1alpha1.ResumeRunRequest, v1alpha1.ResumeRunResponse]
 	deleteRun          *connect.Client[v1alpha1.DeleteRunRequest, v1alpha1.DeleteRunResponse]
+	archiveRun         *connect.Client[v1alpha1.ArchiveRunRequest, v1alpha1.ArchiveRunResponse]
 	listRunResults     *connect.Client[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse]
 	compareRuns        *connect.Client[v1alpha1.CompareRunsRequest, v1alpha1.CompareRunsResponse]
+	sliceRuns          *connect.Client[v1alpha1.SliceRunsRequest, v1alpha1.SliceRunsResponse]
 	promoteResults     *connect.Client[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse]
 	createShadowReplay *connect.Client[v1alpha1.CreateShadowReplayRequest, v1alpha1.CreateShadowReplayResponse]
 }
@@ -213,6 +240,11 @@ func (c *runServiceClient) DeleteRun(ctx context.Context, req *connect.Request[v
 	return c.deleteRun.CallUnary(ctx, req)
 }
 
+// ArchiveRun calls evalsi.v1alpha1.RunService.ArchiveRun.
+func (c *runServiceClient) ArchiveRun(ctx context.Context, req *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error) {
+	return c.archiveRun.CallUnary(ctx, req)
+}
+
 // ListRunResults calls evalsi.v1alpha1.RunService.ListRunResults.
 func (c *runServiceClient) ListRunResults(ctx context.Context, req *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error) {
 	return c.listRunResults.CallUnary(ctx, req)
@@ -221,6 +253,11 @@ func (c *runServiceClient) ListRunResults(ctx context.Context, req *connect.Requ
 // CompareRuns calls evalsi.v1alpha1.RunService.CompareRuns.
 func (c *runServiceClient) CompareRuns(ctx context.Context, req *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error) {
 	return c.compareRuns.CallUnary(ctx, req)
+}
+
+// SliceRuns calls evalsi.v1alpha1.RunService.SliceRuns.
+func (c *runServiceClient) SliceRuns(ctx context.Context, req *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error) {
+	return c.sliceRuns.CallUnary(ctx, req)
 }
 
 // PromoteResults calls evalsi.v1alpha1.RunService.PromoteResults.
@@ -244,9 +281,18 @@ type RunServiceHandler interface {
 	// Continues an errored or cancelled run, skipping finished tasks.
 	ResumeRun(context.Context, *connect.Request[v1alpha1.ResumeRunRequest]) (*connect.Response[v1alpha1.ResumeRunResponse], error)
 	DeleteRun(context.Context, *connect.Request[v1alpha1.DeleteRunRequest]) (*connect.Response[v1alpha1.DeleteRunResponse], error)
+	// Drops a finished run's records, outputs, results and webhook deliveries
+	// and keeps the run itself: its spec, status, summaries, gates and usage.
+	// An archived run cannot be resumed, compared, promoted or listed for
+	// results; it can still be read, and deleted. Archiving twice is harmless.
+	ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error)
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
+	// A metric per run and per value of a record metadata field, computed on
+	// the server over the runs the caller may read: the numbers
+	// `evalsi analyze slice` computes after downloading every result.
+	SliceRuns(context.Context, *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error)
 	// Appends a run's records that match a condition (failures, typically) to
 	// a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
 	PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error)
@@ -305,6 +351,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("DeleteRun")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceArchiveRunHandler := connect.NewUnaryHandler(
+		RunServiceArchiveRunProcedure,
+		svc.ArchiveRun,
+		connect.WithSchema(runServiceMethods.ByName("ArchiveRun")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServiceListRunResultsHandler := connect.NewUnaryHandler(
 		RunServiceListRunResultsProcedure,
 		svc.ListRunResults,
@@ -315,6 +367,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		RunServiceCompareRunsProcedure,
 		svc.CompareRuns,
 		connect.WithSchema(runServiceMethods.ByName("CompareRuns")),
+		connect.WithHandlerOptions(opts...),
+	)
+	runServiceSliceRunsHandler := connect.NewUnaryHandler(
+		RunServiceSliceRunsProcedure,
+		svc.SliceRuns,
+		connect.WithSchema(runServiceMethods.ByName("SliceRuns")),
 		connect.WithHandlerOptions(opts...),
 	)
 	runServicePromoteResultsHandler := connect.NewUnaryHandler(
@@ -345,10 +403,14 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceResumeRunHandler.ServeHTTP(w, r)
 		case RunServiceDeleteRunProcedure:
 			runServiceDeleteRunHandler.ServeHTTP(w, r)
+		case RunServiceArchiveRunProcedure:
+			runServiceArchiveRunHandler.ServeHTTP(w, r)
 		case RunServiceListRunResultsProcedure:
 			runServiceListRunResultsHandler.ServeHTTP(w, r)
 		case RunServiceCompareRunsProcedure:
 			runServiceCompareRunsHandler.ServeHTTP(w, r)
+		case RunServiceSliceRunsProcedure:
+			runServiceSliceRunsHandler.ServeHTTP(w, r)
 		case RunServicePromoteResultsProcedure:
 			runServicePromoteResultsHandler.ServeHTTP(w, r)
 		case RunServiceCreateShadowReplayProcedure:
@@ -390,12 +452,20 @@ func (UnimplementedRunServiceHandler) DeleteRun(context.Context, *connect.Reques
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.DeleteRun is not implemented"))
 }
 
+func (UnimplementedRunServiceHandler) ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.ArchiveRun is not implemented"))
+}
+
 func (UnimplementedRunServiceHandler) ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.ListRunResults is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.CompareRuns is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) SliceRuns(context.Context, *connect.Request[v1alpha1.SliceRunsRequest]) (*connect.Response[v1alpha1.SliceRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.SliceRuns is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) PromoteResults(context.Context, *connect.Request[v1alpha1.PromoteResultsRequest]) (*connect.Response[v1alpha1.PromoteResultsResponse], error) {

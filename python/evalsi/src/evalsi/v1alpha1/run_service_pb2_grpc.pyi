@@ -44,9 +44,20 @@ class RunServiceStub:
     ResumeRun: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ResumeRunRequest, _run_service_pb2.ResumeRunResponse]
     """Continues an errored or cancelled run, skipping finished tasks."""
     DeleteRun: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.DeleteRunRequest, _run_service_pb2.DeleteRunResponse]
+    ArchiveRun: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ArchiveRunRequest, _run_service_pb2.ArchiveRunResponse]
+    """Drops a finished run's records, outputs, results and webhook deliveries
+    and keeps the run itself: its spec, status, summaries, gates and usage.
+    An archived run cannot be resumed, compared, promoted or listed for
+    results; it can still be read, and deleted. Archiving twice is harmless.
+    """
     ListRunResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]
     CompareRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]
     """Paired comparison of two runs over the records they share."""
+    SliceRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.SliceRunsRequest, _run_service_pb2.SliceRunsResponse]
+    """A metric per run and per value of a record metadata field, computed on
+    the server over the runs the caller may read: the numbers
+    `evalsi analyze slice` computes after downloading every result.
+    """
     PromoteResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.PromoteResultsRequest, _run_service_pb2.PromoteResultsResponse]
     """Appends a run's records that match a condition (failures, typically) to
     a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
@@ -73,9 +84,20 @@ class RunServiceAsyncStub(RunServiceStub):
     ResumeRun: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ResumeRunRequest, _run_service_pb2.ResumeRunResponse]  # type: ignore[assignment]
     """Continues an errored or cancelled run, skipping finished tasks."""
     DeleteRun: _aio.UnaryUnaryMultiCallable[_run_service_pb2.DeleteRunRequest, _run_service_pb2.DeleteRunResponse]  # type: ignore[assignment]
+    ArchiveRun: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ArchiveRunRequest, _run_service_pb2.ArchiveRunResponse]  # type: ignore[assignment]
+    """Drops a finished run's records, outputs, results and webhook deliveries
+    and keeps the run itself: its spec, status, summaries, gates and usage.
+    An archived run cannot be resumed, compared, promoted or listed for
+    results; it can still be read, and deleted. Archiving twice is harmless.
+    """
     ListRunResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]  # type: ignore[assignment]
     CompareRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]  # type: ignore[assignment]
     """Paired comparison of two runs over the records they share."""
+    SliceRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.SliceRunsRequest, _run_service_pb2.SliceRunsResponse]  # type: ignore[assignment]
+    """A metric per run and per value of a record metadata field, computed on
+    the server over the runs the caller may read: the numbers
+    `evalsi analyze slice` computes after downloading every result.
+    """
     PromoteResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.PromoteResultsRequest, _run_service_pb2.PromoteResultsResponse]  # type: ignore[assignment]
     """Appends a run's records that match a condition (failures, typically) to
     a dataset, as regression cases: datasets_dir/promoted/<project>/<dataset>.jsonl.
@@ -143,6 +165,18 @@ class RunServiceServicer(metaclass=_abc_1.ABCMeta):
     ) -> _typing.Union[_run_service_pb2.DeleteRunResponse, _abc.Awaitable[_run_service_pb2.DeleteRunResponse]]: ...
 
     @_abc_1.abstractmethod
+    def ArchiveRun(
+        self,
+        request: _run_service_pb2.ArchiveRunRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.ArchiveRunResponse, _abc.Awaitable[_run_service_pb2.ArchiveRunResponse]]:
+        """Drops a finished run's records, outputs, results and webhook deliveries
+        and keeps the run itself: its spec, status, summaries, gates and usage.
+        An archived run cannot be resumed, compared, promoted or listed for
+        results; it can still be read, and deleted. Archiving twice is harmless.
+        """
+
+    @_abc_1.abstractmethod
     def ListRunResults(
         self,
         request: _run_service_pb2.ListRunResultsRequest,
@@ -156,6 +190,17 @@ class RunServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_run_service_pb2.CompareRunsResponse, _abc.Awaitable[_run_service_pb2.CompareRunsResponse]]:
         """Paired comparison of two runs over the records they share."""
+
+    @_abc_1.abstractmethod
+    def SliceRuns(
+        self,
+        request: _run_service_pb2.SliceRunsRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.SliceRunsResponse, _abc.Awaitable[_run_service_pb2.SliceRunsResponse]]:
+        """A metric per run and per value of a record metadata field, computed on
+        the server over the runs the caller may read: the numbers
+        `evalsi analyze slice` computes after downloading every result.
+        """
 
     @_abc_1.abstractmethod
     def PromoteResults(
