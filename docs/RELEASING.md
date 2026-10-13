@@ -6,6 +6,11 @@ charts and an amd64 air-gapped bundle. A pushed `v*` tag publishes them. A
 manual run builds without publishing. Only a maintainer may authorize a dry
 run or tag push; release readiness is not authorization to publish.
 
+The commands below use `0.1.0`, the first release, as the example. The next
+release is `0.2.0`: since v0.1.0, `main` adds a CRD (`CheckpointServer`) and
+API, so it is a minor release, not a patch. A 0.1.x patch would be cut from a
+`release-0.1` branch at `v0.1.0` with fixes only.
+
 ## Prerequisites
 
 Before the first release, a maintainer must check the live repository settings:
