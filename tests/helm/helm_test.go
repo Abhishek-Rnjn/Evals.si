@@ -235,7 +235,7 @@ func TestKEDAExternalNATSMonitoringEndpoint(t *testing.T) {
 	if !found {
 		t.Fatal("no worker ScaledObjects rendered")
 	}
-	command := exec.Command(helm(t), "template", "evalsi", filepath.Join(charts, "evalsi"),
+	command := exec.Command(helm(t), "template", "evalsi", filepath.Join(charts, "evalsi"), "--kube-version", kubeVersion(),
 		"--set", "keda.enabled=true", "--set", "nats.url=nats://external-nats:4222")
 	output, err := command.CombinedOutput()
 	if err == nil || !strings.Contains(string(output), "keda.natsServerMonitoringEndpoint is required") {
