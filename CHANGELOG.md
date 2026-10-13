@@ -25,6 +25,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
+- API pods now have a native 10-second preStop drain and explicit 30-second termination grace. A bounded EKS API-only rollout passed; the original full upgrade failed, so no full-upgrade certification is claimed.
+- KEDA with external NATS now requires `keda.natsServerMonitoringEndpoint` rather than silently targeting the removed bundled Service; all worker pools use the configured monitor. Regression tests and bounded live EKS scaling passed.
 - Applying a Databricks trace source failed validation because the connector was built before its credential was read.
 
 ## [0.1.0] - 2026-10-12

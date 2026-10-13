@@ -256,9 +256,10 @@ The Go server owns the API, runs, ingest, policies, auth and storage; evaluators
 Evals.si is pre-1.0 (`0.1.0` is the first release). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
 
 What is verified, in short:
-- **Kubernetes:** end-to-end on kind in every CI run (amd64, with Landlock), and on AKS and an Istio ambient cluster with KVM nodes (the [verification report](docs/verification/README.md)). EKS and GKE have not been run.
+- **Kubernetes:** end-to-end on kind in every CI run (amd64, with Landlock), AKS and an Istio ambient cluster with KVM nodes. [Bounded EKS checks](docs/verification/EKS-2026-10-12.md) passed live KEDA, separate-host NATS broker recovery, pool isolation, application recovery, second-release coexistence, mounted Python/Wasm and managed alert firing/delivery/resolution. Stock admission is blocked by the control-plane/Calico path; an isolated trusted host-network workaround passed. M4 and GKE remain unverified.
 - **Trace sources:** MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10)), and tested profiles for five agent frameworks.
-- **Web UI:** a browser test runs in CI.
+- **Web UI:** a browser test runs in CI; desktop/mobile Playwright checks passed against EKS, including recovered results, comparison, filtering, API-key sign-in/sign-out and annotation submit/skip. Real OIDC-provider login remains unverified.
+- **Guardrails:** real agentgateway v1.6.0 passed bounded native LLM and MCP request/result pass, mask and block controls; LLM errors failed closed. The upstream model/tool were synthetic; real model calls, streaming behavior and coding-agent products remain unverified.
 - **Air-gapped bundles:** one platform per bundle (amd64 by default, `--platform linux/arm64` for arm64); see the [Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs).
 
 What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md), sorted by what each item needs next. Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).

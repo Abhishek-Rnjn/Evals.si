@@ -207,6 +207,7 @@ workers:
 # installed). Replaces workers.pools.*.replicas.
 keda:
   enabled: false
+  natsServerMonitoringEndpoint: ""
   minReplicas: 1
   maxReplicas: 20
   lagThreshold: 10

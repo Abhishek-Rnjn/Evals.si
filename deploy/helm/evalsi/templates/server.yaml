@@ -44,6 +44,7 @@ spec:
         checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
     spec:
       serviceAccountName: {{ $fn }}
+      terminationGracePeriodSeconds: 30
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
       {{- include "evalsi.pluginInit" . | nindent 6 }}
       {{- with $v.imagePullSecrets }}
@@ -70,6 +71,9 @@ spec:
           {{- with $v.server.envFrom }}
           envFrom: {{- toYaml . | nindent 12 }}
           {{- end }}
+          lifecycle:
+            preStop:
+              sleep: {seconds: 10}
           readinessProbe:
             httpGet: {path: /healthz, port: api, scheme: {{ ternary "HTTPS" "HTTP" $v.server.tls }}}
             periodSeconds: 5
