@@ -8,9 +8,11 @@ const site = process.env.SITE_URL ?? "https://abhishek-rnjn.github.io";
 const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
 // The link-preview card (scripts/og-image.mjs), absolute as Open Graph requires.
 const ogImage = `${site}${base}/og.png`;
-// Google Search Console's HTML-tag verification: the content value of the
-// tag it gives you, set as the GOOGLE_SITE_VERIFICATION repository variable.
-const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ?? "";
+// Google Search Console's HTML-tag verification for
+// https://abhishek-rnjn.github.io/Evals.si/ (the value is public: it is in
+// every page). A GOOGLE_SITE_VERIFICATION repository variable overrides it;
+// the same default is in src/pages/index.astro.
+const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 
 const guides = [
   "agent-runs", "annotation", "fine-tuning", "guardrails", "identity",
