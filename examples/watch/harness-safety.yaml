@@ -1,0 +1,21 @@
+# Agent harness templates (2 of 4): safety on every execution. PII and secrets
+# in a workflow's output, checked by pattern (no judge), on every trace, with
+# an alert as soon as a few leak in an hour.
+#
+#   evalsi policy apply -f examples/watch/harness-safety.yaml --server $URL
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: harness-safety
+  labels: {evals.si/project: studio}
+spec:
+  selector: '"workflow" in labels && labels["stage"] == "production"'
+  stages:
+    - evaluators:
+        - {ref: builtin/pii-leak}       # passes when the output has no PII
+        - {ref: builtin/secret-leak}    # passes when it has no credentials
+  window: 1h
+  alerts:
+    # Pass rate below 99%: more than one execution in a hundred leaked.
+    - {metric: pii-leak, below: 0.99, min_samples: 20}
+    - {metric: secret-leak, below: 0.99, min_samples: 20}

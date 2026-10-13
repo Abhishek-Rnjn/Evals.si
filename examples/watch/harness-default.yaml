@@ -1,0 +1,28 @@
+# Agent harness templates (1 of 4): the default policy. Every execution of
+# every deployed workflow, scored with no judge and no cost, from its first
+# trace: nothing is applied per workflow. The bootstrap Job can create it at
+# install (bootstrap.policies, docs/guides/integrate-an-agent-harness.md).
+#
+# The workflows label their traces (OTEL_RESOURCE_ATTRIBUTES or a trace
+# source's traceLabels): evalsi.label.workflow, evalsi.label.version and
+# evalsi.label.stage=production. Copy the file and change the project.
+#
+#   evalsi policy apply -f examples/watch/harness-default.yaml --server $URL
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: harness-default
+  labels: {evals.si/project: studio}
+spec:
+  selector: '"workflow" in labels && labels["stage"] == "production"'
+  stages:
+    - evaluators:
+        - {ref: builtin/tool-errors}      # share of tool calls that failed
+        - {ref: builtin/loop-detection}   # the same call repeated
+        - {ref: builtin/latency}
+        - {ref: builtin/token-usage}
+  window: 1h
+  # Executions whose tools failed become the next deploy gate's test set.
+  promote:
+    when: 'scores["tool-errors"] > 0.0'
+    dataset: harness-regressions
