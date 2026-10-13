@@ -380,7 +380,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 
 ### Releases
 
-Releases follow semantic versioning; until 1.0 a minor version may change the `v1alpha1` API. v0.1.0 (2026-10-12) closed M1. The next release is **0.2.0**, not 0.1.1: since v0.1.0, `main` adds the `CheckpointServer` CRD, the `SliceRuns` and `ArchiveRun` RPCs, platform wheels and other features (see the [changelog](../CHANGELOG.md)), which is a minor release. Fixes for v0.1.0 alone would be a 0.1.x patch from a release branch. [RELEASING](RELEASING.md) has the procedure.
+Releases follow semantic versioning; until 1.0 a minor version may change the `v1alpha1` API. v0.1.0 (2026-10-12) closed M1. The next release is **0.2.0**, not 0.1.1: since v0.1.0, `main` adds the `CheckpointServer` CRD, the `SliceRuns` and `ArchiveRun` RPCs, platform wheels and other features (see the [changelog](../CHANGELOG.md)), which is a minor release. Fixes for v0.1.0 alone would be a 0.1.x patch from a release branch. `main` is versioned for 0.2.0 (charts `0.2.0`, CHANGELOG section with upgrade notes); [RELEASING](RELEASING.md#releasing-020) has the procedure and what is new to check for this release.
 
 **Exit criteria per milestone**
 

@@ -4,7 +4,17 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
-Planned as 0.2.0: these changes add a CRD and API, so they make a minor release.
+## [0.2.0] - to be tagged
+
+A minor release: it adds the `CheckpointServer` CRD and new `v1alpha1` RPCs, all additive. The headline changes are the agent harness pieces of M2 (a default policy, `evalsi gate`, `evalsi traces` and policy templates), runs evaluated elsewhere stored on the server (`ImportRun`, `Client.log_run`), Linux platform wheels that bundle `evalsid`, run archiving and retention, server-side slicing, and the Databricks Unity Catalog and SageMaker trace-source variants.
+
+### Upgrading from 0.1.0
+
+- **Apply the new CRD first.** Helm does not upgrade CRDs, so apply `CheckpointServer` before upgrading the charts: `kubectl apply -f deploy/helm/evalsi-crds/crds/evals.si_checkpointservers.yaml` (or from the 0.2.0 `evalsi-crds` chart). Then `helm upgrade` `evalsi-crds` (its aggregated roles and the operator's cluster role gain `checkpointservers`) and then `evalsi`. An operator without the CRD keeps running; only `CheckpointServer` is unavailable.
+- **A CPU worker pool may not be empty.** The chart now refuses `workers.pools.cpu.replicas: 0` and a `minReplicas` of 0 for the CPU pool under KEDA. Set at least 1 before upgrading.
+- **KEDA with external NATS** needs `keda.natsServerMonitoringEndpoint`; the chart refuses the upgrade without it.
+- **Nothing to migrate by hand.** The one schema change is additive (a `quota_sandbox` table), made at server start as every migration is ([operations guide](docs/guides/operations.md)). A zero-downtime upgrade from 0.1.0 is not certified: on EKS an API-only rollout passed after the drain fix, and the full upgrade has not been re-run ([evidence](docs/verification/EKS-2026-10-12.md)).
+- **Python:** `evalsi-harness` 0.2.0 pins `evalsi` 0.2.0; upgrade both together.
 
 ### Added
 
@@ -70,5 +80,6 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.
 
-[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.1.0

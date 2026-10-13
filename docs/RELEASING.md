@@ -6,10 +6,11 @@ charts and an amd64 air-gapped bundle. A pushed `v*` tag publishes them. A
 manual run builds without publishing. Only a maintainer may authorize a dry
 run or tag push; release readiness is not authorization to publish.
 
-The commands below use `0.1.0`, the first release, as the example. The next
-release is `0.2.0`: since v0.1.0, `main` adds a CRD (`CheckpointServer`) and
-API, so it is a minor release, not a patch. A 0.1.x patch would be cut from a
-`release-0.1` branch at `v0.1.0` with fixes only.
+The commands below use `0.2.0`, the next release, as the example. Since
+v0.1.0, `main` adds a CRD (`CheckpointServer`) and API, so it is a minor
+release, not a patch. A 0.1.x patch would be cut from a `release-0.1` branch at
+`v0.1.0` with fixes only. What 0.2.0 needs beyond the steps below is under
+[Releasing 0.2.0](#releasing-020).
 
 ## Prerequisites
 
@@ -72,7 +73,7 @@ check. See the [verification record](verification/README.md#ci-postgresql-and-br
 
 After the readiness PR is merged, a maintainer explicitly authorized to run it
 opens Actions > release > Run workflow, chooses the reviewed branch and enters
-`0.1.0` (without `v`). Do not choose a tag for the dry run: publication is
+`0.2.0` (without `v`). Do not choose a tag for the dry run: publication is
 controlled by the tag ref, not by the version input alone.
 
 Wait for all applicable jobs to succeed. Download the `binaries-amd64`,
@@ -94,8 +95,8 @@ Only after explicit approval, tag the reviewed commit and push that tag. The run
 then waits at the `approve` job for a reviewer of the `release` environment:
 
 ```bash
-git tag -a v0.1.0 REVIEWED_COMMIT -m "Evals.si v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 REVIEWED_COMMIT -m "Evals.si v0.2.0"
+git push origin v0.2.0
 ```
 
 Wait for the tag-triggered workflow, including PyPI if enabled. The PyPI
@@ -106,7 +107,7 @@ Download the release assets and validate `SHA256SUMS` from their directory:
 
 ```bash
 sha256sum -c SHA256SUMS
-scripts/verify-release.sh 0.1.0
+scripts/verify-release.sh 0.2.0
 ```
 
 On macOS, `shasum -a 256 -c SHA256SUMS` checks the same hashes. Run the verifier
@@ -120,10 +121,41 @@ If publication or verification fails, report the failed job/artifact and keep
 the release unverified. Do not move a published tag or overwrite its artifacts;
 fix forward under a separately approved version.
 
+## Releasing 0.2.0
+
+The repository is versioned for it: the three charts are `0.2.0`, the Python
+packages `0.2.0.dev0` (the workflow stamps the release version into both), and
+the CHANGELOG has a `[0.2.0] - to be tagged` section with upgrade notes. Steps
+that are new or untested since v0.1.0:
+
+1. **Changelog.** Anything merged after the readiness PR goes under
+   `[0.2.0]`, not `[Unreleased]`, until the tag.
+2. **Kind with Landlock.** Dispatch `ci` on the release commit and read the
+   `kubernetes` job (above); it also runs the M2 gated deploy and the M3
+   trace-source measurement. The `rlframeworks` and `trainers` jobs run on the
+   same dispatch; `mcp-agent` is skipped without an `ANTHROPIC_API_KEY` secret.
+3. **Upgrade from 0.1.0.** On kind: install the v0.1.0 charts, apply the
+   `CheckpointServer` CRD, `helm upgrade` both charts from the release commit,
+   and run a dataset run; the CHANGELOG's upgrade notes are what a user follows.
+4. **Dry run.** As above, plus the first platform wheels: the `wheels-amd64`
+   and `wheels-arm64` artifacts each hold one
+   `evalsi-0.2.0-py3-none-manylinux_2_17_*.whl` with `evalsi/_bin/evalsid` and
+   `bwrap`; install the arm64 one on an arm64 Linux host and run
+   `evalsi evalsid-path`.
+5. **Tag run.** The first tag run of the fixed `release` job: check the
+   GitHub release lists the archives, both wheel kinds, sdists, charts, bundle,
+   SBOMs and `SHA256SUMS`, and nothing else. With PyPI on, check that
+   `pip download evalsi==0.2.0` on Linux amd64 picks the platform wheel and on
+   macOS the pure one.
+6. **After publication.** Date the CHANGELOG section, record the run in the
+   [verification record](verification/README.md), move the install commands in
+   the [Kubernetes guide](guides/kubernetes.md#installing-a-release-and-verifying-it)
+   to `0.2.0`, and update the release lines in the README, PRD and LEFTOVERS.
+
 ## Lessons from v0.1.0
 
 - **Tag rules.** The deployment rule on the `release`, `pypi` and `pypi-harness` environments must be a **tag** rule (`v*`). A branch rule with the same pattern rejects every tag run.
 - **What a dry run does not cover.** Signing, GHCR pushes, the `release` job and PyPI run only on a tag. The first tag run found a login bug in the chart signing step that no dry run could. Treat each of those steps as untested until a tag run passes it.
-- **The `release` job.** It used to download every artifact in the run, including the Docker build records (`*.dockerbuild`), and that download failed; for v0.1.0 the GitHub release was created by hand from the run's artifacts. It now downloads only the release files (`binaries-*`, `python`, `charts`, `bundle`, `sbom-*`), the build action no longer uploads build records, and a dry run gathers and checksums the files too. The fix has run on a dry run but not yet on a tag, so check the release assets after the next tag run.
+- **The `release` job.** It used to download every artifact in the run, including the Docker build records (`*.dockerbuild`), and that download failed; for v0.1.0 the GitHub release was created by hand from the run's artifacts. It now downloads only the release files (`binaries-*`, `python`, `wheels-*`, `charts`, `bundle`, `sbom-*`), the build action no longer uploads build records, and a dry run gathers and checksums the files too. The fix has run on a dry run but not yet on a tag, so check the release assets after the next tag run.
 - **Moving a tag.** Moving an unreleased tag is acceptable only before anything is published. A PyPI version can never be uploaded again, so once the PyPI jobs have run, fix forward under a new version and never re-run the workflow for the same tag.
 - **No macOS `sha256sum`.** Use `shasum -a 256` to create or check `SHA256SUMS` on macOS.
