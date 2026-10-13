@@ -83,7 +83,7 @@ def test_the_deploy_gate_loads_and_deploy_sh_renames_it() -> None:
     assert run.spec.gates, "a deploy gate without gates blocks nothing"
     # deploy.sh names each release's run by rewriting this line.
     assert "\n  name: research-assistant-gate\n" in GATE.read_text()
-    assert "s/^  name: research-assistant-gate\\$/" in (DEMO / "deploy" / "deploy.sh").read_text()
+    assert "s|^  name: research-assistant-gate\\$|" in (DEMO / "deploy" / "deploy.sh").read_text()
 
 
 def test_datasets_named_by_specs_exist() -> None:
