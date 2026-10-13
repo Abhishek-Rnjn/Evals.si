@@ -226,6 +226,16 @@ The `EvalRun`, `OnlineEvalPolicy` and `TraceSource` schemas are generated from t
 
 Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun`, `OnlineEvalPolicy` and `TraceSource` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The webhook then asks evalsid whether it would accept the resource (`validate_only`): a variable the project has no [credential grant](identity.md#8-credentials-which-worker-secrets-a-project-may-use) for, a judge it may not use, a trace source's endpoint the server may not reach, or a spec the server refuses fails at `kubectl apply` too. When evalsid does not answer within 5 seconds, or the project does not exist yet (the operator creates it), the resource is admitted with a warning and its status reports the outcome. The `admin`, `edit` and `view` roles cover the resources through aggregation (`TraceSource`s: `admin` only).
 
+#### When the API server cannot reach the webhooks
+
+The API server calls the webhooks on the operator pod's IP. On EKS with Calico's overlay (IP-in-IP or VXLAN), the managed control plane cannot open connections to overlay pod IPs, so every create of an `evals.si` resource fails with `Address is not allowed` or a timeout, and `failurePolicy: Fail` refuses it ([Tigera's note](https://docs.tigera.io/calico/latest/getting-started/kubernetes/managed-public-cloud/eks)). Kubernetes itself and the operator are fine; the 2026-10-12 [EKS run](../verification/EKS-2026-10-12.md) saw exactly this (EKS-R1). Three ways out, best first:
+
+1. **Use the VPC CNI** for pod networking, whose pod IPs the control plane can reach. Nothing to change in Evals.si.
+2. **Put the webhooks on the node network.** Set `operator.hostNetwork: true` on the `evalsi` release. The operator pod then listens on its node's address (`dnsPolicy: ClusterFirstWithHostNet`), which the control plane can reach. The cost: host networking is refused by the Pod Security `baseline` and `restricted` levels, so the release's namespace must be `privileged` (or exempt the operator pod), and the three ports (`operator.webhookPort`, `metricsPort`, `healthPort`; 9443, 8080 and 8081) become node ports, so every operator replica needs a node of its own and none may clash with another host-network pod. Keep node security groups from exposing them beyond the cluster. This was verified on EKS with fail-closed handlers on a host-network pod: valid and invalid dry runs behaved, and an `EvalRun` completed.
+3. **Turn the webhooks off** (`operator.webhooks: false` on the `evalsi` release and `webhooks.enabled: false` on `evalsi-crds`). Specs are then checked by the controllers and the API only, so a bad spec fails in the resource's status, not at `kubectl apply`, and `evals.si/created-by` is not stamped.
+
+Under Istio STRICT mTLS the symptom is the same but the cause differs; see `operator.istio.peerAuthentication` below.
+
 ## Sandboxes on Kubernetes
 
 Worker pods hold credentials (provider keys, the cluster's tokens), so sandboxes never run beside them. Workers lease sandboxes from a **sandbox pool** over mutual TLS; pools admit only the workers' certificate (`evalsi-worker`).

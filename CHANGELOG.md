@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Operator on the host network.** `operator.hostNetwork` (with `webhookPort`, `metricsPort` and `healthPort`) runs the operator and its admission webhooks on the node's network, for clusters whose API server cannot reach overlay pod IPs (EKS with Calico). The Kubernetes guide covers the choices and the Pod Security cost.
 - **Operator-managed checkpoint serving.** A `CheckpointServer` resource (`kubectl get checkpointservers`) has the operator run vLLM for a checkpoint: a Deployment and Service, the endpoint and readiness in the status, optional PVC of checkpoints, LoRA mode and API-key Secret. `evalsi checkpoints watch|eval --serve operator` creates one per checkpoint through `kubectl` and deletes it afterwards. Tested with a fake client and a fake `kubectl`; not yet run on a cluster.
 - **Platform wheels that bundle `evalsid`.** From the next release, it builds `evalsi` wheels for Linux amd64 and arm64 (`py3-none-manylinux_2_17_*`) that carry `evalsid` and the static `bwrap` in `evalsi/_bin`, the same release as the package. `evalsi serve`, code evaluators and Wasm plugins look for `evalsid` in `EVALSID`, then the bundle, then `PATH`; `evalsi evalsid-path` prints the one in use. The pure-Python wheel and sdist remain; `pip install --no-binary evalsi evalsi` builds the pure package. CI builds a platform wheel from the real archive, installs it and runs its sandbox.
 - **Task environments as OpenEnv and verifiers environments.** `evalsi_harness.envspecs.openenv` (`TaskOpenEnv`, `create_task_app`) and `evalsi_harness.envspecs.verifiers` (`load_environment`) present the tasks agent runs evaluate as an OpenEnv `Environment` and a verifiers `StatefulToolEnv`, rewarded by the task's checker. Install `openenv-core` or `verifiers` yourself (0.3.x each, the versions CI tests against); there are no extras, so the workspace lock stays small.
@@ -20,6 +21,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
+- The chart refuses a CPU worker pool that may be empty (`workers.pools.cpu.replicas: 0`, or `keda.minReplicas` / the pool's `minReplicas` of 0): API restarts wait for a CPU worker to describe evaluators. A pool's own `minReplicas: 0` now takes effect for the other pools instead of falling back to `keda.minReplicas`.
 - New `CheckpointServer` custom resource (`evals.si/v1alpha1`); apply the `evalsi-crds` chart's new CRD on upgrade. `RunService` gains `SliceRuns` and `ArchiveRun`, and `Run` gains `archived_at` (`v1alpha1`, additive).
 - `auth.sigv4` gains `arn` and `auth.databricks` gains `client_id` (`v1alpha1`, additive).
 
