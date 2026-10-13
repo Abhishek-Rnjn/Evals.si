@@ -59,13 +59,15 @@ From Python, with your own evaluator beside the built-in ones:
 import evalsi
 from evalsi import Record, Score, evaluator
 
+
 @evaluator(name="acme/polite", version="1.0.0")
 def polite(record: Record) -> Score:
     return Score(passed="please" in record.output.as_text().lower())
 
+
 result = evalsi.evaluate("qa.jsonl", ["exact-match", polite])
 print(result.table())
-result.save("results.json")   # manifest, summaries and every per-record result
+result.save("results.json")  # manifest, summaries and every per-record result
 ```
 
 ## Runs and CI gates
@@ -87,9 +89,11 @@ evalsi gate -f gate.yaml --server https://evalsi.example --release v42   # a dep
 import evalsi
 from evalsi.client import Client
 
-with Client("https://evalsi.example") as client:      # API key from EVALSI_API_KEY
+with Client("https://evalsi.example") as client:  # API key from EVALSI_API_KEY
     print(client.evaluate("qa.jsonl", ["exact-match"]).table())
-    client.log_run(evalsi.evaluate("qa.jsonl", ["exact-match"]), name="nightly")  # store a local result
+    client.log_run(
+        evalsi.evaluate("qa.jsonl", ["exact-match"]), name="nightly"
+    )  # store a local result
 ```
 
 `Client.evaluate()` returns the same result as in-process `evalsi.evaluate()`, intervals included.
@@ -103,8 +107,12 @@ from trl import GRPOConfig, GRPOTrainer
 from evalsi.rewards.trl import reward_funcs
 
 funcs, weights = reward_funcs("code-reward.yaml")
-trainer = GRPOTrainer(model=model, reward_funcs=funcs,
-                      args=GRPOConfig(..., reward_weights=weights), train_dataset=dataset)
+trainer = GRPOTrainer(
+    model=model,
+    reward_funcs=funcs,
+    args=GRPOConfig(..., reward_weights=weights),
+    train_dataset=dataset,
+)
 ```
 
 verl (`evalsi.rewards.verl`) and OpenRLHF (`evalsi.rewards.openrlhf`, or `evalsi rewards serve`) use the same spec. `evalsi checkpoints` evaluates every training checkpoint against the base model.

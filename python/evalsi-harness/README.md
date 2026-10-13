@@ -38,11 +38,13 @@ The same tasks can be handed to trainers that speak other environment specs (ins
 
 ```python
 from evalsi_harness.envspecs.openenv import TaskOpenEnv, TaskAction, create_task_app
-env = TaskOpenEnv([(record, spec)])              # an OpenEnv Environment
-obs = env.step(TaskAction(tool="submit"))        # obs.done, obs.reward
+
+env = TaskOpenEnv([(record, spec)])  # an OpenEnv Environment
+obs = env.step(TaskAction(tool="submit"))  # obs.done, obs.reward
 
 from evalsi_harness.envspecs.verifiers import load_environment
-vf_env = load_environment([(record, spec)])      # a verifiers StatefulToolEnv
+
+vf_env = load_environment([(record, spec)])  # a verifiers StatefulToolEnv
 ```
 
 Apache-2.0.
