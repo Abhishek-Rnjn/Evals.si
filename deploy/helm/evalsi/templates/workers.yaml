@@ -13,6 +13,12 @@ metadata:
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 automountServiceAccountToken: false
 {{- range $pool, $p := $v.workers.pools }}
+{{- /* A pool's own minReplicas wins even at 0 (default would treat 0 as unset). */}}
+{{- $minReplicas := ternary $p.minReplicas $v.keda.minReplicas (hasKey $p "minReplicas") }}
+{{- $floor := ternary $minReplicas $p.replicas $v.keda.enabled }}
+{{- if and (eq $pool "cpu") (eq (int $floor) 0) }}
+{{- fail "workers.pools.cpu must keep at least one worker (replicas, or keda.minReplicas / its minReplicas): the API describes evaluators through a CPU worker, so with none running its restarts wait" }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -107,7 +113,7 @@ metadata:
   labels: {{- include "evalsi.labels" $ | nindent 4 }}
 spec:
   scaleTargetRef: {name: {{ $fn }}-worker-{{ $pool }}}
-  minReplicaCount: {{ $p.minReplicas | default $v.keda.minReplicas }}
+  minReplicaCount: {{ $minReplicas }}
   maxReplicaCount: {{ $p.maxReplicas | default $v.keda.maxReplicas }}
   pollingInterval: {{ $v.keda.pollingInterval }}
   triggers:

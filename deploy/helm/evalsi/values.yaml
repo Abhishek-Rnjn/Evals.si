@@ -266,6 +266,15 @@ operator:
   # Serve the admission webhooks (evalsi-crds installs their configuration
   # and certificate).
   webhooks: true
+  # Listen on the node's network, not the pod's. For clusters whose API server
+  # cannot reach overlay pod IPs (EKS with Calico's overlay); the namespace
+  # must allow host networking (not Pod Security baseline or restricted), and
+  # the ports below are then node ports: with several replicas, each needs a
+  # node of its own. See docs/guides/kubernetes.md.
+  hostNetwork: false
+  webhookPort: 9443
+  metricsPort: 8080
+  healthPort: 8081
   createProjects: true
   # The operator calls evalsid as an owner, so a resource's evals.si/project
   # label may name another project than its namespace only from this

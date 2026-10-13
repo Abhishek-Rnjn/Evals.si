@@ -60,6 +60,13 @@ spec:
       labels: {app.kubernetes.io/name: {{ $fn }}-operator, app.kubernetes.io/part-of: evalsi}
     spec:
       serviceAccountName: {{ $fn }}-operator
+      {{- if $v.operator.hostNetwork }}
+      # The API server cannot dial overlay pod IPs on some clusters (EKS with
+      # Calico), so the webhooks listen on the node's address. This breaks
+      # the restricted and baseline Pod Security levels.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       securityContext: {{- include "evalsi.podSecurity" . | nindent 8 }}
       {{- with .Values.operator.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
@@ -109,14 +116,17 @@ spec:
             {{- end }}
             - --webhooks={{ $v.operator.webhooks }}
             - --webhook-cert-dir=/etc/evalsi/webhook-tls
+            - --webhook-port={{ $v.operator.webhookPort }}
+            - --metrics-bind-address=:{{ $v.operator.metricsPort }}
+            - --health-probe-bind-address=:{{ $v.operator.healthPort }}
             - --leader-elect={{ gt (int $v.operator.replicas) 1 }}
           env:
             - name: POD_NAMESPACE
               valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
           ports:
-            - {name: webhook, containerPort: 9443}
-            - {name: metrics, containerPort: 8080}
-            - {name: health, containerPort: 8081}
+            - {name: webhook, containerPort: {{ $v.operator.webhookPort }}}
+            - {name: metrics, containerPort: {{ $v.operator.metricsPort }}}
+            - {name: health, containerPort: {{ $v.operator.healthPort }}}
           readinessProbe:
             httpGet: {path: /readyz, port: health}
             periodSeconds: 5
@@ -171,6 +181,6 @@ spec:
     matchLabels: {app.kubernetes.io/name: {{ $fn }}-operator}
   mtls: {mode: STRICT}
   portLevelMtls:
-    9443: {mode: PERMISSIVE}
+    {{ $v.operator.webhookPort }}: {mode: PERMISSIVE}
 {{- end }}
 {{- end }}
