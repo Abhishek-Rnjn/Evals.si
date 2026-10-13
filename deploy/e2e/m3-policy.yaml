@@ -1,0 +1,12 @@
+# M3: scores what the m3 source pulls, so a pulled trace's lag ends when its
+# scores exist.
+apiVersion: evals.si/v1alpha1
+kind: OnlineEvalPolicy
+metadata:
+  name: m3-policy
+  labels: {evals.si/project: demo}
+spec:
+  selector: 'labels["source"] == "m3"'
+  stages:
+    - evaluators: [{ref: builtin/tool-errors}, {ref: builtin/loop-detection}]
+  window: 1h
