@@ -468,3 +468,16 @@ Problems the tag run found, and what was done:
 1. The first tag push failed at `approve` ("Tag … is not allowed to deploy to release"): the environment's `v*` rule had been added as a branch rule. It was changed to a tag rule. Nothing had run.
 2. The second tag run failed in `charts`: `helm registry login` keeps credentials that cosign does not read, so the signature push was refused. The dry run cannot reach that step. Fixed in [PR #37](https://github.com/Abhishek-Rnjn/Evals.si/pull/37). That run was cancelled, `v0.1.0` was moved to the fixed commit before anything was released, and the final run overwrote the `0.1.0` tags it had touched.
 3. In the final run the `release` job failed in `actions/download-artifact`: it downloads every artifact in the run, including the two `*.dockerbuild` build records, and those downloads failed after retries. The release was created by hand with `gh release create` from the run's own artifacts (the same files the job attaches, without the build records), with `SHA256SUMS` computed on the maintainer's machine. The auto-generated release notes listed every pull request title as written, so a maintainer replaced them with the changelog's 0.1.0 section. The workflow fix is in [PR #41](https://github.com/Abhishek-Rnjn/Evals.si/pull/41) (see [RELEASING](../RELEASING.md#lessons-from-v010)).
+
+## Agent harness gate and trace-source measurement (2026-10-13)
+
+Two steps added to the kind e2e job (`deploy/e2e/kind-e2e.sh`), both run in the CI `kubernetes` job (amd64, with Landlock) and ending `=== passed`:
+
+| Step | Run | Result |
+|------|-----|--------|
+| M2: a failed gate blocks a deploy, and the default policy scores the deployed workflow | [run 204](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38353973243) at `3fb0c54` | `deploy.sh v2 mock-regressed` exited 3 and production stayed at v1; `deploy.sh v3` went live; `/v1alpha1/scores?labels=workflow=research-assistant&labels=version=v3` returned v3's production trace scored by the bootstrap's `studio-default` policy |
+| M3: a 30-day backfill from MLflow, then the pull lag of live traces | [run 209](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38382605620) at `f6e6eca` | 300 traces spread over 30 days backfilled in 6.0 s; 20 live traces scored with p50 9.2 s, p95 15.3 s, max 15.3 s (poll interval 15 s; the limit is 120 s) |
+
+Local runs against a real evalsid and MLflow 3.17.0 gave the same picture: 500 traces backfilled in 5.0 s with live p95 15.4 s, and 300 in 3.0 s with p95 15.2 s. None of this is a production measurement: one MLflow, one evalsid, a tiny policy and the demo's mock model. Not verified: the real agent harness, Databricks or SageMaker stores, backfill and lag under load, and scores in each store's own UI.
+
+The same run's `rlframeworks` job passed (Evals.si rewards in verl 0.9.1's reward managers and OpenRLHF 0.11.2's rollout executor, no training step), and `mcp-agent` skipped: the repository has no `ANTHROPIC_API_KEY` secret.
