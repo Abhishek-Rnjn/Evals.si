@@ -328,6 +328,55 @@ func TestOperatorPeerAuthentication(t *testing.T) {
 	}
 }
 
+func TestOperatorHostNetwork(t *testing.T) {
+	spec := find(t, render(t, "evalsi"), "Deployment", "evalsi-operator").Spec
+	if y := toYAML(t, spec); strings.Contains(y, "hostNetwork") || !strings.Contains(y, "--webhook-port=9443") {
+		t.Errorf("default operator: %s", y)
+	}
+	spec = find(t, render(t, "evalsi", "operator.hostNetwork=true", "operator.webhookPort=10250",
+		"operator.metricsPort=18080", "operator.healthPort=18081"), "Deployment", "evalsi-operator").Spec
+	y := toYAML(t, spec)
+	for _, want := range []string{"hostNetwork: true", "dnsPolicy: ClusterFirstWithHostNet", "--webhook-port=10250",
+		"--metrics-bind-address=:18080", "--health-probe-bind-address=:18081", "containerPort: 10250"} {
+		if !strings.Contains(y, want) {
+			t.Errorf("host-network operator lacks %q: %s", want, y)
+		}
+	}
+	pa := find(t, render(t, "evalsi", "operator.istio.peerAuthentication=true", "operator.webhookPort=10250"), "PeerAuthentication", "evalsi-operator-webhook")
+	if y := toYAML(t, pa.Spec); !strings.Contains(y, `"10250":`) {
+		t.Errorf("PeerAuthentication ignores webhookPort: %s", y)
+	}
+}
+
+// An API restart waits for a CPU worker to describe evaluators, so a CPU pool
+// that may scale to zero is refused (EKS report).
+func TestCPUPoolKeepsAWorker(t *testing.T) {
+	for _, args := range [][]string{
+		{"workers.pools.cpu.replicas=0"},
+		{"keda.enabled=true", "keda.minReplicas=0"},
+		{"keda.enabled=true", "workers.pools.cpu.minReplicas=0"},
+	} {
+		cmd := exec.Command(helm(t), append([]string{"template", "t", filepath.Join(charts, "evalsi"), "--kube-version", kubeVersion()}, setArgs(args)...)...)
+		if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "workers.pools.cpu must keep at least one worker") {
+			t.Errorf("%v: %v %s", args, err, out)
+		}
+	}
+	// Other pools may scale to zero, by the default or by their own setting.
+	for _, o := range render(t, "evalsi", "keda.enabled=true", "keda.minReplicas=1", "workers.pools.judge.minReplicas=0") {
+		if o.Kind == "ScaledObject" && o.Metadata.Name == "evalsi-worker-judge" && fmt.Sprint(o.Spec["minReplicaCount"]) != "0" {
+			t.Errorf("judge minReplicas 0 became %v", o.Spec["minReplicaCount"])
+		}
+	}
+}
+
+func setArgs(sets []string) []string {
+	var out []string
+	for _, s := range sets {
+		out = append(out, "--set", s)
+	}
+	return out
+}
+
 // find2 returns every object of a kind.
 func find2(objs []object, kind string) []object {
 	var out []object
