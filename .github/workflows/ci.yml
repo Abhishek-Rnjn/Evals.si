@@ -13,6 +13,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # proxy.golang.org sometimes answers a module download with a stream
+  # INTERNAL_ERROR, which failed jobs before any test ran (python, e2e). The
+  # "|" falls back to fetching from the module's origin on any error, not only
+  # on a 404 as "," does.
+  GOPROXY: https://proxy.golang.org|direct
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
