@@ -4,7 +4,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
-## [0.2.0] - to be tagged
+## [0.2.0] - 2026-10-13
 
 A minor release: it adds the `CheckpointServer` CRD and new `v1alpha1` RPCs, all additive. The headline changes are the agent harness pieces of M2 (a default policy, `evalsi gate`, `evalsi traces` and policy templates), runs evaluated elsewhere stored on the server (`ImportRun`, `Client.log_run`), Linux platform wheels that bundle `evalsid`, run archiving and retention, server-side slicing, and the Databricks Unity Catalog and SageMaker trace-source variants.
 

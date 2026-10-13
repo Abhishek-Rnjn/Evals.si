@@ -481,3 +481,41 @@ Two steps added to the kind e2e job (`deploy/e2e/kind-e2e.sh`), both run in the 
 Local runs against a real evalsid and MLflow 3.17.0 gave the same picture: 500 traces backfilled in 5.0 s with live p95 15.4 s, and 300 in 3.0 s with p95 15.2 s. None of this is a production measurement: one MLflow, one evalsid, a tiny policy and the demo's mock model. Not verified: the real agent harness, Databricks or SageMaker stores, backfill and lag under load, and scores in each store's own UI.
 
 The same run's `rlframeworks` job passed (Evals.si rewards in verl 0.9.1's reward managers and OpenRLHF 0.11.2's rollout executor, no training step), and `mcp-agent` skipped: the repository has no `ANTHROPIC_API_KEY` secret.
+
+## v0.2.0 release record (2026-10-13)
+
+Tag `v0.2.0` points at `0730a18819ade4ca7147d993fb658965c081b9fe` (the merge of
+PR #58). The tag run is
+[38410698562](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38410698562);
+the `release` environment approved the build and the `pypi` and `pypi-harness`
+environments the two PyPI uploads. The GitHub release was published at 14:45 UTC.
+Unlike v0.1.0, nothing had to be fixed or done by hand.
+
+Gates on this exact commit before the tag:
+
+| Gate | Result |
+|------|--------|
+| CI dispatch, [run 215](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38392627968) | All 24 jobs passed, including `kubernetes` (kind with Landlock, ending `=== passed`), `rlframeworks`, `trainers`, `taubench` and `release-check`. `mcp-agent` passed without running Claude Code: the repository has no `ANTHROPIC_API_KEY` secret |
+| Release dry run, [run 38392472377](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38392472377) | Passed. The `release` job gathered and checksummed 12 files, all 0.2.0, and no build records; the amd64 platform wheel installed and its bundled `evalsid` reported 0.2.0 |
+
+What the tag run published:
+
+| Artifact | Where |
+|----------|-------|
+| Images | `ghcr.io/abhishek-rnjn/evalsi:0.2.0` and `evalsi-collector:0.2.0` (also `latest`), signed; the `evalsi` image has an attested SPDX SBOM |
+| Charts | `oci://ghcr.io/abhishek-rnjn/charts/{evalsi,evalsi-crds,evalsi-sandboxd}:0.2.0`, signed (the step that failed on the first v0.1.0 tag run) |
+| Python | PyPI `evalsi` 0.2.0 (pure wheel, sdist and the first platform wheels, `manylinux_2_17_x86_64` and `manylinux_2_17_aarch64`) and `evalsi-harness` 0.2.0 (wheel and sdist) |
+| Release assets | 14 files: the Linux amd64 and arm64 archives, the three `evalsi` wheels and sdist, the `evalsi-harness` wheel and sdist, the three charts, the amd64 bundle, `evalsi-0.2.0.spdx.json` and `SHA256SUMS`. The fixed `release` job attached them itself |
+
+A maintainer checked after publication, from their own machine:
+
+- `SHA256SUMS` verified every release file.
+- `scripts/verify-release.sh 0.2.0` verified the signatures of both images and the three charts, and the `evalsi` image's SBOM attestation, against the release workflow's identity at `v0.2.0`.
+- `helm pull` fetched the three 0.2.0 charts from GHCR.
+- `evalsi==0.2.0` and `evalsi-harness==0.2.0` installed from PyPI into a clean Python 3.12 environment and both report 0.2.0. pip picked the pure wheel on macOS and the `manylinux_2_17_x86_64` wheel for Linux amd64. Python 3.10 is refused (`Requires-Python >=3.11`), as intended.
+- In an arm64 Linux container (`python:3.12-slim`), `pip install evalsi==0.2.0` installed the arm64 platform wheel; `evalsi evalsid-path` found the bundled `evalsi/_bin/evalsid`, which printed `evalsid 0.2.0 (api evalsi.v1alpha1)`.
+
+Not checked:
+
+- A chart install from the OCI charts on a cluster, an upgrade from the v0.1.0 charts (the CHANGELOG's upgrade notes are untested on a cluster), an import of the published bundle, and the arm64 images.
+- The bundled `bwrap` running a sandbox from an installed arm64 wheel (the amd64 wheel's sandbox runs in CI's `release-check`).

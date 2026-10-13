@@ -64,7 +64,7 @@ All three doors exist, and v0.1.0 is released. Status is as of `main` on 2026-10
 | Default policy and gated deploys for an agent harness | Built (A1, A2): bootstrap default policy, `evalsi gate`, the demo's `deploy.sh`, run by the kind e2e job; policy templates in `examples/watch/harness-*.yaml` | `python/evalsi/src/evalsi/cli.py`, `examples/demo/` |
 | Trace inspection and export | Built: `evalsi traces list`, `get` and `export` (records with scores, by label, policy or time) | `python/evalsi/src/evalsi/cli_traces.py` |
 | Runs evaluated elsewhere | Built (E6): `RunService.ImportRun`, `Client.log_run()` | `internal/runs/import.go` |
-| Release tag, signed images, published charts | Done: v0.1.0 on 2026-10-12, signatures verified ([record](verification/README.md#v010-release-record-2026-10-12)). The next release is **0.2.0** (see [Releases](#releases)) | `.github/workflows/release.yml`, [RELEASING](RELEASING.md) |
+| Release tag, signed images, published charts | Done: v0.1.0 on 2026-10-12 and v0.2.0 on 2026-10-13, signatures verified ([v0.1.0](verification/README.md#v010-release-record-2026-10-12), [v0.2.0](verification/README.md#v020-release-record-2026-10-13)); see [Releases](#releases) | `.github/workflows/release.yml`, [RELEASING](RELEASING.md) |
 
 ## Priority customer: the agent harness
 
@@ -371,7 +371,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 
 | Milestone | Status | What is left |
 | --- | --- | --- |
-| M1 Release, SDK client | **Done.** v0.1.0 signed, published and verified; `Client.evaluate()` parity test; webhooks | Nothing |
+| M1 Release, SDK client | **Done.** v0.1.0 signed, published and verified (v0.2.0 since); `Client.evaluate()` parity test; webhooks | Nothing |
 | M2 agent harness online | **In progress.** A3, A7, R1 to R5 and R7 to R9 built. The default policy (A1) and the gated deploy (A2) are built on the demo: standalone checked (a regressed release exits 3, production traces scored by the default policy), and the kind e2e job runs both | The kind job's pass on CI; sign-off on the real agent harness needs access to its repository (open question below) |
 | M3 Pull connectors | **Partly done.** S1, S4 to S8 built; MLflow OSS, Phoenix and Langfuse verified live; R6 passed on kind; a 30-day backfill and p95 pull lag measured by `scripts/measure-trace-source.py` (locally 500 traces in 5 s, p95 15 s; in the kind e2e job) | Databricks and SageMaker against real workspaces; backfill and lag at production scale; scores in each store's UI checked; profiles against real model output |
 | M4 Real-infra hardening | **Not certified.** Bounded EKS KEDA, broker recovery and restore passed | 10k traces/min and 1k concurrent trials; a full zero-downtime upgrade and the N-1 rule; node failure; mesh enforcement |
@@ -380,7 +380,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 
 ### Releases
 
-Releases follow semantic versioning; until 1.0 a minor version may change the `v1alpha1` API. v0.1.0 (2026-10-12) closed M1. The next release is **0.2.0**, not 0.1.1: since v0.1.0, `main` adds the `CheckpointServer` CRD, the `SliceRuns` and `ArchiveRun` RPCs, platform wheels and other features (see the [changelog](../CHANGELOG.md)), which is a minor release. Fixes for v0.1.0 alone would be a 0.1.x patch from a release branch. `main` is versioned for 0.2.0 (charts `0.2.0`, CHANGELOG section with upgrade notes); [RELEASING](RELEASING.md#releasing-020) has the procedure and what is new to check for this release.
+Releases follow semantic versioning; until 1.0 a minor version may change the `v1alpha1` API. v0.1.0 (2026-10-12) closed M1. v0.2.0 (2026-10-13) is a minor release: it adds the `CheckpointServer` CRD, the `ImportRun`, `SliceRuns` and `ArchiveRun` RPCs, platform wheels and the M2 agent harness pieces (see the [changelog](../CHANGELOG.md)); it was signed, published to GHCR and PyPI and verified ([record](verification/README.md#v020-release-record-2026-10-13)). Fixes for a released version alone would be a patch from a release branch. [RELEASING](RELEASING.md) has the procedure.
 
 **Exit criteria per milestone**
 
