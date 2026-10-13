@@ -1,0 +1,12 @@
+# The rlframeworks job's environment (CPU torch comes from the PyTorch CPU
+# index). OpenRLHF is installed separately with --no-deps: its pins include
+# flash-attn and deepspeed, which need CUDA, and none of them is on the reward
+# path these tests exercise.
+verl==0.9.1
+transformers==5.10.4
+tokenizers==0.22.2
+tensordict==0.10.0
+omegaconf==2.3.1
+ray[default]==2.59.0
+aiohttp==3.14.5
+pytest==9.1.1

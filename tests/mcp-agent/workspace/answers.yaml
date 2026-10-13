@@ -1,0 +1,11 @@
+# Three answers, scored by exact match: two are right. The coding agent is
+# asked to run this through the evalsi MCP server and report the score.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: answers
+spec:
+  dataset: {path: data.jsonl}
+  evaluators: [{ref: builtin/exact-match}]
+  gates:
+    - {metric: exact-match, min: 0.9}
