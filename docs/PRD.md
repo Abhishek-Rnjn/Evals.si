@@ -244,7 +244,7 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 | E3 | Tensor-friendly batching: accept lists of dicts, pandas, or Hugging Face datasets; non-blocking futures so a training step never waits | P1 | Built; real tensors/pandas/HF datasets tested; serialization is local and network I/O async ([report](verification/PART-C.md)) |
 | E4 | RL rewards from the cluster Reward Service (TRL, verl, OpenRLHF) | P0 | Built |
 | E5 | Checkpoint evaluation hooks for plain PyTorch and Lightning (not only Hugging Face `TrainerCallback`) | P1 | Built; actual CPU framework tests in separate environments ([guide](guides/fine-tuning.md#plain-pytorch-and-lightning)); state-dict serving needs a compatible strategy. The PyTorch hook saves and evaluates on rank zero only, and the checkpoint takes the umask's mode |
-| E6 | Log results from a local loop to the server as a run, so they show next to cluster runs | P1 | Partly |
+| E6 | Log results from a local loop to the server as a run, so they show next to cluster runs | P1 | Built: `Client.log_run(result)` stores an in-process result as a finished run (`RunService.ImportRun`), gates checked on the server, webhooks fired; local evaluators the server lacks are kept by name ([guide](guides/fine-tuning.md#logging-a-local-loop-to-the-server)) |
 
 ## Architecture and API design
 
@@ -319,6 +319,8 @@ status:
 | `POST /v1alpha1/webhooks` | Subscribe to run finished, gate failed, trace scored, alert fired; HMAC-signed |
 | `GET /v1alpha1/traces/{id}/scores`, `GET /v1alpha1/scores?project=&label=&since=` | Query scores per trace, workflow or label, for the agent harness UI. Built as `TraceService.ListScores`: labels are repeated `labels=key=value`, and `service`, `policy`, `evaluator` and paging are filters too |
 | `evalsi.Client.evaluate()`, `evaluate_stream()`, `evaluate_async()` | Python wrappers over `EvaluationService` returning `EvaluationResult` |
+| `POST /v1alpha1/runs:import`, `Client.log_run()` | `RunService.ImportRun`: store a run evaluated elsewhere (E6) |
+| `evalsi gate`, `evalsi traces` | A deploy gate for one release (A2) for pipelines without `kubectl`; list, show and export ingested traces |
 | `evalsi.log(input=, output=, trace_id=, metadata=)` | Buffered client that sends OTLP to evalsid |
 | Idempotency-Key header on every POST | Dedup retries |
 
@@ -366,7 +368,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 | --- | --- | --- |
 | M1 Release, SDK client | **Done.** v0.1.0 signed, published and verified; `Client.evaluate()` parity test; webhooks | Nothing |
 | M2 agent harness online | **In progress.** A3, A7, R1 to R5 and R7 to R9 built. The default policy (A1) and the gated deploy (A2) are built on the demo: standalone checked (a regressed release exits 3, production traces scored by the default policy), and the kind e2e job runs both | The kind job's pass on CI; sign-off on the real agent harness needs access to its repository (open question below) |
-| M3 Pull connectors | **Partly done.** S1, S4 to S8 built; MLflow OSS, Phoenix and Langfuse verified live; R6 passed on kind | Databricks and SageMaker against real workspaces; 30-day backfill, p95 lag and scores in each store's UI measured; profiles against real model output |
+| M3 Pull connectors | **Partly done.** S1, S4 to S8 built; MLflow OSS, Phoenix and Langfuse verified live; R6 passed on kind; a 30-day backfill and p95 pull lag measured by `scripts/measure-trace-source.py` (locally 500 traces in 5 s, p95 15 s; in the kind e2e job) | Databricks and SageMaker against real workspaces; backfill and lag at production scale; scores in each store's UI checked; profiles against real model output |
 | M4 Real-infra hardening | **Not certified.** Bounded EKS KEDA, broker recovery and restore passed | 10k traces/min and 1k concurrent trials; a full zero-downtime upgrade and the N-1 rule; node failure; mesh enforcement |
 | M5 More sources, SDK | **Split.** P5, E3 and E5 built | LangSmith and ClickHouse connectors, Kafka and S3 sources (S2 later stores, S3); the Kafka question below |
 | GA with agent harness | **Not started** | All P0 met, runbooks and SLO alerts, a 4-week external pilot |

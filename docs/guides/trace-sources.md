@@ -237,6 +237,19 @@ studio/studio-mlflow mlflow     tailing  3s   5       8
 
 Prometheus metrics, per source: `evalsi_source_lag_seconds`, `evalsi_source_watermark_age_seconds`, `evalsi_source_failing`, `evalsi_source_deferred_traces`, `evalsi_source_traces_pulled_total`, `evalsi_source_scores_written_total`. The chart's `prometheusRule.enabled` adds alerts on lag (`prometheusRule.sourceLagSeconds`, default 120) and on a failing source.
 
+### Measuring backfill and lag
+
+[`scripts/measure-trace-source.py`](../../scripts/measure-trace-source.py) checks a source against M3's targets: it seeds an MLflow experiment with traces spread over 30 days (`seed`), then applies a source for it, times the backfill, sends live traces and times each from its end until it is scored (`measure`). It prints the numbers as JSON and fails when p95 is over `--max-p95-seconds` (120 by default). The kind e2e job runs it against the demo MLflow.
+
+```bash
+cd python
+uv run --no-sync python ../scripts/measure-trace-source.py seed --mlflow $MLFLOW --experiment m3 --count 500 --days 30
+uv run --no-sync python ../scripts/measure-trace-source.py measure --server $URL --source-file source.yaml \
+  --mlflow $MLFLOW --experiment m3 --expect 500 --live 30
+```
+
+Lag is mostly the poll interval: with `poll.interval: 15s`, a local MLflow 3.17.0 and evalsid on one machine backfilled 500 traces in 5 seconds and scored live traces with p95 15 seconds. That run is not a production measurement; real numbers depend on the store, its rate limits and the policies' evaluators.
+
 ## How it decides what is new
 
 Stores index a trace by when it **started** but only show it once it has **ended**. A source therefore re-reads, every poll, the traces that started in the last `maxTraceDuration` (default 30 minutes), and skips those it has already scored unless they changed. The watermark, every trace before which has been handled, trails real time by that much, which is why `evalsi_source_watermark_age_seconds` sits near 30 minutes on a healthy source; alert on lag instead.

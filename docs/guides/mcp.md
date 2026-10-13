@@ -64,3 +64,7 @@ mcp:
 ```
 
 Alternatively, put `/mcp` behind agentgateway, which implements the same specification at the gateway.
+
+## Tested with a real coding agent
+
+The CI `mcp-agent` job gives Claude Code (headless, `claude -p`) the stdio server and asks it to run a spec and report the score ([`tests/mcp-agent/run.sh`](../../tests/mcp-agent/run.sh)). The check does not take the agent's word for it: the stream must show the call to the `run` tool, the results file must exist with the known score, and the answer must state that score and the failed gate. It calls a model, so it runs on `main` and on demand, and only when the repository has an `ANTHROPIC_API_KEY` secret. Run it locally with `ANTHROPIC_API_KEY=... tests/mcp-agent/run.sh`.
