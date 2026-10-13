@@ -25,7 +25,8 @@ const siteUrl = new URL(`${base}/`, Astro.site).href;
 const ogImage = new URL(`${base}/og.png`, Astro.site).href;
 const title = "Evals.si (evalsi) · Open-source evaluation for ML models, LLMs, RAG and agents";
 const description = "Evals.si (pip install evalsi) is one entrypoint to evaluate ML models, LLMs, RAG systems and agents: score outputs, gate runs in CI, watch live traces and reward RL training with the same evaluators. Self-hosted, sandboxed, open source.";
-const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ?? "";
+// Search Console verification; the same default as astro.config.mjs.
+const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 const jsonLd = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "SoftwareSourceCode",
