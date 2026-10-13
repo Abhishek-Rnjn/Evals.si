@@ -99,6 +99,35 @@ What each part does:
 - Scores: `kubectl port-forward svc/evalsi 8080:8080` and open `/ui/`; `kubectl port-forward svc/evalsi-demo-mlflow 5000:5000` shows the run in the `evalsi-demo` experiment.
 - A real model: `--set agents.model.baseURL=https://... --set agents.model.name=... --set agents.model.apiKey=...` on the demo chart, and put the key in `evalsi-demo-model-key`; add the host to each spec's `allow_hosts`.
 
+### Every deployed workflow scored, and a gate on every deploy (M2)
+
+The research assistant (the Deep Agents service) plays a deployed agent harness workflow. Its traces carry `evalsi.label.workflow=research-assistant`, its version and `stage=production` (`OTEL_RESOURCE_ATTRIBUTES`), and `overlays/evalsi-demo.yaml` has the bootstrap Job create what an agent harness install starts with: an ingest key (`evalsi-demo-ingest-key`), a reader key for its UI (`evalsi-demo-reader-key`) and a default policy, `studio-default`, that scores every production trace naming a workflow. Nothing is applied per workflow. Send production's traces to Evals.si as well as MLflow:
+
+```bash
+kubectl delete -n evalsi -f examples/demo/deepagents-mlflow-source.yaml --ignore-not-found   # one door per store
+helm upgrade evalsi-demo examples/demo -n evalsi --reuse-values \
+  --set deepagents.otlp.endpoint=https://evalsi:4318 \
+  --set deepagents.otlp.apiKeySecret.name=evalsi-demo-ingest-key \
+  --set deepagents.otlp.caSecret.name=evalsi-server-tls
+```
+
+Then deploy releases the way the agent harness's deploy step would. `deploy/deploy.sh VERSION [MODEL]` stages the release as `evalsi-demo-deepagents-candidate`, applies [research-assistant-gate.yaml](research-assistant-gate.yaml) as `research-assistant-gate-<version>` against it, and moves production to the release only when that run Succeeds. The mock's `mock-regressed` model plays a broken release:
+
+```bash
+examples/demo/deploy/deploy.sh v2 mock-regressed   # exit 3: blocked, production stays at v1
+examples/demo/deploy/deploy.sh v3                  # deployed: production is at v3
+```
+
+Each production execution is then scored by `studio-default`, and the agent harness reads one workflow's scores, one release at a time:
+
+```bash
+KEY=$(kubectl get secret evalsi-demo-reader-key -n evalsi -o jsonpath='{.data.api_key}' | base64 -d)
+curl -sk -H "Authorization: Bearer $KEY" \
+  "https://localhost:8080/v1alpha1/scores?project=demo&labels=workflow=research-assistant&labels=version=v3"
+```
+
+`deploy/e2e/kind-e2e.sh` runs all of this. Standalone, the gate is `evalsi run -f research-assistant-gate.yaml --server ...` against the service on `evalsi-demo-deepagents-candidate:8080`, and exits 3 when it fails. `deploy.sh` keeps no record beyond the Deployment's `evals.si/version` annotation; an agent harness keeps its own.
+
 ### Online scoring from MLflow (R6)
 
 The Deep Agents service traces every run to the demo MLflow (LangChain autolog, experiment `evalsi-demo-deepagents`). A [trace source](../../docs/guides/trace-sources.md) reads those traces back, a policy scores them, and the scores land on the same MLflow traces as assessments, where the agent harness's people already look:

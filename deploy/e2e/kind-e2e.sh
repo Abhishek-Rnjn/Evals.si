@@ -320,6 +320,50 @@ curl -sf -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/
 grep -q '"source_id": *"evalsi/dsh-online"' "$work/dsh-mlflow-traces.json" || { echo "no Evals.si assessment on native dsh traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
+step "M2: a failed gate blocks a deploy, and the default policy scores the deployed workflow"
+# The agent harness's deploy step (examples/demo/deploy/deploy.sh): a release
+# is staged as a candidate, gated, and promoted only when its gate run
+# Succeeds. Production's traces go to Evals.si over OTLP with the ingest key
+# the bootstrap Job wrote, and the bootstrap's default policy (studio-default)
+# scores them: nothing is applied for the workflow. One door per trace store:
+# R6's source stops pulling the same service's traces from MLflow.
+kubectl delete -n "$ns" -f "$demo/deepagents-mlflow-source.yaml" --wait --timeout 2m
+helm upgrade evalsi-demo "$demo" -n "$ns" --reuse-values \
+  --set deepagents.otlp.endpoint=https://evalsi:4318 \
+  --set deepagents.otlp.apiKeySecret.name=evalsi-demo-ingest-key \
+  --set deepagents.otlp.caSecret.name=evalsi-server-tls --wait --timeout 10m
+deployed() { kubectl get deployment evalsi-demo-deepagents -n "$ns" -o jsonpath='{.metadata.annotations.evals\.si/version}'; }
+[ "$(deployed)" = v1 ] || { echo "production is at $(deployed), want v1" >&2; exit 1; }
+set +e
+NAMESPACE="$ns" "$demo/deploy/deploy.sh" v2 mock-regressed
+status=$?
+set -e
+[ "$status" = 3 ] || { echo "deploying a regressed release exited $status, want 3 (gate failed)" >&2; results research-assistant-gate-v2 >&2; exit 1; }
+[ "$(deployed)" = v1 ] || { echo "a release that failed its gate went live: production is at $(deployed)" >&2; exit 1; }
+kubectl get deployment evalsi-demo-deepagents-candidate -n "$ns" >/dev/null 2>&1 && { echo "the blocked candidate was left running" >&2; exit 1; }
+NAMESPACE="$ns" "$demo/deploy/deploy.sh" v3 || { results research-assistant-gate-v3 >&2; exit 1; }
+[ "$(deployed)" = v3 ] || { echo "a release that passed its gate did not go live: production is at $(deployed)" >&2; exit 1; }
+kubectl rollout status deployment/evalsi-demo-deepagents -n "$ns" --timeout 3m
+kubectl port-forward -n "$ns" svc/evalsi-demo-deepagents 18080:8080 >/dev/null 2>&1 &
+pf=$!
+sleep 3
+curl -sf -m 300 -X POST http://127.0.0.1:18080/invoke -H 'content-type: application/json' -d "$question" | head -c 300; echo
+kill "$pf" 2>/dev/null || true
+reader="$(kubectl get secret evalsi-demo-reader-key -n "$ns" -o jsonpath='{.data.api_key}' | base64 -d)"
+kubectl port-forward -n "$ns" svc/evalsi 18082:8080 >/dev/null 2>&1 &
+pf=$!
+sleep 3
+# The agent harness's per-workflow view: this release's executions, scored by the default policy.
+for _ in $(seq 1 60); do
+  curl -sk -H "Authorization: Bearer $reader" \
+    "https://127.0.0.1:18082/v1alpha1/scores?project=demo&policy=studio-default&labels=workflow=research-assistant&labels=version=v3" > "$work/m2-scores.json" || true
+  grep -q '"studio-default"' "$work/m2-scores.json" && break
+  sleep 5
+done
+kill "$pf" 2>/dev/null || true
+head -c 2000 "$work/m2-scores.json"; echo
+grep -q '"studio-default"' "$work/m2-scores.json" || { echo "the default policy scored no execution of the deployed release" >&2; exit 1; }
+
 step "deleting an EvalRun"
 kubectl delete evalrun parity -n "$ns" --wait --timeout=1m
 

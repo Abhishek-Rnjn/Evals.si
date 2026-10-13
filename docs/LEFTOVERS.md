@@ -2,6 +2,21 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
+## Milestones
+
+The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milestones-and-phased-rollout). Where they stand on 2026-10-13:
+
+| Milestone | Planned | Status |
+|-----------|---------|--------|
+| M1 Release, SDK client | Oct to Nov 2026 | Done: v0.1.0 released and verified |
+| M2 agent harness online | Nov to Dec 2026 | In progress: a default policy and a gated deploy built on the demo and run by the kind e2e job; sign-off on the real agent harness needs its repository |
+| M3 Pull connectors | Nov 2026 to Jan 2027 | Partly done: MLflow, Phoenix and Langfuse verified; Databricks and SageMaker not run live; backfill and lag targets not measured |
+| M4 Real-infra hardening | Jan to Feb 2027 | Not certified: bounded EKS checks passed; load, full upgrade and mesh enforcement remain |
+| M5 More sources, SDK | Jan to Mar 2027 | SDK parts done; LangSmith, ClickHouse, Kafka and S3 sources not built |
+| GA with agent harness | 26 March 2027 | Not started |
+
+The next release is **0.2.0** (a minor release: `main` adds a CRD and API since v0.1.0); see [Releases](PRD.md#releases).
+
 Last updated: 2026-10-12 (bounded EKS verification, [report](verification/EKS-2026-10-12.md); server-side slicing, run archiving, environment specs, platform wheels, operator checkpoint serving and a hosted Wasm plugin built; the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 Trace redaction on push and pull is now built and locally regression-tested,

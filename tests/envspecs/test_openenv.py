@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import threading
 import time
 from typing import Any
 
@@ -155,15 +157,36 @@ def test_closing_after_async_use_destroys_the_sandbox() -> None:
 
 
 def test_a_client_that_disconnects_before_submit_leaves_no_sandbox() -> None:
+    """Against a real server: Starlette's TestClient cancels the app as soon as
+    its WebSocket session exits, which can cancel OpenEnv's session cleanup
+    before it runs; a real disconnect does not."""
+    import socket
+
+    import uvicorn
+    from websockets.sync.client import connect
+
     client = TrackingClient()
     app = create_task_app([task()], client=client)
-    with TestClient(app) as http:
-        with http.websocket_connect("/ws") as ws:
-            ws.send_json({"type": "reset", "data": {"seed": 0}})
-            ws.receive_json()
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 10
+        while not server.started and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert server.started, "the server did not start"
+        with connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            ws.send(json.dumps({"type": "reset", "data": {"seed": 0}}))
+            assert json.loads(ws.recv())["data"]["done"] is False
             assert client.live()
         # The session closed with the connection.
         deadline = time.monotonic() + 10
         while client.live() and time.monotonic() < deadline:
             time.sleep(0.1)
-    assert client.live() == []
+        assert client.live() == []
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)

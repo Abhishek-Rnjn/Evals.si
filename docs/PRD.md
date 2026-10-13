@@ -1,6 +1,6 @@
 # Evals.si for Customer Kubernetes: Product Requirements
 
-Status: draft · 2026-10-09 · Abhishek Ranjan
+Status: draft · 2026-10-09, status updated 2026-10-13 · Abhishek Ranjan
 
 ## Summary
 
@@ -26,7 +26,7 @@ Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls
 | Claude Agent SDK | Yes | OTel GenAI conventions | Tested: OpenInference, and Claude Code's own traces (beta), which record no model output ([guide](guides/agent-frameworks.md)) |
 | LlamaIndex | Yes | OpenInference | Tested ([guide](guides/agent-frameworks.md)) |
 | AutoGen, Pydantic AI, Google ADK, Semantic Kernel | Later (generic path works today) | OTel GenAI conventions | Not tested |
-| Custom loop, PyTorch or RL rollout | Generic path | `evalsi.log()`, Run API, in-process SDK | Run API and SDK built; `evalsi.log()` a gap (P5) |
+| Custom loop, PyTorch or RL rollout | Generic path | `evalsi.log()`, Run API, in-process SDK | Built: Run API, SDK and `evalsi.log()` (P5) |
 
 **Trace stores.** OTLP is a push protocol, so any OTLP-compatible store (Tempo, Jaeger, Datadog, Honeycomb, Elastic) is covered by teeing the customer's OTel Collector to evalsid; no connector is needed. Pull connectors are for stores that keep LLM traces behind their own API, where customers also want scores written back into the UI they already use.
 
@@ -41,7 +41,7 @@ Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls
 
 ## Current state
 
-The Kubernetes form factor and the push and embed doors exist today; the pull door and the release do not. Status is as of `main` after PR #12. An end-to-end verification on kind, AKS and an Istio ambient cluster ([docs/verification/](verification/README.md)) passed most exit criteria, and PR #12 fixed most of its findings.
+All three doors exist, and v0.1.0 is released. Status is as of `main` on 2026-10-13. An end-to-end verification on kind, AKS and an Istio ambient cluster ([docs/verification/](verification/README.md)) passed most exit criteria, PR #12 fixed most of its findings, and a bounded EKS run ([report](verification/EKS-2026-10-12.md)) checked scaling, broker recovery and restore. Milestone status is under [Milestones](#milestones-and-phased-rollout).
 
 | Capability | Status | Where it lives |
 | --- | --- | --- |
@@ -56,12 +56,12 @@ The Kubernetes form factor and the push and embed doors exist today; the pull do
 | Agent runs in sandboxes (Firecracker, bubblewrap, Landlock, hardened pod) | Built; all rungs verified on real clusters, Firecracker on a KVM cluster. `mode: bwrap` fails on some hosts (VR-D15) | `internal/sandbox/` |
 | In-process `evalsi.evaluate()`, RL rewards (TRL, verl, OpenRLHF), checkpoint evaluation | Built | `python/evalsi/src/evalsi/` |
 | OIDC, API keys, project RBAC, CEL rules, audit log | Built | `internal/auth/`, `internal/authz/` |
-| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source), Phoenix and self-hosted Langfuse 4.56.0 built and verified for the recorded paths; the rest not built | [trace sources guide](guides/trace-sources.md) |
+| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source), Phoenix and self-hosted Langfuse 4.56.0 built and verified for the recorded paths; Databricks and SageMaker built and contract-tested, not run against a real workspace; LangSmith, Tempo and ClickHouse not built | [trace sources guide](guides/trace-sources.md) |
 | Log and stream sources (Kafka, CloudWatch, Loki, S3 drops) | Not designed | none |
 | `evalsi.log()` SDK call | Built: bounded async OTLP/HTTP, futures and exit flush | [SDK guide](guides/integrate-an-agent-harness.md#sdk-logging-without-otel) |
 | Remote `Client.evaluate()` helper | Built (E2), with a parity test against a real `evalsid` | `python/evalsi/src/evalsi/client.py` |
 | Scores query API for the agent harness UI (`/v1alpha1/scores`) | Built (A3) | `internal/watch/service.go` |
-| Release tag, signed images, published charts | Not done | `.github/workflows/release.yml` |
+| Release tag, signed images, published charts | Done: v0.1.0 on 2026-10-12, signatures verified ([record](verification/README.md#v010-release-record-2026-10-12)). The next release is **0.2.0** (see [Releases](#releases)) | `.github/workflows/release.yml`, [RELEASING](RELEASING.md) |
 
 ## Priority customer: the agent harness
 
@@ -80,8 +80,8 @@ The agent harness is the first application integrated, and every requirement bel
 
 | # | Need | Door | Priority |
 | --- | --- | --- | --- |
-| A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 |
-| A2 | Evaluate a workflow on a test set from the agent harness's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 |
+| A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 (Demo built: a bootstrap default policy scores every production trace that names its workflow; the demo service tees OTLP with only environment variables. Not yet run on the real agent harness) |
+| A2 | Evaluate a workflow on a test set from the agent harness's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 (Demo built: `examples/demo/deploy/deploy.sh` stages, gates and promotes a release, and a failed gate leaves production as it was. Not yet run on the real agent harness) |
 | A3 | Show scores inside the agent harness UI, per workflow and per execution, linked to the trace | API + write-back | P0 (Done: API + write-back contract; `GET /v1alpha1/scores`, [guide](guides/integrate-an-agent-harness.md#4-read-the-scores)) |
 | A4 | Read traces already stored in its MLflow tracking server, including history from before Evals.si was installed | Pull | P1 |
 | A5 | Turn failing production executions into regression datasets, and replay a new workflow version against them | Push + Run API | P1 |
@@ -359,6 +359,21 @@ gantt
 ```
 
 M1 and M2 overlap because M2 needs only the release and the client from M1, not all of it.
+
+**Status on 2026-10-13**
+
+| Milestone | Status | What is left |
+| --- | --- | --- |
+| M1 Release, SDK client | **Done.** v0.1.0 signed, published and verified; `Client.evaluate()` parity test; webhooks | Nothing |
+| M2 agent harness online | **In progress.** A3, A7, R1 to R5 and R7 to R9 built. The default policy (A1) and the gated deploy (A2) are built on the demo: standalone checked (a regressed release exits 3, production traces scored by the default policy), and the kind e2e job runs both | The kind job's pass on CI; sign-off on the real agent harness needs access to its repository (open question below) |
+| M3 Pull connectors | **Partly done.** S1, S4 to S8 built; MLflow OSS, Phoenix and Langfuse verified live; R6 passed on kind | Databricks and SageMaker against real workspaces; 30-day backfill, p95 lag and scores in each store's UI measured; profiles against real model output |
+| M4 Real-infra hardening | **Not certified.** Bounded EKS KEDA, broker recovery and restore passed | 10k traces/min and 1k concurrent trials; a full zero-downtime upgrade and the N-1 rule; node failure; mesh enforcement |
+| M5 More sources, SDK | **Split.** P5, E3 and E5 built | LangSmith and ClickHouse connectors, Kafka and S3 sources (S2 later stores, S3); the Kafka question below |
+| GA with agent harness | **Not started** | All P0 met, runbooks and SLO alerts, a 4-week external pilot |
+
+### Releases
+
+Releases follow semantic versioning; until 1.0 a minor version may change the `v1alpha1` API. v0.1.0 (2026-10-12) closed M1. The next release is **0.2.0**, not 0.1.1: since v0.1.0, `main` adds the `CheckpointServer` CRD, the `SliceRuns` and `ArchiveRun` RPCs, platform wheels and other features (see the [changelog](../CHANGELOG.md)), which is a minor release. Fixes for v0.1.0 alone would be a 0.1.x patch from a release branch. [RELEASING](RELEASING.md) has the procedure.
 
 **Exit criteria per milestone**
 

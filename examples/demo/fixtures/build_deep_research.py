@@ -8,6 +8,9 @@ Agents service): each record carries the documents the question should draw on
 as ``context``, which ``citation-accuracy`` checks the report's [n] against.
 ``deep-research-docs.jsonl`` is for a command-line agent: the same questions,
 with the documents as files in its workdir.
+``deploy-gate.jsonl`` is the research assistant's test set for its deploy gate
+(``research-assistant-gate.yaml``): the questions the mock model answers, so
+the gate passes for a good release on the mock and fails for a regressed one.
 """
 
 from __future__ import annotations
@@ -40,6 +43,9 @@ QUESTIONS = [
     },
 ]
 
+# The deploy gate's questions: the mock model answers these with citations.
+GATE = ["rag-evaluation"]
+
 DOCS_NOTE = (
     "The documents are the files under docs/. Use only them, and cite each claim as [n] "
     "with a numbered list of the file names under a 'Sources' heading."
@@ -71,7 +77,12 @@ def render() -> dict[str, str]:
             }
         )
     dump = lambda rows: "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)  # noqa: E731
-    return {"deep-research.jsonl": dump(plain), "deep-research-docs.jsonl": dump(with_files)}
+    gate = [r for r in plain if r["id"] in GATE]
+    return {
+        "deep-research.jsonl": dump(plain),
+        "deep-research-docs.jsonl": dump(with_files),
+        "deploy-gate.jsonl": dump(gate),
+    }
 
 
 def main() -> int:

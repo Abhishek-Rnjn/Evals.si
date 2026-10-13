@@ -13,3 +13,5 @@ mock-model/*.md
 /deepagents-*.yaml
 /evalsi.yaml
 /README.md
+/research-assistant-gate.yaml
+deploy/

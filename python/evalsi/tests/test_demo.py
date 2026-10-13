@@ -38,6 +38,9 @@ SPECS = sorted(
     if _kind(p) == "EvalRun"
 )
 
+# The research assistant's deploy gate (M2), applied by deploy/deploy.sh.
+GATE = DEMO / "research-assistant-gate.yaml"
+
 
 def test_online_scoring_files_load() -> None:
     from evalsi.cli import load_policy
@@ -75,8 +78,16 @@ def test_generated_files_are_current(builder: str) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_the_deploy_gate_loads_and_deploy_sh_renames_it() -> None:
+    run = load_spec(GATE)
+    assert run.spec.gates, "a deploy gate without gates blocks nothing"
+    # deploy.sh names each release's run by rewriting this line.
+    assert "\n  name: research-assistant-gate\n" in GATE.read_text()
+    assert "s|^  name: research-assistant-gate\\$|" in (DEMO / "deploy" / "deploy.sh").read_text()
+
+
 def test_datasets_named_by_specs_exist() -> None:
-    for spec in SPECS:
+    for spec in [*SPECS, GATE]:
         text = spec.read_text()
         for raw in text.splitlines():
             line = raw.strip()
@@ -237,6 +248,15 @@ def test_the_mock_streams(mock_model: str) -> None:
 
 def test_the_mock_does_not_pretend_to_know_a_task(mock_model: str) -> None:
     reply = chat(mock_model, [{"role": "user", "content": "Write a sonnet."}], [BASH]).json()
+    assert reply["choices"][0]["finish_reason"] == "stop"
+    assert "could not" in reply["choices"][0]["message"]["content"]
+
+
+def test_the_regressed_mock_solves_nothing(mock_model: str) -> None:
+    task = "mathx.range_sum(1, 4) should be 10 (1+2+3+4, both ends included) but it returns 6."
+    reply = chat(
+        mock_model, [{"role": "user", "content": task}], [BASH], model="mock-regressed"
+    ).json()
     assert reply["choices"][0]["finish_reason"] == "stop"
     assert "could not" in reply["choices"][0]["message"]["content"]
 
