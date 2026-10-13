@@ -486,6 +486,10 @@ jobs:
           # Its sandbox uses the bwrap beside it, with nothing on PATH.
           echo '{"command":["/bin/sh","-c","echo ok"],"min_isolation":"namespaced","timeout_s":10}' \
             | PATH=/nonexistent "$bin" sandbox run | grep -q '"outcome":"exit"'
+      - name: The PyPI pages render (README and metadata of both packages)
+        run: |
+          (cd python && uv build --all-packages -o ../pypi-dist)
+          uvx twine==7.0.0 check --strict pypi-dist/*
 
   kubernetes:
     # Phase 4's exit criteria on a kind cluster: an air-gapped install from

@@ -4,6 +4,8 @@ dynamic = ["version"]
 description = "One entrypoint for evaluating ML models, LLMs and agents."
 readme = "README.md"
 license = "Apache-2.0"
+authors = [{ name = "Abhishek Ranjan" }]
+keywords = ["evaluation", "evals", "llm", "llm-as-a-judge", "agents", "rag", "rl", "reward", "mlops", "opentelemetry", "kubernetes"]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
@@ -12,9 +14,19 @@ dependencies = [
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
 ]
 
 [project.optional-dependencies]

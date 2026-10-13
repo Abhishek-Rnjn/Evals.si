@@ -6,11 +6,12 @@ charts and an amd64 air-gapped bundle. A pushed `v*` tag publishes them. A
 manual run builds without publishing. Only a maintainer may authorize a dry
 run or tag push; release readiness is not authorization to publish.
 
-The commands below use `0.2.0`, the next release, as the example. Since
-v0.1.0, `main` adds a CRD (`CheckpointServer`) and API, so it is a minor
-release, not a patch. A 0.1.x patch would be cut from a `release-0.1` branch at
-`v0.1.0` with fixes only. What 0.2.0 needs beyond the steps below is under
-[Releasing 0.2.0](#releasing-020).
+The commands below use `0.2.0`, the latest release, as the example. A minor
+release (`0.3.0`) is cut from `main`; a patch (`0.2.1`) from a `release-0.2`
+branch at `v0.2.0` with fixes only. Before a release, move the CHANGELOG's
+`[Unreleased]` entries under the new version with upgrade notes, and set the
+charts' `version`/`appVersion` and the Python packages' `.dev0` version to it;
+[Releasing 0.2.0](#releasing-020) is the worked example.
 
 ## Prerequisites
 
@@ -123,10 +124,12 @@ fix forward under a separately approved version.
 
 ## Releasing 0.2.0
 
-The repository is versioned for it: the three charts are `0.2.0`, the Python
+The repository was versioned for it: the three charts at `0.2.0`, the Python
 packages `0.2.0.dev0` (the workflow stamps the release version into both), and
-the CHANGELOG has a `[0.2.0] - to be tagged` section with upgrade notes. Steps
-that are new or untested since v0.1.0:
+the CHANGELOG has a `[0.2.0]` section with upgrade notes. Steps
+that were new or untested since v0.1.0 (all but step 3, the upgrade on kind,
+were run and passed; see the
+[release record](verification/README.md#v020-release-record-2026-10-13)):
 
 1. **Changelog.** Anything merged after the readiness PR goes under
    `[0.2.0]`, not `[Unreleased]`, until the tag.
@@ -156,6 +159,6 @@ that are new or untested since v0.1.0:
 
 - **Tag rules.** The deployment rule on the `release`, `pypi` and `pypi-harness` environments must be a **tag** rule (`v*`). A branch rule with the same pattern rejects every tag run.
 - **What a dry run does not cover.** Signing, GHCR pushes, the `release` job and PyPI run only on a tag. The first tag run found a login bug in the chart signing step that no dry run could. Treat each of those steps as untested until a tag run passes it.
-- **The `release` job.** It used to download every artifact in the run, including the Docker build records (`*.dockerbuild`), and that download failed; for v0.1.0 the GitHub release was created by hand from the run's artifacts. It now downloads only the release files (`binaries-*`, `python`, `wheels-*`, `charts`, `bundle`, `sbom-*`), the build action no longer uploads build records, and a dry run gathers and checksums the files too. The fix has run on a dry run but not yet on a tag, so check the release assets after the next tag run.
+- **The `release` job.** It used to download every artifact in the run, including the Docker build records (`*.dockerbuild`), and that download failed; for v0.1.0 the GitHub release was created by hand from the run's artifacts. It now downloads only the release files (`binaries-*`, `python`, `wheels-*`, `charts`, `bundle`, `sbom-*`), the build action no longer uploads build records, and a dry run gathers and checksums the files too. The v0.2.0 tag run created the release with it, with exactly the expected files.
 - **Moving a tag.** Moving an unreleased tag is acceptable only before anything is published. A PyPI version can never be uploaded again, so once the PyPI jobs have run, fix forward under a new version and never re-run the workflow for the same tag.
 - **No macOS `sha256sum`.** Use `shasum -a 256` to create or check `SHA256SUMS` on macOS.
