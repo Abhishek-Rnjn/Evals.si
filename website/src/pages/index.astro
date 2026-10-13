@@ -18,6 +18,28 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const repo = "https://github.com/Abhishek-Rnjn/Evals.si";
 const doc = (p: string) => `${base}${p}`;
 
+// Search and link previews: the canonical URL, the social card
+// (scripts/og-image.mjs) and structured data that ties the site to the
+// repository and the PyPI packages, so search engines treat them as one project.
+const siteUrl = new URL(`${base}/`, Astro.site).href;
+const ogImage = new URL(`${base}/og.png`, Astro.site).href;
+const title = "Evals.si (evalsi) · Open-source evaluation for ML models, LLMs, RAG and agents";
+const description = "Evals.si (pip install evalsi) is one entrypoint to evaluate ML models, LLMs, RAG systems and agents: score outputs, gate runs in CI, watch live traces and reward RL training with the same evaluators. Self-hosted, sandboxed, open source.";
+const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ?? "";
+const jsonLd = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  name: "Evals.si",
+  alternateName: "evalsi",
+  description,
+  url: siteUrl,
+  codeRepository: repo,
+  programmingLanguage: ["Python", "Go"],
+  license: "https://www.apache.org/licenses/LICENSE-2.0",
+  sameAs: [repo, "https://pypi.org/project/evalsi/", "https://pypi.org/project/evalsi-harness/"],
+  keywords: "LLM evaluation, agent evaluation, RAG evaluation, LLM-as-a-judge, evals, RL rewards, OpenTelemetry, Kubernetes",
+});
+
 const ecosystem = [
   "lm-evaluation-harness", "Inspect AI", "RAGAS", "DeepEval", "SWE-bench", "τ-bench", "Terminal-Bench", "BFCL",
   "LangGraph", "CrewAI", "OpenAI Agents SDK", "LlamaIndex", "Claude Agent SDK", "OpenInference", "OpenLLMetry",
@@ -87,8 +109,25 @@ const extras = [
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Evals.si · One entrypoint for evaluations</title>
-  <meta name="description" content="A highly scalable, pluggable evaluations platform for ML models, LLMs, RAG systems and agents, offline and online." />
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={siteUrl} />
+  <link rel="sitemap" href={`${base}/sitemap-index.xml`} />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Evals.si" />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:url" content={siteUrl} />
+  <meta property="og:image" content={ogImage} />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Evals.si: one entrypoint to evaluate ML models, LLMs, RAG systems and agents" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content={ogImage} />
+  {googleVerification && <meta name="google-site-verification" content={googleVerification} />}
+  <script type="application/ld+json" set:html={jsonLd} />
   <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

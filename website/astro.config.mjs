@@ -6,6 +6,11 @@ import tailwindcss from "@tailwindcss/vite";
 const base = (process.env.SITE_BASE ?? "/Evals.si").replace(/\/$/, "") || "/";
 const site = process.env.SITE_URL ?? "https://abhishek-rnjn.github.io";
 const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
+// The link-preview card (scripts/og-image.mjs), absolute as Open Graph requires.
+const ogImage = `${site}${base}/og.png`;
+// Google Search Console's HTML-tag verification: the content value of the
+// tag it gives you, set as the GOOGLE_SITE_VERIFICATION repository variable.
+const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ?? "";
 
 const guides = [
   "agent-runs", "annotation", "fine-tuning", "guardrails", "identity",
@@ -27,11 +32,18 @@ export default defineConfig({
       title: "Evals.si",
       logo: { src: "./src/assets/logo.svg", alt: "Evals.si", replacesTitle: true },
       head: [
+        { tag: "meta", attrs: { property: "og:image", content: ogImage } },
+        { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
+        { tag: "meta", attrs: { property: "og:image:alt", content: "Evals.si: one entrypoint to evaluate ML models, LLMs, RAG systems and agents" } },
+        { tag: "meta", attrs: { name: "twitter:image", content: ogImage } },
+        { tag: "meta", attrs: { name: "keywords", content: "evalsi, Evals.si, LLM evaluation, agent evaluation, RAG evaluation, LLM-as-a-judge, evals, RL rewards, OpenTelemetry, MLflow, Kubernetes" } },
+        ...(googleVerification ? [{ tag: "meta", attrs: { name: "google-site-verification", content: googleVerification } }] : []),
         { tag: "link", attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" } },
         { tag: "link", attrs: { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" } },
       ],
       favicon: "/favicon.svg",
-      description: "One entrypoint for evaluating ML models, LLMs, RAG systems and agents.",
+      description: "Evals.si (pip install evalsi): one entrypoint to evaluate ML models, LLMs, RAG systems and agents, offline and online. Self-hosted and open source.",
       social: [{ icon: "github", label: "GitHub", href: repo }],
       customCss: ["./src/styles/theme.css"],
       components: {

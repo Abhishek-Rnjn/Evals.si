@@ -63,15 +63,41 @@ async function writePage(route, fm, body) {
   await fs.writeFile(file, frontmatter(fm) + body);
 }
 
+// The page's meta description, for search results and link previews: its
+// first paragraph of prose as plain text, cut at a word near 160 characters.
+// Without one every page would share the site's description.
+function describe(text) {
+  for (const block of text.split(/\n\s*\n/)) {
+    const b = block.trim();
+    if (!b || /^(#|\||```|<|>|!\[|- |\* |\d+\. |---|Status:)/.test(b)) continue;
+    let plain = b
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/[`*_]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    // A paragraph that leads into a list ("It shows:") loses that last
+    // sentence, or ends with a full stop when it is the only one.
+    if (plain.endsWith(":")) {
+      const head = plain.replace(/\s*[^.!?]*:$/, "");
+      plain = head.length >= 40 ? head : plain.slice(0, -1) + ".";
+    }
+    if (plain.length < 40) continue;
+    return plain.length <= 160 ? plain : plain.slice(0, 157).replace(/\s+\S*$/, "") + "…";
+  }
+  return undefined;
+}
+
 // Take a repo markdown file, lift its H1 into the title and rewrite its links.
 async function importDoc(src, route, extra = {}) {
   let text = await read(src);
   const m = text.match(/^# (.+)\n/);
   const title = (extra.title ?? m?.[1] ?? path.basename(src, ".md")).replace(/`/g, "");
   if (m) text = text.slice(m[0].length);
+  const description = extra.description ?? describe(text);
   text = await rewriteLinks(text, src);
   const edit = `${REPO}/edit/${BRANCH}/${src}`;
-  await writePage(route, { title, editUrl: edit, ...extra, title }, text);
+  await writePage(route, { title, editUrl: edit, ...extra, ...(description ? { description } : {}), title }, text);
 }
 
 await fs.rm(out, { recursive: true, force: true });
