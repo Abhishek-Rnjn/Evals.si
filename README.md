@@ -253,11 +253,13 @@ The Go server owns the API, runs, ingest, policies, auth and storage; evaluators
 
 ## Project status
 
-Evals.si is pre-1.0 (`0.1.0` is the first release). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
+Evals.si is pre-1.0 (`0.1.0` is the first release; `0.2.0` is next). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
 
 What is verified, in short:
 - **Kubernetes:** end-to-end on kind in every CI run (amd64, with Landlock), AKS and an Istio ambient cluster with KVM nodes. [Bounded EKS checks](docs/verification/EKS-2026-10-12.md) passed live KEDA, separate-host NATS broker recovery, pool isolation, application recovery, second-release coexistence, mounted Python/Wasm and managed alert firing/delivery/resolution. Stock admission is blocked by the control-plane/Calico path; an isolated trusted host-network workaround passed. M4 and GKE remain unverified.
-- **Trace sources:** MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10)), and tested profiles for five agent frameworks.
+- **Trace sources:** MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10)), and tested profiles for five agent frameworks. The kind job measures a 30-day MLflow backfill and the pull lag of live traces (p95 15 s at a 15 s poll).
+- **Agent harness integration:** the kind job deploys the demo workflow through a gate: a regressed release is blocked, a good one goes live, and the default policy scores its executions.
+- **RL frameworks:** TRL's `GRPOTrainer` trains with Evals.si rewards on CPU in CI; the rewards also run inside verl's and OpenRLHF's own reward code (no training step there).
 - **Web UI:** a browser test runs in CI; desktop/mobile Playwright checks passed against EKS, including recovered results, comparison, filtering, API-key sign-in/sign-out and annotation submit/skip. Real OIDC-provider login remains unverified.
 - **Guardrails:** real agentgateway v1.6.0 passed bounded native LLM and MCP request/result pass, mask and block controls; LLM errors failed closed. The upstream model/tool were synthetic; real model calls, streaming behavior and coding-agent products remain unverified.
 - **Air-gapped bundles:** one platform per bundle (amd64 by default, `--platform linux/arm64` for arm64); see the [Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs).

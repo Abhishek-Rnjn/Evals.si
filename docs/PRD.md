@@ -1,6 +1,6 @@
 # Evals.si for Customer Kubernetes: Product Requirements
 
-Status: draft · 2026-10-09, status updated 2026-10-13 · Abhishek Ranjan
+Status: draft · 2026-10-09, status updated 2026-10-13 (after PRs #54 and #56) · Abhishek Ranjan
 
 ## Summary
 
@@ -56,11 +56,14 @@ All three doors exist, and v0.1.0 is released. Status is as of `main` on 2026-10
 | Agent runs in sandboxes (Firecracker, bubblewrap, Landlock, hardened pod) | Built; all rungs verified on real clusters, Firecracker on a KVM cluster. `mode: bwrap` fails on some hosts (VR-D15) | `internal/sandbox/` |
 | In-process `evalsi.evaluate()`, RL rewards (TRL, verl, OpenRLHF), checkpoint evaluation | Built | `python/evalsi/src/evalsi/` |
 | OIDC, API keys, project RBAC, CEL rules, audit log | Built | `internal/auth/`, `internal/authz/` |
-| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source), Phoenix and self-hosted Langfuse 4.56.0 built and verified for the recorded paths; Databricks and SageMaker built and contract-tested, not run against a real workspace; LangSmith, Tempo and ClickHouse not built | [trace sources guide](guides/trace-sources.md) |
+| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source), Phoenix and self-hosted Langfuse 4.56.0 built and verified for the recorded paths; MLflow 30-day backfill and p95 pull lag measured (kind: 300 traces in 6 s, p95 15 s); Databricks and SageMaker built and contract-tested, not run against a real workspace; LangSmith, Tempo and ClickHouse not built | [trace sources guide](guides/trace-sources.md) |
 | Log and stream sources (Kafka, CloudWatch, Loki, S3 drops) | Not designed | none |
 | `evalsi.log()` SDK call | Built: bounded async OTLP/HTTP, futures and exit flush | [SDK guide](guides/integrate-an-agent-harness.md#sdk-logging-without-otel) |
 | Remote `Client.evaluate()` helper | Built (E2), with a parity test against a real `evalsid` | `python/evalsi/src/evalsi/client.py` |
 | Scores query API for the agent harness UI (`/v1alpha1/scores`) | Built (A3) | `internal/watch/service.go` |
+| Default policy and gated deploys for an agent harness | Built (A1, A2): bootstrap default policy, `evalsi gate`, the demo's `deploy.sh`, run by the kind e2e job; policy templates in `examples/watch/harness-*.yaml` | `python/evalsi/src/evalsi/cli.py`, `examples/demo/` |
+| Trace inspection and export | Built: `evalsi traces list`, `get` and `export` (records with scores, by label, policy or time) | `python/evalsi/src/evalsi/cli_traces.py` |
+| Runs evaluated elsewhere | Built (E6): `RunService.ImportRun`, `Client.log_run()` | `internal/runs/import.go` |
 | Release tag, signed images, published charts | Done: v0.1.0 on 2026-10-12, signatures verified ([record](verification/README.md#v010-release-record-2026-10-12)). The next release is **0.2.0** (see [Releases](#releases)) | `.github/workflows/release.yml`, [RELEASING](RELEASING.md) |
 
 ## Priority customer: the agent harness
@@ -81,10 +84,10 @@ The agent harness is the first application integrated, and every requirement bel
 | # | Need | Door | Priority |
 | --- | --- | --- | --- |
 | A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 (Demo built: a bootstrap default policy scores every production trace that names its workflow; the demo service tees OTLP with only environment variables. Not yet run on the real agent harness) |
-| A2 | Evaluate a workflow on a test set from the agent harness's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 (Demo built: `examples/demo/deploy/deploy.sh` stages, gates and promotes a release, and a failed gate leaves production as it was. Not yet run on the real agent harness) |
+| A2 | Evaluate a workflow on a test set from the agent harness's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 (Demo built: `examples/demo/deploy/deploy.sh` stages, gates and promotes a release, and a failed gate leaves production as it was. Any pipeline can call `evalsi gate`, which gates one release against a candidate URL and exits 3 on a failed gate. Not yet run on the real agent harness) |
 | A3 | Show scores inside the agent harness UI, per workflow and per execution, linked to the trace | API + write-back | P0 (Done: API + write-back contract; `GET /v1alpha1/scores`, [guide](guides/integrate-an-agent-harness.md#4-read-the-scores)) |
-| A4 | Read traces already stored in its MLflow tracking server, including history from before Evals.si was installed | Pull | P1 |
-| A5 | Turn failing production executions into regression datasets, and replay a new workflow version against them | Push + Run API | P1 |
+| A4 | Read traces already stored in its MLflow tracking server, including history from before Evals.si was installed | Pull | P1 (Built: a `TraceSource` backfills, then tails; a 30-day backfill and p95 pull lag are measured in the kind e2e job, [trace sources guide](guides/trace-sources.md#measuring-backfill-and-lag)) |
+| A5 | Turn failing production executions into regression datasets, and replay a new workflow version against them | Push + Run API | P1 (Built: a policy's `promote` appends failing traces to a dataset, `evalsi traces export` writes chosen traces as one, and shadow replay re-runs them against a new version; the `harness-default` and `harness-quality` templates promote) |
 | A6 | Inline guardrails on tool calls and model calls, in audit mode first | Guardrails | P2 |
 | A7 | Install Evals.si from its own chart beside the agent harness, with an integration guide | Deploy | P0 |
 
@@ -160,6 +163,8 @@ Both runtimes change quickly, and dsh warns of breaking changes, so the demos pi
 | Same records scored via push, pull and embed | Identical scores and intervals | Parity test in CI |
 | Deploys in the agent harness that run a gate | 100% of production deploys | Agent harness deploy audit log |
 | Scale | 10k traces/min ingest, 1k concurrent agent trials | Load test on a sized cluster |
+
+Measured so far (2026-10-13, [record](verification/README.md#agent-harness-gate-and-trace-source-measurement-2026-10-13)), none at production scale: pull lag p95 15 s against the 2-minute target, with a 30-day MLflow backfill of 300 traces in 6 s (kind e2e job, `scripts/measure-trace-source.py`); every deploy of the demo workflow runs a gate, and a regressed release is blocked (kind e2e job); push and embed parity (`Client.evaluate()` against in-process) is tested in CI. Install-to-first-score time, online scoring delay and scale have not been measured.
 
 ## Personas and user journeys
 
