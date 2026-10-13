@@ -1,0 +1,34 @@
+# The deploy gate for the research assistant (the Deep Agents service), as an
+# agent harness runs it before a release goes live: the candidate release is
+# called over HTTP on its test set, and the gates decide whether it ships.
+# deploy/deploy.sh applies it once per release, named
+# research-assistant-gate-<version>, and promotes the release only when the
+# run Succeeds. Standalone, `evalsi run -f` it: it exits 3 when the gate fails.
+#
+# Judge-free, so it runs on the mock model: citation-accuracy fails a report
+# with no citations, or with citations to documents that do not exist.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: research-assistant-gate
+  labels: {evals.si/project: demo}
+spec:
+  target:
+    agent:
+      http:
+        url: http://evalsi-demo-deepagents-candidate:8080/invoke
+        body_template: '{"input": {{input}}}'
+        output_path: output
+        messages_path: messages
+        timeout: 5m
+  dataset:
+    path: fixtures/deploy-gate.jsonl
+  evaluators:
+    - ref: citation-accuracy
+    - ref: tool-errors
+    - ref: loop-detection
+    - ref: step-budget
+      params: {max_steps: 12}
+  trials: 2
+  gates:
+    - {metric: citation-accuracy, min: 0.9}

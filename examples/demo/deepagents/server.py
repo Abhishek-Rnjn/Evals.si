@@ -12,9 +12,10 @@ the trajectory (``messages_path: messages``).
     python3 server.py --port 8080
 
 Configuration is by environment: see agent.py. With MLFLOW_TRACKING_URI set,
-runs are traced to MLflow; with OTEL_EXPORTER_OTLP_TRACES_ENDPOINT also set
-(and MLFLOW_ENABLE_OTLP_EXPORTER=true), the same spans go to an OTLP endpoint
-such as Evals.si's.
+runs are traced to MLflow; with OTEL_EXPORTER_OTLP_TRACES_ENDPOINT set, they go
+to an OTLP endpoint such as Evals.si's instead, or to both with
+MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT=true. OTEL_RESOURCE_ATTRIBUTES labels them
+(evalsi.label.workflow=..., evalsi.label.version=...).
 """
 
 from __future__ import annotations

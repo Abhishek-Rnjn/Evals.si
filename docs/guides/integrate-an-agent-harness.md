@@ -37,9 +37,18 @@ helm install evalsi deploy/helm/evalsi -n studio \
       - {env: STUDIO_MODEL_KEY, projects: [studio]}
     webhooks:
       - {name: studio, project: studio, url: "http://studio.studio.svc/hooks/evalsi", events: [run.finished, run.gate_failed], secret: {name: studio-evalsi-webhook}}
+    # A default policy: every production trace that names its workflow is
+    # scored, so a new workflow is scored from its first execution.
+    policies:
+      - name: studio-default
+        project: studio
+        selector: '"workflow" in labels && labels["stage"] == "production"'
+        stages:
+          - evaluators: [{ref: tool-errors}, {ref: loop-detection}, {ref: builtin/latency}]
+        window: 3600s
   ```
 
-  The keys are written to the Secrets named, once, and kept across upgrades. A credential grant lets a project's runs name a worker's environment variable (for a model key) without the key being in a spec.
+  The keys are written to the Secrets named, once, and kept across upgrades. Policies here are written in their JSON field names (`window: 3600s`, not `1h`). A credential grant lets a project's runs name a worker's environment variable (for a model key) without the key being in a spec.
 
 ## 2. Connect traces
 
@@ -142,6 +151,8 @@ until phase=$(kubectl get evalrun small-repo-fixes -n studio -o jsonpath='{.stat
 
 A spec's `gates` turn metrics into a verdict (`task-success.pass^3 >= 0.8` means three trials in a row must pass in at least 80% of tasks). A failed gate makes `evalsi run` exit 3 and the `EvalRun` phase `Failed`, which blocks a pipeline step with no extra code. From a service, use the API or a webhook instead of a pipeline ([webhooks](webhooks.md)): `run.gate_failed` is sent when a run ends with a failed gate, signed with HMAC, so the agent harness can mark the deployment blocked.
 
+The demo plays this whole step for one workflow: [`deploy/deploy.sh`](../../examples/demo/deploy/deploy.sh) stages a release as a candidate Service, runs [its gate](../../examples/demo/research-assistant-gate.yaml) against it, and moves production to the release only when the run Succeeds; a regressed release exits 3 and production stays where it was ([walkthrough](../../examples/demo/README.md#every-deployed-workflow-scored-and-a-gate-on-every-deploy-m2)). The kind e2e job runs it.
+
 Embedded in the agent harness's own Python, the same check is a call:
 
 ```python
@@ -165,7 +176,7 @@ Runs execute the agent in a sandbox per trial (the pod rung on Kubernetes), with
         - mlflow: {tracking_uri: "http://mlflow.studio.svc:5000", experiment: evalsi}
   ```
 - **Prometheus and Grafana.** The chart ships a dashboard and metrics; see [Dashboards](kubernetes.md#dashboards).
-- **Per execution and per workflow, in the agent harness's own UI.** `GET /v1alpha1/scores` returns the online scores of live traffic, pushed or pulled alike, one entry per trace (newest first) with its summary and its results grouped by policy, without the trace's full record. Filter it with `project`, `service`, `policy`, `evaluator`, `since` (RFC 3339) and any number of `labels=key=value`. `GET /v1alpha1/traces/{trace_id}/scores` returns one execution's. Label each workflow's traces with the resource attributes `evalsi.label.workflow` and `evalsi.label.version` (or a trace source's labels), and a workflow's page is one query:
+- **Per execution and per workflow, in the agent harness's own UI.** `GET /v1alpha1/scores` returns the online scores of live traffic, pushed or pulled alike, one entry per trace (newest first) with its summary and its results grouped by policy, without the trace's full record. Filter it with `project`, `service`, `policy`, `evaluator`, `since` (RFC 3339) and any number of `labels=key=value`. `GET /v1alpha1/traces/{trace_id}/scores` returns one execution's. Label each workflow's traces with the resource attributes `evalsi.label.workflow` and `evalsi.label.version` (or a trace source's labels; with OpenTelemetry, `OTEL_RESOURCE_ATTRIBUTES=evalsi.label.workflow=support-bot,evalsi.label.version=v7` and no code change), and a workflow's page is one query:
 
   ```bash
   curl -H "Authorization: Bearer $KEY" \

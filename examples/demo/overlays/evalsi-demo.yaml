@@ -26,6 +26,21 @@ bootstrap:
     - {name: demo, description: the reference demos}
   credentialGrants:
     - {env: DEMO_API_KEY, projects: [demo]}
+  # M2: what an agent harness install starts with. The deployed workflows send
+  # traces with the ingest key (deepagents.otlp in the demo chart), and the
+  # default policy scores every trace that names its workflow, so a new
+  # workflow is scored from its first execution with nothing applied for it.
+  # The reader key is what the harness's UI reads the scores with.
+  apiKeys:
+    - {name: demo-ingest, roles: {demo: [ingest]}, secret: {name: evalsi-demo-ingest-key}}
+    - {name: demo-reader, roles: {demo: [viewer]}, secret: {name: evalsi-demo-reader-key}}
+  policies:
+    - name: studio-default
+      project: demo
+      selector: '"workflow" in labels && labels["stage"] == "production"'
+      stages:
+        - evaluators: [{ref: tool-errors}, {ref: loop-detection}, {ref: builtin/latency}]
+      window: 3600s
 workers:
   env:
     - name: DEMO_API_KEY

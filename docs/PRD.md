@@ -80,8 +80,8 @@ The agent harness is the first application integrated, and every requirement bel
 
 | # | Need | Door | Priority |
 | --- | --- | --- | --- |
-| A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 |
-| A2 | Evaluate a workflow on a test set from the agent harness's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 |
+| A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 (Demo built: a bootstrap default policy scores every production trace that names its workflow; the demo service tees OTLP with only environment variables. Not yet run on the real agent harness) |
+| A2 | Evaluate a workflow on a test set from the agent harness's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 (Demo built: `examples/demo/deploy/deploy.sh` stages, gates and promotes a release, and a failed gate leaves production as it was. Not yet run on the real agent harness) |
 | A3 | Show scores inside the agent harness UI, per workflow and per execution, linked to the trace | API + write-back | P0 (Done: API + write-back contract; `GET /v1alpha1/scores`, [guide](guides/integrate-an-agent-harness.md#4-read-the-scores)) |
 | A4 | Read traces already stored in its MLflow tracking server, including history from before Evals.si was installed | Pull | P1 |
 | A5 | Turn failing production executions into regression datasets, and replay a new workflow version against them | Push + Run API | P1 |
@@ -365,7 +365,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 | Milestone | Status | What is left |
 | --- | --- | --- |
 | M1 Release, SDK client | **Done.** v0.1.0 signed, published and verified; `Client.evaluate()` parity test; webhooks | Nothing |
-| M2 agent harness online | **In progress, targeted next.** A3, A7, R1 to R5 and R7 to R9 built; the default policy and the gated deploy are being built as a demo-cluster stand-in for A1 and A2 | Sign-off on the real agent harness needs access to its repository (open question below) |
+| M2 agent harness online | **In progress.** A3, A7, R1 to R5 and R7 to R9 built. The default policy (A1) and the gated deploy (A2) are built on the demo: standalone checked (a regressed release exits 3, production traces scored by the default policy), and the kind e2e job runs both | The kind job's pass on CI; sign-off on the real agent harness needs access to its repository (open question below) |
 | M3 Pull connectors | **Partly done.** S1, S4 to S8 built; MLflow OSS, Phoenix and Langfuse verified live; R6 passed on kind | Databricks and SageMaker against real workspaces; 30-day backfill, p95 lag and scores in each store's UI measured; profiles against real model output |
 | M4 Real-infra hardening | **Not certified.** Bounded EKS KEDA, broker recovery and restore passed | 10k traces/min and 1k concurrent trials; a full zero-downtime upgrade and the N-1 rule; node failure; mesh enforcement |
 | M5 More sources, SDK | **Split.** P5, E3 and E5 built | LangSmith and ClickHouse connectors, Kafka and S3 sources (S2 later stores, S3); the Kafka question below |

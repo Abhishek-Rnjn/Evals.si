@@ -1,67 +1,107 @@
 {{- if .Values.deepagents.enabled }}
 {{- $fn := include "demo.fullname" . -}}
 {{- $d := .Values.deepagents }}
+{{- /* The production service, and the candidate a deploy gate calls before a
+release goes live (deploy/deploy.sh). The candidate traces nowhere: its runs
+are the gate's, not production traffic. */ -}}
+{{- $instances := list (dict "name" (printf "%s-deepagents" $fn) "stage" "production" "version" $d.version "model" $d.model "traced" true) }}
+{{- if $d.candidate.enabled }}
+{{- $instances = append $instances (dict "name" (printf "%s-deepagents-candidate" $fn) "stage" "candidate" "version" $d.candidate.version "model" $d.candidate.model "traced" false) }}
+{{- end }}
+{{- range $i := $instances }}
+{{- $model := default $.Values.agents.model.name $i.model }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $fn }}-deepagents
-  labels: {{- include "demo.labels" . | nindent 4 }}
-    app.kubernetes.io/name: {{ $fn }}-deepagents
+  name: {{ $i.name }}
+  labels: {{- include "demo.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: {{ $i.name }}
+  annotations:
+    evals.si/workflow: {{ $d.workflow | quote }}
+    evals.si/version: {{ $i.version | quote }}
 spec:
   replicas: {{ $d.replicas }}
   selector:
-    matchLabels: {app.kubernetes.io/name: {{ $fn }}-deepagents}
+    matchLabels: {app.kubernetes.io/name: {{ $i.name }}}
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $fn }}-deepagents
+        app.kubernetes.io/name: {{ $i.name }}
         app.kubernetes.io/part-of: evalsi-demo
-        {{- with include "demo.podLabels" (dict "root" . "local" $d) }}
+        {{- with include "demo.podLabels" (dict "root" $ "local" $d) }}
         {{- . | nindent 8 }}
         {{- end }}
     spec:
       securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
-      {{- include "demo.scheduling" (dict "root" . "local" $d) | nindent 6 }}
+      {{- include "demo.scheduling" (dict "root" $ "local" $d) | nindent 6 }}
       containers:
         - name: deepagents
-          image: {{ include "demo.image" (dict "root" . "ref" $d.image) }}
+          image: {{ include "demo.image" (dict "root" $ "ref" $d.image) }}
           imagePullPolicy: {{ $d.pullPolicy }}
           ports: [{name: http, containerPort: 8080}]
           env:
-            - {name: DEMO_MODEL, value: {{ printf "openai:%s" .Values.agents.model.name | quote }}}
-            - {name: OPENAI_BASE_URL, value: {{ include "demo.modelURL" . | quote }}}
+            - {name: DEMO_MODEL, value: {{ printf "openai:%s" $model | quote }}}
+            - {name: OPENAI_BASE_URL, value: {{ include "demo.modelURL" $ | quote }}}
             - name: OPENAI_API_KEY
-              valueFrom: {secretKeyRef: {name: {{ .Values.agents.model.apiKeySecret.name }}, key: {{ .Values.agents.model.apiKeySecret.key }}}}
+              valueFrom: {secretKeyRef: {name: {{ $.Values.agents.model.apiKeySecret.name }}, key: {{ $.Values.agents.model.apiKeySecret.key }}}}
             - {name: OTEL_SERVICE_NAME, value: evalsi-demo-deepagents}
+            # Every trace carries the workflow and its version: Evals.si reads
+            # evalsi.label.<key> resource attributes as labels, which policies
+            # select on and the scores API filters by.
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ printf "evalsi.label.workflow=%s,evalsi.label.version=%s,evalsi.label.stage=%s" $d.workflow $i.version $i.stage | quote }}
             - {name: HOME, value: /tmp/home}
-            {{- if .Values.mlflow.enabled }}
+            {{- if and $i.traced $.Values.mlflow.enabled }}
             - {name: MLFLOW_TRACKING_URI, value: {{ printf "http://%s-mlflow:5000" $fn | quote }}}
             {{- end }}
-            {{- with $d.otlp.endpoint }}
+            {{- if and $i.traced $d.otlp.endpoint }}
             - {name: MLFLOW_ENABLE_OTLP_EXPORTER, value: "true"}
-            - {name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, value: {{ printf "%s/v1/traces" (trimSuffix "/" .) | quote }}}
+            {{- if $.Values.mlflow.enabled }}
+            # Without it, an OTLP endpoint replaces MLflow as the destination.
+            - {name: MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT, value: "true"}
+            {{- end }}
+            - {name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, value: {{ printf "%s/v1/traces" (trimSuffix "/" $d.otlp.endpoint) | quote }}}
             - {name: OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, value: http/protobuf}
+            {{- with $d.otlp.apiKeySecret.name }}
+            - name: EVALSI_INGEST_KEY
+              valueFrom: {secretKeyRef: {name: {{ . }}, key: {{ $d.otlp.apiKeySecret.key }}}}
+            - {name: OTEL_EXPORTER_OTLP_TRACES_HEADERS, value: "authorization=Bearer%20$(EVALSI_INGEST_KEY)"}
+            {{- end }}
+            {{- if $d.otlp.caSecret.name }}
+            - {name: OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE, value: /etc/evalsi-ca/ca.crt}
+            {{- end }}
             {{- end }}
           readinessProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 5
-          securityContext: {{- include "demo.restricted" . | nindent 12 }}
+          securityContext: {{- include "demo.restricted" $ | nindent 12 }}
           resources: {{- toYaml $d.resources | nindent 12 }}
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
+            {{- if and $i.traced $d.otlp.endpoint $d.otlp.caSecret.name }}
+            - {name: evalsi-ca, mountPath: /etc/evalsi-ca, readOnly: true}
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- if and $i.traced $d.otlp.endpoint $d.otlp.caSecret.name }}
+        - name: evalsi-ca
+          secret:
+            secretName: {{ $d.otlp.caSecret.name }}
+            items: [{key: {{ $d.otlp.caSecret.key }}, path: ca.crt}]
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $fn }}-deepagents
-  labels: {{- include "demo.labels" . | nindent 4 }}
-    {{- with include "demo.serviceLabels" (dict "root" . "local" $d) }}
+  name: {{ $i.name }}
+  labels: {{- include "demo.labels" $ | nindent 4 }}
+    {{- with include "demo.serviceLabels" (dict "root" $ "local" $d) }}
     {{- . | nindent 4 }}
     {{- end }}
 spec:
-  selector: {app.kubernetes.io/name: {{ $fn }}-deepagents}
+  selector: {app.kubernetes.io/name: {{ $i.name }}}
   ports: [{name: http, port: 8080, targetPort: http}]
+{{- end }}
 {{- end }}

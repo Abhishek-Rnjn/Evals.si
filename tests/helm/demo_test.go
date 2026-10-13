@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/abhishek-rnjn/evals.si/operator/bootstrap"
 )
 
 // The demo chart (examples/demo) holds to the same placement rules as the main
@@ -159,5 +161,84 @@ func TestDemoOverlays(t *testing.T) {
 				t.Errorf("%s: sources.allow_hosts lacks the demo MLflow:\n%s", shape, cfg)
 			}
 		})
+	}
+}
+
+// M2: the research assistant's deploy gate. A release waits as the candidate,
+// which traces nowhere; production carries its workflow and version on every
+// trace and, with otlp set, sends them to Evals.si as well as to MLflow.
+func TestDemoDeployGateCandidate(t *testing.T) {
+	for _, o := range demo(t) {
+		if o.Metadata.Name == "evalsi-demo-deepagents-candidate" {
+			t.Errorf("a candidate %s without deepagents.candidate.enabled", o.Kind)
+		}
+	}
+	objs := demo(t,
+		"deepagents.candidate.enabled=true", "deepagents.candidate.version=v2", "deepagents.candidate.model=mock-regressed",
+		"deepagents.otlp.endpoint=https://evalsi:4318/",
+		"deepagents.otlp.apiKeySecret.name=evalsi-demo-ingest-key", "deepagents.otlp.caSecret.name=evalsi-server-tls",
+	)
+	find(t, objs, "Service", "evalsi-demo-deepagents-candidate")
+	candidate := find(t, objs, "Deployment", "evalsi-demo-deepagents-candidate")
+	spec := podSpec(t, candidate)
+	for _, want := range []string{"value: openai:mock-regressed", "evalsi.label.version=v2", "evalsi.label.stage=candidate"} {
+		if !strings.Contains(spec, want) {
+			t.Errorf("candidate: no %q in %s", want, spec)
+		}
+	}
+	for _, unwanted := range []string{"MLFLOW_TRACKING_URI", "OTEL_EXPORTER_OTLP", "evalsi-ca"} {
+		if strings.Contains(spec, unwanted) {
+			t.Errorf("candidate traces somewhere (%s): %s", unwanted, spec)
+		}
+	}
+	if candidate.Metadata.Annotations["evals.si/version"] != "v2" {
+		t.Errorf("candidate annotations %v", candidate.Metadata.Annotations)
+	}
+
+	production := find(t, objs, "Deployment", "evalsi-demo-deepagents")
+	spec = podSpec(t, production)
+	for _, want := range []string{
+		"value: openai:mock", "evalsi.label.workflow=research-assistant,evalsi.label.version=v1,evalsi.label.stage=production",
+		"MLFLOW_TRACKING_URI", "name: MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT", "value: https://evalsi:4318/v1/traces",
+		"name: evalsi-demo-ingest-key", "authorization=Bearer%20$(EVALSI_INGEST_KEY)",
+		"value: /etc/evalsi-ca/ca.crt", "secretName: evalsi-server-tls",
+	} {
+		if !strings.Contains(spec, want) {
+			t.Errorf("production: no %q in %s", want, spec)
+		}
+	}
+	if production.Metadata.Annotations["evals.si/version"] != "v1" {
+		t.Errorf("production annotations %v", production.Metadata.Annotations)
+	}
+
+	// Without MLflow, OTLP is the only destination, so there is nothing to export twice to.
+	spec = podSpec(t, find(t, demo(t, "mlflow.enabled=false", "deepagents.otlp.endpoint=https://evalsi:4318"), "Deployment", "evalsi-demo-deepagents"))
+	if strings.Contains(spec, "DUAL_EXPORT") || strings.Contains(spec, "MLFLOW_TRACKING_URI") {
+		t.Errorf("dual export without MLflow: %s", spec)
+	}
+}
+
+// M2: the demo overlay's bootstrap gives the project an ingest key, a reader
+// key and a default policy, in a file the bootstrap command accepts.
+func TestDemoOverlayBootstrapsTheDefaultPolicy(t *testing.T) {
+	abs, err := filepath.Abs("../../examples/demo/overlays")
+	if err != nil {
+		t.Fatal(err)
+	}
+	objs := renderDir(t, "evalsi", charts+"/evalsi", abs+"/evalsi-demo.yaml", abs+"/pod-pool.yaml")
+	raw := find(t, objs, "ConfigMap", "evalsi-bootstrap").Data["bootstrap.json"]
+	cfg, err := bootstrap.Load([]byte(raw))
+	if err != nil {
+		t.Fatalf("%v\n%s", err, raw)
+	}
+	secrets := map[string]bool{}
+	for _, k := range cfg.APIKeys {
+		secrets[k.Secret.Name] = true
+	}
+	if !secrets["evalsi-demo-ingest-key"] || !secrets["evalsi-demo-reader-key"] {
+		t.Errorf("keys %+v", cfg.APIKeys)
+	}
+	if len(cfg.Policies) != 1 || !strings.Contains(string(cfg.Policies[0]), `"studio-default"`) {
+		t.Errorf("policies %s", raw)
 	}
 }

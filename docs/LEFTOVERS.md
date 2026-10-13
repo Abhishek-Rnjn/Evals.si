@@ -9,7 +9,7 @@ The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milesto
 | Milestone | Planned | Status |
 |-----------|---------|--------|
 | M1 Release, SDK client | Oct to Nov 2026 | Done: v0.1.0 released and verified |
-| M2 agent harness online | Nov to Dec 2026 | In progress, next: a default policy and a gated deploy on the demo cluster; sign-off on the real agent harness needs its repository |
+| M2 agent harness online | Nov to Dec 2026 | In progress: a default policy and a gated deploy built on the demo and run by the kind e2e job; sign-off on the real agent harness needs its repository |
 | M3 Pull connectors | Nov 2026 to Jan 2027 | Partly done: MLflow, Phoenix and Langfuse verified; Databricks and SageMaker not run live; backfill and lag targets not measured |
 | M4 Real-infra hardening | Jan to Feb 2027 | Not certified: bounded EKS checks passed; load, full upgrade and mesh enforcement remain |
 | M5 More sources, SDK | Jan to Mar 2027 | SDK parts done; LangSmith, ClickHouse, Kafka and S3 sources not built |

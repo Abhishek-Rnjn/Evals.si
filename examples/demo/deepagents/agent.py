@@ -59,11 +59,17 @@ def build_agent() -> Any:
 
 
 def enable_tracing() -> bool:
-    """MLflow autolog for LangChain and LangGraph, when MLFLOW_TRACKING_URI is set."""
-    if not os.environ.get("MLFLOW_TRACKING_URI"):
+    """MLflow autolog for LangChain and LangGraph, when MLFLOW_TRACKING_URI or an OTLP endpoint is set.
+
+    With both, the traces go to both only if MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT
+    is true; otherwise MLflow sends them to the OTLP endpoint alone.
+    """
+    tracking = os.environ.get("MLFLOW_TRACKING_URI")
+    if not tracking and not os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
         return False
     import mlflow
 
-    mlflow.set_experiment(os.environ.get("MLFLOW_EXPERIMENT_NAME", "evalsi-demo-deepagents"))
+    if tracking:
+        mlflow.set_experiment(os.environ.get("MLFLOW_EXPERIMENT_NAME", "evalsi-demo-deepagents"))
     mlflow.langchain.autolog()
     return True

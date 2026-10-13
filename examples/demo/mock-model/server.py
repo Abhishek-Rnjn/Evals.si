@@ -10,6 +10,10 @@ names, because it picks the tool that takes a ``command``) or a ``tool`` with
 ``arguments``, and an optional ``answer``. A task it does not recognise gets an
 apology.
 
+A model name ending in ``-regressed`` (``mock-regressed``) plays a broken
+release: it calls no tools and apologises for every task, so a deploy gate
+has something to block.
+
     python3 server.py --port 8000 [--solutions solutions.json]
 """
 
@@ -25,6 +29,8 @@ from pathlib import Path
 from typing import Any
 
 SHELL_NAMES = ("execute", "bash", "shell", "run_command", "run_shell")
+REGRESSED = "-regressed"
+APOLOGY = "I could not find a way to do that."
 
 
 def text_of(content: Any) -> str:
@@ -61,6 +67,8 @@ class Script:
 
     def reply(self, body: dict[str, Any]) -> dict[str, Any]:
         """The next assistant message: {"content": str, "tool_calls": [...]}."""
+        if str(body.get("model", "")).endswith(REGRESSED):
+            return {"content": APOLOGY}
         messages = body.get("messages", [])
         user = "\n".join(text_of(m.get("content")) for m in messages if m.get("role") == "user")
         solution = next((s for s in self.solutions if s["match"] in user), None)
@@ -92,7 +100,7 @@ class Script:
             }
         if solution and "answer" in solution:
             return {"content": solution["answer"]}
-        return {"content": "I could not find a way to do that."}
+        return {"content": APOLOGY}
 
 
 def usage(body: dict[str, Any], reply: dict[str, Any]) -> dict[str, int]:
