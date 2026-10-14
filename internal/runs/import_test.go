@@ -2,6 +2,7 @@ package runs
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -181,5 +182,53 @@ func TestImportedRunsCompareAndCannotResume(t *testing.T) {
 	_, err = h.m.ResumeRun(ctx, connect.NewRequest(&evalsiv1alpha1.ResumeRunRequest{Id: run.Msg.GetRun().GetId()}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "imported") {
 		t.Errorf("resuming an imported run: %v", err)
+	}
+}
+
+// An imported run's results are stored under their evaluator's place in the
+// spec, whatever order they come in, so promotion reads each score under its
+// own evaluator.
+func TestImportRunKeysResultsBySpecOrder(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "db", "evalsi.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	h := newHarnessWith(t, st, dir)
+	ctx := context.Background()
+	scored := func(evaluator string, v float64) *evalsiv1alpha1.EvaluationResult {
+		return &evalsiv1alpha1.EvaluationResult{RecordId: "r1", Evaluator: evaluator, Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED,
+			Scores: []*evalsiv1alpha1.Score{{Name: evaluator, Value: &evalsiv1alpha1.Score_Number{Number: v}}}}
+	}
+	request := func(results ...*evalsiv1alpha1.EvaluationResult) *evalsiv1alpha1.ImportRunRequest {
+		return &evalsiv1alpha1.ImportRunRequest{
+			Project: "p",
+			Spec: &evalsiv1alpha1.RunSpec{Evaluators: []*evalsiv1alpha1.EvaluatorRef{
+				{Ref: "acme/alpha", Name: "alpha"}, {Ref: "acme/beta", Name: "beta"},
+			}},
+			Records: []*evalsiv1alpha1.Record{{Id: "r1", Input: text("q")}},
+			Results: results,
+		}
+	}
+
+	resp, err := h.m.ImportRun(ctx, connect.NewRequest(request(scored("beta", 0.9), scored("alpha", 0.1))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, err := h.m.MatchRecords(ctx, resp.Msg.GetRun(), `scores["alpha"] < 0.5`, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0].Scores["alpha"] != 0.1 || matches[0].Scores["beta"] != 0.9 || len(matches[0].Scores) != 2 {
+		t.Fatalf("matches = %+v", matches)
+	}
+
+	// A result from an evaluator the spec does not name, or with a NaN score, is refused.
+	if _, err := h.m.ImportRun(ctx, connect.NewRequest(request(scored("gamma", 0.5)))); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("unknown evaluator: %v", err)
+	}
+	if _, err := h.m.ImportRun(ctx, connect.NewRequest(request(scored("alpha", math.NaN())))); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("NaN score: %v", err)
 	}
 }

@@ -282,7 +282,7 @@ func TestRunWithTrialsGatesAndFailures(t *testing.T) {
 	}
 	final := h.wait(t, run.GetId())
 	if final.GetStatus() != evalsiv1alpha1.RunStatus_RUN_STATUS_FAILED {
-		t.Fatalf("status = %v (%s), want FAILED because pass^2 is 0.5", final.GetStatus(), final.GetError())
+		t.Fatalf("status = %v (%s), want FAILED because pass^2 is 1/3", final.GetStatus(), final.GetError())
 	}
 	if final.GetProgress().GetDone() != final.GetProgress().GetTotal() {
 		t.Errorf("progress = %v", final.GetProgress())
@@ -292,10 +292,13 @@ func TestRunWithTrialsGatesAndFailures(t *testing.T) {
 	if em.GetN() != 4 || em.GetMean() != 0.75 || em.GetErrors() != 2 || em.GetCi().GetMethod() != "clustered-t" {
 		t.Errorf("exact-match = %v", em)
 	}
-	if s := summary(final, "exact-match.pass@2"); s.GetMean() != 1 {
+	// For pass@k and pass^k an errored trial did not pass: broken counts,
+	// failing both of its trials, so easy is the one record of three that
+	// passed every trial.
+	if s := summary(final, "exact-match.pass@2"); s.GetN() != 3 || s.GetMean() != 2.0/3 || s.GetErrors() != 2 {
 		t.Errorf("pass@2 = %v", s)
 	}
-	if s := summary(final, "exact-match.pass^2"); s.GetMean() != 0.5 {
+	if s := summary(final, "exact-match.pass^2"); s.GetN() != 3 || s.GetMean() != 1.0/3 {
 		t.Errorf("pass^2 = %v", s)
 	}
 	if s := summary(final, "count"); s.GetMean() != 2 {
@@ -569,7 +572,7 @@ func agentSpec(inputs ...string) *evalsiv1alpha1.RunSpec {
 		Dataset:     inline(inputs...),
 		Evaluators:  refs("task-success"),
 		Trials:      2,
-		Gates:       []*evalsiv1alpha1.Gate{{Metric: "task-success.pass^2", Min: proto.Float64(0.3)}},
+		Gates:       []*evalsiv1alpha1.Gate{{Metric: "task-success.pass^2", Min: proto.Float64(0.2)}},
 	}
 }
 
@@ -586,7 +589,8 @@ func TestAgentRunsDriveTasksThroughTheWorker(t *testing.T) {
 	if s := summary(run, "task-success"); s.GetMean() != 0.5 || s.GetN() != 6 {
 		t.Errorf("task-success %v", s)
 	}
-	if s := summary(run, "task-success.pass^2"); s.GetMean() < 0.33 || s.GetMean() > 0.34 {
+	// pass^2 counts crash's trials as failed: only pass, of four tasks, passed both.
+	if s := summary(run, "task-success.pass^2"); s.GetMean() != 0.25 || s.GetN() != 4 {
 		t.Errorf("pass^2 %v", s)
 	}
 	if run.GetTargetUsage().GetInputTokens() != 600 {

@@ -17,7 +17,7 @@ from evalsi.client import Client, ServerError
 from evalsi.evaluator import MetricSpec, ScoreType
 from evalsi.judges import JudgeClient, JudgeConfig
 from evalsi.registry import Registry, discover_packs
-from evalsi.results import summarize
+from evalsi.results import MetricSummary, summarize
 from evalsi.run import BudgetExceeded, execute
 from evalsi.runner import bind_evaluators
 from evalsi.runspec import SpecError, check_gates, load_spec, parse_spec
@@ -202,6 +202,45 @@ def test_trials_add_pass_at_k_and_cluster_by_record() -> None:
     assert summaries["exact-match"].ci.method == "clustered-t"
     assert summaries["exact-match.pass@3"].mean == pytest.approx(2 / 3)
     assert summaries["exact-match.pass^3"].mean == pytest.approx(1 / 3)
+
+
+def test_errored_trials_count_as_not_passed() -> None:
+    # One pass and two crashes is pass@3 of 1 but pass^3 of 0; a record that
+    # never ran counts as failing every trial.
+    em = bind_evaluators(["exact-match"])
+    results = [
+        EvaluationResult("a", "exact-match", "x", Outcome.SCORED, [Score(passed=True)], trial=0),
+        *(
+            EvaluationResult("a", "exact-match", "x", Outcome.ERROR, reason="crash", trial=t)
+            for t in (1, 2)
+        ),
+        *(
+            EvaluationResult("b", "exact-match", "x", Outcome.ERROR, reason="crash", trial=t)
+            for t in range(3)
+        ),
+    ]
+    summaries = {
+        s.metric: s for s in summarize(em, results, [Record(id="a"), Record(id="b")], trials=3)
+    }
+    assert summaries["exact-match.pass@3"].n == 2
+    assert summaries["exact-match.pass@3"].mean == pytest.approx(1 / 2)
+    assert summaries["exact-match.pass@3"].errors == 5
+    assert summaries["exact-match.pass^3"].mean == 0
+
+
+def test_gates_fail_non_finite_values() -> None:
+    summaries = [
+        MetricSummary(metric="nan", evaluator="e", kind="number", mean=float("nan")),
+        MetricSummary(metric="inf", evaluator="e", kind="number", mean=float("inf")),
+    ]
+    gates = [
+        run_pb2.Gate(metric="nan", min=0.9),
+        run_pb2.Gate(metric="nan", max=0.1),
+        run_pb2.Gate(metric="inf", max=10),
+    ]
+    results = check_gates(gates, summaries)
+    assert [g.passed for g in results] == [False, False, False]
+    assert "not a finite number" in results[0].reason
 
 
 # --- embedded execution ---

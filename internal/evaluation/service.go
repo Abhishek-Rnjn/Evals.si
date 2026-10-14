@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -302,6 +303,7 @@ func (s *Service) RunRecords(ctx context.Context, insts []Instance, records []*e
 				}
 				for k, r := range resp.GetResults() {
 					r.Evaluator = in.Name
+					rejectNonFinite(r)
 					slots[start+k][ii] = r
 				}
 				return nil
@@ -316,6 +318,27 @@ func (s *Service) RunRecords(ctx context.Context, insts []Instance, records []*e
 		out = append(out, row...)
 	}
 	return out, nil
+}
+
+// rejectNonFinite turns a result with a NaN or infinite number into an error:
+// such a value would make a summary NaN, and NaN passes every comparison a
+// gate makes.
+func rejectNonFinite(r *evalsiv1alpha1.EvaluationResult) {
+	if name, ok := NonFinite(r.GetScores()); ok {
+		r.Outcome = evalsiv1alpha1.Outcome_OUTCOME_ERROR
+		r.Reason = fmt.Sprintf("evaluator returned a non-finite value for score %q", name)
+		r.Scores = nil
+	}
+}
+
+// NonFinite reports the first score whose number is NaN or infinite.
+func NonFinite(scores []*evalsiv1alpha1.Score) (string, bool) {
+	for _, sc := range scores {
+		if v, ok := sc.GetValue().(*evalsiv1alpha1.Score_Number); ok && (math.IsNaN(v.Number) || math.IsInf(v.Number, 0)) {
+			return sc.GetName(), true
+		}
+	}
+	return "", false
 }
 
 func eligible(req *evalsiv1alpha1.Requirements, r *evalsiv1alpha1.Record) bool {
@@ -361,6 +384,7 @@ func (s *Service) RunDataset(ctx context.Context, insts []Instance, records []*e
 		default:
 			result.Outcome = evalsiv1alpha1.Outcome_OUTCOME_SCORED
 			result.Scores = resp.GetScores()
+			rejectNonFinite(result)
 		}
 		if missing := len(records) - len(use); missing > 0 && result.Reason == "" {
 			result.Reason = fmt.Sprintf("%d records lacked required fields", missing)

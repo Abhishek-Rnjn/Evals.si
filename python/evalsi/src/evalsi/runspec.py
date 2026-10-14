@@ -17,6 +17,7 @@ A spec file looks like a Kubernetes object; ``spec`` is the
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -216,6 +217,9 @@ def check_gates(
             result.value = value
             if value is None:
                 result.reason = f"metric has no {stat}"
+            elif not math.isfinite(value):
+                # NaN fails every comparison below, so it would otherwise pass.
+                result.reason = f"{stat} is {value}, not a finite number"
             elif lo is not None and value < lo:
                 result.reason = f"{stat} {value:.4g} is below {lo:.4g}"
             elif hi is not None and value > hi:

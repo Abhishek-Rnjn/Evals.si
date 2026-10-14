@@ -138,7 +138,7 @@ spec:
       budget: {usd: 0.50, wall_clock: 5m}   # a runaway agent stops here
 ```
 
-- **`trials`** runs each task several times. Evals.si reports `pass@k` (at least one of k trials passed) and `pass^k` (all k passed).
+- **`trials`** runs each task several times. Evals.si reports `pass@k` (at least one of k trials passed) and `pass^k` (all k passed). A trial in which the agent failed to run counts as not passed.
 - **`pass^3 >= 0.8`** means: three trials in a row must pass on at least 80% of the tasks. Use `pass^k` when you need reliability, and `pass@k` when one success is enough.
 - **Budgets** cap cost and time, so a bad prompt cannot spend without limit.
 

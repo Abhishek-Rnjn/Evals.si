@@ -75,7 +75,8 @@ func (m *Manager) CompareRuns(ctx context.Context, req *connect.Request[evalsiv1
 	if level == 0 {
 		level = 0.95
 	}
-	if level <= 0 || level >= 1 {
+	// Tested as inside the range, so NaN is refused too.
+	if !(level > 0 && level < 1) {
 		return nil, invalid("confidence_level must be between 0 and 1")
 	}
 	base, err := m.get(ctx, req.Msg.GetBaselineRunId())

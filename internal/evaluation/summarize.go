@@ -92,7 +92,8 @@ func Summarize(insts []Instance, results []*evalsiv1alpha1.EvaluationResult, rec
 	if level == 0 {
 		level = 0.95
 	}
-	if level <= 0 || level >= 1 {
+	// Tested as inside the range, so NaN is refused too.
+	if !(level > 0 && level < 1) {
 		return nil, invalid("confidence_level must be between 0 and 1")
 	}
 	method := "auto"
@@ -111,6 +112,9 @@ func Summarize(insts []Instance, results []*evalsiv1alpha1.EvaluationResult, rec
 	var out []*evalsiv1alpha1.MetricSummary
 	for _, in := range insts {
 		var skipped, errored int64
+		// Records whose evaluation errored, once per errored trial: for
+		// pass@k and pass^k, a trial that errored did not pass.
+		var erroredIDs []string
 		var order []string
 		values := map[string][]scored{}
 		specs := map[string]*evalsiv1alpha1.MetricSpec{}
@@ -131,6 +135,9 @@ func Summarize(insts []Instance, results []*evalsiv1alpha1.EvaluationResult, rec
 				skipped++
 			case evalsiv1alpha1.Outcome_OUTCOME_ERROR:
 				errored++
+				if r.GetRecordId() != "" {
+					erroredIDs = append(erroredIDs, r.GetRecordId())
+				}
 			}
 			for _, sc := range r.GetScores() {
 				key := MetricKey(in, sc.GetName())
@@ -149,7 +156,7 @@ func Summarize(insts []Instance, results []*evalsiv1alpha1.EvaluationResult, rec
 				sum.Skipped, sum.Errors = skipped, errored
 				out = append(out, sum)
 				if trials > 1 && sum.GetKind() == evalsiv1alpha1.MetricKind_METRIC_KIND_PROPORTION {
-					out = append(out, passAtK(key, in.Name, values[key], trials, level)...)
+					out = append(out, passAtK(key, in.Name, values[key], erroredIDs, trials, level)...)
 				}
 			}
 		}
@@ -227,18 +234,26 @@ func summarizeMetric(key string, in Instance, spec *evalsiv1alpha1.MetricSpec, v
 
 // passAtK mirrors _pass_at_k in the Python SDK: pass@k is passed in at least
 // one trial, pass^k is passed in every trial.
-func passAtK(key, evaluator string, values []scored, k int, level float64) []*evalsiv1alpha1.MetricSummary {
+// passAtK computes pass@k and pass^k per record. errored lists a record once
+// for each trial whose evaluation errored (the target or agent failed, or the
+// evaluator did); such a trial counts as not passed, so a record that passed
+// once and failed to run four times has pass^5 of 0, not 1.
+func passAtK(key, evaluator string, values []scored, errored []string, k int, level float64) []*evalsiv1alpha1.MetricSummary {
 	var order []string
 	byRecord := map[string][]bool{}
+	add := func(id string, passed bool) {
+		if _, seen := byRecord[id]; !seen {
+			order = append(order, id)
+		}
+		byRecord[id] = append(byRecord[id], passed)
+	}
 	for _, v := range values {
-		p, ok := v.score.GetValue().(*evalsiv1alpha1.Score_Passed)
-		if !ok {
-			continue
+		if p, ok := v.score.GetValue().(*evalsiv1alpha1.Score_Passed); ok {
+			add(v.recordID, p.Passed)
 		}
-		if _, seen := byRecord[v.recordID]; !seen {
-			order = append(order, v.recordID)
-		}
-		byRecord[v.recordID] = append(byRecord[v.recordID], p.Passed)
+	}
+	for _, id := range errored {
+		add(id, false)
 	}
 	var out []*evalsiv1alpha1.MetricSummary
 	for _, variant := range []struct {
@@ -265,6 +280,7 @@ func passAtK(key, evaluator string, values []scored, k int, level float64) []*ev
 		sum := &evalsiv1alpha1.MetricSummary{
 			Metric: key + "." + variant.name, Evaluator: evaluator,
 			Kind: evalsiv1alpha1.MetricKind_METRIC_KIND_PROPORTION, N: int64(len(nums)),
+			Errors: int64(len(errored)),
 		}
 		if len(nums) > 0 {
 			sum.Mean = proto.Float64(stats.Mean(nums))
