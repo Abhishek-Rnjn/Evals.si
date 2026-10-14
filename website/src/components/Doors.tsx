@@ -3,9 +3,9 @@ import { MagicCard } from "./ui/magic-card";
 
 export default function Doors({ base }: { base: string }) {
   const doors = [
-    { Icon: Gauge, name: "Score", tag: "evalsi eval", text: "Grade outputs you already have. Every mean ships with a confidence interval; records an evaluator can't judge are skipped, never scored zero.", href: `${base}/docs/get-started/` },
-    { Icon: Play, name: "Run", tag: "evalsi run", text: "Durable, resumable runs with trials, gates and budgets, including agents on sandboxed tasks and benchmarks.", href: `${base}/docs/guides/agent-runs/` },
+    { Icon: Play, name: "Run", tag: "evalsi run", text: "Run an agent on sandboxed tasks, or a RAG pipeline or model on a dataset. Trials, gates and budgets fail the build when it gets worse.", href: `${base}/docs/guides/gate-an-agent-in-ci/` },
     { Icon: Activity, name: "Watch", tag: "evalsi policy", text: "Continuously evaluate live agent traces, sent over OpenTelemetry or read from MLflow, Phoenix and Langfuse, with sampling, cascades, windowed alerts and promotion to datasets.", href: `${base}/docs/guides/agent-frameworks/` },
+    { Icon: Gauge, name: "Score", tag: "evalsi eval", text: "Grade agent runs, RAG answers and outputs you already have. Every mean ships with a confidence interval; records an evaluator can't judge are skipped, never scored zero.", href: `${base}/docs/get-started/` },
     { Icon: Trophy, name: "Reward", tag: "RewardService", text: "Evaluators as RL rewards for TRL, verl and OpenRLHF, and every checkpoint checked against the base model.", href: `${base}/docs/guides/fine-tuning/` },
   ];
   return (

@@ -149,6 +149,16 @@ jobs:
           EVALSI_REQUIRE_EVALSID: "1"
       - name: CLI smoke test
         run: uv run --no-sync evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match
+      - name: The RAG example gate fails on a bad citation and passes once it is fixed
+        # examples/rag backs the "Evaluate a RAG pipeline" guide: no model, no judge.
+        run: |
+          code=0
+          uv run --no-sync evalsi run -f ../examples/rag/gate.yaml || code=$?
+          test "$code" -eq 3
+          sed 's/\[4\]/[2]/' ../examples/rag/rag.jsonl > ../examples/rag/fixed.jsonl
+          sed 's/rag.jsonl/fixed.jsonl/' ../examples/rag/gate.yaml > ../examples/rag/fixed.yaml
+          uv run --no-sync evalsi run -f ../examples/rag/fixed.yaml
+          rm ../examples/rag/fixed.jsonl ../examples/rag/fixed.yaml
 
   adapters:
     # Each framework adapter has its own pinned environment, so upstream

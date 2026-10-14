@@ -15,12 +15,12 @@ const ogImage = `${site}${base === "/" ? "" : base}/og.png`;
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 
 const guides = [
-  "agent-runs", "gate-an-agent-in-ci", "annotation", "fine-tuning", "guardrails", "identity",
+  "agent-runs", "gate-an-agent-in-ci", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-harness",
   "agent-frameworks", "operations", "end-to-end", "deepeval",
 ];
 const examples = [
-  "quickstart", "runs", "agent-gate", "agents", "watch", "sources", "guardrails", "annotation",
+  "quickstart", "runs", "agent-gate", "rag", "agents", "watch", "sources", "guardrails", "annotation",
   "finetuning", "custom-evaluator", "wasm", "auth", "server", "ci",
 ];
 
@@ -37,15 +37,15 @@ export default defineConfig({
         { tag: "meta", attrs: { property: "og:image", content: ogImage } },
         { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
         { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
-        { tag: "meta", attrs: { property: "og:image:alt", content: "Evals.si: one entrypoint to evaluate ML models, LLMs, RAG systems and agents" } },
+        { tag: "meta", attrs: { property: "og:image:alt", content: "Evals.si: evaluate AI before you ship, while it runs, and as you train it" } },
         { tag: "meta", attrs: { name: "twitter:image", content: ogImage } },
-        { tag: "meta", attrs: { name: "keywords", content: "evalsi, Evals.si, LLM evaluation, agent evaluation, RAG evaluation, LLM-as-a-judge, evals, RL rewards, OpenTelemetry, MLflow, Kubernetes" } },
+        { tag: "meta", attrs: { name: "keywords", content: "evalsi, Evals.si, agent evaluation, AI agent testing, agent CI gates, RAG evaluation, RAG faithfulness, RL rewards, fine-tuning evaluation, LLM evaluation, LLM-as-a-judge, evals, RL rewards, OpenTelemetry, MLflow, Kubernetes" } },
         ...(googleVerification ? [{ tag: "meta", attrs: { name: "google-site-verification", content: googleVerification } }] : []),
         { tag: "link", attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" } },
         { tag: "link", attrs: { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" } },
       ],
       favicon: "/favicon.svg",
-      description: "Evals.si (pip install evalsi): one entrypoint to evaluate ML models, LLMs, RAG systems and agents, offline and online. Self-hosted and open source.",
+      description: "Evals.si (pip install evalsi): evaluate AI before you ship, while it runs and as you train it. Agents, RAG pipelines, LLMs and models, with CI gates, live trace scoring and RL rewards. Self-hosted and open source.",
       social: [{ icon: "github", label: "GitHub", href: repo }],
       customCss: ["./src/styles/theme.css"],
       components: {

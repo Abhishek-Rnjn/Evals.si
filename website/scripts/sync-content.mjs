@@ -22,7 +22,7 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
-  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19],
 ];
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
@@ -132,7 +132,7 @@ await importDoc("CHANGELOG.md", "/docs/changelog/", { description: "What changed
 
 // Docs overview
 await writePage("/docs/", { title: "Documentation", description: "Guides, architecture and reference for Evals.si." }, `
-Evals.si is one entrypoint for evaluating classic ML models, LLMs, RAG systems and agents, offline and online.
+Evals.si evaluates AI before you ship, while it runs, and as you train it. It runs agents, RAG pipelines and models on datasets and sandboxed tasks and fails the build when a gate fails, scores live traces, and turns the same evaluators into RL rewards and checkpoint checks. Agents come first.
 
 ## Start here
 
@@ -159,6 +159,7 @@ const examples = [
   { dir: "quickstart", title: "Quickstart: grade existing outputs", desc: "Score a JSONL file of question/answer records with built-in evaluators.", guide: "/docs/get-started/" },
   { dir: "runs", title: "Runs: execute a target on a dataset", desc: "A durable run with a dataset, evaluators and a pass/fail gate.", guide: "/docs/get-started/" },
   { dir: "agent-gate", title: "Gate an agent in CI", desc: "A runnable agent gate: a stand-in agent, a hidden checker and a pass/fail gate that exits 3, plus a GitHub Actions workflow.", guide: "/docs/guides/gate-an-agent-in-ci/" },
+  { dir: "rag", title: "Evaluate a RAG pipeline", desc: "A gate over a RAG pipeline's recorded answers: question, answer, retrieved passages and a citation check, with no model needed.", guide: "/docs/guides/evaluate-rag/" },
   { dir: "agents", title: "Agent runs on sandboxed tasks", desc: "Put the built-in agent, or your own, to work on tasks in a sandbox, including SWE-bench.", guide: "/docs/guides/agent-runs/" },
   { dir: "watch", title: "Watch: evaluate live traces", desc: "An online policy that scores OpenTelemetry traces as they arrive.", guide: "/docs/get-started/" },
   { dir: "sources", title: "Trace sources: score traces kept in MLflow", desc: "A TraceSource that reads an agent harness's MLflow traces, scores them and writes the scores back.", guide: "/docs/guides/trace-sources/" },

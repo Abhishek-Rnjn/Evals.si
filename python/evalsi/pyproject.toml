@@ -1,11 +1,11 @@
 [project]
 name = "evalsi"
 dynamic = ["version"]
-description = "One entrypoint for evaluating ML models, LLMs and agents."
+description = "Evaluate AI before you ship, while it runs and as you train it: agents, RAG pipelines, LLMs and models."
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Abhishek Ranjan" }]
-keywords = ["evaluation", "evals", "llm", "llm-as-a-judge", "agents", "rag", "rl", "reward", "mlops", "opentelemetry", "kubernetes"]
+keywords = ["agents", "agent-evaluation", "ai-agents", "rag", "rag-evaluation", "evals", "evaluation", "llm", "llm-as-a-judge", "fine-tuning", "rl", "reward", "sandbox", "ci", "mlops", "opentelemetry", "kubernetes"]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",

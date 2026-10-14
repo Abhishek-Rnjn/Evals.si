@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const out = fileURLToPath(new URL("../public/og.png", import.meta.url));
 
-const pills = ["Score", "Run", "Watch", "Reward"];
+const pills = ["Run", "Watch", "Score", "Reward"];
 const pill = (label, i) => {
   const x = 96 + i * 168;
   return `<rect x="${x}" y="470" width="150" height="54" rx="27" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.25"/>
@@ -29,9 +29,9 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
     <rect x="96" y="96" width="88" height="88" rx="24" fill="url(#g)"/>
     <path d="M118 141l18 18 29-38" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="212" y="166" font-size="72" font-weight="800" fill="#ffffff">Evals<tspan fill="#5eead4">.si</tspan></text>
-    <text x="96" y="290" font-size="46" font-weight="700" fill="#ffffff">One entrypoint to evaluate ML models,</text>
-    <text x="96" y="350" font-size="46" font-weight="700" fill="#ffffff">LLMs, RAG systems and agents</text>
-    <text x="96" y="412" font-size="28" font-weight="500" fill="#a5b4fc">Offline and online · sandboxed · self-hosted · pip install evalsi</text>
+    <text x="96" y="290" font-size="46" font-weight="700" fill="#ffffff">Evaluate AI before you ship,</text>
+    <text x="96" y="350" font-size="46" font-weight="700" fill="#ffffff">while it runs, and as you train it</text>
+    <text x="96" y="412" font-size="28" font-weight="500" fill="#a5b4fc">Agents · RAG · LLMs · RL training · pip install evalsi</text>
     ${pills.map(pill).join("\n    ")}
     <text x="1104" y="574" text-anchor="end" font-size="22" font-weight="500" fill="#94a3b8">github.com/Abhishek-Rnjn/Evals.si</text>
   </g>

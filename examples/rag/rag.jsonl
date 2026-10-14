@@ -1,0 +1,2 @@
+{"id": "refund-window", "input": "How long is the refund window?", "output": "Refunds are accepted for 30 days [1].", "context": ["Our policy allows refunds within 30 days of purchase.", "Shipping takes 3-5 business days."], "reference": "30 days"}
+{"id": "shipping-time", "input": "How long does shipping take?", "output": "Shipping takes 3-5 business days [4].", "context": ["Our policy allows refunds within 30 days of purchase.", "Shipping takes 3-5 business days."], "reference": "3-5 business days"}
