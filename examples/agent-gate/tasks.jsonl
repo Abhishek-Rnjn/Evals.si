@@ -1,0 +1,2 @@
+{"id": "add", "input": "calc.py has a bug: add(2, 3) returns -1. Fix it."}
+{"id": "mul", "input": "calc.py has a bug: mul(2, 3) returns 5. Fix it."}

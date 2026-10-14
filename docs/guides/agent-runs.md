@@ -11,6 +11,8 @@ Kubernetes too.
 - **The grading** is the environment's checker, which runs after the agent finishes, plus any evaluators. With trials, pass@k and pass^k come for free.
 - **Benchmarks** import directly: SWE-bench, τ-bench (tau2), Terminal-Bench and other Harbor datasets, and BFCL.
 
+New here? [Gate an agent in CI](gate-an-agent-in-ci.md) is a free, offline walk-through of a pass, a failing gate and a GitHub Actions workflow.
+
 ## Quick start
 
 [`examples/agents/fix-calc.yaml`](../../examples/agents/fix-calc.yaml) asks a model to fix two bugs in a git checkout. Run it embedded (it needs `evalsid` on `PATH` for the sandbox) or on a server:

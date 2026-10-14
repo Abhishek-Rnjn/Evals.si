@@ -22,7 +22,7 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
-  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18],
 ];
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
@@ -158,6 +158,7 @@ ${guides.map(([n]) => `- [${n.replace(/-/g, " ")}](${BASE}/docs/guides/${n}/)`).
 const examples = [
   { dir: "quickstart", title: "Quickstart: grade existing outputs", desc: "Score a JSONL file of question/answer records with built-in evaluators.", guide: "/docs/get-started/" },
   { dir: "runs", title: "Runs: execute a target on a dataset", desc: "A durable run with a dataset, evaluators and a pass/fail gate.", guide: "/docs/get-started/" },
+  { dir: "agent-gate", title: "Gate an agent in CI", desc: "A runnable agent gate: a stand-in agent, a hidden checker and a pass/fail gate that exits 3, plus a GitHub Actions workflow.", guide: "/docs/guides/gate-an-agent-in-ci/" },
   { dir: "agents", title: "Agent runs on sandboxed tasks", desc: "Put the built-in agent, or your own, to work on tasks in a sandbox, including SWE-bench.", guide: "/docs/guides/agent-runs/" },
   { dir: "watch", title: "Watch: evaluate live traces", desc: "An online policy that scores OpenTelemetry traces as they arrive.", guide: "/docs/get-started/" },
   { dir: "sources", title: "Trace sources: score traces kept in MLflow", desc: "A TraceSource that reads an agent harness's MLflow traces, scores them and writes the scores back.", guide: "/docs/guides/trace-sources/" },

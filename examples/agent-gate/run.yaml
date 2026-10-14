@@ -1,0 +1,55 @@
+# A pull-request gate for an agent: it must fix every task, or the run exits 3.
+# Runs offline and free, with a stand-in agent, so you can see the gate work:
+#   pip install evalsi evalsi-harness
+#   evalsi run -f run.yaml          # exit 0: the gate passes
+# The guide is docs/guides/gate-an-agent-in-ci.md (https://evalsi.dev/docs/guides/gate-an-agent-in-ci/).
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: calc-agent-gate}
+spec:
+  # Your agent goes here. Any command works: it runs inside the sandbox, in the
+  # task's working directory, and gets the instruction on stdin.
+  target:
+    agent:
+      cli:
+        command: [python3, agent.py]
+  dataset: {path: tasks.jsonl}
+  harness: {}
+  environment:
+    files:
+      # A stand-in agent so this runs offline, free and the same every time.
+      # Replace it with your own agent's command.
+      agent.py: |
+        import pathlib
+
+        pathlib.Path("calc.py").write_text("""\
+        def add(a, b):
+            return a + b
+
+
+        def mul(a, b):
+            return a * b
+        """)
+      # The task's starting state: two bugs.
+      calc.py: |
+        def add(a, b):
+            return a - b
+
+
+        def mul(a, b):
+            return a + b
+    setup:
+      - git init -q && git add -A && git -c user.email=e@x -c user.name=e commit -qm base
+    sandbox: {min_isolation: namespaced, network: deny}
+    checker:
+      # Written after the agent finishes, so the agent never sees it.
+      files:
+        test_hidden.py: |
+          from calc import add, mul
+          assert add(2, 3) == 5 and mul(2, 3) == 6
+      command: [python3, test_hidden.py]
+  evaluators:
+    - ref: task-success
+  trials: 1
+  gates:
+    - {metric: task-success, min: 1.0}
