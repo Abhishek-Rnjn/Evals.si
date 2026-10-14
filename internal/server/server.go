@@ -48,6 +48,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
 	"github.com/abhishek-rnjn/evals.si/internal/source"
 	"github.com/abhishek-rnjn/evals.si/internal/source/langfuse"
+	"github.com/abhishek-rnjn/evals.si/internal/source/langsmith"
 	"github.com/abhishek-rnjn/evals.si/internal/source/mlflow"
 	"github.com/abhishek-rnjn/evals.si/internal/source/phoenix"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
@@ -230,7 +231,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	sourceMgr = source.New(st, watcher, source.Options{
 		Runs:      runManager,
 		Redactor:  redactor,
-		Factories: map[string]source.Factory{"mlflow": mlflow.Factory, "phoenix": phoenix.Factory, "langfuse": langfuse.Factory},
+		Factories: map[string]source.Factory{"mlflow": mlflow.Factory, "phoenix": phoenix.Factory, "langfuse": langfuse.Factory, "langsmith": langsmith.Factory},
 		Resolve:   source.NewResolver(creds, cfg.Sources.Dir),
 		// Every request a source makes, redirects included, is checked
 		// against internal addresses, not only the URL it names.

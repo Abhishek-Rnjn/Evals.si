@@ -1,6 +1,6 @@
-# Trace sources: score traces you already keep in MLflow, Phoenix or Langfuse
+# Trace sources: score traces you already keep in MLflow, Phoenix, Langfuse or LangSmith
 
-If your agents already send traces to MLflow, Arize Phoenix or Langfuse, Evals.si can read them from there. A **trace source** pulls the store's traces, scores them with your [online policies](end-to-end.md), and writes the scores back to the same traces, so they show up in the UI your team already uses. Nothing changes on the agents' side: no second exporter, and history from before Evals.si was installed can be read too.
+If your agents already send traces to MLflow, Arize Phoenix, Langfuse or LangSmith, Evals.si can read them from there. A **trace source** pulls the store's traces, scores them with your [online policies](end-to-end.md), and writes the scores back to the same traces, so they show up in the UI your team already uses. Nothing changes on the agents' side: no second exporter, and history from before Evals.si was installed can be read too.
 
 A pulled trace is an ordinary trace of the source's project. It is stored, shown in the web UI with its trajectory, graded by every policy that selects it, and labelled `source: <name>` so a policy can select it.
 
@@ -9,6 +9,7 @@ A pulled trace is an ordinary trace of the source's project. It is stored, shown
 | MLflow 3.x (open source) | `POST /api/3.0/mlflow/traces/search`, spans with `batchGet` | Feedback assessments, updated in place when a score changes | MLflow 3.17.0 |
 | Arize Phoenix | `GET /v1/projects/{project}/traces`, spans by trace ID | Trace annotations with an `identifier`, which Phoenix upserts | Phoenix 20.20.0 |
 | Langfuse | `GET /api/public/v2/observations` (the real-time read path) | Scores, replaced under the same ID | Self-hosted 4.56.0: [Compose and in-cluster verification](../verification/README.md#langfuse-live-recheck-2026-10-10) |
+| LangSmith (cloud or self-hosted) | `POST /runs/query`: root runs list the traces, a trace's runs are its spans | Feedback on the trace's root run, updated in place (`PATCH /feedback/{id}`) when a score changes | Built from the pinned `langsmith` 0.4.37 client and tested against fixtures in its shapes; not live-verified |
 | Databricks MLflow experiments | V3 search and trace metadata; signed HTTPS artifact download | V3 feedback assessments | Contract-tested against pinned MLflow 3.17.0 source; not live-verified |
 | Databricks Unity Catalog schemas | V4 `search-long-running`, polled; spans with the V4 `batchGet` | V4 feedback assessments on the SQL warehouse | Built from pinned MLflow 3.17.0 source and tested against derived fixtures; not live-verified |
 | SageMaker managed MLflow (tracking server or app) | The open-source calls, signed with AWS Signature Version 4 | The open-source assessments | Built from the pinned `sagemaker-mlflow` 0.5.0 source and tested against botocore signatures; not live-verified, and whether the managed server serves the MLflow 3 trace API is unconfirmed |
@@ -49,6 +50,27 @@ It is granted and stored like any other credential. **Evals.si does not use the 
 ### Azure ML
 
 `variant: azureml` is refused when you apply the source. Azure ML's MLflow endpoint is not an MLflow 3 server: the `azureml-mlflow` 1.62.0 client builds its tracking store on the MLflow 2 API (`/mlflow/v2.0`) and notes "V3 API not implemented yet" for MLflow 3, and the trace search, `batchGet` and assessment calls are all `/api/3.0`. Send those traces over OTLP, or read them from a store that does implement it.
+
+### LangSmith
+
+Set `connector: langsmith` and, as `endpoint`, the API URL your agents' `LANGSMITH_ENDPOINT` names: `https://api.smith.langchain.com`, `https://eu.api.smith.langchain.com`, or a self-hosted `https://<host>/api/v1`. `locations` lists one or more tracing projects, by name or ID; names are looked up once per poll cycle, and a name LangSmith does not have is the source's error. The credential is a LangSmith API key, or `<workspace ID>:<API key>` for an organization key that spans workspaces (the workspace is sent as `X-Tenant-Id`).
+
+```yaml
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata: {name: support-langsmith, labels: {evals.si/project: studio}}
+spec:
+  connector: langsmith
+  endpoint: https://api.smith.langchain.com
+  locations: [support-agent]
+  credentials: {env: LANGSMITH_API_KEY}
+  backfill: {since: 168h}
+  writeBack: {enabled: true}
+```
+
+A trace is its root run and the runs under it. Run types become span kinds (`llm`, `chain`, `tool`, `retriever`, `embedding`), and inputs and outputs are read as LangChain writes them: `{"input": "..."}` and `{"output": "..."}` are unwrapped to their text, messages and generations are read as chat messages. Token counts come from `llm` runs only, as a chain's are the sum of its children's. The model is the run's `ls_model_name` metadata, else its invocation's `model`. A run's metadata are span attributes named `langsmith.metadata.<key>`; a root run's `session_id`, `thread_id` or `conversation_id` metadata is the trajectory's session, as in LangSmith's threads.
+
+Scores are written as feedback on the root run, keyed by the metric, with `feedback_source.type` `model` for a judge's score and `api` otherwise, and the policy and evaluator in its metadata. Numbers and booleans (as 1 or 0) are the feedback's `score`, labels its `value`, and the rationale its `comment`. A changed score updates the same feedback.
 
 ## Scheduled batch reports
 
@@ -167,7 +189,7 @@ The server makes the requests, from where it runs. So a project admin cannot poi
       - {env: "file:mlflow-token/token", projects: [studio]}
   ```
 
-  A file is read again at each use, so a rotated Secret takes effect without a restart. On Kubernetes, list the Secret in `sources.secrets` and the chart mounts it where `file:` names look (`sources.dir`). MLflow takes the value as a bearer token (a Databricks service principal's OAuth secret with `auth.databricks.client_id`; a JSON object of AWS keys for SageMaker), Phoenix as its API key (bearer), Langfuse as `<public key>:<secret key>`.
+  A file is read again at each use, so a rotated Secret takes effect without a restart. On Kubernetes, list the Secret in `sources.secrets` and the chart mounts it where `file:` names look (`sources.dir`). MLflow takes the value as a bearer token (a Databricks service principal's OAuth secret with `auth.databricks.client_id`; a JSON object of AWS keys for SageMaker), Phoenix as its API key (bearer), Langfuse as `<public key>:<secret key>`, LangSmith as its API key (`x-api-key`).
 
 Creating and changing sources needs `sources.write`, which only the `admin` role holds: a source makes the server read another system and write to it. `sources.read` lets admins list them and see their status.
 
@@ -198,7 +220,7 @@ evalsi source apply -f studio-mlflow.yaml --server $URL
 kubectl apply -f studio-mlflow.yaml                                  # with the operator
 ```
 
-`locations` is a list of MLflow experiments (names or IDs), one Phoenix project, or at most one Langfuse environment. The same file works with `kubectl apply`: the operator applies it through the API, `kubectl apply` is refused for anything the API would refuse (an unlisted host, an ungranted credential), and `kubectl get tracesources` shows phase, pulled and scored counts and the watermark. Only namespace admins may create TraceSources (the `admin` role), not editors. A source and the policies it names can be applied together (one `kubectl apply`, or a GitOps sync): a policy the API does not have yet is not a refusal, so the source is admitted with a warning and syncs as soon as its policy does. With `evalsi source apply` and the API, a policy that does not exist is `NotFound`.
+`locations` is a list of MLflow experiments (names or IDs), one Phoenix project, at most one Langfuse environment, or LangSmith tracing projects (names or IDs). The same file works with `kubectl apply`: the operator applies it through the API, `kubectl apply` is refused for anything the API would refuse (an unlisted host, an ungranted credential), and `kubectl get tracesources` shows phase, pulled and scored counts and the watermark. Only namespace admins may create TraceSources (the `admin` role), not editors. A source and the policies it names can be applied together (one `kubectl apply`, or a GitOps sync): a policy the API does not have yet is not a refusal, so the source is admitted with a warning and syncs as soon as its policy does. With `evalsi source apply` and the API, a policy that does not exist is `NotFound`.
 
 A policy for the pulled traces selects on their labels:
 
@@ -215,7 +237,7 @@ spec:
 
 Write-back replaces the MLflow, Langfuse and Phoenix [sinks'](../../examples/server/evalsi.yaml) `trace_feedback` for the traces a source reads: do not turn on both for the same store, or each score is written twice. `trace_feedback` stays the way to write back traces that reach Evals.si over OTLP.
 
-Trace tags (MLflow) and attributes or metadata (Phoenix, Langfuse) named `evalsi.label.<key>` become labels, so an agent harness that tags its traces `evalsi.label.workflow` can select per workflow.
+Trace tags (MLflow) and attributes or metadata (Phoenix, Langfuse, LangSmith) named `evalsi.label.<key>` become labels, so an agent harness that tags its traces `evalsi.label.workflow` can select per workflow.
 
 ## 3. Watch it
 
@@ -271,7 +293,7 @@ spec:
     labels.workflow: 'resource["mlflow.tag.agent_harness.workflow_id"]'
 ```
 
-They can set `input`, `output`, `reference`, `context`, `metadata.<key>` and `labels.<key>`. They see what policy selectors see (`service`, `name`, the root span's `attributes`, `resource`, `labels`) plus the record's `input` and `output` as text. MLflow's tags and metadata are resource attributes named `mlflow.tag.<key>` and `mlflow.metadata.<key>`; a Langfuse observation's metadata are span attributes named `langfuse.metadata.<key>`. An expression that fails (a missing key) leaves its field as it was, so the evaluators that need it skip the record rather than score it zero.
+They can set `input`, `output`, `reference`, `context`, `metadata.<key>` and `labels.<key>`. They see what policy selectors see (`service`, `name`, the root span's `attributes`, `resource`, `labels`) plus the record's `input` and `output` as text. MLflow's tags and metadata are resource attributes named `mlflow.tag.<key>` and `mlflow.metadata.<key>`; a Langfuse observation's metadata are span attributes named `langfuse.metadata.<key>`, and a LangSmith run's `langsmith.metadata.<key>`. An expression that fails (a missing key) leaves its field as it was, so the evaluators that need it skip the record rather than score it zero.
 
 ## Network policy
 
@@ -282,4 +304,5 @@ On Kubernetes, `networkPolicy.egress.enabled` adds an egress NetworkPolicy for t
 - Live verification of Databricks (experiments and Unity Catalog), OAuth token acquisition and SageMaker. These are built from the pinned client source and tested against derived fixtures; a real workspace or tracking server can still differ. The V4 filter and ordering syntax for Unity Catalog, and whether a SageMaker server serves the MLflow 3 trace API, are the two assumptions most worth checking first.
 - Databricks table-prefix locations and experiment names, ambient AWS credentials for SageMaker, and an Azure ML variant (the server has no trace API to read).
 - Langfuse Cloud, TLS deployments, production persistence and arm64 images. Self-hosted 4.56.0 score replacement, Secret/Service pulls and enforced evalsid egress passed the recorded in-cluster check.
-- LangSmith, ClickHouse, Tempo and Kafka sources (milestone M5).
+- LangSmith against a live deployment: the connector follows the `langsmith` 0.4.37 client's requests, and the `filter` window on `runs/query` and a `409` for feedback created twice are the assumptions most worth checking first.
+- ClickHouse, Tempo and Kafka sources (milestone M5).

@@ -12,7 +12,7 @@ The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milesto
 | M2 agent harness online | Nov to Dec 2026 | In progress: a default policy and a gated deploy built on the demo and run by the kind e2e job; sign-off on the real agent harness needs its repository |
 | M3 Pull connectors | Nov 2026 to Jan 2027 | Partly done: MLflow, Phoenix and Langfuse verified; Databricks and SageMaker not run live; a 30-day backfill and the pull lag are now measured (locally and in the kind e2e job), not yet at production scale |
 | M4 Real-infra hardening | Jan to Feb 2027 | Not certified: bounded EKS checks passed; load, full upgrade and mesh enforcement remain |
-| M5 More sources, SDK | Jan to Mar 2027 | SDK parts done; LangSmith, ClickHouse, Kafka and S3 sources not built |
+| M5 More sources, SDK | Jan to Mar 2027 | SDK parts done; LangSmith source built and fixture-tested, not live-verified; ClickHouse, Kafka and S3 sources not built |
 | GA with agent harness | 26 March 2027 | Not started |
 
 The plan for strengthening the agent harness through M2 and GA is in [HARNESS-ROADMAP.md](HARNESS-ROADMAP.md).

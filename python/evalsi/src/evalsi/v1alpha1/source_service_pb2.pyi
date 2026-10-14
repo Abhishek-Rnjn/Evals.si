@@ -127,7 +127,7 @@ class TraceSource(_message.Message):
     """Lowercase letters, digits, '.', '_' or '-'."""
     project: _builtins.str
     connector: _builtins.str
-    """"mlflow". "langfuse" and "phoenix" follow."""
+    """"mlflow", "phoenix", "langfuse" or "langsmith"."""
     variant: _builtins.str
     """How the store is reached. MLflow: "oss" (the default), "databricks" or
     "sagemaker". "azureml" is a known name that is refused: its MLflow
@@ -145,7 +145,7 @@ class TraceSource(_message.Message):
     @_builtins.property
     def locations(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Where to read: MLflow experiment IDs, a Phoenix project, a Langfuse
-        environment.
+        environment, LangSmith tracing projects (names or IDs).
         """
 
     @_builtins.property

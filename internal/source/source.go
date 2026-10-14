@@ -1,5 +1,5 @@
 // Package source pulls traces from the stores that already hold them (MLflow,
-// later Langfuse and Phoenix), hands them to the online policy engine, and
+// Phoenix, Langfuse, LangSmith), hands them to the online policy engine, and
 // writes the scores back. Decision 0016 is the design.
 //
 // A Connector speaks one store's API. The Manager owns everything the stores
