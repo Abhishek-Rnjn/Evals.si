@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const out = path.resolve(here, "../src/content/docs");
-const BASE = (process.env.SITE_BASE ?? "/Evals.si").replace(/\/$/, "");
+const BASE = (process.env.SITE_BASE ?? "/").replace(/\/$/, "");
 const REPO = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
 const BRANCH = process.env.REPO_BRANCH ?? "main";
 

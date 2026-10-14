@@ -3,13 +3,13 @@ import starlight from "@astrojs/starlight";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 
-const base = (process.env.SITE_BASE ?? "/Evals.si").replace(/\/$/, "") || "/";
-const site = process.env.SITE_URL ?? "https://abhishek-rnjn.github.io";
+const base = (process.env.SITE_BASE ?? "/").replace(/\/$/, "") || "/";
+const site = process.env.SITE_URL ?? "https://evalsi.dev";
 const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
 // The link-preview card (scripts/og-image.mjs), absolute as Open Graph requires.
-const ogImage = `${site}${base}/og.png`;
+const ogImage = `${site}${base === "/" ? "" : base}/og.png`;
 // Google Search Console's HTML-tag verification for
-// https://abhishek-rnjn.github.io/Evals.si/ (the value is public: it is in
+// https://evalsi.dev/ (the value is public: it is in
 // every page). A GOOGLE_SITE_VERIFICATION repository variable overrides it;
 // the same default is in src/pages/index.astro.
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
