@@ -21,7 +21,28 @@ The weak spots are in what frontier agents need today:
 | CLI agents | Only DeepSeek Harness (`dsh-json`) reports a trajectory. Other coding-agent CLIs return only their final stdout. | `formats.py` (`FORMATS`) |
 | Environments | One sandbox per task. There are no multi-service tasks (22 of the 241 Terminal-Bench 1 tasks do not import), no browser or desktop environments, and WebArena/BrowserGym and GAIA, listed in DESIGN §8, are not built. | `environment.py`, `benchmarks/` |
 | Grading integrity | The checker runs in the sandbox the agent just controlled. Its files are rewritten, but the agent can still change the interpreter, `PATH`, `conftest.py` or test dependencies. | `checker.py` (`run_checker`) |
+| Connectors | No ACP (Agent Client Protocol) connector, though DeepSeek Harness and Deep Agents both ship ACP servers and the PRD's demo table lists ACP targets. | `connectors.py` (`connector_for`) |
+| Sessions | The trajectory is a flat list. A cassette can branch at step N, but an interrupted trial cannot resume, and there is no session tree to fork and compare. | `cassette.py`, `loop.py` |
+| Extensibility | The loop has no hooks. Changing the prompt, gating a tool or changing how context is handled means forking `loop.py`. | `loop.py` (`AgentLoop`) |
 | RL | There are no token IDs or log-probs per turn, rollouts are not asynchronous or partial, setup is not shared across verifiers rollouts, and there are no gymnasium or NeMo Gym specs. | `gym.py`, `envspecs/` |
+
+## What the leading harnesses do
+
+Several open harnesses have converged on patterns the built-in agent lacks. These are the major ones; the phases below adopt them. Details of DeepSeek Harness come partly from third-party write-ups of its developer preview and should be checked against the pinned release (`0.2.1-alpha.2` in `examples/demo/dsh`) before building.
+
+| Harness | Pattern | What we take | Phase |
+|---|---|---|---|
+| **pi** (`pi-mono`: `pi-ai`, `pi-agent-core`, `pi-coding-agent`) | A deliberately minimal core: a system prompt and tool definitions under about 1,000 tokens, and four tools (`read`, `write`, `edit`, `bash`). Everything else (sub-agents, plan mode, permission gates) is an extension. | A **minimal harness profile**, as a baseline for "how much does the harness add?" | H3 |
+| pi | A unified provider layer that can hand a conversation from one provider to another mid-session, including thinking. | **Switching models within a run**: fallback, and a cheaper model for sub-agents or compaction | H1 |
+| pi | Session history as a tree that you can branch from anywhere; print/JSON and RPC modes for scripting. | A **session tree** with resume and fork; a reader for pi's JSON event mode | H2, H3 |
+| pi | Steering and follow-up messages queued while the agent is working. | **Mid-run user messages** from the simulated user | H4 |
+| **DeepSeek Harness** (`dsh`) | Everything is a plugin: model adapter, tool registry, session log, even the agent loop. | **Hooks** at the loop's lifecycle points | H2 |
+| dsh | An append-only session log with resume, fork, search and replay. | The same **session tree**, and retrieval over it | H2 |
+| dsh | Context handled three ways: compaction in place, offloading to sub-agents, and a Ralph loop (a fresh child agent per round, with a round cap). | **Context strategies** beyond compaction, each one something an eval can compare | H2 |
+| dsh | A main agent that delegates to child agents (agent teams). | **Sub-agents** in the built-in agent, with their trajectories linked | H3 |
+| dsh, Deep Agents | ACP servers (`dsh --profile acp`, `deepagents-acp`). | An **ACP connector** | H3 |
+| Claude Code, Codex and others | Programmatic tool calling: the model writes a script that calls tools in the sandbox, instead of one round trip per call. | A **code-mode tool profile** | H2 |
+| Terminal-Bench leaderboards | Scores are reported per harness and model pair, and the same model moves by several points between harnesses. | **Harness configuration as an experiment variable** | H3 |
 
 ## Phases
 
@@ -36,6 +57,7 @@ The goal is for the built-in agent to run today's frontier models correctly, che
 - **Prompt caching.** Put cache breakpoints on the system prompt, the tools and the conversation tail for Anthropic. Record `cache_read` and `cache_write` tokens in `Usage`, and add cache prices to `LoopConfig` so `max_usd` is accurate.
 - **Stop reasons.** Retry a turn cut off by `max_tokens` with a higher limit, or end it as `budget`. Continue after `pause_turn`. Record `refusal` as its own stop reason.
 - **Retries and streaming.** Honour `retry-after`, add jitter, and set a per-run concurrency limit for each provider. Stream responses, so long outputs and long reasoning do not hit the HTTP timeout.
+- **Switching models within a run.** Normalize a conversation so it can move between providers (thinking converted or dropped by a stated rule). Use it for a fallback model on repeated failures and for a separate model for compaction or sub-agents. Each switch is recorded on the step.
 - **Cassette format v2.** Record thinking, reasoning items and cache usage. Old cassettes still replay.
 
 Exit criteria: a recorded multi-step `fix-calc` run with thinking turned on, on Anthropic and on an OpenAI-compatible reasoning model, replays exactly. Cache hits appear in the run's usage. A forced `max_tokens` cut is not reported as a pass.
@@ -49,21 +71,27 @@ The goal is to let agents work for hours and through hundreds of steps without o
 - **A stronger default toolset.** Add `edit_file` (exact-match replace that fails on ambiguity), `glob`, `grep`, `apply_patch`, and background processes with `bash` sessions that persist across calls. Each set can be turned on per task, so comparisons between models stay fair.
 - **Tool search.** When a task exposes many MCP tools, load them on demand through a search tool instead of putting every schema in the prompt.
 - **MCP up to date.** Add OAuth for remote servers, structured tool output, resources and prompts, elicitation answered by the simulated user, and per-tool timeouts.
+- **Context strategies (after dsh).** Besides compaction, add `offload` (hand a token-heavy subtask to a sub-agent and keep only its result) and `fresh-rounds` (the Ralph pattern: each round is a new agent with a clean context, a progress file and a round cap). Record the strategy on the run, so strategies can be compared like models.
+- **Hooks (after dsh's plugins and pi's extensions).** Add Python hooks at the loop's lifecycle points: before a model call, before and after a tool call (allow, deny or rewrite), on compaction and on stop. Prompts, tool gating and context strategies become hooks, so changing the harness no longer means forking `loop.py`. Every hook decision becomes a step event.
+- **Session tree, resume and fork (after pi and dsh).** Store the trajectory as an append-only log of entries, each with a parent. A trial interrupted by a worker restart resumes from its last entry, after the sandbox is restored. Any entry can be forked into a new branch, generalizing the cassette's `branch_at_step`. Add a `session_search` tool so an agent can retrieve what compaction removed.
+- **Code-mode tools (programmatic tool calling).** Add an optional profile where the agent writes a Python script that calls the task's tools inside the sandbox, and only the script's output returns to the context. The tool calls inside it are still recorded as steps.
 - **Memory and notes.** Add an optional `memory` directory tool that survives compaction, for tasks that measure long-horizon planning.
 
-Exit criteria: a synthetic 300-step task finishes inside a 200k-token window with compaction. The number of steps and tokens lost to clearing is recorded on the run.
+Exit criteria: a synthetic 300-step task finishes inside a 200k-token window under each context strategy. The number of steps and tokens lost to clearing is recorded on the run. A trial killed mid-run resumes and grades the same as an uninterrupted one.
 
 ### H3: Agents under test (Jan 2027)
 
 The goal is to evaluate the agents people actually ship, with full trajectories.
 
-- **CLI trajectory readers.** Add `output_format` readers for the structured event streams of popular coding-agent CLIs: Claude Code's `stream-json`, Codex's JSON exec events, and Gemini CLI's JSON output. Each reader gets a recorded fixture and a version pin, like `dsh-json`.
+- **CLI trajectory readers.** Add `output_format` readers for the structured event streams of popular coding-agent CLIs: Claude Code's `stream-json`, Codex's JSON exec events, Gemini CLI's JSON output, and pi's JSON event mode. Each reader gets a recorded fixture and a version pin, like `dsh-json`.
+- **An ACP connector.** Drive agents over the Agent Client Protocol (`dsh --profile acp`, `deepagents-acp` and other ACP agents). Session updates become steps, and permission requests are answered by the harness policy and recorded as policy events.
 - **Agent configuration as environment.** Mount `AGENTS.md` and `CLAUDE.md` files, skills directories and MCP configurations into the sandbox, so the agent's setup is part of the task and can be compared across runs.
-- **Multi-agent trajectories.** Record sub-agent and handoff spans with parent links, from the built-in agent's optional sub-agent tool, from A2A tasks, and from the CLI readers. This is what the `agent` pack's handoff-correctness evaluator needs.
+- **Sub-agents and multi-agent trajectories (after dsh's agent teams).** Give the built-in agent an optional `task` tool that starts a sub-agent with its own context, tools and budget, taken out of the parent's. Record sub-agent and handoff spans with parent links, from that tool, from A2A tasks, and from the CLI readers. This is what the `agent` pack's handoff-correctness evaluator needs.
 - **A2A streaming.** Use `message/stream` and push notifications instead of polling, and show the A2A task states in the trajectory.
-- **The built-in agent as a baseline.** Publish fixed prompts and a fixed toolset version, so a model score from the reference agent means the same thing across releases.
+- **Harness profiles.** Ship versioned profiles of the built-in agent: `minimal` (pi-style: a prompt of about 1,000 tokens and four tools), `standard` (the H2 toolset and compaction) and `code-mode`. A model score names its profile and version, so it means the same thing across releases.
+- **Harness as an experiment variable.** Let a run sweep harness configurations (profile, context strategy, hooks, tools) like it sweeps models. Report a harness × model matrix with confidence intervals, so a team can tell whether a change helped the harness or the model.
 
-Exit criteria: CI runs each CLI reader against a recorded fixture. The kind e2e job runs one CLI agent end to end when a model key is set.
+Exit criteria: CI runs each CLI reader and the ACP connector against recorded fixtures. A run compares two harness profiles on the same model and reports the difference with its interval. The kind e2e job runs one CLI agent end to end when a model key is set.
 
 ### H4: Environments (Feb 2027)
 
@@ -71,6 +99,7 @@ The goal is to cover the main agent task types: terminal, repository, web, deskt
 
 - **Multi-service environments.** Add a Compose-like `services` list (a database, an API, a browser) on a shared private network inside the sandbox rung. This closes the 22 Terminal-Bench 1 tasks that do not import, and Harbor tasks with services.
 - **Browser and computer use.** Add a Playwright browser environment with a `browser` tool set (accessibility tree, screenshots, actions), and a desktop environment for computer-use tools with screenshot steps recorded as images. Then build the WebArena/BrowserGym and GAIA importers.
+- **Mid-run user messages (after pi's steering queue).** The simulated user can interject while the agent works (a correction, a new constraint, a cancellation), timed by step or by event. Evaluators then score whether the agent took it into account.
 - **Stateful tool environments.** Add a database-backed tool environment for τ-bench-style domains, so the checker reads the final database state.
 - **Checker isolation.** Run the checker from a clean copy of the setup snapshot, with only the agent's declared outputs or its diff applied. A checker can still opt in to running in the agent's sandbox. Hash protected files, and record any change to them as a policy event.
 
@@ -101,7 +130,7 @@ Exit criteria: a verifiers or OpenEnv trainer runs one real training step on a G
 
 ## Not planned
 
-- **A general agent framework.** The built-in agent stays a small, fixed reference for comparing models. Heavier behaviour belongs in the BYO path.
+- **A general agent framework.** The built-in agent stays a small reference for comparing models and harness configurations. Hooks and profiles make it configurable; anything bigger, such as a TUI, an extension marketplace or a plan mode, belongs in the BYO path, where pi, dsh and others already do it well.
 - **Provider SDKs as dependencies.** The model clients keep speaking HTTP directly, so the harness stays light.
 - **Hosting agents.** Evals.si runs agents in sandboxes for evaluation. It does not serve them in production.
 
