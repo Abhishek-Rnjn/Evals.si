@@ -35,7 +35,8 @@ Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls
 | MLflow Tracing (OSS 3.x, Databricks, SageMaker, Azure ML) | Yes | MLflow assessments |
 | Langfuse | Yes | Langfuse scores |
 | Arize Phoenix | Yes | Phoenix span annotations |
-| LangSmith, ClickHouse, Tempo/Jaeger query | Later | Feedback, table rows, none |
+| LangSmith | Yes | LangSmith feedback (built, not live-verified) |
+| ClickHouse, Tempo/Jaeger query | Later | Table rows, none |
 | Any OTLP backend | Tee from collector (works today) | OTel `gen_ai.evaluation.result` events |
 | Kafka, Kinesis, Pub/Sub, S3 drops | Later | Not applicable |
 
@@ -56,7 +57,7 @@ All three doors exist, and v0.1.0 is released. Status is as of `main` on 2026-10
 | Agent runs in sandboxes (Firecracker, bubblewrap, Landlock, hardened pod) | Built; all rungs verified on real clusters, Firecracker on a KVM cluster. `mode: bwrap` fails on some hosts (VR-D15) | `internal/sandbox/` |
 | In-process `evalsi.evaluate()`, RL rewards (TRL, verl, OpenRLHF), checkpoint evaluation | Built | `python/evalsi/src/evalsi/` |
 | OIDC, API keys, project RBAC, CEL rules, audit log | Built | `internal/auth/`, `internal/authz/` |
-| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source), Phoenix and self-hosted Langfuse 4.56.0 built and verified for the recorded paths; MLflow 30-day backfill and p95 pull lag measured (kind: 300 traces in 6 s, p95 15 s); Databricks and SageMaker built and contract-tested, not run against a real workspace; LangSmith, Tempo and ClickHouse not built | [trace sources guide](guides/trace-sources.md) |
+| Pull connectors for trace stores (MLflow, Langfuse, Phoenix, LangSmith, Tempo, ClickHouse) | MLflow (open source), Phoenix and self-hosted Langfuse 4.56.0 built and verified for the recorded paths; MLflow 30-day backfill and p95 pull lag measured (kind: 300 traces in 6 s, p95 15 s); Databricks and SageMaker built and contract-tested, not run against a real workspace; LangSmith built and fixture-tested against the pinned `langsmith` 0.4.37 client, not live-verified; Tempo and ClickHouse not built | [trace sources guide](guides/trace-sources.md) |
 | Log and stream sources (Kafka, CloudWatch, Loki, S3 drops) | Not designed | none |
 | `evalsi.log()` SDK call | Built: bounded async OTLP/HTTP, futures and exit flush | [SDK guide](guides/integrate-an-agent-harness.md#sdk-logging-without-otel) |
 | Remote `Client.evaluate()` helper | Built (E2), with a parity test against a real `evalsid` | `python/evalsi/src/evalsi/client.py` |

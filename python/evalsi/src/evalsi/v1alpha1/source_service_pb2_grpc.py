@@ -27,7 +27,7 @@ if _version_not_supported:
 
 class SourceServiceStub:
     """SourceService manages trace sources: stores that already hold an agent's
-    traces (MLflow, later Langfuse and Phoenix) which Evals.si reads, scores
+    traces (MLflow, Phoenix, Langfuse, LangSmith) which Evals.si reads, scores
     with the project's online policies, and writes the scores back to. See
     docs/decisions/0016-trace-source-connectors.md.
 
@@ -80,7 +80,7 @@ class SourceServiceStub:
 
 class SourceServiceServicer:
     """SourceService manages trace sources: stores that already hold an agent's
-    traces (MLflow, later Langfuse and Phoenix) which Evals.si reads, scores
+    traces (MLflow, Phoenix, Langfuse, LangSmith) which Evals.si reads, scores
     with the project's online policies, and writes the scores back to. See
     docs/decisions/0016-trace-source-connectors.md.
 
@@ -184,7 +184,7 @@ def add_SourceServiceServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class SourceService:
     """SourceService manages trace sources: stores that already hold an agent's
-    traces (MLflow, later Langfuse and Phoenix) which Evals.si reads, scores
+    traces (MLflow, Phoenix, Langfuse, LangSmith) which Evals.si reads, scores
     with the project's online policies, and writes the scores back to. See
     docs/decisions/0016-trace-source-connectors.md.
 

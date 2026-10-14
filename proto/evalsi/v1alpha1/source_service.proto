@@ -7,7 +7,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 // SourceService manages trace sources: stores that already hold an agent's
-// traces (MLflow, later Langfuse and Phoenix) which Evals.si reads, scores
+// traces (MLflow, Phoenix, Langfuse, LangSmith) which Evals.si reads, scores
 // with the project's online policies, and writes the scores back to. See
 // docs/decisions/0016-trace-source-connectors.md.
 //
@@ -33,7 +33,7 @@ message TraceSource {
   // Lowercase letters, digits, '.', '_' or '-'.
   string name = 1;
   string project = 2;
-  // "mlflow". "langfuse" and "phoenix" follow.
+  // "mlflow", "phoenix", "langfuse" or "langsmith".
   string connector = 3;
   // How the store is reached. MLflow: "oss" (the default), "databricks" or
   // "sagemaker". "azureml" is a known name that is refused: its MLflow
@@ -42,7 +42,7 @@ message TraceSource {
   // The store's base URL, for example http://mlflow.studio:5000.
   string endpoint = 5;
   // Where to read: MLflow experiment IDs, a Phoenix project, a Langfuse
-  // environment.
+  // environment, LangSmith tracing projects (names or IDs).
   repeated string locations = 6;
   SourceCredentials credentials = 7;
   SourceAuth auth = 8;
