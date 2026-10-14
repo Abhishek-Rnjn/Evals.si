@@ -493,14 +493,14 @@ def _requirements(fields: tuple[str, ...]) -> Requirements:
     )
 
 
-def _models(session: JudgeSession, eval_mode: str) -> dict[str, Any]:
+def _models(session: JudgeSession, eval_mode: str, decisions: str) -> dict[str, Any]:
     """The judge as DeepEval's LLM and as its System One model."""
     if eval_mode not in EVAL_MODES:
         raise ValueError(f"eval_mode must be one of {list(EVAL_MODES)}, not {eval_mode!r}")
     # Passed explicitly, so DEEPEVAL_EVAL_MODE in the worker never routes to TypeSafe.
     return {
         "model": judge_model(session),
-        "system_one_model": system_one_model(session),
+        "system_one_model": system_one_model(session, decisions),
         "eval_mode": eval_mode,
     }
 
@@ -518,6 +518,7 @@ def _metric_evaluator(info: MetricInfo) -> EvaluatorDef:
         strict_mode: bool = False,
         include_reason: bool = True,
         eval_mode: str = "llm",
+        decisions: str = "stated",
         options: dict[str, Any] | None = None,
         **config: Any,
     ) -> Score:
@@ -533,7 +534,7 @@ def _metric_evaluator(info: MetricInfo) -> EvaluatorDef:
         session = _session(ctx)
         cls = getattr(deepeval.metrics, info.cls)
         metric = cls(
-            **_models(session, eval_mode),
+            **_models(session, eval_mode, decisions),
             threshold=threshold,
             strict_mode=strict_mode,
             include_reason=include_reason,
@@ -563,6 +564,7 @@ def _metric_evaluator(info: MetricInfo) -> EvaluatorDef:
             "strict_mode": False,
             "include_reason": True,
             "eval_mode": "llm",
+            "decisions": "stated",
             "options": None,
             **dict.fromkeys(info.config, REQUIRED),
         },
@@ -698,7 +700,9 @@ def jev_questions(questions: Any) -> list[Any]:
 _JEV_QUESTIONS_DOC = (
     "questions: a list of {statement} (true or false), {question, levels} (ordered levels, "
     "worst first) or {question, options: {name: credit 0-1, or null for not applicable}}, "
-    "each with an optional weight."
+    "each with an optional weight. decisions: 'stated' (the judge states probabilities) or "
+    "'logprobs' (read off the first token; needs a server that returns logprobs, such as "
+    "vLLM, SGLang or Ollama)."
 )
 
 
@@ -711,6 +715,7 @@ async def _jev_eval(
     name: str = "jev-eval",
     threshold: float = 0.5,
     strict_mode: bool = False,
+    decisions: str = "stated",
 ) -> Score:
     parsed = jev_questions(questions)
     test_case, params = _single_turn(
@@ -723,7 +728,7 @@ async def _jev_eval(
         name=name,
         evaluation_params=params,
         questions=parsed,
-        system_one_model=system_one_model(session),
+        system_one_model=system_one_model(session, decisions),
         threshold=threshold,
         strict_mode=strict_mode,
         async_mode=True,
@@ -752,6 +757,7 @@ JEV_EVAL = EvaluatorDef(
             "name": "jev-eval",
             "threshold": 0.5,
             "strict_mode": False,
+            "decisions": "stated",
         },
     ),
     fn=_jev_eval,
@@ -816,6 +822,7 @@ async def _conversational_jev_eval(
     name: str = "conversational-jev-eval",
     threshold: float = 0.5,
     strict_mode: bool = False,
+    decisions: str = "stated",
 ) -> Score:
     parsed = jev_questions(questions)
     params = _multi_turn(evaluation_params, "deepeval/conversational-jev-eval")
@@ -827,7 +834,7 @@ async def _conversational_jev_eval(
         name=name,
         evaluation_params=params,
         questions=parsed,
-        system_one_model=system_one_model(session),
+        system_one_model=system_one_model(session, decisions),
         threshold=threshold,
         strict_mode=strict_mode,
         async_mode=True,
@@ -903,6 +910,7 @@ CONVERSATIONAL_JEV_EVAL = EvaluatorDef(
             "name": "conversational-jev-eval",
             "threshold": 0.5,
             "strict_mode": False,
+            "decisions": "stated",
         },
     ),
     fn=_conversational_jev_eval,

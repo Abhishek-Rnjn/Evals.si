@@ -16,10 +16,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from evalsi.evaluator import EvalContext, EvaluatorDef
-from evalsi.judges import JudgeClient, JudgeConfig, JudgeResponse
+from evalsi.judges import JudgeClient, JudgeConfig, JudgeFatalError, JudgeResponse
 from evalsi.types import Record, Score
 
 Reply = Callable[[str, dict[str, Any]], dict[str, Any]]
+# prompt -> the first token's top logprobs (token -> log probability).
+Logprobs = Callable[[str], dict[str, float]]
 
 TEST_JUDGE = JudgeConfig(provider="openai-compatible", model="scripted", base_url="http://judge")
 
@@ -29,6 +31,8 @@ class ScriptedJudge:
     """A judge backend that answers from a function and records each call."""
 
     reply: Reply
+    # Answers next_token_logprobs; without it the judge has no logprobs, like Claude.
+    logprobs: Logprobs | None = None
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
 
     async def complete_json(
@@ -39,12 +43,27 @@ class ScriptedJudge:
             data=self.reply(prompt, schema), model="scripted", input_tokens=10, output_tokens=5
         )
 
+    async def next_token_logprobs(
+        self, *, system: str, prompt: str, top_logprobs: int
+    ) -> JudgeResponse:
+        if self.logprobs is None:
+            raise JudgeFatalError("the scripted judge has no logprobs")
+        self.calls.append((prompt, {"top_logprobs": top_logprobs}))
+        return JudgeResponse(
+            data={"top_logprobs": self.logprobs(prompt)},
+            model="scripted",
+            input_tokens=10,
+            output_tokens=1,
+        )
+
     async def aclose(self) -> None:
         return None
 
 
-def scripted_judge(reply: Reply) -> tuple[EvalContext, ScriptedJudge]:
-    backend = ScriptedJudge(reply)
+def scripted_judge(
+    reply: Reply, logprobs: Logprobs | None = None
+) -> tuple[EvalContext, ScriptedJudge]:
+    backend = ScriptedJudge(reply, logprobs)
     return EvalContext(judge=JudgeClient(TEST_JUDGE, backend)), backend
 
 

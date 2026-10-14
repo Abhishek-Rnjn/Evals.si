@@ -313,3 +313,63 @@ def test_strict_json_schema_closes_objects_and_keeps_property_names() -> None:
         "additionalProperties": False,
         "required": ["reason"],
     }
+
+
+def logprob_response(top: list[tuple[str, float]]) -> dict[str, Any]:
+    tokens = [{"token": t, "logprob": lp} for t, lp in top]
+    return {
+        "model": "judge-1",
+        "choices": [
+            {
+                "message": {"content": top[0][0]},
+                "finish_reason": "length",
+                "logprobs": {"content": [{**tokens[0], "top_logprobs": tokens}]},
+            }
+        ],
+        "usage": {"prompt_tokens": 30, "completion_tokens": 1},
+    }
+
+
+def test_openai_compatible_next_token_logprobs() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=logprob_response([("A", -0.1), (" B", -2.5)]))
+
+    response = asyncio.run(
+        openai_judge(handler).next_token_logprobs(system="s", prompt="p", top_logprobs=20)
+    )
+    assert response.data == {"top_logprobs": {"A": -0.1, " B": -2.5}}
+    assert response.input_tokens == 30
+    body = seen["body"]
+    assert (body["max_tokens"], body["logprobs"], body["top_logprobs"]) == (1, True, 20)
+    assert "response_format" not in body
+
+
+def test_a_server_without_logprobs_is_fatal() -> None:
+    judge = openai_judge(lambda request: httpx.Response(200, json=chat_response("A")))
+    with pytest.raises(JudgeFatalError, match="no token logprobs"):
+        asyncio.run(judge.next_token_logprobs(system="s", prompt="p", top_logprobs=20))
+    client = JudgeClient(OPENAI, FakeBackend({}))
+    with pytest.raises(JudgeFatalError, match="return no token logprobs"):
+        asyncio.run(client.next_token_logprobs(system="s", prompt="p"))
+
+
+def test_label_probabilities_from_logprobs(tmp_path: Path) -> None:
+    import math
+
+    from evalsi.judges.structured import JudgeSession
+    from evalsi.testing import TEST_JUDGE, ScriptedJudge
+
+    top = {"A": math.log(0.5), " A": math.log(0.1), "B": math.log(0.2), "The": math.log(0.2)}
+    backend = ScriptedJudge(lambda p, s: {}, logprobs=lambda prompt: top)
+    client = JudgeClient(TEST_JUDGE, backend, JudgeCache(tmp_path / "c.sqlite3"))
+    session = JudgeSession(client)
+    probs = asyncio.run(session.label_probabilities("p", ["A", "B"]))
+    assert probs == pytest.approx({"A": 0.75, "B": 0.25})
+    assert session.metadata()["min_label_mass"] == pytest.approx(0.8)
+    asyncio.run(session.label_probabilities("p", ["A", "B"]))
+    assert (len(backend.calls), session.cached_calls) == (1, 1)
+    with pytest.raises(JudgeError, match="none of"):
+        asyncio.run(session.label_probabilities("p", ["C", "D"]))

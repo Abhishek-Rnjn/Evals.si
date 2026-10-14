@@ -168,6 +168,33 @@ class JudgeClient:
             self.cache.put(key, {"data": response.data, "model": response.model})
         return response
 
+    async def next_token_logprobs(
+        self, *, system: str, prompt: str, top_logprobs: int = 20
+    ) -> JudgeResponse:
+        """The judge's first-token distribution (``data["top_logprobs"]``:
+        token -> log probability), cached and rate-limited like
+        ``complete_json``. Only backends whose server returns logprobs (the
+        OpenAI-compatible one, against vLLM, SGLang, Ollama or OpenAI) have it."""
+        method = getattr(self.backend, "next_token_logprobs", None)
+        if method is None:
+            raise JudgeFatalError(
+                f"{self.config.provider} judges return no token logprobs; use an "
+                "openai-compatible judge (vLLM, SGLang, Ollama, OpenAI) for logprob decisions"
+            )
+        key = _cache_key(self.config, system, prompt, {"top_logprobs": top_logprobs})
+        if self.cache is not None:
+            hit = self.cache.get(key)
+            if hit is not None:
+                return JudgeResponse(data=hit["data"], model=hit["model"], cached=True)
+        if self.limiter is not None:
+            await self.limiter.acquire()
+        response: JudgeResponse = await method(
+            system=system, prompt=prompt, top_logprobs=top_logprobs
+        )
+        if self.cache is not None:
+            self.cache.put(key, {"data": response.data, "model": response.model})
+        return response
+
     async def aclose(self) -> None:
         await self.backend.aclose()
         if self.cache is not None:

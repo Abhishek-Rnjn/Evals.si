@@ -50,18 +50,57 @@ adapter does not slow down `evalsi`.
   `topic-adherence` (`relevant_topics`) refuse to run without them.
 - **JevEval and System One.** Upstream, `JevEval` and the `hybrid` and
   `system_one` eval modes send typed questions to TypeSafe's hosted Jev
-  model. Here the run's judge answers them in one structured call per record,
-  so no TypeSafe key is read. The judge states its probabilities rather than
-  reading them from logprobs, so they are its own estimate and are not
-  calibrated the way Jev's are. DeepEval's scoring is unchanged. Each score
-  carries the judge's `confidence` and a per-question `score_breakdown`. Every
-  metric except the G-Eval ones takes `eval_mode` (`llm` by default), so
-  `DEEPEVAL_EVAL_MODE` in a worker's environment never reroutes it.
+  model. Here the run's judge answers them, so no TypeSafe key is read.
+  DeepEval's scoring is unchanged. Each score carries the judge's
+  `confidence` and a per-question `score_breakdown`. Every metric except the
+  G-Eval ones takes `eval_mode` (`llm` by default), so `DEEPEVAL_EVAL_MODE`
+  in a worker's environment never reroutes it. The `decisions` param sets
+  where the probabilities come from:
+  - `stated` (default, any judge): in one call per record, the judge reasons
+    and then states a probability for each answer. These are the judge's own
+    estimates and are not calibrated the way Jev's are.
+  - `logprobs`: one call per question, with lettered answers. The
+    probabilities are read off the judge's first token, renormalized over the
+    letters, as G-Eval does for its scores. This needs a judge whose server
+    returns logprobs: a model you host on vLLM, SGLang or Ollama, or OpenAI.
+    Claude judges refuse it. It is the closest to running a Jev-style
+    decider yourself. Turn off thinking on reasoning models, because the
+    first token must be the answer. `min_label_mass` in the score's metadata
+    is the smallest share of first-token probability that fell on a letter.
+    If it is low, the model was answering with something else.
+
+On a server, register the decider as a named judge and pick it with the run's
+(or online policy's) `judge:`. A run has one judge, so a run's other judged
+evaluators use it too: put work that needs a different judge in its own run.
+A local model needs no key:
+
+```yaml
+# server config
+judges:
+  decider:
+    provider: openai-compatible
+    model: Qwen/Qwen3-8B
+    base_url: http://vllm.models.svc:8000/v1
+    temperature: 0
+```
+
+```yaml
+# run.yaml (on a server)
+spec:
+  judge: decider
+  evaluators:
+    - ref: deepeval/jev-eval
+      params: {decisions: logprobs, questions: [...]}
+```
+
+In-process, point the judge at it with
+`--judge-base-url http://localhost:8000/v1 --judge-model Qwen/Qwen3-8B`.
 
 ```yaml
 evaluators:
-  - name: deepeval/jev-eval
+  - ref: deepeval/jev-eval
     params:
+      decisions: logprobs
       evaluation_params: [input, actual_output, retrieval_context]
       questions:
         - statement: The answer only uses facts from the retrieved context.

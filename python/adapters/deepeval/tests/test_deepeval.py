@@ -11,7 +11,7 @@ import pytest
 import evalsi
 from evalsi import Content, Record
 from evalsi.evaluator import EvaluatorConfigError
-from evalsi.judges import JudgeClient
+from evalsi.judges import JudgeClient, JudgeFatalError
 from evalsi.testing import TEST_JUDGE, ScriptedJudge, score, scripted_judge
 from evalsi.types import Message, Step, ToolCall, Trajectory
 from evalsi_deepeval import (
@@ -415,3 +415,51 @@ def test_conversational_jev_eval() -> None:
         questions=[{"statement": "The assistant remembered the order number."}],
     )["conversational-jev-eval"]
     assert result.number == pytest.approx(0.8)
+
+
+def letter_logprobs(prompt: str) -> dict[str, float]:
+    # A self-hosted model's first token: mostly the first letter, some mass elsewhere.
+    import math
+
+    if "Is this statement true?" in prompt:
+        return {"A": math.log(0.6), " A": math.log(0.2), "B": math.log(0.2)}
+    if "rambling" in prompt:
+        return {"A": math.log(0.1), "B": math.log(0.1), "C": math.log(0.6), "The": math.log(0.2)}
+    return {"A": math.log(0.9), "B": math.log(0.1)}
+
+
+def test_jev_eval_reads_probabilities_off_logprobs() -> None:
+    ctx, judge = scripted_judge(lambda p, s: {}, logprobs=letter_logprobs)
+    result = score(
+        EVALUATORS["jev-eval"], rag_record(), ctx, questions=QUESTIONS, decisions="logprobs"
+    )["jev-eval"]
+    # P(true)=0.8; expected level (0.125 + 2 * 0.75) / 2; P(polite)=0.9 weighted 2.
+    assert result.number == pytest.approx((0.8 + 0.8125 + 2 * 0.9) / 4)
+    assert len(judge.calls) == 3  # one first-token call per question
+    assert all(schema == {"top_logprobs": 20} for _, schema in judge.calls)
+    assert "C: tight" in judge.calls[1][0]
+    assert result.metadata["min_label_mass"] == pytest.approx(0.8)
+    assert "logprobs" in result.explanation
+
+
+def test_logprob_decisions_need_a_judge_with_logprobs() -> None:
+    ctx, _ = scripted_judge(lambda p, s: {})  # like Claude: no logprobs
+    with pytest.raises(JudgeFatalError, match="no logprobs"):
+        score(EVALUATORS["jev-eval"], rag_record(), ctx, questions=QUESTIONS, decisions="logprobs")
+    with pytest.raises(ValueError, match="decisions"):
+        score(EVALUATORS["jev-eval"], rag_record(), ctx, questions=QUESTIONS, decisions="vibes")
+
+
+def test_builtin_metrics_take_logprob_decisions() -> None:
+    ctx, judge = scripted_judge(lambda p, s: {}, logprobs=letter_logprobs)
+    result = score(
+        EVALUATORS["answer-relevancy"],
+        rag_record(),
+        ctx,
+        eval_mode="system_one",
+        decisions="logprobs",
+    )["answer-relevancy"]
+    assert result.number is not None
+    assert 0.0 <= result.number <= 1.0
+    assert judge.calls
+    assert all(schema == {"top_logprobs": 20} for _, schema in judge.calls)

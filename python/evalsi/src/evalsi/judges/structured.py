@@ -8,6 +8,7 @@ evaluation spent.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -17,6 +18,11 @@ from evalsi.types import Usage
 ADAPTER_SYSTEM = (
     "You are an evaluation judge. Follow the instructions in the user message and reply "
     "with JSON that matches the requested schema."
+)
+
+LABEL_SYSTEM = (
+    "You are an evaluation judge. Read the user message and answer with the single "
+    "letter of your answer, and nothing else."
 )
 
 _DROP = frozenset({"title", "default", "examples"})
@@ -64,11 +70,38 @@ class JudgeSession:
     input_tokens: int = 0
     output_tokens: int = 0
     models: set[str] = field(default_factory=set)
+    # For each label_probabilities call, the share of the judge's first-token
+    # probability that fell on one of the labels.
+    label_mass: list[float] = field(default_factory=list)
 
     async def complete(self, prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
         response = await self.judge.complete_json(
             system=self.system, prompt=prompt, schema=strict_json_schema(schema)
         )
+        self._tally(response)
+        return response.data
+
+    async def label_probabilities(self, prompt: str, labels: list[str]) -> dict[str, float]:
+        """The judge's probability for each of ``labels`` (single letters), read
+        from the log probabilities of its first token and renormalized over the
+        labels. Tokens are matched after stripping whitespace."""
+        response = await self.judge.next_token_logprobs(system=LABEL_SYSTEM, prompt=prompt)
+        self._tally(response)
+        mass = dict.fromkeys(labels, 0.0)
+        for token, logprob in response.data["top_logprobs"].items():
+            label = token.strip()
+            if label in mass:
+                mass[label] += math.exp(logprob)
+        total = sum(mass.values())
+        if total <= 0:
+            raise JudgeError(
+                f"the judge's first token was none of {labels}; is it a reasoning model "
+                "that thinks first? Turn thinking off for logprob decisions"
+            )
+        self.label_mass.append(min(total, 1.0))
+        return {label: p / total for label, p in mass.items()}
+
+    def _tally(self, response: Any) -> None:
         self.calls += 1
         self.models.add(response.model)
         if response.cached:
@@ -76,7 +109,6 @@ class JudgeSession:
         else:
             self.input_tokens += response.input_tokens or 0
             self.output_tokens += response.output_tokens or 0
-        return response.data
 
     async def complete_model(self, prompt: str, model: Any) -> Any:
         """Ask for an instance of the pydantic class ``model``."""
@@ -92,8 +124,12 @@ class JudgeSession:
         return Usage(input_tokens=self.input_tokens, output_tokens=self.output_tokens)
 
     def metadata(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "judge_model": ", ".join(sorted(self.models)),
             "judge_calls": self.calls,
             "cached": self.calls > 0 and self.calls == self.cached_calls,
         }
+        if self.label_mass:
+            # Low means the judge often answered with something other than a label.
+            out["min_label_mass"] = min(self.label_mass)
+        return out
