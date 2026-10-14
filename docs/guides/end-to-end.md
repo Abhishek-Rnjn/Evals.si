@@ -154,7 +154,7 @@ uv run evalsi eval --data qa.jsonl --evaluators ragas/faithfulness,deepeval/g-ev
 
 | Adapter | Gives you |
 |---|---|
-| DeepEval | `deepeval/*` metrics: faithfulness, hallucination, bias, toxicity, g-eval, tool correctness and more |
+| DeepEval | `deepeval/*` metrics: faithfulness, hallucination, bias, toxicity, g-eval, jev-eval, tool correctness, task completion, conversational metrics and more |
 | RAGAS | `ragas/*` metrics: context precision/recall, factual correctness, agent goal accuracy, tool-call F1 and more |
 | Inspect AI | `inspect://log.eval` importer, and `evalsi_scorer(...)` to use Evals.si evaluators inside Inspect |
 | lm-evaluation-harness | An `evalsi` lm-eval model, and an `lm-eval://` importer |

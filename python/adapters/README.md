@@ -9,7 +9,7 @@ from `evalsi.testing`.
 
 | Package | Upstream | What it adds |
 |---|---|---|
-| `evalsi-adapter-deepeval` | `deepeval==4.2.8` | Pack `deepeval`: `faithfulness`, `answer-relevancy`, `contextual-precision`, `contextual-recall`, `contextual-relevancy`, `hallucination`, `bias`, `toxicity`, `summarization`, `tool-correctness`, `argument-correctness`, `g-eval` |
+| `evalsi-adapter-deepeval` | `deepeval==4.2.8` | Pack `deepeval`. RAG and safety: `faithfulness`, `answer-relevancy`, `contextual-precision`, `contextual-recall`, `contextual-relevancy`, `hallucination`, `bias`, `toxicity`, `summarization`, `pii-leakage`, `misuse`, `non-advice`, `role-violation`, `prompt-alignment`. Agents: `tool-correctness`, `argument-correctness`, `task-completion`, `step-efficiency`, `plan-quality`, `plan-adherence`. Conversations: `knowledge-retention`, `conversation-completeness`, `turn-relevancy`, `role-adherence`, `topic-adherence`, `goal-accuracy`. Custom: `g-eval`, `jev-eval`, `conversational-g-eval`, `conversational-jev-eval` |
 | `evalsi-adapter-ragas` | `ragas==0.4.3` | Pack `ragas`: `faithfulness`, `context-precision`, `context-utilization`, `context-recall`, `context-entity-recall`, `context-relevance`, `response-groundedness`, `answer-accuracy`, `factual-correctness`, `noise-sensitivity`, `agent-goal-accuracy` (with and without reference), `topic-adherence`, `tool-call-accuracy`, `tool-call-f1` |
 | `evalsi-adapter-inspect` | `inspect-ai==0.3.276` | Importer `inspect://log.eval`, which turns Inspect samples into records with trajectories and Inspect's scores. `evalsi_scorer(...)` runs any Evals.si evaluator as an Inspect scorer. |
 | `evalsi-adapter-lm-eval` | `lm-eval==0.4.13` | lm-eval model `evalsi`, which generates through Evals.si target connectors. `evaluate(tasks, target)` returns records. Importer `lm-eval://samples_<task>_<date>.jsonl`. |
@@ -31,6 +31,46 @@ which means:
 
 The upstream package is imported only when a metric runs, so installing an
 adapter does not slow down `evalsi`.
+
+### DeepEval: traces, conversations and JevEval
+
+- **Agent traces.** Metrics that read a trace (`step-efficiency`,
+  `plan-quality`, `plan-adherence`, and `task-completion` when there is one)
+  get the record's trajectory as a DeepEval trace: one agent span whose
+  children are the steps, nested by `parent_span_id`. `g-eval` and `jev-eval`
+  judge it with `evaluation_params: [trace]`.
+- **Conversations.** Conversational metrics get a `ConversationalTestCase`
+  whose turns are the input's chat messages followed by the output. System
+  messages are dropped and tool messages become the outputs of the
+  assistant's tool calls. Records without both a user and an assistant turn
+  are skipped.
+- **Required settings are required params.** `prompt-alignment`
+  (`prompt_instructions`), `misuse` (`domain`), `non-advice` (`advice_types`),
+  `role-violation` (`role`), `role-adherence` (`chatbot_role`) and
+  `topic-adherence` (`relevant_topics`) refuse to run without them.
+- **JevEval and System One.** Upstream, `JevEval` and the `hybrid` and
+  `system_one` eval modes send typed questions to TypeSafe's hosted Jev
+  model. Here the run's judge answers them in one structured call per record,
+  so no TypeSafe key is read. The judge states its probabilities rather than
+  reading them from logprobs, so they are its own estimate and are not
+  calibrated the way Jev's are. DeepEval's scoring is unchanged. Each score
+  carries the judge's `confidence` and a per-question `score_breakdown`. Every
+  metric except the G-Eval ones takes `eval_mode` (`llm` by default), so
+  `DEEPEVAL_EVAL_MODE` in a worker's environment never reroutes it.
+
+```yaml
+evaluators:
+  - name: deepeval/jev-eval
+    params:
+      evaluation_params: [input, actual_output, retrieval_context]
+      questions:
+        - statement: The answer only uses facts from the retrieved context.
+          weight: 2
+        - question: How directly does it answer the question?
+          levels: [evasive, partial, direct]
+        - question: Does it cite a source?
+          options: {cites one: 1.0, no citation: 0.0, nothing to cite: null}
+```
 
 ```bash
 cd python/adapters/ragas && uv sync          # an isolated environment for this adapter

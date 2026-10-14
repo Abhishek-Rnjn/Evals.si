@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- **More of DeepEval in the `deepeval` adapter (30 metrics, up from 12).** Agent trace metrics (`task-completion`, `step-efficiency`, `plan-quality`, `plan-adherence`) read the trajectory as a DeepEval trace. Conversational metrics (`knowledge-retention`, `conversation-completeness`, `turn-relevancy`, `role-adherence`, `topic-adherence`, `goal-accuracy`, `conversational-g-eval`) read the record's chat messages. Safety and instruction metrics: `pii-leakage`, `misuse`, `non-advice`, `role-violation`, `prompt-alignment`. **`jev-eval`** and **`conversational-jev-eval`** port DeepEval's JevEval: weighted true/false, scale and choice questions, answered with probabilities by the run's judge rather than TypeSafe's hosted Jev, so no TypeSafe key is read. The same judge serves the `hybrid` and `system_one` eval modes through the new `eval_mode` param. `g-eval` can judge the whole trajectory (`evaluation_params: [trace]`) and `tools_called`.
+
 ### Changed
 
 - The PyPI pages of `evalsi` and `evalsi-harness` describe the project: what Evals.si does, installs and extras (including the Linux platform wheels), a quickstart, runs and gates, the server client, RL rewards and the evaluator packs, with keywords and classifiers. CI checks that both render (`twine check --strict`). A published version's page cannot change, so this shows from the next release.
