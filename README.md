@@ -46,7 +46,7 @@ metric       n  mean   95% CI          skipped  errors
 exact-match  3  0.667  [0.208, 0.939]        0       0
 ```
 
-Two of the three outputs match their reference (the second says Kyoto, not Tokyo), and the table says how sure that number is. Next: [add a judge](#add-a-judge), [run a model or an agent on a dataset](#a-tour) or [score live traces](docs/guides/trace-sources.md). The docs are at [evalsi.dev](https://evalsi.dev/).
+Two of the three outputs match their reference (the second says Kyoto, not Tokyo), and the table says how sure that number is. Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md), [add a judge](#add-a-judge), [run a model or an agent on a dataset](#a-tour) or [score live traces](docs/guides/trace-sources.md). The docs are at [evalsi.dev](https://evalsi.dev/).
 
 ## How it fits with other tools
 
@@ -312,7 +312,7 @@ What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md)
 
 | Start here | Guides | Reference |
 |---|---|---|
-| [Documentation site](https://evalsi.dev/) | [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
+| [Documentation site](https://evalsi.dev/) | [Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) · [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
 | [End-to-end guide](docs/guides/end-to-end.md) | [Kubernetes](docs/guides/kubernetes.md) · [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md) · [Identity](docs/guides/identity.md) | [Decision records](docs/decisions/README.md) |
 | [Examples](examples/) | [Guardrails](docs/guides/guardrails.md) · [MCP](docs/guides/mcp.md) · [Plugins](docs/guides/plugins.md) · [DeepEval and JevEval](docs/guides/deepeval.md) · [Webhooks](docs/guides/webhooks.md) | [Product requirements](docs/PRD.md) |
 | [Integrate an agent harness](docs/guides/integrate-an-agent-harness.md) | [Annotation](docs/guides/annotation.md) · [Fine-tuning and RL](docs/guides/fine-tuning.md) · [Web UI](docs/guides/web-ui.md) | [Roadmap and leftovers](docs/LEFTOVERS.md) |

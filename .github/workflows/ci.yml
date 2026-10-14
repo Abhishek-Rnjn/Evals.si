@@ -242,6 +242,18 @@ jobs:
         run: |
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
           cd python && EVALSI_TEST_EVALSID="$RUNNER_TEMP/evalsid" uv run --no-sync pytest -q
+      - name: The agent-gate example passes, and a regressed agent fails its gate
+        # examples/agent-gate backs the "Gate an agent in CI" guide: a stand-in
+        # agent in a real sandbox, exit 0 when it fixes the tasks, 3 when not.
+        run: |
+          export PATH="$RUNNER_TEMP:$PATH"
+          cd python
+          uv run --no-sync evalsi run -f ../examples/agent-gate/run.yaml
+          sed 's/return a \* b/return a + b/' ../examples/agent-gate/run.yaml > ../examples/agent-gate/regressed.yaml
+          code=0
+          uv run --no-sync evalsi run -f ../examples/agent-gate/regressed.yaml || code=$?
+          rm ../examples/agent-gate/regressed.yaml
+          test "$code" -eq 3
       - run: uv sync --locked
         working-directory: python/adapters/swebench
       - name: End-to-end tests

@@ -1,0 +1,51 @@
+# Gate every pull request on an agent run, with no server: the job installs
+# Evals.si, runs the spec in a sandbox and fails when a gate fails (exit 3).
+# Copy this to .github/workflows/agent-gate.yml and point `-f` at your spec.
+name: agent-gate
+on:
+  pull_request:
+    paths: ['agent/**', 'prompts/**', 'evals/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Sandbox prerequisites
+        # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
+        # which the sandbox needs, unless this is relaxed.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: pip install evalsi evalsi-harness
+
+      # Exit code 3 when a gate fails, which fails the job.
+      - name: Run the agent gate
+        # A real agent calls a model: pass its key here, and name it in the
+        # spec's cli.env_from so only the agent sees it.
+        # env: {AGENT_MODEL_KEY: '${{ secrets.AGENT_MODEL_KEY }}'}
+        run: evalsi run -f evals/agent-gate.yaml --output results.json
+
+      - name: Build the report
+        if: always()
+        run: evalsi report results.json -o report.md
+
+      - name: Show the report in the job summary
+        if: always()
+        run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-gate-report
+          path: |
+            results.json
+            report.md
