@@ -154,13 +154,15 @@ uv run evalsi eval --data qa.jsonl --evaluators ragas/faithfulness,deepeval/g-ev
 
 | Adapter | Gives you |
 |---|---|
-| DeepEval | `deepeval/*` metrics: faithfulness, hallucination, bias, toxicity, g-eval, tool correctness and more |
+| DeepEval | `deepeval/*` metrics: faithfulness, hallucination, bias, toxicity, g-eval, jev-eval, tool correctness, task completion, conversational metrics and more |
 | RAGAS | `ragas/*` metrics: context precision/recall, factual correctness, agent goal accuracy, tool-call F1 and more |
 | Inspect AI | `inspect://log.eval` importer, and `evalsi_scorer(...)` to use Evals.si evaluators inside Inspect |
 | lm-evaluation-harness | An `evalsi` lm-eval model, and an `lm-eval://` importer |
 | SWE-bench, τ-bench, BFCL | Benchmark importers graded by the benchmark's own code (section 5) |
 
 DeepEval and RAGAS keep their own prompts and scoring, but their model calls go through your judge, so they are cached, rate-limited and costed like every other judge call, and the framework never reads a provider key.
+
+DeepEval's JevEval scores weighted questions you write: true or false, scales and choices. Your judge answers them, either stating its probabilities or, with `decisions: logprobs` on a model you serve on vLLM, SGLang or Ollama, with probabilities read off its token logprobs. The [DeepEval and JevEval guide](deepeval.md) covers every metric, how records map onto DeepEval's test cases and traces, and how to run a decider on your own model.
 
 ## 4. Run: execute a target, gate on the result
 

@@ -69,6 +69,44 @@ class OpenAICompatibleJudge:
             output_tokens=usage.get("completion_tokens"),
         )
 
+    async def next_token_logprobs(
+        self, *, system: str, prompt: str, top_logprobs: int
+    ) -> JudgeResponse:
+        """The model's distribution over its first output token: the
+        ``top_logprobs`` likeliest tokens and their log probabilities, as
+        ``data["top_logprobs"]``. For decisions read off the model's
+        probabilities rather than stated in its text."""
+        body: dict[str, Any] = {
+            "model": self.config.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": 1,
+            "logprobs": True,
+            "top_logprobs": top_logprobs,
+        }
+        if self.config.temperature is not None:
+            body["temperature"] = self.config.temperature
+        payload = await self._post(body)
+        try:
+            first = payload["choices"][0]["logprobs"]["content"][0]
+            top = {str(t["token"]): float(t["logprob"]) for t in first["top_logprobs"]}
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise JudgeFatalError(
+                f"judge returned no token logprobs ({payload!r:.200}); the server must "
+                "support logprobs, as vLLM, SGLang, Ollama and OpenAI do"
+            ) from exc
+        if not top:
+            raise JudgeFatalError("judge returned no top_logprobs; raise the server's limit")
+        usage = payload.get("usage") or {}
+        return JudgeResponse(
+            data={"top_logprobs": top},
+            model=str(payload.get("model", self.config.model)),
+            input_tokens=usage.get("prompt_tokens"),
+            output_tokens=usage.get("completion_tokens"),
+        )
+
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
         delay = 1.0
         for attempt in range(1, MAX_ATTEMPTS + 1):
