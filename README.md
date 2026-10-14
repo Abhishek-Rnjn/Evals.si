@@ -7,12 +7,12 @@
 Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
 
 [![CI](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml)
-[![Docs](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/website.yml/badge.svg)](https://abhishek-rnjn.github.io/Evals.si/)
+[![Docs](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/website.yml/badge.svg)](https://evalsi.dev/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)
 
-[Documentation](https://abhishek-rnjn.github.io/Evals.si/) ·
+[Documentation](https://evalsi.dev/) ·
 [Quickstart](#quickstart) ·
 [Guides](#documentation) ·
 [Examples](examples/) ·
@@ -270,7 +270,7 @@ What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md)
 
 | Start here | Guides | Reference |
 |---|---|---|
-| [Documentation site](https://abhishek-rnjn.github.io/Evals.si/) | [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
+| [Documentation site](https://evalsi.dev/) | [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
 | [End-to-end guide](docs/guides/end-to-end.md) | [Kubernetes](docs/guides/kubernetes.md) · [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md) · [Identity](docs/guides/identity.md) | [Decision records](docs/decisions/README.md) |
 | [Examples](examples/) | [Guardrails](docs/guides/guardrails.md) · [MCP](docs/guides/mcp.md) · [Plugins](docs/guides/plugins.md) · [Webhooks](docs/guides/webhooks.md) | [Product requirements](docs/PRD.md) |
 | [Integrate an agent harness](docs/guides/integrate-an-agent-harness.md) | [Annotation](docs/guides/annotation.md) · [Fine-tuning and RL](docs/guides/fine-tuning.md) · [Web UI](docs/guides/web-ui.md) | [Roadmap and leftovers](docs/LEFTOVERS.md) |

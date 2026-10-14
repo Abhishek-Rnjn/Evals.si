@@ -2,7 +2,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 const dist = path.resolve("dist");
-const base = (process.env.SITE_BASE ?? "/Evals.si").replace(/\/$/, "");
+const base = (process.env.SITE_BASE ?? "/").replace(/\/$/, "");
 const walk = async (d) => (await Promise.all((await fs.readdir(d, { withFileTypes: true })).map((e) => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]))).flat();
 const bad = new Set();
 for (const f of (await walk(dist)).filter((f) => f.endsWith(".html"))) {
