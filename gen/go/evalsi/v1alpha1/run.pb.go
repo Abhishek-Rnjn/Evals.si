@@ -31,6 +31,12 @@ const (
 	// The lower confidence bound, for "we are confident it is at least X".
 	GateStat_GATE_STAT_CI_LOW  GateStat = 2
 	GateStat_GATE_STAT_CI_HIGH GateStat = 3
+	// The fraction of the metric's evaluations that errored: errors / (n +
+	// errors), skipped records left out. A metric's mean and interval leave
+	// errored records out, so gate this with a max, for example
+	// {metric: "task-success", stat: GATE_STAT_ERROR_RATE, max: 0.05}, to
+	// fail a candidate that errors on many records and passes the rest.
+	GateStat_GATE_STAT_ERROR_RATE GateStat = 4
 )
 
 // Enum value maps for GateStat.
@@ -40,12 +46,14 @@ var (
 		1: "GATE_STAT_MEAN",
 		2: "GATE_STAT_CI_LOW",
 		3: "GATE_STAT_CI_HIGH",
+		4: "GATE_STAT_ERROR_RATE",
 	}
 	GateStat_value = map[string]int32{
 		"GATE_STAT_UNSPECIFIED": 0,
 		"GATE_STAT_MEAN":        1,
 		"GATE_STAT_CI_LOW":      2,
 		"GATE_STAT_CI_HIGH":     3,
+		"GATE_STAT_ERROR_RATE":  4,
 	}
 )
 
@@ -1278,12 +1286,13 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\bimported\x18\x14 \x01(\bR\bimported\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*f\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x80\x01\n" +
 	"\bGateStat\x12\x19\n" +
 	"\x15GATE_STAT_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eGATE_STAT_MEAN\x10\x01\x12\x14\n" +
 	"\x10GATE_STAT_CI_LOW\x10\x02\x12\x15\n" +
-	"\x11GATE_STAT_CI_HIGH\x10\x03*\xb8\x01\n" +
+	"\x11GATE_STAT_CI_HIGH\x10\x03\x12\x18\n" +
+	"\x14GATE_STAT_ERROR_RATE\x10\x04*\xb8\x01\n" +
 	"\tRunStatus\x12\x1a\n" +
 	"\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12RUN_STATUS_PENDING\x10\x01\x12\x16\n" +

@@ -17,6 +17,7 @@ A spec file looks like a Kubernetes object; ``spec`` is the
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -162,6 +163,15 @@ def validate(spec: run_pb2.RunSpec) -> None:
             raise SpecError("every gate needs a metric")
         if not gate.HasField("min") and not gate.HasField("max"):
             raise SpecError(f"gate on {gate.metric!r} needs min or max")
+        if gate.stat not in _STATS:
+            raise SpecError(f"gate on {gate.metric!r} has unknown stat {gate.stat}")
+        # A NaN bound fails both comparisons, so the gate would always pass.
+        for bound in ("min", "max"):
+            if gate.HasField(bound) and not math.isfinite(getattr(gate, bound)):
+                raise SpecError(f"gate on {gate.metric!r}: {bound} is not a finite number")
+    level = spec.summary.confidence_level
+    if level and not 0 < level < 1:
+        raise SpecError("spec.summary.confidence_level must be between 0 and 1")
 
 
 def spec_to_dict(spec: run_pb2.RunSpec) -> dict[str, Any]:
@@ -191,7 +201,14 @@ _STATS = {
     run_pb2.GATE_STAT_MEAN: "mean",
     run_pb2.GATE_STAT_CI_LOW: "ci_low",
     run_pb2.GATE_STAT_CI_HIGH: "ci_high",
+    run_pb2.GATE_STAT_ERROR_RATE: "error_rate",
 }
+
+
+def _error_rate(summary: MetricSummary) -> float | None:
+    """The fraction of a metric's evaluations that errored; skips are left out."""
+    ran = summary.n + summary.errors
+    return summary.errors / ran if ran else None
 
 
 def check_gates(
@@ -212,10 +229,14 @@ def check_gates(
                 "mean": summary.mean,
                 "ci_low": summary.ci.low if summary.ci else None,
                 "ci_high": summary.ci.high if summary.ci else None,
+                "error_rate": _error_rate(summary),
             }[stat]
             result.value = value
             if value is None:
                 result.reason = f"metric has no {stat}"
+            elif not math.isfinite(value):
+                # NaN fails every comparison below, so it would otherwise pass.
+                result.reason = f"{stat} is {value}, not a finite number"
             elif lo is not None and value < lo:
                 result.reason = f"{stat} {value:.4g} is below {lo:.4g}"
             elif hi is not None and value > hi:

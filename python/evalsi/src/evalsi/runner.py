@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import math
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -175,6 +176,13 @@ async def _evaluate_one(
         return finish(Outcome.ERROR, reason=f"{type(exc).__name__}: {exc}")
     if not scores:
         return finish(Outcome.SKIPPED, reason="evaluator returned no scores")
+    # NaN would make the summary NaN, and NaN passes every gate comparison.
+    for score in scores:
+        if score.number is not None and not math.isfinite(score.number):
+            return finish(
+                Outcome.ERROR,
+                reason=f"evaluator returned a non-finite value for score {score.name!r}",
+            )
     return finish(Outcome.SCORED, scores=scores)
 
 

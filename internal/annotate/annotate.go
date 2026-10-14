@@ -396,7 +396,8 @@ func (s *Service) SummarizeQueue(ctx context.Context, req *connect.Request[evals
 	if level == 0 {
 		level = 0.95
 	}
-	if level <= 0 || level >= 1 {
+	// Tested as inside the range, so NaN is refused too.
+	if !(level > 0 && level < 1) {
 		return nil, invalid("confidence_level must be between 0 and 1")
 	}
 	items, err := s.store.QueueItems(ctx, q.GetProject(), q.GetName(), 0, 0)

@@ -17,9 +17,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -282,12 +284,35 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 	} else if spec.GetTrials() > 1 {
 		return nil, invalid("spec.trials above 1 needs a target; without one every trial is identical")
 	}
-	for _, g := range spec.GetGates() {
-		if g.GetMetric() == "" || (g.Min == nil && g.Max == nil) {
-			return nil, invalid("every gate needs a metric and a min or max")
-		}
+	if err := validateGates(spec); err != nil {
+		return nil, err
 	}
 	return insts, nil
+}
+
+// validateGates checks the parts of a spec that are read when the run
+// finishes, so a bad value is refused here rather than failing the run.
+func validateGates(spec *evalsiv1alpha1.RunSpec) error {
+	for _, g := range spec.GetGates() {
+		if g.GetMetric() == "" || (g.Min == nil && g.Max == nil) {
+			return invalid("every gate needs a metric and a min or max")
+		}
+		// An unknown stat would otherwise be checked as the mean.
+		if _, known := evalsiv1alpha1.GateStat_name[int32(g.GetStat())]; !known {
+			return invalid("gate on %q has unknown stat %d", g.GetMetric(), g.GetStat())
+		}
+		// A NaN bound fails both comparisons, so the gate would always pass.
+		for _, bound := range []*float64{g.Min, g.Max} {
+			if bound != nil && (math.IsNaN(*bound) || math.IsInf(*bound, 0)) {
+				return invalid("gate on %q has a bound that is not a finite number", g.GetMetric())
+			}
+		}
+	}
+	// Zero means the default; anything else must be inside (0, 1), which NaN is not.
+	if level := spec.GetSummary().GetConfidenceLevel(); level != 0 && !(level > 0 && level < 1) {
+		return invalid("spec.summary.confidence_level must be between 0 and 1")
+	}
+	return nil
 }
 
 // resolvePath keeps dataset paths inside DatasetsDir, symlinks included. On
@@ -670,6 +695,14 @@ func (m *Manager) execute(ctx context.Context, id string, a *activeRun) {
 			m.opts.OnFinished(proto.Clone(run).(*evalsiv1alpha1.Run))
 		}
 	}
+	// A panic here would take the whole server down, and with it every other
+	// run; the run fails instead.
+	defer func() {
+		if p := recover(); p != nil {
+			m.log.Error("run panicked", "run", id, "panic", p, "stack", string(debug.Stack()))
+			finish(evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR, fmt.Sprintf("internal error: %v", p))
+		}
+	}()
 	if ctx.Err() != nil {
 		finish(m.stoppedStatus(a), m.stoppedMessage(a))
 		return
@@ -1059,6 +1092,11 @@ func CheckGates(gates []*evalsiv1alpha1.Gate, summaries []*evalsiv1alpha1.Metric
 			if s.GetCi() != nil {
 				value = proto.Float64(s.GetCi().GetHigh())
 			}
+		case evalsiv1alpha1.GateStat_GATE_STAT_ERROR_RATE:
+			stat = "error_rate"
+			if ran := s.GetN() + s.GetErrors(); ran > 0 {
+				value = proto.Float64(float64(s.GetErrors()) / float64(ran))
+			}
 		default:
 			value = s.Mean
 		}
@@ -1066,6 +1104,9 @@ func CheckGates(gates []*evalsiv1alpha1.Gate, summaries []*evalsiv1alpha1.Metric
 		switch {
 		case value == nil:
 			res.Reason = "metric has no " + stat
+		case math.IsNaN(*value) || math.IsInf(*value, 0):
+			// NaN fails every comparison below, so it would otherwise pass.
+			res.Reason = fmt.Sprintf("%s is %v, not a finite number", stat, *value)
 		case g.Min != nil && *value < g.GetMin():
 			res.Reason = fmt.Sprintf("%s %.4g is below %.4g", stat, *value, g.GetMin())
 		case g.Max != nil && *value > g.GetMax():

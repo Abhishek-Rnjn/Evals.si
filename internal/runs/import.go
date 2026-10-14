@@ -33,10 +33,8 @@ func (m *Manager) ImportRun(ctx context.Context, req *connect.Request[evalsiv1al
 	if spec == nil || len(spec.GetEvaluators()) == 0 {
 		return nil, invalid("spec with its evaluators is required")
 	}
-	for _, g := range spec.GetGates() {
-		if g.GetMetric() == "" || (g.Min == nil && g.Max == nil) {
-			return nil, invalid("every gate needs a metric and a min or max")
-		}
+	if err := validateGates(spec); err != nil {
+		return nil, err
 	}
 	records, results := msg.GetRecords(), msg.GetResults()
 	switch {
@@ -58,7 +56,15 @@ func (m *Manager) ImportRun(ctx context.Context, req *connect.Request[evalsiv1al
 		index[r.GetId()] = i
 	}
 	trials := trialsOf(spec)
+	// A result is stored under its evaluator's place in the spec, which is
+	// how promotion and resumption read it back (see scoredBy).
 	evaluators := map[string]int{}
+	for e, in := range importedInstances(spec.GetEvaluators()) {
+		if _, dup := evaluators[in.Name]; dup {
+			return nil, invalid("evaluator %q is named twice in the spec", in.Name)
+		}
+		evaluators[in.Name] = e
+	}
 	stored := make([]store.Result, 0, len(results))
 	seen := map[store.Key]bool{}
 	for i, r := range results {
@@ -69,13 +75,15 @@ func (m *Manager) ImportRun(ctx context.Context, req *connect.Request[evalsiv1al
 		if r.GetEvaluator() == "" {
 			return nil, invalid("results[%d] has no evaluator", i)
 		}
+		if name, bad := evaluation.NonFinite(r.GetScores()); bad {
+			return nil, invalid("results[%d] score %q is not a finite number", i, name)
+		}
 		if t := int(r.GetTrial()); t < 0 || t >= trials {
 			return nil, invalid("results[%d] is trial %d; the spec has %d trial(s)", i, t, trials)
 		}
 		e, ok := evaluators[r.GetEvaluator()]
 		if !ok {
-			e = len(evaluators)
-			evaluators[r.GetEvaluator()] = e
+			return nil, invalid("results[%d] names evaluator %q, which is not in the spec", i, r.GetEvaluator())
 		}
 		key := store.Key{RecordIdx: idx, Trial: int(r.GetTrial()), EvalIdx: e}
 		if seen[key] {
@@ -161,7 +169,11 @@ func (m *Manager) scoredBy(run *evalsiv1alpha1.Run) ([]evaluation.Instance, erro
 	if !run.GetImported() {
 		return m.engine.Bind(run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
 	}
-	refs := run.GetSpec().GetEvaluators()
+	return importedInstances(run.GetSpec().GetEvaluators()), nil
+}
+
+// importedInstances names an imported run's evaluators as its results do.
+func importedInstances(refs []*evalsiv1alpha1.EvaluatorRef) []evaluation.Instance {
 	out := make([]evaluation.Instance, 0, len(refs))
 	for _, ref := range refs {
 		name, _, _ := strings.Cut(ref.GetRef(), "@")
@@ -175,5 +187,5 @@ func (m *Manager) scoredBy(run *evalsiv1alpha1.Run) ([]evaluation.Instance, erro
 			Params:   ref.GetParams(),
 		})
 	}
-	return out, nil
+	return out
 }

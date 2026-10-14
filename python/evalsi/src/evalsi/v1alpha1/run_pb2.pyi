@@ -37,6 +37,13 @@ class _GateStatEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_GateStat.Val
     GATE_STAT_CI_LOW: _GateStat.ValueType  # 2
     """The lower confidence bound, for "we are confident it is at least X"."""
     GATE_STAT_CI_HIGH: _GateStat.ValueType  # 3
+    GATE_STAT_ERROR_RATE: _GateStat.ValueType  # 4
+    """The fraction of the metric's evaluations that errored: errors / (n +
+    errors), skipped records left out. A metric's mean and interval leave
+    errored records out, so gate this with a max, for example
+    {metric: "task-success", stat: GATE_STAT_ERROR_RATE, max: 0.05}, to
+    fail a candidate that errors on many records and passes the rest.
+    """
 
 class GateStat(_GateStat, metaclass=_GateStatEnumTypeWrapper): ...
 
@@ -45,6 +52,13 @@ GATE_STAT_MEAN: GateStat.ValueType  # 1
 GATE_STAT_CI_LOW: GateStat.ValueType  # 2
 """The lower confidence bound, for "we are confident it is at least X"."""
 GATE_STAT_CI_HIGH: GateStat.ValueType  # 3
+GATE_STAT_ERROR_RATE: GateStat.ValueType  # 4
+"""The fraction of the metric's evaluations that errored: errors / (n +
+errors), skipped records left out. A metric's mean and interval leave
+errored records out, so gate this with a max, for example
+{metric: "task-success", stat: GATE_STAT_ERROR_RATE, max: 0.05}, to
+fail a candidate that errors on many records and passes the rest.
+"""
 Global___GateStat: _TypeAlias = GateStat  # noqa: Y015
 
 class _RunStatus:

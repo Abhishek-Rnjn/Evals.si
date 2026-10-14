@@ -61,6 +61,20 @@ def test_errors_are_reported_not_scored() -> None:
     assert error.reason == "RuntimeError: boom"
 
 
+def test_non_finite_scores_are_errors() -> None:
+    # A NaN would make the mean NaN, which passes every gate; it is an error instead.
+    @evaluator(name="test/nan", version="1.0.0")
+    def broken(record: Record) -> Score:
+        return Score(number=float("nan") if record.id == "b" else 0.5)
+
+    result = evalsi.evaluate(ROWS, [broken])
+    summary = result.metric("nan")
+    assert (summary.n, summary.errors, summary.mean) == (3, 1, 0.5)
+    (error,) = result.errors()
+    assert error.record_id == "b"
+    assert "non-finite" in error.reason
+
+
 def test_custom_async_evaluator_with_params_and_alias() -> None:
     @evaluator(
         name="test/longer-than",

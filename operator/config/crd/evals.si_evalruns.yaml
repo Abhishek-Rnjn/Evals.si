@@ -947,8 +947,8 @@ spec:
                     min:
                       type: number
                     stat:
-                      description: One of [GATE_STAT_CI_HIGH GATE_STAT_CI_LOW GATE_STAT_MEAN
-                        GATE_STAT_UNSPECIFIED], or its number.
+                      description: One of [GATE_STAT_CI_HIGH GATE_STAT_CI_LOW GATE_STAT_ERROR_RATE
+                        GATE_STAT_MEAN GATE_STAT_UNSPECIFIED], or its number.
                       x-kubernetes-int-or-string: true
                   type: object
                   x-kubernetes-preserve-unknown-fields: true

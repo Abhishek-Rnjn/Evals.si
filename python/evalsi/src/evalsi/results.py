@@ -115,6 +115,8 @@ def summarize(
         mine = [r for r in results if r.evaluator == instance.name]
         skipped = sum(r.outcome is Outcome.SKIPPED for r in mine)
         errors = sum(r.outcome is Outcome.ERROR for r in mine)
+        # For pass@k and pass^k a trial whose evaluation errored did not pass.
+        errored_ids = [r.record_id for r in mine if r.outcome is Outcome.ERROR and r.record_id]
         # Declared metrics first, so they appear even when every record was skipped.
         values: dict[str, list[tuple[Score, str]]] = {
             metric_key(instance, o.name): [] for o in instance.spec.outputs
@@ -142,18 +144,34 @@ def summarize(
                 summary.skipped, summary.errors = skipped, errors
                 summaries.append(summary)
                 if trials > 1 and summary.kind == "proportion":
-                    summaries.extend(_pass_at_k(key, instance.name, scored, trials, level))
+                    summaries.extend(
+                        _pass_at_k(key, instance.name, scored, errored_ids, k=trials, level=level)
+                    )
     return summaries
 
 
 def _pass_at_k(
-    key: str, evaluator: str, scored: list[tuple[Score, str]], k: int, level: float
+    key: str,
+    evaluator: str,
+    scored: list[tuple[Score, str]],
+    errored: list[str],
+    *,
+    k: int,
+    level: float,
 ) -> list[MetricSummary]:
-    """pass@k: passed in at least one trial; pass^k: passed in every trial."""
+    """pass@k: passed in at least one trial; pass^k: passed in every trial.
+
+    ``errored`` lists a record once per trial whose evaluation errored (the
+    target or agent failed, or the evaluator did); such a trial did not pass.
+    Those trials are already in the values (``n`` counts records), so the
+    errors are reported on the base metric, not again here.
+    """
     by_record: dict[str, list[bool]] = {}
     for score, rid in scored:
         if score.passed is not None:
             by_record.setdefault(rid, []).append(score.passed)
+    for rid in errored:
+        by_record.setdefault(rid, []).append(False)
     out = []
     for name, reduce in ((f"pass@{k}", any), (f"pass^{k}", all)):
         values = [1.0 if reduce(v) else 0.0 for v in by_record.values()]

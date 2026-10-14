@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -106,7 +107,11 @@ func (f *fakeWorker) Evaluate(_ context.Context, req *pluginv1alpha1.EvaluateReq
 				res.Outcome, res.Reason = evalsiv1alpha1.Outcome_OUTCOME_ERROR, "JudgeError: down"
 				break
 			}
-			res.Scores = []*evalsiv1alpha1.Score{{Name: "llm-judge", Value: &evalsiv1alpha1.Score_Number{Number: 0.75}}}
+			score := 0.75
+			if r.GetId() == "nan" {
+				score = math.NaN() // a broken plugin
+			}
+			res.Scores = []*evalsiv1alpha1.Score{{Name: "llm-judge", Value: &evalsiv1alpha1.Score_Number{Number: score}}}
 		}
 		resp.Results = append(resp.Results, res)
 	}
