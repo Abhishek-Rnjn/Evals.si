@@ -2,7 +2,7 @@
 
 A reproducible comparison of Evals.si and `mlflow.genai.evaluate` on the same records: speed, score agreement and judge cost. Features are compared in the results write-up, not here.
 
-Results are added to this folder when the run finishes (`RESULTS.md`).
+Results are in [RESULTS.md](RESULTS.md).
 
 ## What it measures
 
