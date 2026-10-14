@@ -154,6 +154,14 @@ def test_parse_spec_and_validation() -> None:
             {**SPEC, "spec": {**SPEC["spec"], "gates": [{"metric": "x", "stat": 99, "max": 1}]}},
             "unknown stat",
         ),
+        (
+            {**SPEC, "spec": {**SPEC["spec"], "gates": [{"metric": "x", "min": "NaN"}]}},
+            "not a finite number",
+        ),
+        (
+            {**SPEC, "spec": {**SPEC["spec"], "summary": {"confidence_level": "NaN"}}},
+            "confidence_level",
+        ),
     ]
     for document, message in bad:
         if document["spec"].get("target", 1) is None:
@@ -228,7 +236,8 @@ def test_errored_trials_count_as_not_passed() -> None:
     }
     assert summaries["exact-match.pass@3"].n == 2
     assert summaries["exact-match.pass@3"].mean == pytest.approx(1 / 2)
-    assert summaries["exact-match.pass@3"].errors == 5
+    assert summaries["exact-match.pass@3"].errors == 0
+    assert summaries["exact-match"].errors == 5
     assert summaries["exact-match.pass^3"].mean == 0
 
 

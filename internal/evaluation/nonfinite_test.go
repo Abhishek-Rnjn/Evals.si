@@ -78,10 +78,14 @@ func TestPassAtKCountsErroredTrials(t *testing.T) {
 	for _, s := range sums {
 		got[s.GetMetric()] = s
 	}
-	if s := got["task-success.pass@5"]; s.GetN() != 2 || s.GetMean() != 0.5 || s.GetErrors() != 9 {
+	if s := got["task-success.pass@5"]; s.GetN() != 2 || s.GetMean() != 0.5 || s.GetErrors() != 0 {
 		t.Errorf("pass@5 = %v", s)
 	}
 	if s := got["task-success.pass^5"]; s.GetN() != 2 || s.GetMean() != 0 {
 		t.Errorf("pass^5 = %v", s)
+	}
+	// The errors are the base metric's, counted once.
+	if s := got["task-success"]; s.GetErrors() != 9 {
+		t.Errorf("task-success = %v", s)
 	}
 }

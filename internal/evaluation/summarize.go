@@ -237,7 +237,9 @@ func summarizeMetric(key string, in Instance, spec *evalsiv1alpha1.MetricSpec, v
 // passAtK computes pass@k and pass^k per record. errored lists a record once
 // for each trial whose evaluation errored (the target or agent failed, or the
 // evaluator did); such a trial counts as not passed, so a record that passed
-// once and failed to run four times has pass^5 of 0, not 1.
+// once and failed to run four times has pass^5 of 0, not 1. The errored
+// trials are already in these rows' values (N counts records), so they are
+// reported on the base metric, not again here.
 func passAtK(key, evaluator string, values []scored, errored []string, k int, level float64) []*evalsiv1alpha1.MetricSummary {
 	var order []string
 	byRecord := map[string][]bool{}
@@ -280,7 +282,6 @@ func passAtK(key, evaluator string, values []scored, errored []string, k int, le
 		sum := &evalsiv1alpha1.MetricSummary{
 			Metric: key + "." + variant.name, Evaluator: evaluator,
 			Kind: evalsiv1alpha1.MetricKind_METRIC_KIND_PROPORTION, N: int64(len(nums)),
-			Errors: int64(len(errored)),
 		}
 		if len(nums) > 0 {
 			sum.Mean = proto.Float64(stats.Mean(nums))

@@ -301,6 +301,12 @@ func validateGates(spec *evalsiv1alpha1.RunSpec) error {
 		if _, known := evalsiv1alpha1.GateStat_name[int32(g.GetStat())]; !known {
 			return invalid("gate on %q has unknown stat %d", g.GetMetric(), g.GetStat())
 		}
+		// A NaN bound fails both comparisons, so the gate would always pass.
+		for _, bound := range []*float64{g.Min, g.Max} {
+			if bound != nil && (math.IsNaN(*bound) || math.IsInf(*bound, 0)) {
+				return invalid("gate on %q has a bound that is not a finite number", g.GetMetric())
+			}
+		}
 	}
 	// Zero means the default; anything else must be inside (0, 1), which NaN is not.
 	if level := spec.GetSummary().GetConfidenceLevel(); level != 0 && !(level > 0 && level < 1) {

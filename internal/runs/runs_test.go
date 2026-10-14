@@ -295,7 +295,7 @@ func TestRunWithTrialsGatesAndFailures(t *testing.T) {
 	// For pass@k and pass^k an errored trial did not pass: broken counts,
 	// failing both of its trials, so easy is the one record of three that
 	// passed every trial.
-	if s := summary(final, "exact-match.pass@2"); s.GetN() != 3 || s.GetMean() != 2.0/3 || s.GetErrors() != 2 {
+	if s := summary(final, "exact-match.pass@2"); s.GetN() != 3 || s.GetMean() != 2.0/3 || s.GetErrors() != 0 {
 		t.Errorf("pass@2 = %v", s)
 	}
 	if s := summary(final, "exact-match.pass^2"); s.GetN() != 3 || s.GetMean() != 1.0/3 {

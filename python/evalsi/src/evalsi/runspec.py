@@ -165,6 +165,13 @@ def validate(spec: run_pb2.RunSpec) -> None:
             raise SpecError(f"gate on {gate.metric!r} needs min or max")
         if gate.stat not in _STATS:
             raise SpecError(f"gate on {gate.metric!r} has unknown stat {gate.stat}")
+        # A NaN bound fails both comparisons, so the gate would always pass.
+        for bound in ("min", "max"):
+            if gate.HasField(bound) and not math.isfinite(getattr(gate, bound)):
+                raise SpecError(f"gate on {gate.metric!r}: {bound} is not a finite number")
+    level = spec.summary.confidence_level
+    if level and not 0 < level < 1:
+        raise SpecError("spec.summary.confidence_level must be between 0 and 1")
 
 
 def spec_to_dict(spec: run_pb2.RunSpec) -> dict[str, Any]:

@@ -95,7 +95,7 @@ func TestRunFailsItsErrorRateGate(t *testing.T) {
 	}
 }
 
-func TestCreateRunRefusesUnknownGateStat(t *testing.T) {
+func TestCreateRunRefusesBadGates(t *testing.T) {
 	h := newHarness(t)
 	spec := &evalsiv1alpha1.RunSpec{
 		Dataset: inline("easy"), Evaluators: refs("exact-match"),
@@ -103,5 +103,10 @@ func TestCreateRunRefusesUnknownGateStat(t *testing.T) {
 	}
 	if _, err := h.tryCreate("p", spec); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("unknown stat: %v", err)
+	}
+	// A NaN bound fails both comparisons, so the gate would always pass.
+	spec.Gates = []*evalsiv1alpha1.Gate{{Metric: "exact-match", Min: proto.Float64(math.NaN())}}
+	if _, err := h.tryCreate("p", spec); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("NaN bound: %v", err)
 	}
 }

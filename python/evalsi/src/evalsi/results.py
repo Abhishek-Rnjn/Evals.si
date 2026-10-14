@@ -163,6 +163,8 @@ def _pass_at_k(
 
     ``errored`` lists a record once per trial whose evaluation errored (the
     target or agent failed, or the evaluator did); such a trial did not pass.
+    Those trials are already in the values (``n`` counts records), so the
+    errors are reported on the base metric, not again here.
     """
     by_record: dict[str, list[bool]] = {}
     for score, rid in scored:
@@ -177,7 +179,6 @@ def _pass_at_k(
             metric=f"{key}.{name}", evaluator=evaluator, kind="proportion", higher_is_better=True
         )
         summary.n = len(values)
-        summary.errors = len(errored)
         if values:
             summary.mean = fmean(values)
             summary.std = stdev(values) if len(values) > 1 else None
