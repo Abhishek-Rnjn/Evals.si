@@ -4,7 +4,7 @@
 
 `evalsi` is the Python SDK and CLI of [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si), a pluggable, sandboxed and self-hosted evaluation service. The same evaluators score outputs you already have, run a model or an agent on a dataset and gate on the result, score live agent traffic, and reward RL training, so a metric means the same thing in CI, in production and in training.
 
-[Documentation](https://abhishek-rnjn.github.io/Evals.si/) ·
+[Documentation](https://evalsi.dev/) ·
 [GitHub](https://github.com/Abhishek-Rnjn/Evals.si) ·
 [Changelog](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md) ·
 [Examples](https://github.com/Abhishek-Rnjn/Evals.si/tree/main/examples)

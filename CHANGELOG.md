@@ -12,6 +12,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
+- **The site is at https://evalsi.dev/.** The PyPI project links, the READMEs and SUPPORT.md point to it, and the old `abhishek-rnjn.github.io/Evals.si/` address redirects there. The README gains a 30-second `pip install` quickstart and a short comparison with the metric libraries and benchmark harnesses that Evals.si runs as adapters. The PyPI links change with the next release.
 - The PyPI pages of `evalsi` and `evalsi-harness` describe the project: what Evals.si does, installs and extras (including the Linux platform wheels), a quickstart, runs and gates, the server client, RL rewards and the evaluator packs, with keywords and classifiers. CI checks that both render (`twine check --strict`). A published version's page cannot change, so this shows from the next release.
 
 ## [0.2.0] - 2026-10-13

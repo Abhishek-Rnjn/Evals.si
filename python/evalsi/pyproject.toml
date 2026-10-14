@@ -61,8 +61,8 @@ ml-classic = "evalsi.packs.ml_classic:PACK"
 ml-monitoring = "evalsi.packs.ml_monitoring:PACK"
 
 [project.urls]
-Homepage = "https://abhishek-rnjn.github.io/Evals.si/"
-Documentation = "https://abhishek-rnjn.github.io/Evals.si/"
+Homepage = "https://evalsi.dev/"
+Documentation = "https://evalsi.dev/"
 Repository = "https://github.com/Abhishek-Rnjn/Evals.si"
 Issues = "https://github.com/Abhishek-Rnjn/Evals.si/issues"
 Changelog = "https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md"

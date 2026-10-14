@@ -2,7 +2,7 @@
 
 **The built-in agent harness for [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si).** It drives an agent through a task in an Evals.si sandbox and grades the end state, for evaluation and for RL environments.
 
-[Documentation](https://abhishek-rnjn.github.io/Evals.si/) ·
+[Documentation](https://evalsi.dev/) ·
 [Agent runs guide](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/guides/agent-runs.md) ·
 [GitHub](https://github.com/Abhishek-Rnjn/Evals.si) ·
 [Changelog](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md)
