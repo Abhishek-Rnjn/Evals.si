@@ -15,6 +15,8 @@ The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milesto
 | M5 More sources, SDK | Jan to Mar 2027 | SDK parts done; LangSmith, ClickHouse, Kafka and S3 sources not built |
 | GA with agent harness | 26 March 2027 | Not started |
 
+The plan for strengthening the agent harness through M2 and GA is in [HARNESS-ROADMAP.md](HARNESS-ROADMAP.md).
+
 The latest release is **v0.2.0** (2026-10-13, [record](verification/README.md#v020-release-record-2026-10-13)); see [Releases](PRD.md#releases).
 
 Last updated: 2026-10-13 (v0.2.0 released and verified; the two buildable rows built: verl and OpenRLHF reward paths and Claude Code over MCP in CI; backfill and lag measured; E6 imports); before that 2026-10-12 (bounded EKS verification, [report](verification/EKS-2026-10-12.md); server-side slicing, run archiving, environment specs, platform wheels, operator checkpoint serving and a hosted Wasm plugin built; the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
