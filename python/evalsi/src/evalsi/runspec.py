@@ -163,6 +163,8 @@ def validate(spec: run_pb2.RunSpec) -> None:
             raise SpecError("every gate needs a metric")
         if not gate.HasField("min") and not gate.HasField("max"):
             raise SpecError(f"gate on {gate.metric!r} needs min or max")
+        if gate.stat not in _STATS:
+            raise SpecError(f"gate on {gate.metric!r} has unknown stat {gate.stat}")
 
 
 def spec_to_dict(spec: run_pb2.RunSpec) -> dict[str, Any]:
@@ -192,7 +194,14 @@ _STATS = {
     run_pb2.GATE_STAT_MEAN: "mean",
     run_pb2.GATE_STAT_CI_LOW: "ci_low",
     run_pb2.GATE_STAT_CI_HIGH: "ci_high",
+    run_pb2.GATE_STAT_ERROR_RATE: "error_rate",
 }
+
+
+def _error_rate(summary: MetricSummary) -> float | None:
+    """The fraction of a metric's evaluations that errored; skips are left out."""
+    ran = summary.n + summary.errors
+    return summary.errors / ran if ran else None
 
 
 def check_gates(
@@ -213,6 +222,7 @@ def check_gates(
                 "mean": summary.mean,
                 "ci_low": summary.ci.low if summary.ci else None,
                 "ci_high": summary.ci.high if summary.ci else None,
+                "error_rate": _error_rate(summary),
             }[stat]
             result.value = value
             if value is None:

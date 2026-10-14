@@ -297,6 +297,10 @@ func validateGates(spec *evalsiv1alpha1.RunSpec) error {
 		if g.GetMetric() == "" || (g.Min == nil && g.Max == nil) {
 			return invalid("every gate needs a metric and a min or max")
 		}
+		// An unknown stat would otherwise be checked as the mean.
+		if _, known := evalsiv1alpha1.GateStat_name[int32(g.GetStat())]; !known {
+			return invalid("gate on %q has unknown stat %d", g.GetMetric(), g.GetStat())
+		}
 	}
 	// Zero means the default; anything else must be inside (0, 1), which NaN is not.
 	if level := spec.GetSummary().GetConfidenceLevel(); level != 0 && !(level > 0 && level < 1) {
@@ -1081,6 +1085,11 @@ func CheckGates(gates []*evalsiv1alpha1.Gate, summaries []*evalsiv1alpha1.Metric
 			stat = "ci_high"
 			if s.GetCi() != nil {
 				value = proto.Float64(s.GetCi().GetHigh())
+			}
+		case evalsiv1alpha1.GateStat_GATE_STAT_ERROR_RATE:
+			stat = "error_rate"
+			if ran := s.GetN() + s.GetErrors(); ran > 0 {
+				value = proto.Float64(float64(s.GetErrors()) / float64(ran))
 			}
 		default:
 			value = s.Mean

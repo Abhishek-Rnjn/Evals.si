@@ -150,6 +150,10 @@ def test_parse_spec_and_validation() -> None:
         ({**SPEC, "spec": {**SPEC["spec"], "bogus": 1}}, "invalid spec"),
         ({**SPEC, "spec": {**SPEC["spec"], "target": None}}, "needs a target"),
         ({**SPEC, "spec": {**SPEC["spec"], "gates": [{"metric": "x"}]}}, "needs min or max"),
+        (
+            {**SPEC, "spec": {**SPEC["spec"], "gates": [{"metric": "x", "stat": 99, "max": 1}]}},
+            "unknown stat",
+        ),
     ]
     for document, message in bad:
         if document["spec"].get("target", 1) is None:
@@ -226,6 +230,41 @@ def test_errored_trials_count_as_not_passed() -> None:
     assert summaries["exact-match.pass@3"].mean == pytest.approx(1 / 2)
     assert summaries["exact-match.pass@3"].errors == 5
     assert summaries["exact-match.pass^3"].mean == 0
+
+
+def test_error_rate_gate() -> None:
+    # The mean leaves errored records out; the error rate catches a candidate
+    # that errors on most records and passes the rest.
+    summaries = [
+        MetricSummary(metric="flaky", evaluator="e", kind="proportion", n=1, errors=3, mean=1.0),
+        MetricSummary(metric="clean", evaluator="e", kind="proportion", n=4, mean=1.0),
+        MetricSummary(metric="empty", evaluator="e", kind="proportion"),
+    ]
+    rate = run_pb2.GATE_STAT_ERROR_RATE
+    mean, flaky, clean, empty = check_gates(
+        [
+            run_pb2.Gate(metric="flaky", min=0.9),
+            run_pb2.Gate(metric="flaky", stat=rate, max=0.05),
+            run_pb2.Gate(metric="clean", stat=rate, max=0.05),
+            run_pb2.Gate(metric="empty", stat=rate, max=0.05),
+        ],
+        summaries,
+    )
+    assert mean.passed
+    assert (flaky.passed, flaky.value, flaky.stat) == (False, 0.75, "error_rate")
+    assert (clean.passed, clean.value) == (True, 0.0)
+    assert not empty.passed
+    assert "no error_rate" in empty.reason
+    spec = parse_spec(
+        {
+            **SPEC,
+            "spec": {
+                **SPEC["spec"],
+                "gates": [{"metric": "exact-match", "stat": "GATE_STAT_ERROR_RATE", "max": 0.05}],
+            },
+        }
+    )
+    assert spec.spec.gates[0].stat == rate
 
 
 def test_gates_fail_non_finite_values() -> None:
