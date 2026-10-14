@@ -1387,7 +1387,7 @@ The exit criterion runs end to end, verified against a local OpenAI-compatible j
 4. **Packs and adapters.**
    - Packs: `text`, `rag`, `safety` and the trace-based `agent` pack.
    - Adapters in `python/adapters/`, each with its own pinned environment and offline contract tests:
-     - DeepEval (12 metrics) and RAGAS (15 metrics), with their model calls answered by the run's judge;
+     - DeepEval (30 metrics, including JevEval answered by the run's judge) and RAGAS (15 metrics), with their model calls answered by the run's judge;
      - Inspect AI: log import, and Evals.si evaluators as Inspect scorers;
      - lm-eval-harness: an `LM` that generates through our connectors, and a sample-log importer.
    - Importers plug in as `scheme://path` datasets.

@@ -8,14 +8,16 @@ const site = process.env.SITE_URL ?? "https://evalsi.dev";
 const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
 // The link-preview card (scripts/og-image.mjs), absolute as Open Graph requires.
 const ogImage = `${site}${base === "/" ? "" : base}/og.png`;
-// Google Search Console's HTML-tag verification: the content value of the
-// tag it gives you, set as the GOOGLE_SITE_VERIFICATION repository variable.
-const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ?? "";
+// Google Search Console's HTML-tag verification for
+// https://evalsi.dev/ (the value is public: it is in
+// every page). A GOOGLE_SITE_VERIFICATION repository variable overrides it;
+// the same default is in src/pages/index.astro.
+const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 
 const guides = [
   "agent-runs", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-harness",
-  "agent-frameworks", "operations", "end-to-end",
+  "agent-frameworks", "operations", "end-to-end", "deepeval",
 ];
 const examples = [
   "quickstart", "runs", "agents", "watch", "sources", "guardrails", "annotation",

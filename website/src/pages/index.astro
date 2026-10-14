@@ -25,7 +25,8 @@ const siteUrl = new URL(`${base}/`, Astro.site).href;
 const ogImage = new URL(`${base}/og.png`, Astro.site).href;
 const title = "Evals.si (evalsi) · Open-source evaluation for ML models, LLMs, RAG and agents";
 const description = "Evals.si (pip install evalsi) is one entrypoint to evaluate ML models, LLMs, RAG systems and agents: score outputs, gate runs in CI, watch live traces and reward RL training with the same evaluators. Self-hosted, sandboxed, open source.";
-const googleVerification = process.env.GOOGLE_SITE_VERIFICATION ?? "";
+// Search Console verification; the same default as astro.config.mjs.
+const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 const jsonLd = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "SoftwareSourceCode",
@@ -37,7 +38,7 @@ const jsonLd = JSON.stringify({
   programmingLanguage: ["Python", "Go"],
   license: "https://www.apache.org/licenses/LICENSE-2.0",
   sameAs: [repo, "https://pypi.org/project/evalsi/", "https://pypi.org/project/evalsi-harness/"],
-  keywords: "LLM evaluation, agent evaluation, RAG evaluation, LLM-as-a-judge, evals, RL rewards, OpenTelemetry, Kubernetes",
+  keywords: "LLM evaluation, agent evaluation, RAG evaluation, LLM-as-a-judge, G-Eval, JevEval, DeepEval, evals, RL rewards, OpenTelemetry, Kubernetes",
 });
 
 const ecosystem = [
@@ -45,6 +46,7 @@ const ecosystem = [
   "LangGraph", "CrewAI", "OpenAI Agents SDK", "LlamaIndex", "Claude Agent SDK", "OpenInference", "OpenLLMetry",
   "MLflow", "OpenTelemetry", "Langfuse", "Phoenix", "agentgateway", "Kubernetes", "KEDA", "NATS",
   "PostgreSQL", "ClickHouse", "S3", "Firecracker", "TRL", "verl", "OpenRLHF", "MCP", "A2A",
+  "vLLM", "SGLang", "Ollama",
 ];
 
 const tabs = [
@@ -156,10 +158,10 @@ const extras = [
       <div aria-hidden="true" class="pointer-events-none absolute left-1/2 top-[-12rem] -z-10 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(99,102,241,0.35),rgba(45,212,191,0.12),transparent)] blur-2xl"></div>
 
       <div class="mx-auto max-w-6xl px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <a href={doc("/docs/guides/trace-sources/")} class="animate-fade-up inline-block">
+        <a href={doc("/docs/guides/deepeval/")} class="animate-fade-up inline-block">
           <AnimatedGradientText>
             <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
-            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">Trace sources for MLflow, Phoenix and Langfuse, and five agent frameworks tested</span>
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">30 DeepEval metrics and JevEval, decided by a model you host</span>
             <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
           </AnimatedGradientText>
         </a>
@@ -241,6 +243,7 @@ latency        6  <span class="text-indigo-600 font-medium">517.500</span>  [276
             <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>gRPC, gRPC-Web, HTTP/JSON and MCP on one port</li>
             <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>Scores written back to MLflow, Langfuse and Phoenix, or exported over OpenTelemetry</li>
             <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>No default judge, so nothing is billed by surprise</li>
+            <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>Judges on Claude, OpenAI or a model you serve on vLLM, SGLang or Ollama</li>
           </ul>
           <a href={doc("/integrations/")} class="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:gap-3 dark:text-indigo-300 transition-all">Explore integrations <ArrowRight className="size-4" /></a>
         </div>
@@ -299,7 +302,7 @@ latency        6  <span class="text-indigo-600 font-medium">517.500</span>  [276
   <footer class="border-t border-neutral-200 dark:border-white/5">
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 py-8 text-sm text-neutral-500 sm:flex-row sm:px-6">
       <div class="flex items-center gap-3"><span class="[&>svg]:h-6 [&>svg]:w-auto" set:html={logo} /><span>Apache-2.0</span></div>
-      <nav class="flex gap-6">
+      <nav class="flex flex-wrap justify-center gap-x-6 gap-y-2">
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/docs/get-started/")}>Docs</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/examples/")}>Examples</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/integrations/")}>Integrations</a>
