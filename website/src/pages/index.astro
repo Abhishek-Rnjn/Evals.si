@@ -23,8 +23,8 @@ const doc = (p: string) => `${base}${p}`;
 // repository and the PyPI packages, so search engines treat them as one project.
 const siteUrl = new URL(`${base}/`, Astro.site).href;
 const ogImage = new URL(`${base}/og.png`, Astro.site).href;
-const title = "Evals.si (evalsi) · Open-source evaluation for ML models, LLMs, RAG and agents";
-const description = "Evals.si (pip install evalsi) is one entrypoint to evaluate ML models, LLMs, RAG systems and agents: score outputs, gate runs in CI, watch live traces and reward RL training with the same evaluators. Self-hosted, sandboxed, open source.";
+const title = "Evals.si (evalsi) · Open-source evaluation for AI agents, RAG and models, from CI to production to training";
+const description = "Evals.si (pip install evalsi) evaluates AI before you ship, while it runs and as you train it: agents on sandboxed tasks, RAG pipelines, LLMs and models, with CI gates, live trace scoring and RL rewards on one set of evaluators. Self-hosted, sandboxed, open source.";
 // Search Console verification; the same default as astro.config.mjs.
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 const jsonLd = JSON.stringify({
@@ -38,7 +38,7 @@ const jsonLd = JSON.stringify({
   programmingLanguage: ["Python", "Go"],
   license: "https://www.apache.org/licenses/LICENSE-2.0",
   sameAs: [repo, "https://pypi.org/project/evalsi/", "https://pypi.org/project/evalsi-harness/"],
-  keywords: "LLM evaluation, agent evaluation, RAG evaluation, LLM-as-a-judge, G-Eval, JevEval, DeepEval, evals, RL rewards, OpenTelemetry, Kubernetes",
+  keywords: "agent evaluation, AI agent testing, agent CI gates, RAG evaluation, RAG faithfulness, RL rewards, fine-tuning evaluation, LLM evaluation, LLM-as-a-judge, G-Eval, JevEval, DeepEval, evals, RL rewards, OpenTelemetry, Kubernetes",
 });
 
 const ecosystem = [
@@ -50,7 +50,38 @@ const ecosystem = [
 ];
 
 const tabs = [
-  { label: "CLI", lang: "bash", code: `# Install from PyPI and grade outputs you already have
+  { label: "Agent gate", lang: "yaml", code: `# evalsi run -f agent-gate.yaml    exit 0 passes, exit 3 fails the build
+target:
+  agent:
+    cli: {command: [my-agent, --task, "{instruction}"]}
+dataset: {path: tasks.jsonl}
+environment:
+  checker: {command: [pytest, -q, hidden_tests]}   # the agent never sees it
+evaluators: [{ref: task-success}, {ref: policy-violations}]
+trials: 3
+gates:
+  - {metric: task-success.pass^3, min: 0.8}        # 3 passes in a row, on 80% of tasks` },
+  { label: "RAG", lang: "bash", code: `# Retrieval and generation, scored separately
+pip install evalsi
+evalsi eval --data rag.jsonl --evaluators citation-accuracy      # no judge needed
+
+# With a judge (a model you host, or Claude): where does it break?
+evalsi eval --data rag.jsonl \\
+  --evaluators faithfulness,answer-relevance,context-precision,context-recall \\
+  --judge-model my-judge --judge-base-url http://localhost:8000/v1` },
+  { label: "Training", lang: "yaml", code: `# Evaluators as an RL reward for TRL, verl or OpenRLHF
+apiVersion: evals.si/v1alpha1
+kind: RewardSpec
+metadata: {name: math-grpo}
+spec:
+  components:
+    - {ref: format-check, name: format, weight: 0.1}
+    - {ref: math-equiv, name: correct, weight: 1.0}
+    - ref: overlong-penalty
+      name: overlong
+      weight: 1.0
+      params: {max_length: 4096, buffer: 512}` },
+  { label: "Score outputs", lang: "bash", code: `# Install from PyPI and grade outputs you already have
 pip install evalsi
 evalsi eval --data qa.jsonl \\
   --evaluators exact-match,numeric-match,latency
@@ -95,6 +126,39 @@ spec:
   gates: [{metric: task-success, min: 0.3}]` },
 ];
 
+const tracks = [
+  {
+    name: "Agents", badge: "Built first",
+    text: "Put an agent to work on sandboxed tasks and grade what it did, before it ships and while it runs.",
+    points: [
+      "A hidden checker grades the end state; evaluators score tool calls, trajectories, loops and policy violations",
+      "pass@k and pass^k over trials, and gates that fail the build",
+      "Live traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK",
+    ],
+    links: [{ label: "Gate an agent in CI", href: "/docs/guides/gate-an-agent-in-ci/" }, { label: "Agent runs", href: "/docs/guides/agent-runs/" }],
+  },
+  {
+    name: "RAG", badge: "",
+    text: "Retrieval and generation fail differently, so Evals.si scores them separately and tells you which to fix.",
+    points: [
+      "context precision and recall for retrieval; faithfulness and answer relevance for generation",
+      "citation accuracy needs no judge, and a judge can be a model you host",
+      "RAGAS and DeepEval metrics, and a CI gate on your pipeline's recorded answers",
+    ],
+    links: [{ label: "Evaluate a RAG pipeline", href: "/docs/guides/evaluate-rag/" }, { label: "DeepEval and JevEval", href: "/docs/guides/deepeval/" }],
+  },
+  {
+    name: "Training", badge: "",
+    text: "Evaluators become the reward and the regression check while you fine-tune or run RL.",
+    points: [
+      "Rewards for TRL, verl and OpenRLHF: format, math equivalence, sandboxed code tests and reward models",
+      "Every checkpoint compared with the base model, record by record",
+      "Regression gates that fail on significant drops",
+    ],
+    links: [{ label: "Fine-tuning and RL", href: "/docs/guides/fine-tuning/" }, { label: "Examples", href: "/examples/finetuning/" }],
+  },
+];
+
 const extras = [
   { name: "Trace sources", text: "Score traces kept in MLflow, Phoenix or Langfuse, and write scores back", href: "/docs/guides/trace-sources/" },
   { name: "Agent frameworks", text: "LangGraph, CrewAI, OpenAI Agents, LlamaIndex, Claude Agent SDK", href: "/docs/guides/agent-frameworks/" },
@@ -123,7 +187,7 @@ const extras = [
   <meta property="og:image" content={ogImage} />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Evals.si: one entrypoint to evaluate ML models, LLMs, RAG systems and agents" />
+  <meta property="og:image:alt" content="Evals.si: evaluate AI before you ship, while it runs, and as you train it" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content={title} />
   <meta name="twitter:description" content={description} />
@@ -158,20 +222,21 @@ const extras = [
       <div aria-hidden="true" class="pointer-events-none absolute left-1/2 top-[-12rem] -z-10 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(99,102,241,0.35),rgba(45,212,191,0.12),transparent)] blur-2xl"></div>
 
       <div class="mx-auto max-w-6xl px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <a href={doc("/docs/guides/deepeval/")} class="animate-fade-up inline-block">
+        <a href={doc("/docs/guides/gate-an-agent-in-ci/")} class="animate-fade-up inline-block">
           <AnimatedGradientText>
             <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
-            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">30 DeepEval metrics and JevEval, decided by a model you host</span>
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">Gate an agent in CI: a free, offline walkthrough</span>
             <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
           </AnimatedGradientText>
         </a>
 
-        <h1 class="animate-fade-up mx-auto mt-8 max-w-4xl text-balance text-5xl font-extrabold tracking-tight [animation-delay:80ms] sm:text-7xl">
-          One entrypoint to evaluate{" "}
-          <span class="bg-gradient-to-r from-indigo-500 via-violet-400 to-teal-400 bg-clip-text text-transparent">everything</span>.
+        <h1 class="animate-fade-up mx-auto mt-8 max-w-4xl text-balance text-4xl font-extrabold tracking-tight [animation-delay:80ms] sm:text-6xl">
+          Evaluate{" "}
+          <span class="bg-gradient-to-r from-indigo-500 via-violet-400 to-teal-400 bg-clip-text text-transparent">AI</span>{" "}
+          before you ship, while it runs, and as you train it.
         </h1>
         <p class="animate-fade-up mx-auto mt-6 max-w-2xl text-pretty text-lg text-neutral-600 [animation-delay:160ms] sm:text-xl dark:text-neutral-400">
-          Classic ML models, LLMs, RAG systems, agents and RL checkpoints, offline and online. Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
+          Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs and CI gates, live trace scoring, and RL rewards for training. Built first for agents. Self-hosted, from a laptop to Kubernetes.
         </p>
         <div class="animate-fade-up mt-10 flex flex-wrap items-center justify-center gap-4 [animation-delay:240ms]">
           <RainbowButton href={doc("/docs/get-started/")}>Get started <ArrowRight className="size-4" /></RainbowButton>
@@ -193,14 +258,15 @@ const extras = [
               <span class="size-3 rounded-full bg-[#ff5f57]"></span><span class="size-3 rounded-full bg-[#febc2e]"></span><span class="size-3 rounded-full bg-[#28c840]"></span>
               <span class="ml-3 font-mono text-xs text-neutral-500">evalsi eval</span>
             </div>
-            <pre class="overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed text-neutral-700 sm:text-[13.5px]"><code><span class="text-teal-600">$</span> uv run evalsi eval --data qa.jsonl --evaluators exact-match,numeric-match,latency
+            <pre class="overflow-x-auto p-5 font-mono text-[12.5px] leading-relaxed text-neutral-700 sm:text-[13.5px]"><code><span class="text-teal-600">$</span> evalsi eval --data agent-runs.jsonl --evaluators tool-call-accuracy,tool-errors,loop-detection
 
-<span class="text-neutral-400">6 records · 3 evaluators</span>
+<span class="text-neutral-400">2 records · 3 evaluators</span>
 
-<span class="text-neutral-400">metric         n  mean     95% CI              skipped  errors</span>
-exact-match    6  <span class="text-indigo-600 font-medium">0.333</span>    [0.097, 0.700]            0       0
-numeric-match  3  <span class="text-indigo-600 font-medium">0.667</span>    [0.208, 0.939]            <span class="text-amber-600">3</span>       0
-latency        6  <span class="text-indigo-600 font-medium">517.500</span>  [276.409, 758.591]        0       0</code></pre>
+<span class="text-neutral-400">metric                        n  mean   95% CI          skipped  errors</span>
+tool-call-accuracy.recall     2  <span class="text-indigo-600 font-medium">0.750</span>  [0.000, 1.000]        0       0
+tool-call-accuracy.precision  2  <span class="text-indigo-600 font-medium">0.667</span>  [0.000, 1.000]        0       0
+tool-errors                   2  <span class="text-indigo-600 font-medium">0.500</span>  [0.000, 1.000]        0       0
+loop-detection                2  <span class="text-amber-600 font-medium">0.500</span>  [0.095, 0.905]        0       0</code></pre>
             <BorderBeam size={250} duration={10} />
           </div>
         </div>
@@ -225,10 +291,40 @@ latency        6  <span class="text-indigo-600 font-medium">517.500</span>  [276
     <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
       <div class="mx-auto mb-12 max-w-2xl text-center">
         <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">Four doors, one platform</p>
-        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Score it, run it, watch it, reward it</h2>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Run it, watch it, score it, reward it</h2>
         <p class="mt-4 text-neutral-600 dark:text-neutral-400">The same evaluators work in every mode, so a metric means the same thing in CI, in production and in training.</p>
       </div>
       <Doors base={base} client:visible />
+    </section>
+
+    <!-- Tracks -->
+    <section class="mx-auto max-w-6xl px-4 pb-8 sm:px-6">
+      <div class="mx-auto mb-12 max-w-2xl text-center">
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">Built for what you are building</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Agents, RAG and training</h2>
+        <p class="mt-4 text-neutral-600 dark:text-neutral-400">Agents come first because that is where evaluation is hardest. RAG and training are first-class too, and every track uses the same evaluators.</p>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-3">
+        {tracks.map((t) => (
+          <div class="flex flex-col rounded-2xl border border-neutral-200 p-6 dark:border-white/10">
+            <div class="flex items-center justify-between">
+              <h3 class="text-xl font-semibold">{t.name}</h3>
+              {t.badge && <span class="rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-xs font-medium text-indigo-600 dark:text-indigo-300">{t.badge}</span>}
+            </div>
+            <p class="mt-2 text-sm text-neutral-500 dark:text-neutral-400">{t.text}</p>
+            <ul class="mt-4 space-y-2 text-sm text-neutral-600 dark:text-neutral-400">
+              {t.points.map((p) => (
+                <li class="flex gap-3"><span class="mt-1.5 size-1.5 shrink-0 rounded-full bg-teal-400"></span>{p}</li>
+              ))}
+            </ul>
+            <div class="mt-6 flex flex-wrap gap-x-5 gap-y-2 pt-2 text-sm font-semibold text-indigo-600 dark:text-indigo-300">
+              {t.links.map((l) => (
+                <a href={doc(l.href)} class="inline-flex items-center gap-1 transition-all hover:gap-2">{l.label} <ArrowRight className="size-4" /></a>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
 
     <!-- Architecture -->

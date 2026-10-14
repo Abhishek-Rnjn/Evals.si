@@ -44,7 +44,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="evalsi", description="Evaluate ML models, LLMs and agents."
+        prog="evalsi",
+        description="Evaluate AI agents, RAG pipelines, LLMs and models, from CI to training.",
     )
     parser.add_argument("--version", action="version", version=f"evalsi {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)

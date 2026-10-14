@@ -1,11 +1,11 @@
 [project]
 name = "evalsi-harness"
 dynamic = ["version"]
-description = "The light built-in agent harness for Evals.si: tool loop, MCP tools, sandboxes, user simulator, record and replay."
+description = "The agent harness for Evals.si: run and grade AI agents on sandboxed tasks, with a tool loop, MCP tools, a user simulator, record and replay."
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Abhishek Ranjan" }]
-keywords = ["evaluation", "agents", "agent-harness", "sandbox", "mcp", "benchmarks", "rl-environments"]
+keywords = ["agents", "agent-evaluation", "ai-agents", "evaluation", "agent-harness", "sandbox", "mcp", "benchmarks", "ci", "rl-environments"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

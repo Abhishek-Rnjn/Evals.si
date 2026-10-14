@@ -1,0 +1,16 @@
+# A gate over a RAG pipeline's recorded answers: each record carries the
+# question (input), the answer (output), the retrieved passages (context) and
+# the expected answer (reference). No model, no server and no judge needed:
+#   pip install evalsi
+#   evalsi run -f gate.yaml        # exit 3: the second answer cites [4], and there are two passages
+# Add judge-based metrics (faithfulness, answer-relevance, context-precision,
+# context-recall) by listing them below and passing --judge-* options.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: rag-gate}
+spec:
+  dataset: {path: rag.jsonl}
+  evaluators:
+    - ref: citation-accuracy
+  gates:
+    - {metric: citation-accuracy, min: 0.9}

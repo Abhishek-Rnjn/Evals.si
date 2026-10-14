@@ -2,9 +2,9 @@
 
 # Evals.si
 
-**One entrypoint to evaluate classic ML models, LLMs, RAG systems, agents and RL checkpoints, offline and online.**
+**Evaluate AI before you ship, while it runs, and as you train it.**
 
-Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
+Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs and CI gates, live trace scoring, and RL rewards for training. Built first for agents. Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
 
 [![CI](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml)
 [![Docs](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/website.yml/badge.svg)](https://evalsi.dev/)
@@ -23,30 +23,78 @@ Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
 
 ---
 
-Evals.si grades outputs you already have, runs a model or an agent on a dataset and gates on the result, and scores live agent traffic as it happens. The same evaluators work in every mode, so a metric means the same thing in CI, in production and in training.
+Evals.si evaluates an AI system across its life. **Before you ship**, it runs agents, RAG pipelines and models on datasets and sandboxed tasks, and fails the build when a gate fails. **While it runs**, it scores live traces as they arrive and writes the scores back to the MLflow, Phoenix or Langfuse your team already uses. **As you train it**, the same evaluators become RL rewards and checkpoint checks for fine-tuning. One set of evaluators serves all three, so a metric means the same thing in CI, in production and in training.
 
 ## Try it in 30 seconds
 
-No clone and no server. You need Python 3.11+.
+No clone, no server and no API key. You need Python 3.11+.
+
+### An agent
+
+Score two recorded agent runs on their tool calls:
 
 ```bash
 pip install evalsi
-cat > qa.jsonl <<'JSONL'
-{"id": "capital-fr", "input": "What is the capital of France?", "output": "Paris", "reference": "Paris"}
-{"id": "capital-jp", "input": "What is the capital of Japan?", "output": "Kyoto", "reference": "Tokyo"}
-{"id": "capital-au", "input": "What is the capital of Australia?", "output": "canberra", "reference": ["Canberra", "Canberra, ACT"]}
+cat > agent-runs.jsonl <<'JSONL'
+{"id": "refund-ok", "input": "Refund order 42", "output": "Refunded order 42.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 42}}, {"name": "refund", "arguments": {"id": 42}}]}, "trajectory": {"steps": [{"type": "tool", "name": "lookup_order", "input": {"json": {"id": 42}}, "output": {"text": "paid"}}, {"type": "tool", "name": "refund", "input": {"json": {"id": 42}}, "output": {"text": "ok"}}]}}
+{"id": "refund-loop", "input": "Refund order 7", "output": "Sorry, I could not do that.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 7}}, {"name": "refund", "arguments": {"id": 7}}]}, "trajectory": {"steps": [{"type": "tool", "name": "lookup_order", "input": {"json": {"id": 7}}, "error": "timeout"}, {"type": "tool", "name": "lookup_order", "input": {"json": {"id": 7}}, "error": "timeout"}, {"type": "tool", "name": "lookup_order", "input": {"json": {"id": 7}}, "error": "timeout"}]}}
 JSONL
-evalsi eval --data qa.jsonl --evaluators exact-match
+evalsi eval --data agent-runs.jsonl --evaluators tool-call-accuracy,tool-errors,loop-detection
 ```
 
 ```text
-3 records · 1 evaluator
+2 records · 3 evaluators
 
-metric       n  mean   95% CI          skipped  errors
-exact-match  3  0.667  [0.208, 0.939]        0       0
+metric                        n  mean   95% CI          skipped  errors
+tool-call-accuracy.recall     2  0.750  [0.000, 1.000]        0       0
+tool-call-accuracy.precision  2  0.667  [0.000, 1.000]        0       0
+tool-errors                   2  0.500  [0.000, 1.000]        0       0
+loop-detection                2  0.500  [0.095, 0.905]        0       0
 ```
 
-Two of the three outputs match their reference (the second says Kyoto, not Tokyo), and the table says how sure that number is. Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md), [add a judge](#add-a-judge), [run a model or an agent on a dataset](#a-tour) or [score live traces](docs/guides/trace-sources.md). The docs are at [evalsi.dev](https://evalsi.dev/).
+The first run made both expected calls. The second called `lookup_order` three times in a row, failed each time and never refunded. The table shows what that does to each metric, and how wide the interval is with two runs.
+
+### A RAG pipeline
+
+Check a RAG pipeline's recorded answers, then gate on them:
+
+```bash
+cat > rag.jsonl <<'JSONL'
+{"id": "refund-window", "input": "How long is the refund window?", "output": "Refunds are accepted for 30 days [1].", "context": ["Our policy allows refunds within 30 days of purchase.", "Shipping takes 3-5 business days."], "reference": "30 days"}
+{"id": "shipping-time", "input": "How long does shipping take?", "output": "Shipping takes 3-5 business days [4].", "context": ["Our policy allows refunds within 30 days of purchase.", "Shipping takes 3-5 business days."], "reference": "3-5 business days"}
+JSONL
+evalsi eval --data rag.jsonl --evaluators citation-accuracy
+```
+
+```text
+2 records · 1 evaluator
+
+metric             n  mean   95% CI          skipped  errors
+citation-accuracy  2  0.500  [0.095, 0.905]        0       0
+```
+
+The second answer cites passage `[4]`, but only two passages were retrieved. Add a judge and the `faithfulness`, `answer-relevance`, `context-precision` and `context-recall` metrics tell you whether retrieval or generation is at fault ([guide](docs/guides/evaluate-rag.md)).
+
+Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
+
+## What you can evaluate
+
+Agents come first, because that is where evaluation is hardest. RAG and training are first-class too, and the evaluators are shared, so what you learn on one carries to the others.
+
+### Agents
+
+Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. A hidden checker grades the end state, and evaluators score tool calls, trajectories, loops, step budgets, policy violations and the diff. Trials give pass@k and pass^k, and gates fail the build when an agent gets worse. In production, score traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK.
+[Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) · [Evaluate a RAG pipeline](docs/guides/evaluate-rag.md) · [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md)
+
+### RAG
+
+Retrieval and generation fail differently, so they are scored separately: `context-precision` and `context-recall` for retrieval, `faithfulness` and `answer-relevance` for generation, and `citation-accuracy`, which needs no judge. Use the built-in metrics, or RAGAS and DeepEval's, through a judge you choose, including a model you host. Gate a pipeline in CI on its recorded answers, and read every mean with its confidence interval.
+[Evaluate a RAG pipeline](docs/guides/evaluate-rag.md) · [DeepEval and JevEval](docs/guides/deepeval.md) · [Example](examples/rag/)
+
+### Training and fine-tuning
+
+Evaluators become RL rewards for TRL, verl and OpenRLHF: format checks, math equivalence, sandboxed code tests and served reward models, composed by a `RewardSpec` into one reward per rollout with a breakdown per component. Every saved checkpoint is evaluated against your run specs, compared with the base model record by record, and regression gates fail on significant drops.
+[Fine-tuning and RL](docs/guides/fine-tuning.md) · [Example](examples/finetuning/)
 
 ## How it fits with other tools
 
@@ -56,18 +104,22 @@ Evals.si does not replace metric libraries and benchmarks. It runs them, and add
 |---|---|
 | A library of metrics inside your own test suite | [DeepEval](docs/guides/deepeval.md) or RAGAS (both also run here as adapters) |
 | Standard benchmarks and harnesses | lm-evaluation-harness or Inspect AI (both also run here as adapters) |
-| One place that runs those and your own evaluators on a dataset, with trials, budgets and pass/fail gates | **Evals.si** |
-| Scores on live agent traffic, written back to your trace store (MLflow, Phoenix, Langfuse) | **Evals.si** |
+| An agent run on sandboxed tasks, graded on the end state, with pass/fail gates for CI and deploys | **Evals.si** |
+| RAG metrics split into retrieval and generation, as a gate in CI | **Evals.si** |
+| Scores on live traffic, written back to your trace store (MLflow, Phoenix, Langfuse) | **Evals.si** |
+| RL rewards and checkpoint regression checks from the same evaluators | **Evals.si** |
 | Untrusted evaluator or agent code in a sandbox, self-hosted or air-gapped | **Evals.si** |
-| The same metric definition in CI, production monitoring and RL training rewards | **Evals.si** |
 
 If you only need a handful of metrics in a pytest file, a metric library alone is simpler. Evals.si is for when evaluations become a pipeline.
 
 ## Highlights
 
-- **Four ways in.** **Score** outputs you have, **Run** a target (model, RAG pipeline or agent) on a dataset with trials, gates and budgets, **Watch** live traces with online policies, and **Reward** RL training with the same evaluators.
-- **Agents, offline and online.** Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. Score production traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK, each tested against recorded traces.
+- **Before, during and after.** Gate a pull request or a deploy, score live traces as they arrive, and reward or check a model as it trains, all with the same evaluators and the same metric definitions.
+- **Built first for agents.** Sandboxed tasks, a hidden checker, tool-call and trajectory evaluators, pass@k and pass^k over trials, and gates that fail the build ([guide](docs/guides/gate-an-agent-in-ci.md)).
+- **RAG, scored where it breaks.** Retrieval and generation metrics side by side, with or without a judge, plus RAGAS and DeepEval ([guide](docs/guides/evaluate-rag.md)).
+- **Training, not only testing.** Evaluators as RL rewards for TRL, verl and OpenRLHF, and checkpoint checks against the base model ([guide](docs/guides/fine-tuning.md)).
 - **Works with your trace store.** Push OpenTelemetry (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or let a trace source read MLflow, Phoenix or Langfuse, score the traces and write the scores back where your team already looks.
+- **Four ways in.** **Run** an agent, a model or a RAG pipeline on a dataset with trials, gates and budgets, **Watch** live traces with online policies, **Score** outputs you already have, and **Reward** RL training.
 - **Pipeline controls.** Upload JSONL/Parquet datasets, retry keyed API writes without repeating execution, delete finished runs to recover quotas, or schedule bounded UTC trace-query windows as batch reports. See [pipeline contracts](docs/guides/integrate-an-agent-harness.md#5-pipeline-writes-datasets-and-retention) and [scheduled pulls](docs/guides/trace-sources.md#scheduled-batch-reports).
 - **Pluggable.** lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as isolated adapters; your own evaluators are Python functions or sandboxed Wasm modules. DeepEval brings 30 metrics for RAG, agents, safety and conversations, including G-Eval and JevEval.
 - **Judges you choose, including your own.** Use Claude, OpenAI or any OpenAI-compatible server. JevEval's questions can be answered by a model you serve on vLLM, SGLang or Ollama, with the probabilities read off its token logprobs ([guide](docs/guides/deepeval.md)).

@@ -1,8 +1,8 @@
 # evalsi
 
-**One entrypoint to evaluate classic ML models, LLMs, RAG systems, agents and RL checkpoints, offline and online.**
+**Evaluate AI before you ship, while it runs, and as you train it.**
 
-`evalsi` is the Python SDK and CLI of [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si), a pluggable, sandboxed and self-hosted evaluation service. The same evaluators score outputs you already have, run a model or an agent on a dataset and gate on the result, score live agent traffic, and reward RL training, so a metric means the same thing in CI, in production and in training.
+`evalsi` is the Python SDK and CLI of [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si), a pluggable, sandboxed and self-hosted evaluation service. Before you ship, it runs agents, RAG pipelines and models on datasets and sandboxed tasks and fails the build when a gate fails. While it runs, it scores live traces. As you train, the same evaluators become RL rewards and checkpoint checks. Agents come first, and a metric means the same thing in CI, in production and in training.
 
 [Documentation](https://evalsi.dev/) ·
 [GitHub](https://github.com/Abhishek-Rnjn/Evals.si) ·
@@ -11,10 +11,12 @@
 
 ## Why Evals.si
 
-- **Four ways in.** **Score** outputs you have, **Run** a target (model, RAG pipeline or agent) on a dataset with trials, gates and budgets, **Watch** live traces with online policies, and **Reward** RL training with the same evaluators.
+- **Built first for agents.** Agents run on sandboxed tasks (SWE-bench, τ-bench, Terminal-Bench, BFCL) and a hidden checker grades the end state. Evaluators score tool calls, trajectories, loops, step budgets and policy violations, with pass@k and pass^k over trials, and gates fail the build when an agent gets worse.
+- **RAG, scored where it breaks.** Retrieval (`context-precision`, `context-recall`) and generation (`faithfulness`, `answer-relevance`) are scored separately, plus `citation-accuracy`, which needs no judge. RAGAS and DeepEval metrics run through your judge.
+- **Training, not only testing.** Evaluators become RL rewards for TRL, verl and OpenRLHF, and every checkpoint is checked against the base model with regression gates.
+- **Live traffic.** Production traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK are scored as they arrive, and the scores go back to MLflow, Phoenix or Langfuse.
+- **Four ways in.** **Run** an agent, a model or a RAG pipeline on a dataset with trials, gates and budgets, **Watch** live traces with online policies, **Score** outputs you have, and **Reward** RL training with the same evaluators.
 - **Honest numbers.** Every mean has a confidence interval. Records an evaluator can't judge are skipped, never scored as zero, and evaluator failures are errors. There is no default judge, so nothing is billed by surprise.
-- **Agents, offline and online.** Agents run on sandboxed tasks (SWE-bench, τ-bench, Terminal-Bench, BFCL), and production traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK are scored as they arrive.
-- **Works with your trace store.** Push OpenTelemetry, or read MLflow, Phoenix or Langfuse and write the scores back where your team already looks.
 - **Pluggable.** Your evaluators are Python functions or sandboxed Wasm modules; lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as adapters. DeepEval's 30 metrics include G-Eval and JevEval, whose decisions can come from token logprobs of a model you serve on vLLM, SGLang or Ollama.
 - **Fails closed.** Untrusted code runs in Firecracker microVMs, bubblewrap, Landlock or hardened pods, never with weaker isolation than asked.
 

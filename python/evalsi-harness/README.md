@@ -1,6 +1,6 @@
 # evalsi-harness
 
-**The built-in agent harness for [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si).** It drives an agent through a task in an Evals.si sandbox and grades the end state, for evaluation and for RL environments.
+**The built-in agent harness for [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si), which evaluates AI before you ship, while it runs and as you train it.** It drives an agent through a task in an Evals.si sandbox and grades the end state, so you can evaluate and gate agents in CI, and use the same tasks as RL environments.
 
 [Documentation](https://evalsi.dev/) ·
 [Agent runs guide](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/guides/agent-runs.md) ·
