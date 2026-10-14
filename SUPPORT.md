@@ -2,7 +2,7 @@
 
 ## Getting help
 
-- Read the [documentation](https://abhishek-rnjn.github.io/Evals.si/) and the [guides](docs/guides/).
+- Read the [documentation](https://evalsi.dev/) and the [guides](docs/guides/).
 - Ask a question or report a bug in a [GitHub issue](https://github.com/Abhishek-Rnjn/Evals.si/issues/new/choose).
 - Report security problems privately: see [SECURITY.md](SECURITY.md).
 

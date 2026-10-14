@@ -8,6 +8,7 @@ Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
 
 [![CI](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml)
 [![Docs](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/website.yml/badge.svg)](https://evalsi.dev/)
+[![PyPI](https://img.shields.io/pypi/v/evalsi.svg)](https://pypi.org/project/evalsi/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)
@@ -23,6 +24,44 @@ Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
 ---
 
 Evals.si grades outputs you already have, runs a model or an agent on a dataset and gates on the result, and scores live agent traffic as it happens. The same evaluators work in every mode, so a metric means the same thing in CI, in production and in training.
+
+## Try it in 30 seconds
+
+No clone and no server. You need Python 3.11+.
+
+```bash
+pip install evalsi
+cat > qa.jsonl <<'JSONL'
+{"id": "capital-fr", "input": "What is the capital of France?", "output": "Paris", "reference": "Paris"}
+{"id": "capital-jp", "input": "What is the capital of Japan?", "output": "Kyoto", "reference": "Tokyo"}
+{"id": "capital-au", "input": "What is the capital of Australia?", "output": "canberra", "reference": ["Canberra", "Canberra, ACT"]}
+JSONL
+evalsi eval --data qa.jsonl --evaluators exact-match
+```
+
+```text
+3 records · 1 evaluator
+
+metric       n  mean   95% CI          skipped  errors
+exact-match  3  0.667  [0.208, 0.939]        0       0
+```
+
+Two of the three outputs match their reference (the second says Kyoto, not Tokyo), and the table says how sure that number is. Next: [add a judge](#add-a-judge), [run a model or an agent on a dataset](#a-tour) or [score live traces](docs/guides/trace-sources.md). The docs are at [evalsi.dev](https://evalsi.dev/).
+
+## How it fits with other tools
+
+Evals.si does not replace metric libraries and benchmarks. It runs them, and adds what they leave to you: running targets, gating, live scoring and isolation.
+
+| You want | Use |
+|---|---|
+| A library of metrics inside your own test suite | [DeepEval](docs/guides/deepeval.md) or RAGAS (both also run here as adapters) |
+| Standard benchmarks and harnesses | lm-evaluation-harness or Inspect AI (both also run here as adapters) |
+| One place that runs those and your own evaluators on a dataset, with trials, budgets and pass/fail gates | **Evals.si** |
+| Scores on live agent traffic, written back to your trace store (MLflow, Phoenix, Langfuse) | **Evals.si** |
+| Untrusted evaluator or agent code in a sandbox, self-hosted or air-gapped | **Evals.si** |
+| The same metric definition in CI, production monitoring and RL training rewards | **Evals.si** |
+
+If you only need a handful of metrics in a pytest file, a metric library alone is simpler. Evals.si is for when evaluations become a pipeline.
 
 ## Highlights
 

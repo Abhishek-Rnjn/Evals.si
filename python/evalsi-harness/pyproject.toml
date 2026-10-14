@@ -35,8 +35,8 @@ harbor = "evalsi_harness.benchmarks.harbor:load_harbor"
 terminal-bench = "evalsi_harness.benchmarks.harbor:load_terminal_bench"
 
 [project.urls]
-Homepage = "https://abhishek-rnjn.github.io/Evals.si/"
-Documentation = "https://abhishek-rnjn.github.io/Evals.si/"
+Homepage = "https://evalsi.dev/"
+Documentation = "https://evalsi.dev/"
 Repository = "https://github.com/Abhishek-Rnjn/Evals.si"
 Issues = "https://github.com/Abhishek-Rnjn/Evals.si/issues"
 Changelog = "https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md"
