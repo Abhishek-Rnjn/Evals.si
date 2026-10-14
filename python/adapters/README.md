@@ -34,6 +34,9 @@ adapter does not slow down `evalsi`.
 
 ### DeepEval: traces, conversations and JevEval
 
+The [DeepEval and JevEval guide](../../docs/guides/deepeval.md) has the full
+reference. In brief:
+
 - **Agent traces.** Metrics that read a trace (`step-efficiency`,
   `plan-quality`, `plan-adherence`, and `task-completion` when there is one)
   get the record's trajectory as a DeepEval trace: one agent span whose
@@ -79,7 +82,7 @@ A local model needs no key:
 judges:
   decider:
     provider: openai-compatible
-    model: Qwen/Qwen3-8B
+    model: Qwen/Qwen2.5-7B-Instruct
     base_url: http://vllm.models.svc:8000/v1
     temperature: 0
 ```
@@ -94,7 +97,7 @@ spec:
 ```
 
 In-process, point the judge at it with
-`--judge-base-url http://localhost:8000/v1 --judge-model Qwen/Qwen3-8B`.
+`--judge-base-url http://localhost:8000/v1 --judge-model Qwen/Qwen2.5-7B-Instruct`.
 
 ```yaml
 evaluators:

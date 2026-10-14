@@ -30,7 +30,8 @@ Evals.si grades outputs you already have, runs a model or an agent on a dataset 
 - **Agents, offline and online.** Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. Score production traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK, each tested against recorded traces.
 - **Works with your trace store.** Push OpenTelemetry (OTel GenAI, OpenInference, OpenLLMetry, MLflow), or let a trace source read MLflow, Phoenix or Langfuse, score the traces and write the scores back where your team already looks.
 - **Pipeline controls.** Upload JSONL/Parquet datasets, retry keyed API writes without repeating execution, delete finished runs to recover quotas, or schedule bounded UTC trace-query windows as batch reports. See [pipeline contracts](docs/guides/integrate-an-agent-harness.md#5-pipeline-writes-datasets-and-retention) and [scheduled pulls](docs/guides/trace-sources.md#scheduled-batch-reports).
-- **Pluggable.** lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as isolated adapters; your own evaluators are Python functions or sandboxed Wasm modules.
+- **Pluggable.** lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as isolated adapters; your own evaluators are Python functions or sandboxed Wasm modules. DeepEval brings 30 metrics for RAG, agents, safety and conversations, including G-Eval and JevEval.
+- **Judges you choose, including your own.** Use Claude, OpenAI or any OpenAI-compatible server. JevEval's questions can be answered by a model you serve on vLLM, SGLang or Ollama, with the probabilities read off its token logprobs ([guide](docs/guides/deepeval.md)).
 - **Honest numbers.** Every mean has a confidence interval. Records an evaluator can't judge are skipped, never scored as zero, and evaluator failures are errors. There is no default judge, so nothing is billed by surprise.
 - **Fails closed.** Untrusted code runs in Firecracker microVMs where available, else bubblewrap or Landlock, else hardened pods, and never with weaker isolation than asked.
 - **Runs in your environment.** A single binary, or Helm charts and an operator with CRDs. Self-hosted and air-gappable, with your own models, storage, identity and secrets.
@@ -81,6 +82,8 @@ uv run evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators llm-judge
 ```
 
 Judge responses are cached by content hash, so re-running an unchanged evaluation costs nothing. Pass `--no-cache` to force fresh calls.
+
+A judge served on vLLM, SGLang or Ollama can also give its decisions as probabilities read off its token logprobs, rather than as text. JevEval's questions use this with `decisions: logprobs`; see the [DeepEval and JevEval guide](docs/guides/deepeval.md).
 
 ### From Python
 
@@ -180,7 +183,7 @@ Each row is a real run of the framework, checked in and tested; the [agent frame
 | `ml-classic` | classification, regression and ranking metrics |
 | `ml-monitoring` | drift (PSI, KS, Jensen-Shannon), data quality, group fairness |
 
-DeepEval, RAGAS, Inspect AI and lm-evaluation-harness, and the SWE-bench, τ-bench and BFCL benchmarks, live in [`python/adapters`](python/adapters/README.md), each in its own pinned environment. Community evaluators can be [Wasm modules](docs/guides/plugins.md) with no filesystem, network or clock, installed from a plugin index.
+DeepEval, RAGAS, Inspect AI and lm-evaluation-harness, and the SWE-bench, τ-bench and BFCL benchmarks, live in [`python/adapters`](python/adapters/README.md), each in its own pinned environment. The [DeepEval guide](docs/guides/deepeval.md) covers its 30 metrics for RAG, agent traces, safety and conversations. It also covers G-Eval and JevEval, metrics you define as criteria or as weighted questions, whose decisions can come from a model you host. Community evaluators can be [Wasm modules](docs/guides/plugins.md) with no filesystem, network or clock, installed from a plugin index.
 
 ### Kubernetes
 
@@ -272,7 +275,7 @@ What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md)
 |---|---|---|
 | [Documentation site](https://abhishek-rnjn.github.io/Evals.si/) | [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
 | [End-to-end guide](docs/guides/end-to-end.md) | [Kubernetes](docs/guides/kubernetes.md) · [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md) · [Identity](docs/guides/identity.md) | [Decision records](docs/decisions/README.md) |
-| [Examples](examples/) | [Guardrails](docs/guides/guardrails.md) · [MCP](docs/guides/mcp.md) · [Plugins](docs/guides/plugins.md) · [Webhooks](docs/guides/webhooks.md) | [Product requirements](docs/PRD.md) |
+| [Examples](examples/) | [Guardrails](docs/guides/guardrails.md) · [MCP](docs/guides/mcp.md) · [Plugins](docs/guides/plugins.md) · [DeepEval and JevEval](docs/guides/deepeval.md) · [Webhooks](docs/guides/webhooks.md) | [Product requirements](docs/PRD.md) |
 | [Integrate an agent harness](docs/guides/integrate-an-agent-harness.md) | [Annotation](docs/guides/annotation.md) · [Fine-tuning and RL](docs/guides/fine-tuning.md) · [Web UI](docs/guides/web-ui.md) | [Roadmap and leftovers](docs/LEFTOVERS.md) |
 
 ## Repository layout

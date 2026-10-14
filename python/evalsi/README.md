@@ -15,7 +15,7 @@
 - **Honest numbers.** Every mean has a confidence interval. Records an evaluator can't judge are skipped, never scored as zero, and evaluator failures are errors. There is no default judge, so nothing is billed by surprise.
 - **Agents, offline and online.** Agents run on sandboxed tasks (SWE-bench, τ-bench, Terminal-Bench, BFCL), and production traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK are scored as they arrive.
 - **Works with your trace store.** Push OpenTelemetry, or read MLflow, Phoenix or Langfuse and write the scores back where your team already looks.
-- **Pluggable.** Your evaluators are Python functions or sandboxed Wasm modules; lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as adapters.
+- **Pluggable.** Your evaluators are Python functions or sandboxed Wasm modules; lm-evaluation-harness, Inspect AI, RAGAS and DeepEval run as adapters. DeepEval's 30 metrics include G-Eval and JevEval, whose decisions can come from token logprobs of a model you serve on vLLM, SGLang or Ollama.
 - **Fails closed.** Untrusted code runs in Firecracker microVMs, bubblewrap, Landlock or hardened pods, never with weaker isolation than asked.
 
 ## Install

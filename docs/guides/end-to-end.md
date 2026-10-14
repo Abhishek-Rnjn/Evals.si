@@ -162,6 +162,8 @@ uv run evalsi eval --data qa.jsonl --evaluators ragas/faithfulness,deepeval/g-ev
 
 DeepEval and RAGAS keep their own prompts and scoring, but their model calls go through your judge, so they are cached, rate-limited and costed like every other judge call, and the framework never reads a provider key.
 
+DeepEval's JevEval scores weighted questions you write: true or false, scales and choices. Your judge answers them, either stating its probabilities or, with `decisions: logprobs` on a model you serve on vLLM, SGLang or Ollama, with probabilities read off its token logprobs. The [DeepEval and JevEval guide](deepeval.md) covers every metric, how records map onto DeepEval's test cases and traces, and how to run a decider on your own model.
+
 ## 4. Run: execute a target, gate on the result
 
 A run spec generates outputs from a target, scores them, and checks gates. [`examples/runs/capitals.yaml`](../../examples/runs/capitals.yaml):

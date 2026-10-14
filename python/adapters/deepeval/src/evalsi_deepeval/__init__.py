@@ -931,6 +931,10 @@ PACK = Pack(
 )
 
 __all__ = [
+    "CONVERSATIONAL_G_EVAL",
+    "CONVERSATIONAL_JEV_EVAL",
+    "G_EVAL",
+    "JEV_EVAL",
     "METRICS",
     "PACK",
     "conversation",

@@ -1,4 +1,4 @@
-import { Boxes, Cpu, KeyRound, Puzzle, ServerCog, ShieldCheck, Sparkles } from "lucide-react";
+import { Boxes, Cpu, Gauge, KeyRound, Puzzle, ServerCog, ShieldCheck, Sparkles } from "lucide-react";
 import { BentoCard, BentoGrid } from "./ui/bento-grid";
 import { Marquee } from "./ui/marquee";
 
@@ -93,6 +93,34 @@ function Identity() {
   );
 }
 
+function Decisions() {
+  // A jev-eval breakdown: each question's answer distribution, read off a self-hosted model's logprobs.
+  const questions = [
+    { q: "Supported by the retrieved context?", bars: [["true", 0.86], ["false", 0.14]] },
+    { q: "How directly does it answer?", bars: [["evasive", 0.05], ["partial", 0.27], ["direct", 0.68]] },
+    { q: "Agent confirmed before refunding?", bars: [["true", 0.91], ["false", 0.09]] },
+  ] as const;
+  return (
+    <div className={`absolute inset-x-6 top-5 grid gap-3 font-mono text-[11px] md:grid-cols-3`}>
+      {questions.map(({ q, bars }, i) => (
+        // On a phone the card is one column tall, so it shows one question.
+        <div key={q} className={`${i > 0 ? "hidden md:block " : ""}rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 transition-transform duration-300 group-hover:-translate-y-1 dark:border-white/10 dark:bg-white/[.03]`}>
+          <div className="mb-1.5 truncate text-neutral-600 dark:text-neutral-300">{q}</div>
+          {bars.map(([label, p]) => (
+            <div key={label} className="flex items-center gap-2 leading-5">
+              <span className="w-14 shrink-0 text-neutral-400">{label}</span>
+              <span className="h-1.5 flex-1 rounded-full bg-neutral-200 dark:bg-white/10">
+                <span className="block h-full rounded-full bg-gradient-to-r from-indigo-500 to-teal-400" style={{ width: `${p * 100}%` }} />
+              </span>
+              <span className="text-neutral-400">{p.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Scale() {
   const items = ["PostgreSQL", "ClickHouse", "S3", "NATS", "KEDA", "HA replicas", "air-gapped"];
   return (
@@ -113,6 +141,7 @@ export default function Features({ base }: { base: string }) {
     { Icon: Cpu, name: "MCP for coding agents", description: "Agents check their own changes with evalsi mcp.", href: `${base}/docs/guides/mcp/`, cta: "Connect over MCP", className: "md:col-span-1", background: <Mcp /> },
     { Icon: KeyRound, name: "Identity and access", description: "OIDC, API keys, project RBAC, CEL rules and an audit log.", href: `${base}/docs/guides/identity/`, cta: "Set up access", className: "md:col-span-1", background: <Identity /> },
     { Icon: ServerCog, name: "Runs in your environment", description: "Self-hosted with your models, storage, identity and secrets.", href: `${base}/docs/guides/kubernetes/`, cta: "Scale it out", className: "md:col-span-1", background: <Scale /> },
+    { Icon: Gauge, name: "Agent and RAG metrics you define", description: "30 DeepEval metrics, plus JevEval questions you write about answers, context and trajectories, decided by your judge or by the logprobs of a model you host.", href: `${base}/docs/guides/deepeval/`, cta: "DeepEval and JevEval", className: "md:col-span-3", background: <Decisions /> },
   ];
   return (
     <BentoGrid>
