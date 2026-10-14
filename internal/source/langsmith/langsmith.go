@@ -520,9 +520,8 @@ func (c *connector) WriteBack(ctx context.Context, scores []source.Score, prior 
 		default:
 			continue
 		}
-		if s.Rationale != "" {
-			update["comment"] = s.Rationale
-		}
+		// Always sent, so an update with no rationale clears the old comment.
+		update["comment"] = s.Rationale
 		id, written := feedbackID(s), false
 		if p, ok := prior[s.Key()]; ok && p.RemoteID != "" {
 			id, written = p.RemoteID, true
@@ -532,7 +531,10 @@ func (c *connector) WriteBack(ctx context.Context, scores []source.Score, prior 
 		if written {
 			err = c.call(ctx, http.MethodPatch, "/feedback/"+id, nil, update, nil)
 			if errors.As(err, &ae) && ae.Status == http.StatusNotFound {
-				written = false // deleted in LangSmith: create it again
+				// Deleted in LangSmith: create it again. Only a changed
+				// score reaches here; the manager does not resend one whose
+				// value it already wrote.
+				written = false
 			}
 		}
 		if !written {

@@ -315,7 +315,7 @@ func TestWriteBackFeedback(t *testing.T) {
 	if err != nil || len(again) != 1 || again[0].RemoteID != written[0].RemoteID || f.requests[0].Method != http.MethodPatch {
 		t.Fatalf("update %v %v %v", again, err, f.requests)
 	}
-	if fb := f.feedback[written[0].RemoteID]; fb["score"] != 1.0 {
+	if fb := f.feedback[written[0].RemoteID]; fb["score"] != 1.0 || fb["comment"] != "" {
 		t.Fatalf("feedback %v", fb)
 	}
 	// Without the record of the earlier write, the create conflicts and the
@@ -327,7 +327,7 @@ func TestWriteBackFeedback(t *testing.T) {
 	if len(f.requests) != 2 || f.requests[1].Method != http.MethodPatch || f.feedback[written[0].RemoteID]["score"] != 0.0 || len(f.feedback) != 3 {
 		t.Fatalf("requests %v feedback %v", f.requests, f.feedback)
 	}
-	// Feedback deleted in LangSmith is created again.
+	// Feedback deleted in LangSmith is created again by its next changed score.
 	delete(f.feedback, written[0].RemoteID)
 	if _, err := c.WriteBack(context.Background(), []source.Score{{TraceID: traceID, Policy: "support", Metric: "tool-errors", Value: 0.25}}, prior); err != nil {
 		t.Fatal(err)

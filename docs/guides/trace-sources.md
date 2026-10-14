@@ -70,7 +70,7 @@ spec:
 
 A trace is its root run and the runs under it. Run types become span kinds (`llm`, `chain`, `tool`, `retriever`, `embedding`), and inputs and outputs are read as LangChain writes them: `{"input": "..."}` and `{"output": "..."}` are unwrapped to their text, messages and generations are read as chat messages. Token counts come from `llm` runs only, as a chain's are the sum of its children's. The model is the run's `ls_model_name` metadata, else its invocation's `model`. A run's metadata are span attributes named `langsmith.metadata.<key>`; a root run's `session_id`, `thread_id` or `conversation_id` metadata is the trajectory's session, as in LangSmith's threads.
 
-Scores are written as feedback on the root run, keyed by the metric, with `feedback_source.type` `model` for a judge's score and `api` otherwise, and the policy and evaluator in its metadata. Numbers and booleans (as 1 or 0) are the feedback's `score`, labels its `value`, and the rationale its `comment`. A changed score updates the same feedback.
+Scores are written as feedback on the root run, keyed by the metric, with `feedback_source.type` `model` for a judge's score and `api` otherwise, and the policy and evaluator in its metadata. Numbers and booleans (as 1 or 0) are the feedback's `score`, labels its `value`, and the rationale its `comment`. A changed score updates the same feedback, comment included (a score with no rationale clears it). Feedback deleted in LangSmith is created again when its score next changes; an unchanged score is not sent again.
 
 ## Scheduled batch reports
 
