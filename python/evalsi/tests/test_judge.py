@@ -373,3 +373,15 @@ def test_label_probabilities_from_logprobs(tmp_path: Path) -> None:
     assert (len(backend.calls), session.cached_calls) == (1, 1)
     with pytest.raises(JudgeError, match="none of"):
         asyncio.run(session.label_probabilities("p", ["C", "D"]))
+
+
+def test_label_probabilities_refuse_more_labels_than_top_logprobs() -> None:
+    from evalsi.judges.structured import TOP_LOGPROBS, JudgeSession
+    from evalsi.testing import TEST_JUDGE, ScriptedJudge
+
+    backend = ScriptedJudge(lambda p, s: {}, logprobs=lambda prompt: {"A": 0.0})
+    session = JudgeSession(JudgeClient(TEST_JUDGE, backend))
+    labels = [chr(ord("A") + i) for i in range(TOP_LOGPROBS + 1)]
+    with pytest.raises(ValueError, match="at most 20 answers"):
+        asyncio.run(session.label_probabilities("p", labels))
+    assert backend.calls == []

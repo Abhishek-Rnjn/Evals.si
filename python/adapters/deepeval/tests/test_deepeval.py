@@ -463,3 +463,11 @@ def test_builtin_metrics_take_logprob_decisions() -> None:
     assert 0.0 <= result.number <= 1.0
     assert judge.calls
     assert all(schema == {"top_logprobs": 20} for _, schema in judge.calls)
+
+
+def test_logprob_decisions_refuse_more_answers_than_top_logprobs() -> None:
+    ctx, judge = scripted_judge(lambda p, s: {}, logprobs=letter_logprobs)
+    many = {"question": "Which city?", "options": {f"city {i}": i / 20 for i in range(21)}}
+    with pytest.raises(ValueError, match="at most 20 answers"):
+        score(EVALUATORS["jev-eval"], rag_record(), ctx, questions=[many], decisions="logprobs")
+    assert judge.calls == []

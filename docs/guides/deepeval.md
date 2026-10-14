@@ -30,9 +30,12 @@ never scored as zero.
 | Conversations | `knowledge-retention`, `conversation-completeness`, `turn-relevancy`, `role-adherence`, `topic-adherence`, `goal-accuracy` | chat messages |
 | Custom | `g-eval`, `jev-eval`, `conversational-g-eval`, `conversational-jev-eval` | the fields you choose |
 
-Every metric takes `threshold`, `strict_mode` and `include_reason`, plus `options`, which passes
-extra keyword arguments to the DeepEval class. Some need a setting they cannot run without, and
-these are required params, so a run that omits one fails at configuration time:
+Every evaluator takes `threshold` and `strict_mode`. The catalog metrics (every row but Custom)
+also take `include_reason`, `eval_mode`, `decisions` and `options`, which passes extra keyword
+arguments to the DeepEval class. The custom evaluators take the params described under
+[G-Eval and JevEval](#g-eval-and-jeveval-metrics-you-define) instead. Some catalog metrics need a
+setting they cannot run without, and these are required params, so a run that omits one fails at
+configuration time:
 
 | Evaluator | Required param |
 |---|---|
@@ -122,6 +125,9 @@ answer. Two things follow:
 - **Turn thinking off.** The first token has to be the answer. A reasoning model that opens with
   a thinking block puts its probability on something other than a letter, and the decision fails
   with an error saying so. Use an instruct model, or serve the model with thinking disabled.
+- **At most 20 answers per question.** Servers return the 20 likeliest first tokens, so a question
+  with more answers is refused; use `stated` for it. An answer missing from those 20 counts as
+  zero, and its true probability is at most the smallest one returned.
 - **Check `min_label_mass`.** The score's metadata reports the smallest share of first-token
   probability that fell on a letter across the record's questions. Near 1, the model answered
   with letters. If it is low, it was starting its reply some other way, and the letters'

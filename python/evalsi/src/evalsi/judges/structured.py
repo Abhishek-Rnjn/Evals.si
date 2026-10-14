@@ -20,6 +20,10 @@ ADAPTER_SYSTEM = (
     "with JSON that matches the requested schema."
 )
 
+# How many first-token alternatives label_probabilities asks for: 20 is
+# OpenAI's limit and vLLM's default --max-logprobs.
+TOP_LOGPROBS = 20
+
 LABEL_SYSTEM = (
     "You are an evaluation judge. Read the user message and answer with the single "
     "letter of your answer, and nothing else."
@@ -84,8 +88,20 @@ class JudgeSession:
     async def label_probabilities(self, prompt: str, labels: list[str]) -> dict[str, float]:
         """The judge's probability for each of ``labels`` (single letters), read
         from the log probabilities of its first token and renormalized over the
-        labels. Tokens are matched after stripping whitespace."""
-        response = await self.judge.next_token_logprobs(system=LABEL_SYSTEM, prompt=prompt)
+        labels. Tokens are matched after stripping whitespace.
+
+        Only the ``TOP_LOGPROBS`` likeliest tokens come back, so a label missing
+        from them counts as zero; its true probability is at most the smallest
+        one returned. More labels than that could never all be seen, so they
+        are refused rather than silently scored."""
+        if len(labels) > TOP_LOGPROBS:
+            raise ValueError(
+                f"logprob decisions take at most {TOP_LOGPROBS} answers (the top tokens a "
+                f"server returns), not {len(labels)}; use fewer answers or decisions: stated"
+            )
+        response = await self.judge.next_token_logprobs(
+            system=LABEL_SYSTEM, prompt=prompt, top_logprobs=TOP_LOGPROBS
+        )
         self._tally(response)
         mass = dict.fromkeys(labels, 0.0)
         for token, logprob in response.data["top_logprobs"].items():
