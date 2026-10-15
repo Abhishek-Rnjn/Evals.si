@@ -23,8 +23,10 @@ from evalsi_harness.tools import OUTPUT_LIMIT, Tool, ToolResult, _clip
 
 # The tools that change the sandbox. On replay these run again, as bash does,
 # so the replayed file tree is the recorded one and the checker grades it.
-MUTATING = frozenset({"edit_file", "apply_patch"})
-NAMES = ("edit_file", "glob", "grep", "apply_patch")
+MUTATING = frozenset({"edit_file", "apply_patch", "memory"})
+NAMES = ("edit_file", "glob", "grep", "apply_patch", "memory")
+# Offered by the agent loop itself, which owns what they need.
+LOOP_NAMES = ("session_search",)
 MAX_LISTED = 500
 # Evals.si's own files never show up in searches, as they never show up in the diff.
 _PRUNE = "-not -path '*/.git/*' -not -path '*/.evalsi-*'"
@@ -298,15 +300,110 @@ class ApplyPatchTool:
         )
 
 
+MEMORY_DIR = ".evalsi-memory"
+MEMORY_FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
+MEMORY_MAX_BYTES = 64 * 1024
+MEMORY_MAX_FILES = 100
+
+
+class MemoryTool:
+    """Notes that outlive context management. They are files in the sandbox
+    (so a replay rebuilds them), under ``.evalsi-memory/``, which Evals.si's
+    own naming keeps out of the agent's diff."""
+
+    def __init__(self, env: TaskEnvironment) -> None:
+        self.env = env
+        self.spec = ToolSpec(
+            name="memory",
+            description=(
+                "Keep notes that must survive your context being shortened: decisions, what you "
+                "have verified, what is left to do. Actions: list, read (name), write (name, "
+                "content), append (name, content), delete (name). Read your notes again after "
+                "the conversation is summarized."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["list", "read", "write", "append", "delete"],
+                    },
+                    "name": {"type": "string", "description": "A file name such as progress.md."},
+                    "content": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        )
+
+    async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
+        action, name = _text(args, "action"), _text(args, "name")
+        if action == "list":
+            return await self._list()
+        if action not in ("read", "write", "append", "delete"):
+            return ToolResult("action must be list, read, write, append or delete", is_error=True)
+        if not name or not MEMORY_FILE.match(name):
+            return ToolResult(
+                "name must be a plain file name (letters, digits, dots, dashes, underscores)", True
+            )
+        path = f"{MEMORY_DIR}/{name}"
+        try:
+            if action == "read":
+                files = await self.env.sandbox.read_files([path], max_bytes=MEMORY_MAX_BYTES)
+                if path not in files:
+                    return ToolResult(f"no note named {name}", is_error=True)
+                return ToolResult(files[path].decode(errors="replace"))
+            if action == "delete":
+                result = await self.env.run(f"rm -f -- {shlex.quote(path)}", span=span)
+                return ToolResult(
+                    f"deleted {name}" if result.ok else "could not delete", not result.ok
+                )
+            content = _text(args, "content")
+            if content is None:
+                return ToolResult(f"{action} needs content", is_error=True)
+            if action == "append":
+                files = await self.env.sandbox.read_files([path], max_bytes=MEMORY_MAX_BYTES)
+                existing = files.get(path, b"").decode(errors="replace")
+                content = (
+                    existing + ("" if not existing or existing.endswith("\n") else "\n") + content
+                )
+            if len(content.encode()) > MEMORY_MAX_BYTES:
+                return ToolResult(f"a note is limited to {MEMORY_MAX_BYTES} bytes", is_error=True)
+            if await self._count() >= MEMORY_MAX_FILES and not await self._exists(path):
+                return ToolResult(f"at most {MEMORY_MAX_FILES} notes; delete one first", True)
+            await self.env.sandbox.write_files({path: content})
+        except SandboxError as exc:
+            return ToolResult(str(exc), is_error=True)
+        return ToolResult(f"{'appended to' if action == 'append' else 'wrote'} {name}")
+
+    async def _names(self) -> list[str]:
+        files = await self.env.sandbox.read_files([MEMORY_DIR], max_bytes=MEMORY_MAX_BYTES)
+        return sorted(p.removeprefix(MEMORY_DIR + "/") for p in files)
+
+    async def _count(self) -> int:
+        return len(await self._names())
+
+    async def _exists(self, path: str) -> bool:
+        return path.removeprefix(MEMORY_DIR + "/") in await self._names()
+
+    async def _list(self) -> ToolResult:
+        try:
+            names = await self._names()
+        except SandboxError as exc:
+            return ToolResult(str(exc), is_error=True)
+        return ToolResult("\n".join(names) if names else "no notes yet")
+
+
 def extra_tools(env: TaskEnvironment, names: list[str]) -> list[Tool]:
     """The optional tools a spec asked for, in the order it listed them."""
+    names = [n for n in names if n not in LOOP_NAMES]
     unknown = [n for n in names if n not in NAMES]
     if unknown:
-        raise ValueError(f"unknown built-in tool(s) {unknown}; choose from {list(NAMES)}")
+        raise ValueError(f"unknown built-in tool(s) {unknown}; choose from {[*NAMES, *LOOP_NAMES]}")
     made: dict[str, Tool] = {
         "edit_file": EditFileTool(env),
         "glob": GlobTool(env),
         "grep": GrepTool(env),
         "apply_patch": ApplyPatchTool(env),
+        "memory": MemoryTool(env),
     }
     return [made[n] for n in dict.fromkeys(names)]

@@ -248,7 +248,20 @@ class BuiltinHarness:
     def _system(self, live: LiveTask) -> str:
         """The agent's system prompt. Subclasses (benchmark harnesses) replace it."""
         c = self.config
-        return DEFAULT_SYSTEM + (f"\n\n{c.instructions}" if c.instructions else "")
+        notes = []
+        if "memory" in c.tools.builtin:
+            notes.append(
+                "You have a memory tool for notes that survive your context being shortened. "
+                "Record what you decide, verify and still have to do, and read it back when "
+                "earlier work is no longer in front of you."
+            )
+        if "session_search" in c.tools.builtin:
+            notes.append(
+                "Earlier parts of this task may be cleared or summarized. session_search finds "
+                "and re-reads any of it."
+            )
+        parts = [DEFAULT_SYSTEM, *notes, *([c.instructions] if c.instructions else [])]
+        return "\n\n".join(parts)
 
     @staticmethod
     def _cache_prices(live: LiveTask) -> dict[str, float]:
@@ -299,6 +312,7 @@ class BuiltinHarness:
             input_per_mtok=c.pricing.input_per_mtok,
             output_per_mtok=c.pricing.output_per_mtok,
             truncation_retry_tokens=self._truncation_retry(live),
+            session_search="session_search" in self.config.tools.builtin,
             context=self._context(live),
             **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,

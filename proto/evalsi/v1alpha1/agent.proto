@@ -153,8 +153,10 @@ message Tools {
   repeated MockTool mocks = 3;
   repeated ToolFault faults = 4;
   // More built-in tools to offer, by name: edit_file (exact-match replace),
-  // glob, grep and apply_patch (a unified diff). Off by default, so a
-  // comparison between models uses the same toolset unless a spec says so.
+  // glob, grep, apply_patch (a unified diff), memory (notes that survive
+  // context management) and session_search (find and re-read what context
+  // management removed). Off by default, so a comparison between models uses
+  // the same toolset unless a spec says so.
   repeated string builtin = 5;
 }
 

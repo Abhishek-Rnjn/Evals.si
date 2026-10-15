@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
+from evalsi_harness.archive import Archive, SessionSearchTool
 from evalsi_harness.context import ContextConfig, ContextView, make_strategy
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
 from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
@@ -51,6 +52,8 @@ class LoopConfig:
     # (0: not retried). It is the config's, not the model's, so a replay makes
     # the same decision as the recorded run.
     truncation_retry_tokens: int = 0
+    # Offer session_search over the run's unabridged history.
+    session_search: bool = False
     context: ContextConfig = field(default_factory=ContextConfig)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
@@ -85,6 +88,9 @@ class AgentLoop:
         user: UserSimulator | None = None,
         hooks: Hooks | None = None,
     ) -> None:
+        self.archive = Archive()
+        if config.session_search:
+            tools = [*tools, SessionSearchTool(self.archive)]
         names = [t.spec.name for t in tools]
         dupes = {n for n in names if names.count(n) > 1}
         if dupes:
@@ -164,6 +170,8 @@ class AgentLoop:
 
     async def run(self, conversation: list[dict[str, Any]]) -> FinalEvent:
         started = time.monotonic()
+        for message in conversation:
+            self.archive.add(message)
         try:
             async with asyncio.timeout(self.config.wall_clock_s or None):
                 return await self._loop(list(conversation), started)
@@ -197,6 +205,7 @@ class AgentLoop:
             if turn.stop_reason == "refusal":
                 return self._final(turn.text, "refusal")
             messages.append(turn.as_message())
+            self.archive.add(messages[-1])
             if turn.stop_reason == "pause_turn" and not turn.tool_calls:
                 continue  # the API asks for the turn to be resumed as it stands
             if turn.tool_calls:
@@ -227,6 +236,7 @@ class AgentLoop:
                     return final
                 continue
             messages.append({"role": "user", "content": reply.message})
+            self.archive.add(messages[-1])
 
     def _emit_hook_steps(self) -> None:
         for step in self.hooks.drain():
@@ -242,6 +252,7 @@ class AgentLoop:
             if more is not None:
                 self.stop_continues += 1
                 messages.append({"role": "user", "content": more.message})
+                self.archive.add(messages[-1])
                 return None
         return final
 
@@ -395,6 +406,7 @@ class AgentLoop:
                     "is_error": result.is_error,
                 }
             )
+            self.archive.add({**messages[-1], "name": call.name})
 
     def _tool_step(
         self, call: ToolCallRequest, result: ToolResult, span: str, start: float

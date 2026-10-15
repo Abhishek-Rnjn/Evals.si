@@ -575,8 +575,10 @@ class Tools(_message.Message):
     @_builtins.property
     def builtin(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """More built-in tools to offer, by name: edit_file (exact-match replace),
-        glob, grep and apply_patch (a unified diff). Off by default, so a
-        comparison between models uses the same toolset unless a spec says so.
+        glob, grep, apply_patch (a unified diff), memory (notes that survive
+        context management) and session_search (find and re-read what context
+        management removed). Off by default, so a comparison between models uses
+        the same toolset unless a spec says so.
         """
 
     def __init__(

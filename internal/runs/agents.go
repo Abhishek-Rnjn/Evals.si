@@ -213,7 +213,7 @@ var forkName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 const maxHooks = 8
 
 // builtinTools are the optional built-in tools a spec may list.
-var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch"}
+var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search"}
 
 // minContextWindow is the smallest window a strategy can work in: below it the
 // summary and the kept turns alone would not fit.

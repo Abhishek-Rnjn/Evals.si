@@ -991,8 +991,10 @@ type Tools struct {
 	Mocks   []*MockTool  `protobuf:"bytes,3,rep,name=mocks,proto3" json:"mocks,omitempty"`
 	Faults  []*ToolFault `protobuf:"bytes,4,rep,name=faults,proto3" json:"faults,omitempty"`
 	// More built-in tools to offer, by name: edit_file (exact-match replace),
-	// glob, grep and apply_patch (a unified diff). Off by default, so a
-	// comparison between models uses the same toolset unless a spec says so.
+	// glob, grep, apply_patch (a unified diff), memory (notes that survive
+	// context management) and session_search (find and re-read what context
+	// management removed). Off by default, so a comparison between models uses
+	// the same toolset unless a spec says so.
 	Builtin       []string `protobuf:"bytes,5,rep,name=builtin,proto3" json:"builtin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
