@@ -95,23 +95,32 @@ class A2AAgent(_message.Message):
     URL_FIELD_NUMBER: _builtins.int
     HEADERS_ENV_FIELD_NUMBER: _builtins.int
     TIMEOUT_FIELD_NUMBER: _builtins.int
+    STREAM_FIELD_NUMBER: _builtins.int
     url: _builtins.str
+    stream: _builtins.bool
+    """Use message/stream (server-sent events) instead of message/send and
+    polling, so each task state and artifact chunk the agent reports becomes
+    a step. The agent's card must declare streaming.
+    """
     @_builtins.property
     def headers_env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
         """HTTP header -> environment variable holding its value (read by the worker)."""
 
     @_builtins.property
-    def timeout(self) -> _duration_pb2.Duration: ...
+    def timeout(self) -> _duration_pb2.Duration:
+        """For streaming, the longest silence tolerated between events."""
+
     def __init__(
         self,
         *,
         url: _builtins.str = ...,
         headers_env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         timeout: _duration_pb2.Duration | None = ...,
+        stream: _builtins.bool = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["headers_env", b"headers_env", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["headers_env", b"headers_env", "stream", b"stream", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___A2AAgent: _TypeAlias = A2AAgent  # noqa: Y015

@@ -29,7 +29,12 @@ message A2AAgent {
   string url = 1;
   // HTTP header -> environment variable holding its value (read by the worker).
   map<string, string> headers_env = 2;
+  // For streaming, the longest silence tolerated between events.
   google.protobuf.Duration timeout = 3;
+  // Use message/stream (server-sent events) instead of message/send and
+  // polling, so each task state and artifact chunk the agent reports becomes
+  // a step. The agent's card must declare streaming.
+  bool stream = 4;
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).

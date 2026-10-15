@@ -160,8 +160,13 @@ type A2AAgent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Url   string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// HTTP header -> environment variable holding its value (read by the worker).
-	HeadersEnv    map[string]string    `protobuf:"bytes,2,rep,name=headers_env,json=headersEnv,proto3" json:"headers_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Timeout       *durationpb.Duration `protobuf:"bytes,3,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	HeadersEnv map[string]string `protobuf:"bytes,2,rep,name=headers_env,json=headersEnv,proto3" json:"headers_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// For streaming, the longest silence tolerated between events.
+	Timeout *durationpb.Duration `protobuf:"bytes,3,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// Use message/stream (server-sent events) instead of message/send and
+	// polling, so each task state and artifact chunk the agent reports becomes
+	// a step. The agent's card must declare streaming.
+	Stream        bool `protobuf:"varint,4,opt,name=stream,proto3" json:"stream,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,6 +220,13 @@ func (x *A2AAgent) GetTimeout() *durationpb.Duration {
 		return x.Timeout
 	}
 	return nil
+}
+
+func (x *A2AAgent) GetStream() bool {
+	if x != nil {
+		return x.Stream
+	}
+	return false
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -2218,12 +2230,13 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tresponses\x18\x03 \x01(\v2\x1f.evalsi.v1alpha1.ResponsesAgentH\x00R\tresponses\x120\n" +
 	"\x04http\x18\x04 \x01(\v2\x1a.evalsi.v1alpha1.HTTPAgentH\x00R\x04http\x12-\n" +
 	"\x03cli\x18\x05 \x01(\v2\x19.evalsi.v1alpha1.CLIAgentH\x00R\x03cliB\x06\n" +
-	"\x04kind\"\xdc\x01\n" +
+	"\x04kind\"\xf4\x01\n" +
 	"\bA2AAgent\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12J\n" +
 	"\vheaders_env\x18\x02 \x03(\v2).evalsi.v1alpha1.A2AAgent.HeadersEnvEntryR\n" +
 	"headersEnv\x123\n" +
-	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x1a=\n" +
+	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x16\n" +
+	"\x06stream\x18\x04 \x01(\bR\x06stream\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +

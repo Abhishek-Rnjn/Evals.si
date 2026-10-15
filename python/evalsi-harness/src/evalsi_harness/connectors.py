@@ -149,6 +149,7 @@ def _a2a_text(parts: Any) -> str:
 
 
 TERMINAL = {"completed", "failed", "canceled", "rejected"}
+MAX_STREAM_EVENTS = 10_000
 
 
 class A2AConnector:
@@ -158,6 +159,7 @@ class A2AConnector:
         self.url = cfg.url
         self.name = cfg.url
         self.client = httpx.AsyncClient(timeout=_timeout(cfg), headers=_headers(cfg.headers_env))
+        self.stream = cfg.stream
         self.context_id: str | None = None
         self.task_id: str | None = None
 
@@ -187,6 +189,8 @@ class A2AConnector:
             message["contextId"] = self.context_id
         if self.task_id:
             message["taskId"] = self.task_id
+        if self.stream:
+            return await self._stream(message, text)
         result = await self._rpc(
             "message/send", {"message": message, "configuration": {"blocking": True}}
         )
@@ -224,6 +228,104 @@ class A2AConnector:
             reply = _a2a_text(result.get("parts"))
             return AgentReply(reply, steps=[_agent_step("a2a", reply, input_text=text)])
         raise TaskError(f"A2A agent {self.url}: unexpected result {result!r:.200}")
+
+    async def _stream(self, message: dict[str, Any], text: str) -> AgentReply:  # noqa: PLR0915
+        """``message/stream``: every status update is a step, artifact chunks are
+        put back together, and the stream's last event settles the task."""
+        body = {
+            "jsonrpc": "2.0",
+            "id": str(uuid.uuid4()),
+            "method": "message/stream",
+            "params": {"message": message},
+        }
+        steps: list[Step] = []
+        artifacts: dict[str, list[str]] = {}
+        state = ""
+        last_text = ""
+        task_id = ""
+        final = False
+        events = 0
+        try:
+            async with self.client.stream(
+                "POST", self.url, json=body, headers={"Accept": "text/event-stream"}
+            ) as response:
+                if response.status_code >= 400:
+                    detail = (await response.aread()).decode(errors="replace")[:300]
+                    raise TaskError(f"A2A agent {self.url}: HTTP {response.status_code}: {detail}")
+                async for raw in response.aiter_lines():
+                    if not raw.startswith("data:"):
+                        continue
+                    events += 1
+                    if events > MAX_STREAM_EVENTS:
+                        raise TaskError(
+                            f"A2A agent {self.url}: more than {MAX_STREAM_EVENTS} events"
+                        )
+                    try:
+                        payload = json.loads(raw[5:].strip())
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(payload, Mapping):
+                        continue
+                    if "error" in payload:
+                        err = payload["error"]
+                        detail = err.get("message", err) if isinstance(err, Mapping) else err
+                        raise TaskError(f"A2A agent {self.url}: {detail}")
+                    result = payload.get("result")
+                    if not isinstance(result, Mapping):
+                        continue
+                    self.context_id = result.get("contextId") or self.context_id
+                    kind = result.get("kind", "")
+                    if kind == "artifact-update":
+                        artifact = result.get("artifact") or {}
+                        chunk = _a2a_text(artifact.get("parts"))
+                        key = str(artifact.get("artifactId", ""))
+                        parts = artifacts.setdefault(key, [])
+                        if result.get("append"):
+                            parts.append(chunk)
+                        else:
+                            parts[:] = [chunk]
+                        continue
+                    if kind == "message":
+                        last_text = _a2a_text(result.get("parts")) or last_text
+                        steps.append(_agent_step("a2a:message", last_text, input_text=text))
+                        final = True
+                        continue
+                    status = result.get("status") if kind in ("status-update", "task") else None
+                    if not isinstance(status, Mapping):
+                        continue
+                    task_id = str(result.get("taskId") or result.get("id") or task_id)
+                    state = str(status.get("state", state))
+                    last_text = _a2a_text((status.get("message") or {}).get("parts")) or last_text
+                    step = _agent_step(
+                        f"a2a:{state}",
+                        last_text if status.get("message") else "",
+                        input_text=text if not steps else "",
+                        error=state if state == "failed" else "",
+                    )
+                    step.attributes.update({"a2a.state": state, "a2a.task_id": task_id})
+                    steps.append(step)
+                    if kind == "task":  # a snapshot may carry the artifacts so far
+                        for art in result.get("artifacts") or []:
+                            artifacts[str(art.get("artifactId", ""))] = [
+                                _a2a_text(art.get("parts"))
+                            ]
+                    if result.get("final") or state in (*TERMINAL, "input-required"):
+                        final = True
+        except httpx.HTTPError as exc:
+            raise TaskError(f"A2A agent {self.url}: {exc}") from exc
+        if not final:
+            raise TaskError(f"A2A agent {self.url}: the stream ended before the task settled")
+        self.task_id = task_id if state == "input-required" else None
+        chunks = ["".join(p) for p in artifacts.values()]
+        reply = "\n".join(c for c in chunks if c) or last_text
+        if steps and not (steps[-1].output and steps[-1].output.as_text()):
+            steps[-1].output = Content(text=reply)
+        return AgentReply(
+            reply,
+            steps=steps,
+            finished=state in TERMINAL or not state,
+            extra={"a2a_state": state or "completed", "a2a_events": events},
+        )
 
     async def aclose(self) -> None:
         await self.client.aclose()

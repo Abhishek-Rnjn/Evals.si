@@ -37,7 +37,7 @@ A run spec becomes an agent run when it has `target.agent` or `harness`. To run 
 
 | Kind | Spec | How it is driven |
 |---|---|---|
-| A2A | `a2a: {url, headers_env}` | JSON-RPC `message/send`, following the task until it settles |
+| A2A | `a2a: {url, headers_env, timeout, stream}` | JSON-RPC `message/send`, following the task until it settles; with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events; push notifications are not used) |
 | MCP | `mcp: {url, tool, argument}` | the agent is a tool on an MCP server; each message is one call |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses`; later turns continue with `previous_response_id` |
 | HTTP | `http: {url, method, body_template, output_path, messages_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`); the answer at `output_path`, its steps at `messages_path` |
