@@ -576,8 +576,9 @@ class Tools(_message.Message):
     def builtin(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """More built-in tools to offer, by name: edit_file (exact-match replace),
         glob, grep, apply_patch (a unified diff), memory (notes that survive
-        context management) and session_search (find and re-read what context
-        management removed). Off by default, so a comparison between models uses
+        context management), session_search (find and re-read what context
+        management removed) and delegate (hand a subtask to a sub-agent with a
+        fresh context and keep only its report). Off by default, so a comparison between models uses
         the same toolset unless a spec says so.
         """
 
@@ -720,12 +721,17 @@ class BuiltinHarness(_message.Message):
     INSTRUCTIONS_FIELD_NUMBER: _builtins.int
     CONTEXT_FIELD_NUMBER: _builtins.int
     HOOKS_FIELD_NUMBER: _builtins.int
+    DELEGATE_STEPS_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
     """Run a model's parallel tool calls concurrently (default true)."""
     instructions: _builtins.str
     """Appended to the agent's system prompt."""
+    delegate_steps: _builtins.int
+    """With "delegate" among tools.builtin: the model calls a sub-agent may make
+    for one task (default 20). Its budget comes out of the parent's.
+    """
     @_builtins.property
     def budget(self) -> Global___AgentBudget: ...
     @_builtins.property
@@ -762,10 +768,11 @@ class BuiltinHarness(_message.Message):
         instructions: _builtins.str = ...,
         context: Global___ContextManagement | None = ...,
         hooks: _abc.Iterable[Global___Hook] | None = ...,
+        delegate_steps: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015

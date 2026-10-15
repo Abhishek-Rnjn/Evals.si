@@ -154,8 +154,9 @@ message Tools {
   repeated ToolFault faults = 4;
   // More built-in tools to offer, by name: edit_file (exact-match replace),
   // glob, grep, apply_patch (a unified diff), memory (notes that survive
-  // context management) and session_search (find and re-read what context
-  // management removed). Off by default, so a comparison between models uses
+  // context management), session_search (find and re-read what context
+  // management removed) and delegate (hand a subtask to a sub-agent with a
+  // fresh context and keep only its report). Off by default, so a comparison between models uses
   // the same toolset unless a spec says so.
   repeated string builtin = 5;
 }
@@ -223,6 +224,9 @@ message BuiltinHarness {
   ContextManagement context = 10;
   // Python hooks at the agent's lifecycle points, called in this order.
   repeated Hook hooks = 11;
+  // With "delegate" among tools.builtin: the model calls a sub-agent may make
+  // for one task (default 20). Its budget comes out of the parent's.
+  int32 delegate_steps = 12;
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,

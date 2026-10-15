@@ -992,8 +992,9 @@ type Tools struct {
 	Faults  []*ToolFault `protobuf:"bytes,4,rep,name=faults,proto3" json:"faults,omitempty"`
 	// More built-in tools to offer, by name: edit_file (exact-match replace),
 	// glob, grep, apply_patch (a unified diff), memory (notes that survive
-	// context management) and session_search (find and re-read what context
-	// management removed). Off by default, so a comparison between models uses
+	// context management), session_search (find and re-read what context
+	// management removed) and delegate (hand a subtask to a sub-agent with a
+	// fresh context and keep only its report). Off by default, so a comparison between models uses
 	// the same toolset unless a spec says so.
 	Builtin       []string `protobuf:"bytes,5,rep,name=builtin,proto3" json:"builtin,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1291,7 +1292,10 @@ type BuiltinHarness struct {
 	// conversation is resent every step.
 	Context *ContextManagement `protobuf:"bytes,10,opt,name=context,proto3" json:"context,omitempty"`
 	// Python hooks at the agent's lifecycle points, called in this order.
-	Hooks         []*Hook `protobuf:"bytes,11,rep,name=hooks,proto3" json:"hooks,omitempty"`
+	Hooks []*Hook `protobuf:"bytes,11,rep,name=hooks,proto3" json:"hooks,omitempty"`
+	// With "delegate" among tools.builtin: the model calls a sub-agent may make
+	// for one task (default 20). Its budget comes out of the parent's.
+	DelegateSteps int32 `protobuf:"varint,12,opt,name=delegate_steps,json=delegateSteps,proto3" json:"delegate_steps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1401,6 +1405,13 @@ func (x *BuiltinHarness) GetHooks() []*Hook {
 		return x.Hooks
 	}
 	return nil
+}
+
+func (x *BuiltinHarness) GetDelegateSteps() int32 {
+	if x != nil {
+		return x.DelegateSteps
+	}
+	return 0
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,
@@ -2137,7 +2148,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\x12\x17\n" +
 	"\afork_as\x18\x04 \x01(\tR\x06forkAs\"(\n" +
 	"\x10EscalationPolicy\x12\x14\n" +
-	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xe5\x04\n" +
+	"\x05allow\x18\x01 \x03(\tR\x05allow\"\x8c\x05\n" +
 	"\x0eBuiltinHarness\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x124\n" +
 	"\x06budget\x18\x02 \x01(\v2\x1c.evalsi.v1alpha1.AgentBudgetR\x06budget\x122\n" +
@@ -2152,7 +2163,8 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\finstructions\x18\t \x01(\tR\finstructions\x12<\n" +
 	"\acontext\x18\n" +
 	" \x01(\v2\".evalsi.v1alpha1.ContextManagementR\acontext\x12+\n" +
-	"\x05hooks\x18\v \x03(\v2\x15.evalsi.v1alpha1.HookR\x05hooksB\x16\n" +
+	"\x05hooks\x18\v \x03(\v2\x15.evalsi.v1alpha1.HookR\x05hooks\x12%\n" +
+	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateStepsB\x16\n" +
 	"\x14_parallel_tool_calls\"O\n" +
 	"\x04Hook\x12\x16\n" +
 	"\x06python\x18\x01 \x01(\tR\x06python\x12/\n" +

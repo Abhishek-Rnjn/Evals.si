@@ -260,6 +260,12 @@ class BuiltinHarness:
                 "Earlier parts of this task may be cleared or summarized. session_search finds "
                 "and re-reads any of it."
             )
+        if "delegate" in c.tools.builtin:
+            notes.append(
+                "For work that would fill your context with output you do not need to keep "
+                "(reading many files, long searches, debugging a long command), use delegate: a "
+                "sub-agent does it in a fresh context and you get only its report."
+            )
         parts = [DEFAULT_SYSTEM, *notes, *([c.instructions] if c.instructions else [])]
         return "\n\n".join(parts)
 
@@ -313,6 +319,9 @@ class BuiltinHarness:
             output_per_mtok=c.pricing.output_per_mtok,
             truncation_retry_tokens=self._truncation_retry(live),
             session_search="session_search" in self.config.tools.builtin,
+            delegate_steps=(self.config.delegate_steps or 20)
+            if "delegate" in self.config.tools.builtin
+            else 0,
             context=self._context(live),
             **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,

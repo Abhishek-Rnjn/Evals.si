@@ -1003,6 +1003,10 @@ spec:
                             type: integer
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                      delegate_steps:
+                        type: integer
+                      delegateSteps:
+                        type: integer
                       escalation:
                         properties:
                           allow:

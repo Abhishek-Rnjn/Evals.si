@@ -725,6 +725,9 @@ func TestAgentRunValidation(t *testing.T) {
 			off := false
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off, Builtin: []string{"grep"}}
 		},
+		"delegate steps too high": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().DelegateSteps = maxDelegateSteps + 1
+		},
 		"fork needs a step": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "fork", Dir: "tapes"}
 		},
@@ -790,6 +793,10 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"delegate": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"delegate", "memory"}}
+			s.GetHarness().GetBuiltin().DelegateSteps = 30
 		},
 		"resume": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "resume", Dir: "tapes"}

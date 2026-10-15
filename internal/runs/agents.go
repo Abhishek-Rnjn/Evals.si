@@ -96,6 +96,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("tool faults need a kind (timeout, error or malformed) and a rate from 0 to 1")
 		}
 	}
+	if b.GetDelegateSteps() < 0 || b.GetDelegateSteps() > maxDelegateSteps {
+		return invalid("spec.harness.builtin.delegate_steps must be from 0 to %d", maxDelegateSteps)
+	}
 	if err := validateContext(b.GetContext()); err != nil {
 		return err
 	}
@@ -209,11 +212,14 @@ func (m *Manager) workerSpec(spec *evalsiv1alpha1.RunSpec) (*evalsiv1alpha1.RunS
 // forkName is what a forked log may be called: a file name, never a path.
 var forkName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
+// maxDelegateSteps bounds a sub-agent's model calls.
+const maxDelegateSteps = 200
+
 // maxHooks bounds the hooks of one run.
 const maxHooks = 8
 
 // builtinTools are the optional built-in tools a spec may list.
-var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search"}
+var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search", "delegate"}
 
 // minContextWindow is the smallest window a strategy can work in: below it the
 // summary and the kept turns alone would not fit.

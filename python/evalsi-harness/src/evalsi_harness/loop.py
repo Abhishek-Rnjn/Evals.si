@@ -25,6 +25,7 @@ from evalsi_harness.models import (
     ToolCallRequest,
     thinking_text,
 )
+from evalsi_harness.subagent import DelegateTool
 from evalsi_harness.tools import Tool, ToolResult
 from evalsi_harness.user_sim import UserSimulator
 
@@ -54,6 +55,8 @@ class LoopConfig:
     truncation_retry_tokens: int = 0
     # Offer session_search over the run's unabridged history.
     session_search: bool = False
+    # Offer delegate, with sub-agents of up to this many steps (0: not offered).
+    delegate_steps: int = 0
     context: ContextConfig = field(default_factory=ContextConfig)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
@@ -68,6 +71,8 @@ class LoopState:
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     truncated_turns: int = 0
+    subagents: int = 0
+    subagent_steps: int = 0
     reasoning_tokens: int = 0
     truncation_retries: int = 0
 
@@ -91,6 +96,9 @@ class AgentLoop:
         self.archive = Archive()
         if config.session_search:
             tools = [*tools, SessionSearchTool(self.archive)]
+        self._base_tools = list(tools)
+        if config.delegate_steps:
+            tools = [*tools, DelegateTool(self, config.delegate_steps)]
         names = [t.spec.name for t in tools]
         dupes = {n for n in names if names.count(n) > 1}
         if dupes:
@@ -103,6 +111,7 @@ class AgentLoop:
         self.state = LoopState()
         self.hooks = hooks or Hooks()
         self.stop_continues = 0
+        self._started = time.monotonic()
         self.root = span_id()
         self.strategy = make_strategy(config.context)
         self.view = ContextView(
@@ -161,6 +170,14 @@ class AgentLoop:
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
                 **(
+                    {
+                        "subagents": self.state.subagents,
+                        "subagent_steps": self.state.subagent_steps,
+                    }
+                    if self.config.delegate_steps
+                    else {}
+                ),
+                **(
                     {"context": self.strategy.stats.to_dict()}
                     if self.config.context.strategy != "none"
                     else {}
@@ -168,8 +185,41 @@ class AgentLoop:
             },
         )
 
+    def sub_tools(self) -> list[Tool]:
+        """What a sub-agent gets: the parent's tools, without delegate."""
+        return list(self._base_tools)
+
+    def remaining_budget(self) -> dict[str, Any] | None:
+        """What a sub-agent may spend: what the parent has left. None when nothing is."""
+        c, u = self.config, self.state.usage
+        tokens = usd = wall = 0.0
+        if c.max_tokens:
+            tokens = c.max_tokens - ((u.input_tokens or 0) + (u.output_tokens or 0))
+            if tokens <= 0:
+                return None
+        if c.max_usd:
+            usd = c.max_usd - self.cost()
+            if usd <= 0:
+                return None
+        if c.wall_clock_s:
+            wall = c.wall_clock_s - (time.monotonic() - self._started)
+            if wall <= 0:
+                return None
+        return {"tokens": int(tokens), "usd": usd, "wall_clock_s": wall}
+
+    def bill_subagent(self, final: FinalEvent, sub: AgentLoop) -> None:
+        """Adds a finished sub-agent's spend to this run's."""
+        if final.usage is not None:
+            _add(self.state.usage, final.usage)
+        self.state.cache_read_tokens += sub.state.cache_read_tokens
+        self.state.cache_write_tokens += sub.state.cache_write_tokens
+        self.state.reasoning_tokens += sub.state.reasoning_tokens
+        self.state.subagents += 1
+        self.state.subagent_steps += sub.state.steps
+
     async def run(self, conversation: list[dict[str, Any]]) -> FinalEvent:
         started = time.monotonic()
+        self._started = started
         for message in conversation:
             self.archive.add(message)
         try:
@@ -384,7 +434,9 @@ class AgentLoop:
                     result = await tool.call(args, span=span)
             return call, result, self._tool_step(call, result, span, start)
 
-        if self.config.parallel and len(calls) > 1:
+        # delegate calls run in order: a sub-agent's model calls are recorded in sequence.
+        concurrent = self.config.parallel and not any(c.name == "delegate" for c in calls)
+        if concurrent and len(calls) > 1:
             done = await asyncio.gather(*(one(c, d) for c, d in prepared))
         else:
             done = [await one(c, d) for c, d in prepared]
