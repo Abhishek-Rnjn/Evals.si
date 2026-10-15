@@ -148,4 +148,6 @@ Exit criteria: a verifiers or OpenEnv trainer runs one real training step on a G
 
 ## Tracking
 
+**H1, first part (2026-10-15):** thinking blocks across tool turns, Anthropic prompt caching and cache-aware cost, `retry-after`, and stop reasons (`max_tokens`, `refusal`, `pause_turn`) are built and unit-tested over a mock HTTP transport. Not built yet: the `thinking` configuration on `TargetConfig`, the Responses API client, streaming, a retry with a higher limit after `max_tokens`, switching models within a run, a per-provider concurrency limit, and cassette format v2 with reasoning items. None of it has run against a live model.
+
 As each phase is built, what is left of it (unverified, deferred or needing infrastructure) moves to [LEFTOVERS.md](LEFTOVERS.md), the same way the other phases are recorded.

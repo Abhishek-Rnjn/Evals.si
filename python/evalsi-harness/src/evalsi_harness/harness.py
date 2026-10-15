@@ -247,6 +247,16 @@ class BuiltinHarness:
         c = self.config
         return DEFAULT_SYSTEM + (f"\n\n{c.instructions}" if c.instructions else "")
 
+    @staticmethod
+    def _cache_prices(live: LiveTask) -> dict[str, float]:
+        """Anthropic bills cache reads at a tenth of the input price and writes
+        at 1.25 times it. For other providers we assume no discount, so a
+        spend budget stays an upper bound."""
+        spec = live.task.spec
+        if spec.HasField("target") and spec.target.connector == "anthropic":
+            return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
+        return {}
+
     def _loop_config(self, live: LiveTask) -> LoopConfig:
         c = self.config
         system = self._system(live)
@@ -257,6 +267,7 @@ class BuiltinHarness:
             wall_clock_s=self._wall_clock(),
             input_per_mtok=c.pricing.input_per_mtok,
             output_per_mtok=c.pricing.output_per_mtok,
+            **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,
         )

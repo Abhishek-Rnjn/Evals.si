@@ -40,6 +40,9 @@ def _turn_to_dict(turn: ModelTurn) -> dict[str, Any]:
         ],
         "usage": turn.usage.to_dict(),
         "stop_reason": turn.stop_reason,
+        **({"thinking": turn.thinking} if turn.thinking else {}),
+        **({"cache_read_tokens": turn.cache_read_tokens} if turn.cache_read_tokens else {}),
+        **({"cache_write_tokens": turn.cache_write_tokens} if turn.cache_write_tokens else {}),
     }
 
 
@@ -49,6 +52,9 @@ def _turn_from_dict(data: dict[str, Any]) -> ModelTurn:
         tool_calls=[ToolCallRequest(**c) for c in data.get("tool_calls") or []],
         usage=Usage.from_dict(data.get("usage") or {}),
         stop_reason=data.get("stop_reason", ""),
+        thinking=data.get("thinking") or [],
+        cache_read_tokens=data.get("cache_read_tokens", 0),
+        cache_write_tokens=data.get("cache_write_tokens", 0),
     )
 
 

@@ -34,6 +34,11 @@ class LoopConfig:
     wall_clock_s: float = 0.0
     input_per_mtok: float = 0.0
     output_per_mtok: float = 0.0
+    # Price of cached prompt tokens as a multiple of the input price. 1.0
+    # assumes no discount, so max_usd stays an upper bound for providers
+    # whose cache prices we do not know.
+    cache_read_mult: float = 1.0
+    cache_write_mult: float = 1.0
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
 
@@ -44,6 +49,9 @@ class LoopState:
     user_usage: Usage = field(default_factory=lambda: Usage(input_tokens=0, output_tokens=0))
     steps: int = 0
     tool_calls: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    truncated_turns: int = 0
 
 
 def _add(total: Usage, part: Usage) -> None:
@@ -74,10 +82,16 @@ class AgentLoop:
         self.root = span_id()
 
     def cost(self) -> float:
-        u = self.state.usage
+        u, c, st = self.state.usage, self.config, self.state
+        plain = (u.input_tokens or 0) - st.cache_read_tokens - st.cache_write_tokens
         return (
-            (u.input_tokens or 0) * self.config.input_per_mtok
-            + (u.output_tokens or 0) * self.config.output_per_mtok
+            (
+                plain
+                + st.cache_read_tokens * c.cache_read_mult
+                + st.cache_write_tokens * c.cache_write_mult
+            )
+            * c.input_per_mtok
+            + (u.output_tokens or 0) * c.output_per_mtok
         ) / 1e6
 
     def _over_budget(self, started: float) -> str:
@@ -109,6 +123,8 @@ class AgentLoop:
                 "steps": self.state.steps,
                 "tool_calls": self.state.tool_calls,
                 "user_usage": self.state.user_usage.to_dict(),
+                "cache_read_tokens": self.state.cache_read_tokens,
+                "cache_write_tokens": self.state.cache_write_tokens,
             },
         )
 
@@ -131,9 +147,20 @@ class AgentLoop:
             turn = await self.model.complete(messages, specs, system=self.config.system)
             self.state.steps += 1
             _add(self.state.usage, turn.usage)
+            self.state.cache_read_tokens += turn.cache_read_tokens
+            self.state.cache_write_tokens += turn.cache_write_tokens
             self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
-            messages.append(turn.as_message())
             last_text = turn.text or last_text
+            if turn.truncated:
+                # Cut off by the output limit: a tool call may be half-written
+                # and an answer is incomplete, so this is not a normal finish.
+                self.state.truncated_turns += 1
+                return self._final(turn.text, "budget", error="the model hit its output limit")
+            if turn.stop_reason == "refusal":
+                return self._final(turn.text, "refusal")
+            messages.append(turn.as_message())
+            if turn.stop_reason == "pause_turn" and not turn.tool_calls:
+                continue  # the API asks for the turn to be resumed as it stands
             if turn.tool_calls:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
@@ -180,6 +207,9 @@ class AgentLoop:
             attributes={
                 "gen_ai.request.model": self.model.name,
                 "gen_ai.response.finish_reasons": [turn.stop_reason],
+                "gen_ai.usage.cache_read.input_tokens": turn.cache_read_tokens,
+                "gen_ai.usage.cache_creation.input_tokens": turn.cache_write_tokens,
+                **({"evalsi.thinking.blocks": len(turn.thinking)} if turn.thinking else {}),
             },
         )
 
