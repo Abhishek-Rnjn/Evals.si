@@ -370,6 +370,7 @@ def test_record_replay_and_branch(
     assert rec is not None
     tape = tmp_path / "tapes" / "t1.0.jsonl"
     assert [json.loads(line)["kind"] for line in tape.read_text().splitlines()] == [
+        "header",
         "model",
         "tool",
         "model",

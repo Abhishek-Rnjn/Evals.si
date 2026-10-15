@@ -213,8 +213,12 @@ class Scripted:
     def __init__(self, *turns: ModelTurn) -> None:
         self.turns = list(turns)
         self.calls = 0
+        self.limits: list[int] = []
 
-    async def complete(self, messages: Any, tools: Any, *, system: str = "") -> ModelTurn:
+    async def complete(
+        self, messages: Any, tools: Any, *, system: str = "", max_tokens: int = 0
+    ) -> ModelTurn:
+        self.limits.append(max_tokens)
         self.calls += 1
         return self.turns.pop(0)
 

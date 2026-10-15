@@ -257,6 +257,15 @@ class BuiltinHarness:
             return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
         return {}
 
+    @staticmethod
+    def _truncation_retry(live: LiveTask) -> int:
+        """The limit to retry a truncated turn with: twice the target's, up to 128k."""
+        spec = live.task.spec
+        if not spec.HasField("target"):
+            return 0
+        current = spec.target.max_tokens or 16000
+        return min(current * 2, 128_000) if current < 128_000 else 0
+
     def _loop_config(self, live: LiveTask) -> LoopConfig:
         c = self.config
         system = self._system(live)
@@ -267,6 +276,7 @@ class BuiltinHarness:
             wall_clock_s=self._wall_clock(),
             input_per_mtok=c.pricing.input_per_mtok,
             output_per_mtok=c.pricing.output_per_mtok,
+            truncation_retry_tokens=self._truncation_retry(live),
             **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,

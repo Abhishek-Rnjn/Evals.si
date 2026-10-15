@@ -1286,6 +1286,8 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
+                  api:
+                    type: string
                   api_key_env:
                     type: string
                   apiKeyEnv:
@@ -1298,18 +1300,43 @@ spec:
                     type: string
                   effort:
                     type: string
+                  fallback_after:
+                    type: integer
+                  fallbackAfter:
+                    type: integer
+                  fallbacks:
+                    items:
+                      description: evalsi.v1alpha1.Target (recursive; checked on admission)
+                      x-kubernetes-preserve-unknown-fields: true
+                    type: array
+                  max_concurrency:
+                    type: integer
                   max_tokens:
+                    type: integer
+                  maxConcurrency:
                     type: integer
                   maxTokens:
                     type: integer
                   model:
                     type: string
+                  stream:
+                    type: boolean
                   system_prompt:
                     type: string
                   systemPrompt:
                     type: string
                   temperature:
                     type: number
+                  thinking:
+                    properties:
+                      budget_tokens:
+                        type: integer
+                      budgetTokens:
+                        type: integer
+                      mode:
+                        type: string
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               trials:

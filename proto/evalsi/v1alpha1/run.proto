@@ -47,10 +47,36 @@ message Target {
   string system_prompt = 5;
   int32 max_tokens = 6;
   optional double temperature = 7;
-  // Anthropic only: output_config.effort.
+  // Anthropic: output_config.effort. Responses API: reasoning.effort.
   string effort = 8;
   // A bring-your-own agent instead of a model.
   AgentTarget agent = 9;
+  // Anthropic extended thinking for the built-in agent; unset leaves the
+  // model's default.
+  Thinking thinking = 10;
+  // Stream the response, so long outputs and long reasoning do not hit the
+  // HTTP timeout.
+  bool stream = 11;
+  // At most this many concurrent model calls to this endpoint and key from one
+  // worker process; 0 is unlimited.
+  int32 max_concurrency = 12;
+  // openai-compatible only: "chat-completions" (default) or "responses".
+  string api = 13;
+  // Built-in agent: models to switch to, in order, when this one keeps failing
+  // (after fallback_after consecutive failed calls; default 2). The
+  // conversation moves with the agent; thinking blocks are dropped when the
+  // provider changes. Each switch is recorded on the step. A fallback's own
+  // fallbacks are ignored.
+  repeated Target fallbacks = 14;
+  int32 fallback_after = 15;
+}
+
+message Thinking {
+  // "adaptive" (the model decides), "enabled" (with budget_tokens) or
+  // "disabled".
+  string mode = 1;
+  // For "enabled": tokens the model may think with; below max_tokens.
+  int32 budget_tokens = 2;
 }
 
 message DatasetSource {

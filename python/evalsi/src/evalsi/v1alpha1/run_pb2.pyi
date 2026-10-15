@@ -19,10 +19,10 @@ import builtins as _builtins
 import sys
 import typing as _typing
 
-if sys.version_info >= (3, 10):
-    from typing import TypeAlias as _TypeAlias
+if sys.version_info >= (3, 11):
+    from typing import TypeAlias as _TypeAlias, Never as _Never
 else:
-    from typing_extensions import TypeAlias as _TypeAlias
+    from typing_extensions import TypeAlias as _TypeAlias, Never as _Never
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -178,6 +178,12 @@ class Target(_message.Message):
     TEMPERATURE_FIELD_NUMBER: _builtins.int
     EFFORT_FIELD_NUMBER: _builtins.int
     AGENT_FIELD_NUMBER: _builtins.int
+    THINKING_FIELD_NUMBER: _builtins.int
+    STREAM_FIELD_NUMBER: _builtins.int
+    MAX_CONCURRENCY_FIELD_NUMBER: _builtins.int
+    API_FIELD_NUMBER: _builtins.int
+    FALLBACKS_FIELD_NUMBER: _builtins.int
+    FALLBACK_AFTER_FIELD_NUMBER: _builtins.int
     connector: _builtins.str
     """"openai-compatible" or "anthropic". For an agent run without an agent
     below, the model the built-in reference agent uses.
@@ -194,10 +200,36 @@ class Target(_message.Message):
     max_tokens: _builtins.int
     temperature: _builtins.float
     effort: _builtins.str
-    """Anthropic only: output_config.effort."""
+    """Anthropic: output_config.effort. Responses API: reasoning.effort."""
+    stream: _builtins.bool
+    """Stream the response, so long outputs and long reasoning do not hit the
+    HTTP timeout.
+    """
+    max_concurrency: _builtins.int
+    """At most this many concurrent model calls to this endpoint and key from one
+    worker process; 0 is unlimited.
+    """
+    api: _builtins.str
+    """openai-compatible only: "chat-completions" (default) or "responses"."""
+    fallback_after: _builtins.int
     @_builtins.property
     def agent(self) -> _agent_pb2.AgentTarget:
         """A bring-your-own agent instead of a model."""
+
+    @_builtins.property
+    def thinking(self) -> Global___Thinking:
+        """Anthropic extended thinking for the built-in agent; unset leaves the
+        model's default.
+        """
+
+    @_builtins.property
+    def fallbacks(self) -> _containers.RepeatedCompositeFieldContainer[Global___Target]:
+        """Built-in agent: models to switch to, in order, when this one keeps failing
+        (after fallback_after consecutive failed calls; default 2). The
+        conversation moves with the agent; thinking blocks are dropped when the
+        provider changes. Each switch is recorded on the step. A fallback's own
+        fallbacks are ignored.
+        """
 
     def __init__(
         self,
@@ -211,16 +243,47 @@ class Target(_message.Message):
         temperature: _builtins.float | None = ...,
         effort: _builtins.str = ...,
         agent: _agent_pb2.AgentTarget | None = ...,
+        thinking: Global___Thinking | None = ...,
+        stream: _builtins.bool = ...,
+        max_concurrency: _builtins.int = ...,
+        api: _builtins.str = ...,
+        fallbacks: _abc.Iterable[Global___Target] | None = ...,
+        fallback_after: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "temperature", b"temperature"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "temperature", b"temperature", "thinking", b"thinking"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "api_key_env", b"api_key_env", "base_url", b"base_url", "connector", b"connector", "effort", b"effort", "max_tokens", b"max_tokens", "model", b"model", "system_prompt", b"system_prompt", "temperature", b"temperature"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "api", b"api", "api_key_env", b"api_key_env", "base_url", b"base_url", "connector", b"connector", "effort", b"effort", "fallback_after", b"fallback_after", "fallbacks", b"fallbacks", "max_concurrency", b"max_concurrency", "max_tokens", b"max_tokens", "model", b"model", "stream", b"stream", "system_prompt", b"system_prompt", "temperature", b"temperature", "thinking", b"thinking"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__temperature: _TypeAlias = _typing.Literal["temperature"]  # noqa: Y015
     _WhichOneofArgType__temperature: _TypeAlias = _typing.Literal["_temperature", b"_temperature"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType__temperature) -> _WhichOneofReturnType__temperature | None: ...
 
 Global___Target: _TypeAlias = Target  # noqa: Y015
+
+@_typing.final
+class Thinking(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    MODE_FIELD_NUMBER: _builtins.int
+    BUDGET_TOKENS_FIELD_NUMBER: _builtins.int
+    mode: _builtins.str
+    """"adaptive" (the model decides), "enabled" (with budget_tokens) or
+    "disabled".
+    """
+    budget_tokens: _builtins.int
+    """For "enabled": tokens the model may think with; below max_tokens."""
+    def __init__(
+        self,
+        *,
+        mode: _builtins.str = ...,
+        budget_tokens: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["budget_tokens", b"budget_tokens", "mode", b"mode"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___Thinking: _TypeAlias = Thinking  # noqa: Y015
 
 @_typing.final
 class DatasetSource(_message.Message):
@@ -240,9 +303,11 @@ class DatasetSource(_message.Message):
             key: _builtins.str = ...,
             value: _builtins.str = ...,
         ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
         _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-
+    
     INLINE_FIELD_NUMBER: _builtins.int
     PATH_FIELD_NUMBER: _builtins.int
     URI_FIELD_NUMBER: _builtins.int
@@ -359,6 +424,8 @@ class RunOutputs(_message.Message):
         trial: _builtins.int = ...,
         all_trials: _builtins.bool = ...,
     ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["all_trials", b"all_trials", "run_id", b"run_id", "trial", b"trial"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -376,6 +443,8 @@ class InlineRecords(_message.Message):
         *,
         records: _abc.Iterable[_record_pb2.Record] | None = ...,
     ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["records", b"records"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -468,6 +537,8 @@ class Budget(_message.Message):
         max_target_tokens: _builtins.int = ...,
         max_judge_tokens: _builtins.int = ...,
     ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["max_judge_tokens", b"max_judge_tokens", "max_target_tokens", b"max_target_tokens"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -488,6 +559,8 @@ class Progress(_message.Message):
         total: _builtins.int = ...,
         done: _builtins.int = ...,
     ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["done", b"done", "total", b"total"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -511,9 +584,11 @@ class Run(_message.Message):
             key: _builtins.str = ...,
             value: _builtins.str = ...,
         ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
         _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-
+    
     ID_FIELD_NUMBER: _builtins.int
     NAME_FIELD_NUMBER: _builtins.int
     PROJECT_FIELD_NUMBER: _builtins.int

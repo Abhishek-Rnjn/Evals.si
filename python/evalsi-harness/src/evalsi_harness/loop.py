@@ -15,7 +15,7 @@ from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
-from evalsi_harness.models import ChatModel, ModelTurn, ToolCallRequest
+from evalsi_harness.models import ChatModel, ModelTurn, ToolCallRequest, thinking_text
 from evalsi_harness.tools import Tool, ToolResult
 from evalsi_harness.user_sim import UserSimulator
 
@@ -39,6 +39,10 @@ class LoopConfig:
     # whose cache prices we do not know.
     cache_read_mult: float = 1.0
     cache_write_mult: float = 1.0
+    # A turn cut off by the output limit is tried once more with this limit
+    # (0: not retried). It is the config's, not the model's, so a replay makes
+    # the same decision as the recorded run.
+    truncation_retry_tokens: int = 0
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
 
@@ -52,6 +56,8 @@ class LoopState:
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     truncated_turns: int = 0
+    reasoning_tokens: int = 0
+    truncation_retries: int = 0
 
 
 def _add(total: Usage, part: Usage) -> None:
@@ -125,6 +131,8 @@ class AgentLoop:
                 "user_usage": self.state.user_usage.to_dict(),
                 "cache_read_tokens": self.state.cache_read_tokens,
                 "cache_write_tokens": self.state.cache_write_tokens,
+                "reasoning_tokens": self.state.reasoning_tokens,
+                "truncation_retries": self.state.truncation_retries,
             },
         )
 
@@ -142,14 +150,7 @@ class AgentLoop:
         while True:
             if reason := self._over_budget(started):
                 return self._final(last_text, reason)
-            step_span = span_id()
-            start_ns = time.time_ns()
-            turn = await self.model.complete(messages, specs, system=self.config.system)
-            self.state.steps += 1
-            _add(self.state.usage, turn.usage)
-            self.state.cache_read_tokens += turn.cache_read_tokens
-            self.state.cache_write_tokens += turn.cache_write_tokens
-            self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
+            turn = await self._call_model(messages, specs)
             last_text = turn.text or last_text
             if turn.truncated:
                 # Cut off by the output limit: a tool call may be half-written
@@ -184,10 +185,33 @@ class AgentLoop:
                 return self._final(turn.text, "completed")
             messages.append({"role": "user", "content": reply.message})
 
+    async def _call_model(self, messages: list[dict[str, Any]], specs: list[Any]) -> ModelTurn:
+        """One model step. A turn cut off by the output limit is tried again,
+        once, with a higher limit; both calls are steps and both are billed."""
+        limit = 0
+        while True:
+            step_span = span_id()
+            start_ns = time.time_ns()
+            turn = await self.model.complete(
+                messages, specs, system=self.config.system, max_tokens=limit
+            )
+            self.state.steps += 1
+            _add(self.state.usage, turn.usage)
+            self.state.cache_read_tokens += turn.cache_read_tokens
+            self.state.cache_write_tokens += turn.cache_write_tokens
+            self.state.reasoning_tokens += turn.reasoning_tokens
+            self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
+            if not turn.truncated or limit or not self.config.truncation_retry_tokens:
+                return turn
+            if self._over_budget(time.monotonic()):  # steps or spend left no room
+                return turn
+            limit = self.config.truncation_retry_tokens
+            self.state.truncation_retries += 1
+
     def _llm_step(self, turn: ModelTurn, span: str) -> Step:
         return Step(
             type="llm",
-            name=self.model.name,
+            name=turn.model or self.model.name,
             output=Content(
                 messages=[
                     Message(
@@ -205,11 +229,22 @@ class AgentLoop:
             usage=turn.usage,
             duration_ms=turn.usage.latency_ms,
             attributes={
-                "gen_ai.request.model": self.model.name,
+                "gen_ai.request.model": turn.model or self.model.name,
                 "gen_ai.response.finish_reasons": [turn.stop_reason],
                 "gen_ai.usage.cache_read.input_tokens": turn.cache_read_tokens,
                 "gen_ai.usage.cache_creation.input_tokens": turn.cache_write_tokens,
-                **({"evalsi.thinking.blocks": len(turn.thinking)} if turn.thinking else {}),
+                "gen_ai.usage.reasoning.output_tokens": turn.reasoning_tokens,
+                **(
+                    {
+                        "evalsi.thinking.blocks": len(turn.thinking),
+                        "evalsi.thinking.text": thinking_text(turn.thinking),
+                    }
+                    if turn.thinking
+                    else {}
+                ),
+                **(
+                    {"evalsi.model.switched_from": turn.switched_from} if turn.switched_from else {}
+                ),
             },
         )
 

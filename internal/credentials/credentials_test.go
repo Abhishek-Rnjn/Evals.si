@@ -176,6 +176,36 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+func TestSpecUsesCoverFallbackModels(t *testing.T) {
+	spec := &evalsiv1alpha1.RunSpec{Target: &evalsiv1alpha1.Target{
+		Connector: "anthropic", Model: "m",
+		Fallbacks: []*evalsiv1alpha1.Target{
+			{Connector: "openai-compatible", Model: "f", BaseUrl: "https://f.example/v1", ApiKeyEnv: "FALLBACK_KEY"},
+			{Connector: "anthropic", Model: "g", ApiKeyEnv: "none"},
+		},
+	}}
+	if _, err := SpecUses(spec); err == nil || !strings.Contains(err.Error(), "fallbacks[1]") {
+		t.Fatalf("a keyless anthropic fallback was accepted: %v", err)
+	}
+	spec.Target.Fallbacks = spec.Target.Fallbacks[:1]
+	uses, err := SpecUses(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, u := range uses {
+		if u.Env == "FALLBACK_KEY" {
+			found = true
+			if u.URL != "https://f.example/v1" || u.Field != "spec.target.fallbacks[0].api_key_env" {
+				t.Errorf("use = %+v", u)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("the fallback's key was not listed for a grant check: %+v", uses)
+	}
+}
+
 func TestSpecUses(t *testing.T) {
 	harnessCfg, _ := structpb.NewStruct(map[string]any{"base_url": "https://h.example", "secret_env": "H_SECRET"})
 	spec := &evalsiv1alpha1.RunSpec{

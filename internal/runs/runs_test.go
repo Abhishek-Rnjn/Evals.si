@@ -535,6 +535,64 @@ func TestCreateRunValidation(t *testing.T) {
 	}
 }
 
+func TestCreateRunValidatesModelOptions(t *testing.T) {
+	h := newHarness(t)
+	anthropic := func(mod func(*evalsiv1alpha1.Target)) *evalsiv1alpha1.RunSpec {
+		tg := &evalsiv1alpha1.Target{Connector: "anthropic", Model: "m"}
+		mod(tg)
+		return &evalsiv1alpha1.RunSpec{Target: tg, Dataset: inline("easy"), Evaluators: refs("exact-match")}
+	}
+	fb := func(f *evalsiv1alpha1.Target) func(*evalsiv1alpha1.Target) {
+		return func(tg *evalsiv1alpha1.Target) { tg.Fallbacks = []*evalsiv1alpha1.Target{f} }
+	}
+	cases := map[string]*evalsiv1alpha1.RunSpec{
+		"thinking.mode must be": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.Thinking = &evalsiv1alpha1.Thinking{Mode: "deep"}
+		}),
+		"budget_tokens is required": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.Thinking = &evalsiv1alpha1.Thinking{Mode: "enabled"}
+		}),
+		"below max_tokens": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.MaxTokens = 2000
+			tg.Thinking = &evalsiv1alpha1.Thinking{Mode: "enabled", BudgetTokens: 4000}
+		}),
+		"thinking is for anthropic": {
+			Target:     &evalsiv1alpha1.Target{Connector: "openai-compatible", Model: "m", BaseUrl: "http://x/v1", Thinking: &evalsiv1alpha1.Thinking{Mode: "adaptive"}},
+			Dataset:    inline("easy"),
+			Evaluators: refs("exact-match"),
+		},
+		"api must be": anthropic(func(tg *evalsiv1alpha1.Target) { tg.Api = "completions" }),
+		"api responses is for openai-compatible": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.Api = "responses"
+		}),
+		"cannot be negative": anthropic(func(tg *evalsiv1alpha1.Target) { tg.MaxConcurrency = -1 }),
+		"at most": anthropic(func(tg *evalsiv1alpha1.Target) {
+			for range maxFallbacks + 1 {
+				tg.Fallbacks = append(tg.Fallbacks, &evalsiv1alpha1.Target{Connector: "anthropic", Model: "f"})
+			}
+		}),
+		"fallbacks[0].base_url is required": anthropic(fb(&evalsiv1alpha1.Target{Connector: "openai-compatible", Model: "f"})),
+		"fallbacks[0].connector must be":    anthropic(fb(&evalsiv1alpha1.Target{Connector: "gemini", Model: "f"})),
+		"cannot have fallbacks of its own": anthropic(fb(&evalsiv1alpha1.Target{
+			Connector: "anthropic", Model: "f", Fallbacks: []*evalsiv1alpha1.Target{{Connector: "anthropic", Model: "g"}},
+		})),
+	}
+	for want, spec := range cases {
+		_, err := h.m.CreateRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Spec: spec}))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: err = %v", want, err)
+		}
+	}
+	good := anthropic(func(tg *evalsiv1alpha1.Target) {
+		tg.MaxTokens = 8000
+		tg.Thinking = &evalsiv1alpha1.Thinking{Mode: "enabled", BudgetTokens: 4000}
+		tg.Fallbacks = []*evalsiv1alpha1.Target{{Connector: "openai-compatible", Model: "f", BaseUrl: "http://x/v1", Api: "responses"}}
+	})
+	if err := validateTargetOptions(good.GetTarget(), "spec.target"); err != nil {
+		t.Errorf("a valid target was refused: %v", err)
+	}
+}
+
 func TestListAndCompare(t *testing.T) {
 	h := newHarness(t)
 	spec := func(inputs ...string) *evalsiv1alpha1.RunSpec {

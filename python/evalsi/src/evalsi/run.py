@@ -65,6 +65,13 @@ def target_config(target: run_pb2.Target) -> TargetConfig:
         max_tokens=target.max_tokens or 16000,
         temperature=target.temperature if target.HasField("temperature") else None,
         effort=target.effort,
+        thinking=target.thinking.mode if target.HasField("thinking") else "",
+        thinking_budget=target.thinking.budget_tokens if target.HasField("thinking") else 0,
+        stream=target.stream,
+        max_concurrency=target.max_concurrency,
+        api=target.api,
+        fallbacks=tuple(target_config(f) for f in target.fallbacks),
+        fallback_after=target.fallback_after,
     )
 
 
