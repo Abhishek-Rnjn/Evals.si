@@ -218,7 +218,8 @@ class AgentLoop:
                 "cache_write_tokens": self.state.cache_write_tokens,
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
-                "tools_offered": sorted(self.tools),
+                # What the model was shown: deferred MCP tools only appear after a search.
+                "tools_offered": sorted(n for n in self.tools if n not in self.deferred),
                 **(
                     {
                         "subagents": self.state.subagents,
@@ -228,7 +229,10 @@ class AgentLoop:
                     else {}
                 ),
                 **(
-                    {"context": self.strategy.stats.to_dict()}
+                    {
+                        "context": self.strategy.stats.to_dict(),
+                        "context_strategy": self.config.context.strategy,
+                    }
                     if self.config.context.strategy != "none"
                     else {}
                 ),

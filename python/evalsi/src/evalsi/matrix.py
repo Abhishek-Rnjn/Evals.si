@@ -85,9 +85,12 @@ def harness_of(result: Mapping[str, Any]) -> str:
 
 
 def _model_of(result: Mapping[str, Any]) -> str:
-    target = _get(result, "manifest", "target")
-    if isinstance(target, Mapping):
-        return str(target.get("model") or target.get("connector") or "")
+    # An agent run records its target under manifest.agent.agent; a plain model
+    # run under manifest.target.
+    for path in (("manifest", "target"), ("manifest", "agent", "agent")):
+        target = _get(result, *path)
+        if isinstance(target, Mapping) and (target.get("model") or target.get("connector")):
+            return str(target.get("model") or target.get("connector"))
     return ""
 
 
@@ -100,6 +103,17 @@ def _cost(result: Mapping[str, Any]) -> Cost:
         steps = _get(r, "metadata", "agent", "steps")
         if isinstance(steps, int | float) and not isinstance(steps, bool):
             calls.append(float(steps))
+        else:
+            # A CLI agent has no step count of its own: count the model calls its
+            # trajectory shows (a reader turned its event stream into them).
+            llm = [
+                s
+                for s in _get(r, "trajectory", "steps") or []
+                if isinstance(s, Mapping)
+                and str(s.get("type", "")).lower().removeprefix("step_type_") == "llm"
+            ]
+            if llm:
+                calls.append(float(len(llm)))
         usage = r.get("usage") or {}
         tin, tout = usage.get("input_tokens"), usage.get("output_tokens")
         if tin is not None or tout is not None:
@@ -292,7 +306,16 @@ def mechanisms(result: Mapping[str, Any]) -> list[Mechanism]:
     for tool in OPTIONAL_TOOLS:
         if tool in offered:
             out.append(Mechanism(f"tool:{tool}", sum(tool in _called(r) for r in records), n))
-    strategy = _get(result, "manifest", "spec", "harness", "builtin", "context", "strategy")
+    # The strategy that ran is what the run recorded (a profile may have chosen
+    # it); the spec's own is the fallback for results from an older harness.
+    strategy = next(
+        (
+            _get(r, "metadata", "agent", "context_strategy")
+            for r in records
+            if _get(r, "metadata", "agent", "context_strategy")
+        ),
+        _get(result, "manifest", "spec", "harness", "builtin", "context", "strategy"),
+    )
     if strategy and strategy != "none":
 
         def acted(r: Mapping[str, Any]) -> bool:
