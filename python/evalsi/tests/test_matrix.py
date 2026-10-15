@@ -121,3 +121,47 @@ def test_the_cli_prints_a_table_and_json(
     assert [r["harness"] for r in rows] == ["standard@1", "minimal@1"]
     assert main(["matrix", str(pa), "--metric", "nope"]) == 2
     assert main(["matrix", str(tmp_path / "missing.json"), "--metric", "x"]) == 2
+
+
+def with_trajectory(
+    data: dict[str, Any], called: list[list[str]], offered: list[str]
+) -> dict[str, Any]:
+    for rec, names in zip(data["records"], called, strict=True):
+        rec["trajectory"] = {"steps": [{"type": "STEP_TYPE_TOOL", "name": n} for n in names]}
+        rec["metadata"]["agent"]["tools_offered"] = offered
+    return data
+
+
+def test_a_mechanism_that_never_ran_is_flagged(capsys: pytest.CaptureFixture[str]) -> None:
+    data = results("standard@1", [1, 0, 1], tokens=1000, steps=5)
+    data["manifest"]["spec"]["harness"]["builtin"]["context"] = {"strategy": "compact"}
+    with_trajectory(
+        data,
+        [["bash", "grep"], ["bash"], ["bash", "grep"]],
+        ["bash", "grep", "edit_file", "request_escalation"],
+    )
+    found = {m.name: (m.ran, m.of) for m in matrix.mechanisms(data)}
+    assert found["tool:grep"] == (2, 3)
+    assert found["tool:edit_file"] == (0, 3)  # offered, never called
+    assert found["context:compact"] == (0, 3)  # the window never filled
+    text = matrix.mechanism_lines([("standard", data)])
+    assert "tool:edit_file 0/3 (never ran)" in text
+    assert "context:compact 0/3 (never ran)" in text
+    assert "tool:grep 2/3" in text
+    assert "(never ran)" not in text.split("tool:grep 2/3")[1].split(",")[0]
+
+
+def test_a_context_strategy_that_acted_is_counted(tmp_path: Path) -> None:
+    data = results("standard@1", [1, 1], tokens=1000, steps=5)
+    data["manifest"]["spec"]["harness"]["builtin"]["context"] = {"strategy": "compact"}
+    data["records"][0]["metadata"]["agent"]["context"] = {"clears": 1, "compactions": 1}
+    data["records"][1]["metadata"]["agent"]["context"] = {"clears": 0, "compactions": 0}
+    (m,) = matrix.mechanisms(data)
+    assert (m.name, m.ran, m.of) == ("context:compact", 1, 2)
+    path = tmp_path / "a.json"
+    path.write_text(json.dumps(data))
+    assert main(["matrix", str(path), "--metric", "task-success", "--mechanisms"]) == 0
+    assert (
+        main(["matrix", str(path), "--metric", "task-success", "--mechanisms", "--format", "json"])
+        == 0
+    )

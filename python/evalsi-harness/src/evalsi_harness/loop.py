@@ -218,6 +218,7 @@ class AgentLoop:
                 "cache_write_tokens": self.state.cache_write_tokens,
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
+                "tools_offered": sorted(self.tools),
                 **(
                     {
                         "subagents": self.state.subagents,

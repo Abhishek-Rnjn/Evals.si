@@ -13,6 +13,7 @@ import json
 import os
 import sys
 from collections.abc import Sequence
+from dataclasses import asdict
 from typing import Any
 
 from evalsi._version import __version__
@@ -188,6 +189,11 @@ def _add_run(sub: Any) -> None:
         default=[],
         help="a results file name, run name or dataset hash the harness was tuned on; "
         "cells are then split into tuned and held-out",
+    )
+    mx.add_argument(
+        "--mechanisms",
+        action="store_true",
+        help="also show, per cell, which optional tools and context strategy ran in how many tasks",
     )
     mx.add_argument("--format", choices=["table", "json"], default="table")
     mx.set_defaults(func=_cmd_matrix)
@@ -897,9 +903,15 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.format == "json":
-        print(json.dumps([c.to_dict() for c in cells], indent=2))
+        rows = [c.to_dict() for c in cells]
+        if args.mechanisms:
+            for row, (_, data) in zip(rows, loaded, strict=True):
+                row["mechanisms"] = [asdict(m) for m in matrix.mechanisms(data)]
+        print(json.dumps(rows, indent=2))
     else:
         print(matrix.table(cells))
+        if args.mechanisms:
+            print("\n" + matrix.mechanism_lines(loaded))
     return 0
 
 

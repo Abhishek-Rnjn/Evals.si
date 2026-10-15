@@ -171,6 +171,21 @@ def _f(value: float | None, fmt: str = ".3f") -> str:
     return format(value, fmt)
 
 
+def mechanism_lines(results: Sequence[tuple[str, Mapping[str, Any]]]) -> str:
+    """One line per cell: what ran, in how many tasks, and a warning for what never did."""
+    lines = []
+    for name, data in results:
+        found = mechanisms(data)
+        if not found:
+            lines.append(f"{name}: no optional mechanism recorded")
+            continue
+        parts = [
+            f"{m.name} {m.ran}/{m.of}" + (" (never ran)" if m.never_ran else "") for m in found
+        ]
+        lines.append(f"{name}: " + ", ".join(parts))
+    return "\n".join(lines)
+
+
 def table(cells: Sequence[Cell]) -> str:
     """The matrix as text: score and interval, then cost, then the difference."""
     head = [
@@ -222,3 +237,70 @@ def paired_n(baseline: Mapping[str, Any], candidate: Mapping[str, Any], metric: 
     a = record_values(baseline).get(metric, {})
     b = record_values(candidate).get(metric, {})
     return len(set(a) & set(b))
+
+
+# Tools a harness may add (the H2 toolset and friends): "offered but never
+# called" is the finding that matters when a change is meant to add one.
+OPTIONAL_TOOLS = (
+    "edit_file",
+    "glob",
+    "grep",
+    "apply_patch",
+    "memory",
+    "session_search",
+    "delegate",
+    "tool_search",
+    "run_code",
+    "evidence",
+)
+
+
+@dataclass
+class Mechanism:
+    """A part of the harness that was on, and in how many tasks it ran."""
+
+    name: str
+    ran: int
+    of: int
+
+    @property
+    def never_ran(self) -> bool:
+        return self.of > 0 and self.ran == 0
+
+
+def _called(record: Mapping[str, Any]) -> set[str]:
+    steps = _get(record, "trajectory", "steps") or []
+    return {
+        str(s.get("name", ""))
+        for s in steps
+        if isinstance(s, Mapping)
+        and str(s.get("type", "")).lower().removeprefix("step_type_") == "tool"
+    }
+
+
+def mechanisms(result: Mapping[str, Any]) -> list[Mechanism]:
+    """Which parts of the harness were on, and in how many tasks the traces show
+    them running. A gain credited to a change whose mechanism ran in none of the
+    tasks is not evidence the change helped: the window may never have filled,
+    the new tool may never have been called."""
+    records = [r for r in result.get("records") or [] if isinstance(r, Mapping)]
+    n = len(records)
+    out: list[Mechanism] = []
+    offered: set[str] = set()
+    for r in records:
+        offered.update(_get(r, "metadata", "agent", "tools_offered") or [])
+    for tool in OPTIONAL_TOOLS:
+        if tool in offered:
+            out.append(Mechanism(f"tool:{tool}", sum(tool in _called(r) for r in records), n))
+    strategy = _get(result, "manifest", "spec", "harness", "builtin", "context", "strategy")
+    if strategy and strategy != "none":
+
+        def acted(r: Mapping[str, Any]) -> bool:
+            agent = _get(r, "metadata", "agent") or {}
+            stats = agent.get("context") or {}
+            return bool(
+                stats.get("clears") or stats.get("compactions") or stats.get("rounds")
+            ) or bool(agent.get("evidence"))
+
+        out.append(Mechanism(f"context:{strategy}", sum(acted(r) for r in records), n))
+    return out

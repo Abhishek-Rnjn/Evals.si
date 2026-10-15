@@ -169,7 +169,7 @@ Run the same spec once per profile (or per model), each with `--output`, then:
 evalsi matrix standard.json minimal.json code-mode.json --metric task-success
 ```
 
-Each file is a cell with its harness, model, score and interval, and beside the score what it cost per task: model calls, tokens and dollars, and the score per thousand tokens. Every cell after the first is compared with the first, paired by record and trial, so the difference carries its own interval and is starred when it excludes zero. `--tuned-on NAME` (a results file name, a run name or a dataset hash) splits the cells into `tuned` and `held-out`, so a profile tuned on one benchmark is also read on others. Cost columns show `-` when the results lack the figure.
+Each file is a cell with its harness, model, score and interval, and beside the score what it cost per task: model calls, tokens and dollars, and the score per thousand tokens. Every cell after the first is compared with the first, paired by record and trial, so the difference carries its own interval and is starred when it excludes zero. `--tuned-on NAME` (a results file name, a run name or a dataset hash) splits the cells into `tuned` and `held-out`, so a profile tuned on one benchmark is also read on others. Cost columns show `-` when the results lack the figure. `--mechanisms` adds, per cell, which optional tools were offered and in how many tasks the trajectories show them called, and whether the context strategy cleared or compacted anything, with `(never ran)` for a mechanism that ran in no task: a gain credited to a change whose mechanism never executed (a window that never filled, a tool the model never called) is not evidence the change helped.
 
 ### The agent's own setup
 
