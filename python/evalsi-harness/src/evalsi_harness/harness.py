@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -34,7 +35,14 @@ from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskE
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.hooks import Hooks, load_hooks
 from evalsi_harness.loop import DEFAULT_SYSTEM, AgentLoop, LoopConfig
-from evalsi_harness.mcp import MCPClient, MCPTool
+from evalsi_harness.mcp import (
+    MCPClient,
+    MCPPromptsTool,
+    MCPResourcesTool,
+    MCPTool,
+    OAuth,
+    answer_from_text,
+)
 from evalsi_harness.models import ChatModel, create_model
 from evalsi_harness.task import Task, TaskError
 from evalsi_harness.tools import (
@@ -49,6 +57,18 @@ from evalsi_harness.tools import (
 from evalsi_harness.toolset import MEMORY_DIR, MUTATING, extra_tools
 from evalsi_harness.trust import Trust
 from evalsi_harness.user_sim import UserSimulator
+
+
+def _elicitation(user: UserSimulator) -> Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]:
+    """Answers an MCP server's question with the simulated user."""
+
+    async def answer(message: str, schema: dict[str, Any]) -> dict[str, Any]:
+        reply = await user.reply([{"role": "assistant", "content": message}])
+        if not reply.message:
+            return {"action": "cancel"}
+        return answer_from_text(schema, reply.message)
+
+    return answer
 
 
 @dataclass
@@ -365,7 +385,7 @@ class BuiltinHarness:
             system=system,
         )
 
-    async def _tools(self, live: LiveTask) -> list[Tool]:
+    async def _tools(self, live: LiveTask, user: UserSimulator | None = None) -> list[Tool]:
         tools: list[Tool] = []
         cfg = self.config.tools
         use_sandbox = cfg.sandbox if cfg.HasField("sandbox") else live.env is not None
@@ -390,14 +410,40 @@ class BuiltinHarness:
             if server.command:
                 self.ctx.trust.check_command(list(server.command), f"MCP server {server.name}")
             headers = {h: os.environ.get(env, "") for h, env in server.headers_env.items()}
+            oauth = None
+            if server.HasField("oauth"):
+                o = server.oauth
+                oauth = OAuth(
+                    o.token_url,
+                    os.environ.get(o.client_id_env, ""),
+                    os.environ.get(o.client_secret_env, ""),
+                    o.scope,
+                )
+            elicit = _elicitation(user) if server.elicitation and user is not None else None
             client = await MCPClient.connect(
-                name=server.name, url=server.url, command=list(server.command), headers=headers
+                name=server.name,
+                url=server.url,
+                command=list(server.command),
+                headers=headers,
+                timeout_s=server.timeout_s or 120.0,
+                oauth=oauth,
+                elicit=elicit,
             )
             live.closers.append(client.aclose)
             for spec in await client.list_tools():
                 if server.tools and spec.name not in server.tools:
                     continue
-                tools.append(MCPTool(client, spec))
+                tool = MCPTool(
+                    client, spec, timeout_s=float(server.tool_timeout_s.get(spec.name, 0))
+                )
+                # tool_search: MCP tools start unloaded and are loaded as the agent needs them.
+                tool.deferred = "tool_search" in cfg.builtin
+                tools.append(tool)
+            label = re.sub(r"[^A-Za-z0-9_]", "_", server.name) or f"mcp{len(tools)}"
+            if server.resources:
+                tools.append(MCPResourcesTool(client, label))
+            if server.prompts:
+                tools.append(MCPPromptsTool(client, label))
         for mock in cfg.mocks:
             tools.append(
                 MockTool(
@@ -525,7 +571,8 @@ class BuiltinHarness:
             except ValueError as exc:
                 raise TaskError(f"target: {exc}") from exc
             live.closers.append(model.aclose)
-        tools = await self._tools(live)
+        user = self._user_simulator(task)
+        tools = await self._tools(live, user)
         cassette = live.cassette = self._cassette(live)
         if cassette is not None:
             model = CassetteModel(cassette, model)
@@ -534,7 +581,6 @@ class BuiltinHarness:
                 CassetteTool(cassette, t, reexecute=t.spec.name in sandbox_names) for t in tools
             ]
         assert model is not None
-        user = self._user_simulator(task)
         hooks = self._hooks(live)
         loop = AgentLoop(
             model,

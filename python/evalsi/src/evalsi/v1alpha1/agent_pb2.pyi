@@ -435,15 +435,51 @@ class MCPServer(_message.Message):
         _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
+    @_typing.final
+    class ToolTimeoutSEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.int
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.int = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     NAME_FIELD_NUMBER: _builtins.int
     URL_FIELD_NUMBER: _builtins.int
     COMMAND_FIELD_NUMBER: _builtins.int
     HEADERS_ENV_FIELD_NUMBER: _builtins.int
     TOOLS_FIELD_NUMBER: _builtins.int
+    TIMEOUT_S_FIELD_NUMBER: _builtins.int
+    TOOL_TIMEOUT_S_FIELD_NUMBER: _builtins.int
+    RESOURCES_FIELD_NUMBER: _builtins.int
+    PROMPTS_FIELD_NUMBER: _builtins.int
+    ELICITATION_FIELD_NUMBER: _builtins.int
+    OAUTH_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """A name used to prefix its tools when names collide."""
     url: _builtins.str
     """Streamable HTTP endpoint."""
+    timeout_s: _builtins.int
+    """Seconds a request to the server may take (default 120), and per tool
+    (by name) where a tool needs more or less.
+    """
+    resources: _builtins.bool
+    """Also offer the server's resources and prompts, as <name>_resources and
+    <name>_prompts tools.
+    """
+    prompts: _builtins.bool
+    elicitation: _builtins.bool
+    """Let the server ask the user questions mid-call (MCP elicitation), answered
+    by the user simulator, which spec.harness.builtin.user_simulator must set.
+    """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Or a command started on the worker that speaks MCP over stdio. It runs
@@ -456,6 +492,12 @@ class MCPServer(_message.Message):
     def tools(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Only these tools; all when empty."""
 
+    @_builtins.property
+    def tool_timeout_s(self) -> _containers.ScalarMap[_builtins.str, _builtins.int]: ...
+    @_builtins.property
+    def oauth(self) -> Global___MCPOAuth:
+        """Reach a url server with an OAuth 2 client-credentials token."""
+
     def __init__(
         self,
         *,
@@ -464,11 +506,49 @@ class MCPServer(_message.Message):
         command: _abc.Iterable[_builtins.str] | None = ...,
         headers_env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         tools: _abc.Iterable[_builtins.str] | None = ...,
+        timeout_s: _builtins.int = ...,
+        tool_timeout_s: _abc.Mapping[_builtins.str, _builtins.int] | None = ...,
+        resources: _builtins.bool = ...,
+        prompts: _builtins.bool = ...,
+        elicitation: _builtins.bool = ...,
+        oauth: Global___MCPOAuth | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "headers_env", b"headers_env", "name", b"name", "tools", b"tools", "url", b"url"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["oauth", b"oauth"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "elicitation", b"elicitation", "headers_env", b"headers_env", "name", b"name", "oauth", b"oauth", "prompts", b"prompts", "resources", b"resources", "timeout_s", b"timeout_s", "tool_timeout_s", b"tool_timeout_s", "tools", b"tools", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___MCPServer: _TypeAlias = MCPServer  # noqa: Y015
+
+@_typing.final
+class MCPOAuth(_message.Message):
+    """OAuth 2 client credentials: the machine flow, since a run has no one to
+    approve a browser redirect. The two variables are read by the worker and,
+    on a server, must be granted to the run's project (credentials.grants).
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TOKEN_URL_FIELD_NUMBER: _builtins.int
+    CLIENT_ID_ENV_FIELD_NUMBER: _builtins.int
+    CLIENT_SECRET_ENV_FIELD_NUMBER: _builtins.int
+    SCOPE_FIELD_NUMBER: _builtins.int
+    token_url: _builtins.str
+    client_id_env: _builtins.str
+    client_secret_env: _builtins.str
+    scope: _builtins.str
+    def __init__(
+        self,
+        *,
+        token_url: _builtins.str = ...,
+        client_id_env: _builtins.str = ...,
+        client_secret_env: _builtins.str = ...,
+        scope: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["client_id_env", b"client_id_env", "client_secret_env", b"client_secret_env", "scope", b"scope", "token_url", b"token_url"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___MCPOAuth: _TypeAlias = MCPOAuth  # noqa: Y015
 
 @_typing.final
 class MockTool(_message.Message):
@@ -577,8 +657,9 @@ class Tools(_message.Message):
         """More built-in tools to offer, by name: edit_file (exact-match replace),
         glob, grep, apply_patch (a unified diff), memory (notes that survive
         context management), session_search (find and re-read what context
-        management removed) and delegate (hand a subtask to a sub-agent with a
-        fresh context and keep only its report). Off by default, so a comparison between models uses
+        management removed) delegate (hand a subtask to a sub-agent with a
+        fresh context and keep only its report) and tool_search (the MCP tools
+        start unloaded and the agent loads the ones it needs by searching). Off by default, so a comparison between models uses
         the same toolset unless a spec says so.
         """
 

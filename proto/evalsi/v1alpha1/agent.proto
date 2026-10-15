@@ -121,6 +121,29 @@ message MCPServer {
   map<string, string> headers_env = 4;
   // Only these tools; all when empty.
   repeated string tools = 5;
+  // Seconds a request to the server may take (default 120), and per tool
+  // (by name) where a tool needs more or less.
+  int32 timeout_s = 6;
+  map<string, int32> tool_timeout_s = 7;
+  // Also offer the server's resources and prompts, as <name>_resources and
+  // <name>_prompts tools.
+  bool resources = 8;
+  bool prompts = 9;
+  // Let the server ask the user questions mid-call (MCP elicitation), answered
+  // by the user simulator, which spec.harness.builtin.user_simulator must set.
+  bool elicitation = 10;
+  // Reach a url server with an OAuth 2 client-credentials token.
+  MCPOAuth oauth = 11;
+}
+
+// OAuth 2 client credentials: the machine flow, since a run has no one to
+// approve a browser redirect. The two variables are read by the worker and,
+// on a server, must be granted to the run's project (credentials.grants).
+message MCPOAuth {
+  string token_url = 1;
+  string client_id_env = 2;
+  string client_secret_env = 3;
+  string scope = 4;
 }
 
 // A tool answered from the spec instead of a live system.
@@ -155,8 +178,9 @@ message Tools {
   // More built-in tools to offer, by name: edit_file (exact-match replace),
   // glob, grep, apply_patch (a unified diff), memory (notes that survive
   // context management), session_search (find and re-read what context
-  // management removed) and delegate (hand a subtask to a sub-agent with a
-  // fresh context and keep only its report). Off by default, so a comparison between models uses
+  // management removed) delegate (hand a subtask to a sub-agent with a
+  // fresh context and keep only its report) and tool_search (the MCP tools
+  // start unloaded and the agent loads the ones it needs by searching). Off by default, so a comparison between models uses
   // the same toolset unless a spec says so.
   repeated string builtin = 5;
 }

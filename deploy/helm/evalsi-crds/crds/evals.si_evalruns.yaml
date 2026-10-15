@@ -1095,6 +1095,8 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                elicitation:
+                                  type: boolean
                                 headers_env:
                                   additionalProperties:
                                     type: string
@@ -1105,6 +1107,40 @@ spec:
                                   type: object
                                 name:
                                   type: string
+                                oauth:
+                                  properties:
+                                    client_id_env:
+                                      type: string
+                                    client_secret_env:
+                                      type: string
+                                    clientIdEnv:
+                                      type: string
+                                    clientSecretEnv:
+                                      type: string
+                                    scope:
+                                      type: string
+                                    token_url:
+                                      type: string
+                                    tokenUrl:
+                                      type: string
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                prompts:
+                                  type: boolean
+                                resources:
+                                  type: boolean
+                                timeout_s:
+                                  type: integer
+                                timeoutS:
+                                  type: integer
+                                tool_timeout_s:
+                                  additionalProperties:
+                                    type: integer
+                                  type: object
+                                toolTimeoutS:
+                                  additionalProperties:
+                                    type: integer
+                                  type: object
                                 tools:
                                   items:
                                     type: string

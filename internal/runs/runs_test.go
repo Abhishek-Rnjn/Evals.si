@@ -728,6 +728,24 @@ func TestAgentRunValidation(t *testing.T) {
 		"evidence state without a window": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "evidence-state"}
 		},
+		"mcp timeout too long": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", TimeoutS: maxMCPTimeout + 1}}}
+		},
+		"mcp tool timeout": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", ToolTimeoutS: map[string]int32{"slow": 0}}}}
+		},
+		"elicitation without a user": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", Elicitation: true}}}
+		},
+		"oauth for a command": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"npx", "mcp-crm"}, Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://t", ClientIdEnv: "A", ClientSecretEnv: "B"}}}}
+		},
+		"oauth bad token url": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "ftp://t", ClientIdEnv: "A", ClientSecretEnv: "B"}}}}
+		},
+		"oauth without secrets": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://t"}}}}
+		},
 		"too many rounds": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: maxRounds + 1}
 		},
@@ -799,6 +817,14 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"mcp options": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().UserSimulator = &evalsiv1alpha1.UserSimulator{Goal: "g"}
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{
+				Builtin: []string{"tool_search"},
+				Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", TimeoutS: 30, ToolTimeoutS: map[string]int32{"slow": 600}, Resources: true, Prompts: true, Elicitation: true,
+					Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://auth.example/token", ClientIdEnv: "A", ClientSecretEnv: "B", Scope: "read"}}},
+			}
 		},
 		"evidence state with a window": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "evidence-state", WindowTokens: 200000, Trigger: 0.7, Target: 0.4}

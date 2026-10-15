@@ -2,6 +2,7 @@ package runs
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -76,6 +77,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 	for _, s := range b.GetTools().GetMcp() {
 		if (s.GetUrl() == "") == (len(s.GetCommand()) == 0) {
 			return invalid("every MCP server needs exactly one of url or command")
+		}
+		if err := validateMCPOptions(s, b.GetUserSimulator() != nil); err != nil {
+			return err
 		}
 		if len(s.GetCommand()) > 0 {
 			if err := m.trustCommand(s.GetCommand(), "MCP server "+s.GetName()); err != nil {
@@ -222,7 +226,7 @@ const maxRounds = 50
 const maxHooks = 8
 
 // builtinTools are the optional built-in tools a spec may list.
-var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search", "delegate"}
+var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search", "delegate", "tool_search"}
 
 // minContextWindow is the smallest window a strategy can work in: below it the
 // summary and the kept turns alone would not fit.
@@ -260,6 +264,38 @@ func validateContext(c *evalsiv1alpha1.ContextManagement) error {
 	}
 	if c.GetKeepRecent() < 0 || c.GetKeepTurns() < 0 || c.GetSummaryMaxTokens() < 0 || c.GetWindowTokens() < 0 {
 		return invalid("%s: keep_recent, keep_turns, summary_max_tokens and window_tokens cannot be negative", f)
+	}
+	return nil
+}
+
+// maxMCPTimeout bounds a request to an MCP server, in seconds.
+const maxMCPTimeout = 3600
+
+// validateMCPOptions checks an MCP server's timeouts, OAuth and elicitation.
+func validateMCPOptions(s *evalsiv1alpha1.MCPServer, hasUser bool) error {
+	f := "spec.harness.builtin.tools.mcp " + s.GetName()
+	if s.GetTimeoutS() < 0 || s.GetTimeoutS() > maxMCPTimeout {
+		return invalid("%s: timeout_s must be from 0 to %d", f, maxMCPTimeout)
+	}
+	for name, t := range s.GetToolTimeoutS() {
+		if name == "" || t < 1 || t > maxMCPTimeout {
+			return invalid("%s: tool_timeout_s needs a tool name and from 1 to %d seconds", f, maxMCPTimeout)
+		}
+	}
+	if s.GetElicitation() && !hasUser {
+		return invalid("%s: elicitation needs spec.harness.builtin.user_simulator to answer", f)
+	}
+	if o := s.GetOauth(); o != nil {
+		u, err := url.Parse(o.GetTokenUrl())
+		if len(s.GetCommand()) > 0 {
+			return invalid("%s: oauth is for servers reached by url", f)
+		}
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return invalid("%s: oauth.token_url must be an http or https URL", f)
+		}
+		if o.GetClientIdEnv() == "" || o.GetClientSecretEnv() == "" {
+			return invalid("%s: oauth needs client_id_env and client_secret_env", f)
+		}
 	}
 	return nil
 }

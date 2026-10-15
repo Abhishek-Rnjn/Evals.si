@@ -26,7 +26,7 @@ from evalsi_harness.tools import OUTPUT_LIMIT, Tool, ToolResult, _clip
 MUTATING = frozenset({"edit_file", "apply_patch", "memory"})
 NAMES = ("edit_file", "glob", "grep", "apply_patch", "memory")
 # Offered by the agent loop itself, which owns what they need.
-LOOP_NAMES = ("session_search", "delegate")
+LOOP_NAMES = ("session_search", "delegate", "tool_search")
 MAX_LISTED = 500
 # Evals.si's own files never show up in searches, as they never show up in the diff.
 _PRUNE = "-not -path '*/.git/*' -not -path '*/.evalsi-*'"

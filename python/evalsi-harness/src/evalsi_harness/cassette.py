@@ -316,6 +316,8 @@ class CassetteTool:
         self.inner = inner
         self.spec = inner.spec
         self.reexecute = reexecute
+        # tool_search's flag passes through the recording.
+        self.deferred = getattr(inner, "deferred", False)
 
     async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
         result = self.cassette.tool_result(self.spec.name, args)

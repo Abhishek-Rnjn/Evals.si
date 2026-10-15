@@ -35,6 +35,7 @@ from evalsi_harness.models import (
 )
 from evalsi_harness.subagent import DelegateTool
 from evalsi_harness.tools import Tool, ToolResult
+from evalsi_harness.toolsearch import ToolSearchTool
 from evalsi_harness.user_sim import UserSimulator
 
 ROUND_OPENING = (
@@ -121,6 +122,12 @@ class AgentLoop:
             raise ValueError(f"two tools share the name(s) {sorted(dupes)}")
         self.model = model
         self.tools = {t.spec.name: t for t in tools}
+        # Tools that start unloaded (tool_search loads them as the agent needs).
+        self.deferred = {t.spec.name for t in tools if getattr(t, "deferred", False)}
+        self.active: set[str] = set()
+        if self.deferred:
+            search = ToolSearchTool(self)
+            self.tools[search.spec.name] = search
         self.config = config
         self.emit = emit
         self.user = user
@@ -214,6 +221,14 @@ class AgentLoop:
                 **({"evidence": self.evidence.counts()} if self.evidence is not None else {}),
             },
         )
+
+    def _specs(self) -> list[Any]:
+        """The tools the model sees now: all but the deferred ones not yet loaded."""
+        return [
+            t.spec
+            for name, t in self.tools.items()
+            if name not in self.deferred or name in self.active
+        ]
 
     def sub_tools(self) -> list[Tool]:
         """What a sub-agent gets: the parent's tools, without delegate."""
@@ -309,7 +324,6 @@ class AgentLoop:
         )
 
     async def _loop(self, messages: list[dict[str, Any]], started: float) -> FinalEvent:
-        specs = [t.spec for t in self.tools.values()]
         last_text = ""
         while True:
             if reason := self._over_budget(started):
@@ -327,7 +341,7 @@ class AgentLoop:
                 parent=self.root,
             )
             self._emit_hook_steps()
-            turn = await self._call_model(request.messages, specs, request.system)
+            turn = await self._call_model(request.messages, self._specs(), request.system)
             last_text = turn.text or last_text
             if turn.truncated:
                 # Cut off by the output limit: a tool call may be half-written
@@ -507,6 +521,10 @@ class AgentLoop:
             else:
                 if not isinstance(args, dict):
                     result = ToolResult("the arguments must be a JSON object", is_error=True)
+                elif call.name in self.deferred and call.name not in self.active:
+                    result = ToolResult(
+                        f"{call.name} is not loaded yet: call tool_search to load it", is_error=True
+                    )
                 elif tool is None:
                     known = ", ".join(sorted(self.tools)) or "none"
                     result = ToolResult(

@@ -407,6 +407,12 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 	}
 	for _, s := range spec.GetHarness().GetBuiltin().GetTools().GetMcp() {
 		uses = append(uses, headerUses("MCP server "+s.GetName()+" headers_env", s.GetHeadersEnv(), s.GetUrl())...)
+		if o := s.GetOauth(); o != nil {
+			field := "MCP server " + s.GetName() + " oauth."
+			uses = append(uses,
+				Use{Env: o.GetClientIdEnv(), Field: field + "client_id_env", URL: o.GetTokenUrl()},
+				Use{Env: o.GetClientSecretEnv(), Field: field + "client_secret_env", URL: o.GetTokenUrl()})
+		}
 	}
 	uses = append(uses, ParamUses("spec.harness.external.config", spec.GetHarness().GetExternal().GetConfig(), nil)...)
 	return uses, nil
