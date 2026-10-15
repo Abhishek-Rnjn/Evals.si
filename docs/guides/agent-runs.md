@@ -99,6 +99,22 @@ Notes on environments:
 | `recording: {mode: record\|replay, dir, branch_at_step}` | captures model calls and tool I/O. Replay reruns sandbox commands, so the environment is rebuilt; `branch_at_step: N` replays N steps, then continues live |
 | `escalation.allow` | escalation kinds the harness grants (`network`) |
 
+### Long runs: context management
+
+Without `harness.builtin.context`, the whole conversation is resent every step until it overflows the model's window. Set a strategy and the window to keep a long run going:
+
+| Field | What it does |
+|---|---|
+| `strategy` | `none` (default); `clear-tool-results` replaces old tool results with a stub such as `[tool result cleared to save context: 5120 characters from bash]`, keeping the message and its tool-call id; `compact` clears first, and when that is not enough has the agent's own model summarize the earlier turns (the task message, a summary, then the last `keep_turns` turns verbatim) |
+| `window_tokens` | the model's context window (at least 4,000); required for any strategy but `none` |
+| `trigger`, `target` | start at this fraction of the window (default 0.8) and go down to this one (default 0.5). Working in batches rewrites the provider's prompt cache once per batch, not on every turn |
+| `keep_recent`, `keep_turns`, `summary_max_tokens` | tool results kept intact (4), assistant turns kept verbatim after a summary (6), and the summary's output limit (4096) |
+| `spill_outputs` | a `bash` output over 16,000 characters is written to `.evalsi-out/NNNN.txt` in the sandbox and the reply carries its head, tail and path, instead of being clipped in the middle. The files are Evals.si's own, so they stay out of the agent's diff |
+
+The prompt size is the model's last reported `input_tokens`, scaled by characters to the conversation as it now is, so it follows the real tokenizer. Every clear and compaction is a step named `context:clear-tool-results` or `context:compact`, with `evalsi.context.tokens_before`, `tokens_after` and what was removed; a compaction's model call is billed to the run (and to `max_usd`) but is not one of `max_steps`. The run's `agent.context` metadata totals them: `clears`, `compactions`, `results_cleared`, `chars_removed`, `tokens_removed`, `turns_summarized` and `summary_failures`. A summary that comes back cut off or empty is not used: the run keeps the cleared conversation instead.
+
+A recording replays only under the strategy and window it was recorded with (the cassette header names them), since another strategy would send the model different conversations; the summary call is recorded in sequence like any other model call.
+
 ### Model options
 
 The built-in agent calls `spec.target`. Besides `connector`, `model`, `base_url`, `api_key_env`, `max_tokens`, `temperature` and `effort`, the target takes these options (they apply to the built-in agent only):

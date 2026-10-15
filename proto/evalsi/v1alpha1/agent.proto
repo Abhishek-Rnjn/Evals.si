@@ -197,6 +197,36 @@ message BuiltinHarness {
   optional bool parallel_tool_calls = 8;
   // Appended to the agent's system prompt.
   string instructions = 9;
+  // Keeps long runs inside the model's context window. Unset: the whole
+  // conversation is resent every step.
+  ContextManagement context = 10;
+}
+
+// How the built-in agent handles a conversation that grows past its context
+// window. The prompt size is counted from the model's last reported usage.
+// Every clear or compaction is a step on the trajectory, and a recorded run
+// replays only with the same strategy and window.
+message ContextManagement {
+  // "none" (default), "clear-tool-results" (replace old tool results with a
+  // stub) or "compact" (clear first, then summarize earlier turns with the
+  // agent's own model).
+  string strategy = 1;
+  // The model's context window in tokens; required for any strategy but none.
+  int32 window_tokens = 2;
+  // Start when the prompt reaches this fraction of the window (default 0.8)...
+  double trigger = 3;
+  // ...and clear or compact down to this fraction (default 0.5). Clearing in
+  // batches, not a little every turn, keeps the provider's prompt cache warm.
+  double target = 4;
+  // Tool results kept intact, newest first (default 4).
+  int32 keep_recent = 5;
+  // Assistant turns kept verbatim after a summary (default 6).
+  int32 keep_turns = 6;
+  // Output limit for the summary (default 4096).
+  int32 summary_max_tokens = 7;
+  // Write a large bash output to a file in the sandbox (.evalsi-out/) and
+  // return its head, tail and path, instead of clipping it in the middle.
+  bool spill_outputs = 8;
 }
 
 // A harness you bring: anything that implements evalsi.harness.v1alpha1.HarnessService.

@@ -86,6 +86,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("tool faults need a kind (timeout, error or malformed) and a rate from 0 to 1")
 		}
 	}
+	if err := validateContext(b.GetContext()); err != nil {
+		return err
+	}
 	switch rec := b.GetRecording(); rec.GetMode() {
 	case "", "off":
 	case "record", "replay":
@@ -170,4 +173,40 @@ func (m *Manager) workerSpec(spec *evalsiv1alpha1.RunSpec) (*evalsiv1alpha1.RunS
 	out := proto.Clone(spec).(*evalsiv1alpha1.RunSpec)
 	out.GetHarness().GetBuiltin().GetRecording().Dir = dir
 	return out, nil
+}
+
+// minContextWindow is the smallest window a strategy can work in: below it the
+// summary and the kept turns alone would not fit.
+const minContextWindow = 4000
+
+// validateContext checks the context management a spec asks for, so a bad
+// value is refused here rather than failing every trial.
+func validateContext(c *evalsiv1alpha1.ContextManagement) error {
+	if c == nil {
+		return nil
+	}
+	const f = "spec.harness.builtin.context"
+	switch c.GetStrategy() {
+	case "", "none":
+	case "clear-tool-results", "compact":
+		if c.GetWindowTokens() < minContextWindow {
+			return invalid("%s.window_tokens must be at least %d for strategy %s", f, minContextWindow, c.GetStrategy())
+		}
+	default:
+		return invalid("%s.strategy must be none, clear-tool-results or compact, not %q", f, c.GetStrategy())
+	}
+	trigger, target := c.GetTrigger(), c.GetTarget()
+	if trigger == 0 {
+		trigger = 0.8
+	}
+	if target == 0 {
+		target = 0.5
+	}
+	if trigger <= 0 || trigger > 1 || target <= 0 || target >= trigger {
+		return invalid("%s: need 0 < target < trigger <= 1 (defaults 0.5 and 0.8)", f)
+	}
+	if c.GetKeepRecent() < 0 || c.GetKeepTurns() < 0 || c.GetSummaryMaxTokens() < 0 || c.GetWindowTokens() < 0 {
+		return invalid("%s: keep_recent, keep_turns, summary_max_tokens and window_tokens cannot be negative", f)
+	}
+	return nil
 }

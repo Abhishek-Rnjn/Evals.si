@@ -973,6 +973,36 @@ spec:
                             x-kubernetes-int-or-string: true
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                      context:
+                        properties:
+                          keep_recent:
+                            type: integer
+                          keep_turns:
+                            type: integer
+                          keepRecent:
+                            type: integer
+                          keepTurns:
+                            type: integer
+                          spill_outputs:
+                            type: boolean
+                          spillOutputs:
+                            type: boolean
+                          strategy:
+                            type: string
+                          summary_max_tokens:
+                            type: integer
+                          summaryMaxTokens:
+                            type: integer
+                          target:
+                            type: number
+                          trigger:
+                            type: number
+                          window_tokens:
+                            type: integer
+                          windowTokens:
+                            type: integer
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       escalation:
                         properties:
                           allow:

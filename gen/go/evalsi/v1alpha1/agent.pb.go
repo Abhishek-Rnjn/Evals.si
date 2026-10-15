@@ -1250,7 +1250,10 @@ type BuiltinHarness struct {
 	// Run a model's parallel tool calls concurrently (default true).
 	ParallelToolCalls *bool `protobuf:"varint,8,opt,name=parallel_tool_calls,json=parallelToolCalls,proto3,oneof" json:"parallel_tool_calls,omitempty"`
 	// Appended to the agent's system prompt.
-	Instructions  string `protobuf:"bytes,9,opt,name=instructions,proto3" json:"instructions,omitempty"`
+	Instructions string `protobuf:"bytes,9,opt,name=instructions,proto3" json:"instructions,omitempty"`
+	// Keeps long runs inside the model's context window. Unset: the whole
+	// conversation is resent every step.
+	Context       *ContextManagement `protobuf:"bytes,10,opt,name=context,proto3" json:"context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1348,6 +1351,129 @@ func (x *BuiltinHarness) GetInstructions() string {
 	return ""
 }
 
+func (x *BuiltinHarness) GetContext() *ContextManagement {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+// How the built-in agent handles a conversation that grows past its context
+// window. The prompt size is counted from the model's last reported usage.
+// Every clear or compaction is a step on the trajectory, and a recorded run
+// replays only with the same strategy and window.
+type ContextManagement struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "none" (default), "clear-tool-results" (replace old tool results with a
+	// stub) or "compact" (clear first, then summarize earlier turns with the
+	// agent's own model).
+	Strategy string `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	// The model's context window in tokens; required for any strategy but none.
+	WindowTokens int32 `protobuf:"varint,2,opt,name=window_tokens,json=windowTokens,proto3" json:"window_tokens,omitempty"`
+	// Start when the prompt reaches this fraction of the window (default 0.8)...
+	Trigger float64 `protobuf:"fixed64,3,opt,name=trigger,proto3" json:"trigger,omitempty"`
+	// ...and clear or compact down to this fraction (default 0.5). Clearing in
+	// batches, not a little every turn, keeps the provider's prompt cache warm.
+	Target float64 `protobuf:"fixed64,4,opt,name=target,proto3" json:"target,omitempty"`
+	// Tool results kept intact, newest first (default 4).
+	KeepRecent int32 `protobuf:"varint,5,opt,name=keep_recent,json=keepRecent,proto3" json:"keep_recent,omitempty"`
+	// Assistant turns kept verbatim after a summary (default 6).
+	KeepTurns int32 `protobuf:"varint,6,opt,name=keep_turns,json=keepTurns,proto3" json:"keep_turns,omitempty"`
+	// Output limit for the summary (default 4096).
+	SummaryMaxTokens int32 `protobuf:"varint,7,opt,name=summary_max_tokens,json=summaryMaxTokens,proto3" json:"summary_max_tokens,omitempty"`
+	// Write a large bash output to a file in the sandbox (.evalsi-out/) and
+	// return its head, tail and path, instead of clipping it in the middle.
+	SpillOutputs  bool `protobuf:"varint,8,opt,name=spill_outputs,json=spillOutputs,proto3" json:"spill_outputs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContextManagement) Reset() {
+	*x = ContextManagement{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContextManagement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContextManagement) ProtoMessage() {}
+
+func (x *ContextManagement) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContextManagement.ProtoReflect.Descriptor instead.
+func (*ContextManagement) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ContextManagement) GetStrategy() string {
+	if x != nil {
+		return x.Strategy
+	}
+	return ""
+}
+
+func (x *ContextManagement) GetWindowTokens() int32 {
+	if x != nil {
+		return x.WindowTokens
+	}
+	return 0
+}
+
+func (x *ContextManagement) GetTrigger() float64 {
+	if x != nil {
+		return x.Trigger
+	}
+	return 0
+}
+
+func (x *ContextManagement) GetTarget() float64 {
+	if x != nil {
+		return x.Target
+	}
+	return 0
+}
+
+func (x *ContextManagement) GetKeepRecent() int32 {
+	if x != nil {
+		return x.KeepRecent
+	}
+	return 0
+}
+
+func (x *ContextManagement) GetKeepTurns() int32 {
+	if x != nil {
+		return x.KeepTurns
+	}
+	return 0
+}
+
+func (x *ContextManagement) GetSummaryMaxTokens() int32 {
+	if x != nil {
+		return x.SummaryMaxTokens
+	}
+	return 0
+}
+
+func (x *ContextManagement) GetSpillOutputs() bool {
+	if x != nil {
+		return x.SpillOutputs
+	}
+	return false
+}
+
 // A harness you bring: anything that implements evalsi.harness.v1alpha1.HarnessService.
 type ExternalHarness struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1364,7 +1490,7 @@ type ExternalHarness struct {
 
 func (x *ExternalHarness) Reset() {
 	*x = ExternalHarness{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1376,7 +1502,7 @@ func (x *ExternalHarness) String() string {
 func (*ExternalHarness) ProtoMessage() {}
 
 func (x *ExternalHarness) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1389,7 +1515,7 @@ func (x *ExternalHarness) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExternalHarness.ProtoReflect.Descriptor instead.
 func (*ExternalHarness) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ExternalHarness) GetKind() isExternalHarness_Kind {
@@ -1468,7 +1594,7 @@ type CommandHarness struct {
 
 func (x *CommandHarness) Reset() {
 	*x = CommandHarness{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1480,7 +1606,7 @@ func (x *CommandHarness) String() string {
 func (*CommandHarness) ProtoMessage() {}
 
 func (x *CommandHarness) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1493,7 +1619,7 @@ func (x *CommandHarness) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandHarness.ProtoReflect.Descriptor instead.
 func (*CommandHarness) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{18}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CommandHarness) GetArgv() []string {
@@ -1522,7 +1648,7 @@ type SandboxPolicy struct {
 
 func (x *SandboxPolicy) Reset() {
 	*x = SandboxPolicy{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1534,7 +1660,7 @@ func (x *SandboxPolicy) String() string {
 func (*SandboxPolicy) ProtoMessage() {}
 
 func (x *SandboxPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1547,7 +1673,7 @@ func (x *SandboxPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxPolicy.ProtoReflect.Descriptor instead.
 func (*SandboxPolicy) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{19}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SandboxPolicy) GetMinIsolation() string {
@@ -1617,7 +1743,7 @@ type Checker struct {
 
 func (x *Checker) Reset() {
 	*x = Checker{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1629,7 +1755,7 @@ func (x *Checker) String() string {
 func (*Checker) ProtoMessage() {}
 
 func (x *Checker) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1642,7 +1768,7 @@ func (x *Checker) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Checker.ProtoReflect.Descriptor instead.
 func (*Checker) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{20}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Checker) GetCommand() []string {
@@ -1699,7 +1825,7 @@ type Environment struct {
 
 func (x *Environment) Reset() {
 	*x = Environment{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1711,7 +1837,7 @@ func (x *Environment) String() string {
 func (*Environment) ProtoMessage() {}
 
 func (x *Environment) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1724,7 +1850,7 @@ func (x *Environment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Environment.ProtoReflect.Descriptor instead.
 func (*Environment) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{21}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *Environment) GetImage() string {
@@ -1908,7 +2034,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x03dir\x18\x02 \x01(\tR\x03dir\x12$\n" +
 	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\"(\n" +
 	"\x10EscalationPolicy\x12\x14\n" +
-	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xfa\x03\n" +
+	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xb8\x04\n" +
 	"\x0eBuiltinHarness\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x124\n" +
 	"\x06budget\x18\x02 \x01(\v2\x1c.evalsi.v1alpha1.AgentBudgetR\x06budget\x122\n" +
@@ -1920,8 +2046,21 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"escalation\x18\a \x01(\v2!.evalsi.v1alpha1.EscalationPolicyR\n" +
 	"escalation\x123\n" +
 	"\x13parallel_tool_calls\x18\b \x01(\bH\x00R\x11parallelToolCalls\x88\x01\x01\x12\"\n" +
-	"\finstructions\x18\t \x01(\tR\finstructionsB\x16\n" +
-	"\x14_parallel_tool_calls\"\xbd\x01\n" +
+	"\finstructions\x18\t \x01(\tR\finstructions\x12<\n" +
+	"\acontext\x18\n" +
+	" \x01(\v2\".evalsi.v1alpha1.ContextManagementR\acontextB\x16\n" +
+	"\x14_parallel_tool_calls\"\x99\x02\n" +
+	"\x11ContextManagement\x12\x1a\n" +
+	"\bstrategy\x18\x01 \x01(\tR\bstrategy\x12#\n" +
+	"\rwindow_tokens\x18\x02 \x01(\x05R\fwindowTokens\x12\x18\n" +
+	"\atrigger\x18\x03 \x01(\x01R\atrigger\x12\x16\n" +
+	"\x06target\x18\x04 \x01(\x01R\x06target\x12\x1f\n" +
+	"\vkeep_recent\x18\x05 \x01(\x05R\n" +
+	"keepRecent\x12\x1d\n" +
+	"\n" +
+	"keep_turns\x18\x06 \x01(\x05R\tkeepTurns\x12,\n" +
+	"\x12summary_max_tokens\x18\a \x01(\x05R\x10summaryMaxTokens\x12#\n" +
+	"\rspill_outputs\x18\b \x01(\bR\fspillOutputs\"\xbd\x01\n" +
 	"\x0fExternalHarness\x12\x1a\n" +
 	"\aaddress\x18\x01 \x01(\tH\x00R\aaddress\x12;\n" +
 	"\acommand\x18\x02 \x01(\v2\x1f.evalsi.v1alpha1.CommandHarnessH\x00R\acommand\x12\x18\n" +
@@ -1982,7 +2121,7 @@ func file_evalsi_v1alpha1_agent_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_agent_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	(*AgentTarget)(nil),         // 0: evalsi.v1alpha1.AgentTarget
 	(*A2AAgent)(nil),            // 1: evalsi.v1alpha1.A2AAgent
@@ -2001,22 +2140,23 @@ var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	(*Recording)(nil),           // 14: evalsi.v1alpha1.Recording
 	(*EscalationPolicy)(nil),    // 15: evalsi.v1alpha1.EscalationPolicy
 	(*BuiltinHarness)(nil),      // 16: evalsi.v1alpha1.BuiltinHarness
-	(*ExternalHarness)(nil),     // 17: evalsi.v1alpha1.ExternalHarness
-	(*CommandHarness)(nil),      // 18: evalsi.v1alpha1.CommandHarness
-	(*SandboxPolicy)(nil),       // 19: evalsi.v1alpha1.SandboxPolicy
-	(*Checker)(nil),             // 20: evalsi.v1alpha1.Checker
-	(*Environment)(nil),         // 21: evalsi.v1alpha1.Environment
-	nil,                         // 22: evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
-	nil,                         // 23: evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
-	nil,                         // 24: evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
-	nil,                         // 25: evalsi.v1alpha1.CLIAgent.EnvFromEntry
-	nil,                         // 26: evalsi.v1alpha1.MCPServer.HeadersEnvEntry
-	nil,                         // 27: evalsi.v1alpha1.MockTool.ResponsesEntry
-	nil,                         // 28: evalsi.v1alpha1.Checker.FilesEntry
-	nil,                         // 29: evalsi.v1alpha1.Environment.FilesEntry
-	nil,                         // 30: evalsi.v1alpha1.Environment.EnvEntry
-	(*durationpb.Duration)(nil), // 31: google.protobuf.Duration
-	(*structpb.Struct)(nil),     // 32: google.protobuf.Struct
+	(*ContextManagement)(nil),   // 17: evalsi.v1alpha1.ContextManagement
+	(*ExternalHarness)(nil),     // 18: evalsi.v1alpha1.ExternalHarness
+	(*CommandHarness)(nil),      // 19: evalsi.v1alpha1.CommandHarness
+	(*SandboxPolicy)(nil),       // 20: evalsi.v1alpha1.SandboxPolicy
+	(*Checker)(nil),             // 21: evalsi.v1alpha1.Checker
+	(*Environment)(nil),         // 22: evalsi.v1alpha1.Environment
+	nil,                         // 23: evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
+	nil,                         // 24: evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
+	nil,                         // 25: evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
+	nil,                         // 26: evalsi.v1alpha1.CLIAgent.EnvFromEntry
+	nil,                         // 27: evalsi.v1alpha1.MCPServer.HeadersEnvEntry
+	nil,                         // 28: evalsi.v1alpha1.MockTool.ResponsesEntry
+	nil,                         // 29: evalsi.v1alpha1.Checker.FilesEntry
+	nil,                         // 30: evalsi.v1alpha1.Environment.FilesEntry
+	nil,                         // 31: evalsi.v1alpha1.Environment.EnvEntry
+	(*durationpb.Duration)(nil), // 32: google.protobuf.Duration
+	(*structpb.Struct)(nil),     // 33: google.protobuf.Struct
 }
 var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	1,  // 0: evalsi.v1alpha1.AgentTarget.a2a:type_name -> evalsi.v1alpha1.A2AAgent
@@ -2024,21 +2164,21 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	3,  // 2: evalsi.v1alpha1.AgentTarget.responses:type_name -> evalsi.v1alpha1.ResponsesAgent
 	4,  // 3: evalsi.v1alpha1.AgentTarget.http:type_name -> evalsi.v1alpha1.HTTPAgent
 	5,  // 4: evalsi.v1alpha1.AgentTarget.cli:type_name -> evalsi.v1alpha1.CLIAgent
-	22, // 5: evalsi.v1alpha1.A2AAgent.headers_env:type_name -> evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
-	31, // 6: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
-	23, // 7: evalsi.v1alpha1.MCPAgent.headers_env:type_name -> evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
-	31, // 8: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
-	31, // 9: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
-	24, // 10: evalsi.v1alpha1.HTTPAgent.headers_env:type_name -> evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
-	31, // 11: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
-	25, // 12: evalsi.v1alpha1.CLIAgent.env_from:type_name -> evalsi.v1alpha1.CLIAgent.EnvFromEntry
-	31, // 13: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
+	23, // 5: evalsi.v1alpha1.A2AAgent.headers_env:type_name -> evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
+	32, // 6: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
+	24, // 7: evalsi.v1alpha1.MCPAgent.headers_env:type_name -> evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
+	32, // 8: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
+	32, // 9: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
+	25, // 10: evalsi.v1alpha1.HTTPAgent.headers_env:type_name -> evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
+	32, // 11: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
+	26, // 12: evalsi.v1alpha1.CLIAgent.env_from:type_name -> evalsi.v1alpha1.CLIAgent.EnvFromEntry
+	32, // 13: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
 	16, // 14: evalsi.v1alpha1.Harness.builtin:type_name -> evalsi.v1alpha1.BuiltinHarness
-	17, // 15: evalsi.v1alpha1.Harness.external:type_name -> evalsi.v1alpha1.ExternalHarness
-	31, // 16: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
-	26, // 17: evalsi.v1alpha1.MCPServer.headers_env:type_name -> evalsi.v1alpha1.MCPServer.HeadersEnvEntry
-	32, // 18: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
-	27, // 19: evalsi.v1alpha1.MockTool.responses:type_name -> evalsi.v1alpha1.MockTool.ResponsesEntry
+	18, // 15: evalsi.v1alpha1.Harness.external:type_name -> evalsi.v1alpha1.ExternalHarness
+	32, // 16: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
+	27, // 17: evalsi.v1alpha1.MCPServer.headers_env:type_name -> evalsi.v1alpha1.MCPServer.HeadersEnvEntry
+	33, // 18: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
+	28, // 19: evalsi.v1alpha1.MockTool.responses:type_name -> evalsi.v1alpha1.MockTool.ResponsesEntry
 	9,  // 20: evalsi.v1alpha1.Tools.mcp:type_name -> evalsi.v1alpha1.MCPServer
 	10, // 21: evalsi.v1alpha1.Tools.mocks:type_name -> evalsi.v1alpha1.MockTool
 	11, // 22: evalsi.v1alpha1.Tools.faults:type_name -> evalsi.v1alpha1.ToolFault
@@ -2048,21 +2188,22 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	13, // 26: evalsi.v1alpha1.BuiltinHarness.user_simulator:type_name -> evalsi.v1alpha1.UserSimulator
 	14, // 27: evalsi.v1alpha1.BuiltinHarness.recording:type_name -> evalsi.v1alpha1.Recording
 	15, // 28: evalsi.v1alpha1.BuiltinHarness.escalation:type_name -> evalsi.v1alpha1.EscalationPolicy
-	18, // 29: evalsi.v1alpha1.ExternalHarness.command:type_name -> evalsi.v1alpha1.CommandHarness
-	32, // 30: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
-	28, // 31: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
-	31, // 32: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
-	29, // 33: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
-	31, // 34: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
-	19, // 35: evalsi.v1alpha1.Environment.sandbox:type_name -> evalsi.v1alpha1.SandboxPolicy
-	20, // 36: evalsi.v1alpha1.Environment.checker:type_name -> evalsi.v1alpha1.Checker
-	30, // 37: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
-	31, // 38: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
-	39, // [39:39] is the sub-list for method output_type
-	39, // [39:39] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	17, // 29: evalsi.v1alpha1.BuiltinHarness.context:type_name -> evalsi.v1alpha1.ContextManagement
+	19, // 30: evalsi.v1alpha1.ExternalHarness.command:type_name -> evalsi.v1alpha1.CommandHarness
+	33, // 31: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
+	29, // 32: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
+	32, // 33: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
+	30, // 34: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
+	32, // 35: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
+	20, // 36: evalsi.v1alpha1.Environment.sandbox:type_name -> evalsi.v1alpha1.SandboxPolicy
+	21, // 37: evalsi.v1alpha1.Environment.checker:type_name -> evalsi.v1alpha1.Checker
+	31, // 38: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
+	32, // 39: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
+	40, // [40:40] is the sub-list for method output_type
+	40, // [40:40] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_agent_proto_init() }
@@ -2083,7 +2224,7 @@ func file_evalsi_v1alpha1_agent_proto_init() {
 	}
 	file_evalsi_v1alpha1_agent_proto_msgTypes[12].OneofWrappers = []any{}
 	file_evalsi_v1alpha1_agent_proto_msgTypes[16].OneofWrappers = []any{}
-	file_evalsi_v1alpha1_agent_proto_msgTypes[17].OneofWrappers = []any{
+	file_evalsi_v1alpha1_agent_proto_msgTypes[18].OneofWrappers = []any{
 		(*ExternalHarness_Address)(nil),
 		(*ExternalHarness_Command)(nil),
 		(*ExternalHarness_Python)(nil),
@@ -2094,7 +2235,7 @@ func file_evalsi_v1alpha1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_agent_proto_rawDesc), len(file_evalsi_v1alpha1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
+from evalsi_harness.context import ContextConfig, ContextView, make_strategy
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
 from evalsi_harness.models import (
     ChatModel,
@@ -49,6 +50,7 @@ class LoopConfig:
     # (0: not retried). It is the config's, not the model's, so a replay makes
     # the same decision as the recorded run.
     truncation_retry_tokens: int = 0
+    context: ContextConfig = field(default_factory=ContextConfig)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
 
@@ -92,6 +94,15 @@ class AgentLoop:
         self.user = user
         self.state = LoopState()
         self.root = span_id()
+        self.strategy = make_strategy(config.context)
+        self.view = ContextView(
+            model=model,
+            system=config.system,
+            tools_chars=len(
+                json.dumps([(t.spec.name, t.spec.description, t.spec.input_schema) for t in tools])
+            ),
+            bill=self._bill,
+        )
 
     def cost(self) -> float:
         u, c, st = self.state.usage, self.config, self.state
@@ -139,6 +150,11 @@ class AgentLoop:
                 "cache_write_tokens": self.state.cache_write_tokens,
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
+                **(
+                    {"context": self.strategy.stats.to_dict()}
+                    if self.config.context.strategy != "none"
+                    else {}
+                ),
             },
         )
 
@@ -156,6 +172,11 @@ class AgentLoop:
         while True:
             if reason := self._over_budget(started):
                 return self._final(last_text, reason)
+            prepared = await self.strategy.prepare(messages, self.view, parent=self.root)
+            if prepared.messages is not messages:
+                messages[:] = prepared.messages
+            for step in prepared.steps:
+                self.emit(StepEvent(step))
             turn = await self._call_model(messages, specs)
             last_text = turn.text or last_text
             if turn.truncated:
@@ -191,6 +212,10 @@ class AgentLoop:
                 return self._final(turn.text, "completed")
             messages.append({"role": "user", "content": reply.message})
 
+    def _bill(self, turn: ModelTurn) -> None:
+        """Spend on a model call that is not a step (a summary)."""
+        self._account(turn)
+
     def _account(self, turn: ModelTurn) -> None:
         _add(self.state.usage, turn.usage)
         self.state.cache_read_tokens += turn.cache_read_tokens
@@ -203,6 +228,7 @@ class AgentLoop:
         step_span = span_id()
         start_ns = time.time_ns()
         turn = await self.model.complete(messages, specs, system=self.config.system)
+        self.view.observe(messages, turn.usage.input_tokens)
         self.state.steps += 1
         self._account(turn)
         self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))

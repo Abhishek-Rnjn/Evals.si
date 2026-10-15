@@ -686,6 +686,7 @@ class BuiltinHarness(_message.Message):
     ESCALATION_FIELD_NUMBER: _builtins.int
     PARALLEL_TOOL_CALLS_FIELD_NUMBER: _builtins.int
     INSTRUCTIONS_FIELD_NUMBER: _builtins.int
+    CONTEXT_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
@@ -704,6 +705,12 @@ class BuiltinHarness(_message.Message):
     def recording(self) -> Global___Recording: ...
     @_builtins.property
     def escalation(self) -> Global___EscalationPolicy: ...
+    @_builtins.property
+    def context(self) -> Global___ContextManagement:
+        """Keeps long runs inside the model's context window. Unset: the whole
+        conversation is resent every step.
+        """
+
     def __init__(
         self,
         *,
@@ -716,16 +723,75 @@ class BuiltinHarness(_message.Message):
         escalation: Global___EscalationPolicy | None = ...,
         parallel_tool_calls: _builtins.bool | None = ...,
         instructions: _builtins.str = ...,
+        context: Global___ContextManagement | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "escalation", b"escalation", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType__parallel_tool_calls) -> _WhichOneofReturnType__parallel_tool_calls | None: ...
 
 Global___BuiltinHarness: _TypeAlias = BuiltinHarness  # noqa: Y015
+
+@_typing.final
+class ContextManagement(_message.Message):
+    """How the built-in agent handles a conversation that grows past its context
+    window. The prompt size is counted from the model's last reported usage.
+    Every clear or compaction is a step on the trajectory, and a recorded run
+    replays only with the same strategy and window.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    STRATEGY_FIELD_NUMBER: _builtins.int
+    WINDOW_TOKENS_FIELD_NUMBER: _builtins.int
+    TRIGGER_FIELD_NUMBER: _builtins.int
+    TARGET_FIELD_NUMBER: _builtins.int
+    KEEP_RECENT_FIELD_NUMBER: _builtins.int
+    KEEP_TURNS_FIELD_NUMBER: _builtins.int
+    SUMMARY_MAX_TOKENS_FIELD_NUMBER: _builtins.int
+    SPILL_OUTPUTS_FIELD_NUMBER: _builtins.int
+    strategy: _builtins.str
+    """"none" (default), "clear-tool-results" (replace old tool results with a
+    stub) or "compact" (clear first, then summarize earlier turns with the
+    agent's own model).
+    """
+    window_tokens: _builtins.int
+    """The model's context window in tokens; required for any strategy but none."""
+    trigger: _builtins.float
+    """Start when the prompt reaches this fraction of the window (default 0.8)..."""
+    target: _builtins.float
+    """...and clear or compact down to this fraction (default 0.5). Clearing in
+    batches, not a little every turn, keeps the provider's prompt cache warm.
+    """
+    keep_recent: _builtins.int
+    """Tool results kept intact, newest first (default 4)."""
+    keep_turns: _builtins.int
+    """Assistant turns kept verbatim after a summary (default 6)."""
+    summary_max_tokens: _builtins.int
+    """Output limit for the summary (default 4096)."""
+    spill_outputs: _builtins.bool
+    """Write a large bash output to a file in the sandbox (.evalsi-out/) and
+    return its head, tail and path, instead of clipping it in the middle.
+    """
+    def __init__(
+        self,
+        *,
+        strategy: _builtins.str = ...,
+        window_tokens: _builtins.int = ...,
+        trigger: _builtins.float = ...,
+        target: _builtins.float = ...,
+        keep_recent: _builtins.int = ...,
+        keep_turns: _builtins.int = ...,
+        summary_max_tokens: _builtins.int = ...,
+        spill_outputs: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["keep_recent", b"keep_recent", "keep_turns", b"keep_turns", "spill_outputs", b"spill_outputs", "strategy", b"strategy", "summary_max_tokens", b"summary_max_tokens", "target", b"target", "trigger", b"trigger", "window_tokens", b"window_tokens"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ContextManagement: _TypeAlias = ContextManagement  # noqa: Y015
 
 @_typing.final
 class ExternalHarness(_message.Message):

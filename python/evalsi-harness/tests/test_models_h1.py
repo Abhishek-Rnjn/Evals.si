@@ -765,7 +765,7 @@ def test_a_cassette_carries_its_version_and_old_ones_replay(tmp_path: Any) -> No
     )
     tape.save()
     lines = [json.loads(x) for x in path.read_text().splitlines()]
-    assert lines[0] == {"kind": "header", "version": 2}
+    assert lines[0] == {"kind": "header", "version": 2, "context": {"strategy": "none"}}
     assert Cassette(path, "replay").next_turn() is not None
     # A version 1 file has no header.
     path.write_text("\n".join(json.dumps(x) for x in lines[1:]) + "\n")

@@ -718,6 +718,24 @@ func TestAgentRunValidation(t *testing.T) {
 		"bad network": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Sandbox = &evalsiv1alpha1.SandboxPolicy{Network: "allowlist"}
 		},
+		"unknown context strategy": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "forget", WindowTokens: 100000}
+		},
+		"strategy without a window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact"}
+		},
+		"window too small": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 1000}
+		},
+		"target above trigger": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 100000, Trigger: 0.6, Target: 0.7}
+		},
+		"default target above a low trigger": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 100000, Trigger: 0.4}
+		},
+		"negative keep": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{KeepRecent: -1}
+		},
 	}
 	for name, mutate := range cases {
 		spec := agentSpec("pass")
@@ -742,6 +760,12 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"context management": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 200000, Trigger: 0.9, Target: 0.6, SpillOutputs: true}
+		},
+		"strategy none needs no window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "none", SpillOutputs: true}
 		},
 	}
 	for name, mutate := range ok {

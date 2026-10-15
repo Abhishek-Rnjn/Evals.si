@@ -29,6 +29,7 @@ from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness._version import __version__
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool
 from evalsi_harness.checker import run_checker
+from evalsi_harness.context import ContextConfig, context_config
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.loop import DEFAULT_SYSTEM, AgentLoop, LoopConfig
@@ -261,6 +262,12 @@ class BuiltinHarness:
             return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
         return {}
 
+    def _context(self, live: LiveTask) -> ContextConfig:
+        try:
+            return context_config(self.config.context)
+        except ValueError as exc:
+            raise TaskError(f"harness.builtin.context: {exc}") from exc
+
     @staticmethod
     def _truncation_retry(live: LiveTask) -> int:
         """The limit to retry a truncated turn with: twice the target's, up to 128k."""
@@ -281,6 +288,7 @@ class BuiltinHarness:
             input_per_mtok=c.pricing.input_per_mtok,
             output_per_mtok=c.pricing.output_per_mtok,
             truncation_retry_tokens=self._truncation_retry(live),
+            context=self._context(live),
             **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,
@@ -295,7 +303,10 @@ class BuiltinHarness:
                 raise TaskError("tools.sandbox is on but the task has no environment")
             # Always offered: asking is itself evidence for safety evaluators,
             # even when the policy (by default) denies it.
-            tools += [*sandbox_tools(live.env), self._escalation_tool(live)]
+            tools += [
+                *sandbox_tools(live.env, spill_outputs=self._context(live).spill_outputs),
+                self._escalation_tool(live),
+            ]
         for server in cfg.mcp:
             if server.command:
                 self.ctx.trust.check_command(list(server.command), f"MCP server {server.name}")
@@ -399,7 +410,10 @@ class BuiltinHarness:
         if not base.is_absolute():
             base = self.ctx.base_dir / base
         return Cassette(
-            base / f"{live.task.slug}.jsonl", rec.mode, branch_at_step=rec.branch_at_step
+            base / f"{live.task.slug}.jsonl",
+            rec.mode,
+            branch_at_step=rec.branch_at_step,
+            context=self._context(live).describe(),
         )
 
     async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:

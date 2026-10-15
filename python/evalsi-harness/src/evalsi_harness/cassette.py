@@ -69,7 +69,14 @@ def _turn_from_dict(data: dict[str, Any]) -> ModelTurn:
 class Cassette:
     """One task trial's recording, and the replay cursor over it."""
 
-    def __init__(self, path: Path, mode: str, *, branch_at_step: int = 0) -> None:
+    def __init__(
+        self,
+        path: Path,
+        mode: str,
+        *,
+        branch_at_step: int = 0,
+        context: dict[str, Any] | None = None,
+    ) -> None:
         if mode not in ("record", "replay"):
             raise ValueError(f"recording mode must be off, record or replay, not {mode!r}")
         self.path = path
@@ -79,18 +86,30 @@ class Cassette:
         self._turns: deque[dict[str, Any]] = deque()
         self._tools: dict[tuple[str, str], deque[dict[str, Any]]] = defaultdict(deque)
         self.turns_served = 0
+        # The context strategy the recording is valid for: a replay under
+        # another one would send the model different conversations.
+        self.context = context if context is not None else {"strategy": "none"}
         self.live = mode == "record"
         if mode == "replay":
             if not path.exists():
                 raise CassetteError(f"no cassette to replay at {path}")
+            recorded: dict[str, Any] = {"strategy": "none"}  # version 1 files have no header
             for line in path.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
                     continue
                 entry = json.loads(line)
-                if entry["kind"] == "model":
+                if entry["kind"] == "header":
+                    recorded = entry.get("context") or {"strategy": "none"}
+                elif entry["kind"] == "model":
                     self._turns.append(entry["turn"])
                 elif entry["kind"] == "tool":
                     self._tools[(entry["name"], _args_key(entry["args"]))].append(entry["result"])
+            if recorded != self.context:
+                raise CassetteError(
+                    f"cassette {path.name} was recorded with context management "
+                    f"{recorded}, but the spec asks for {self.context}; "
+                    "a replay needs the same strategy and window"
+                )
 
     def record(self, entry: dict[str, Any]) -> None:
         if self.mode == "record":
@@ -133,8 +152,9 @@ class Cassette:
         with self.path.open("w", encoding="utf-8") as f:
             # Version 2 records thinking, reasoning items, cache and reasoning
             # tokens and model switches. Version 1 files have no header, lack
-            # those fields, and replay unchanged.
-            f.write(json.dumps({"kind": "header", "version": CASSETTE_VERSION}) + "\n")
+            # those fields, and replay unchanged (as context management "none").
+            header = {"kind": "header", "version": CASSETTE_VERSION, "context": self.context}
+            f.write(json.dumps(header) + "\n")
             for entry in self.entries:
                 f.write(json.dumps(entry) + "\n")
 
