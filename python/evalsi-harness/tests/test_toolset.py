@@ -273,7 +273,7 @@ def test_extra_tools_by_name_in_order_and_unknown_names_are_refused() -> None:
         assert [t.spec.name for t in tools] == ["grep", "edit_file"]
         with pytest.raises(ValueError, match="unknown built-in tool"):
             extra_tools(env, ["rm"])
-        assert set(NAMES) == {"edit_file", "glob", "grep", "apply_patch"}
+        assert set(NAMES) == {"edit_file", "glob", "grep", "apply_patch", "memory"}
         assert {"edit_file", "apply_patch"} == MUTATING
 
     with_env({}, body)
