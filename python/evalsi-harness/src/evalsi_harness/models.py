@@ -1,33 +1,42 @@
 """Tool-calling chat models for the built-in reference agent.
 
-Two protocols, spoken directly over HTTP so the harness stays light:
+Three protocols, spoken directly over HTTP so the harness stays light:
 
 - ``openai-compatible``: chat completions with ``tools`` (vLLM, SGLang,
-  Ollama, LiteLLM, gateways, OpenAI itself).
+  Ollama, LiteLLM, gateways, OpenAI itself), or with ``api: responses`` the
+  Responses API (``responses.py``).
 - ``anthropic``: the Messages API with ``tools``.
 
 Conversations are kept in the chat-completions shape (system, user,
-assistant with ``tool_calls``, tool messages) and translated for Anthropic.
+assistant with ``tool_calls``, tool messages) and translated for Anthropic
+and the Responses API. An assistant message may carry ``thinking_blocks``:
+the provider's own reasoning items, which only that provider can read.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 import httpx
 
-from evalsi.targets import RETRY_STATUS, TargetConfig, api_key
+from evalsi.targets import TargetConfig, api_key
 from evalsi.types import Usage
+from evalsi_harness.modelhttp import (
+    MAX_RETRY_AFTER_S,
+    ModelError,
+    gate_for,
+    post_json,
+    retry_after,
+    stream_events,
+)
+from evalsi_harness.streaming import collect_anthropic, collect_chat
+
+__all__ = ["MAX_RETRY_AFTER_S", "ModelError", "retry_after"]
 
 Message = dict[str, Any]
-
-
-class ModelError(RuntimeError):
-    """The model call failed after retries."""
 
 
 @dataclass
@@ -44,9 +53,29 @@ class ModelTurn:
     tool_calls: list[ToolCallRequest] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     stop_reason: str = ""
+    # Anthropic thinking and redacted_thinking blocks, exactly as returned
+    # (signatures included): the API needs them back with the tool results.
+    thinking: list[dict[str, Any]] = field(default_factory=list)
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    # Reasoning tokens, where the provider reports them (a part of the output).
+    reasoning_tokens: int = 0
+    # The model that served the turn, when it is not the client's own (a
+    # fallback), and the one it replaced when this turn switched models.
+    model: str = ""
+    switched_from: str = ""
+
+    @property
+    def truncated(self) -> bool:
+        """The model hit its output limit, so a tool call may be cut off."""
+        return self.stop_reason in ("max_tokens", "length")
 
     def as_message(self) -> Message:
         msg: Message = {"role": "assistant", "content": self.text}
+        if self.thinking:
+            msg["thinking_blocks"] = self.thinking
+            if self.model:
+                msg["thinking_by"] = self.model
         if self.tool_calls:
             msg["tool_calls"] = [
                 {
@@ -66,37 +95,31 @@ class ToolSpec:
     input_schema: dict[str, Any]
 
 
+def thinking_text(blocks: list[dict[str, Any]], limit: int = 8000) -> str:
+    """The readable part of reasoning blocks (not signatures or encrypted
+    content), for the trace."""
+    parts: list[str] = []
+    for block in blocks:
+        if block.get("type") == "thinking":
+            parts.append(str(block.get("thinking") or ""))
+        elif block.get("type") == "reasoning":
+            parts.extend(str(x.get("text") or "") for x in block.get("summary") or [])
+    return "\n".join(p for p in parts if p)[:limit]
+
+
 class ChatModel(Protocol):
     name: str
 
     async def complete(
-        self, messages: list[Message], tools: list[ToolSpec], *, system: str = ""
+        self,
+        messages: list[Message],
+        tools: list[ToolSpec],
+        *,
+        system: str = "",
+        max_tokens: int = 0,
     ) -> ModelTurn: ...
 
     async def aclose(self) -> None: ...
-
-
-async def _post(
-    client: httpx.AsyncClient, url: str, body: dict[str, Any], headers: dict[str, str]
-) -> dict[str, Any]:
-    delay = 1.0
-    for attempt in range(1, 6):
-        try:
-            response = await client.post(url, json=body, headers=headers)
-        except httpx.TransportError as exc:
-            if attempt == 5:
-                raise ModelError(f"model request failed: {exc}") from exc
-        else:
-            if response.status_code < 400:
-                payload: dict[str, Any] = response.json()
-                return payload
-            if response.status_code not in RETRY_STATUS or attempt == 5:
-                raise ModelError(
-                    f"model returned HTTP {response.status_code}: {response.text[:400]}"
-                )
-        await asyncio.sleep(delay)
-        delay *= 2
-    raise AssertionError("unreachable")
 
 
 class OpenAIChat:
@@ -109,15 +132,21 @@ class OpenAIChat:
         key = api_key(config.api_key_env, "OPENAI_API_KEY")
         if key:
             self._headers["Authorization"] = f"Bearer {key}"
+        self._gate = gate_for(self._url, config.api_key_env, config.max_concurrency)
 
     async def complete(
-        self, messages: list[Message], tools: list[ToolSpec], *, system: str = ""
+        self,
+        messages: list[Message],
+        tools: list[ToolSpec],
+        *,
+        system: str = "",
+        max_tokens: int = 0,
     ) -> ModelTurn:
         body: dict[str, Any] = {
             "model": self.config.model,
             "messages": ([{"role": "system", "content": system}] if system else [])
             + [to_openai(m) for m in messages],
-            "max_tokens": self.config.max_tokens,
+            "max_tokens": max_tokens or self.config.max_tokens,
         }
         if tools:
             body["tools"] = [
@@ -134,7 +163,14 @@ class OpenAIChat:
         if self.config.temperature is not None:
             body["temperature"] = self.config.temperature
         start = time.perf_counter()
-        payload = await _post(self._client, self._url, body, self._headers)
+        if self.config.stream:
+            body["stream"] = True
+            body["stream_options"] = {"include_usage": True}
+            payload = await collect_chat(
+                stream_events(self._client, self._url, body, self._headers, self._gate)
+            )
+        else:
+            payload = await post_json(self._client, self._url, body, self._headers, self._gate)
         try:
             choice = payload["choices"][0]
             message = choice["message"]
@@ -149,15 +185,23 @@ class OpenAIChat:
             for i, c in enumerate(message.get("tool_calls") or [])
         ]
         usage = payload.get("usage") or {}
+        details = usage.get("prompt_tokens_details") or {}
+        finish = choice.get("finish_reason") or ""
+        refusal = message.get("refusal") or ""
+        if refusal or finish == "content_filter":
+            # The model declined, or the provider's filter stopped it: not a normal answer.
+            finish = "refusal"
         return ModelTurn(
-            text=message.get("content") or "",
+            text=message.get("content") or refusal,
             tool_calls=calls,
             usage=Usage(
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),
                 latency_ms=(time.perf_counter() - start) * 1000,
             ),
-            stop_reason=choice.get("finish_reason") or "",
+            stop_reason=finish,
+            # A part of prompt_tokens, as in Anthropic's normalized total.
+            cache_read_tokens=int(details.get("cached_tokens") or 0),
         )
 
     async def aclose(self) -> None:
@@ -165,7 +209,10 @@ class OpenAIChat:
 
 
 def to_openai(message: Message) -> Message:
-    """Drops the fields chat completions does not know (a tool result's is_error)."""
+    """Drops the fields chat completions does not know (a tool result's is_error,
+    an assistant turn's thinking_blocks)."""
+    if message.get("role") == "assistant" and "thinking_blocks" in message:
+        return {k: v for k, v in message.items() if k not in ("thinking_blocks", "thinking_by")}
     if message.get("role") != "tool":
         return message
     content = message.get("content") or ""
@@ -193,7 +240,7 @@ def to_anthropic(messages: list[Message]) -> list[dict[str, Any]]:
             else:
                 out.append({"role": "user", "content": [block]})
         elif role == "assistant":
-            blocks: list[dict[str, Any]] = []
+            blocks: list[dict[str, Any]] = list(msg.get("thinking_blocks") or [])
             if msg.get("content"):
                 blocks.append({"type": "text", "text": msg["content"]})
             for call in msg.get("tool_calls") or []:
@@ -215,6 +262,36 @@ def to_anthropic(messages: list[Message]) -> list[dict[str, Any]]:
     return out
 
 
+EPHEMERAL = {"type": "ephemeral"}
+
+
+def with_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Marks the end of the conversation as a cache breakpoint, so the next
+    call reads everything before it from the cache (system and tools carry
+    their own). Messages are copied, never changed in place."""
+    if not messages:
+        return messages
+    last = dict(messages[-1])
+    content = last["content"]
+    if isinstance(content, str):
+        if not content:
+            return messages
+        content = [{"type": "text", "text": content}]
+    elif content:
+        content = list(content)
+    else:
+        return messages
+    # Thinking blocks cannot carry cache_control: mark the last block before them.
+    index = len(content) - 1
+    while index > 0 and content[index].get("type") in ("thinking", "redacted_thinking"):
+        index -= 1
+    if content[index].get("type") in ("thinking", "redacted_thinking"):
+        return messages
+    content[index] = {**content[index], "cache_control": EPHEMERAL}
+    last["content"] = content
+    return [*messages[:-1], last]
+
+
 class AnthropicChat:
     def __init__(self, config: TargetConfig, client: httpx.AsyncClient | None = None) -> None:
         self.config = config
@@ -226,31 +303,56 @@ class AnthropicChat:
         key = api_key(config.api_key_env, "ANTHROPIC_API_KEY")
         if key:
             self._headers["x-api-key"] = key
+        self._gate = gate_for(self._url, config.api_key_env, config.max_concurrency)
 
     async def complete(
-        self, messages: list[Message], tools: list[ToolSpec], *, system: str = ""
+        self,
+        messages: list[Message],
+        tools: list[ToolSpec],
+        *,
+        system: str = "",
+        max_tokens: int = 0,
     ) -> ModelTurn:
         body: dict[str, Any] = {
             "model": self.config.model,
-            "max_tokens": self.config.max_tokens,
-            "messages": to_anthropic(messages),
+            "max_tokens": max_tokens or self.config.max_tokens,
+            "messages": with_cache_breakpoint(to_anthropic(messages)),
         }
         if system:
-            body["system"] = system
+            body["system"] = [{"type": "text", "text": system, "cache_control": EPHEMERAL}]
         if tools:
             body["tools"] = [
                 {"name": t.name, "description": t.description, "input_schema": t.input_schema}
                 for t in tools
             ]
+            body["tools"][-1]["cache_control"] = EPHEMERAL
         if self.config.effort:
             body["output_config"] = {"effort": self.config.effort}
-        if self.config.temperature is not None:
+        thinking_on = self.config.thinking in ("adaptive", "enabled")
+        if self.config.thinking == "adaptive":
+            body["thinking"] = {"type": "adaptive"}
+        elif self.config.thinking == "enabled":
+            body["thinking"] = {"type": "enabled", "budget_tokens": self.config.thinking_budget}
+            # The budget must stay below the limit, also when the limit is raised.
+            body["max_tokens"] = max(body["max_tokens"], self.config.thinking_budget + 1)
+        elif self.config.thinking == "disabled":
+            body["thinking"] = {"type": "disabled"}
+        # The API refuses a temperature while the model is thinking.
+        if self.config.temperature is not None and not thinking_on:
             body["temperature"] = self.config.temperature
         start = time.perf_counter()
-        payload = await _post(self._client, self._url, body, self._headers)
-        text, calls = [], []
+        if self.config.stream:
+            body["stream"] = True
+            payload = await collect_anthropic(
+                stream_events(self._client, self._url, body, self._headers, self._gate)
+            )
+        else:
+            payload = await post_json(self._client, self._url, body, self._headers, self._gate)
+        text, calls, thinking = [], [], []
         for block in payload.get("content") or []:
-            if block.get("type") == "text":
+            if block.get("type") in ("thinking", "redacted_thinking"):
+                thinking.append(block)
+            elif block.get("type") == "text":
                 text.append(block.get("text", ""))
             elif block.get("type") == "tool_use":
                 calls.append(
@@ -261,15 +363,26 @@ class AnthropicChat:
                     )
                 )
         usage = payload.get("usage") or {}
+        cache_read = int(usage.get("cache_read_input_tokens") or 0)
+        cache_write = int(usage.get("cache_creation_input_tokens") or 0)
         return ModelTurn(
             text="".join(text),
             tool_calls=calls,
             usage=Usage(
-                input_tokens=usage.get("input_tokens"),
+                # Anthropic reports cache tokens apart from input_tokens; the
+                # total prompt size is the sum, as with chat completions.
+                input_tokens=(
+                    None
+                    if usage.get("input_tokens") is None
+                    else usage["input_tokens"] + cache_read + cache_write
+                ),
                 output_tokens=usage.get("output_tokens"),
                 latency_ms=(time.perf_counter() - start) * 1000,
             ),
             stop_reason=payload.get("stop_reason") or "",
+            thinking=thinking,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
         )
 
     async def aclose(self) -> None:
@@ -277,6 +390,20 @@ class AnthropicChat:
 
 
 def create_model(config: TargetConfig) -> ChatModel:
+    model: ChatModel
     if config.connector == "anthropic":
-        return AnthropicChat(config)
-    return OpenAIChat(config)
+        model = AnthropicChat(config)
+    elif config.api == "responses":
+        from evalsi_harness.responses import OpenAIResponses
+
+        model = OpenAIResponses(config)
+    else:
+        model = OpenAIChat(config)
+    if config.fallbacks:
+        from evalsi_harness.fallback import FallbackModel
+
+        return FallbackModel(
+            [model, *(create_model(replace(f, fallbacks=())) for f in config.fallbacks)],
+            after=config.fallback_after or 2,
+        )
+    return model

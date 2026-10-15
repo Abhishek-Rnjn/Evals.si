@@ -20,8 +20,17 @@ from pathlib import Path
 from typing import Any
 
 from evalsi.types import Usage
-from evalsi_harness.models import ChatModel, Message, ModelTurn, ToolCallRequest, ToolSpec
+from evalsi_harness.models import (
+    ChatModel,
+    Message,
+    ModelError,
+    ModelTurn,
+    ToolCallRequest,
+    ToolSpec,
+)
 from evalsi_harness.tools import Tool, ToolResult
+
+CASSETTE_VERSION = 2
 
 
 class CassetteError(RuntimeError):
@@ -40,6 +49,12 @@ def _turn_to_dict(turn: ModelTurn) -> dict[str, Any]:
         ],
         "usage": turn.usage.to_dict(),
         "stop_reason": turn.stop_reason,
+        **({"thinking": turn.thinking} if turn.thinking else {}),
+        **({"cache_read_tokens": turn.cache_read_tokens} if turn.cache_read_tokens else {}),
+        **({"cache_write_tokens": turn.cache_write_tokens} if turn.cache_write_tokens else {}),
+        **({"reasoning_tokens": turn.reasoning_tokens} if turn.reasoning_tokens else {}),
+        **({"model": turn.model} if turn.model else {}),
+        **({"switched_from": turn.switched_from} if turn.switched_from else {}),
     }
 
 
@@ -49,6 +64,12 @@ def _turn_from_dict(data: dict[str, Any]) -> ModelTurn:
         tool_calls=[ToolCallRequest(**c) for c in data.get("tool_calls") or []],
         usage=Usage.from_dict(data.get("usage") or {}),
         stop_reason=data.get("stop_reason", ""),
+        thinking=data.get("thinking") or [],
+        cache_read_tokens=data.get("cache_read_tokens", 0),
+        cache_write_tokens=data.get("cache_write_tokens", 0),
+        reasoning_tokens=data.get("reasoning_tokens", 0),
+        model=data.get("model", ""),
+        switched_from=data.get("switched_from", ""),
     )
 
 
@@ -95,7 +116,12 @@ class Cassette:
                 "set branch_at_step to continue live"
             )
         self.turns_served += 1
-        return _turn_from_dict(self._turns.popleft())
+        entry = self._turns.popleft()
+        if "error" in entry:
+            # The provider refused this call when it was recorded (a raised limit that was
+            # too high, say); the run handled it, so the replay raises it again.
+            raise ModelError(entry["error"])
+        return _turn_from_dict(entry)
 
     def tool_result(self, name: str, args: dict[str, Any]) -> ToolResult | None:
         if self.live:
@@ -117,6 +143,10 @@ class Cassette:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("w", encoding="utf-8") as f:
+            # Version 2 records thinking, reasoning items, cache and reasoning
+            # tokens and model switches. Version 1 files have no header, lack
+            # those fields, and replay unchanged.
+            f.write(json.dumps({"kind": "header", "version": CASSETTE_VERSION}) + "\n")
             for entry in self.entries:
                 f.write(json.dumps(entry) + "\n")
 
@@ -130,7 +160,12 @@ class CassetteModel:
         self.name = live.name if live is not None else "replay"
 
     async def complete(
-        self, messages: list[Message], tools: list[ToolSpec], *, system: str = ""
+        self,
+        messages: list[Message],
+        tools: list[ToolSpec],
+        *,
+        system: str = "",
+        max_tokens: int = 0,
     ) -> ModelTurn:
         turn = self.cassette.next_turn()
         if turn is None:
@@ -138,7 +173,13 @@ class CassetteModel:
                 raise CassetteError(
                     "replay reached the branch point but no live model is configured"
                 )
-            turn = await self.inner.complete(messages, tools, system=system)
+            try:
+                turn = await self.inner.complete(
+                    messages, tools, system=system, max_tokens=max_tokens
+                )
+            except ModelError as exc:
+                self.cassette.record({"kind": "model", "turn": {"error": str(exc)}})
+                raise
         self.cassette.record({"kind": "model", "turn": _turn_to_dict(turn)})
         return turn
 

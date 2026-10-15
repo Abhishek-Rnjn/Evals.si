@@ -148,4 +148,6 @@ Exit criteria: a verifiers or OpenEnv trainer runs one real training step on a G
 
 ## Tracking
 
+**H1 (2026-10-15):** built and tested over mock transports and a local server: thinking preserved across tool turns and configurable on the target, the Responses API client with reasoning items carried between turns, streaming for all three protocols, Anthropic prompt caching with cache-aware cost, `retry-after` and 529 retries, a retry of a turn cut off by `max_tokens`, stop reasons (`refusal`, `pause_turn`), a per-endpoint concurrency limit, fallback models with the switch recorded on the step, and cassette format v2. Not done: none of it has run against a live provider, so the exit test (a recorded multi-step `fix-calc` run with thinking on Anthropic and on an OpenAI reasoning model that replays exactly) is open; it needs model keys. Not built: moving a conversation's reasoning between providers (it is dropped, by a stated rule), a separate model for compaction or sub-agents (they arrive with H2 and H3), Anthropic's `pause_turn` with server-side tools, and a streamed response's partial output on failure (a broken stream is an error, not resumed).
+
 As each phase is built, what is left of it (unverified, deferred or needing infrastructure) moves to [LEFTOVERS.md](LEFTOVERS.md), the same way the other phases are recorded.

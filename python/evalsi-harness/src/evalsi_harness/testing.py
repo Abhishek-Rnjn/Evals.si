@@ -110,7 +110,7 @@ class ScriptedModelServer:
                         )
                     payload: dict[str, Any] = {
                         "content": blocks,
-                        "stop_reason": "tool_use" if calls else "end_turn",
+                        "stop_reason": reply.get("stop") or ("tool_use" if calls else "end_turn"),
                         "usage": {"input_tokens": 100, "output_tokens": 20},
                     }
                 else:
@@ -129,7 +129,11 @@ class ScriptedModelServer:
                         ]
                     payload = {
                         "choices": [
-                            {"message": message, "finish_reason": "tool_calls" if calls else "stop"}
+                            {
+                                "message": message,
+                                "finish_reason": reply.get("stop")
+                                or ("tool_calls" if calls else "stop"),
+                            }
                         ],
                         "usage": {"prompt_tokens": 100, "completion_tokens": 20},
                     }

@@ -48,6 +48,12 @@ from evalsi_harness.trust import Trust
 from evalsi_harness.user_sim import UserSimulator
 
 
+def _doubled(max_tokens: int) -> int:
+    """Twice a target's output limit (16,000 when unset), up to 128k; 0 when already there."""
+    current = max_tokens or 16000
+    return min(current * 2, 128_000) if current < 128_000 else 0
+
+
 @dataclass
 class HarnessManifest:
     name: str
@@ -247,6 +253,45 @@ class BuiltinHarness:
         c = self.config
         return DEFAULT_SYSTEM + (f"\n\n{c.instructions}" if c.instructions else "")
 
+    @staticmethod
+    def _cache_prices(live: LiveTask) -> dict[str, float]:
+        """Cache prices as multiples of the input price. Anthropic bills reads at a
+        tenth and writes at 1.25 times; for other providers we assume no discount,
+        so a spend budget stays an upper bound. In a chain that includes any other
+        provider (a fallback) the read discount is off, but the write surcharge
+        stays whenever Anthropic is in it: a write it makes costs 1.25 times."""
+        spec = live.task.spec
+        if not spec.HasField("target"):
+            return {}
+        chain = [spec.target, *spec.target.fallbacks]
+        anthropic = [t.connector == "anthropic" for t in chain]
+        if all(anthropic):
+            return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
+        if any(anthropic):
+            return {"cache_write_mult": 1.25}
+        return {}
+        chain = [spec.target, *spec.target.fallbacks]
+        if all(t.connector == "anthropic" for t in chain):
+            return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
+        return {}
+
+    @staticmethod
+    def _truncation_retry(live: LiveTask) -> int:
+        """The limit to retry a truncated turn with: twice the target's, up to 128k."""
+        spec = live.task.spec
+        if not spec.HasField("target"):
+            return 0
+        return _doubled(spec.target.max_tokens)
+
+    @staticmethod
+    def _truncation_retry_by_model(live: LiveTask) -> dict[str, int]:
+        """The same, for each model of a fallback chain by name, so a turn a fallback
+        served is retried above the fallback's own limit, not the primary's."""
+        spec = live.task.spec
+        if not spec.HasField("target"):
+            return {}
+        return {t.model: _doubled(t.max_tokens) for t in [spec.target, *spec.target.fallbacks]}
+
     def _loop_config(self, live: LiveTask) -> LoopConfig:
         c = self.config
         system = self._system(live)
@@ -257,6 +302,9 @@ class BuiltinHarness:
             wall_clock_s=self._wall_clock(),
             input_per_mtok=c.pricing.input_per_mtok,
             output_per_mtok=c.pricing.output_per_mtok,
+            truncation_retry_tokens=self._truncation_retry(live),
+            truncation_retry_by_model=self._truncation_retry_by_model(live),
+            **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,
         )

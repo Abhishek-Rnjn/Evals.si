@@ -99,6 +99,22 @@ Notes on environments:
 | `recording: {mode: record\|replay, dir, branch_at_step}` | captures model calls and tool I/O. Replay reruns sandbox commands, so the environment is rebuilt; `branch_at_step: N` replays N steps, then continues live |
 | `escalation.allow` | escalation kinds the harness grants (`network`) |
 
+### Model options
+
+The built-in agent calls `spec.target`. Besides `connector`, `model`, `base_url`, `api_key_env`, `max_tokens`, `temperature` and `effort`, the target takes these options (they apply to the built-in agent only):
+
+| Field | What it does |
+|---|---|
+| `thinking: {mode, budget_tokens}` | Anthropic extended thinking: `adaptive`, `enabled` (with a `budget_tokens` below `max_tokens`) or `disabled`. The thinking blocks are sent back with the tool results, as the API requires, and a temperature is not sent while the model thinks. The readable part of the thinking is on the `llm` step as `evalsi.thinking.text` (redacted like other attributes); signatures and encrypted content are not |
+| `api: responses` | for `openai-compatible` targets: use the Responses API instead of chat completions. `effort` becomes `reasoning.effort`. The call is stateless (`store: false`) and the encrypted reasoning items travel with the conversation, so a reasoning model keeps its plan across tool calls. Reasoning tokens are counted on the step |
+| `stream: true` | stream the response, so long outputs and long reasoning do not hit the HTTP timeout |
+| `max_concurrency: N` | at most N concurrent model calls to this endpoint and key from one worker process |
+| `fallbacks: [target, ...]`, `fallback_after: N` | models to switch to, in order, when the current one fails N times in a row (default 2; each failure is already retried with backoff). The run stays on the new model, the step records `evalsi.model.switched_from`, and reasoning blocks from another model are dropped from the conversation, since a provider only accepts its own. A fallback needs its own credential grant |
+
+Calls honour `retry-after` and retry HTTP 429, 5xx and 529 with jitter. Anthropic prompts are cached (breakpoints on the system prompt, the tools and the end of the conversation), and `max_usd` prices cached tokens: at a tenth of the input price for reads and 1.25 times for writes on Anthropic, at full price elsewhere, so a spend budget is an upper bound. `budget.tokens` counts the whole prompt, cached tokens included.
+
+A turn cut off by `max_tokens` is tried once more with twice the limit (up to 128k); if it is cut off again, or the provider refuses the higher limit, the run ends with stop reason `budget`, not `completed`, and is still checked. The retry is on by default and spends the extra tokens. A refusal ends the run as `refusal`, and `pause_turn` is resumed.
+
 `harness.external` runs another harness over the [harness protocol](../../proto/evalsi/harness/v1alpha1/harness.proto) (`Describe`, `Setup`, `Run` streaming trajectory events, `Check`, `Teardown`). It can be a gRPC `address`, a `command` serving it on a socket, or a Python class (`python: module:Class`). The benchmark harnesses below are Python classes.
 
 ## Grading

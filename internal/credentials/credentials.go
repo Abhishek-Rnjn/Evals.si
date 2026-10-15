@@ -373,7 +373,15 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 	var uses []Use
 	t := spec.GetTarget()
 	if t.GetConnector() != "" || t.GetModel() != "" {
-		u, err := targetUse(t)
+		u, err := targetUse(t, "spec.target.api_key_env")
+		if err != nil {
+			return nil, err
+		}
+		uses = append(uses, u...)
+	}
+	// A fallback model is called with its own key, so it needs the same grant.
+	for i, f := range t.GetFallbacks() {
+		u, err := targetUse(f, fmt.Sprintf("spec.target.fallbacks[%d].api_key_env", i))
 		if err != nil {
 			return nil, err
 		}
@@ -404,12 +412,11 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 	return uses, nil
 }
 
-func targetUse(t *evalsiv1alpha1.Target) ([]Use, error) {
-	field := "spec.target.api_key_env"
+func targetUse(t *evalsiv1alpha1.Target, field string) ([]Use, error) {
 	switch t.GetConnector() {
 	case "anthropic":
 		if t.GetApiKeyEnv() == None {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("spec.target: the anthropic connector needs a key; api_key_env cannot be none"))
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(strings.TrimSuffix(field, ".api_key_env")+": the anthropic connector needs a key; api_key_env cannot be none"))
 		}
 		dest := t.GetBaseUrl()
 		if dest == "" {

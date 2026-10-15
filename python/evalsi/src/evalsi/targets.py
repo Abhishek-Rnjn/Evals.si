@@ -27,7 +27,8 @@ import httpx
 from evalsi.types import Content, Record, Usage
 
 CONNECTORS = ("openai-compatible", "anthropic")
-RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504}
+# 529 is Anthropic's "overloaded".
+RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 
 
 class TargetError(RuntimeError):
@@ -58,6 +59,14 @@ class TargetConfig:
     temperature: float | None = None
     effort: str = ""
     timeout_s: float = 600.0
+    # Options for the built-in agent's model clients (see proto Target).
+    thinking: str = ""  # "", "adaptive", "enabled" or "disabled" (Anthropic)
+    thinking_budget: int = 0
+    stream: bool = False
+    max_concurrency: int = 0
+    api: str = ""  # openai-compatible: "" or "chat-completions", or "responses"
+    fallbacks: tuple[TargetConfig, ...] = ()
+    fallback_after: int = 0
 
     def __post_init__(self) -> None:
         if self.connector not in CONNECTORS:
@@ -68,6 +77,20 @@ class TargetConfig:
             raise ValueError("a target needs a model")
         if self.connector == "openai-compatible" and not self.base_url:
             raise ValueError("the openai-compatible target needs base_url")
+        if self.api not in ("", "chat-completions", "responses"):
+            raise ValueError(f"api must be chat-completions or responses, not {self.api!r}")
+        if self.api == "responses" and self.connector != "openai-compatible":
+            raise ValueError("api responses is for openai-compatible targets")
+        if self.thinking not in ("", "adaptive", "enabled", "disabled"):
+            raise ValueError(
+                f"thinking must be adaptive, enabled or disabled, not {self.thinking!r}"
+            )
+        if self.thinking and self.connector != "anthropic":
+            raise ValueError("thinking is for anthropic targets")
+        if self.thinking == "enabled" and not 0 < self.thinking_budget < self.max_tokens:
+            raise ValueError("thinking enabled needs thinking_budget above 0 and below max_tokens")
+        if self.max_concurrency < 0 or self.fallback_after < 0:
+            raise ValueError("max_concurrency and fallback_after cannot be negative")
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -78,6 +101,20 @@ class TargetConfig:
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "effort": self.effort,
+            # Only what is set, so the description of an older target is unchanged.
+            **{
+                k: v
+                for k, v in {
+                    "thinking": self.thinking,
+                    "thinking_budget": self.thinking_budget,
+                    "stream": self.stream,
+                    "max_concurrency": self.max_concurrency,
+                    "api": self.api,
+                    "fallbacks": [f.describe() for f in self.fallbacks],
+                    "fallback_after": self.fallback_after,
+                }.items()
+                if v
+            },
         }
 
 

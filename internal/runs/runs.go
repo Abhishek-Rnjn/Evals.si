@@ -284,10 +284,80 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 	} else if spec.GetTrials() > 1 {
 		return nil, invalid("spec.trials above 1 needs a target; without one every trial is identical")
 	}
+	if err := validateTargetOptions(spec.GetTarget(), "spec.target"); err != nil {
+		return nil, err
+	}
 	if err := validateGates(spec); err != nil {
 		return nil, err
 	}
 	return insts, nil
+}
+
+// defaultMaxTokens is the output limit a target gets when it sets none (the
+// Python worker's default).
+const defaultMaxTokens = 16000
+
+// maxFallbacks bounds the models a run may switch between.
+const maxFallbacks = 4
+
+// validateTargetOptions checks a target's model options (and its fallbacks),
+// so a bad value is refused here rather than failing every trial.
+func validateTargetOptions(t *evalsiv1alpha1.Target, field string) error {
+	if t == nil {
+		return nil
+	}
+	if t.GetMaxConcurrency() < 0 || t.GetFallbackAfter() < 0 {
+		return invalid("%s: max_concurrency and fallback_after cannot be negative", field)
+	}
+	switch t.GetApi() {
+	case "", "chat-completions", "responses":
+	default:
+		return invalid("%s.api must be chat-completions or responses", field)
+	}
+	if t.GetApi() == "responses" && t.GetConnector() == "anthropic" {
+		return invalid("%s.api responses is for openai-compatible targets", field)
+	}
+	if th := t.GetThinking(); th != nil {
+		switch th.GetMode() {
+		case "adaptive", "disabled":
+		case "enabled":
+			if th.GetBudgetTokens() <= 0 {
+				return invalid("%s.thinking.budget_tokens is required when mode is enabled", field)
+			}
+			limit := t.GetMaxTokens()
+			if limit == 0 {
+				limit = defaultMaxTokens
+			}
+			if th.GetBudgetTokens() >= limit {
+				return invalid("%s.thinking.budget_tokens must be below max_tokens (%d unless set)", field, limit)
+			}
+		default:
+			return invalid("%s.thinking.mode must be adaptive, enabled or disabled", field)
+		}
+		if t.GetConnector() != "anthropic" {
+			return invalid("%s.thinking is for anthropic targets", field)
+		}
+	}
+	if len(t.GetFallbacks()) > maxFallbacks {
+		return invalid("%s.fallbacks can hold at most %d models", field, maxFallbacks)
+	}
+	for i, f := range t.GetFallbacks() {
+		name := fmt.Sprintf("%s.fallbacks[%d]", field, i)
+		switch {
+		case f.GetConnector() != "openai-compatible" && f.GetConnector() != "anthropic":
+			return invalid("%s.connector must be openai-compatible or anthropic", name)
+		case f.GetModel() == "":
+			return invalid("%s.model is required", name)
+		case f.GetConnector() == "openai-compatible" && f.GetBaseUrl() == "":
+			return invalid("%s.base_url is required for openai-compatible", name)
+		case len(f.GetFallbacks()) > 0:
+			return invalid("%s cannot have fallbacks of its own", name)
+		}
+		if err := validateTargetOptions(f, name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // validateGates checks the parts of a spec that are read when the run

@@ -15,7 +15,13 @@ from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
-from evalsi_harness.models import ChatModel, ModelTurn, ToolCallRequest
+from evalsi_harness.models import (
+    ChatModel,
+    ModelError,
+    ModelTurn,
+    ToolCallRequest,
+    thinking_text,
+)
 from evalsi_harness.tools import Tool, ToolResult
 from evalsi_harness.user_sim import UserSimulator
 
@@ -34,6 +40,18 @@ class LoopConfig:
     wall_clock_s: float = 0.0
     input_per_mtok: float = 0.0
     output_per_mtok: float = 0.0
+    # Price of cached prompt tokens as a multiple of the input price. 1.0
+    # assumes no discount, so max_usd stays an upper bound for providers
+    # whose cache prices we do not know.
+    cache_read_mult: float = 1.0
+    cache_write_mult: float = 1.0
+    # A turn cut off by the output limit is tried once more with this limit
+    # (0: not retried). It is the config's, not the model's, so a replay makes
+    # the same decision as the recorded run.
+    truncation_retry_tokens: int = 0
+    # The same per model, by name: the retry limit follows the model that served
+    # the turn (a fallback has limits of its own).
+    truncation_retry_by_model: dict[str, int] = field(default_factory=dict)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
 
@@ -44,6 +62,11 @@ class LoopState:
     user_usage: Usage = field(default_factory=lambda: Usage(input_tokens=0, output_tokens=0))
     steps: int = 0
     tool_calls: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    truncated_turns: int = 0
+    reasoning_tokens: int = 0
+    truncation_retries: int = 0
 
 
 def _add(total: Usage, part: Usage) -> None:
@@ -74,10 +97,16 @@ class AgentLoop:
         self.root = span_id()
 
     def cost(self) -> float:
-        u = self.state.usage
+        u, c, st = self.state.usage, self.config, self.state
+        plain = (u.input_tokens or 0) - st.cache_read_tokens - st.cache_write_tokens
         return (
-            (u.input_tokens or 0) * self.config.input_per_mtok
-            + (u.output_tokens or 0) * self.config.output_per_mtok
+            (
+                plain
+                + st.cache_read_tokens * c.cache_read_mult
+                + st.cache_write_tokens * c.cache_write_mult
+            )
+            * c.input_per_mtok
+            + (u.output_tokens or 0) * c.output_per_mtok
         ) / 1e6
 
     def _over_budget(self, started: float) -> str:
@@ -109,6 +138,10 @@ class AgentLoop:
                 "steps": self.state.steps,
                 "tool_calls": self.state.tool_calls,
                 "user_usage": self.state.user_usage.to_dict(),
+                "cache_read_tokens": self.state.cache_read_tokens,
+                "cache_write_tokens": self.state.cache_write_tokens,
+                "reasoning_tokens": self.state.reasoning_tokens,
+                "truncation_retries": self.state.truncation_retries,
             },
         )
 
@@ -126,14 +159,18 @@ class AgentLoop:
         while True:
             if reason := self._over_budget(started):
                 return self._final(last_text, reason)
-            step_span = span_id()
-            start_ns = time.time_ns()
-            turn = await self.model.complete(messages, specs, system=self.config.system)
-            self.state.steps += 1
-            _add(self.state.usage, turn.usage)
-            self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
-            messages.append(turn.as_message())
+            turn = await self._call_model(messages, specs)
             last_text = turn.text or last_text
+            if turn.truncated:
+                # Cut off by the output limit: a tool call may be half-written
+                # and an answer is incomplete, so this is not a normal finish.
+                self.state.truncated_turns += 1
+                return self._final(turn.text, "budget", error="the model hit its output limit")
+            if turn.stop_reason == "refusal":
+                return self._final(turn.text, "refusal")
+            messages.append(turn.as_message())
+            if turn.stop_reason == "pause_turn" and not turn.tool_calls:
+                continue  # the API asks for the turn to be resumed as it stands
             if turn.tool_calls:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
@@ -157,10 +194,54 @@ class AgentLoop:
                 return self._final(turn.text, "completed")
             messages.append({"role": "user", "content": reply.message})
 
+    def _account(self, turn: ModelTurn) -> None:
+        _add(self.state.usage, turn.usage)
+        self.state.cache_read_tokens += turn.cache_read_tokens
+        self.state.cache_write_tokens += turn.cache_write_tokens
+        self.state.reasoning_tokens += turn.reasoning_tokens
+
+    async def _call_model(self, messages: list[dict[str, Any]], specs: list[Any]) -> ModelTurn:
+        """One model step. A turn cut off by the output limit is tried again,
+        once, with a higher limit; both calls are steps and both are billed."""
+        step_span = span_id()
+        start_ns = time.time_ns()
+        turn = await self.model.complete(messages, specs, system=self.config.system)
+        self.state.steps += 1
+        self._account(turn)
+        self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
+        retry_to = self.config.truncation_retry_by_model.get(
+            turn.model, self.config.truncation_retry_tokens
+        )
+        if not turn.truncated or not retry_to:
+            return turn
+        if self._over_budget(time.monotonic()):  # steps or spend left no room
+            return turn
+        self.state.truncation_retries += 1
+        try:
+            return await self._retry_cut_off(messages, specs, retry_to)
+        except ModelError:
+            # The provider refused the higher limit (above its output cap, or
+            # past the context window). The cut-off turn stands, so the run
+            # ends as a budget stop and is still checked.
+            return turn
+
+    async def _retry_cut_off(
+        self, messages: list[dict[str, Any]], specs: list[Any], limit: int
+    ) -> ModelTurn:
+        step_span = span_id()
+        start_ns = time.time_ns()
+        turn = await self.model.complete(
+            messages, specs, system=self.config.system, max_tokens=limit
+        )
+        self.state.steps += 1
+        self._account(turn)
+        self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
+        return turn
+
     def _llm_step(self, turn: ModelTurn, span: str) -> Step:
         return Step(
             type="llm",
-            name=self.model.name,
+            name=turn.model or self.model.name,
             output=Content(
                 messages=[
                     Message(
@@ -178,8 +259,22 @@ class AgentLoop:
             usage=turn.usage,
             duration_ms=turn.usage.latency_ms,
             attributes={
-                "gen_ai.request.model": self.model.name,
+                "gen_ai.request.model": turn.model or self.model.name,
                 "gen_ai.response.finish_reasons": [turn.stop_reason],
+                "gen_ai.usage.cache_read.input_tokens": turn.cache_read_tokens,
+                "gen_ai.usage.cache_creation.input_tokens": turn.cache_write_tokens,
+                "gen_ai.usage.reasoning.output_tokens": turn.reasoning_tokens,
+                **(
+                    {
+                        "evalsi.thinking.blocks": len(turn.thinking),
+                        "evalsi.thinking.text": thinking_text(turn.thinking),
+                    }
+                    if turn.thinking
+                    else {}
+                ),
+                **(
+                    {"evalsi.model.switched_from": turn.switched_from} if turn.switched_from else {}
+                ),
             },
         )
 
