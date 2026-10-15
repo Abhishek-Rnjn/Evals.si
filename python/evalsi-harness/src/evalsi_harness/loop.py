@@ -10,12 +10,19 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.archive import Archive, SessionSearchTool
-from evalsi_harness.context import ContextConfig, ContextView, make_strategy
+from evalsi_harness.context import (
+    PROGRESS_NOTE,
+    ROUND_DONE,
+    ContextConfig,
+    ContextView,
+    make_strategy,
+)
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
 from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
 from evalsi_harness.models import (
@@ -28,6 +35,13 @@ from evalsi_harness.models import (
 from evalsi_harness.subagent import DelegateTool
 from evalsi_harness.tools import Tool, ToolResult
 from evalsi_harness.user_sim import UserSimulator
+
+ROUND_OPENING = (
+    "Round {n} of {total}. This is a fresh start: the conversation of the earlier rounds is gone, "
+    "and the files they changed are still there. The notes you kept in {file}:\n\n{notes}\n\n"
+    "Continue the task from where those notes leave off, and keep {file} up to date. When the "
+    "whole task is complete, end your reply with {done}."
+)
 
 DEFAULT_SYSTEM = (
     "You are an autonomous agent completing a task. Use the tools available to you to "
@@ -92,6 +106,7 @@ class AgentLoop:
         *,
         user: UserSimulator | None = None,
         hooks: Hooks | None = None,
+        progress: Callable[[], Awaitable[str]] | None = None,
     ) -> None:
         self.archive = Archive()
         if config.session_search:
@@ -111,6 +126,9 @@ class AgentLoop:
         self.state = LoopState()
         self.hooks = hooks or Hooks()
         self.stop_continues = 0
+        # fresh-rounds: reads the notes a round leaves for the next.
+        self.progress = progress
+        self._round_start = 0
         self._started = time.monotonic()
         self.root = span_id()
         self.strategy = make_strategy(config.context)
@@ -140,6 +158,11 @@ class AgentLoop:
         c, u = self.config, self.state.usage
         if self.state.steps >= c.max_steps:
             return "max_steps"
+        if (
+            c.context.strategy == "fresh-rounds"
+            and self.state.steps - self._round_start >= c.context.round_steps
+        ):
+            return "round_limit"
         if c.max_tokens and (u.input_tokens or 0) + (u.output_tokens or 0) >= c.max_tokens:
             return "budget"
         if c.max_usd and self.cost() >= c.max_usd:
@@ -224,9 +247,59 @@ class AgentLoop:
             self.archive.add(message)
         try:
             async with asyncio.timeout(self.config.wall_clock_s or None):
+                if self.config.context.strategy == "fresh-rounds":
+                    return await self._rounds(list(conversation), started)
                 return await self._loop(list(conversation), started)
         except TimeoutError:
             return self._final("", "timeout")
+
+    async def _rounds(self, conversation: list[dict[str, Any]], started: float) -> FinalEvent:
+        """The Ralph pattern: each round is a new agent on the task and the notes
+        the last one kept, until a reply says the task is complete or the rounds
+        run out. Only the progress notes and the sandbox carry over."""
+        c = self.config.context
+        final = self._final("", "max_steps")
+        for round_no in range(1, c.rounds + 1):
+            messages = list(conversation)
+            self._round_start = self.state.steps
+            if round_no > 1:
+                notes = (await self.progress()) if self.progress else ""
+                opening = ROUND_OPENING.format(
+                    n=round_no,
+                    total=c.rounds,
+                    notes=notes.strip() or "(none: nothing was written to progress.md)",
+                    done=ROUND_DONE,
+                    file=PROGRESS_NOTE,
+                )
+                messages.append({"role": "user", "content": opening})
+                self.archive.add(messages[-1])
+                self.strategy.stats.rounds += 1
+                self.emit(
+                    StepEvent(
+                        Step(
+                            type="agent",
+                            name="context:round",
+                            output=Content(text=f"round {round_no} of {c.rounds}"),
+                            span_id=span_id(),
+                            parent_span_id=self.root,
+                            attributes={
+                                "evalsi.context.round": round_no,
+                                "evalsi.context.notes_chars": len(notes),
+                            },
+                        )
+                    )
+                )
+            final = await self._loop(messages, started)
+            text = final.output.as_text() if final.output is not None else ""
+            finished = final.stop_reason == "completed" and ROUND_DONE in text
+            if finished or final.stop_reason not in ("completed", "round_limit"):
+                return final
+        # Out of rounds without the agent saying it was done.
+        return self._final(
+            final.output.as_text() if final.output is not None else "",
+            "max_steps",
+            error=f"{c.rounds} rounds ended without {ROUND_DONE}",
+        )
 
     async def _loop(self, messages: list[dict[str, Any]], started: float) -> FinalEvent:
         specs = [t.spec for t in self.tools.values()]

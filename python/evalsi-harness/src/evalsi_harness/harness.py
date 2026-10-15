@@ -29,7 +29,7 @@ from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness._version import __version__
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool
 from evalsi_harness.checker import run_checker
-from evalsi_harness.context import ContextConfig, context_config
+from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.hooks import Hooks, load_hooks
@@ -46,7 +46,7 @@ from evalsi_harness.tools import (
     ToolResult,
     sandbox_tools,
 )
-from evalsi_harness.toolset import MUTATING, extra_tools
+from evalsi_harness.toolset import MEMORY_DIR, MUTATING, extra_tools
 from evalsi_harness.trust import Trust
 from evalsi_harness.user_sim import UserSimulator
 
@@ -249,7 +249,15 @@ class BuiltinHarness:
         """The agent's system prompt. Subclasses (benchmark harnesses) replace it."""
         c = self.config
         notes = []
-        if "memory" in c.tools.builtin:
+        rounds = c.context.strategy == "fresh-rounds"
+        if rounds:
+            notes.append(
+                "Your work may be split across several rounds, each starting with a clean "
+                "context. Keep notes in your memory file progress.md: what is done, what you "
+                f"verified, what is left. When the whole task is complete, end your reply with "
+                f"{ROUND_DONE}."
+            )
+        if "memory" in c.tools.builtin and not rounds:
             notes.append(
                 "You have a memory tool for notes that survive your context being shortened. "
                 "Record what you decide, verify and still have to do, and read it back when "
@@ -282,6 +290,27 @@ class BuiltinHarness:
         if all(t.connector == "anthropic" for t in chain):
             return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
         return {}
+
+    def _progress_reader(self, live: LiveTask) -> Callable[[], Awaitable[str]] | None:
+        """For fresh-rounds: the notes the last round left in the memory file."""
+        if self._context(live).strategy != "fresh-rounds" or live.env is None:
+            return None
+        env = live.env
+        path = f"{MEMORY_DIR}/{PROGRESS_NOTE}"
+
+        async def read() -> str:
+            files = await env.sandbox.read_files([path], max_bytes=64 * 1024)
+            return files.get(path, b"").decode(errors="replace")
+
+        return read
+
+    def _builtin_names(self, live: LiveTask) -> list[str]:
+        """The optional tools a spec names, plus the memory tool that fresh-rounds
+        needs for its notes."""
+        names = list(self.config.tools.builtin)
+        if self._context(live).strategy == "fresh-rounds" and "memory" not in names:
+            names.append("memory")
+        return names
 
     def _hooks(self, live: LiveTask) -> Hooks:
         refs = [
@@ -341,11 +370,12 @@ class BuiltinHarness:
                 *sandbox_tools(live.env, spill_outputs=self._context(live).spill_outputs),
                 self._escalation_tool(live),
             ]
-        if cfg.builtin:
+        builtin = self._builtin_names(live)
+        if builtin:
             if not use_sandbox or live.env is None:
                 raise TaskError("tools.builtin needs the sandbox tools and an environment")
             try:
-                tools += extra_tools(live.env, list(cfg.builtin))
+                tools += extra_tools(live.env, builtin)
             except ValueError as exc:
                 raise TaskError(f"tools.builtin: {exc}") from exc
         for server in cfg.mcp:
@@ -498,7 +528,15 @@ class BuiltinHarness:
         assert model is not None
         user = self._user_simulator(task)
         hooks = self._hooks(live)
-        loop = AgentLoop(model, tools, self._loop_config(live), emit, user=user, hooks=hooks)
+        loop = AgentLoop(
+            model,
+            tools,
+            self._loop_config(live),
+            emit,
+            user=user,
+            hooks=hooks,
+            progress=self._progress_reader(live),
+        )
         conversation = await self._conversation(live, user, emit)
         try:
             return await loop.run(conversation)

@@ -983,6 +983,12 @@ spec:
                             type: integer
                           keepTurns:
                             type: integer
+                          round_steps:
+                            type: integer
+                          roundSteps:
+                            type: integer
+                          rounds:
+                            type: integer
                           spill_outputs:
                             type: boolean
                           spillOutputs:

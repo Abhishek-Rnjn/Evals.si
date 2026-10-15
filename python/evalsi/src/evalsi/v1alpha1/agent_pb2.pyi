@@ -826,13 +826,20 @@ class ContextManagement(_message.Message):
     KEEP_TURNS_FIELD_NUMBER: _builtins.int
     SUMMARY_MAX_TOKENS_FIELD_NUMBER: _builtins.int
     SPILL_OUTPUTS_FIELD_NUMBER: _builtins.int
+    ROUNDS_FIELD_NUMBER: _builtins.int
+    ROUND_STEPS_FIELD_NUMBER: _builtins.int
     strategy: _builtins.str
     """"none" (default), "clear-tool-results" (replace old tool results with a
-    stub) or "compact" (clear first, then summarize earlier turns with the
-    agent's own model).
+    stub), "compact" (clear first, then summarize earlier turns with the
+    agent's own model) or "fresh-rounds" (the Ralph pattern: each round is a
+    new agent with a clean context that starts from the task and the notes it
+    kept in the memory file progress.md; the run ends when a reply carries
+    TASK_COMPLETE, or after `rounds` rounds).
     """
     window_tokens: _builtins.int
-    """The model's context window in tokens; required for any strategy but none."""
+    """The model's context window in tokens; required for clear-tool-results and
+    compact.
+    """
     trigger: _builtins.float
     """Start when the prompt reaches this fraction of the window (default 0.8)..."""
     target: _builtins.float
@@ -849,6 +856,11 @@ class ContextManagement(_message.Message):
     """Write a large bash output to a file in the sandbox (.evalsi-out/) and
     return its head, tail and path, instead of clipping it in the middle.
     """
+    rounds: _builtins.int
+    """fresh-rounds: the most rounds (default 5) and the model calls one round
+    may make (default 30).
+    """
+    round_steps: _builtins.int
     def __init__(
         self,
         *,
@@ -860,8 +872,10 @@ class ContextManagement(_message.Message):
         keep_turns: _builtins.int = ...,
         summary_max_tokens: _builtins.int = ...,
         spill_outputs: _builtins.bool = ...,
+        rounds: _builtins.int = ...,
+        round_steps: _builtins.int = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["keep_recent", b"keep_recent", "keep_turns", b"keep_turns", "spill_outputs", b"spill_outputs", "strategy", b"strategy", "summary_max_tokens", b"summary_max_tokens", "target", b"target", "trigger", b"trigger", "window_tokens", b"window_tokens"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["keep_recent", b"keep_recent", "keep_turns", b"keep_turns", "round_steps", b"round_steps", "rounds", b"rounds", "spill_outputs", b"spill_outputs", "strategy", b"strategy", "summary_max_tokens", b"summary_max_tokens", "target", b"target", "trigger", b"trigger", "window_tokens", b"window_tokens"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ContextManagement: _TypeAlias = ContextManagement  # noqa: Y015

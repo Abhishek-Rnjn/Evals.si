@@ -32,7 +32,9 @@ from evalsi_harness.models import ChatModel, ModelError, ModelTurn
 
 Message = dict[str, Any]
 
-STRATEGIES = ("none", "clear-tool-results", "compact")
+STRATEGIES = ("none", "clear-tool-results", "compact", "fresh-rounds")
+ROUND_DONE = "TASK_COMPLETE"
+PROGRESS_NOTE = "progress.md"
 SUMMARY_PREFIX = (
     "[Summary of the earlier work, written by you before the conversation was shortened]\n"
 )
@@ -59,12 +61,18 @@ class ContextConfig:
     keep_turns: int = 6
     summary_max_tokens: int = 4096
     spill_outputs: bool = False
+    # fresh-rounds: the most rounds, and the model calls one round may make.
+    rounds: int = 5
+    round_steps: int = 30
 
     def __post_init__(self) -> None:
         if self.strategy not in STRATEGIES:
             raise ValueError(f"context strategy must be one of {STRATEGIES}, not {self.strategy!r}")
-        if self.strategy != "none" and self.window_tokens < 4000:
+        windowed = self.strategy in ("clear-tool-results", "compact")
+        if windowed and self.window_tokens < 4000:
             raise ValueError("a context strategy needs window_tokens of at least 4000")
+        if self.strategy == "fresh-rounds" and (self.rounds < 1 or self.round_steps < 1):
+            raise ValueError("fresh-rounds needs rounds and round_steps of at least 1")
         if not 0 < self.target < self.trigger <= 1:
             raise ValueError("context needs 0 < target < trigger <= 1")
         if min(self.keep_recent, self.keep_turns, self.summary_max_tokens) < 0:
@@ -74,6 +82,12 @@ class ContextConfig:
         """What a recording is only valid for: the strategy and its numbers."""
         if self.strategy == "none":
             return {"strategy": "none"}
+        if self.strategy == "fresh-rounds":
+            return {
+                "strategy": "fresh-rounds",
+                "rounds": self.rounds,
+                "round_steps": self.round_steps,
+            }
         return {
             "strategy": self.strategy,
             "window_tokens": self.window_tokens,
@@ -96,6 +110,8 @@ def context_config(proto: Any) -> ContextConfig:
         keep_turns=proto.keep_turns or 6,
         summary_max_tokens=proto.summary_max_tokens or 4096,
         spill_outputs=proto.spill_outputs,
+        rounds=proto.rounds or 5,
+        round_steps=proto.round_steps or 30,
     )
 
 
@@ -118,6 +134,7 @@ class ContextStats:
     tokens_removed: int = 0
     turns_summarized: int = 0
     summary_failures: int = 0
+    rounds: int = 0
 
     def to_dict(self) -> dict[str, int]:
         return dict(vars(self))

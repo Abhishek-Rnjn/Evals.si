@@ -215,6 +215,9 @@ var forkName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 // maxDelegateSteps bounds a sub-agent's model calls.
 const maxDelegateSteps = 200
 
+// maxRounds bounds the rounds of a fresh-rounds run.
+const maxRounds = 50
+
 // maxHooks bounds the hooks of one run.
 const maxHooks = 8
 
@@ -234,12 +237,16 @@ func validateContext(c *evalsiv1alpha1.ContextManagement) error {
 	const f = "spec.harness.builtin.context"
 	switch c.GetStrategy() {
 	case "", "none":
+	case "fresh-rounds":
+		if c.GetRounds() < 0 || c.GetRounds() > maxRounds || c.GetRoundSteps() < 0 {
+			return invalid("%s: rounds must be from 0 to %d and round_steps cannot be negative", f, maxRounds)
+		}
 	case "clear-tool-results", "compact":
 		if c.GetWindowTokens() < minContextWindow {
 			return invalid("%s.window_tokens must be at least %d for strategy %s", f, minContextWindow, c.GetStrategy())
 		}
 	default:
-		return invalid("%s.strategy must be none, clear-tool-results or compact, not %q", f, c.GetStrategy())
+		return invalid("%s.strategy must be none, clear-tool-results, compact or fresh-rounds, not %q", f, c.GetStrategy())
 	}
 	trigger, target := c.GetTrigger(), c.GetTarget()
 	if trigger == 0 {

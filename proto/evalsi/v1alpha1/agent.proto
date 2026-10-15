@@ -244,10 +244,14 @@ message Hook {
 // replays only with the same strategy and window.
 message ContextManagement {
   // "none" (default), "clear-tool-results" (replace old tool results with a
-  // stub) or "compact" (clear first, then summarize earlier turns with the
-  // agent's own model).
+  // stub), "compact" (clear first, then summarize earlier turns with the
+  // agent's own model) or "fresh-rounds" (the Ralph pattern: each round is a
+  // new agent with a clean context that starts from the task and the notes it
+  // kept in the memory file progress.md; the run ends when a reply carries
+  // TASK_COMPLETE, or after `rounds` rounds).
   string strategy = 1;
-  // The model's context window in tokens; required for any strategy but none.
+  // The model's context window in tokens; required for clear-tool-results and
+  // compact.
   int32 window_tokens = 2;
   // Start when the prompt reaches this fraction of the window (default 0.8)...
   double trigger = 3;
@@ -263,6 +267,10 @@ message ContextManagement {
   // Write a large bash output to a file in the sandbox (.evalsi-out/) and
   // return its head, tail and path, instead of clipping it in the middle.
   bool spill_outputs = 8;
+  // fresh-rounds: the most rounds (default 5) and the model calls one round
+  // may make (default 30).
+  int32 rounds = 9;
+  int32 round_steps = 10;
 }
 
 // A harness you bring: anything that implements evalsi.harness.v1alpha1.HarnessService.

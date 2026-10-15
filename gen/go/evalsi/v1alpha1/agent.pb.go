@@ -1477,10 +1477,14 @@ func (x *Hook) GetConfig() *structpb.Struct {
 type ContextManagement struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "none" (default), "clear-tool-results" (replace old tool results with a
-	// stub) or "compact" (clear first, then summarize earlier turns with the
-	// agent's own model).
+	// stub), "compact" (clear first, then summarize earlier turns with the
+	// agent's own model) or "fresh-rounds" (the Ralph pattern: each round is a
+	// new agent with a clean context that starts from the task and the notes it
+	// kept in the memory file progress.md; the run ends when a reply carries
+	// TASK_COMPLETE, or after `rounds` rounds).
 	Strategy string `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
-	// The model's context window in tokens; required for any strategy but none.
+	// The model's context window in tokens; required for clear-tool-results and
+	// compact.
 	WindowTokens int32 `protobuf:"varint,2,opt,name=window_tokens,json=windowTokens,proto3" json:"window_tokens,omitempty"`
 	// Start when the prompt reaches this fraction of the window (default 0.8)...
 	Trigger float64 `protobuf:"fixed64,3,opt,name=trigger,proto3" json:"trigger,omitempty"`
@@ -1495,7 +1499,11 @@ type ContextManagement struct {
 	SummaryMaxTokens int32 `protobuf:"varint,7,opt,name=summary_max_tokens,json=summaryMaxTokens,proto3" json:"summary_max_tokens,omitempty"`
 	// Write a large bash output to a file in the sandbox (.evalsi-out/) and
 	// return its head, tail and path, instead of clipping it in the middle.
-	SpillOutputs  bool `protobuf:"varint,8,opt,name=spill_outputs,json=spillOutputs,proto3" json:"spill_outputs,omitempty"`
+	SpillOutputs bool `protobuf:"varint,8,opt,name=spill_outputs,json=spillOutputs,proto3" json:"spill_outputs,omitempty"`
+	// fresh-rounds: the most rounds (default 5) and the model calls one round
+	// may make (default 30).
+	Rounds        int32 `protobuf:"varint,9,opt,name=rounds,proto3" json:"rounds,omitempty"`
+	RoundSteps    int32 `protobuf:"varint,10,opt,name=round_steps,json=roundSteps,proto3" json:"round_steps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1584,6 +1592,20 @@ func (x *ContextManagement) GetSpillOutputs() bool {
 		return x.SpillOutputs
 	}
 	return false
+}
+
+func (x *ContextManagement) GetRounds() int32 {
+	if x != nil {
+		return x.Rounds
+	}
+	return 0
+}
+
+func (x *ContextManagement) GetRoundSteps() int32 {
+	if x != nil {
+		return x.RoundSteps
+	}
+	return 0
 }
 
 // A harness you bring: anything that implements evalsi.harness.v1alpha1.HarnessService.
@@ -2168,7 +2190,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x14_parallel_tool_calls\"O\n" +
 	"\x04Hook\x12\x16\n" +
 	"\x06python\x18\x01 \x01(\tR\x06python\x12/\n" +
-	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\"\x99\x02\n" +
+	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\"\xd2\x02\n" +
 	"\x11ContextManagement\x12\x1a\n" +
 	"\bstrategy\x18\x01 \x01(\tR\bstrategy\x12#\n" +
 	"\rwindow_tokens\x18\x02 \x01(\x05R\fwindowTokens\x12\x18\n" +
@@ -2179,7 +2201,11 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
 	"keep_turns\x18\x06 \x01(\x05R\tkeepTurns\x12,\n" +
 	"\x12summary_max_tokens\x18\a \x01(\x05R\x10summaryMaxTokens\x12#\n" +
-	"\rspill_outputs\x18\b \x01(\bR\fspillOutputs\"\xbd\x01\n" +
+	"\rspill_outputs\x18\b \x01(\bR\fspillOutputs\x12\x16\n" +
+	"\x06rounds\x18\t \x01(\x05R\x06rounds\x12\x1f\n" +
+	"\vround_steps\x18\n" +
+	" \x01(\x05R\n" +
+	"roundSteps\"\xbd\x01\n" +
 	"\x0fExternalHarness\x12\x1a\n" +
 	"\aaddress\x18\x01 \x01(\tH\x00R\aaddress\x12;\n" +
 	"\acommand\x18\x02 \x01(\v2\x1f.evalsi.v1alpha1.CommandHarnessH\x00R\acommand\x12\x18\n" +

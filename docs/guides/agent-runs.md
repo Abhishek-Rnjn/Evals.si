@@ -106,7 +106,7 @@ Without `harness.builtin.context`, the whole conversation is resent every step u
 
 | Field | What it does |
 |---|---|
-| `strategy` | `none` (default); `clear-tool-results` replaces old tool results with a stub such as `[tool result cleared to save context: 5120 characters from bash]`, keeping the message and its tool-call id; `compact` clears first, and when that is not enough has the agent's own model summarize the earlier turns (the task message, a summary, then the last `keep_turns` turns verbatim) |
+| `strategy` | `none` (default); `fresh-rounds` (see below); `clear-tool-results` replaces old tool results with a stub such as `[tool result cleared to save context: 5120 characters from bash]`, keeping the message and its tool-call id; `compact` clears first, and when that is not enough has the agent's own model summarize the earlier turns (the task message, a summary, then the last `keep_turns` turns verbatim) |
 | `window_tokens` | the model's context window (at least 4,000); required for any strategy but `none` |
 | `trigger`, `target` | start at this fraction of the window (default 0.8) and go down to this one (default 0.5). Working in batches rewrites the provider's prompt cache once per batch, not on every turn |
 | `keep_recent`, `keep_turns`, `summary_max_tokens` | tool results kept intact (4), assistant turns kept verbatim after a summary (6), and the summary's output limit (4096) |
@@ -115,6 +115,8 @@ Without `harness.builtin.context`, the whole conversation is resent every step u
 The prompt size is the model's last reported `input_tokens`, scaled by characters to the conversation as it now is, so it follows the real tokenizer. Every clear and compaction is a step named `context:clear-tool-results` or `context:compact`, with `evalsi.context.tokens_before`, `tokens_after` and what was removed; a compaction's model call is billed to the run (and to `max_usd`) but is not one of `max_steps`. The run's `agent.context` metadata totals them: `clears`, `compactions`, `results_cleared`, `chars_removed`, `tokens_removed`, `turns_summarized` and `summary_failures`. A summary that comes back cut off or empty is not used: the run keeps the cleared conversation instead.
 
 A recording replays only under the strategy and window it was recorded with (the cassette header names them), since another strategy would send the model different conversations; the summary call is recorded in sequence like any other model call.
+
+**`fresh-rounds`** (the Ralph pattern) trades one long conversation for several short ones. Each round is a new agent with a clean context: it starts from the task and the notes the previous round kept in its memory file `progress.md` (the `memory` tool is added for it), plus whatever the earlier rounds left in the sandbox. A round ends when the agent replies without calling tools or reaches `round_steps` model calls (default 30). The run ends when a reply carries `TASK_COMPLETE`, or after `rounds` rounds (default 5) with stop reason `max_steps` and an error saying so; `max_steps` and the other budgets bound the whole run. It needs no `window_tokens`; each round's context is as long as `round_steps` makes it. The prompt tells the agent about the notes and the marker, every new round is a `context:round` step, and `agent.context.rounds` counts the fresh starts. `session_search` still sees all rounds.
 
 ### Sub-agents
 

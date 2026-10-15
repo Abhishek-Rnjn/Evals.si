@@ -725,6 +725,9 @@ func TestAgentRunValidation(t *testing.T) {
 			off := false
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off, Builtin: []string{"grep"}}
 		},
+		"too many rounds": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: maxRounds + 1}
+		},
 		"delegate steps too high": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().DelegateSteps = maxDelegateSteps + 1
 		},
@@ -793,6 +796,9 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"fresh rounds need no window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: 8, RoundSteps: 25}
 		},
 		"delegate": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"delegate", "memory"}}
