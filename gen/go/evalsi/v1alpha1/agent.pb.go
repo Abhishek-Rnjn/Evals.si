@@ -1136,16 +1136,32 @@ func (x *UserSimulator) GetMaxTurns() int32 {
 	return 0
 }
 
-// Record and replay of model calls and tool I/O.
+// Record and replay of model calls and tool I/O. A recording is a session
+// log: every model turn and tool result is written as it happens, so a trial
+// that dies leaves everything up to its last step.
 type Recording struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "off" (default), "record" or "replay".
+	// "off" (default), "record", "replay", "resume" or "fork".
+	//
+	//	record: start a new log (replacing one).
+	//	replay: serve a log's model turns and tool results (sandbox tools run
+	//	  again, so the environment is rebuilt); with branch_at_step, replay
+	//	  the first N turns and then continue live without saving.
+	//	resume: continue an interrupted trial: replay its log, then run live
+	//	  and append to the same log. A trial with no log starts one.
+	//	fork: replay the first branch_at_step turns of a log, then run live,
+	//	  writing a new log (fork_as) that holds that prefix and the new
+	//	  continuation and names the log it forked from.
 	Mode string `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
 	// Directory for cassettes, one per task and trial. Embedded: relative to
 	// the spec. Server: inside datasets_dir.
 	Dir string `protobuf:"bytes,2,opt,name=dir,proto3" json:"dir,omitempty"`
-	// replay: replay the first N steps, then continue live (branching).
-	BranchAtStep  int32 `protobuf:"varint,3,opt,name=branch_at_step,json=branchAtStep,proto3" json:"branch_at_step,omitempty"`
+	// replay and fork: the number of model turns to replay before going live.
+	// Required for fork.
+	BranchAtStep int32 `protobuf:"varint,3,opt,name=branch_at_step,json=branchAtStep,proto3" json:"branch_at_step,omitempty"`
+	// fork: the new log's name (letters, digits, dots, dashes and underscores);
+	// default: the source's name with ".fork-N".
+	ForkAs        string `protobuf:"bytes,4,opt,name=fork_as,json=forkAs,proto3" json:"fork_as,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1199,6 +1215,13 @@ func (x *Recording) GetBranchAtStep() int32 {
 		return x.BranchAtStep
 	}
 	return 0
+}
+
+func (x *Recording) GetForkAs() string {
+	if x != nil {
+		return x.ForkAs
+	}
+	return ""
 }
 
 // What the harness does when a sandbox denies something and the agent asks
@@ -2105,11 +2128,12 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x05judge\x18\x01 \x01(\tR\x05judge\x12\x18\n" +
 	"\apersona\x18\x02 \x01(\tR\apersona\x12\x12\n" +
 	"\x04goal\x18\x03 \x01(\tR\x04goal\x12\x1b\n" +
-	"\tmax_turns\x18\x04 \x01(\x05R\bmaxTurns\"W\n" +
+	"\tmax_turns\x18\x04 \x01(\x05R\bmaxTurns\"p\n" +
 	"\tRecording\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12\x10\n" +
 	"\x03dir\x18\x02 \x01(\tR\x03dir\x12$\n" +
-	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\"(\n" +
+	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\x12\x17\n" +
+	"\afork_as\x18\x04 \x01(\tR\x06forkAs\"(\n" +
 	"\x10EscalationPolicy\x12\x14\n" +
 	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xe5\x04\n" +
 	"\x0eBuiltinHarness\x12\x1b\n" +

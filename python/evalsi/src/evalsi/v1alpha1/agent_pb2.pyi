@@ -632,29 +632,50 @@ Global___UserSimulator: _TypeAlias = UserSimulator  # noqa: Y015
 
 @_typing.final
 class Recording(_message.Message):
-    """Record and replay of model calls and tool I/O."""
+    """Record and replay of model calls and tool I/O. A recording is a session
+    log: every model turn and tool result is written as it happens, so a trial
+    that dies leaves everything up to its last step.
+    """
 
     DESCRIPTOR: _descriptor.Descriptor
 
     MODE_FIELD_NUMBER: _builtins.int
     DIR_FIELD_NUMBER: _builtins.int
     BRANCH_AT_STEP_FIELD_NUMBER: _builtins.int
+    FORK_AS_FIELD_NUMBER: _builtins.int
     mode: _builtins.str
-    """"off" (default), "record" or "replay"."""
+    """"off" (default), "record", "replay", "resume" or "fork".
+      record: start a new log (replacing one).
+      replay: serve a log's model turns and tool results (sandbox tools run
+        again, so the environment is rebuilt); with branch_at_step, replay
+        the first N turns and then continue live without saving.
+      resume: continue an interrupted trial: replay its log, then run live
+        and append to the same log. A trial with no log starts one.
+      fork: replay the first branch_at_step turns of a log, then run live,
+        writing a new log (fork_as) that holds that prefix and the new
+        continuation and names the log it forked from.
+    """
     dir: _builtins.str
     """Directory for cassettes, one per task and trial. Embedded: relative to
     the spec. Server: inside datasets_dir.
     """
     branch_at_step: _builtins.int
-    """replay: replay the first N steps, then continue live (branching)."""
+    """replay and fork: the number of model turns to replay before going live.
+    Required for fork.
+    """
+    fork_as: _builtins.str
+    """fork: the new log's name (letters, digits, dots, dashes and underscores);
+    default: the source's name with ".fork-N".
+    """
     def __init__(
         self,
         *,
         mode: _builtins.str = ...,
         dir: _builtins.str = ...,
         branch_at_step: _builtins.int = ...,
+        fork_as: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["branch_at_step", b"branch_at_step", "dir", b"dir", "mode", b"mode"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["branch_at_step", b"branch_at_step", "dir", b"dir", "fork_as", b"fork_as", "mode", b"mode"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Recording: _TypeAlias = Recording  # noqa: Y015

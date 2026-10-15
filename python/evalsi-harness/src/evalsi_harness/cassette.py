@@ -7,9 +7,15 @@ deterministically, or branched: with ``branch_at_step=N`` the first N model
 turns (and their tool results) are replayed and the run continues live from
 there, for counterfactual evaluation.
 
+A cassette is also a session log: each entry is written as it happens, so a
+trial that dies leaves everything up to its last step. ``resume`` replays that
+log and carries on live, appending to it. ``fork`` replays its first N turns
+and goes live into a new log that holds the prefix and the new continuation and
+names the log it forked from, so logs form a tree (``session_tree``).
 
 Tools that change the sandbox are re-executed during replay, so the
-environment ends in the same state the recording did.
+environment ends in the same state the recording did. That is also how a
+resumed or forked trial gets its sandbox back.
 """
 
 from __future__ import annotations
@@ -66,8 +72,15 @@ def _turn_from_dict(data: dict[str, Any]) -> ModelTurn:
     )
 
 
+MODES = ("record", "replay", "resume", "fork")
+
+
 class Cassette:
-    """One task trial's recording, and the replay cursor over it."""
+    """One task trial's session log, and the replay cursor over it.
+
+    ``path`` is the log. ``record`` writes it anew; ``replay`` only reads;
+    ``resume`` reads it and appends what happens live; ``fork`` reads it and
+    writes the new log ``fork_to``."""
 
     def __init__(
         self,
@@ -77,13 +90,18 @@ class Cassette:
         branch_at_step: int = 0,
         context: dict[str, Any] | None = None,
         hooks: list[str] | None = None,
+        fork_to: Path | None = None,
     ) -> None:
-        if mode not in ("record", "replay"):
-            raise ValueError(f"recording mode must be off, record or replay, not {mode!r}")
+        if mode not in MODES:
+            raise ValueError(
+                f"recording mode must be off, record, replay, resume or fork, not {mode!r}"
+            )
+        if mode == "fork" and (branch_at_step <= 0 or fork_to is None):
+            raise ValueError("fork needs branch_at_step above 0 and a log to write")
         self.path = path
         self.mode = mode
         self.branch_at = branch_at_step
-        self.entries: list[dict[str, Any]] = []
+        self.fork_to = fork_to
         self._turns: deque[dict[str, Any]] = deque()
         self._tools: dict[tuple[str, str], deque[dict[str, Any]]] = defaultdict(deque)
         self.turns_served = 0
@@ -93,38 +111,110 @@ class Cassette:
         # Hooks change what the agent sees and does, so they are part of what a
         # recording is valid for, too.
         self.hooks = hooks or []
-        self.live = mode == "record"
-        if mode == "replay":
-            if not path.exists():
-                raise CassetteError(f"no cassette to replay at {path}")
-            recorded: dict[str, Any] = {"strategy": "none"}  # version 1 files have no header
-            recorded_hooks: list[str] = []
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
+        self._next_id = 0
+        self._last_id = -1
+        self._out: Any = None
+        # A resume with no log yet is just a recording.
+        self._fresh = mode == "record" or (mode == "resume" and not self._has_log())
+        self.live = self._fresh
+        if not self._fresh:
+            self._load()
+
+    def _has_log(self) -> bool:
+        return self.path.exists() and self.path.stat().st_size > 0
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            raise CassetteError(f"no cassette to replay at {self.path}")
+        recorded: dict[str, Any] = {"strategy": "none"}  # version 1 files have no header
+        recorded_hooks: list[str] = []
+        good = []
+        for line in self.path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
                 entry = json.loads(line)
-                if entry["kind"] == "header":
-                    recorded = entry.get("context") or {"strategy": "none"}
-                    recorded_hooks = entry.get("hooks") or []
-                elif entry["kind"] == "model":
+            except json.JSONDecodeError:
+                # A trial killed mid-write leaves a half line at the end; the
+                # entries before it are good.
+                if self.mode == "resume":
+                    break
+                raise CassetteError(
+                    f"cassette {self.path.name} is damaged: {line[:80]!r}"
+                ) from None
+            good.append(line)
+            if entry["kind"] == "header":
+                recorded = entry.get("context") or {"strategy": "none"}
+                recorded_hooks = entry.get("hooks") or []
+            else:
+                self._next_id = max(self._next_id, entry.get("id", self._next_id) + 1)
+                self._last_id = entry.get("id", self._last_id)
+                if entry["kind"] == "model":
                     self._turns.append(entry["turn"])
                 elif entry["kind"] == "tool":
-                    self._tools[(entry["name"], _args_key(entry["args"]))].append(entry["result"])
-            if recorded_hooks != self.hooks:
-                raise CassetteError(
-                    f"cassette {path.name} was recorded with hooks {recorded_hooks}, but the spec "
-                    f"lists {self.hooks}; a replay needs the same hooks in the same order"
-                )
-            if recorded != self.context:
-                raise CassetteError(
-                    f"cassette {path.name} was recorded with context management "
-                    f"{recorded}, but the spec asks for {self.context}; "
-                    "a replay needs the same strategy and window"
-                )
+                    key = (entry["name"], _args_key(entry["args"]))
+                    self._tools[key].append(entry["result"])
+        if recorded_hooks != self.hooks:
+            raise CassetteError(
+                f"cassette {self.path.name} was recorded with hooks {recorded_hooks}, but the spec "
+                f"lists {self.hooks}; a replay needs the same hooks in the same order"
+            )
+        if recorded != self.context:
+            raise CassetteError(
+                f"cassette {self.path.name} was recorded with context management "
+                f"{recorded}, but the spec asks for {self.context}; "
+                "a replay needs the same strategy and window"
+            )
+        if self.mode == "resume":
+            # Drop a half-written last line, so appending continues a valid log.
+            self.path.write_text("\n".join(good) + "\n" if good else "", encoding="utf-8")
 
-    def record(self, entry: dict[str, Any]) -> None:
-        if self.mode == "record":
-            self.entries.append(entry)
+    # --- writing ---
+
+    def _writer(self) -> Any:
+        if self._out is None:
+            target = self.fork_to if self.mode == "fork" else self.path
+            assert target is not None
+            target.parent.mkdir(parents=True, exist_ok=True)
+            appending = self.mode == "resume" and not self._fresh
+            self._out = target.open("a" if appending else "w", encoding="utf-8")
+            if not appending:
+                # Version 2 records thinking, reasoning items, cache and reasoning
+                # tokens and model switches. Version 1 files have no header, lack
+                # those fields, and replay unchanged (as context management "none").
+                header: dict[str, Any] = {
+                    "kind": "header",
+                    "version": CASSETTE_VERSION,
+                    "context": self.context,
+                    "hooks": self.hooks,
+                }
+                if self.mode == "fork":
+                    header["forked_from"] = {"session": self.path.name, "turns": self.branch_at}
+                self._out.write(json.dumps(header) + "\n")
+                self._out.flush()
+        return self._out
+
+    def record(self, entry: dict[str, Any], *, replayed: bool = False) -> None:
+        """Appends an entry to the log. A resumed run does not write what it
+        served from its own log; a fork writes everything, prefix included."""
+        if self.mode == "replay" or (replayed and self.mode == "resume"):
+            return
+        entry = {"id": self._next_id, "parent": self._last_id, **entry}
+        self._last_id = self._next_id
+        self._next_id += 1
+        out = self._writer()
+        out.write(json.dumps(entry) + "\n")
+        out.flush()  # a trial killed now still leaves this entry
+
+    def save(self) -> None:
+        if self._out is not None:
+            self._out.close()
+            self._out = None
+        elif self.mode in ("record", "fork"):
+            self._writer()  # an empty log still has its header
+            self.save()
+
+    # --- reading ---
 
     def next_turn(self) -> ModelTurn | None:
         """The next recorded turn, or None once the run has gone live."""
@@ -134,6 +224,9 @@ class Cassette:
             self.live = True
             return None
         if not self._turns:
+            if self.mode == "resume":
+                self.live = True  # the log ends here: carry on
+                return None
             raise CassetteError(
                 f"cassette {self.path.name} has only {self.turns_served} model turns; "
                 "set branch_at_step to continue live"
@@ -146,6 +239,8 @@ class Cassette:
             return None
         queue = self._tools.get((name, _args_key(args)))
         if not queue:
+            if self.mode == "resume":
+                return None  # the trial died before this call finished: run it
             raise CassetteError(
                 f"cassette {self.path.name} has no result for {name}({_args_key(args)})"
             )
@@ -156,23 +251,25 @@ class Cassette:
             metadata=data.get("metadata") or {},
         )
 
-    def save(self) -> None:
-        if self.mode != "record":
-            return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("w", encoding="utf-8") as f:
-            # Version 2 records thinking, reasoning items, cache and reasoning
-            # tokens and model switches. Version 1 files have no header, lack
-            # those fields, and replay unchanged (as context management "none").
-            header = {
-                "kind": "header",
-                "version": CASSETTE_VERSION,
-                "context": self.context,
-                "hooks": self.hooks,
-            }
-            f.write(json.dumps(header) + "\n")
-            for entry in self.entries:
-                f.write(json.dumps(entry) + "\n")
+
+def session_tree(directory: Path) -> dict[str, dict[str, Any]]:
+    """The logs in a directory and how they relate: for each, its parent log
+    (None for a root), the turns of the parent it replays, and its own length."""
+    tree: dict[str, dict[str, Any]] = {}
+    for path in sorted(directory.glob("*.jsonl")):
+        parent, turns, models = None, 0, 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                break
+            if entry.get("kind") == "header" and entry.get("forked_from"):
+                parent = entry["forked_from"]["session"]
+                turns = entry["forked_from"]["turns"]
+            elif entry.get("kind") == "model":
+                models += 1
+        tree[path.name] = {"parent": parent, "forked_at_turn": turns, "turns": models}
+    return tree
 
 
 class CassetteModel:
@@ -192,13 +289,14 @@ class CassetteModel:
         max_tokens: int = 0,
     ) -> ModelTurn:
         turn = self.cassette.next_turn()
+        replayed = turn is not None
         if turn is None:
             if self.inner is None:
                 raise CassetteError(
                     "replay reached the branch point but no live model is configured"
                 )
             turn = await self.inner.complete(messages, tools, system=system, max_tokens=max_tokens)
-        self.cassette.record({"kind": "model", "turn": _turn_to_dict(turn)})
+        self.cassette.record({"kind": "model", "turn": _turn_to_dict(turn)}, replayed=replayed)
         return turn
 
     async def aclose(self) -> None:
@@ -221,6 +319,7 @@ class CassetteTool:
 
     async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
         result = self.cassette.tool_result(self.spec.name, args)
+        replayed = result is not None
         if result is None:
             result = await self.inner.call(args, span=span)
         elif self.reexecute:
@@ -235,6 +334,7 @@ class CassetteTool:
                     "is_error": result.is_error,
                     "metadata": result.metadata,
                 },
-            }
+            },
+            replayed=replayed,
         )
         return result

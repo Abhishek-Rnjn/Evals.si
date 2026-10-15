@@ -99,6 +99,14 @@ class ScriptedModelServer:
                     messages = body["messages"]
                     tools = [t["function"]["name"] for t in body.get("tools", [])]
                 reply = outer.script(messages, tools)
+                if reply.get("status"):  # a scripted provider failure
+                    data = json.dumps({"error": {"message": "scripted failure"}}).encode()
+                    self.send_response(reply["status"])
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 calls = reply.get("tool_calls") or []
                 n = len(outer.requests)
                 if anthropic:

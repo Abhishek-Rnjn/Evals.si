@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -112,12 +113,21 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 	}
 	switch rec := b.GetRecording(); rec.GetMode() {
 	case "", "off":
-	case "record", "replay":
-		if _, err := m.recordingDir(rec.GetDir(), rec.GetMode() == "record"); err != nil {
+	case "record", "replay", "resume", "fork":
+		if _, err := m.recordingDir(rec.GetDir(), rec.GetMode() != "replay"); err != nil {
 			return err
 		}
+		if rec.GetBranchAtStep() < 0 {
+			return invalid("spec.harness.builtin.recording.branch_at_step cannot be negative")
+		}
+		if rec.GetMode() == "fork" && rec.GetBranchAtStep() == 0 {
+			return invalid("spec.harness.builtin.recording: mode fork needs branch_at_step above 0")
+		}
+		if rec.GetForkAs() != "" && (rec.GetMode() != "fork" || !forkName.MatchString(rec.GetForkAs())) {
+			return invalid("spec.harness.builtin.recording.fork_as is for mode fork and takes letters, digits, dots, dashes and underscores")
+		}
 	default:
-		return invalid("spec.harness.builtin.recording.mode must be off, record or replay")
+		return invalid("spec.harness.builtin.recording.mode must be off, record, replay, resume or fork")
 	}
 	if p := env.GetChecker().GetParser(); strings.Contains(p, ":") && !strings.HasPrefix(p, "junit:") {
 		if err := m.trustPython(p, "spec.environment.checker.parser"); err != nil {
@@ -187,7 +197,7 @@ func (m *Manager) workerSpec(spec *evalsiv1alpha1.RunSpec) (*evalsiv1alpha1.RunS
 	if rec.GetMode() == "" || rec.GetMode() == "off" {
 		return spec, nil
 	}
-	dir, err := m.recordingDir(rec.GetDir(), rec.GetMode() == "record")
+	dir, err := m.recordingDir(rec.GetDir(), rec.GetMode() != "replay")
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +205,9 @@ func (m *Manager) workerSpec(spec *evalsiv1alpha1.RunSpec) (*evalsiv1alpha1.RunS
 	out.GetHarness().GetBuiltin().GetRecording().Dir = dir
 	return out, nil
 }
+
+// forkName is what a forked log may be called: a file name, never a path.
+var forkName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
 // maxHooks bounds the hooks of one run.
 const maxHooks = 8

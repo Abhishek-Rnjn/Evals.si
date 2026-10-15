@@ -725,6 +725,18 @@ func TestAgentRunValidation(t *testing.T) {
 			off := false
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off, Builtin: []string{"grep"}}
 		},
+		"fork needs a step": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "fork", Dir: "tapes"}
+		},
+		"fork name is a path": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "fork", Dir: "tapes", BranchAtStep: 2, ForkAs: "../x"}
+		},
+		"fork_as outside fork": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "resume", Dir: "tapes", ForkAs: "x"}
+		},
+		"negative branch": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "replay", Dir: "tapes", BranchAtStep: -1}
+		},
 		"hook without a class": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "acme.hooks"}}
 		},
@@ -778,6 +790,12 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"resume": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "resume", Dir: "tapes"}
+		},
+		"fork": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "fork", Dir: "tapes", BranchAtStep: 3, ForkAs: "try-b.1"}
 		},
 		"trusted hooks": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "acme.check:parse"}, {Python: "evalsi_gate:Gate"}}

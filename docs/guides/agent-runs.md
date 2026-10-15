@@ -97,7 +97,7 @@ Notes on environments:
 | `tools.builtin` | more built-in tools, by name: `edit_file` (replace exact text; fails if the text is missing or not unique, keeps a script executable), `glob`, `grep` (extended regular expressions, binary files skipped) and `apply_patch` (a unified diff, checked first and applied all or nothing, through `git apply` or `patch`). Off by default, so a comparison between models uses the same toolset unless a spec lists them; `edit_file` and `apply_patch` run again on replay, like `bash` |
 | `tools.faults` | deterministic fault injection (`error`, `timeout`, `malformed`) per tool, at a rate |
 | `user_simulator: {persona, goal, max_turns, judge}` | an LLM user for multi-turn tasks, speaking through a judge |
-| `recording: {mode: record\|replay, dir, branch_at_step}` | captures model calls and tool I/O. Replay reruns sandbox commands, so the environment is rebuilt; `branch_at_step: N` replays N steps, then continues live |
+| `recording: {mode, dir, branch_at_step, fork_as}` | a session log of model calls and tool I/O, written as it happens. `record` starts one; `replay` serves it (sandbox commands and edits run again, so the environment is rebuilt), and with `branch_at_step: N` replays N turns and then continues live; `resume` continues an interrupted trial (replay its log, then run live and append to it; a trial with no log starts one); `fork` replays the first `branch_at_step` turns of a log and goes live into a new log that names its parent. See [Sessions](#sessions-resume-and-fork) |
 | `escalation.allow` | escalation kinds the harness grants (`network`) |
 
 ### Long runs: context management
@@ -115,6 +115,15 @@ Without `harness.builtin.context`, the whole conversation is resent every step u
 The prompt size is the model's last reported `input_tokens`, scaled by characters to the conversation as it now is, so it follows the real tokenizer. Every clear and compaction is a step named `context:clear-tool-results` or `context:compact`, with `evalsi.context.tokens_before`, `tokens_after` and what was removed; a compaction's model call is billed to the run (and to `max_usd`) but is not one of `max_steps`. The run's `agent.context` metadata totals them: `clears`, `compactions`, `results_cleared`, `chars_removed`, `tokens_removed`, `turns_summarized` and `summary_failures`. A summary that comes back cut off or empty is not used: the run keeps the cleared conversation instead.
 
 A recording replays only under the strategy and window it was recorded with (the cassette header names them), since another strategy would send the model different conversations; the summary call is recorded in sequence like any other model call.
+
+### Sessions: resume and fork
+
+A recording is an append-only session log, one file per task and trial, and every model turn and tool result is on disk as soon as it happens. That makes two things possible:
+
+- **Resume.** A trial killed by a worker restart or a dying provider leaves its log up to the last step. Run again with `recording: {mode: resume}`: the harness replays the log (the model is not called, and `bash`, `write_file`, `edit_file` and `apply_patch` run again, which is how the sandbox is restored) and carries on live, appending to the same log. A call that was in flight when the trial died, with no recorded result, simply runs. A half-written last line is dropped. The resumed trial grades the same as an uninterrupted one; the cost and the wall-clock budget restart from what the replay re-counts.
+- **Fork.** `recording: {mode: fork, branch_at_step: N, fork_as: "try-b"}` replays the first N turns of a log and goes live into a new log, `<task>.<fork_as>.jsonl` (default `<task>.fork-1.jsonl`, then `-2`), which holds the prefix and the new continuation and names its parent in its header. The source log is untouched, and the fork replays on its own. Forking at different turns, or with a different model, hook or tool setting, gives counterfactual runs from a shared start. `evalsi_harness.cassette.session_tree(dir)` lists the logs and how they descend from each other.
+
+A log is valid only for the context strategy and hooks it was recorded with; resuming or forking under others is refused.
 
 ### Hooks
 

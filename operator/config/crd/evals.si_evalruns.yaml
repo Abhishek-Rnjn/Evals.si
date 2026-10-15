@@ -1052,6 +1052,10 @@ spec:
                             type: integer
                           dir:
                             type: string
+                          fork_as:
+                            type: string
+                          forkAs:
+                            type: string
                           mode:
                             type: string
                         type: object

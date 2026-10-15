@@ -427,13 +427,28 @@ class BuiltinHarness:
         base = Path(rec.dir or "cassettes")
         if not base.is_absolute():
             base = self.ctx.base_dir / base
-        return Cassette(
-            base / f"{live.task.slug}.jsonl",
-            rec.mode,
-            branch_at_step=rec.branch_at_step,
-            context=self._context(live).describe(),
-            hooks=[h.python for h in self.config.hooks],
-        )
+        fork_to = None
+        if rec.mode == "fork":
+            # One log per task and trial, so a name given for the run is
+            # prefixed with the task's own.
+            if rec.fork_as:
+                fork_to = base / f"{live.task.slug}.{rec.fork_as}.jsonl"
+            else:
+                n = 1
+                while (base / f"{live.task.slug}.fork-{n}.jsonl").exists():
+                    n += 1
+                fork_to = base / f"{live.task.slug}.fork-{n}.jsonl"
+        try:
+            return Cassette(
+                base / f"{live.task.slug}.jsonl",
+                rec.mode,
+                branch_at_step=rec.branch_at_step,
+                context=self._context(live).describe(),
+                hooks=[h.python for h in self.config.hooks],
+                fork_to=fork_to,
+            )
+        except ValueError as exc:
+            raise TaskError(f"harness.builtin.recording: {exc}") from exc
 
     async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:
         task = live.task
