@@ -50,3 +50,45 @@ def test_a_different_agent_setup_is_a_different_environment() -> None:
     b = EnvironmentConfig(files={**SETUP, "AGENTS.md": "Do not run the tests."})
     assert a.key() != b.key()
     assert a.key() == EnvironmentConfig(files=dict(SETUP)).key()
+
+
+def test_a_wrong_output_format_fails_the_trial_and_the_checker_never_grades_it(
+    sandboxes: LocalSandboxClient,
+) -> None:
+    spec = spec_of(
+        {
+            "target": {
+                "agent": {
+                    "cli": {
+                        "command": ["sh", "-c", "echo plain text"],
+                        "output_format": "codex-json",
+                    }
+                }
+            },
+            "environment": {"checker": {"command": ["true"]}},  # would pass if it ran
+        }
+    )
+    out = run(spec, record("go"), sandboxes)
+    assert "no codex-json events" in out.error
+    assert out.record is None or out.record.check is None or not out.record.check.passed
+
+
+def test_the_cost_a_cli_reports_is_kept_in_the_runs_usage(sandboxes: LocalSandboxClient) -> None:
+    fixture = FIXTURES / "claude-code-0.3.300-fix-calc.jsonl"
+    spec = spec_of(
+        {
+            "target": {
+                "agent": {
+                    "cli": {
+                        "command": ["sh", "-c", f"cat {fixture}"],
+                        "output_format": "claude-stream-json",
+                    }
+                }
+            },
+            "environment": {"checker": {"command": ["true"]}},
+        }
+    )
+    rec = run(spec, record("go"), sandboxes).record
+    assert rec is not None
+    assert rec.usage is not None
+    assert rec.usage.cost_usd == 0.0123

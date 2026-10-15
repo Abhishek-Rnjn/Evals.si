@@ -103,8 +103,11 @@ def test_code_mode_profile_shows_the_model_one_tool(
     model: Model, sandboxes: LocalSandboxClient
 ) -> None:
     server = model(calls_then([{"text": "done"}]))
-    run(spec_with(server, profile="code-mode"), record(), sandboxes)  # type: ignore[arg-type]
+    out = run(spec_with(server, profile="code-mode"), record(), sandboxes)  # type: ignore[arg-type]
     assert names(server) == ["run_code"]
+    # The metadata follows the same visibility rule as the request.
+    assert out.record is not None
+    assert out.record.metadata["agent"]["tools_offered"] == ["run_code"]
 
 
 def test_a_conflicting_or_unknown_profile_fails_the_trial_with_a_reason(

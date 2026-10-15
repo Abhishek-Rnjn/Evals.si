@@ -35,6 +35,12 @@ def stream_server() -> Iterator[Callable[[Events], str]]:
                     if ev == "garbage":
                         self.wfile.write(b"data: {not json\n\n")
                         continue
+                    if isinstance(ev, tuple):  # one event over several data lines
+                        text = json.dumps(ev[0], indent=2).split("\n")
+                        self.wfile.write(b"".join(b"data: " + t.encode() + b"\n" for t in text))
+                        self.wfile.write(b"\n")
+                        self.wfile.flush()
+                        continue
                     self.wfile.write(b"data: " + json.dumps(ev).encode() + b"\n\n")
                     self.wfile.flush()
 
@@ -163,3 +169,13 @@ def test_a_failed_task_is_a_failed_step(
     steps = [s for s in rec.trajectory.steps if s.type == "agent"]  # type: ignore[union-attr]
     assert steps[0].error == "failed"
     assert rec.metadata["agent"]["a2a_state"] == "failed"
+
+
+def test_an_event_spread_over_several_data_lines_is_one_event(
+    stream_server: Callable[[Events], str], sandboxes: LocalSandboxClient
+) -> None:
+    url = stream_server(lambda body: [(status("completed", "all done", final=True),)])
+    rec = run(spec_for(url), record("go"), sandboxes).record
+    assert rec is not None
+    assert rec.output is not None
+    assert rec.output.as_text() == "all done"

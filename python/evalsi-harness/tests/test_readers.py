@@ -164,3 +164,18 @@ def test_garbage_and_unknown_events_are_skipped(fmt: str) -> None:
     run = parse_output(fmt, '{"type":"future_event","x":1}\n{not json\n["a"]\n')
     assert run is not None
     assert run.steps == []
+
+
+def test_pretty_printed_gemini_json_is_read_whole() -> None:
+    doc = json.dumps(
+        {
+            "response": "done",
+            "stats": {"models": {"m": {"tokens": {"prompt": 5, "candidates": 2}}}},
+        },
+        indent=2,
+    )
+    run = parse_output("gemini-json", doc)
+    assert run is not None
+    assert run.answer == "done"
+    assert (run.usage.input_tokens, run.usage.output_tokens) == (5, 2)
+    assert run.error == ""

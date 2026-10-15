@@ -16,7 +16,7 @@ import os
 import shlex
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -252,16 +252,29 @@ class A2AConnector:
                 if response.status_code >= 400:
                     detail = (await response.aread()).decode(errors="replace")[:300]
                     raise TaskError(f"A2A agent {self.url}: HTTP {response.status_code}: {detail}")
-                async for raw in response.aiter_lines():
-                    if not raw.startswith("data:"):
-                        continue
+                data_lines: list[str] = []
+
+                async def sse_events() -> AsyncIterator[str]:
+                    # An event is its ``data:`` lines, joined with newlines, up to a
+                    # blank line (or the end of the stream).
+                    async for raw in response.aiter_lines():
+                        if raw == "":
+                            if data_lines:
+                                yield "\n".join(data_lines)
+                                data_lines.clear()
+                        elif raw.startswith("data:"):
+                            data_lines.append(raw[5:].removeprefix(" "))
+                    if data_lines:
+                        yield "\n".join(data_lines)
+
+                async for block in sse_events():
                     events += 1
                     if events > MAX_STREAM_EVENTS:
                         raise TaskError(
                             f"A2A agent {self.url}: more than {MAX_STREAM_EVENTS} events"
                         )
                     try:
-                        payload = json.loads(raw[5:].strip())
+                        payload = json.loads(block)
                     except json.JSONDecodeError:
                         continue
                     if not isinstance(payload, Mapping):
@@ -566,6 +579,9 @@ class CLIConnector:
         if parsed is not None:
             # The agent reported its run: its steps are the trajectory, and the
             # raw event stream is not repeated as the answer.
+            if parsed.wrong_format and not parsed.steps:
+                # Not a run the checker should grade: the spec names the wrong format.
+                raise TaskError(f"cli agent: {parsed.error}")
             output, steps, usage = parsed.answer, parsed.steps, parsed.usage
             error = error or parsed.error
         steps.append(
@@ -635,6 +651,8 @@ async def drive_agent(
                     emit(StepEvent(step))
                 usage.input_tokens = (usage.input_tokens or 0) + (reply.usage.input_tokens or 0)
                 usage.output_tokens = (usage.output_tokens or 0) + (reply.usage.output_tokens or 0)
+                if reply.usage.cost_usd is not None:  # unknown stays unknown, zero is a price
+                    usage.cost_usd = (usage.cost_usd or 0.0) + reply.usage.cost_usd
                 conversation.append({"role": "assistant", "content": reply.text})
                 if user is None or reply.finished:
                     break

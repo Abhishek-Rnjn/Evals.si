@@ -47,6 +47,7 @@ class Cell:
     low: float | None
     high: float | None
     cost: Cost
+    level: float = 0.95
     # Mean score per 1,000 tokens of a task, when tokens are known.
     score_per_ktok: float | None = None
     # The paired difference from the first cell, when there is one.
@@ -101,7 +102,8 @@ def _cost(result: Mapping[str, Any]) -> Cost:
     records = result.get("records") or []
     for r in records:
         steps = _get(r, "metadata", "agent", "steps")
-        if isinstance(steps, int | float) and not isinstance(steps, bool):
+        builtin = _get(r, "metadata", "agent", "tools_offered") is not None
+        if builtin and isinstance(steps, int | float) and not isinstance(steps, bool):
             calls.append(float(steps))
         else:
             # A CLI agent has no step count of its own: count the model calls its
@@ -168,9 +170,14 @@ def build(
             low=ci.get("low"),
             high=ci.get("high"),
             cost=cost,
+            level=float(ci.get("level") or level),
             score_per_ktok=per_ktok,
         )
-        if cells:
+        first = cells[0].dataset if cells else ""
+        # Record ids repeat across unrelated datasets, so cells are paired only
+        # when they ran the same one.
+        comparable = not (first and dataset and not dataset.startswith(first))
+        if cells and comparable:
             for c in compare_results(results[0][1], data, level=level):
                 if c.metric == metric:
                     cell.diff, cell.diff_low, cell.diff_high = c.diff, c.diff_low, c.diff_high
@@ -209,7 +216,7 @@ def table(cells: Sequence[Cell]) -> str:
         "split",
         "n",
         "score",
-        "95% CI",
+        "CI",
         "calls/task",
         "tokens/task",
         "$/task",
@@ -230,7 +237,7 @@ def table(cells: Sequence[Cell]) -> str:
                 c.split or "-",
                 str(c.n),
                 _f(c.mean),
-                f"[{_f(c.low)}, {_f(c.high)}]",
+                f"[{_f(c.low)}, {_f(c.high)}] {c.level:.0%}",
                 _f(c.cost.calls, ".1f"),
                 _f(c.cost.tokens, ".0f"),
                 _f(c.cost.usd, ".4f"),
@@ -321,9 +328,13 @@ def mechanisms(result: Mapping[str, Any]) -> list[Mechanism]:
         def acted(r: Mapping[str, Any]) -> bool:
             agent = _get(r, "metadata", "agent") or {}
             stats = agent.get("context") or {}
-            return bool(
-                stats.get("clears") or stats.get("compactions") or stats.get("rounds")
-            ) or bool(agent.get("evidence"))
+            evidence = agent.get("evidence")
+            used = isinstance(evidence, Mapping) and any(
+                isinstance(v, int | float) and v > 0 for v in evidence.values()
+            )
+            return (
+                bool(stats.get("clears") or stats.get("compactions") or stats.get("rounds")) or used
+            )
 
         out.append(Mechanism(f"context:{strategy}", sum(acted(r) for r in records), n))
     return out

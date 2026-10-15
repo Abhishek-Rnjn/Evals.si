@@ -58,6 +58,8 @@ class Parsed:
     model: str = ""
     # Tool names the agent used, in order, for "did the mechanism run" checks.
     tools: list[str] = field(default_factory=list)
+    # The output held none of the format's events: the wrong format, not a quiet agent.
+    wrong_format: bool = False
 
 
 def events(stdout: str) -> list[dict[str, Any]]:
@@ -164,6 +166,7 @@ def _finish(run: Parsed, seen: bool, tin: int, tout: int, cost: float | None = N
 def _unrecognized(run: Parsed, fmt: str, evs: list[dict[str, Any]], known: set[str]) -> None:
     if not any(e.get("type") in known for e in evs) and not run.error:
         run.error = f"no {fmt} events in the output; is output_format right for this agent?"
+        run.wrong_format = True
 
 
 # --- Claude Code -----------------------------------------------------------------
@@ -426,8 +429,15 @@ def parse_codex(stdout: str) -> Parsed:
 
 def parse_gemini(stdout: str) -> Parsed:  # noqa: PLR0915
     run = Parsed(answer="")
-    evs = events(stdout)
-    # ``--output-format json`` prints one object, ``{"response", "stats"}``.
+    # ``--output-format json`` prints one object, ``{"response", "stats"}``,
+    # usually indented over many lines, so the whole output is tried first.
+    whole: Any = None
+    if len(stdout) <= MAX_TEXT * 4:
+        try:
+            whole = json.loads(stdout)
+        except json.JSONDecodeError:
+            whole = None
+    evs = [whole] if isinstance(whole, dict) else events(stdout)
     if len(evs) == 1 and "response" in evs[0] and "type" not in evs[0]:
         only = evs[0]
         run.answer = _text(only.get("response"))

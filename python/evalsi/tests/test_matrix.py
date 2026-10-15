@@ -53,7 +53,7 @@ def results(
             {
                 "id": f"t{i}",
                 "usage": {"input_tokens": tokens - 100, "output_tokens": 100, "cost_usd": 0.01},
-                "metadata": {"agent": {"steps": steps, "profile": profile}},
+                "metadata": {"agent": {"steps": steps, "profile": profile, "tools_offered": []}},
             }
             for i in range(n)
         ],
@@ -165,3 +165,43 @@ def test_a_context_strategy_that_acted_is_counted(tmp_path: Path) -> None:
         main(["matrix", str(path), "--metric", "task-success", "--mechanisms", "--format", "json"])
         == 0
     )
+
+
+def test_cells_on_different_datasets_are_not_paired() -> None:
+    other = results("minimal@1", [1, 1, 1], tokens=3000, steps=9, dataset="e" * 64)
+    _, cand = matrix.build([("a", A), ("other", other)], "task-success")
+    assert cand.diff is None
+    assert cand.mean == 1.0  # its own score and cost are still reported
+    assert cand.cost.tokens == 3000
+
+
+def test_the_ci_level_shown_is_the_cells_own() -> None:
+    wide = results("minimal@1", [1, 0, 1, 1], tokens=100, steps=2)
+    wide["summaries"][0]["ci"]["level"] = 0.9
+    cells = matrix.build([("a", A), ("w", wide)], "task-success")
+    assert [c.level for c in cells] == [0.95, 0.9]
+    assert "90%" in matrix.table(cells)
+
+
+def test_a_cli_agents_calls_are_its_model_steps_not_its_sends() -> None:
+    cli = results("agent:cli", [1, 1], tokens=500, steps=1)
+    for rec in cli["records"]:
+        del rec["metadata"]["agent"]["tools_offered"]  # a CLI agent has no tool list
+        rec["trajectory"] = {
+            "steps": [{"type": "STEP_TYPE_LLM"}] * 7 + [{"type": "STEP_TYPE_AGENT"}]
+        }
+    (cell,) = matrix.build([("cli", cli)], "task-success")
+    assert cell.cost.calls == 7
+    none = results("agent:cli", [1], tokens=500, steps=1)
+    del none["records"][0]["metadata"]["agent"]["tools_offered"]
+    (blank,) = matrix.build([("cli", none)], "task-success")
+    assert blank.cost.calls is None  # unknown, not the one send
+
+
+def test_an_idle_evidence_strategy_is_not_counted_as_run() -> None:
+    data = results("standard@1", [1, 1], tokens=100, steps=2)
+    data["manifest"]["spec"]["harness"]["builtin"]["context"] = {"strategy": "evidence-state"}
+    data["records"][0]["metadata"]["agent"]["evidence"] = {"entries": 0, "conclusions": 0}
+    data["records"][1]["metadata"]["agent"]["evidence"] = {"entries": 3, "conclusions": 1}
+    (m,) = matrix.mechanisms(data)
+    assert (m.name, m.ran, m.of) == ("context:evidence-state", 1, 2)
