@@ -39,6 +39,30 @@ def target(server: ScriptedModelServer, connector: str = "openai-compatible") ->
 CHECK_HELLO = {"command": ["sh", "-c", 'test "$(cat out.txt)" = hello']}
 
 
+@pytest.mark.parametrize(
+    ("connector", "stop"), [("openai-compatible", "length"), ("anthropic", "max_tokens")]
+)
+def test_a_truncated_turn_is_a_budget_stop_that_is_still_checked(
+    model: Model, sandboxes: LocalSandboxClient, connector: str, stop: str
+) -> None:
+    server = model(calls_then([{"text": "cut of", "stop": stop}]))
+    spec = spec_of(
+        {
+            "target": target(server, connector),
+            "harness": {"builtin": {}},
+            "environment": {"checker": CHECK_HELLO},
+        }
+    )
+    outcome = run(spec, record(), sandboxes)
+    rec = outcome.record
+    # Not an error: the record exists, the checker ran, and it failed the task.
+    assert outcome.error == ""
+    assert rec is not None
+    assert rec.metadata["agent"]["stop_reason"] == "budget"
+    assert rec.check is not None
+    assert not rec.check.passed
+
+
 @pytest.mark.parametrize("connector", ["openai-compatible", "anthropic"])
 def test_the_builtin_agent_does_a_sandbox_task(
     model: Model, sandboxes: LocalSandboxClient, connector: str

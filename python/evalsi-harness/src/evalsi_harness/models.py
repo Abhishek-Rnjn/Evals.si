@@ -266,7 +266,13 @@ def with_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]
         content = list(content)
     else:
         return messages
-    content[-1] = {**content[-1], "cache_control": EPHEMERAL}
+    # Thinking blocks cannot carry cache_control: mark the last block before them.
+    index = len(content) - 1
+    while index > 0 and content[index].get("type") in ("thinking", "redacted_thinking"):
+        index -= 1
+    if content[index].get("type") in ("thinking", "redacted_thinking"):
+        return messages
+    content[index] = {**content[index], "cache_control": EPHEMERAL}
     last["content"] = content
     return [*messages[:-1], last]
 

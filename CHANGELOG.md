@@ -20,7 +20,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
-- **A truncated or refused turn no longer reads as a completed run.** A turn cut off by `max_tokens` (or `length`) ends the run as `budget` with an error, instead of running a half-written tool call or reporting `completed`. A `refusal` is its own stop reason, and `pause_turn` resumes the turn.
+- **A truncated or refused turn no longer reads as a completed run.** A turn cut off by `max_tokens` (or `length`) ends the run as `budget` with an error, instead of running a half-written tool call or reporting `completed`. A `refusal` is its own stop reason, and `pause_turn` resumes the turn. HTTP 529 (Anthropic overloaded) is retried. For Anthropic targets, `budget.tokens` now counts cached prompt tokens too, so a spec with a token budget may get fewer steps than before.
 
 - **Evals.si is described as evaluating AI before you ship, while it runs, and as you train it,** with agents as the lead use case and RAG and training alongside. The README, the homepage (a new Agents / RAG / Training section and code tabs), the link-preview card, the `evalsi` and `evalsi-harness` PyPI descriptions and keywords, `evalsi --help` and the site metadata say so. The PyPI text changes with the next release.
 - **The site is at https://evalsi.dev/.** The PyPI project links, the READMEs and SUPPORT.md point to it, and the old `abhishek-rnjn.github.io/Evals.si/` address redirects there. The README gains a 30-second `pip install` quickstart and a short comparison with the metric libraries and benchmark harnesses that Evals.si runs as adapters. The PyPI links change with the next release.

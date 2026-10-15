@@ -187,7 +187,7 @@ def test_a_rate_limited_call_waits_at_least_retry_after(monkeypatch: pytest.Monk
     async def fake_sleep(seconds: float) -> None:
         sleeps.append(seconds)
 
-    monkeypatch.setattr(models.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
     calls = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -279,3 +279,32 @@ def test_cached_tokens_are_priced_and_reported() -> None:
     assert final.usage.cost_usd == pytest.approx(1.0 + 0.8 + 1.25)
     assert final.extra["cache_read_tokens"] == 800_000
     assert final.extra["cache_write_tokens"] == 100_000
+
+
+def test_a_thinking_turn_replays_exactly_from_a_cassette() -> None:
+    from evalsi.types import Usage
+    from evalsi_harness.cassette import _turn_from_dict, _turn_to_dict
+
+    turn = ModelTurn(
+        text="ok",
+        tool_calls=[ToolCallRequest("t1", "bash", '{"command": "ls"}')],
+        usage=Usage(input_tokens=900, output_tokens=7),
+        stop_reason="tool_use",
+        thinking=THINKING,
+        cache_read_tokens=800,
+        cache_write_tokens=50,
+    )
+    saved = json.loads(json.dumps(_turn_to_dict(turn)))
+    assert _turn_from_dict(saved) == turn
+    # A cassette written before thinking and cache counts existed still loads.
+    old = {"text": "hi", "tool_calls": [], "usage": {}, "stop_reason": "end_turn"}
+    assert _turn_from_dict(old) == ModelTurn(text="hi", stop_reason="end_turn")
+
+
+def test_the_breakpoint_skips_trailing_thinking_blocks() -> None:
+    blocks = [{"type": "text", "text": "a"}, *THINKING]
+    out = with_cache_breakpoint([{"role": "assistant", "content": blocks}])
+    assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert all("cache_control" not in b for b in out[0]["content"][1:])
+    only = [{"role": "assistant", "content": list(THINKING)}]
+    assert with_cache_breakpoint(only) == only

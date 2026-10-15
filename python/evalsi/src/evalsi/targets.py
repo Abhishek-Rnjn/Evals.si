@@ -27,7 +27,8 @@ import httpx
 from evalsi.types import Content, Record, Usage
 
 CONNECTORS = ("openai-compatible", "anthropic")
-RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504}
+# 529 is Anthropic's "overloaded".
+RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 
 
 class TargetError(RuntimeError):
