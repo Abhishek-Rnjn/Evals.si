@@ -113,7 +113,7 @@ The built-in agent calls `spec.target`. Besides `connector`, `model`, `base_url`
 
 Calls honour `retry-after` and retry HTTP 429, 5xx and 529 with jitter. Anthropic prompts are cached (breakpoints on the system prompt, the tools and the end of the conversation), and `max_usd` prices cached tokens: at a tenth of the input price for reads and 1.25 times for writes on Anthropic, at full price elsewhere, so a spend budget is an upper bound. `budget.tokens` counts the whole prompt, cached tokens included.
 
-A turn cut off by `max_tokens` is tried once more with twice the limit (up to 128k); if it is cut off again, the run ends with stop reason `budget`, not `completed`. A refusal ends the run as `refusal`, and `pause_turn` is resumed.
+A turn cut off by `max_tokens` is tried once more with twice the limit (up to 128k); if it is cut off again, or the provider refuses the higher limit, the run ends with stop reason `budget`, not `completed`, and is still checked. The retry is on by default and spends the extra tokens. A refusal ends the run as `refusal`, and `pause_turn` is resumed.
 
 `harness.external` runs another harness over the [harness protocol](../../proto/evalsi/harness/v1alpha1/harness.proto) (`Describe`, `Setup`, `Run` streaming trajectory events, `Check`, `Teardown`). It can be a gRPC `address`, a `command` serving it on a socket, or a Python class (`python: module:Class`). The benchmark harnesses below are Python classes.
 

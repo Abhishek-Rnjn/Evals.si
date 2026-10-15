@@ -251,9 +251,13 @@ class BuiltinHarness:
     def _cache_prices(live: LiveTask) -> dict[str, float]:
         """Anthropic bills cache reads at a tenth of the input price and writes
         at 1.25 times it. For other providers we assume no discount, so a
-        spend budget stays an upper bound."""
+        spend budget stays an upper bound; a chain with any other provider in
+        it (a fallback) is priced that way too."""
         spec = live.task.spec
-        if spec.HasField("target") and spec.target.connector == "anthropic":
+        if not spec.HasField("target"):
+            return {}
+        chain = [spec.target, *spec.target.fallbacks]
+        if all(t.connector == "anthropic" for t in chain):
             return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
         return {}
 

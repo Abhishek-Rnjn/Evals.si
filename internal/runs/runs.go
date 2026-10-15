@@ -293,6 +293,10 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 	return insts, nil
 }
 
+// defaultMaxTokens is the output limit a target gets when it sets none (the
+// Python worker's default).
+const defaultMaxTokens = 16000
+
 // maxFallbacks bounds the models a run may switch between.
 const maxFallbacks = 4
 
@@ -320,8 +324,12 @@ func validateTargetOptions(t *evalsiv1alpha1.Target, field string) error {
 			if th.GetBudgetTokens() <= 0 {
 				return invalid("%s.thinking.budget_tokens is required when mode is enabled", field)
 			}
-			if t.GetMaxTokens() != 0 && th.GetBudgetTokens() >= t.GetMaxTokens() {
-				return invalid("%s.thinking.budget_tokens must be below max_tokens", field)
+			limit := t.GetMaxTokens()
+			if limit == 0 {
+				limit = defaultMaxTokens
+			}
+			if th.GetBudgetTokens() >= limit {
+				return invalid("%s.thinking.budget_tokens must be below max_tokens (%d unless set)", field, limit)
 			}
 		default:
 			return invalid("%s.thinking.mode must be adaptive, enabled or disabled", field)

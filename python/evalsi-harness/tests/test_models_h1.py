@@ -495,6 +495,26 @@ def test_a_second_cut_ends_the_run_as_budget_and_zero_disables_the_retry() -> No
     assert final.stop_reason == "budget"
 
 
+class RefusesHigherLimits(Scripted):
+    """The provider accepts the first call and refuses the raised limit."""
+
+    async def complete(
+        self, messages: Any, tools: Any, *, system: str = "", max_tokens: int = 0
+    ) -> ModelTurn:
+        if max_tokens:
+            raise ModelError("HTTP 400: max_tokens is too large for this model")
+        return await super().complete(messages, tools, system=system, max_tokens=max_tokens)
+
+
+def test_a_provider_that_refuses_the_higher_limit_leaves_a_budget_stop_not_an_error() -> None:
+    model = RefusesHigherLimits(cut())
+    final, steps = run_loop(model, truncation_retry_tokens=32000)
+    assert final.stop_reason == "budget"
+    assert final.error == "the model hit its output limit"
+    assert final.extra["steps"] == 1
+    assert len(steps) == 1
+
+
 def test_the_retry_does_not_outrun_the_step_budget() -> None:
     model = Scripted(cut(), ModelTurn(text="never", stop_reason="end_turn"))
     final, _ = run_loop(model, truncation_retry_tokens=32000, max_steps=1)
@@ -553,6 +573,25 @@ def test_a_failing_model_is_replaced_after_n_failures_and_the_switch_is_recorded
     turn = asyncio.run(chain.complete([{"role": "user", "content": "q"}], []))
     assert len(a.seen) == 2
     assert (turn.model, turn.switched_from) == ("b", "")
+
+
+def test_a_raised_limit_that_is_refused_never_causes_a_switch() -> None:
+    class RefusesRaised(Flaky):
+        async def complete(
+            self, messages: Any, tools: Any, *, system: str = "", max_tokens: int = 0
+        ) -> ModelTurn:
+            self.seen.append(messages)
+            if max_tokens:
+                raise ModelError("HTTP 400: too large")
+            return replace(self.turn)
+
+    a, b = RefusesRaised("a"), Flaky("b")
+    chain = FallbackModel([a, b], after=1)
+    with pytest.raises(ModelError, match="too large"):
+        asyncio.run(chain.complete([], [], max_tokens=32000))
+    assert (chain.current, len(a.seen), len(b.seen)) == (0, 1, 0)
+    # An ordinary call still works on the same model.
+    assert asyncio.run(chain.complete([], [])).model == "a"
 
 
 def test_one_failure_below_the_limit_stays_on_the_model() -> None:
@@ -679,6 +718,32 @@ def test_the_gate_caps_concurrent_calls_per_endpoint() -> None:
     assert peak == 2
 
 
+def test_the_gate_survives_successive_event_loops() -> None:
+    async def use() -> None:
+        async with Gate("shared-endpoint", 1):
+            await asyncio.sleep(0)
+
+    for _ in range(3):
+        asyncio.run(use())
+
+
+def test_a_finished_stream_is_closed_at_once() -> None:
+    closed = False
+
+    async def events() -> Any:
+        nonlocal closed
+        try:
+            yield "response.completed", {"response": {"output": []}}
+            yield "response.other", {}
+        finally:
+            closed = True
+
+    from evalsi_harness.streaming import collect_responses
+
+    asyncio.run(collect_responses(events()))
+    assert closed
+
+
 def test_no_limit_means_no_gate() -> None:
     assert not isinstance(modelhttp.gate_for("u", "k", 0), Gate)
     assert isinstance(modelhttp.gate_for("u", "k", 3), Gate)
@@ -705,3 +770,19 @@ def test_a_cassette_carries_its_version_and_old_ones_replay(tmp_path: Any) -> No
     # A version 1 file has no header.
     path.write_text("\n".join(json.dumps(x) for x in lines[1:]) + "\n")
     assert Cassette(path, "replay").next_turn() is not None
+
+
+def test_cache_prices_apply_only_when_the_whole_chain_is_anthropic() -> None:
+    from evalsi_harness.harness import BuiltinHarness
+
+    class Live:
+        def __init__(self, target: dict[str, Any]) -> None:
+            self.task = type("T", (), {"spec": spec_of({"target": target})})()
+
+    anthropic = {"connector": "anthropic", "model": "c"}
+    other = {"connector": "openai-compatible", "model": "m", "base_url": "http://x/v1"}
+    price = BuiltinHarness._cache_prices
+    assert price(Live(anthropic)) == {"cache_read_mult": 0.1, "cache_write_mult": 1.25}  # type: ignore[arg-type]
+    assert price(Live({**anthropic, "fallbacks": [anthropic]})) != {}  # type: ignore[arg-type]
+    assert price(Live({**anthropic, "fallbacks": [other]})) == {}  # type: ignore[arg-type]
+    assert price(Live(other)) == {}  # type: ignore[arg-type]

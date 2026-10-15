@@ -4,7 +4,9 @@ shape each API returns without streaming, so one parser serves both."""
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Coroutine
+from contextlib import aclosing
+from functools import wraps
 from typing import Any
 
 from evalsi_harness.modelhttp import ModelError
@@ -12,6 +14,23 @@ from evalsi_harness.modelhttp import ModelError
 Events = AsyncIterator[tuple[str, dict[str, Any]]]
 
 
+def _closing(
+    collect: Callable[[Events], Coroutine[Any, Any, dict[str, Any]]],
+) -> Callable[[Events], Coroutine[Any, Any, dict[str, Any]]]:
+    """Closes the event stream when the collector returns or raises, so the
+    connection and the concurrency permit are released at once, not when the
+    generator is garbage collected."""
+
+    @wraps(collect)
+    async def wrapper(events: Events) -> dict[str, Any]:
+        async with aclosing(events):  # type: ignore[type-var]
+            result = await collect(events)
+        return result
+
+    return wrapper
+
+
+@_closing
 async def collect_anthropic(events: Events) -> dict[str, Any]:
     blocks: dict[int, dict[str, Any]] = {}
     partial: dict[int, list[str]] = {}
@@ -55,6 +74,7 @@ async def collect_anthropic(events: Events) -> dict[str, Any]:
     }
 
 
+@_closing
 async def collect_chat(events: Events) -> dict[str, Any]:
     text: list[str] = []
     calls: dict[int, dict[str, Any]] = {}
@@ -84,6 +104,7 @@ async def collect_chat(events: Events) -> dict[str, Any]:
     return {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}
 
 
+@_closing
 async def collect_responses(events: Events) -> dict[str, Any]:
     """The Responses API ends its stream with the whole response."""
     async for name, data in events:

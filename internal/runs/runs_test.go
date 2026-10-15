@@ -561,6 +561,9 @@ func TestCreateRunValidatesModelOptions(t *testing.T) {
 			Dataset:    inline("easy"),
 			Evaluators: refs("exact-match"),
 		},
+		"below max_tokens (16000": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.Thinking = &evalsiv1alpha1.Thinking{Mode: "enabled", BudgetTokens: 20000}
+		}),
 		"api must be": anthropic(func(tg *evalsiv1alpha1.Target) { tg.Api = "completions" }),
 		"api responses is for openai-compatible": anthropic(func(tg *evalsiv1alpha1.Target) {
 			tg.Api = "responses"

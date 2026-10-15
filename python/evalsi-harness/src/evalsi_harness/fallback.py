@@ -43,6 +43,18 @@ class FallbackModel:
         max_tokens: int = 0,
     ) -> ModelTurn:
         first = self.current
+        if max_tokens:
+            # A retry with a raised limit that the provider refuses must not
+            # count as the model failing: ask the current model once, and let
+            # the caller decide.
+            turn = await self.models[self.current].complete(
+                only_own_thinking(messages, self.models[self.current].name),
+                tools,
+                system=system,
+                max_tokens=max_tokens,
+            )
+            turn.model = self.models[self.current].name
+            return turn
         last: ModelError | None = None
         while self.current < len(self.models):
             model = self.models[self.current]

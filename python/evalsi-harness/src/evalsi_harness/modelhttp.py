@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import weakref
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from typing import Any, ClassVar
@@ -35,7 +36,9 @@ class Gate:
     """At most ``limit`` concurrent calls per event loop and endpoint, shared
     by every client in the process that names the same key."""
 
-    _semaphores: ClassVar[dict[tuple[int, str], asyncio.Semaphore]] = {}
+    _semaphores: ClassVar[
+        weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Semaphore]]
+    ] = weakref.WeakKeyDictionary()
 
     def __init__(self, key: str, limit: int) -> None:
         self.key = key
@@ -43,10 +46,11 @@ class Gate:
         self._held: list[asyncio.Semaphore] = []
 
     def _semaphore(self) -> asyncio.Semaphore:
-        slot = (id(asyncio.get_running_loop()), self.key)
-        if slot not in self._semaphores:
-            self._semaphores[slot] = asyncio.Semaphore(self.limit)
-        return self._semaphores[slot]
+        # Keyed by the loop itself, so a finished loop takes its semaphores with it.
+        per_loop = self._semaphores.setdefault(asyncio.get_running_loop(), {})
+        if self.key not in per_loop:
+            per_loop[self.key] = asyncio.Semaphore(self.limit)
+        return per_loop[self.key]
 
     async def __aenter__(self) -> None:
         sem = self._semaphore()

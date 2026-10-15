@@ -19,10 +19,10 @@ import builtins as _builtins
 import sys
 import typing as _typing
 
-if sys.version_info >= (3, 11):
-    from typing import TypeAlias as _TypeAlias, Never as _Never
+if sys.version_info >= (3, 10):
+    from typing import TypeAlias as _TypeAlias
 else:
-    from typing_extensions import TypeAlias as _TypeAlias, Never as _Never
+    from typing_extensions import TypeAlias as _TypeAlias
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -278,8 +278,6 @@ class Thinking(_message.Message):
         mode: _builtins.str = ...,
         budget_tokens: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["budget_tokens", b"budget_tokens", "mode", b"mode"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -303,11 +301,9 @@ class DatasetSource(_message.Message):
             key: _builtins.str = ...,
             value: _builtins.str = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
         _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    
+
     INLINE_FIELD_NUMBER: _builtins.int
     PATH_FIELD_NUMBER: _builtins.int
     URI_FIELD_NUMBER: _builtins.int
@@ -424,8 +420,6 @@ class RunOutputs(_message.Message):
         trial: _builtins.int = ...,
         all_trials: _builtins.bool = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["all_trials", b"all_trials", "run_id", b"run_id", "trial", b"trial"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -443,8 +437,6 @@ class InlineRecords(_message.Message):
         *,
         records: _abc.Iterable[_record_pb2.Record] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["records", b"records"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -537,8 +529,6 @@ class Budget(_message.Message):
         max_target_tokens: _builtins.int = ...,
         max_judge_tokens: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["max_judge_tokens", b"max_judge_tokens", "max_target_tokens", b"max_target_tokens"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -559,8 +549,6 @@ class Progress(_message.Message):
         total: _builtins.int = ...,
         done: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
     _ClearFieldArgType: _TypeAlias = _typing.Literal["done", b"done", "total", b"total"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
@@ -584,11 +572,9 @@ class Run(_message.Message):
             key: _builtins.str = ...,
             value: _builtins.str = ...,
         ) -> None: ...
-        _HasFieldArgType: _TypeAlias = _Never  # noqa: Y015
-        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
         _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    
+
     ID_FIELD_NUMBER: _builtins.int
     NAME_FIELD_NUMBER: _builtins.int
     PROJECT_FIELD_NUMBER: _builtins.int

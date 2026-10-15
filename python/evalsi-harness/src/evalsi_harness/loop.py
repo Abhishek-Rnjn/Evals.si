@@ -15,7 +15,13 @@ from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
-from evalsi_harness.models import ChatModel, ModelTurn, ToolCallRequest, thinking_text
+from evalsi_harness.models import (
+    ChatModel,
+    ModelError,
+    ModelTurn,
+    ToolCallRequest,
+    thinking_text,
+)
 from evalsi_harness.tools import Tool, ToolResult
 from evalsi_harness.user_sim import UserSimulator
 
@@ -185,28 +191,46 @@ class AgentLoop:
                 return self._final(turn.text, "completed")
             messages.append({"role": "user", "content": reply.message})
 
+    def _account(self, turn: ModelTurn) -> None:
+        _add(self.state.usage, turn.usage)
+        self.state.cache_read_tokens += turn.cache_read_tokens
+        self.state.cache_write_tokens += turn.cache_write_tokens
+        self.state.reasoning_tokens += turn.reasoning_tokens
+
     async def _call_model(self, messages: list[dict[str, Any]], specs: list[Any]) -> ModelTurn:
         """One model step. A turn cut off by the output limit is tried again,
         once, with a higher limit; both calls are steps and both are billed."""
-        limit = 0
-        while True:
-            step_span = span_id()
-            start_ns = time.time_ns()
-            turn = await self.model.complete(
-                messages, specs, system=self.config.system, max_tokens=limit
-            )
-            self.state.steps += 1
-            _add(self.state.usage, turn.usage)
-            self.state.cache_read_tokens += turn.cache_read_tokens
-            self.state.cache_write_tokens += turn.cache_write_tokens
-            self.state.reasoning_tokens += turn.reasoning_tokens
-            self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
-            if not turn.truncated or limit or not self.config.truncation_retry_tokens:
-                return turn
-            if self._over_budget(time.monotonic()):  # steps or spend left no room
-                return turn
-            limit = self.config.truncation_retry_tokens
-            self.state.truncation_retries += 1
+        step_span = span_id()
+        start_ns = time.time_ns()
+        turn = await self.model.complete(messages, specs, system=self.config.system)
+        self.state.steps += 1
+        self._account(turn)
+        self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
+        if not turn.truncated or not self.config.truncation_retry_tokens:
+            return turn
+        if self._over_budget(time.monotonic()):  # steps or spend left no room
+            return turn
+        self.state.truncation_retries += 1
+        try:
+            return await self._retry_cut_off(messages, specs, self.config.truncation_retry_tokens)
+        except ModelError:
+            # The provider refused the higher limit (above its output cap, or
+            # past the context window). The cut-off turn stands, so the run
+            # ends as a budget stop and is still checked.
+            return turn
+
+    async def _retry_cut_off(
+        self, messages: list[dict[str, Any]], specs: list[Any], limit: int
+    ) -> ModelTurn:
+        step_span = span_id()
+        start_ns = time.time_ns()
+        turn = await self.model.complete(
+            messages, specs, system=self.config.system, max_tokens=limit
+        )
+        self.state.steps += 1
+        self._account(turn)
+        self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
+        return turn
 
     def _llm_step(self, turn: ModelTurn, span: str) -> Step:
         return Step(
