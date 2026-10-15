@@ -160,8 +160,13 @@ type A2AAgent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Url   string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// HTTP header -> environment variable holding its value (read by the worker).
-	HeadersEnv    map[string]string    `protobuf:"bytes,2,rep,name=headers_env,json=headersEnv,proto3" json:"headers_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Timeout       *durationpb.Duration `protobuf:"bytes,3,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	HeadersEnv map[string]string `protobuf:"bytes,2,rep,name=headers_env,json=headersEnv,proto3" json:"headers_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// For streaming, the longest silence tolerated between events.
+	Timeout *durationpb.Duration `protobuf:"bytes,3,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// Use message/stream (server-sent events) instead of message/send and
+	// polling, so each task state and artifact chunk the agent reports becomes
+	// a step. The agent's card must declare streaming.
+	Stream        bool `protobuf:"varint,4,opt,name=stream,proto3" json:"stream,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,6 +220,13 @@ func (x *A2AAgent) GetTimeout() *durationpb.Duration {
 		return x.Timeout
 	}
 	return nil
+}
+
+func (x *A2AAgent) GetStream() bool {
+	if x != nil {
+		return x.Stream
+	}
+	return false
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -479,9 +491,12 @@ type CLIAgent struct {
 	AllowHosts []string             `protobuf:"bytes,4,rep,name=allow_hosts,json=allowHosts,proto3" json:"allow_hosts,omitempty"`
 	Timeout    *durationpb.Duration `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	// How to read the program's standard output. Empty: the output is the
-	// answer, and the run has one step. "dsh-json": newline-delimited run events
-	// from `dsh --profile headless --json`, read as model calls, tool calls and
-	// the final answer.
+	// answer, and the run has one step. Otherwise the program's structured event
+	// stream is read as model calls, tool calls and the final answer: "dsh-json"
+	// (`dsh --profile headless --json`), "claude-stream-json" (`claude -p
+	// --output-format stream-json --verbose`), "codex-json" (`codex exec
+	// --json`), "gemini-json" (`gemini --output-format stream-json`) or
+	// "pi-json" (`pi --mode json`).
 	OutputFormat  string `protobuf:"bytes,6,opt,name=output_format,json=outputFormat,proto3" json:"output_format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1425,6 +1440,14 @@ type BuiltinHarness struct {
 	// With "delegate" among tools.builtin: the model calls a sub-agent may make
 	// for one task (default 20). Its budget comes out of the parent's.
 	DelegateSteps int32 `protobuf:"varint,12,opt,name=delegate_steps,json=delegateSteps,proto3" json:"delegate_steps,omitempty"`
+	// A versioned profile of the agent: "minimal" (a short prompt and four
+	// tools: bash, read_file, write_file, edit_file; no escalation tool),
+	// "standard" (the H2 toolset, and compaction when context.window_tokens is
+	// set without a strategy) or "code-mode" (run_code over edit_file, glob and
+	// grep). "name" is the latest version, "name@1" pins one. A profile owns the
+	// toolset, so it cannot be combined with tools.builtin. The run's metadata
+	// and a recording's guard carry the resolved "name@version".
+	Profile       string `protobuf:"bytes,13,opt,name=profile,proto3" json:"profile,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1541,6 +1564,13 @@ func (x *BuiltinHarness) GetDelegateSteps() int32 {
 		return x.DelegateSteps
 	}
 	return 0
+}
+
+func (x *BuiltinHarness) GetProfile() string {
+	if x != nil {
+		return x.Profile
+	}
+	return ""
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,
@@ -2200,12 +2230,13 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tresponses\x18\x03 \x01(\v2\x1f.evalsi.v1alpha1.ResponsesAgentH\x00R\tresponses\x120\n" +
 	"\x04http\x18\x04 \x01(\v2\x1a.evalsi.v1alpha1.HTTPAgentH\x00R\x04http\x12-\n" +
 	"\x03cli\x18\x05 \x01(\v2\x19.evalsi.v1alpha1.CLIAgentH\x00R\x03cliB\x06\n" +
-	"\x04kind\"\xdc\x01\n" +
+	"\x04kind\"\xf4\x01\n" +
 	"\bA2AAgent\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12J\n" +
 	"\vheaders_env\x18\x02 \x03(\v2).evalsi.v1alpha1.A2AAgent.HeadersEnvEntryR\n" +
 	"headersEnv\x123\n" +
-	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x1a=\n" +
+	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x16\n" +
+	"\x06stream\x18\x04 \x01(\bR\x06stream\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
@@ -2317,7 +2348,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\x12\x17\n" +
 	"\afork_as\x18\x04 \x01(\tR\x06forkAs\"(\n" +
 	"\x10EscalationPolicy\x12\x14\n" +
-	"\x05allow\x18\x01 \x03(\tR\x05allow\"\x8c\x05\n" +
+	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xa6\x05\n" +
 	"\x0eBuiltinHarness\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x124\n" +
 	"\x06budget\x18\x02 \x01(\v2\x1c.evalsi.v1alpha1.AgentBudgetR\x06budget\x122\n" +
@@ -2333,7 +2364,8 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\acontext\x18\n" +
 	" \x01(\v2\".evalsi.v1alpha1.ContextManagementR\acontext\x12+\n" +
 	"\x05hooks\x18\v \x03(\v2\x15.evalsi.v1alpha1.HookR\x05hooks\x12%\n" +
-	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateStepsB\x16\n" +
+	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateSteps\x12\x18\n" +
+	"\aprofile\x18\r \x01(\tR\aprofileB\x16\n" +
 	"\x14_parallel_tool_calls\"O\n" +
 	"\x04Hook\x12\x16\n" +
 	"\x06python\x18\x01 \x01(\tR\x06python\x12/\n" +

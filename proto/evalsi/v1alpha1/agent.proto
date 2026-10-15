@@ -29,7 +29,12 @@ message A2AAgent {
   string url = 1;
   // HTTP header -> environment variable holding its value (read by the worker).
   map<string, string> headers_env = 2;
+  // For streaming, the longest silence tolerated between events.
   google.protobuf.Duration timeout = 3;
+  // Use message/stream (server-sent events) instead of message/send and
+  // polling, so each task state and artifact chunk the agent reports becomes
+  // a step. The agent's card must declare streaming.
+  bool stream = 4;
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -82,9 +87,12 @@ message CLIAgent {
   repeated string allow_hosts = 4;
   google.protobuf.Duration timeout = 5;
   // How to read the program's standard output. Empty: the output is the
-  // answer, and the run has one step. "dsh-json": newline-delimited run events
-  // from `dsh --profile headless --json`, read as model calls, tool calls and
-  // the final answer.
+  // answer, and the run has one step. Otherwise the program's structured event
+  // stream is read as model calls, tool calls and the final answer: "dsh-json"
+  // (`dsh --profile headless --json`), "claude-stream-json" (`claude -p
+  // --output-format stream-json --verbose`), "codex-json" (`codex exec
+  // --json`), "gemini-json" (`gemini --output-format stream-json`) or
+  // "pi-json" (`pi --mode json`).
   string output_format = 6;
 }
 
@@ -253,6 +261,14 @@ message BuiltinHarness {
   // With "delegate" among tools.builtin: the model calls a sub-agent may make
   // for one task (default 20). Its budget comes out of the parent's.
   int32 delegate_steps = 12;
+  // A versioned profile of the agent: "minimal" (a short prompt and four
+  // tools: bash, read_file, write_file, edit_file; no escalation tool),
+  // "standard" (the H2 toolset, and compaction when context.window_tokens is
+  // set without a strategy) or "code-mode" (run_code over edit_file, glob and
+  // grep). "name" is the latest version, "name@1" pins one. A profile owns the
+  // toolset, so it cannot be combined with tools.builtin. The run's metadata
+  // and a recording's guard carry the resolved "name@version".
+  string profile = 13;
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,

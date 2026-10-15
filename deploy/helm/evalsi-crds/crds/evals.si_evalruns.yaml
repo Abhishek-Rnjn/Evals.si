@@ -1054,6 +1054,8 @@ spec:
                             type: number
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                      profile:
+                        type: string
                       recording:
                         properties:
                           branch_at_step:
@@ -1263,6 +1265,8 @@ spec:
                             additionalProperties:
                               type: string
                             type: object
+                          stream:
+                            type: boolean
                           timeout:
                             description: 'A duration: "250ms", "30s", "10m", "1.5h",
                               or a number of seconds.'

@@ -37,7 +37,7 @@ A run spec becomes an agent run when it has `target.agent` or `harness`. To run 
 
 | Kind | Spec | How it is driven |
 |---|---|---|
-| A2A | `a2a: {url, headers_env}` | JSON-RPC `message/send`, following the task until it settles |
+| A2A | `a2a: {url, headers_env, timeout, stream}` | JSON-RPC `message/send`, following the task until it settles; with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events; push notifications are not used) |
 | MCP | `mcp: {url, tool, argument}` | the agent is a tool on an MCP server; each message is one call |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses`; later turns continue with `previous_response_id` |
 | HTTP | `http: {url, method, body_template, output_path, messages_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`); the answer at `output_path`, its steps at `messages_path` |
@@ -49,7 +49,7 @@ A CLI agent:
 - has `install` commands run once, during setup;
 - receives only the environment variables named in `env_from`, a map from the name in the sandbox to the worker's variable (`env_from: {ANTHROPIC_API_KEY: AGENT_ANTHROPIC_KEY}`), for its own model credentials;
 - can reach only `allow_hosts`, through the egress proxy (name the port too: `host:8000`);
-- has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events into model-call and tool-call steps with token counts. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
+- has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events, `claude-stream-json` Claude Code's `--output-format stream-json --verbose` (sub-agent messages hang under the call that started them, and the run's cost is kept), `codex-json` `codex exec --json`, `gemini-json` `gemini --output-format stream-json` and `pi-json` `pi --mode json`, each into model-call and tool-call steps with token counts. A stream with none of the format's events is an error on the run, so a wrong format is not read as an agent that did nothing. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
 
 Setup uses the environment's `setup_network`. When `install` needs a package index, set `environment: {setup_network: allow}` in the spec.
 
@@ -148,6 +148,32 @@ Every call a script makes goes through the same path as a direct one: it is a to
 Naming `delegate` in `tools.builtin` gives the agent a tool that starts a sub-agent on a task. The sub-agent has a clean context, the parent's tools (without `delegate`, so there is one level) and the same model, and runs for up to `delegate_steps` model calls (default 20; the agent may ask for fewer). Everything it reads and tries stays in its own conversation, and the parent gets its final report as the tool result, so a token-heavy subtask costs the parent a paragraph, not a context. This is the `offload` pattern, and it combines with the context strategies; a sub-agent has one job and one reply, so it runs with `fresh-rounds` turned off.
 
 Its spend is the parent's: tokens, spend and wall-clock time come out of what the parent has left (a `delegate` with nothing left is an error the agent sees), and `agent.subagents` and `agent.subagent_steps` total them. Its steps are on the trajectory under a `subagent` step that hangs from the `delegate` call, so a multi-agent run reads as a tree. Hooks apply to the sub-agent's tool calls too. Its model and tool calls are recorded in order with the parent's, so a replay reproduces them; `delegate` calls in one turn therefore run one after another.
+
+### Profiles: a harness a score can name
+
+`harness.builtin.profile` picks a versioned profile of the built-in agent, so a model's score names the harness it was measured on and means the same thing across releases:
+
+| profile | prompt and tools |
+|---|---|
+| `minimal` | a prompt of a few hundred characters and four tools: `bash`, `read_file`, `write_file`, `edit_file`. The escalation request tool is **not** offered, so a safety evaluator that needs to see the agent ask for access cannot use it. A baseline for how much the rest of the harness adds. |
+| `standard` | the default prompt and the whole H2 toolset (`edit_file`, `glob`, `grep`, `apply_patch`, `memory`, `session_search`). With `context.window_tokens` set and no strategy, it compacts. |
+| `code-mode` | `run_code` over `edit_file`, `glob` and `grep` ([Code mode](#code-mode)). |
+
+`minimal` is the latest `minimal` version; `minimal@1` pins one. A shipped version never changes: a change to a profile is a new version. A profile owns the toolset, so setting it together with `tools.builtin` is an error. Budgets, hooks, `instructions`, MCP servers and an explicit context strategy are still the spec's. The run records the resolved `name@version` (`metadata.agent.profile`), and a recording replays only under the same profile.
+
+### Comparing harnesses
+
+Run the same spec once per profile (or per model), each with `--output`, then:
+
+```
+evalsi matrix standard.json minimal.json code-mode.json --metric task-success
+```
+
+Each file is a cell with its harness, model, score and interval, and beside the score what it cost per task: model calls, tokens and dollars, and the score per thousand tokens. Every cell after the first is compared with the first, paired by record and trial, so the difference carries its own interval and is starred when it excludes zero. `--tuned-on NAME` (a results file name, a run name or a dataset hash) splits the cells into `tuned` and `held-out`, so a profile tuned on one benchmark is also read on others. Cost columns show `-` when the results lack the figure. `--mechanisms` adds, per cell, which optional tools were offered and in how many tasks the trajectories show them called, and whether the context strategy cleared or compacted anything, with `(never ran)` for a mechanism that ran in no task: a gain credited to a change whose mechanism never executed (a window that never filled, a tool the model never called) is not evidence the change helped.
+
+### The agent's own setup
+
+An agent under test is often configured by files in its working directory: `AGENTS.md` or `CLAUDE.md`, a skills directory, an MCP config such as `.mcp.json`. Put them in `environment.files` (relative paths are the workdir; nested and dot paths work), and they are part of the task: written into the sandbox before the agent starts, visible to the checker, and part of the environment's identity, so two setups never share a snapshot and a run that changes only `AGENTS.md` is a different environment. Compare setups by running the same spec with different `files` and reading the two runs side by side.
 
 ### Sessions: resume and fork
 
