@@ -52,12 +52,17 @@ async def collect_anthropic(events: Events) -> dict[str, Any]:
             elif kind == "thinking_delta":
                 block["thinking"] = block.get("thinking", "") + delta.get("thinking", "")
             elif kind == "signature_delta":
-                block["signature"] = delta.get("signature", "")
+                # A signature may arrive in pieces, like the thinking it signs.
+                block["signature"] = block.get("signature", "") + delta.get("signature", "")
             elif kind == "input_json_delta":
                 partial.setdefault(data["index"], []).append(delta.get("partial_json", ""))
         elif name == "message_delta":
             stop_reason = (data.get("delta") or {}).get("stop_reason") or stop_reason
             usage.update(data.get("usage") or {})
+    if not stop_reason:
+        # A stream that ends before message_delta was cut off: its text may be partial and
+        # its tool calls unfinished, so it is not a response.
+        raise ModelError("the stream ended before the response completed (no stop reason)")
     for index, parts in partial.items():
         try:
             parsed = json.loads("".join(parts) or "{}")
@@ -77,6 +82,7 @@ async def collect_anthropic(events: Events) -> dict[str, Any]:
 @_closing
 async def collect_chat(events: Events) -> dict[str, Any]:
     text: list[str] = []
+    refusal: list[str] = []
     calls: dict[int, dict[str, Any]] = {}
     finish = ""
     usage: dict[str, Any] = {}
@@ -88,6 +94,8 @@ async def collect_chat(events: Events) -> dict[str, Any]:
             delta = choice.get("delta") or {}
             if delta.get("content"):
                 text.append(delta["content"])
+            if delta.get("refusal"):
+                refusal.append(delta["refusal"])
             for call in delta.get("tool_calls") or []:
                 slot = calls.setdefault(
                     call.get("index", 0),
@@ -98,7 +106,11 @@ async def collect_chat(events: Events) -> dict[str, Any]:
                 slot["function"]["name"] += fn.get("name") or ""
                 slot["function"]["arguments"] += fn.get("arguments") or ""
             finish = choice.get("finish_reason") or finish
+    if not finish:
+        raise ModelError("the stream ended before the response completed (no finish reason)")
     message: dict[str, Any] = {"content": "".join(text)}
+    if refusal:
+        message["refusal"] = "".join(refusal)
     if calls:
         message["tool_calls"] = [calls[i] for i in sorted(calls)]
     return {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}

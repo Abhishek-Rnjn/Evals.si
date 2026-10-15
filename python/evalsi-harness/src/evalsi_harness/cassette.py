@@ -20,7 +20,14 @@ from pathlib import Path
 from typing import Any
 
 from evalsi.types import Usage
-from evalsi_harness.models import ChatModel, Message, ModelTurn, ToolCallRequest, ToolSpec
+from evalsi_harness.models import (
+    ChatModel,
+    Message,
+    ModelError,
+    ModelTurn,
+    ToolCallRequest,
+    ToolSpec,
+)
 from evalsi_harness.tools import Tool, ToolResult
 
 CASSETTE_VERSION = 2
@@ -109,7 +116,12 @@ class Cassette:
                 "set branch_at_step to continue live"
             )
         self.turns_served += 1
-        return _turn_from_dict(self._turns.popleft())
+        entry = self._turns.popleft()
+        if "error" in entry:
+            # The provider refused this call when it was recorded (a raised limit that was
+            # too high, say); the run handled it, so the replay raises it again.
+            raise ModelError(entry["error"])
+        return _turn_from_dict(entry)
 
     def tool_result(self, name: str, args: dict[str, Any]) -> ToolResult | None:
         if self.live:
@@ -161,7 +173,13 @@ class CassetteModel:
                 raise CassetteError(
                     "replay reached the branch point but no live model is configured"
                 )
-            turn = await self.inner.complete(messages, tools, system=system, max_tokens=max_tokens)
+            try:
+                turn = await self.inner.complete(
+                    messages, tools, system=system, max_tokens=max_tokens
+                )
+            except ModelError as exc:
+                self.cassette.record({"kind": "model", "turn": {"error": str(exc)}})
+                raise
         self.cassette.record({"kind": "model", "turn": _turn_to_dict(turn)})
         return turn
 
