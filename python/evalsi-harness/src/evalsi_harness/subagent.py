@@ -92,6 +92,11 @@ class DelegateTool:
                 system=SUBAGENT_SYSTEM,
                 session_search=False,
                 delegate_steps=0,
+                # A sub-agent has one job and one reply. fresh-rounds needs a progress
+                # reader and a completion marker it was never told about.
+                context=replace(loop.config.context, strategy="none")
+                if loop.config.context.strategy == "fresh-rounds"
+                else loop.config.context,
             ),
             loop.emit,
             hooks=loop.hooks,

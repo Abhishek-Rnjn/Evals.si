@@ -363,3 +363,25 @@ def test_edits_replay_into_the_same_file_tree(model: Any, sandboxes: Any, tmp_pa
     assert again is not None
     assert again.check is not None
     assert again.check.passed  # the edit ran again: out.txt says hello
+
+
+def test_a_pathological_glob_cannot_stall_the_worker() -> None:
+    import time
+
+    from evalsi_harness.toolset import MAX_GLOB_PATH, MAX_GLOB_PATTERN, GlobMatcher
+
+    started = time.monotonic()
+    nasty = GlobMatcher("*a*a*a*a*a*a*a*a*a*b")
+    assert not nasty.match("a" * 900)
+    assert not GlobMatcher("**/*a**a**a**a**a*b").match("x/" + "a" * 900)
+    assert time.monotonic() - started < 2
+    with pytest.raises(ValueError, match="limited to"):
+        GlobMatcher("*" * (MAX_GLOB_PATTERN + 1))
+    assert not GlobMatcher("*").match("a" * (MAX_GLOB_PATH + 1))  # absurd paths do not match
+    # Ordinary patterns still mean what they did.
+    assert GlobMatcher("src/**/*.py").match("src/a/b/c.py")
+    assert GlobMatcher("**/x").match("x")
+    assert not GlobMatcher("a*").match("a/b")
+    assert GlobMatcher("[a-c]?.txt").match("bz.txt")
+    assert not GlobMatcher("[!a-c]?.txt").match("bz.txt")
+    assert GlobMatcher("*.py").match("") is False

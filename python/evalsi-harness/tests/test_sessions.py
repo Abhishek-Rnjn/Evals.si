@@ -227,3 +227,27 @@ def test_a_resumed_log_still_refuses_a_different_context_strategy_or_hooks(tmp_p
     with pytest.raises(CassetteError, match="same strategy"):
         Cassette(path, "resume", hooks=["m:A"], context={"strategy": "compact"})
     assert Cassette(path, "resume", hooks=["m:A"]).next_turn() is not None
+
+
+def test_a_log_only_replays_with_the_tools_it_was_recorded_with(tmp_path: Path) -> None:
+    path = tmp_path / "t.jsonl"
+    tools = {"builtin": ["code_mode", "delegate"], "delegate_steps": 5}
+    tape = Cassette(path, "record", toolset=tools)
+    tape.record({"kind": "model", "turn": {"text": "x", "stop_reason": "end_turn"}})
+    tape.save()
+    assert Cassette(path, "replay", toolset=tools).next_turn() is not None
+    for other in (
+        None,
+        {"builtin": ["code_mode"], "delegate_steps": 5},
+        {**tools, "delegate_steps": 9},
+    ):
+        with pytest.raises(CassetteError, match="same tools"):
+            Cassette(path, "replay", toolset=other)
+    # A log written before toolsets were recorded is a log with none.
+    lines = path.read_text().splitlines()
+    header = json.loads(lines[0])
+    del header["toolset"]
+    path.write_text("\n".join([json.dumps(header), *lines[1:]]) + "\n")
+    assert Cassette(path, "replay").next_turn() is not None
+    with pytest.raises(CassetteError, match="same tools"):
+        Cassette(path, "replay", toolset=tools)

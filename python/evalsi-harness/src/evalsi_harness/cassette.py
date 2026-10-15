@@ -30,6 +30,7 @@ from evalsi_harness.models import ChatModel, Message, ModelTurn, ToolCallRequest
 from evalsi_harness.tools import Tool, ToolResult
 
 CASSETTE_VERSION = 2
+EMPTY_TOOLSET: dict[str, Any] = {"builtin": [], "delegate_steps": 0}
 
 
 class CassetteError(RuntimeError):
@@ -90,6 +91,7 @@ class Cassette:
         branch_at_step: int = 0,
         context: dict[str, Any] | None = None,
         hooks: list[str] | None = None,
+        toolset: dict[str, Any] | None = None,
         fork_to: Path | None = None,
     ) -> None:
         if mode not in MODES:
@@ -111,6 +113,9 @@ class Cassette:
         # Hooks change what the agent sees and does, so they are part of what a
         # recording is valid for, too.
         self.hooks = hooks or []
+        # Which optional tools the agent had: they change what it can do and the
+        # sequence of calls, so a replay without them would rebuild another sandbox.
+        self.toolset = toolset if toolset is not None else EMPTY_TOOLSET
         self._next_id = 0
         self._last_id = -1
         self._out: Any = None
@@ -128,6 +133,7 @@ class Cassette:
             raise CassetteError(f"no cassette to replay at {self.path}")
         recorded: dict[str, Any] = {"strategy": "none"}  # version 1 files have no header
         recorded_hooks: list[str] = []
+        recorded_toolset: dict[str, Any] = EMPTY_TOOLSET
         good = []
         for line in self.path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
@@ -146,6 +152,7 @@ class Cassette:
             if entry["kind"] == "header":
                 recorded = entry.get("context") or {"strategy": "none"}
                 recorded_hooks = entry.get("hooks") or []
+                recorded_toolset = entry.get("toolset") or EMPTY_TOOLSET
             else:
                 self._next_id = max(self._next_id, entry.get("id", self._next_id) + 1)
                 self._last_id = entry.get("id", self._last_id)
@@ -158,6 +165,11 @@ class Cassette:
             raise CassetteError(
                 f"cassette {self.path.name} was recorded with hooks {recorded_hooks}, but the spec "
                 f"lists {self.hooks}; a replay needs the same hooks in the same order"
+            )
+        if recorded_toolset != self.toolset:
+            raise CassetteError(
+                f"cassette {self.path.name} was recorded with the tools {recorded_toolset}, but "
+                f"the spec has {self.toolset}; a replay needs the same tools"
             )
         if recorded != self.context:
             raise CassetteError(
@@ -187,6 +199,7 @@ class Cassette:
                     "version": CASSETTE_VERSION,
                     "context": self.context,
                     "hooks": self.hooks,
+                    "toolset": self.toolset,
                 }
                 if self.mode == "fork":
                     header["forked_from"] = {"session": self.path.name, "turns": self.branch_at}

@@ -37,37 +37,116 @@ def _text(args: dict[str, Any], key: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def glob_regex(pattern: str) -> re.Pattern[str]:
-    """A glob as a regular expression: ``*`` and ``?`` stay inside a path
-    segment, ``**`` crosses them, ``[...]`` is a class."""
-    out, i = [], 0
-    while i < len(pattern):
-        c = pattern[i]
-        if pattern.startswith("**/", i):
-            out.append("(?:.*/)?")
-            i += 3
-            continue
-        if pattern.startswith("**", i):
-            out.append(".*")
-            i += 2
-            continue
-        if c == "*":
-            out.append("[^/]*")
-        elif c == "?":
-            out.append("[^/]")
-        elif c == "[":
-            j = pattern.find("]", i + 2)
-            if j == -1:
-                out.append(re.escape(c))
-            else:
+MAX_GLOB_PATTERN = 120
+MAX_GLOB_PATH = 1024
+
+
+class GlobMatcher:
+    """A glob matched without backtracking: ``*`` and ``?`` stay inside a path
+    segment, ``**`` crosses them (``**/`` also matches no directory at all) and
+    ``[abc]`` / ``[!abc]`` is a class.
+
+    The pattern comes from the model, so it is run as a small automaton, in time
+    proportional to pattern length times path length. A regular expression made
+    of the same wildcards can take exponential time and stall the worker."""
+
+    def __init__(self, pattern: str) -> None:
+        if len(pattern) > MAX_GLOB_PATTERN:
+            raise ValueError(f"a glob is limited to {MAX_GLOB_PATTERN} characters")
+        # Tokens: ("lit", c), ("one",), ("star",), ("any",), ("class", chars, negated).
+        self.tokens: list[tuple[Any, ...]] = []
+        self.skip: dict[int, int] = {}  # an optional group, for "**/"
+        i = 0
+        while i < len(pattern):
+            c = pattern[i]
+            if pattern.startswith("**/", i):
+                self.skip[len(self.tokens)] = len(self.tokens) + 2
+                self.tokens += [("any",), ("lit", "/")]
+                i += 3
+                continue
+            if pattern.startswith("**", i):
+                self.tokens.append(("any",))
+                i += 2
+                continue
+            if c == "*":
+                self.tokens.append(("star",))
+            elif c == "?":
+                self.tokens.append(("one",))
+            elif c == "[" and (j := pattern.find("]", i + 2)) != -1:
                 body = pattern[i + 1 : j]
-                body = "^" + body[1:] if body.startswith("!") else body
-                out.append(f"[{body.replace(chr(92), chr(92) * 2)}]")
+                negated = body[:1] in ("!", "^")
+                self.tokens.append(("class", _class_chars(body[1:] if negated else body), negated))
                 i = j
+            else:
+                self.tokens.append(("lit", c))
+            i += 1
+
+    def _close(self, states: set[int]) -> set[int]:
+        out, todo = set(states), list(states)
+        while todo:
+            n = todo.pop()
+            if n >= len(self.tokens):
+                continue
+            nxt = []
+            if self.tokens[n][0] in ("star", "any"):
+                nxt.append(n + 1)  # matches nothing
+            if n in self.skip:
+                nxt.append(self.skip[n])
+            for m in nxt:
+                if m not in out:
+                    out.add(m)
+                    todo.append(m)
+        return out
+
+    def match(self, path: str) -> bool:
+        if len(path) > MAX_GLOB_PATH:
+            return False
+        states = self._close({0})
+        for ch in path:
+            nxt: set[int] = set()
+            for n in states:
+                if n >= len(self.tokens):
+                    continue
+                t = self.tokens[n]
+                kind = t[0]
+                if kind == "lit":
+                    if ch == t[1]:
+                        nxt.add(n + 1)
+                elif kind == "one":
+                    if ch != "/":
+                        nxt.add(n + 1)
+                elif kind == "class":
+                    if ch != "/" and ((ch in t[1]) != t[2]):
+                        nxt.add(n + 1)
+                elif kind == "star":
+                    if ch != "/":
+                        nxt.add(n)
+                else:  # any
+                    nxt.add(n)
+            states = self._close(nxt)
+            if not states:
+                return False
+        return len(self.tokens) in states
+
+
+def _class_chars(body: str) -> frozenset[str]:
+    """The characters of a class body such as ``a-c_`` (ranges expanded)."""
+    chars: set[str] = set()
+    i = 0
+    while i < len(body):
+        if i + 2 < len(body) and body[i + 1] == "-":
+            lo, hi = ord(body[i]), ord(body[i + 2])
+            chars.update(chr(c) for c in range(lo, min(hi, lo + 256) + 1))
+            i += 3
         else:
-            out.append(re.escape(c))
-        i += 1
-    return re.compile("".join(out) + r"\Z")
+            chars.add(body[i])
+            i += 1
+    return frozenset(chars)
+
+
+def glob_regex(pattern: str) -> GlobMatcher:
+    """Kept for callers of the old name: a matcher with ``match(path)``."""
+    return GlobMatcher(pattern)
 
 
 class EditFileTool:
@@ -179,7 +258,10 @@ class GlobTool:
         pattern = _text(args, "pattern")
         if not pattern:
             return ToolResult("glob needs a pattern", is_error=True)
-        regex = glob_regex(pattern.removeprefix("./"))
+        try:
+            regex = GlobMatcher(pattern.removeprefix("./"))
+        except ValueError as exc:
+            return ToolResult(str(exc), is_error=True)
         result = await self.env.run(f"find . -type f {_PRUNE}", span=span)
         if not result.ok:
             return ToolResult(f"find failed: {result.stderr.strip()[:300]}", is_error=True)

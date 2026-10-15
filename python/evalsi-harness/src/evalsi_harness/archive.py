@@ -8,7 +8,6 @@ as it was, so an agent that needs a detail it no longer sees can search for it
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -59,9 +58,9 @@ class SessionSearchTool:
             name="session_search",
             description=(
                 "Search everything said and done earlier in this task, including tool outputs "
-                "that were cleared from your context or folded into a summary. Give a query (a "
-                "regular expression, case-insensitive) to list matching entries with a snippet "
-                "and their numbers, or an entry number as index to read it in full."
+                "that were cleared from your context or folded into a summary. Give a query (text "
+                "to find, case-insensitive) to list matching entries with a snippet and their "
+                "numbers, or an entry number as index to read it in full."
             ),
             input_schema={
                 "type": "object",
@@ -89,20 +88,19 @@ class SessionSearchTool:
             return ToolResult("give a query to search for, or an index to read", is_error=True)
         limit = args.get("max_results")
         limit = limit if isinstance(limit, int) and 0 < limit <= 50 else 8
-        try:
-            pattern = re.compile(query, re.IGNORECASE)
-        except re.error:
-            pattern = re.compile(re.escape(query), re.IGNORECASE)
+        # A literal match, not a regular expression: a pattern written by the model
+        # could backtrack for ever on a long entry, and nothing here may stall the worker.
+        needle = query.strip().lower()
         hits: list[str] = []
         total = 0
         for e in reversed(entries):  # newest first: what you lost most recently
-            m = pattern.search(e.text)
-            if m is None:
+            at = e.text.lower().find(needle)
+            if at < 0:
                 continue
             total += 1
             if len(hits) < limit:
-                start = max(m.start() - SNIPPET // 2, 0)
-                snippet = e.text[start : m.end() + SNIPPET].replace("\n", " ")
+                start = max(at - SNIPPET // 2, 0)
+                snippet = e.text[start : at + len(needle) + SNIPPET].replace("\n", " ")
                 label = f"{e.role} {e.name}".strip()
                 hits.append(f"#{e.index} [{label}, {len(e.text)} chars] ...{snippet}...")
         if not hits:

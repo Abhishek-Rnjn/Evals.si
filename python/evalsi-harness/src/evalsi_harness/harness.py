@@ -559,6 +559,10 @@ class BuiltinHarness:
                 branch_at_step=rec.branch_at_step,
                 context=self._context(live).describe(),
                 hooks=[h.python for h in self.config.hooks],
+                toolset={
+                    "builtin": list(self.config.tools.builtin),
+                    "delegate_steps": self.config.delegate_steps,
+                },
                 fork_to=fork_to,
             )
         except ValueError as exc:

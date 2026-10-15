@@ -236,3 +236,33 @@ def test_the_config_validates_rounds_and_describes_only_what_a_replay_depends_on
     }
     ContextConfig(strategy="fresh-rounds")  # no window needed
     assert ToolCallRequest("a", "b", "{}")  # keeps the import honest
+
+
+def test_the_exit_criterion_holds_for_300_steps_in_a_200k_window_over_rounds() -> None:
+    """The control (no strategy) overflows this window; ten rounds of thirty steps do not."""
+    from tests.test_context import WINDOW, WindowedModel
+
+    class Finishing(WindowedModel):
+        async def complete(self, messages: Any, tools: Any, **kw: Any) -> ModelTurn:
+            turn = await super().complete(messages, tools, **kw)
+            if not turn.tool_calls and kw.get("system") != "":
+                turn.text = f"finished {ROUND_DONE}"
+            return turn
+
+    model = Finishing()
+    events: list[Any] = []
+    loop = AgentLoop(
+        model,
+        [FunctionTool("blob", lambda n: "x" * 4000, input_schema={"type": "object"})],
+        LoopConfig(
+            max_steps=1000,
+            context=ContextConfig(strategy="fresh-rounds", rounds=12, round_steps=30),
+        ),
+        events.append,
+    )
+    final = asyncio.run(loop.run([{"role": "user", "content": "read every blob"}]))
+    assert final.stop_reason == "completed"
+    assert model.calls == 301
+    assert model.peak <= WINDOW  # each round's context was a fraction of the window
+    assert model.peak < WINDOW // 4
+    assert final.extra["context"]["rounds"] == 10  # eleven rounds, ten fresh starts

@@ -770,6 +770,7 @@ def test_a_cassette_carries_its_version_and_old_ones_replay(tmp_path: Any) -> No
         "version": 2,
         "context": {"strategy": "none"},
         "hooks": [],
+        "toolset": {"builtin": [], "delegate_steps": 0},
     }
     assert Cassette(path, "replay").next_turn() is not None
     # A version 1 file has no header.

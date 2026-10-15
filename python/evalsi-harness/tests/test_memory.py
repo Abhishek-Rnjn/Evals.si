@@ -69,9 +69,22 @@ def test_search_reads_an_entry_in_full_and_reports_misses_and_bad_input() -> Non
     assert search(a, query="zebra").content == "no entry matches 'zebra'"
     assert search(a).is_error
     assert search(a, query="   ").is_error
-    # A pattern that is not a valid regex is searched for literally.
+    # The query is text, not a pattern: regex syntax is just characters.
     assert search(a, query="port = (8080").content.startswith("no entry matches")
-    assert search(a, query="a[b", max_results=1).content.startswith("no entry matches")
+    assert search(a, query="p.rt").content.startswith("no entry matches")
+    assert search(a, query=".*").content.startswith("no entry matches")
+
+
+def test_a_pathological_query_cannot_stall_the_search() -> None:
+    import time
+
+    a = Archive()
+    a.add({"role": "tool", "name": "bash", "content": "a" * 16000 + "b"})
+    started = time.monotonic()
+    r = search(a, query="(a+)+$")  # catastrophic as a regex; just characters here
+    assert time.monotonic() - started < 1
+    assert r.content.startswith("no entry matches")
+    assert search(a, query="AAAAb").content.startswith("#0")  # case-insensitive literal
 
 
 def test_search_caps_results_and_says_how_many_more() -> None:

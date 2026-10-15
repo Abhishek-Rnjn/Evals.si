@@ -9,9 +9,11 @@ back. The script's output is the tool result.
 The script is **not** run by Python. It is parsed and interpreted by the small
 evaluator below, which allows a safe subset: assignments, ``if``, ``for``,
 ``while``, ``try``, comprehensions, f-strings, small functions and lambdas,
-the usual string, list and dict methods, ``json`` and ``re``. There is no
-``open``, ``eval``, ``exec``, ``getattr``, no imports beyond ``json`` and
-``re``, and no attribute starting with an underscore, so a script can reach
+the usual string, list and dict methods and ``json``. There is no
+``open``, ``eval``, ``exec``, ``getattr``, no imports beyond ``json``, no
+regular expressions (a model-written pattern can backtrack for ever, and the
+interpreter shares a thread with every other trial; ``grep`` is a tool), and no
+attribute starting with an underscore, so a script can reach
 nothing but the tools it was given, and the model's code never runs on the
 worker. Every tool call inside it goes through the same path as a direct one,
 so each is a step on the trajectory (under the ``run_code`` step), hooks apply
@@ -36,6 +38,7 @@ MAX_SOURCE = 20_000
 MAX_RANGE = 100_000
 MAX_SEQUENCE = 1_000_000
 MAX_DEPTH = 40
+MAX_INT_BITS = 8192
 
 ToolFn = Callable[[dict[str, Any]], Awaitable[ToolResult]]
 
@@ -71,16 +74,6 @@ class _Json:
         return json.dumps(value, indent=indent, default=str)
 
 
-class _Re:
-    search = staticmethod(re.search)
-    match = staticmethod(re.match)
-    findall = staticmethod(re.findall)
-    sub = staticmethod(re.sub)
-    split = staticmethod(re.split)
-    IGNORECASE = re.IGNORECASE
-    MULTILINE = re.MULTILINE
-
-
 _STR = """lower upper strip lstrip rstrip split splitlines join startswith endswith replace find
 count zfill title capitalize isdigit isalpha isalnum isspace ljust rjust partition rpartition
 removeprefix removesuffix"""
@@ -92,9 +85,7 @@ METHODS: dict[type, frozenset[str]] = {
     dict: frozenset({"get", "keys", "values", "items", "update", "setdefault", "pop", "copy"}),
     set: frozenset({"add", "update", "discard", "union", "intersection", "difference"}),
     tuple: frozenset({"index", "count"}),
-    re.Match: frozenset({"group", "groups", "groupdict", "start", "end", "span"}),
     _Json: frozenset({"loads", "dumps"}),
-    _Re: frozenset({"search", "match", "findall", "sub", "split", "IGNORECASE", "MULTILINE"}),
 }
 
 BUILTINS: dict[str, Any] = {
@@ -102,7 +93,7 @@ BUILTINS: dict[str, Any] = {
     "reversed": reversed, "min": min, "max": max, "sum": sum, "any": any, "all": all,
     "abs": abs, "round": round, "str": str, "int": int, "float": float, "bool": bool,
     "list": list, "dict": dict, "set": set, "tuple": tuple, "isinstance": isinstance,
-    "True": True, "False": False, "None": None, "json": _Json, "re": _Re,
+    "True": True, "False": False, "None": None, "json": _Json,
     "Exception": Exception, "ValueError": ValueError, "KeyError": KeyError, "print": print,
 }  # fmt: skip
 
@@ -244,8 +235,8 @@ class Interpreter:
             return
         elif isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name not in ("json", "re"):
-                    raise CodeError(f"line {node.lineno}: only json and re can be imported")
+                if alias.name != "json":
+                    raise CodeError(f"line {node.lineno}: only json can be imported")
         elif isinstance(node, ast.Raise):
             exc = await self.ev(node.exc, env) if node.exc else Exception("raised")
             raise exc if isinstance(exc, BaseException) else Exception(str(exc))
@@ -311,15 +302,64 @@ class Interpreter:
     # --- expressions ---
 
     def binop(self, op: ast.operator, a: Any, b: Any) -> Any:
+        """One arithmetic step. The size of the result is checked before it is
+        built wherever it follows from the operands: a script cannot make the
+        worker allocate its way to a stall."""
         fn = _BINOPS.get(type(op))
         if fn is None:
             raise CodeError(f"line {self.line}: operator {type(op).__name__} is not supported")
-        if isinstance(op, ast.Pow) and (not isinstance(b, int | float) or abs(b) > 64):
-            raise Limit("an exponent above 64 is not allowed")
-        repeats = isinstance(op, ast.Mult) and isinstance(a, str | list | tuple)
-        if repeats and isinstance(b, int) and len(a) * max(b, 0) > MAX_SEQUENCE:
-            raise Limit("that sequence would be too large")
-        return fn(a, b)
+        seq = (str, list, tuple)
+        if isinstance(op, ast.Pow):
+            if not isinstance(b, int | float) or abs(b) > 64:
+                raise Limit("an exponent above 64 is not allowed")
+            if isinstance(a, int) and a.bit_length() * max(int(b), 1) > MAX_INT_BITS:
+                raise Limit("that number would be too large")
+        elif isinstance(op, ast.Mult):
+            if isinstance(a, seq) and isinstance(b, int) and len(a) * max(b, 0) > MAX_SEQUENCE:
+                raise Limit("that sequence would be too large")
+            if isinstance(b, seq) and isinstance(a, int) and len(b) * max(a, 0) > MAX_SEQUENCE:
+                raise Limit("that sequence would be too large")
+            ints = isinstance(a, int) and isinstance(b, int)
+            if ints and a.bit_length() + b.bit_length() > MAX_INT_BITS:
+                raise Limit("that number would be too large")
+        elif isinstance(op, ast.Add) and isinstance(a, seq) and isinstance(b, seq):
+            if len(a) + len(b) > MAX_SEQUENCE:
+                raise Limit("that sequence would be too large")
+        return self.sized(fn(a, b))
+
+    @staticmethod
+    def sized(value: Any) -> Any:
+        """Refuses a result too large to keep, after the fact, for what the
+        operands could not tell us in advance."""
+        if isinstance(value, str | list | tuple | dict | set | bytes) and len(value) > MAX_SEQUENCE:
+            raise Limit("that value is too large")
+        too_big = isinstance(value, int) and value.bit_length() > MAX_INT_BITS
+        if too_big and not isinstance(value, bool):
+            raise Limit("that number would be too large")
+        return value
+
+    def guard_call(self, fn: Any, args: list[Any]) -> None:
+        """Checks the size a native call could produce from its arguments, before it runs."""
+        owner, name = getattr(fn, "__self__", None), getattr(fn, "__name__", "")
+        widens = isinstance(owner, str) and name in ("ljust", "rjust", "zfill", "center")
+        if widens and args and isinstance(args[0], int) and args[0] > MAX_SEQUENCE:
+            raise Limit("that width is too large")
+        if isinstance(owner, str) and name == "replace" and len(args) >= 2:
+            old, new = str(args[0]), str(args[1])
+            if old == "":
+                raise Limit("replace needs a non-empty text to look for")
+            if len(owner) * max(len(new), 1) // len(old) > MAX_SEQUENCE:
+                raise Limit("that replacement would be too large")
+        if isinstance(owner, list) and name in ("extend", "insert") and args:
+            extra = args[-1]
+            if hasattr(extra, "__len__") and len(owner) + len(extra) > MAX_SEQUENCE:
+                raise Limit("that list would be too large")
+        if isinstance(owner, dict | set) and name == "update" and args:
+            extra = args[0]
+            if hasattr(extra, "__len__") and len(owner) + len(extra) > MAX_SEQUENCE:
+                raise Limit("that collection would be too large")
+        if fn is int and args and isinstance(args[0], str) and len(args[0]) > 4000:
+            raise Limit("that number would be too large")
 
     async def ev(self, node: ast.expr | None, env: dict[str, Any]) -> Any:
         if node is None:
@@ -372,7 +412,9 @@ class Interpreter:
         elif node.conversion == ord("s"):
             value = str(value)
         spec = await self.ev(node.format_spec, env) if node.format_spec else ""
-        return format(value, spec)
+        if re.search(r"\d{7,}", str(spec)):
+            raise Limit("that format width is too large")
+        return self.sized(format(value, spec))
 
     async def ev_BinOp(self, node: ast.BinOp, env: dict[str, Any]) -> Any:
         return self.binop(node.op, await self.ev(node.left, env), await self.ev(node.right, env))
@@ -456,21 +498,27 @@ class Interpreter:
         if isinstance(fn, _ToolCall):
             return await fn(*args, **kwargs)
         if isinstance(kwargs.get("key"), _Function):
-            return await self.keyed(fn, args, kwargs)
+            return await self.keyed(fn, args, kwargs, env)
         if not callable(fn):
             raise TypeError(f"{type(fn).__name__} is not callable")
+        self.guard_call(fn, args)
         result = fn(*args, **kwargs)
         if isinstance(result, range) and len(result) > MAX_RANGE:
             raise Limit(f"range is limited to {MAX_RANGE}")
-        return result
+        return self.sized(result)
 
-    async def keyed(self, fn: Any, args: list[Any], kwargs: dict[str, Any]) -> Any:
+    async def keyed(
+        self, fn: Any, args: list[Any], kwargs: dict[str, Any], env: dict[str, Any]
+    ) -> Any:
         """sorted, min, max and list.sort with a ``key`` the script defined: the
         keys are computed here (the function is not native) and used to order."""
         key = kwargs.pop("key")
         target = fn.__self__ if getattr(fn, "__name__", "") == "sort" else None
-        items = list(target if target is not None else args[0])
-        keys = [await self.call_function(key, [x], {}, {}) for x in items]
+        if target is not None:
+            items = list(target)
+        else:
+            items = list(args) if len(args) > 1 and fn in (min, max) else list(args[0])
+        keys = [await self.call_function(key, [x], {}, env) for x in items]
         order = sorted(range(len(items)), key=keys.__getitem__, reverse=bool(kwargs.get("reverse")))
         if fn is sorted:
             return [items[i] for i in order]
@@ -600,9 +648,9 @@ class RunCodeTool:
                 "its output as a string (starting with 'ERROR: ' if it failed).\n"
                 f"Tools:\n{listing}\n"
                 "The language is a safe subset of Python: variables, if/for/while/try, "
-                "comprehensions, f-strings, def and lambda, the usual str/list/dict methods, "
-                "json and re. There are no files, imports (other than json and re), classes or "
-                "attributes starting with an underscore. Use print() for output."
+                "comprehensions, f-strings, def and lambda, the usual str/list/dict methods and "
+                "json. There are no files, imports (other than json), classes, regular "
+                "expressions or attributes starting with an underscore. Use print() for output."
             ),
             input_schema={
                 "type": "object",

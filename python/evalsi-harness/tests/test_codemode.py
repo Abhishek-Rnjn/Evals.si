@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +118,23 @@ print(sq(7))
     ]
 
 
+def test_a_key_function_sees_the_scripts_variables_and_max_takes_several_values() -> None:
+    out, _ = run_script(
+        """
+weights = {"a": 3, "b": 1, "c": 2}
+print(sorted(["a", "b", "c"], key=lambda k: weights[k]))
+print(max("a", "b", "c", key=lambda k: weights[k]), min(3, 1, 2, key=lambda v: -v))
+items = ["a", "b", "c"]
+items.sort(key=lambda k: weights[k], reverse=True)
+print(items)
+def rank(k):
+    return weights[k] * 10
+print(max(["a", "b"], key=rank))
+"""
+    )
+    assert out.splitlines() == ["['b', 'c', 'a']", "a 3", "['a', 'c', 'b']", "a"]
+
+
 def test_try_except_catches_script_errors_but_not_limits() -> None:
     out, _ = run_script(
         """
@@ -144,20 +162,21 @@ finally:
     assert out == "0\n"
 
 
-def test_json_and_re_are_available_and_nothing_else_is_imported() -> None:
+def test_json_is_available_and_nothing_else_is_imported() -> None:
     out, _ = run_script(
         """
 import json
-import re
 data = json.loads('{"a": [1, 2]}')
 print(data["a"][1], json.dumps({"k": 1}))
-m = re.search(r"(\\d+)-(\\d+)", "ids 12-34")
-print(m.group(1), m.groups(), re.findall("a.", "abac"), re.sub("b", "-", "abc"))
 """
     )
-    assert out.splitlines() == ['2 {"k": 1}', "12 ('12', '34') ['ab', 'ac'] a-c"]
-    fails("import os", "only json and re can be imported")
+    assert out == '2 {"k": 1}\n'
+    fails("import os", "only json can be imported")
+    fails("import re", "only json can be imported")
     fails("from os import path", "ImportFrom is not supported")
+    # Regular expressions are not offered at all: a model-written pattern can backtrack for ever.
+    with pytest.raises(CodeError, match="NameError"):
+        run_script("re.search('(a+)+$', 'a' * 40 + 'b')")
 
 
 # --- safety ------------------------------------------------------------------------
@@ -227,6 +246,35 @@ def test_resource_limits_stop_runaway_scripts() -> None:
     with pytest.raises(Limit, match="nested too deeply"):
         run_script("def f():\n    return f()\nf()")
     fails("x = 1" + " " * 25_000, "longer than")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "x = [1]\nfor i in range(40):\n    x.extend(x)",
+        "x = [1]\nfor i in range(40):\n    x = x + x",
+        "x = 'ab'\nfor i in range(40):\n    x = x + x",
+        "n = 2 ** 64\nfor i in range(30):\n    n = n * n",
+        "n = 3\nfor i in range(30):\n    n = n ** 64",
+        "x = 'a'.ljust(10**9)",
+        "x = 'a'.rjust(10**9, 'b')",
+        "x = '1'.zfill(10**9)",
+        "s = 'a' * 1000\nfor i in range(40):\n    s = s.replace('a', 'aa' * 10)",
+        "x = 'abc'.replace('', 'x' * 100000)",
+        "x = {}\nfor i in range(30):\n    x.update({j: j for j in range(100000)})",
+        "x = f\"{'a':>{10**9}}\"",
+        "x = int('9' * 100000)",
+        "x = [0] * 10**7",
+        "x = 10 * ('ab',) * 10**7",
+    ],
+)
+def test_runaway_growth_is_stopped_before_it_is_built(source: str) -> None:
+    tool = RunCodeTool({}, {})
+    started = time.monotonic()
+    r = asyncio.run(tool.call({"code": source}))
+    assert time.monotonic() - started < 2, source
+    assert r.is_error
+    assert r.content.startswith(("Stopped:", "Error:")), r.content
 
 
 def test_tool_call_count_is_capped() -> None:
@@ -472,3 +520,45 @@ def test_a_run_in_code_mode_replays_exactly(model: Any, sandboxes: Any, tmp_path
     assert again is not None
     assert again.check is not None
     assert again.check.passed  # the inner bash ran again on replay
+
+
+def test_a_subagent_never_inherits_fresh_rounds() -> None:
+    from evalsi_harness.context import ROUND_DONE, ContextConfig
+    from evalsi_harness.subagent import SUBAGENT_SYSTEM
+
+    class Router:
+        name = "router"
+
+        def __init__(self) -> None:
+            self.sub_calls = 0
+            self.sub_seen: list[list[dict[str, Any]]] = []
+
+        async def complete(
+            self, messages: Any, tools: Any, *, system: str = "", max_tokens: int = 0
+        ) -> ModelTurn:
+            if system == SUBAGENT_SYSTEM:
+                self.sub_calls += 1
+                self.sub_seen.append([dict(m) for m in messages])
+                return turn("the report")  # no TASK_COMPLETE: it was never told about it
+            if not any(m["role"] == "tool" for m in messages):
+                call = ToolCallRequest("d1", "delegate", '{"task": "look into it"}')
+                return turn(calls=[call])
+            return turn(f"all done {ROUND_DONE}")
+
+        async def aclose(self) -> None:
+            pass
+
+    model = Router()
+    loop = AgentLoop(
+        model,
+        [FunctionTool("read", lambda: "x", input_schema={"type": "object"})],
+        LoopConfig(
+            delegate_steps=10,
+            context=ContextConfig(strategy="fresh-rounds", rounds=4, round_steps=10),
+        ),
+        lambda e: None,
+    )
+    final = asyncio.run(loop.run([{"role": "user", "content": "go"}]))
+    assert final.stop_reason == "completed"
+    assert model.sub_calls == 1  # one round, one reply; not four restarts
+    assert [m["content"] for m in model.sub_seen[0]] == ["look into it"]
