@@ -32,33 +32,50 @@ def retry_after(response: httpx.Response) -> float:
         return 0.0
 
 
-class Gate:
-    """At most ``limit`` concurrent calls per event loop and endpoint, shared
-    by every client in the process that names the same key."""
+class _InFlight:
+    """The model calls in flight to one endpoint and key, on one event loop."""
 
-    _semaphores: ClassVar[
-        weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Semaphore]]
+    def __init__(self) -> None:
+        self.active = 0
+        self.changed = asyncio.Condition()
+
+
+_CountsByLoop = weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, _InFlight]]
+
+
+class Gate:
+    """A cap on concurrent model calls to one endpoint and key.
+
+    Every client in the process that names the same key shares one count of calls
+    in flight. A call waits until fewer than *its own* ``limit`` are in flight, so
+    a run that asks for a tighter limit than an earlier one is held to it, and a
+    looser one is not held back by it: each run's cap is enforced against the
+    shared count, and no run gets a gate of its own that the others cannot see."""
+
+    _counts: ClassVar[
+        weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, _InFlight]]
     ] = weakref.WeakKeyDictionary()
 
     def __init__(self, key: str, limit: int) -> None:
         self.key = key
         self.limit = limit
-        self._held: list[asyncio.Semaphore] = []
 
-    def _semaphore(self) -> asyncio.Semaphore:
-        # Keyed by the loop itself, so a finished loop takes its semaphores with it.
-        per_loop = self._semaphores.setdefault(asyncio.get_running_loop(), {})
-        if self.key not in per_loop:
-            per_loop[self.key] = asyncio.Semaphore(self.limit)
-        return per_loop[self.key]
+    def _flight(self) -> _InFlight:
+        # Keyed by the loop itself, so a finished loop takes its counts with it.
+        per_loop = self._counts.setdefault(asyncio.get_running_loop(), {})
+        return per_loop.setdefault(self.key, _InFlight())
 
     async def __aenter__(self) -> None:
-        sem = self._semaphore()
-        await sem.acquire()
-        self._held.append(sem)
+        flight = self._flight()
+        async with flight.changed:
+            await flight.changed.wait_for(lambda: flight.active < self.limit)
+            flight.active += 1
 
     async def __aexit__(self, *exc: object) -> None:
-        self._held.pop().release()
+        flight = self._flight()
+        async with flight.changed:
+            flight.active -= 1
+            flight.changed.notify_all()
 
 
 def gate_for(url: str, api_key_env: str, limit: int) -> Gate | Any:

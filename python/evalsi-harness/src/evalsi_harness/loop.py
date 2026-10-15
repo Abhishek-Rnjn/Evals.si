@@ -70,6 +70,9 @@ class LoopConfig:
     # (0: not retried). It is the config's, not the model's, so a replay makes
     # the same decision as the recorded run.
     truncation_retry_tokens: int = 0
+    # The same per model, by name: the retry limit follows the model that served
+    # the turn (a fallback has limits of its own).
+    truncation_retry_by_model: dict[str, int] = field(default_factory=dict)
     # Offer session_search over the run's unabridged history.
     session_search: bool = False
     # Code mode: the model sees one tool, run_code, and acts through scripts.
@@ -456,15 +459,16 @@ class AgentLoop:
         self.state.steps += 1
         self._account(turn)
         self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
-        if not turn.truncated or not self.config.truncation_retry_tokens:
+        retry_to = self.config.truncation_retry_by_model.get(
+            turn.model, self.config.truncation_retry_tokens
+        )
+        if not turn.truncated or not retry_to:
             return turn
         if self._over_budget(time.monotonic()):  # steps or spend left no room
             return turn
         self.state.truncation_retries += 1
         try:
-            return await self._retry_cut_off(
-                messages, specs, system, self.config.truncation_retry_tokens
-            )
+            return await self._retry_cut_off(messages, specs, system, retry_to)
         except ModelError:
             # The provider refused the higher limit (above its output cap, or
             # past the context window). The cut-off turn stands, so the run

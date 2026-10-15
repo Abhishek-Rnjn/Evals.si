@@ -71,8 +71,10 @@ def test_an_interrupted_trial_resumes_and_grades_like_an_uninterrupted_one(
     assert died.record is None
     assert died.error
     tape = tmp_path / "tapes" / "t1.0.jsonl"
-    # Everything up to the last step is on disk: two turns and their results.
-    assert kinds(tape) == ["header", "model", "tool", "model", "tool"]
+    # Everything up to the last step is on disk: two turns and their results, and the
+    # refusal the third call met. A resume drops that last one: it is where the trial died.
+    assert kinds(tape) == ["header", "model", "tool", "model", "tool", "model"]
+    assert "error" in json.loads(tape.read_text().splitlines()[-1])["turn"]
 
     # Resume: replay the two turns (the sandbox is rebuilt by re-running them),
     # then carry on live with the rest.

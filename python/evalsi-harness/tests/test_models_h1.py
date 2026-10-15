@@ -778,7 +778,7 @@ def test_a_cassette_carries_its_version_and_old_ones_replay(tmp_path: Any) -> No
     assert Cassette(path, "replay").next_turn() is not None
 
 
-def test_cache_prices_apply_only_when_the_whole_chain_is_anthropic() -> None:
+def test_cache_discounts_need_an_all_anthropic_chain_but_the_write_surcharge_stays() -> None:
     from evalsi_harness.harness import BuiltinHarness
 
     class Live:
@@ -790,5 +790,171 @@ def test_cache_prices_apply_only_when_the_whole_chain_is_anthropic() -> None:
     price = BuiltinHarness._cache_prices
     assert price(Live(anthropic)) == {"cache_read_mult": 0.1, "cache_write_mult": 1.25}  # type: ignore[arg-type]
     assert price(Live({**anthropic, "fallbacks": [anthropic]})) != {}  # type: ignore[arg-type]
-    assert price(Live({**anthropic, "fallbacks": [other]})) == {}  # type: ignore[arg-type]
+    # A mixed chain loses the read discount, but an Anthropic write still costs 1.25 times.
+    mixed = price(Live({**anthropic, "fallbacks": [other]}))  # type: ignore[arg-type]
+    assert mixed == {"cache_write_mult": 1.25}
     assert price(Live(other)) == {}  # type: ignore[arg-type]
+
+
+# --- review fixes ----------------------------------------------------------------------
+
+
+def test_a_split_thinking_signature_is_put_back_together() -> None:
+    body = sse(
+        ("message_start", {"message": {"usage": {"input_tokens": 1}}}),
+        (
+            "content_block_start",
+            {"index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+        ),
+        (
+            "content_block_delta",
+            {"index": 0, "delta": {"type": "signature_delta", "signature": "AAA"}},
+        ),
+        (
+            "content_block_delta",
+            {"index": 0, "delta": {"type": "signature_delta", "signature": "BBB"}},
+        ),
+        ("message_delta", {"delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 1}}),
+    )
+    model = AnthropicChat(
+        replace(CLAUDE, stream=True), transport_client(lambda r: sse_response(body))
+    )
+    turn = asyncio.run(model.complete([{"role": "user", "content": "q"}], []))
+    assert turn.thinking[0]["signature"] == "AAABBB"
+
+
+def test_streams_that_end_early_are_errors_not_short_answers() -> None:
+    cut = sse(
+        ("message_start", {"message": {"usage": {"input_tokens": 1}}}),
+        ("content_block_start", {"index": 0, "content_block": {"type": "text", "text": ""}}),
+        (
+            "content_block_delta",
+            {"index": 0, "delta": {"type": "text_delta", "text": "half an ans"}},
+        ),
+    )
+    model = AnthropicChat(
+        replace(CLAUDE, stream=True), transport_client(lambda r: sse_response(cut))
+    )
+    with pytest.raises(ModelError, match="no stop reason"):
+        asyncio.run(model.complete([{"role": "user", "content": "q"}], []))
+    chunk = ("", {"choices": [{"delta": {"content": "half"}, "finish_reason": None}]})
+    cfg = TargetConfig(
+        connector="openai-compatible", model="m", base_url="http://x/v1", stream=True
+    )
+    chat = OpenAIChat(cfg, transport_client(lambda r: sse_response(sse(chunk))))
+    with pytest.raises(ModelError, match="no finish reason"):
+        asyncio.run(chat.complete([{"role": "user", "content": "q"}], []))
+
+
+def test_a_chat_refusal_or_content_filter_is_a_refusal() -> None:
+    def chat(payload: dict[str, Any], stream: bool = False) -> Any:
+        cfg = replace(OPENAI, api="", stream=stream)
+        body = (
+            sse(
+                ("", {"choices": [{"delta": payload["delta"], "finish_reason": payload["finish"]}]})
+            )
+            if stream
+            else None
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if stream:
+                return sse_response(body)  # type: ignore[arg-type]
+            message = {k: v for k, v in payload.items() if k != "finish"}
+            return httpx.Response(
+                200, json={"choices": [{"message": message, "finish_reason": payload["finish"]}]}
+            )
+
+        model = OpenAIChat(cfg, transport_client(handler))
+        return asyncio.run(model.complete([{"role": "user", "content": "q"}], []))
+
+    refused = chat({"content": None, "refusal": "I can't help with that", "finish": "stop"})
+    assert (refused.stop_reason, refused.text) == ("refusal", "I can't help with that")
+    assert chat({"content": "par", "finish": "content_filter"}).stop_reason == "refusal"
+    assert chat({"content": "fine", "finish": "stop"}).stop_reason == "stop"
+    streamed = chat({"delta": {"refusal": "No."}, "finish": "stop"}, stream=True)
+    assert (streamed.stop_reason, streamed.text) == ("refusal", "No.")
+
+
+def test_a_refused_retry_is_recorded_and_replays_as_the_same_error(tmp_path: Any) -> None:
+    from evalsi_harness.cassette import Cassette, CassetteModel
+
+    class Picky(Flaky):
+        async def complete(
+            self, messages: Any, tools: Any, *, system: str = "", max_tokens: int = 0
+        ) -> ModelTurn:
+            if max_tokens:
+                raise ModelError("HTTP 400: max_tokens too large")
+            return ModelTurn(text="cut", stop_reason="max_tokens")
+
+    path = tmp_path / "t.jsonl"
+    live = CassetteModel(Cassette(path, "record"), Picky("p"))
+    cfg = LoopConfig(truncation_retry_tokens=32000)
+    loop = AgentLoop(live, [], cfg, lambda e: None)
+    first = asyncio.run(loop.run([{"role": "user", "content": "go"}]))
+    live.cassette.save()
+    assert first.stop_reason == "budget"
+    # The replay meets the same refusal at the same point, instead of reading the
+    # tape's next turn (or running off its end).
+    replay = CassetteModel(Cassette(path, "replay"), None)
+    again = asyncio.run(
+        AgentLoop(replay, [], cfg, lambda e: None).run([{"role": "user", "content": "go"}])
+    )
+    assert again.stop_reason == "budget"
+    assert again.error == first.error
+
+
+def test_the_retry_limit_follows_the_model_that_served_the_turn() -> None:
+    class Big:
+        name = "big"
+
+        def __init__(self) -> None:
+            self.limits: list[int] = []
+
+        async def complete(
+            self, messages: Any, tools: Any, *, system: str = "", max_tokens: int = 0
+        ) -> ModelTurn:
+            self.limits.append(max_tokens)
+            if max_tokens:
+                return ModelTurn(text="whole", stop_reason="end_turn", model="big")
+            return ModelTurn(text="cut", stop_reason="max_tokens", model="big")
+
+        async def aclose(self) -> None:
+            pass
+
+    model = Big()
+    cfg = LoopConfig(
+        truncation_retry_tokens=32_000,  # the primary's: twice 16k
+        truncation_retry_by_model={"big": 128_000, "small": 32_000},
+    )
+    final = asyncio.run(
+        AgentLoop(model, [], cfg, lambda e: None).run([{"role": "user", "content": "go"}])
+    )
+    assert final.stop_reason == "completed"
+    assert model.limits == [0, 128_000]  # the fallback's limit, not the primary's
+
+
+def test_each_runs_own_concurrency_cap_holds_against_a_shared_count() -> None:
+    async def go() -> tuple[int, int]:
+        loose = [Gate("shared-endpoint-2", 8) for _ in range(6)]
+        tight = Gate("shared-endpoint-2", 1)
+        running = peak_tight = 0
+
+        async def call(g: Gate, is_tight: bool) -> None:
+            nonlocal running, peak_tight
+            async with g:
+                running += 1
+                if is_tight:
+                    peak_tight = max(peak_tight, running)
+                await asyncio.sleep(0.01)
+                running -= 1
+
+        await asyncio.gather(
+            *(call(g, False) for g in loose), *(call(tight, True) for _ in range(5))
+        )
+        return peak_tight, running
+
+    peak_when_tight_ran, left = asyncio.run(go())
+    # A tight caller only starts when nothing else is in flight (its cap is 1).
+    assert peak_when_tight_ran == 1
+    assert left == 0

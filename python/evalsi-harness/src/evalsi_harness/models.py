@@ -186,15 +186,20 @@ class OpenAIChat:
         ]
         usage = payload.get("usage") or {}
         details = usage.get("prompt_tokens_details") or {}
+        finish = choice.get("finish_reason") or ""
+        refusal = message.get("refusal") or ""
+        if refusal or finish == "content_filter":
+            # The model declined, or the provider's filter stopped it: not a normal answer.
+            finish = "refusal"
         return ModelTurn(
-            text=message.get("content") or "",
+            text=message.get("content") or refusal,
             tool_calls=calls,
             usage=Usage(
                 input_tokens=usage.get("prompt_tokens"),
                 output_tokens=usage.get("completion_tokens"),
                 latency_ms=(time.perf_counter() - start) * 1000,
             ),
-            stop_reason=choice.get("finish_reason") or "",
+            stop_reason=finish,
             # A part of prompt_tokens, as in Anthropic's normalized total.
             cache_read_tokens=int(details.get("cached_tokens") or 0),
         )

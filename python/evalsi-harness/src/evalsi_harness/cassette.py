@@ -26,7 +26,14 @@ from pathlib import Path
 from typing import Any
 
 from evalsi.types import Usage
-from evalsi_harness.models import ChatModel, Message, ModelTurn, ToolCallRequest, ToolSpec
+from evalsi_harness.models import (
+    ChatModel,
+    Message,
+    ModelError,
+    ModelTurn,
+    ToolCallRequest,
+    ToolSpec,
+)
 from evalsi_harness.tools import Tool, ToolResult
 
 CASSETTE_VERSION = 2
@@ -161,6 +168,15 @@ class Cassette:
                 elif entry["kind"] == "tool":
                     key = (entry["name"], _args_key(entry["args"]))
                     self._tools[key].append(entry["result"])
+        if self.mode == "resume":
+            # A refusal at the very end is where the trial died (a provider that went away),
+            # not an outcome the run handled: resuming tries that call again.
+            while self._turns and "error" in self._turns[-1]:
+                self._turns.pop()
+                dropped = good.pop()
+                self._next_id = max(self._next_id - 1, 0)
+                self._last_id = json.loads(good[-1]).get("id", -1) if good else -1
+                del dropped
         if recorded_hooks != self.hooks:
             raise CassetteError(
                 f"cassette {self.path.name} was recorded with hooks {recorded_hooks}, but the spec "
@@ -245,7 +261,12 @@ class Cassette:
                 "set branch_at_step to continue live"
             )
         self.turns_served += 1
-        return _turn_from_dict(self._turns.popleft())
+        entry = self._turns.popleft()
+        if "error" in entry:
+            # The provider refused this call when it was recorded (a raised limit that was
+            # too high, say); the run handled it, so the replay raises it again.
+            raise ModelError(entry["error"])
+        return _turn_from_dict(entry)
 
     def tool_result(self, name: str, args: dict[str, Any]) -> ToolResult | None:
         if self.live:
@@ -301,14 +322,25 @@ class CassetteModel:
         system: str = "",
         max_tokens: int = 0,
     ) -> ModelTurn:
-        turn = self.cassette.next_turn()
+        try:
+            turn = self.cassette.next_turn()
+        except ModelError as exc:
+            # A refusal on the tape: a fork copies it into its own log, a resume does not.
+            self.cassette.record({"kind": "model", "turn": {"error": str(exc)}}, replayed=True)
+            raise
         replayed = turn is not None
         if turn is None:
             if self.inner is None:
                 raise CassetteError(
                     "replay reached the branch point but no live model is configured"
                 )
-            turn = await self.inner.complete(messages, tools, system=system, max_tokens=max_tokens)
+            try:
+                turn = await self.inner.complete(
+                    messages, tools, system=system, max_tokens=max_tokens
+                )
+            except ModelError as exc:
+                self.cassette.record({"kind": "model", "turn": {"error": str(exc)}})
+                raise
         self.cassette.record({"kind": "model", "turn": _turn_to_dict(turn)}, replayed=replayed)
         return turn
 
