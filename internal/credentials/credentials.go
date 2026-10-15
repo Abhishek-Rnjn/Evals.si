@@ -407,6 +407,18 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 	}
 	for _, s := range spec.GetHarness().GetBuiltin().GetTools().GetMcp() {
 		uses = append(uses, headerUses("MCP server "+s.GetName()+" headers_env", s.GetHeadersEnv(), s.GetUrl())...)
+		if o := s.GetOauth(); o != nil {
+			field := "MCP server " + s.GetName() + " oauth."
+			// The id and secret go to the token endpoint, and the token they buy goes to the
+			// server, so the grant has to cover both destinations: a caller granted only the
+			// token endpoint must not be able to point the server URL somewhere else and
+			// receive the token.
+			for _, dest := range []string{o.GetTokenUrl(), s.GetUrl()} {
+				uses = append(uses,
+					Use{Env: o.GetClientIdEnv(), Field: field + "client_id_env", URL: dest},
+					Use{Env: o.GetClientSecretEnv(), Field: field + "client_secret_env", URL: dest})
+			}
+		}
 	}
 	uses = append(uses, ParamUses("spec.harness.external.config", spec.GetHarness().GetExternal().GetConfig(), nil)...)
 	return uses, nil

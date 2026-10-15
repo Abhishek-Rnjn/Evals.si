@@ -206,6 +206,35 @@ func TestSpecUsesCoverFallbackModels(t *testing.T) {
 	}
 }
 
+func TestSpecUsesCoverMCPOAuthSecrets(t *testing.T) {
+	spec := &evalsiv1alpha1.RunSpec{
+		Harness: &evalsiv1alpha1.Harness{Kind: &evalsiv1alpha1.Harness_Builtin{Builtin: &evalsiv1alpha1.BuiltinHarness{
+			Tools: &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{
+				Name: "crm", Url: "https://crm.example/mcp",
+				Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://auth.example/token", ClientIdEnv: "CRM_ID", ClientSecretEnv: "CRM_SECRET"},
+			}}},
+		}}},
+	}
+	uses, err := SpecUses(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The secrets go to the token endpoint and the token they buy goes to the server, so a
+	// grant is checked against both destinations.
+	dests := map[string]map[string]bool{}
+	for _, u := range uses {
+		if dests[u.Env] == nil {
+			dests[u.Env] = map[string]bool{}
+		}
+		dests[u.Env][u.URL] = true
+	}
+	for _, env := range []string{"CRM_ID", "CRM_SECRET"} {
+		if !dests[env]["https://auth.example/token"] || !dests[env]["https://crm.example/mcp"] {
+			t.Errorf("%s is checked against %v, want the token endpoint and the server", env, dests[env])
+		}
+	}
+}
+
 func TestSpecUses(t *testing.T) {
 	harnessCfg, _ := structpb.NewStruct(map[string]any{"base_url": "https://h.example", "secret_env": "H_SECRET"})
 	spec := &evalsiv1alpha1.RunSpec{

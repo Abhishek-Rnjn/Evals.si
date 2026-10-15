@@ -76,6 +76,10 @@ class ScriptedModelServer:
     def __init__(self, script: Script) -> None:
         self.script = script
         self.requests: list[dict[str, Any]] = []
+        # Report prompt tokens from the size of the request (4 characters a
+        # token) instead of a fixed 100, so context management has something real
+        # to count.
+        self.sized_usage = False
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -83,8 +87,10 @@ class ScriptedModelServer:
                 pass
 
             def do_POST(self) -> None:
-                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                raw = self.rfile.read(int(self.headers["Content-Length"]))
+                body = json.loads(raw)
                 outer.requests.append(body)
+                prompt_tokens = len(raw) // 4 if outer.sized_usage else 100
                 anthropic = self.path.endswith("/messages")
                 if anthropic:
                     messages = _to_openai_messages(body)
@@ -93,6 +99,14 @@ class ScriptedModelServer:
                     messages = body["messages"]
                     tools = [t["function"]["name"] for t in body.get("tools", [])]
                 reply = outer.script(messages, tools)
+                if reply.get("status"):  # a scripted provider failure
+                    data = json.dumps({"error": {"message": "scripted failure"}}).encode()
+                    self.send_response(reply["status"])
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 calls = reply.get("tool_calls") or []
                 n = len(outer.requests)
                 if anthropic:
@@ -111,7 +125,7 @@ class ScriptedModelServer:
                     payload: dict[str, Any] = {
                         "content": blocks,
                         "stop_reason": reply.get("stop") or ("tool_use" if calls else "end_turn"),
-                        "usage": {"input_tokens": 100, "output_tokens": 20},
+                        "usage": {"input_tokens": prompt_tokens, "output_tokens": 20},
                     }
                 else:
                     message: dict[str, Any] = {
@@ -135,7 +149,7 @@ class ScriptedModelServer:
                                 or ("tool_calls" if calls else "stop"),
                             }
                         ],
-                        "usage": {"prompt_tokens": 100, "completion_tokens": 20},
+                        "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 20},
                     }
                 data = json.dumps(payload).encode()
                 self.send_response(200)
@@ -224,6 +238,8 @@ class LocalSandbox:
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode() if isinstance(content, str) else content)
+            if mode:
+                path.chmod(mode)
 
     async def read_files(self, paths: Sequence[str], max_bytes: int = 0) -> dict[str, bytes]:
         out: dict[str, bytes] = {}

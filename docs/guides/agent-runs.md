@@ -94,10 +94,83 @@ Notes on environments:
 | `instructions` | appended to the system prompt |
 | `tools.mcp` | MCP servers (streamable HTTP, or stdio commands) whose tools the agent gets |
 | `tools.mocks` | canned tools: one `response`, or `responses` keyed by arguments |
+| `tools.builtin` | more built-in tools, by name: `edit_file` (replace exact text; fails if the text is missing or not unique, keeps a script executable), `glob`, `grep` (extended regular expressions, binary files skipped) and `apply_patch` (a unified diff, checked first and applied all or nothing, through `git apply` or `patch`), `memory` (notes under `.evalsi-memory/` that survive context management: list, read, write, append, delete) `session_search` (search the run's unabridged history for some text, including tool output that was cleared or summarized, and read an entry back in full) `delegate` (hand a self-contained subtask to a sub-agent and keep only its report; see [Sub-agents](#sub-agents)) `tool_search` (the MCP tools start unloaded; see [MCP servers](#mcp-servers)) and `code_mode` (the agent acts through scripts; see [Code mode](#code-mode)). Off by default, so a comparison between models uses the same toolset unless a spec lists them; `edit_file`, `apply_patch` and `memory` run again on replay, like `bash`; naming `memory` or `session_search` also adds a line about it to the system prompt |
 | `tools.faults` | deterministic fault injection (`error`, `timeout`, `malformed`) per tool, at a rate |
 | `user_simulator: {persona, goal, max_turns, judge}` | an LLM user for multi-turn tasks, speaking through a judge |
-| `recording: {mode: record\|replay, dir, branch_at_step}` | captures model calls and tool I/O. Replay reruns sandbox commands, so the environment is rebuilt; `branch_at_step: N` replays N steps, then continues live |
+| `recording: {mode, dir, branch_at_step, fork_as}` | a session log of model calls and tool I/O, written as it happens. `record` starts one; `replay` serves it (sandbox commands and edits run again, so the environment is rebuilt), and with `branch_at_step: N` replays N turns and then continues live; `resume` continues an interrupted trial (replay its log, then run live and append to it; a trial with no log starts one); `fork` replays the first `branch_at_step` turns of a log and goes live into a new log that names its parent. See [Sessions](#sessions-resume-and-fork) |
 | `escalation.allow` | escalation kinds the harness grants (`network`) |
+
+### Long runs: context management
+
+Without `harness.builtin.context`, the whole conversation is resent every step until it overflows the model's window. Set a strategy and the window to keep a long run going:
+
+| Field | What it does |
+|---|---|
+| `strategy` | `none` (default); `fresh-rounds` and `evidence-state` (see below); `clear-tool-results` replaces old tool results with a stub such as `[tool result cleared to save context: 5120 characters from bash]`, keeping the message and its tool-call id; `compact` clears first, and when that is not enough has the agent's own model summarize the earlier turns (the task message, a summary, then the last `keep_turns` turns verbatim) |
+| `window_tokens` | the model's context window (at least 4,000); required for any strategy but `none` |
+| `trigger`, `target` | start at this fraction of the window (default 0.8) and go down to this one (default 0.5). Working in batches rewrites the provider's prompt cache once per batch, not on every turn |
+| `keep_recent`, `keep_turns`, `summary_max_tokens` | tool results kept intact (4), assistant turns kept verbatim after a summary (6), and the summary's output limit (4096) |
+| `spill_outputs` | a `bash` output over 16,000 characters is written to `.evalsi-out/NNNN.txt` in the sandbox and the reply carries its head, tail and path, instead of being clipped in the middle. The files are Evals.si's own, so they stay out of the agent's diff |
+
+The prompt size is the model's last reported `input_tokens`, scaled by characters to the conversation as it now is, so it follows the real tokenizer. Every clear and compaction is a step named `context:clear-tool-results` or `context:compact`, with `evalsi.context.tokens_before`, `tokens_after` and what was removed; a compaction's model call is billed to the run (and to `max_usd`) but is not one of `max_steps`. The run's `agent.context` metadata totals them: `clears`, `compactions`, `results_cleared`, `chars_removed`, `tokens_removed`, `turns_summarized` and `summary_failures`. A summary that comes back cut off or empty is not used: the run keeps the cleared conversation instead.
+
+A recording replays only under the strategy and window it was recorded with (the cassette header names them), since another strategy would send the model different conversations; the summary call is recorded in sequence like any other model call.
+
+**`fresh-rounds`** (the Ralph pattern) trades one long conversation for several short ones. Each round is a new agent with a clean context: it starts from the task and the notes the previous round kept in its memory file `progress.md` (the `memory` tool is added for it), plus whatever the earlier rounds left in the sandbox. A round ends when the agent replies without calling tools or reaches `round_steps` model calls (default 30). The run ends when a reply carries `TASK_COMPLETE`, or after `rounds` rounds (default 5) with stop reason `max_steps` and an error saying so; `max_steps` and the other budgets bound the whole run. It needs no `window_tokens`; each round's context is as long as `round_steps` makes it. The prompt tells the agent about the notes and the marker, every new round is a `context:round` step, and `agent.context.rounds` counts the fresh starts. `session_search` still sees all rounds.
+
+**`evidence-state`**, after the LongHarness paper, is for questions over a corpus. The agent keeps two lists in an `evidence` tool, outside the conversation: **evidence** (a statement, a source and a quote copied verbatim from something it read; an entry whose quote is not in any tool result or the task is refused, and the agent's own words never count) and **conclusions** (a claim, the evidence ids that support it and the gaps still open; a claim with an open gap is not supported). A correction supersedes or retracts an entry instead of appending next to it, and a claim follows a superseded entry or reopens when its last support is retracted. The state is shown to the model on every call, as a message sent with that call only, so it is never in the conversation. When the window fills, old tool results are cleared first, and if that is not enough the conversation is cut to the task and the last `keep_turns` turns: the state carries over, and there is no summary to trust. `agent.evidence` counts the entries and conclusions, and each cut is a `context:evidence-state` step. The paper's ablations found structured state beat free-text notes by 6.8 to 7.8 points on one benchmark with one run per setting, so compare it with `compact` and `fresh-rounds` on your tasks before relying on it.
+
+### MCP servers
+
+`tools.mcp` lists MCP servers (a streamable HTTP `url`, or a `command` the worker starts that speaks MCP over stdio). Besides `name`, `headers_env` and `tools` (which tools to expose), a server takes:
+
+| Field | What it does |
+|---|---|
+| `timeout_s`, `tool_timeout_s: {tool: seconds}` | how long a request may take (default 120 s), and a limit per tool. A tool that runs out of time returns an error the agent sees, and the connection stays usable |
+| `resources`, `prompts` | also offer the server's resources and prompt templates, as `<name>_resources` (list, read) and `<name>_prompts` (list, get) tools |
+| `elicitation` | let the server ask the user a question in the middle of a call (MCP elicitation), answered by the [user simulator](#harness-options), which the spec must set. The reply is fitted to the question's schema: an enum takes the option it names, a boolean yes or no, a number the number next to the property's name or the next one in order, a string the whole reply; a required value the reply cannot supply is a decline. The answers do not use the conversation's simulated-user turns (a replay serves the tool's recorded result without asking, so a turn taken at record time would drift the two apart), at most ten questions are answered a run, and they are on the tool's step as `evalsi.tool.elicitations` |
+| `oauth: {token_url, client_id_env, client_secret_env, scope}` | reach a remote server with an OAuth 2 client-credentials token (the machine flow; a run has no one to approve a browser redirect). The token is fetched once, reused until it nears expiry, and refreshed on a 401. The two variables are read by the worker and, on a server, must be granted to the run's project, for the token endpoint and for the server's URL, since the token goes to the server |
+
+Tool results are shaped for a context: images and audio become a note (`[image/png content, 2001 bytes, not shown]`), not base64; a resource link becomes its uri; a tool's `outputSchema` is added to its description, and structured output is returned as JSON when there is no text.
+
+With **`tool_search`** in `tools.builtin`, the MCP tools start unloaded. The model sees the sandbox tools and one `tool_search` tool whose description counts and names what exists; a search by what it needs to do loads the best matches (up to five), which are in the tool list from the next step. This keeps hundreds of schemas out of every prompt. Loading appends to the tool list, so the earlier part of the prompt keeps its cache. Calling a tool that is not loaded returns an error that says to search.
+
+### Code mode
+
+With `code_mode` in `tools.builtin`, the model is offered one tool, `run_code`, whose description lists the task's other tools as functions. It writes a short Python script that calls them, loops over what they return and `print`s only what it needs, and that output is the tool result. One script can read twenty files and print the three lines that matter, which is one round trip and a few tokens, not twenty of each. Tools return their output as a string (starting `ERROR: ` when the call failed), take their arguments by keyword or in schema order, and the calls the script makes are capped at 100.
+
+The script is not run by Python. The harness parses it and interprets a safe subset itself: variables, `if`, `for`, `while`, `try`, comprehensions, f-strings, `def` and `lambda`, the usual string, list, dict and set methods, and `json`. There is no `open`, `eval`, `exec`, `getattr`, `type`, `str.format`, class, `with`, import other than `json`, or attribute starting with an underscore, so a script reaches nothing but its tools, and model-written code never runs on the worker. There are no regular expressions either: a pattern written by a model can backtrack for ever, and the interpreter shares a thread with every other trial (the `grep` tool does the searching). Operations (200,000), tool calls (100), output, `range`, exponents, recursion depth, the size of every string, list, dict and set (1,000,000 items) and of every integer (8,192 bits) are capped; sizes are checked before the result is built wherever the operands tell it (`*`, `+`, `**`, `extend`, `update`, `ljust`, `replace`, format widths) and after a native call otherwise. A cap ends the script with a message the model sees, and a script's own `try` cannot swallow it.
+
+Every call a script makes goes through the same path as a direct one: it is a tool step under the `run_code` step, hooks see it (a `Deny` shows up as an `ERROR: ` string in the script), and it is recorded and replayed with the run, sandbox-changing calls included. The other tools are hidden from the model, which is told to call them from `run_code`; MCP tools that `tool_search` leaves unloaded are not available to scripts.
+
+### Sub-agents
+
+Naming `delegate` in `tools.builtin` gives the agent a tool that starts a sub-agent on a task. The sub-agent has a clean context, the parent's tools (without `delegate`, so there is one level) and the same model, and runs for up to `delegate_steps` model calls (default 20; the agent may ask for fewer). Everything it reads and tries stays in its own conversation, and the parent gets its final report as the tool result, so a token-heavy subtask costs the parent a paragraph, not a context. This is the `offload` pattern, and it combines with the context strategies; a sub-agent has one job and one reply, so it runs with `fresh-rounds` turned off.
+
+Its spend is the parent's: tokens, spend and wall-clock time come out of what the parent has left (a `delegate` with nothing left is an error the agent sees), and `agent.subagents` and `agent.subagent_steps` total them. Its steps are on the trajectory under a `subagent` step that hangs from the `delegate` call, so a multi-agent run reads as a tree. Hooks apply to the sub-agent's tool calls too. Its model and tool calls are recorded in order with the parent's, so a replay reproduces them; `delegate` calls in one turn therefore run one after another.
+
+### Sessions: resume and fork
+
+A recording is an append-only session log, one file per task and trial, and every model turn and tool result is on disk as soon as it happens. That makes two things possible:
+
+- **Resume.** A trial killed by a worker restart or a dying provider leaves its log up to the last step. Run again with `recording: {mode: resume}`: the harness replays the log (the model is not called, and `bash`, `write_file`, `edit_file` and `apply_patch` run again, which is how the sandbox is restored) and carries on live, appending to the same log. A call that was in flight when the trial died, with no recorded result, simply runs. A half-written last line is dropped. The resumed trial grades the same as an uninterrupted one; the cost and the wall-clock budget restart from what the replay re-counts.
+- **Fork.** `recording: {mode: fork, branch_at_step: N, fork_as: "try-b"}` replays the first N turns of a log and goes live into a new log, `<task>.<fork_as>.jsonl` (default `<task>.fork-1.jsonl`, then `-2`), which holds the prefix and the new continuation and names its parent in its header. The source log is untouched, and the fork replays on its own. Forking at different turns, or with a different model, gives counterfactual runs from a shared start; a fork must keep the hooks, tools and context strategy of its source, since a changed hook or tool changes the replayed prefix. `evalsi_harness.cassette.session_tree(dir)` lists the logs and how they descend from each other.
+
+A log is valid only for the context strategy, hooks and optional tools (`tools.builtin`, `delegate_steps`) it was recorded with; resuming, forking or replaying under others is refused.
+
+### Hooks
+
+`harness.builtin.hooks` lists Python classes (`module:Class`, with an optional `config`) that run at the agent's lifecycle points, so changing the prompt, gating a tool or reacting to a compaction does not mean forking the loop. A class is built as `Class(config)` and has any of these methods, sync or async:
+
+| Method | Returns |
+|---|---|
+| `before_model(ctx, request)` | `None`, or a `ModelRequest(messages, system)` to send for this call only; the conversation itself is unchanged |
+| `before_tool(ctx, call)` | `None` to allow, `Deny(reason)` (the agent sees the reason as the tool's error and the tool does not run), or `Rewrite(arguments)` |
+| `after_tool(ctx, call, result)` | `None`, or a `ToolResult` to take its place |
+| `on_compaction(ctx, step)` | nothing; sees each context-management step |
+| `on_stop(ctx, final)` | `None` to let the agent finish, or `Continue(message)` to send it one more user message (at most three times a run), for example to ask it to run the tests |
+
+Every decision is a step named `hook:<module:Class>` with `evalsi.hook.event`, `decision`, `reason` and, for a rewrite, `original_arguments`, so evaluators see what a hook changed. Hooks are called in the order listed, and a `Deny` stops the hooks after it. For parallel tool calls the hooks see the calls one at a time, in order, before any runs. An exception in a hook ends the run with the error: a gate that silently stopped gating would be worse. On a server the class must be listed under `agents.trusted_python`, like other Python the worker runs, and a recording replays only with the same hooks in the same order (and the same tools and context strategy).
 
 ### Model options
 

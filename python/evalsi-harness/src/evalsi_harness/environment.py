@@ -73,6 +73,8 @@ class TaskEnvironment:
     config: EnvironmentConfig
     policy_events: list[PolicyEvent] = field(default_factory=list)
     _egress_seen: int = 0
+    # Large tool outputs written to .evalsi-out/ so far (file names count up).
+    spilled: int = 0
 
     @property
     def workdir(self) -> str:

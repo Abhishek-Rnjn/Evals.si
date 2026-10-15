@@ -973,6 +973,46 @@ spec:
                             x-kubernetes-int-or-string: true
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                      context:
+                        properties:
+                          keep_recent:
+                            type: integer
+                          keep_turns:
+                            type: integer
+                          keepRecent:
+                            type: integer
+                          keepTurns:
+                            type: integer
+                          round_steps:
+                            type: integer
+                          roundSteps:
+                            type: integer
+                          rounds:
+                            type: integer
+                          spill_outputs:
+                            type: boolean
+                          spillOutputs:
+                            type: boolean
+                          strategy:
+                            type: string
+                          summary_max_tokens:
+                            type: integer
+                          summaryMaxTokens:
+                            type: integer
+                          target:
+                            type: number
+                          trigger:
+                            type: number
+                          window_tokens:
+                            type: integer
+                          windowTokens:
+                            type: integer
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      delegate_steps:
+                        type: integer
+                      delegateSteps:
+                        type: integer
                       escalation:
                         properties:
                           allow:
@@ -981,6 +1021,17 @@ spec:
                             type: array
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                      hooks:
+                        items:
+                          properties:
+                            config:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                            python:
+                              type: string
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type: array
                       instructions:
                         type: string
                       max_steps:
@@ -1011,12 +1062,20 @@ spec:
                             type: integer
                           dir:
                             type: string
+                          fork_as:
+                            type: string
+                          forkAs:
+                            type: string
                           mode:
                             type: string
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
                       tools:
                         properties:
+                          builtin:
+                            items:
+                              type: string
+                            type: array
                           faults:
                             items:
                               properties:
@@ -1036,6 +1095,8 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                elicitation:
+                                  type: boolean
                                 headers_env:
                                   additionalProperties:
                                     type: string
@@ -1046,6 +1107,40 @@ spec:
                                   type: object
                                 name:
                                   type: string
+                                oauth:
+                                  properties:
+                                    client_id_env:
+                                      type: string
+                                    client_secret_env:
+                                      type: string
+                                    clientIdEnv:
+                                      type: string
+                                    clientSecretEnv:
+                                      type: string
+                                    scope:
+                                      type: string
+                                    token_url:
+                                      type: string
+                                    tokenUrl:
+                                      type: string
+                                  type: object
+                                  x-kubernetes-preserve-unknown-fields: true
+                                prompts:
+                                  type: boolean
+                                resources:
+                                  type: boolean
+                                timeout_s:
+                                  type: integer
+                                timeoutS:
+                                  type: integer
+                                tool_timeout_s:
+                                  additionalProperties:
+                                    type: integer
+                                  type: object
+                                toolTimeoutS:
+                                  additionalProperties:
+                                    type: integer
+                                  type: object
                                 tools:
                                   items:
                                     type: string

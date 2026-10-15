@@ -72,9 +72,14 @@ class FunctionTool:
 # --- sandbox tools ---
 
 
+SPILL_DIR = ".evalsi-out"
+SPILL_SHOWN = OUTPUT_LIMIT // 4  # characters of head, and of tail, kept in the reply
+
+
 class BashTool:
-    def __init__(self, env: TaskEnvironment) -> None:
+    def __init__(self, env: TaskEnvironment, *, spill: bool = False) -> None:
         self.env = env
+        self.spill = spill
         self.spec = ToolSpec(
             name="bash",
             description=(
@@ -114,11 +119,31 @@ class BashTool:
         if result.denials:
             parts.append(f"[sandbox denied: {', '.join(result.denials)}]")
         parts.append(f"[exit code {result.exit_code}]")
-        return ToolResult(
-            _clip("\n".join(parts)),
-            is_error=not result.ok,
-            metadata={"exit_code": result.exit_code, "outcome": result.outcome},
+        text = "\n".join(parts)
+        meta: dict[str, Any] = {"exit_code": result.exit_code, "outcome": result.outcome}
+        if self.spill and len(text) > OUTPUT_LIMIT:
+            spilled = await self._spill(text)
+            if spilled is not None:
+                text, path = spilled
+                meta["spilled_to"] = path
+        return ToolResult(_clip(text), is_error=not result.ok, metadata=meta)
+
+    async def _spill(self, text: str) -> tuple[str, str] | None:
+        """Writes a large output to a file in the sandbox and returns the head
+        and tail with its path. The files are Evals.si's own (``.evalsi-*``), so
+        they stay out of the agent's diff. None when the write fails."""
+        self.env.spilled += 1
+        path = f"{SPILL_DIR}/{self.env.spilled:04d}.txt"
+        try:
+            await self.env.sandbox.write_files({path: text})
+        except SandboxError:
+            return None
+        omitted = len(text) - 2 * SPILL_SHOWN
+        note = (
+            f"\n... [{omitted} more characters. The full output ({len(text)} characters) is in "
+            f"{path}: read ranges of it with sed -n, grep or tail] ...\n"
         )
+        return text[:SPILL_SHOWN] + note + text[-SPILL_SHOWN:], path
 
 
 class ReadFileTool:
@@ -175,8 +200,8 @@ class WriteFileTool:
         return ToolResult(f"wrote {len(content.encode())} bytes to {path}")
 
 
-def sandbox_tools(env: TaskEnvironment) -> list[Tool]:
-    return [BashTool(env), ReadFileTool(env), WriteFileTool(env)]
+def sandbox_tools(env: TaskEnvironment, *, spill_outputs: bool = False) -> list[Tool]:
+    return [BashTool(env, spill=spill_outputs), ReadFileTool(env), WriteFileTool(env)]
 
 
 # --- mocks and faults ---

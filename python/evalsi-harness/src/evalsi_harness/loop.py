@@ -10,11 +10,23 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
+from evalsi_harness.archive import Archive, SessionSearchTool
+from evalsi_harness.codemode import RunCodeTool
+from evalsi_harness.context import (
+    PROGRESS_NOTE,
+    ROUND_DONE,
+    ContextConfig,
+    ContextView,
+    make_strategy,
+)
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
+from evalsi_harness.evidence import EvidenceState, EvidenceTool
+from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
 from evalsi_harness.models import (
     ChatModel,
     ModelError,
@@ -22,8 +34,17 @@ from evalsi_harness.models import (
     ToolCallRequest,
     thinking_text,
 )
+from evalsi_harness.subagent import DelegateTool
 from evalsi_harness.tools import Tool, ToolResult
+from evalsi_harness.toolsearch import ToolSearchTool
 from evalsi_harness.user_sim import UserSimulator
+
+ROUND_OPENING = (
+    "Round {n} of {total}. This is a fresh start: the conversation of the earlier rounds is gone, "
+    "and the files they changed are still there. The notes you kept in {file}:\n\n{notes}\n\n"
+    "Continue the task from where those notes leave off, and keep {file} up to date. When the "
+    "whole task is complete, end your reply with {done}."
+)
 
 DEFAULT_SYSTEM = (
     "You are an autonomous agent completing a task. Use the tools available to you to "
@@ -52,6 +73,13 @@ class LoopConfig:
     # The same per model, by name: the retry limit follows the model that served
     # the turn (a fallback has limits of its own).
     truncation_retry_by_model: dict[str, int] = field(default_factory=dict)
+    # Offer session_search over the run's unabridged history.
+    session_search: bool = False
+    # Code mode: the model sees one tool, run_code, and acts through scripts.
+    code_mode: bool = False
+    # Offer delegate, with sub-agents of up to this many steps (0: not offered).
+    delegate_steps: int = 0
+    context: ContextConfig = field(default_factory=ContextConfig)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
 
@@ -65,6 +93,8 @@ class LoopState:
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     truncated_turns: int = 0
+    subagents: int = 0
+    subagent_steps: int = 0
     reasoning_tokens: int = 0
     truncation_retries: int = 0
 
@@ -83,18 +113,59 @@ class AgentLoop:
         emit: Emit,
         *,
         user: UserSimulator | None = None,
+        hooks: Hooks | None = None,
+        progress: Callable[[], Awaitable[str]] | None = None,
     ) -> None:
+        self.archive = Archive()
+        # What a sub-agent gets is what the caller passed: the tools added below are bound
+        # to this loop (its archive, its budget), and a sub-agent builds its own.
+        self._base_tools = list(tools)
+        if config.session_search:
+            tools = [*tools, SessionSearchTool(self.archive)]
+        if config.delegate_steps:
+            tools = [*tools, DelegateTool(self, config.delegate_steps)]
         names = [t.spec.name for t in tools]
         dupes = {n for n in names if names.count(n) > 1}
         if dupes:
             raise ValueError(f"two tools share the name(s) {sorted(dupes)}")
         self.model = model
         self.tools = {t.spec.name: t for t in tools}
+        # Tools that start unloaded (tool_search loads them as the agent needs).
+        self.deferred = {t.spec.name for t in tools if getattr(t, "deferred", False)}
+        # Tools the model cannot call directly (code mode: run_code calls them).
+        self.hidden: set[str] = set()
+        self._inner_calls = 0
+        self.active: set[str] = set()
+        if self.deferred:
+            search = ToolSearchTool(self)
+            self.tools[search.spec.name] = search
+        if config.code_mode:
+            self._enable_code_mode()
         self.config = config
         self.emit = emit
         self.user = user
         self.state = LoopState()
+        self.hooks = hooks or Hooks()
+        self.stop_continues = 0
+        # fresh-rounds: reads the notes a round leaves for the next.
+        self.progress = progress
+        self._round_start = 0
+        self._started = time.monotonic()
         self.root = span_id()
+        self.evidence = (
+            EvidenceState(self.archive) if config.context.strategy == "evidence-state" else None
+        )
+        if self.evidence is not None:
+            self.tools["evidence"] = EvidenceTool(self.evidence)
+        self.strategy = make_strategy(config.context, self.evidence)
+        self.view = ContextView(
+            model=model,
+            system=config.system,
+            tools_chars=len(
+                json.dumps([(t.spec.name, t.spec.description, t.spec.input_schema) for t in tools])
+            ),
+            bill=self._bill,
+        )
 
     def cost(self) -> float:
         u, c, st = self.state.usage, self.config, self.state
@@ -113,6 +184,11 @@ class AgentLoop:
         c, u = self.config, self.state.usage
         if self.state.steps >= c.max_steps:
             return "max_steps"
+        if (
+            c.context.strategy == "fresh-rounds"
+            and self.state.steps - self._round_start >= c.context.round_steps
+        ):
+            return "round_limit"
         if c.max_tokens and (u.input_tokens or 0) + (u.output_tokens or 0) >= c.max_tokens:
             return "budget"
         if c.max_usd and self.cost() >= c.max_usd:
@@ -142,24 +218,167 @@ class AgentLoop:
                 "cache_write_tokens": self.state.cache_write_tokens,
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
+                **(
+                    {
+                        "subagents": self.state.subagents,
+                        "subagent_steps": self.state.subagent_steps,
+                    }
+                    if self.config.delegate_steps
+                    else {}
+                ),
+                **(
+                    {"context": self.strategy.stats.to_dict()}
+                    if self.config.context.strategy != "none"
+                    else {}
+                ),
+                **({"evidence": self.evidence.counts()} if self.evidence is not None else {}),
             },
         )
 
+    def _enable_code_mode(self) -> None:
+        """The model sees run_code alone; the rest of the tools become functions in it."""
+        scripted = {
+            name: t.spec
+            for name, t in self.tools.items()
+            if name not in self.deferred and name not in ("tool_search", "delegate")
+        }
+        loop = self
+
+        class Bridge(RunCodeTool):
+            async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
+                def bound(name: str) -> Any:
+                    async def go(arguments: dict[str, Any]) -> ToolResult:
+                        return await loop.inner_call(name, arguments, span)
+
+                    return go
+
+                self.callables = {name: bound(name) for name in scripted}
+                return await super().call(args, span=span)
+
+        tool = Bridge({}, scripted)
+        self.tools[tool.spec.name] = tool
+        self.hidden = set(scripted)
+
+    def _specs(self) -> list[Any]:
+        """The tools the model sees now: all but the deferred ones not yet loaded."""
+        return [
+            t.spec
+            for name, t in self.tools.items()
+            if (name not in self.deferred or name in self.active) and name not in self.hidden
+        ]
+
+    def sub_tools(self) -> list[Tool]:
+        """What a sub-agent gets: the parent's tools, without delegate."""
+        return list(self._base_tools)
+
+    def remaining_budget(self) -> dict[str, Any] | None:
+        """What a sub-agent may spend: what the parent has left. None when nothing is."""
+        c, u = self.config, self.state.usage
+        tokens = usd = wall = 0.0
+        if c.max_tokens:
+            tokens = c.max_tokens - ((u.input_tokens or 0) + (u.output_tokens or 0))
+            if tokens <= 0:
+                return None
+        if c.max_usd:
+            usd = c.max_usd - self.cost()
+            if usd <= 0:
+                return None
+        if c.wall_clock_s:
+            wall = c.wall_clock_s - (time.monotonic() - self._started)
+            if wall <= 0:
+                return None
+        return {"tokens": int(tokens), "usd": usd, "wall_clock_s": wall}
+
+    def bill_subagent(self, final: FinalEvent, sub: AgentLoop) -> None:
+        """Adds a finished sub-agent's spend to this run's."""
+        if final.usage is not None:
+            _add(self.state.usage, final.usage)
+        self.state.cache_read_tokens += sub.state.cache_read_tokens
+        self.state.cache_write_tokens += sub.state.cache_write_tokens
+        self.state.reasoning_tokens += sub.state.reasoning_tokens
+        self.state.subagents += 1
+        self.state.subagent_steps += sub.state.steps
+
     async def run(self, conversation: list[dict[str, Any]]) -> FinalEvent:
         started = time.monotonic()
+        self._started = started
+        for message in conversation:
+            self.archive.add(message)
         try:
             async with asyncio.timeout(self.config.wall_clock_s or None):
+                if self.config.context.strategy == "fresh-rounds":
+                    return await self._rounds(list(conversation), started)
                 return await self._loop(list(conversation), started)
         except TimeoutError:
             return self._final("", "timeout")
 
+    async def _rounds(self, conversation: list[dict[str, Any]], started: float) -> FinalEvent:
+        """The Ralph pattern: each round is a new agent on the task and the notes
+        the last one kept, until a reply says the task is complete or the rounds
+        run out. Only the progress notes and the sandbox carry over."""
+        c = self.config.context
+        final = self._final("", "max_steps")
+        for round_no in range(1, c.rounds + 1):
+            messages = list(conversation)
+            self._round_start = self.state.steps
+            if round_no > 1:
+                notes = (await self.progress()) if self.progress else ""
+                opening = ROUND_OPENING.format(
+                    n=round_no,
+                    total=c.rounds,
+                    notes=notes.strip() or "(none: nothing was written to progress.md)",
+                    done=ROUND_DONE,
+                    file=PROGRESS_NOTE,
+                )
+                messages.append({"role": "user", "content": opening})
+                self.archive.add(messages[-1])
+                self.strategy.stats.rounds += 1
+                self.emit(
+                    StepEvent(
+                        Step(
+                            type="agent",
+                            name="context:round",
+                            output=Content(text=f"round {round_no} of {c.rounds}"),
+                            span_id=span_id(),
+                            parent_span_id=self.root,
+                            attributes={
+                                "evalsi.context.round": round_no,
+                                "evalsi.context.notes_chars": len(notes),
+                            },
+                        )
+                    )
+                )
+            final = await self._loop(messages, started)
+            text = final.output.as_text() if final.output is not None else ""
+            finished = final.stop_reason == "completed" and ROUND_DONE in text
+            if finished or final.stop_reason not in ("completed", "round_limit"):
+                return final
+        # Out of rounds without the agent saying it was done.
+        return self._final(
+            final.output.as_text() if final.output is not None else "",
+            "max_steps",
+            error=f"{c.rounds} rounds ended without {ROUND_DONE}",
+        )
+
     async def _loop(self, messages: list[dict[str, Any]], started: float) -> FinalEvent:
-        specs = [t.spec for t in self.tools.values()]
         last_text = ""
         while True:
             if reason := self._over_budget(started):
                 return self._final(last_text, reason)
-            turn = await self._call_model(messages, specs)
+            prepared = await self.strategy.prepare(messages, self.view, parent=self.root)
+            if prepared.messages is not messages:
+                messages[:] = prepared.messages
+            for step in prepared.steps:
+                self.emit(StepEvent(step))
+                if step.name.startswith("context:"):
+                    await self.hooks.on_compaction(step, parent=self.root)
+            request = await self.hooks.before_model(
+                ModelRequest([*messages, *prepared.transient], self.config.system),
+                step=self.state.steps,
+                parent=self.root,
+            )
+            self._emit_hook_steps()
+            turn = await self._call_model(request.messages, self._specs(), request.system)
             last_text = turn.text or last_text
             if turn.truncated:
                 # Cut off by the output limit: a tool call may be half-written
@@ -169,13 +388,17 @@ class AgentLoop:
             if turn.stop_reason == "refusal":
                 return self._final(turn.text, "refusal")
             messages.append(turn.as_message())
+            self.archive.add(messages[-1])
             if turn.stop_reason == "pause_turn" and not turn.tool_calls:
                 continue  # the API asks for the turn to be resumed as it stands
             if turn.tool_calls:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
             if self.user is None:
-                return self._final(turn.text, "completed")
+                final = await self._finish(turn.text, messages)
+                if final is not None:
+                    return final
+                continue
             reply = await self.user.reply(messages)
             _add(self.state.user_usage, reply.usage)
             if reply.message:
@@ -191,8 +414,34 @@ class AgentLoop:
                     )
                 )
             if reply.done or not reply.message:
-                return self._final(turn.text, "completed")
+                final = await self._finish(turn.text, messages)
+                if final is not None:
+                    return final
+                continue
             messages.append({"role": "user", "content": reply.message})
+            self.archive.add(messages[-1])
+
+    def _emit_hook_steps(self) -> None:
+        for step in self.hooks.drain():
+            self.emit(StepEvent(step))
+
+    async def _finish(self, text: str, messages: list[dict[str, Any]]) -> FinalEvent | None:
+        """The final event for a normal finish, or None when an ``on_stop`` hook
+        sent the agent back to work with one more message."""
+        final = self._final(text, "completed")
+        if self.hooks and self.stop_continues < MAX_CONTINUES:
+            more = await self.hooks.on_stop(final, step=self.state.steps, parent=self.root)
+            self._emit_hook_steps()
+            if more is not None:
+                self.stop_continues += 1
+                messages.append({"role": "user", "content": more.message})
+                self.archive.add(messages[-1])
+                return None
+        return final
+
+    def _bill(self, turn: ModelTurn) -> None:
+        """Spend on a model call that is not a step (a summary)."""
+        self._account(turn)
 
     def _account(self, turn: ModelTurn) -> None:
         _add(self.state.usage, turn.usage)
@@ -200,12 +449,15 @@ class AgentLoop:
         self.state.cache_write_tokens += turn.cache_write_tokens
         self.state.reasoning_tokens += turn.reasoning_tokens
 
-    async def _call_model(self, messages: list[dict[str, Any]], specs: list[Any]) -> ModelTurn:
+    async def _call_model(
+        self, messages: list[dict[str, Any]], specs: list[Any], system: str
+    ) -> ModelTurn:
         """One model step. A turn cut off by the output limit is tried again,
         once, with a higher limit; both calls are steps and both are billed."""
         step_span = span_id()
         start_ns = time.time_ns()
-        turn = await self.model.complete(messages, specs, system=self.config.system)
+        turn = await self.model.complete(messages, specs, system=system)
+        self.view.observe(messages, turn.usage.input_tokens)
         self.state.steps += 1
         self._account(turn)
         self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
@@ -218,7 +470,7 @@ class AgentLoop:
             return turn
         self.state.truncation_retries += 1
         try:
-            return await self._retry_cut_off(messages, specs, retry_to)
+            return await self._retry_cut_off(messages, specs, system, retry_to)
         except ModelError:
             # The provider refused the higher limit (above its output cap, or
             # past the context window). The cut-off turn stands, so the run
@@ -226,13 +478,11 @@ class AgentLoop:
             return turn
 
     async def _retry_cut_off(
-        self, messages: list[dict[str, Any]], specs: list[Any], limit: int
+        self, messages: list[dict[str, Any]], specs: list[Any], system: str, limit: int
     ) -> ModelTurn:
         step_span = span_id()
         start_ns = time.time_ns()
-        turn = await self.model.complete(
-            messages, specs, system=self.config.system, max_tokens=limit
-        )
+        turn = await self.model.complete(messages, specs, system=system, max_tokens=limit)
         self.state.steps += 1
         self._account(turn)
         self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
@@ -281,45 +531,34 @@ class AgentLoop:
     async def _call_tools(
         self, calls: list[ToolCallRequest], messages: list[dict[str, Any]]
     ) -> None:
-        async def one(call: ToolCallRequest) -> tuple[ToolCallRequest, ToolResult, Step]:
-            span = span_id()
-            start = time.perf_counter()
-            tool = self.tools.get(call.name)
-            try:
-                args = json.loads(call.arguments or "{}")
-            except json.JSONDecodeError as exc:
-                result = ToolResult(f"the arguments are not valid JSON: {exc}", is_error=True)
-            else:
-                if not isinstance(args, dict):
-                    result = ToolResult("the arguments must be a JSON object", is_error=True)
-                elif tool is None:
-                    known = ", ".join(sorted(self.tools)) or "none"
-                    result = ToolResult(
-                        f"there is no tool {call.name!r} (tools: {known})", is_error=True
-                    )
-                else:
-                    result = await tool.call(args, span=span)
-            step = Step(
-                type="tool",
-                name=call.name,
-                input=Content(text=call.arguments),
-                output=Content(text=result.content),
-                error=result.content[:500] if result.is_error else "",
-                span_id=span,
-                parent_span_id=self.root,
-                duration_ms=(time.perf_counter() - start) * 1000,
-                attributes={
-                    "gen_ai.tool.call.id": call.id,
-                    **{f"evalsi.tool.{k}": v for k, v in result.metadata.items()},
-                },
-            )
+        step_no = self.state.steps
+        # Hooks see the calls one at a time, in order, before any runs, so what
+        # they decide does not depend on how long the tools take.
+        prepared: list[tuple[ToolCallRequest, Deny | None]] = []
+        for call in calls:
+            prepared.append(await self.hooks.before_tool(call, step=step_no, parent=self.root))
+        self._emit_hook_steps()
+
+        async def one(
+            call: ToolCallRequest, denied: Deny | None
+        ) -> tuple[ToolCallRequest, ToolResult, Step]:
+            result, step = await self._execute(call, denied, self.root)
             return call, result, step
 
-        if self.config.parallel and len(calls) > 1:
-            done = await asyncio.gather(*(one(c) for c in calls))
+        # delegate calls run in order: a sub-agent's model calls are recorded in sequence.
+        concurrent = self.config.parallel and not any(c.name == "delegate" for c in calls)
+        if concurrent and len(calls) > 1:
+            done = await asyncio.gather(*(one(c, d) for c, d in prepared))
         else:
-            done = [await one(c) for c in calls]
-        for call, result, step in done:
+            done = [await one(c, d) for c, d in prepared]
+        for call, ran, step in done:
+            result = ran
+            if self.hooks:
+                result = await self.hooks.after_tool(call, ran, step=step_no, parent=self.root)
+                if result is not ran:
+                    step.output = Content(text=result.content)
+                    step.error = result.content[:500] if result.is_error else ""
+                self._emit_hook_steps()
             self.state.tool_calls += 1
             self.emit(StepEvent(step))
             messages.append(
@@ -330,3 +569,81 @@ class AgentLoop:
                     "is_error": result.is_error,
                 }
             )
+            self.archive.add({**messages[-1], "name": call.name})
+
+    async def _execute(
+        self, call: ToolCallRequest, denied: Deny | None, parent: str, *, inner: bool = False
+    ) -> tuple[ToolResult, Step]:
+        """Runs one tool call (unless a hook denied it) and builds its step, a
+        child of ``parent``. ``inner`` is a call made from a code-mode script."""
+        span = span_id()
+        start = time.perf_counter()
+        tool = self.tools.get(call.name)
+        if denied is not None:
+            result = ToolResult(
+                f"this call was denied by a hook: {denied.reason}",
+                is_error=True,
+                metadata={"hook_denied": True},
+            )
+            return result, self._tool_step(call, result, span, start, parent)
+        try:
+            args = json.loads(call.arguments or "{}")
+        except json.JSONDecodeError as exc:
+            result = ToolResult(f"the arguments are not valid JSON: {exc}", is_error=True)
+        else:
+            if not isinstance(args, dict):
+                result = ToolResult("the arguments must be a JSON object", is_error=True)
+            elif call.name in self.deferred and call.name not in self.active:
+                result = ToolResult(
+                    f"{call.name} is not loaded yet: call tool_search to load it", is_error=True
+                )
+            elif call.name in self.hidden and not inner:
+                result = ToolResult(
+                    f"{call.name} is only available inside a run_code script", is_error=True
+                )
+            elif tool is None:
+                known = ", ".join(sorted(self.tools)) or "none"
+                result = ToolResult(
+                    f"there is no tool {call.name!r} (tools: {known})", is_error=True
+                )
+            else:
+                result = await tool.call(args, span=span)
+        return result, self._tool_step(call, result, span, start, parent)
+
+    async def inner_call(self, name: str, arguments: dict[str, Any], parent: str) -> ToolResult:
+        """A tool call made by a code-mode script. It goes through hooks, is a step
+        under the ``run_code`` step, and is recorded and replayed like any other."""
+        self._inner_calls += 1
+        call = ToolCallRequest(f"inner-{self._inner_calls}", name, json.dumps(arguments))
+        step_no = self.state.steps
+        call, denied = await self.hooks.before_tool(call, step=step_no, parent=parent)
+        self._emit_hook_steps()
+        ran, step = await self._execute(call, denied, parent, inner=True)
+        result = ran
+        if self.hooks:
+            result = await self.hooks.after_tool(call, ran, step=step_no, parent=parent)
+            if result is not ran:
+                step.output = Content(text=result.content)
+                step.error = result.content[:500] if result.is_error else ""
+            self._emit_hook_steps()
+        self.state.tool_calls += 1
+        self.emit(StepEvent(step))
+        return result
+
+    def _tool_step(
+        self, call: ToolCallRequest, result: ToolResult, span: str, start: float, parent: str
+    ) -> Step:
+        return Step(
+            type="tool",
+            name=call.name,
+            input=Content(text=call.arguments),
+            output=Content(text=result.content),
+            error=result.content[:500] if result.is_error else "",
+            span_id=span,
+            parent_span_id=parent,
+            duration_ms=(time.perf_counter() - start) * 1000,
+            attributes={
+                "gen_ai.tool.call.id": call.id,
+                **{f"evalsi.tool.{k}": v for k, v in result.metadata.items()},
+            },
+        )

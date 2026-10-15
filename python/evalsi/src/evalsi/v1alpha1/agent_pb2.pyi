@@ -435,15 +435,51 @@ class MCPServer(_message.Message):
         _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
         def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
+    @_typing.final
+    class ToolTimeoutSEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.int
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.int = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     NAME_FIELD_NUMBER: _builtins.int
     URL_FIELD_NUMBER: _builtins.int
     COMMAND_FIELD_NUMBER: _builtins.int
     HEADERS_ENV_FIELD_NUMBER: _builtins.int
     TOOLS_FIELD_NUMBER: _builtins.int
+    TIMEOUT_S_FIELD_NUMBER: _builtins.int
+    TOOL_TIMEOUT_S_FIELD_NUMBER: _builtins.int
+    RESOURCES_FIELD_NUMBER: _builtins.int
+    PROMPTS_FIELD_NUMBER: _builtins.int
+    ELICITATION_FIELD_NUMBER: _builtins.int
+    OAUTH_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """A name used to prefix its tools when names collide."""
     url: _builtins.str
     """Streamable HTTP endpoint."""
+    timeout_s: _builtins.int
+    """Seconds a request to the server may take (default 120), and per tool
+    (by name) where a tool needs more or less.
+    """
+    resources: _builtins.bool
+    """Also offer the server's resources and prompts, as <name>_resources and
+    <name>_prompts tools.
+    """
+    prompts: _builtins.bool
+    elicitation: _builtins.bool
+    """Let the server ask the user questions mid-call (MCP elicitation), answered
+    by the user simulator, which spec.harness.builtin.user_simulator must set.
+    """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Or a command started on the worker that speaks MCP over stdio. It runs
@@ -456,6 +492,12 @@ class MCPServer(_message.Message):
     def tools(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Only these tools; all when empty."""
 
+    @_builtins.property
+    def tool_timeout_s(self) -> _containers.ScalarMap[_builtins.str, _builtins.int]: ...
+    @_builtins.property
+    def oauth(self) -> Global___MCPOAuth:
+        """Reach a url server with an OAuth 2 client-credentials token."""
+
     def __init__(
         self,
         *,
@@ -464,11 +506,49 @@ class MCPServer(_message.Message):
         command: _abc.Iterable[_builtins.str] | None = ...,
         headers_env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         tools: _abc.Iterable[_builtins.str] | None = ...,
+        timeout_s: _builtins.int = ...,
+        tool_timeout_s: _abc.Mapping[_builtins.str, _builtins.int] | None = ...,
+        resources: _builtins.bool = ...,
+        prompts: _builtins.bool = ...,
+        elicitation: _builtins.bool = ...,
+        oauth: Global___MCPOAuth | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "headers_env", b"headers_env", "name", b"name", "tools", b"tools", "url", b"url"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["oauth", b"oauth"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "elicitation", b"elicitation", "headers_env", b"headers_env", "name", b"name", "oauth", b"oauth", "prompts", b"prompts", "resources", b"resources", "timeout_s", b"timeout_s", "tool_timeout_s", b"tool_timeout_s", "tools", b"tools", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___MCPServer: _TypeAlias = MCPServer  # noqa: Y015
+
+@_typing.final
+class MCPOAuth(_message.Message):
+    """OAuth 2 client credentials: the machine flow, since a run has no one to
+    approve a browser redirect. The two variables are read by the worker and,
+    on a server, must be granted to the run's project (credentials.grants).
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    TOKEN_URL_FIELD_NUMBER: _builtins.int
+    CLIENT_ID_ENV_FIELD_NUMBER: _builtins.int
+    CLIENT_SECRET_ENV_FIELD_NUMBER: _builtins.int
+    SCOPE_FIELD_NUMBER: _builtins.int
+    token_url: _builtins.str
+    client_id_env: _builtins.str
+    client_secret_env: _builtins.str
+    scope: _builtins.str
+    def __init__(
+        self,
+        *,
+        token_url: _builtins.str = ...,
+        client_id_env: _builtins.str = ...,
+        client_secret_env: _builtins.str = ...,
+        scope: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["client_id_env", b"client_id_env", "client_secret_env", b"client_secret_env", "scope", b"scope", "token_url", b"token_url"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___MCPOAuth: _TypeAlias = MCPOAuth  # noqa: Y015
 
 @_typing.final
 class MockTool(_message.Message):
@@ -561,6 +641,7 @@ class Tools(_message.Message):
     MCP_FIELD_NUMBER: _builtins.int
     MOCKS_FIELD_NUMBER: _builtins.int
     FAULTS_FIELD_NUMBER: _builtins.int
+    BUILTIN_FIELD_NUMBER: _builtins.int
     sandbox: _builtins.bool
     """The sandbox tools (bash, read_file, write_file, list_files). On by
     default when the task has an environment.
@@ -571,6 +652,19 @@ class Tools(_message.Message):
     def mocks(self) -> _containers.RepeatedCompositeFieldContainer[Global___MockTool]: ...
     @_builtins.property
     def faults(self) -> _containers.RepeatedCompositeFieldContainer[Global___ToolFault]: ...
+    @_builtins.property
+    def builtin(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """More built-in tools to offer, by name: edit_file (exact-match replace),
+        glob, grep, apply_patch (a unified diff), memory (notes that survive
+        context management), session_search (find and re-read what context
+        management removed) delegate (hand a subtask to a sub-agent with a
+        fresh context and keep only its report) tool_search (the MCP tools
+        start unloaded and the agent loads the ones it needs by searching) and
+        code_mode (the agent sees one tool, run_code, and acts by writing a script
+        that calls the other tools as functions; only what it prints comes back). Off by default, so a comparison between models uses
+        the same toolset unless a spec says so.
+        """
+
     def __init__(
         self,
         *,
@@ -578,10 +672,11 @@ class Tools(_message.Message):
         mcp: _abc.Iterable[Global___MCPServer] | None = ...,
         mocks: _abc.Iterable[Global___MockTool] | None = ...,
         faults: _abc.Iterable[Global___ToolFault] | None = ...,
+        builtin: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox", "sandbox", b"sandbox"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox", "faults", b"faults", "mcp", b"mcp", "mocks", b"mocks", "sandbox", b"sandbox"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox", "builtin", b"builtin", "faults", b"faults", "mcp", b"mcp", "mocks", b"mocks", "sandbox", b"sandbox"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__sandbox: _TypeAlias = _typing.Literal["sandbox"]  # noqa: Y015
     _WhichOneofArgType__sandbox: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox"]  # noqa: Y015
@@ -623,29 +718,50 @@ Global___UserSimulator: _TypeAlias = UserSimulator  # noqa: Y015
 
 @_typing.final
 class Recording(_message.Message):
-    """Record and replay of model calls and tool I/O."""
+    """Record and replay of model calls and tool I/O. A recording is a session
+    log: every model turn and tool result is written as it happens, so a trial
+    that dies leaves everything up to its last step.
+    """
 
     DESCRIPTOR: _descriptor.Descriptor
 
     MODE_FIELD_NUMBER: _builtins.int
     DIR_FIELD_NUMBER: _builtins.int
     BRANCH_AT_STEP_FIELD_NUMBER: _builtins.int
+    FORK_AS_FIELD_NUMBER: _builtins.int
     mode: _builtins.str
-    """"off" (default), "record" or "replay"."""
+    """"off" (default), "record", "replay", "resume" or "fork".
+      record: start a new log (replacing one).
+      replay: serve a log's model turns and tool results (sandbox tools run
+        again, so the environment is rebuilt); with branch_at_step, replay
+        the first N turns and then continue live without saving.
+      resume: continue an interrupted trial: replay its log, then run live
+        and append to the same log. A trial with no log starts one.
+      fork: replay the first branch_at_step turns of a log, then run live,
+        writing a new log (fork_as) that holds that prefix and the new
+        continuation and names the log it forked from.
+    """
     dir: _builtins.str
     """Directory for cassettes, one per task and trial. Embedded: relative to
     the spec. Server: inside datasets_dir.
     """
     branch_at_step: _builtins.int
-    """replay: replay the first N steps, then continue live (branching)."""
+    """replay and fork: the number of model turns to replay before going live.
+    Required for fork.
+    """
+    fork_as: _builtins.str
+    """fork: the new log's name (letters, digits, dots, dashes and underscores);
+    default: the source's name with ".fork-N".
+    """
     def __init__(
         self,
         *,
         mode: _builtins.str = ...,
         dir: _builtins.str = ...,
         branch_at_step: _builtins.int = ...,
+        fork_as: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["branch_at_step", b"branch_at_step", "dir", b"dir", "mode", b"mode"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["branch_at_step", b"branch_at_step", "dir", b"dir", "fork_as", b"fork_as", "mode", b"mode"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Recording: _TypeAlias = Recording  # noqa: Y015
@@ -686,12 +802,19 @@ class BuiltinHarness(_message.Message):
     ESCALATION_FIELD_NUMBER: _builtins.int
     PARALLEL_TOOL_CALLS_FIELD_NUMBER: _builtins.int
     INSTRUCTIONS_FIELD_NUMBER: _builtins.int
+    CONTEXT_FIELD_NUMBER: _builtins.int
+    HOOKS_FIELD_NUMBER: _builtins.int
+    DELEGATE_STEPS_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
     """Run a model's parallel tool calls concurrently (default true)."""
     instructions: _builtins.str
     """Appended to the agent's system prompt."""
+    delegate_steps: _builtins.int
+    """With "delegate" among tools.builtin: the model calls a sub-agent may make
+    for one task (default 20). Its budget comes out of the parent's.
+    """
     @_builtins.property
     def budget(self) -> Global___AgentBudget: ...
     @_builtins.property
@@ -704,6 +827,16 @@ class BuiltinHarness(_message.Message):
     def recording(self) -> Global___Recording: ...
     @_builtins.property
     def escalation(self) -> Global___EscalationPolicy: ...
+    @_builtins.property
+    def context(self) -> Global___ContextManagement:
+        """Keeps long runs inside the model's context window. Unset: the whole
+        conversation is resent every step.
+        """
+
+    @_builtins.property
+    def hooks(self) -> _containers.RepeatedCompositeFieldContainer[Global___Hook]:
+        """Python hooks at the agent's lifecycle points, called in this order."""
+
     def __init__(
         self,
         *,
@@ -716,16 +849,122 @@ class BuiltinHarness(_message.Message):
         escalation: Global___EscalationPolicy | None = ...,
         parallel_tool_calls: _builtins.bool | None = ...,
         instructions: _builtins.str = ...,
+        context: Global___ContextManagement | None = ...,
+        hooks: _abc.Iterable[Global___Hook] | None = ...,
+        delegate_steps: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "escalation", b"escalation", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType__parallel_tool_calls) -> _WhichOneofReturnType__parallel_tool_calls | None: ...
 
 Global___BuiltinHarness: _TypeAlias = BuiltinHarness  # noqa: Y015
+
+@_typing.final
+class Hook(_message.Message):
+    """A Python class "module:Class" with any of before_model, before_tool,
+    after_tool, on_compaction and on_stop methods, built as Class(config). On a
+    server the class must be listed under agents.trusted_python. A recording
+    replays only with the same hooks.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PYTHON_FIELD_NUMBER: _builtins.int
+    CONFIG_FIELD_NUMBER: _builtins.int
+    python: _builtins.str
+    @_builtins.property
+    def config(self) -> _struct_pb2.Struct: ...
+    def __init__(
+        self,
+        *,
+        python: _builtins.str = ...,
+        config: _struct_pb2.Struct | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["config", b"config"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["config", b"config", "python", b"python"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___Hook: _TypeAlias = Hook  # noqa: Y015
+
+@_typing.final
+class ContextManagement(_message.Message):
+    """How the built-in agent handles a conversation that grows past its context
+    window. The prompt size is counted from the model's last reported usage.
+    Every clear or compaction is a step on the trajectory, and a recorded run
+    replays only with the same strategy and window.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    STRATEGY_FIELD_NUMBER: _builtins.int
+    WINDOW_TOKENS_FIELD_NUMBER: _builtins.int
+    TRIGGER_FIELD_NUMBER: _builtins.int
+    TARGET_FIELD_NUMBER: _builtins.int
+    KEEP_RECENT_FIELD_NUMBER: _builtins.int
+    KEEP_TURNS_FIELD_NUMBER: _builtins.int
+    SUMMARY_MAX_TOKENS_FIELD_NUMBER: _builtins.int
+    SPILL_OUTPUTS_FIELD_NUMBER: _builtins.int
+    ROUNDS_FIELD_NUMBER: _builtins.int
+    ROUND_STEPS_FIELD_NUMBER: _builtins.int
+    strategy: _builtins.str
+    """"none" (default), "clear-tool-results" (replace old tool results with a
+    stub), "compact" (clear first, then summarize earlier turns with the
+    agent's own model) or "fresh-rounds" (the Ralph pattern: each round is a
+    new agent with a clean context that starts from the task and the notes it
+    kept in the memory file progress.md; the run ends when a reply carries
+    TASK_COMPLETE, or after `rounds` rounds) or "evidence-state" (an evidence
+    list whose entries must quote what the agent read, and a conclusion list
+    with open gaps, kept outside the conversation, shown on every call and
+    carried over when old turns are dropped).
+    """
+    window_tokens: _builtins.int
+    """The model's context window in tokens; required for clear-tool-results,
+    compact and evidence-state.
+    """
+    trigger: _builtins.float
+    """Start when the prompt reaches this fraction of the window (default 0.8)..."""
+    target: _builtins.float
+    """...and clear or compact down to this fraction (default 0.5). Clearing in
+    batches, not a little every turn, keeps the provider's prompt cache warm.
+    """
+    keep_recent: _builtins.int
+    """Tool results kept intact, newest first (default 4)."""
+    keep_turns: _builtins.int
+    """Assistant turns kept verbatim after a summary (default 6)."""
+    summary_max_tokens: _builtins.int
+    """Output limit for the summary (default 4096)."""
+    spill_outputs: _builtins.bool
+    """Write a large bash output to a file in the sandbox (.evalsi-out/) and
+    return its head, tail and path, instead of clipping it in the middle.
+    """
+    rounds: _builtins.int
+    """fresh-rounds: the most rounds (default 5) and the model calls one round
+    may make (default 30).
+    """
+    round_steps: _builtins.int
+    def __init__(
+        self,
+        *,
+        strategy: _builtins.str = ...,
+        window_tokens: _builtins.int = ...,
+        trigger: _builtins.float = ...,
+        target: _builtins.float = ...,
+        keep_recent: _builtins.int = ...,
+        keep_turns: _builtins.int = ...,
+        summary_max_tokens: _builtins.int = ...,
+        spill_outputs: _builtins.bool = ...,
+        rounds: _builtins.int = ...,
+        round_steps: _builtins.int = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["keep_recent", b"keep_recent", "keep_turns", b"keep_turns", "round_steps", b"round_steps", "rounds", b"rounds", "spill_outputs", b"spill_outputs", "strategy", b"strategy", "summary_max_tokens", b"summary_max_tokens", "target", b"target", "trigger", b"trigger", "window_tokens", b"window_tokens"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ContextManagement: _TypeAlias = ContextManagement  # noqa: Y015
 
 @_typing.final
 class ExternalHarness(_message.Message):

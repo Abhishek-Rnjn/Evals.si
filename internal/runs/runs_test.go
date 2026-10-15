@@ -718,6 +718,86 @@ func TestAgentRunValidation(t *testing.T) {
 		"bad network": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Sandbox = &evalsiv1alpha1.SandboxPolicy{Network: "allowlist"}
 		},
+		"unknown built-in tool": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"rm_rf"}}
+		},
+		"built-in tools without the sandbox": func(s *evalsiv1alpha1.RunSpec) {
+			off := false
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off, Builtin: []string{"grep"}}
+		},
+		"evidence state without a window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "evidence-state"}
+		},
+		"mcp timeout too long": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", TimeoutS: maxMCPTimeout + 1}}}
+		},
+		"mcp tool timeout": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", ToolTimeoutS: map[string]int32{"slow": 0}}}}
+		},
+		"elicitation without a user": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", Elicitation: true}}}
+		},
+		"oauth for a command": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"npx", "mcp-crm"}, Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://t", ClientIdEnv: "A", ClientSecretEnv: "B"}}}}
+		},
+		"oauth bad token url": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "ftp://t", ClientIdEnv: "A", ClientSecretEnv: "B"}}}}
+		},
+		"oauth without secrets": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://t"}}}}
+		},
+		"fresh rounds without the sandbox": func(s *evalsiv1alpha1.RunSpec) {
+			off := false
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off}
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds"}
+		},
+		"too many rounds": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: maxRounds + 1}
+		},
+		"delegate steps too high": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().DelegateSteps = maxDelegateSteps + 1
+		},
+		"fork needs a step": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "fork", Dir: "tapes"}
+		},
+		"fork name is a path": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "fork", Dir: "tapes", BranchAtStep: 2, ForkAs: "../x"}
+		},
+		"fork_as outside fork": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "resume", Dir: "tapes", ForkAs: "x"}
+		},
+		"negative branch": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "replay", Dir: "tapes", BranchAtStep: -1}
+		},
+		"hook without a class": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "acme.hooks"}}
+		},
+		"untrusted hook": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "os:system"}}
+		},
+		"too many hooks": func(s *evalsiv1alpha1.RunSpec) {
+			for range maxHooks + 1 {
+				s.GetHarness().GetBuiltin().Hooks = append(s.GetHarness().GetBuiltin().Hooks, &evalsiv1alpha1.Hook{Python: "evalsi_x:H"})
+			}
+		},
+		"unknown context strategy": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "forget", WindowTokens: 100000}
+		},
+		"strategy without a window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact"}
+		},
+		"window too small": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 1000}
+		},
+		"target above trigger": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 100000, Trigger: 0.6, Target: 0.7}
+		},
+		"default target above a low trigger": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 100000, Trigger: 0.4}
+		},
+		"negative keep": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{KeepRecent: -1}
+		},
 	}
 	for name, mutate := range cases {
 		spec := agentSpec("pass")
@@ -742,6 +822,42 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"mcp options": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().UserSimulator = &evalsiv1alpha1.UserSimulator{Goal: "g"}
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{
+				Builtin: []string{"tool_search"},
+				Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", TimeoutS: 30, ToolTimeoutS: map[string]int32{"slow": 600}, Resources: true, Prompts: true, Elicitation: true,
+					Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://auth.example/token", ClientIdEnv: "A", ClientSecretEnv: "B", Scope: "read"}}},
+			}
+		},
+		"evidence state with a window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "evidence-state", WindowTokens: 200000, Trigger: 0.7, Target: 0.4}
+		},
+		"fresh rounds need no window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: 8, RoundSteps: 25}
+		},
+		"delegate": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"delegate", "memory"}}
+			s.GetHarness().GetBuiltin().DelegateSteps = 30
+		},
+		"resume": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "resume", Dir: "tapes"}
+		},
+		"fork": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "fork", Dir: "tapes", BranchAtStep: 3, ForkAs: "try-b.1"}
+		},
+		"trusted hooks": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "acme.check:parse"}, {Python: "evalsi_gate:Gate"}}
+		},
+		"optional built-in tools": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"edit_file", "glob", "grep", "apply_patch"}}
+		},
+		"context management": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 200000, Trigger: 0.9, Target: 0.6, SpillOutputs: true}
+		},
+		"strategy none needs no window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "none", SpillOutputs: true}
 		},
 	}
 	for name, mutate := range ok {

@@ -121,6 +121,29 @@ message MCPServer {
   map<string, string> headers_env = 4;
   // Only these tools; all when empty.
   repeated string tools = 5;
+  // Seconds a request to the server may take (default 120), and per tool
+  // (by name) where a tool needs more or less.
+  int32 timeout_s = 6;
+  map<string, int32> tool_timeout_s = 7;
+  // Also offer the server's resources and prompts, as <name>_resources and
+  // <name>_prompts tools.
+  bool resources = 8;
+  bool prompts = 9;
+  // Let the server ask the user questions mid-call (MCP elicitation), answered
+  // by the user simulator, which spec.harness.builtin.user_simulator must set.
+  bool elicitation = 10;
+  // Reach a url server with an OAuth 2 client-credentials token.
+  MCPOAuth oauth = 11;
+}
+
+// OAuth 2 client credentials: the machine flow, since a run has no one to
+// approve a browser redirect. The two variables are read by the worker and,
+// on a server, must be granted to the run's project (credentials.grants).
+message MCPOAuth {
+  string token_url = 1;
+  string client_id_env = 2;
+  string client_secret_env = 3;
+  string scope = 4;
 }
 
 // A tool answered from the spec instead of a live system.
@@ -152,6 +175,16 @@ message Tools {
   repeated MCPServer mcp = 2;
   repeated MockTool mocks = 3;
   repeated ToolFault faults = 4;
+  // More built-in tools to offer, by name: edit_file (exact-match replace),
+  // glob, grep, apply_patch (a unified diff), memory (notes that survive
+  // context management), session_search (find and re-read what context
+  // management removed) delegate (hand a subtask to a sub-agent with a
+  // fresh context and keep only its report) tool_search (the MCP tools
+  // start unloaded and the agent loads the ones it needs by searching) and
+  // code_mode (the agent sees one tool, run_code, and acts by writing a script
+  // that calls the other tools as functions; only what it prints comes back). Off by default, so a comparison between models uses
+  // the same toolset unless a spec says so.
+  repeated string builtin = 5;
 }
 
 // An LLM-driven simulated user with a persona and goal, for multi-turn tasks
@@ -166,15 +199,30 @@ message UserSimulator {
   int32 max_turns = 4;
 }
 
-// Record and replay of model calls and tool I/O.
+// Record and replay of model calls and tool I/O. A recording is a session
+// log: every model turn and tool result is written as it happens, so a trial
+// that dies leaves everything up to its last step.
 message Recording {
-  // "off" (default), "record" or "replay".
+  // "off" (default), "record", "replay", "resume" or "fork".
+  //   record: start a new log (replacing one).
+  //   replay: serve a log's model turns and tool results (sandbox tools run
+  //     again, so the environment is rebuilt); with branch_at_step, replay
+  //     the first N turns and then continue live without saving.
+  //   resume: continue an interrupted trial: replay its log, then run live
+  //     and append to the same log. A trial with no log starts one.
+  //   fork: replay the first branch_at_step turns of a log, then run live,
+  //     writing a new log (fork_as) that holds that prefix and the new
+  //     continuation and names the log it forked from.
   string mode = 1;
   // Directory for cassettes, one per task and trial. Embedded: relative to
   // the spec. Server: inside datasets_dir.
   string dir = 2;
-  // replay: replay the first N steps, then continue live (branching).
+  // replay and fork: the number of model turns to replay before going live.
+  // Required for fork.
   int32 branch_at_step = 3;
+  // fork: the new log's name (letters, digits, dots, dashes and underscores);
+  // default: the source's name with ".fork-N".
+  string fork_as = 4;
 }
 
 // What the harness does when a sandbox denies something and the agent asks
@@ -197,6 +245,61 @@ message BuiltinHarness {
   optional bool parallel_tool_calls = 8;
   // Appended to the agent's system prompt.
   string instructions = 9;
+  // Keeps long runs inside the model's context window. Unset: the whole
+  // conversation is resent every step.
+  ContextManagement context = 10;
+  // Python hooks at the agent's lifecycle points, called in this order.
+  repeated Hook hooks = 11;
+  // With "delegate" among tools.builtin: the model calls a sub-agent may make
+  // for one task (default 20). Its budget comes out of the parent's.
+  int32 delegate_steps = 12;
+}
+
+// A Python class "module:Class" with any of before_model, before_tool,
+// after_tool, on_compaction and on_stop methods, built as Class(config). On a
+// server the class must be listed under agents.trusted_python. A recording
+// replays only with the same hooks.
+message Hook {
+  string python = 1;
+  google.protobuf.Struct config = 2;
+}
+
+// How the built-in agent handles a conversation that grows past its context
+// window. The prompt size is counted from the model's last reported usage.
+// Every clear or compaction is a step on the trajectory, and a recorded run
+// replays only with the same strategy and window.
+message ContextManagement {
+  // "none" (default), "clear-tool-results" (replace old tool results with a
+  // stub), "compact" (clear first, then summarize earlier turns with the
+  // agent's own model) or "fresh-rounds" (the Ralph pattern: each round is a
+  // new agent with a clean context that starts from the task and the notes it
+  // kept in the memory file progress.md; the run ends when a reply carries
+  // TASK_COMPLETE, or after `rounds` rounds) or "evidence-state" (an evidence
+  // list whose entries must quote what the agent read, and a conclusion list
+  // with open gaps, kept outside the conversation, shown on every call and
+  // carried over when old turns are dropped).
+  string strategy = 1;
+  // The model's context window in tokens; required for clear-tool-results,
+  // compact and evidence-state.
+  int32 window_tokens = 2;
+  // Start when the prompt reaches this fraction of the window (default 0.8)...
+  double trigger = 3;
+  // ...and clear or compact down to this fraction (default 0.5). Clearing in
+  // batches, not a little every turn, keeps the provider's prompt cache warm.
+  double target = 4;
+  // Tool results kept intact, newest first (default 4).
+  int32 keep_recent = 5;
+  // Assistant turns kept verbatim after a summary (default 6).
+  int32 keep_turns = 6;
+  // Output limit for the summary (default 4096).
+  int32 summary_max_tokens = 7;
+  // Write a large bash output to a file in the sandbox (.evalsi-out/) and
+  // return its head, tail and path, instead of clipping it in the middle.
+  bool spill_outputs = 8;
+  // fresh-rounds: the most rounds (default 5) and the model calls one round
+  // may make (default 30).
+  int32 rounds = 9;
+  int32 round_steps = 10;
 }
 
 // A harness you bring: anything that implements evalsi.harness.v1alpha1.HarnessService.
