@@ -249,6 +249,14 @@ class BuiltinHarness:
         """The agent's system prompt. Subclasses (benchmark harnesses) replace it."""
         c = self.config
         notes = []
+        if c.context.strategy == "evidence-state":
+            notes.append(
+                "Record what you find with the evidence tool, not in your head: each finding is a "
+                "statement, its source and a quote copied verbatim from what you read. Correct a "
+                "finding by superseding or retracting it. Keep the conclusions you are working "
+                "toward, with the evidence that supports each and the gaps still open; your "
+                "conversation will be cut down as it grows, and those lists are what remains."
+            )
         rounds = c.context.strategy == "fresh-rounds"
         if rounds:
             notes.append(

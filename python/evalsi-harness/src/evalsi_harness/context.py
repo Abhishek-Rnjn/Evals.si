@@ -32,7 +32,7 @@ from evalsi_harness.models import ChatModel, ModelError, ModelTurn
 
 Message = dict[str, Any]
 
-STRATEGIES = ("none", "clear-tool-results", "compact", "fresh-rounds")
+STRATEGIES = ("none", "clear-tool-results", "compact", "fresh-rounds", "evidence-state")
 ROUND_DONE = "TASK_COMPLETE"
 PROGRESS_NOTE = "progress.md"
 SUMMARY_PREFIX = (
@@ -68,7 +68,7 @@ class ContextConfig:
     def __post_init__(self) -> None:
         if self.strategy not in STRATEGIES:
             raise ValueError(f"context strategy must be one of {STRATEGIES}, not {self.strategy!r}")
-        windowed = self.strategy in ("clear-tool-results", "compact")
+        windowed = self.strategy in ("clear-tool-results", "compact", "evidence-state")
         if windowed and self.window_tokens < 4000:
             raise ValueError("a context strategy needs window_tokens of at least 4000")
         if self.strategy == "fresh-rounds" and (self.rounds < 1 or self.round_steps < 1):
@@ -176,6 +176,9 @@ class ContextView:
 class ContextResult:
     messages: list[Message]
     steps: list[Step] = field(default_factory=list)
+    # Messages sent with this call only, after the conversation (a state the
+    # strategy keeps outside it).
+    transient: list[Message] = field(default_factory=list)
 
 
 class ContextStrategy(Protocol):
@@ -429,7 +432,11 @@ class Compact:
         return out, step
 
 
-def make_strategy(config: ContextConfig) -> ContextStrategy:
+def make_strategy(config: ContextConfig, evidence: Any = None) -> ContextStrategy:
+    if config.strategy == "evidence-state":
+        from evalsi_harness.evidence import EvidenceStateStrategy
+
+        return EvidenceStateStrategy(config, evidence)
     if config.strategy == "clear-tool-results":
         return ClearToolResults(config)
     if config.strategy == "compact":

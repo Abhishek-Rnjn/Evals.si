@@ -24,6 +24,7 @@ from evalsi_harness.context import (
     make_strategy,
 )
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
+from evalsi_harness.evidence import EvidenceState, EvidenceTool
 from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
 from evalsi_harness.models import (
     ChatModel,
@@ -131,7 +132,12 @@ class AgentLoop:
         self._round_start = 0
         self._started = time.monotonic()
         self.root = span_id()
-        self.strategy = make_strategy(config.context)
+        self.evidence = (
+            EvidenceState(self.archive) if config.context.strategy == "evidence-state" else None
+        )
+        if self.evidence is not None:
+            self.tools["evidence"] = EvidenceTool(self.evidence)
+        self.strategy = make_strategy(config.context, self.evidence)
         self.view = ContextView(
             model=model,
             system=config.system,
@@ -205,6 +211,7 @@ class AgentLoop:
                     if self.config.context.strategy != "none"
                     else {}
                 ),
+                **({"evidence": self.evidence.counts()} if self.evidence is not None else {}),
             },
         )
 
@@ -315,7 +322,9 @@ class AgentLoop:
                 if step.name.startswith("context:"):
                     await self.hooks.on_compaction(step, parent=self.root)
             request = await self.hooks.before_model(
-                ModelRequest(messages, self.config.system), step=self.state.steps, parent=self.root
+                ModelRequest([*messages, *prepared.transient], self.config.system),
+                step=self.state.steps,
+                parent=self.root,
             )
             self._emit_hook_steps()
             turn = await self._call_model(request.messages, specs, request.system)

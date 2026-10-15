@@ -1481,10 +1481,13 @@ type ContextManagement struct {
 	// agent's own model) or "fresh-rounds" (the Ralph pattern: each round is a
 	// new agent with a clean context that starts from the task and the notes it
 	// kept in the memory file progress.md; the run ends when a reply carries
-	// TASK_COMPLETE, or after `rounds` rounds).
+	// TASK_COMPLETE, or after `rounds` rounds) or "evidence-state" (an evidence
+	// list whose entries must quote what the agent read, and a conclusion list
+	// with open gaps, kept outside the conversation, shown on every call and
+	// carried over when old turns are dropped).
 	Strategy string `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
-	// The model's context window in tokens; required for clear-tool-results and
-	// compact.
+	// The model's context window in tokens; required for clear-tool-results,
+	// compact and evidence-state.
 	WindowTokens int32 `protobuf:"varint,2,opt,name=window_tokens,json=windowTokens,proto3" json:"window_tokens,omitempty"`
 	// Start when the prompt reaches this fraction of the window (default 0.8)...
 	Trigger float64 `protobuf:"fixed64,3,opt,name=trigger,proto3" json:"trigger,omitempty"`

@@ -725,6 +725,9 @@ func TestAgentRunValidation(t *testing.T) {
 			off := false
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off, Builtin: []string{"grep"}}
 		},
+		"evidence state without a window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "evidence-state"}
+		},
 		"too many rounds": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: maxRounds + 1}
 		},
@@ -796,6 +799,9 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"evidence state with a window": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "evidence-state", WindowTokens: 200000, Trigger: 0.7, Target: 0.4}
 		},
 		"fresh rounds need no window": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: 8, RoundSteps: 25}

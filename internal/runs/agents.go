@@ -241,12 +241,12 @@ func validateContext(c *evalsiv1alpha1.ContextManagement) error {
 		if c.GetRounds() < 0 || c.GetRounds() > maxRounds || c.GetRoundSteps() < 0 {
 			return invalid("%s: rounds must be from 0 to %d and round_steps cannot be negative", f, maxRounds)
 		}
-	case "clear-tool-results", "compact":
+	case "clear-tool-results", "compact", "evidence-state":
 		if c.GetWindowTokens() < minContextWindow {
 			return invalid("%s.window_tokens must be at least %d for strategy %s", f, minContextWindow, c.GetStrategy())
 		}
 	default:
-		return invalid("%s.strategy must be none, clear-tool-results, compact or fresh-rounds, not %q", f, c.GetStrategy())
+		return invalid("%s.strategy must be none, clear-tool-results, compact, fresh-rounds or evidence-state, not %q", f, c.GetStrategy())
 	}
 	trigger, target := c.GetTrigger(), c.GetTarget()
 	if trigger == 0 {
