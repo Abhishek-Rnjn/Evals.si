@@ -703,6 +703,9 @@ func TestAgentRunValidation(t *testing.T) {
 		"cli needs a command": func(s *evalsiv1alpha1.RunSpec) {
 			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{}}}
 		},
+		"cli with an unknown output format": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{Command: []string{"agent"}, OutputFormat: "claude-json"}}}
+		},
 		"untrusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"rm", "-rf", "/"}}}}
 		},

@@ -26,25 +26,23 @@ in an error, is recorded as that step's error.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.events import span_id
+from evalsi_harness.readers import Parsed, parse_claude, parse_codex, parse_gemini, parse_pi
 
-FORMATS = ("", "dsh-json")
+_READERS = {
+    "claude-stream-json": parse_claude,
+    "codex-json": parse_codex,
+    "gemini-json": parse_gemini,
+    "pi-json": parse_pi,
+}
+
+FORMATS = ("", "dsh-json", "claude-stream-json", "codex-json", "gemini-json", "pi-json")
 
 
-@dataclass
-class ParsedRun:
-    """What a structured output format says about a run."""
-
-    answer: str
-    steps: list[Step] = field(default_factory=list)
-    usage: Usage = field(default_factory=Usage)
-    # Why the run failed, when the agent said so; empty otherwise.
-    error: str = ""
-    session_id: str = ""
+ParsedRun = Parsed
 
 
 def parse_output(fmt: str, stdout: str) -> ParsedRun | None:
@@ -53,6 +51,8 @@ def parse_output(fmt: str, stdout: str) -> ParsedRun | None:
         return None
     if fmt == "dsh-json":
         return parse_dsh_events(stdout)
+    if fmt in _READERS:
+        return _READERS[fmt](stdout)
     raise ValueError(
         f"unknown output_format {fmt!r}; use one of {', '.join(repr(f) for f in FORMATS)}"
     )

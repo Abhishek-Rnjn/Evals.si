@@ -479,9 +479,12 @@ type CLIAgent struct {
 	AllowHosts []string             `protobuf:"bytes,4,rep,name=allow_hosts,json=allowHosts,proto3" json:"allow_hosts,omitempty"`
 	Timeout    *durationpb.Duration `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	// How to read the program's standard output. Empty: the output is the
-	// answer, and the run has one step. "dsh-json": newline-delimited run events
-	// from `dsh --profile headless --json`, read as model calls, tool calls and
-	// the final answer.
+	// answer, and the run has one step. Otherwise the program's structured event
+	// stream is read as model calls, tool calls and the final answer: "dsh-json"
+	// (`dsh --profile headless --json`), "claude-stream-json" (`claude -p
+	// --output-format stream-json --verbose`), "codex-json" (`codex exec
+	// --json`), "gemini-json" (`gemini --output-format stream-json`) or
+	// "pi-json" (`pi --mode json`).
 	OutputFormat  string `protobuf:"bytes,6,opt,name=output_format,json=outputFormat,proto3" json:"output_format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

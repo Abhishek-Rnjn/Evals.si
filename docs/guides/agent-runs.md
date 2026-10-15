@@ -49,7 +49,7 @@ A CLI agent:
 - has `install` commands run once, during setup;
 - receives only the environment variables named in `env_from`, a map from the name in the sandbox to the worker's variable (`env_from: {ANTHROPIC_API_KEY: AGENT_ANTHROPIC_KEY}`), for its own model credentials;
 - can reach only `allow_hosts`, through the egress proxy (name the port too: `host:8000`);
-- has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events into model-call and tool-call steps with token counts. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
+- has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events, `claude-stream-json` Claude Code's `--output-format stream-json --verbose` (sub-agent messages hang under the call that started them, and the run's cost is kept), `codex-json` `codex exec --json`, `gemini-json` `gemini --output-format stream-json` and `pi-json` `pi --mode json`, each into model-call and tool-call steps with token counts. A stream with none of the format's events is an error on the run, so a wrong format is not read as an agent that did nothing. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
 
 Setup uses the environment's `setup_network`. When `install` needs a package index, set `environment: {setup_network: allow}` in the spec.
 

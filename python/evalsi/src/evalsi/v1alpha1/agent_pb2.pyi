@@ -298,9 +298,12 @@ class CLIAgent(_message.Message):
     OUTPUT_FORMAT_FIELD_NUMBER: _builtins.int
     output_format: _builtins.str
     """How to read the program's standard output. Empty: the output is the
-    answer, and the run has one step. "dsh-json": newline-delimited run events
-    from `dsh --profile headless --json`, read as model calls, tool calls and
-    the final answer.
+    answer, and the run has one step. Otherwise the program's structured event
+    stream is read as model calls, tool calls and the final answer: "dsh-json"
+    (`dsh --profile headless --json`), "claude-stream-json" (`claude -p
+    --output-format stream-json --verbose`), "codex-json" (`codex exec
+    --json`), "gemini-json" (`gemini --output-format stream-json`) or
+    "pi-json" (`pi --mode json`).
     """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...

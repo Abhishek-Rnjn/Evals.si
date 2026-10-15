@@ -1,0 +1,10 @@
+{"type": "thread.started", "thread_id": "th1"}
+{"type": "turn.started"}
+{"type": "item.completed", "item": {"id": "i0", "type": "reasoning", "text": "thinking"}}
+{"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": "I will run the tests."}}
+{"type": "item.started", "item": {"id": "i2", "type": "command_execution", "command": "pytest", "aggregated_output": "", "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "i2", "type": "command_execution", "command": "pytest", "aggregated_output": "1 failed", "exit_code": 1, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "i3", "type": "file_change", "changes": [{"path": "calc.py", "kind": "update"}], "status": "completed"}}
+{"type": "item.completed", "item": {"id": "i4", "type": "mcp_tool_call", "server": "docs", "tool": "lookup", "arguments": {"q": "add"}, "result": {"content": [{"type": "text", "text": "ok"}]}, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "i5", "type": "agent_message", "text": "Fixed add."}}
+{"type": "turn.completed", "usage": {"input_tokens": 120, "cached_input_tokens": 50, "output_tokens": 30}}

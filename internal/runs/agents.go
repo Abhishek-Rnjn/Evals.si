@@ -46,6 +46,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 		if len(agent.GetCli().GetCommand()) == 0 {
 			return invalid("spec.target.agent.cli.command is required")
 		}
+		if f := agent.GetCli().GetOutputFormat(); !cliOutputFormats[f] {
+			return invalid("spec.target.agent.cli.output_format %q is not one of dsh-json, claude-stream-json, codex-json, gemini-json, pi-json", f)
+		}
 	case agent != nil:
 		return invalid("spec.target.agent needs one of a2a, mcp, responses, http or cli")
 	case builtin && !replay:
@@ -303,4 +306,15 @@ func validateMCPOptions(s *evalsiv1alpha1.MCPServer, hasUser bool) error {
 		}
 	}
 	return nil
+}
+
+// cliOutputFormats are the structured output formats the harness reads for a
+// CLI agent (python/evalsi-harness formats.py); empty is plain output.
+var cliOutputFormats = map[string]bool{
+	"":                   true,
+	"dsh-json":           true,
+	"claude-stream-json": true,
+	"codex-json":         true,
+	"gemini-json":        true,
+	"pi-json":            true,
 }
