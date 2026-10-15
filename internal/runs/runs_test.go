@@ -746,6 +746,11 @@ func TestAgentRunValidation(t *testing.T) {
 		"oauth without secrets": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Url: "http://m", Oauth: &evalsiv1alpha1.MCPOAuth{TokenUrl: "https://t"}}}}
 		},
+		"fresh rounds without the sandbox": func(s *evalsiv1alpha1.RunSpec) {
+			off := false
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off}
+			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds"}
+		},
 		"too many rounds": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "fresh-rounds", Rounds: maxRounds + 1}
 		},

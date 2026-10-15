@@ -92,7 +92,12 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("spec.harness.builtin.tools.builtin: unknown tool %q (choose from %s)", name, strings.Join(builtinTools, ", "))
 		}
 	}
-	if len(b.GetTools().GetBuiltin()) > 0 && b.GetTools() != nil && b.GetTools().Sandbox != nil && !b.GetTools().GetSandbox() {
+	noSandbox := b.GetTools() != nil && b.GetTools().Sandbox != nil && !b.GetTools().GetSandbox()
+	// fresh-rounds keeps its notes in the memory tool, which it adds on its own.
+	if noSandbox && b.GetContext().GetStrategy() == "fresh-rounds" {
+		return invalid("spec.harness.builtin.context: fresh-rounds keeps its notes with the memory tool, which needs the sandbox tools that tools.sandbox turned off")
+	}
+	if len(b.GetTools().GetBuiltin()) > 0 && noSandbox {
 		return invalid("spec.harness.builtin.tools.builtin needs the sandbox tools, which tools.sandbox turned off")
 	}
 	for _, f := range b.GetTools().GetFaults() {

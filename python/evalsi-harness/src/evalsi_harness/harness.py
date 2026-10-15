@@ -58,17 +58,39 @@ from evalsi_harness.toolset import MEMORY_DIR, MUTATING, extra_tools
 from evalsi_harness.trust import Trust
 from evalsi_harness.user_sim import UserSimulator
 
+MAX_ELICITATIONS = 10
+
 
 def _elicitation(user: UserSimulator) -> Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]:
     """Answers an MCP server's question with the simulated user."""
 
+    asked = 0
+
     async def answer(message: str, schema: dict[str, Any]) -> dict[str, Any]:
-        reply = await user.reply([{"role": "assistant", "content": message}])
+        nonlocal asked
+        asked += 1
+        if asked > MAX_ELICITATIONS:
+            return {"action": "cancel"}
+        # The conversation's turn allowance is not spent here: a replay serves the
+        # tool's recorded result without asking, so a turn taken now would be a turn
+        # the replay (or a resume) does not take, and the two would drift apart.
+        turns = user.turns
+        try:
+            reply = await user.reply([{"role": "assistant", "content": message}])
+        finally:
+            user.turns = turns
         if not reply.message:
             return {"action": "cancel"}
         return answer_from_text(schema, reply.message)
 
     return answer
+
+
+def _hook_identity(h: Any) -> Any:
+    """What a recording depends on for a hook: its class, and its config when it has one
+    (a changed ban list changes which calls are denied)."""
+    config = json_format.MessageToDict(h.config) if h.HasField("config") else {}
+    return {"python": h.python, "config": config} if config else h.python
 
 
 def _doubled(max_tokens: int) -> int:
@@ -125,6 +147,9 @@ class LiveTask:
     isolation: dict[str, Any] = field(default_factory=dict)
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     cassette: Cassette | None = None
+    # The simulated user, when the task has one: MCP elicitation is answered by it.
+    # (On the live task, not an argument, so a subclass's _tools(self, live) still fits.)
+    user: UserSimulator | None = None
     # What the agent changed in the workdir (a git diff), for code review
     # evaluators; captured before the checker runs.
     diff: str | None = None
@@ -415,7 +440,7 @@ class BuiltinHarness:
             system=system,
         )
 
-    async def _tools(self, live: LiveTask, user: UserSimulator | None = None) -> list[Tool]:
+    async def _tools(self, live: LiveTask) -> list[Tool]:
         tools: list[Tool] = []
         cfg = self.config.tools
         use_sandbox = cfg.sandbox if cfg.HasField("sandbox") else live.env is not None
@@ -449,7 +474,9 @@ class BuiltinHarness:
                     os.environ.get(o.client_secret_env, ""),
                     o.scope,
                 )
-            elicit = _elicitation(user) if server.elicitation and user is not None else None
+            elicit = (
+                _elicitation(live.user) if server.elicitation and live.user is not None else None
+            )
             client = await MCPClient.connect(
                 name=server.name,
                 url=server.url,
@@ -581,7 +608,7 @@ class BuiltinHarness:
                 rec.mode,
                 branch_at_step=rec.branch_at_step,
                 context=self._context(live).describe(),
-                hooks=[h.python for h in self.config.hooks],
+                hooks=[_hook_identity(h) for h in self.config.hooks],
                 toolset={
                     "builtin": list(self.config.tools.builtin),
                     "delegate_steps": self.config.delegate_steps,
@@ -605,8 +632,8 @@ class BuiltinHarness:
             except ValueError as exc:
                 raise TaskError(f"target: {exc}") from exc
             live.closers.append(model.aclose)
-        user = self._user_simulator(task)
-        tools = await self._tools(live, user)
+        user = live.user = self._user_simulator(task)
+        tools = await self._tools(live)
         cassette = live.cassette = self._cassette(live)
         if cassette is not None:
             model = CassetteModel(cassette, model)

@@ -90,7 +90,6 @@ class DelegateTool:
                 max_usd=budget["usd"],
                 wall_clock_s=budget["wall_clock_s"],
                 system=SUBAGENT_SYSTEM,
-                session_search=False,
                 delegate_steps=0,
                 # A sub-agent has one job and one reply. fresh-rounds needs a progress
                 # reader and a completion marker it was never told about.

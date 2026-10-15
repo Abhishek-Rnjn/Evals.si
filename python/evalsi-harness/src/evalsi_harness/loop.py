@@ -117,9 +117,11 @@ class AgentLoop:
         progress: Callable[[], Awaitable[str]] | None = None,
     ) -> None:
         self.archive = Archive()
+        # What a sub-agent gets is what the caller passed: the tools added below are bound
+        # to this loop (its archive, its budget), and a sub-agent builds its own.
+        self._base_tools = list(tools)
         if config.session_search:
             tools = [*tools, SessionSearchTool(self.archive)]
-        self._base_tools = list(tools)
         if config.delegate_steps:
             tools = [*tools, DelegateTool(self, config.delegate_steps)]
         names = [t.spec.name for t in tools]

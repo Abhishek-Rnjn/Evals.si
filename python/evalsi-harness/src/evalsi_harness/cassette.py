@@ -21,6 +21,7 @@ resumed or forked trial gets its sandbox back.
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
@@ -97,7 +98,7 @@ class Cassette:
         *,
         branch_at_step: int = 0,
         context: dict[str, Any] | None = None,
-        hooks: list[str] | None = None,
+        hooks: list[Any] | None = None,
         toolset: dict[str, Any] | None = None,
         fork_to: Path | None = None,
     ) -> None:
@@ -126,6 +127,8 @@ class Cassette:
         self._next_id = 0
         self._last_id = -1
         self._out: Any = None
+        # Whether this log's file has been created: after that it is only appended to.
+        self._started = False
         # A resume with no log yet is just a recording.
         self._fresh = mode == "record" or (mode == "resume" and not self._has_log())
         self.live = self._fresh
@@ -139,12 +142,11 @@ class Cassette:
         if not self.path.exists():
             raise CassetteError(f"no cassette to replay at {self.path}")
         recorded: dict[str, Any] = {"strategy": "none"}  # version 1 files have no header
-        recorded_hooks: list[str] = []
+        recorded_hooks: list[Any] = []
         recorded_toolset: dict[str, Any] = EMPTY_TOOLSET
-        good = []
-        for line in self.path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
+        good: list[str] = []
+        lines = [ln for ln in self.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        for line in lines:
             try:
                 entry = json.loads(line)
             except json.JSONDecodeError:
@@ -193,9 +195,13 @@ class Cassette:
                 f"{recorded}, but the spec asks for {self.context}; "
                 "a replay needs the same strategy and window"
             )
-        if self.mode == "resume":
-            # Drop a half-written last line, so appending continues a valid log.
-            self.path.write_text("\n".join(good) + "\n" if good else "", encoding="utf-8")
+        if self.mode == "resume" and good != lines:
+            # Drop a half-written last line (and a refusal the trial died on), so appending
+            # continues a valid log. The repaired log replaces the old one in one step: a
+            # kill in the middle leaves the whole old log, never a truncated one.
+            tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+            tmp.write_text("\n".join(good) + "\n" if good else "", encoding="utf-8")
+            os.replace(tmp, self.path)
 
     # --- writing ---
 
@@ -204,8 +210,9 @@ class Cassette:
             target = self.fork_to if self.mode == "fork" else self.path
             assert target is not None
             target.parent.mkdir(parents=True, exist_ok=True)
-            appending = self.mode == "resume" and not self._fresh
+            appending = self._started or (self.mode == "resume" and not self._fresh)
             self._out = target.open("a" if appending else "w", encoding="utf-8")
+            self._started = True
             if not appending:
                 # Version 2 records thinking, reasoning items, cache and reasoning
                 # tokens and model switches. Version 1 files have no header, lack
@@ -236,12 +243,11 @@ class Cassette:
         out.flush()  # a trial killed now still leaves this entry
 
     def save(self) -> None:
+        if self._out is None and self.mode in ("record", "fork") and not self._started:
+            self._writer()  # an empty log still has its header
         if self._out is not None:
             self._out.close()
             self._out = None
-        elif self.mode in ("record", "fork"):
-            self._writer()  # an empty log still has its header
-            self.save()
 
     # --- reading ---
 

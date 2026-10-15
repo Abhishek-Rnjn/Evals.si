@@ -80,15 +80,20 @@ class ContextConfig:
 
     def describe(self) -> dict[str, Any]:
         """What a recording is only valid for: the strategy and its numbers."""
+        # Spilling changes what a bash call returns and leaves, under any strategy; the
+        # default (off) is left out so the descriptor of an older recording is unchanged.
+        spill = {"spill_outputs": True} if self.spill_outputs else {}
         if self.strategy == "none":
-            return {"strategy": "none"}
+            return {"strategy": "none", **spill}
         if self.strategy == "fresh-rounds":
             return {
                 "strategy": "fresh-rounds",
                 "rounds": self.rounds,
                 "round_steps": self.round_steps,
+                **spill,
             }
         return {
+            **spill,
             "strategy": self.strategy,
             "window_tokens": self.window_tokens,
             "trigger": self.trigger,
@@ -383,8 +388,12 @@ class Compact:
         if tail_start is None:
             return None
         old = messages[1:tail_start]
-        # The transcript has to fit the window with room for the answer.
-        budget_chars = int(c.window_tokens * 0.7 / view.ratio())
+        # The summary's room is taken out of the window first, then the instructions
+        # that frame the transcript; what is left, with a margin, is the transcript's.
+        reply = min(c.summary_max_tokens, c.window_tokens // 4)
+        framing = int((len(SUMMARY_SYSTEM) + 120) * view.ratio())
+        room = max(c.window_tokens - reply - framing, c.window_tokens // 5)
+        budget_chars = int(room * 0.85 / view.ratio())
         limit = 2000
         text = _transcript(old, limit)
         while len(text) > budget_chars and limit > 100:
@@ -396,7 +405,7 @@ class Compact:
                 [{"role": "user", "content": prompt}],
                 [],
                 system=SUMMARY_SYSTEM,
-                max_tokens=c.summary_max_tokens,
+                max_tokens=reply,
             )
         except ModelError:
             self.stats.summary_failures += 1

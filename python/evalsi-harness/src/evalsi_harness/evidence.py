@@ -43,7 +43,14 @@ from evalsi_harness.tools import ToolResult
 MIN_QUOTE = 8
 MAX_QUOTE = 600
 SHOWN_QUOTE = 240
-MAX_ENTRIES = 200
+MAX_ENTRIES = 200  # active entries
+MAX_HISTORY = 50  # superseded and retracted entries kept, newest first
+MAX_CLAIMS = 50
+MAX_GAPS = 10
+MAX_TEXT = 500  # a statement or a claim
+MAX_SOURCE = 200
+MAX_GAP = 300
+STATE_SHARE = 0.25  # of the window, at most
 STATE_HEADER = "[Your evidence state, kept outside the conversation. It is current; trust it.]"
 
 
@@ -83,6 +90,13 @@ class EvidenceState:
     def __bool__(self) -> bool:
         return bool(self.evidence or self.claims)
 
+    def _trim_history(self) -> None:
+        """Keeps the newest MAX_HISTORY corrections and drops the older ones, so
+        corrections cannot fill the list: capacity is for what is still valid."""
+        gone = [e.id for e in self.evidence.values() if e.status != "active"]
+        for eid in gone[: max(len(gone) - MAX_HISTORY, 0)]:
+            del self.evidence[eid]
+
     def counts(self) -> dict[str, int]:
         by = [e.status for e in self.evidence.values()]
         return {
@@ -100,14 +114,39 @@ class EvidenceState:
             needle in _squash(e.text) for e in self.archive.entries if e.role in ("tool", "user")
         )
 
-    def render(self) -> str:
-        lines = [STATE_HEADER]
+    def render(self, limit: int = 0) -> str:
+        """The state as the model sees it. With a ``limit`` in characters, the state
+        shrinks to fit rather than crowd out the conversation it is shown beside: the
+        quotes go first, then the corrections, then the oldest active entries; the
+        conclusions and their gaps stay, since they steer the search."""
         active = [e for e in self.evidence.values() if e.status == "active"]
-        lines.append("Evidence:" if active else "Evidence: none yet.")
-        for e in active:
-            quote = e.quote if len(e.quote) <= SHOWN_QUOTE else e.quote[:SHOWN_QUOTE] + "..."
-            lines.append(f' {e.id} [{e.source}] {e.statement}\n    "{quote}"')
         gone = [e for e in self.evidence.values() if e.status != "active"]
+        quotes, history, hidden = True, True, 0
+        while True:
+            text = self._render(active[hidden:], gone if history else [], quotes, hidden)
+            if not limit or len(text) <= limit:
+                return text
+            if quotes:
+                quotes = False
+            elif history:
+                history = False
+            elif hidden < len(active):
+                hidden += max(len(active) // 10, 1)
+            else:
+                return text[:limit]
+
+    def _render(
+        self, active: list[Evidence], gone: list[Evidence], quotes: bool, hidden: int
+    ) -> str:
+        lines = [STATE_HEADER]
+        lines.append("Evidence:" if active or hidden else "Evidence: none yet.")
+        if hidden:
+            lines.append(f" ({hidden} older entries are not shown; see them with action view)")
+        for e in active:
+            lines.append(f" {e.id} [{e.source}] {e.statement}")
+            if quotes:
+                quote = e.quote if len(e.quote) <= SHOWN_QUOTE else e.quote[:SHOWN_QUOTE] + "..."
+                lines.append(f'    "{quote}"')
         if gone:
             lines.append("No longer valid: " + "; ".join(f"{e.id} ({e.note})" for e in gone))
         if self.claims:
@@ -117,8 +156,7 @@ class EvidenceState:
                 lines.append(f" {c.id} {c.status.upper()}: {c.claim}{tail}")
                 for gap in c.gaps:
                     lines.append(f"    open gap: {gap}")
-        open_gaps = [g for c in self.claims.values() for g in c.gaps]
-        if open_gaps:
+        if any(c.gaps for c in self.claims.values()):
             lines.append("Next: search to close the open gaps before anything else.")
         return "\n".join(lines)
 
@@ -138,10 +176,17 @@ class EvidenceState:
         return None
 
     def add(self, statement: str, source: str, quote: str) -> tuple[str | None, str | None]:
-        if len(self.evidence) >= MAX_ENTRIES:
-            return (
-                None,
-                f"the list holds {MAX_ENTRIES} entries; retract the ones you no longer need",
+        active = sum(1 for e in self.evidence.values() if e.status == "active")
+        if active >= MAX_ENTRIES:
+            return None, (
+                f"the list holds {MAX_ENTRIES} active entries; retract the ones you no longer need"
+            )
+        return self._add(statement, source, quote)
+
+    def _add(self, statement: str, source: str, quote: str) -> tuple[str | None, str | None]:
+        if len(statement) > MAX_TEXT or len(source) > MAX_SOURCE:
+            return None, (
+                f"a statement is limited to {MAX_TEXT} characters and a source to {MAX_SOURCE}"
             )
         if (err := self._check(statement, source, quote)) is not None:
             return None, err
@@ -156,11 +201,13 @@ class EvidenceState:
         entry = self.evidence.get(old)
         if entry is None or entry.status != "active":
             return None, f"{old} is not an active entry"
-        new, err = self.add(statement, source, quote)
+        # A correction replaces an active entry, so it is allowed when the list is full.
+        new, err = self._add(statement, source, quote)
         if new is None:
             return None, err
         entry.status, entry.note = "superseded", f"superseded by {new}"
         self._repoint(old, new)
+        self._trim_history()
         return new, None
 
     def retract(self, eid: str, reason: str) -> str | None:
@@ -170,12 +217,15 @@ class EvidenceState:
         if not reason.strip():
             return "say why it is retracted"
         entry.status, entry.note = "retracted", f"retracted: {reason.strip()[:120]}"
+        self._trim_history()
         for c in self.claims.values():
             if eid in c.support:
                 c.support.remove(eid)
                 if not c.support:
                     c.status = "open"
-                    c.gaps.append(f"{eid} was retracted; the claim needs new support")
+                    c.gaps = [*c.gaps, f"{eid} was retracted; the claim needs new support"][
+                        -MAX_GAPS:
+                    ]
         return None
 
     def _repoint(self, old: str, new: str) -> None:
@@ -188,6 +238,13 @@ class EvidenceState:
         bad = [s for s in support if s not in self.evidence or self.evidence[s].status != "active"]
         if bad:
             return None, f"{', '.join(bad)} are not active evidence entries"
+        if len(claim) > MAX_TEXT or len(gaps) > MAX_GAPS or any(len(g) > MAX_GAP for g in gaps):
+            return None, (
+                f"a claim is limited to {MAX_TEXT} characters, and its gaps to {MAX_GAPS} of "
+                f"{MAX_GAP} characters each"
+            )
+        if cid is None and len(self.claims) >= MAX_CLAIMS:
+            return None, f"at most {MAX_CLAIMS} conclusions; update one instead"
         if cid is None:
             self._c += 1
             cid = f"C{self._c}"
@@ -294,8 +351,11 @@ class EvidenceStateStrategy:
     ) -> ContextResult:
         c = self.config
         window = c.window_tokens
+        # The state is sent with every call, and clearing or cutting the conversation
+        # cannot make room for it, so it is held to a share of the window.
+        share = int(window * STATE_SHARE / view.ratio())
         transient: list[Message] = (
-            [{"role": "user", "content": self.state.render()}] if self.state else []
+            [{"role": "user", "content": self.state.render(share)}] if self.state else []
         )
 
         def size(m: list[Message]) -> int:

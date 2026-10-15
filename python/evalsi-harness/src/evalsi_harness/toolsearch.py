@@ -28,6 +28,12 @@ def words(text: str) -> list[str]:
     return _WORD.findall(text.lower().replace("_", " ").replace("-", " "))
 
 
+def _summary(spec: ToolSpec) -> str:
+    """The first line of a tool's description; MCP descriptions are optional."""
+    lines = spec.description.strip().splitlines()
+    return lines[0][:160] if lines else ""
+
+
 def score(query: list[str], spec: ToolSpec) -> float:
     """Name matches count three times a description match; a query word that
     is part of a name word counts too (search finds search_issues)."""
@@ -78,7 +84,7 @@ class ToolSearchTool:
             return ToolResult(f"no unloaded tool matches {query!r}; try other words.{more}")
         for s in hits:
             self.loop.active.add(s.name)
-        lines = [f"- {s.name}: {s.description.strip().splitlines()[0][:160]}" for s in hits]
+        lines = [f"- {s.name}: {_summary(s)}".rstrip(": ") for s in hits]
         return ToolResult(
             "Loaded, and available from your next step:\n" + "\n".join(lines),
             metadata={"loaded": [s.name for s in hits]},

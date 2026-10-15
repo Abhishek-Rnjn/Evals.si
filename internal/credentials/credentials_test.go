@@ -219,13 +219,19 @@ func TestSpecUsesCoverMCPOAuthSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]string{}
+	// The secrets go to the token endpoint and the token they buy goes to the server, so a
+	// grant is checked against both destinations.
+	dests := map[string]map[string]bool{}
 	for _, u := range uses {
-		got[u.Env] = u.URL
+		if dests[u.Env] == nil {
+			dests[u.Env] = map[string]bool{}
+		}
+		dests[u.Env][u.URL] = true
 	}
-	// The secrets go to the token endpoint, so that is the destination a grant is checked against.
-	if got["CRM_ID"] != "https://auth.example/token" || got["CRM_SECRET"] != "https://auth.example/token" {
-		t.Errorf("uses = %v", got)
+	for _, env := range []string{"CRM_ID", "CRM_SECRET"} {
+		if !dests[env]["https://auth.example/token"] || !dests[env]["https://crm.example/mcp"] {
+			t.Errorf("%s is checked against %v, want the token endpoint and the server", env, dests[env])
+		}
 	}
 }
 
