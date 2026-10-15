@@ -43,6 +43,10 @@ Several open harnesses have converged on patterns the built-in agent lacks. Thes
 | dsh, Deep Agents | ACP servers (`dsh --profile acp`, `deepagents-acp`). | An **ACP connector** | H3 |
 | Claude Code, Codex and others | Programmatic tool calling: the model writes a script that calls tools in the sandbox, instead of one round trip per call. | A **code-mode tool profile** | H2 |
 | Terminal-Bench leaderboards | Scores are reported per harness and model pair, and the same model moves by several points between harnesses. | **Harness configuration as an experiment variable** | H3 |
+| **LongHarness** ([arXiv 2610.13075](https://arxiv.org/abs/2610.13075)) | Corpus-level question answering keeps two persistent states outside the chat history: an *EvidenceBank* of source-linked statements (active, superseded or retracted, each citing a passage the agent read) and a *Conclusion State* of claims with open gaps that steer the next search. | An **`evidence-state` context strategy**; a **citation-grounding check**; a **stage audit** that splits a failure into retrieval, evidence use and answer conversion | H2, H5 |
+| **Evo2** ([arXiv 2610.13025](https://arxiv.org/abs/2610.13025)) | Harness search: a model proposes edits to a harness and reflects on traces, over a tree of variants with crossover between branches. Fitness is the task score with the executor fixed. | **Cost beside every score**; **held-out and transfer runs** for a harness profile; a **mechanism-ran check**. The search itself and training an evolver are not planned | H3, H5 |
+
+Both papers are preprints from October 2026. Their results come from one setup each and mostly single runs or small subsets, so they motivate the items above and are not evidence that the gains carry to our tasks.
 
 ## Phases
 
@@ -72,6 +76,7 @@ The goal is to let agents work for hours and through hundreds of steps without o
 - **Tool search.** When a task exposes many MCP tools, load them on demand through a search tool instead of putting every schema in the prompt.
 - **MCP up to date.** Add OAuth for remote servers, structured tool output, resources and prompts, elicitation answered by the simulated user, and per-tool timeouts.
 - **Context strategies (after dsh).** Besides compaction, add `offload` (hand a token-heavy subtask to a sub-agent and keep only its result) and `fresh-rounds` (the Ralph pattern: each round is a new agent with a clean context, a progress file and a round cap). Record the strategy on the run, so strategies can be compared like models.
+- **An `evidence-state` strategy (after LongHarness).** Keep two structured states outside the conversation: an evidence list of source-linked statements, and a conclusion list of claims with open gaps. A new statement must cite a passage the agent has read, and a correction supersedes or retracts the old entry instead of appending to it. Open gaps steer what the agent searches for next. The paper's ablations found structured state beat free-text notes by 6.8 to 7.8 points and append-only evidence cost up to 10.0 points, on one benchmark with one run per setting, so this is a strategy to compare against `compact` and `fresh-rounds`, not a new default.
 - **Hooks (after dsh's plugins and pi's extensions).** Add Python hooks at the loop's lifecycle points: before a model call, before and after a tool call (allow, deny or rewrite), on compaction and on stop. Prompts, tool gating and context strategies become hooks, so changing the harness no longer means forking `loop.py`. Every hook decision becomes a step event.
 - **Session tree, resume and fork (after pi and dsh).** Store the trajectory as an append-only log of entries, each with a parent. A trial interrupted by a worker restart resumes from its last entry, after the sandbox is restored. Any entry can be forked into a new branch, generalizing the cassette's `branch_at_step`. Add a `session_search` tool so an agent can retrieve what compaction removed.
 - **Code-mode tools (programmatic tool calling).** Add an optional profile where the agent writes a Python script that calls the task's tools inside the sandbox, and only the script's output returns to the context. The tool calls inside it are still recorded as steps.
@@ -90,6 +95,9 @@ The goal is to evaluate the agents people actually ship, with full trajectories.
 - **A2A streaming.** Use `message/stream` and push notifications instead of polling, and show the A2A task states in the trajectory.
 - **Harness profiles.** Ship versioned profiles of the built-in agent: `minimal` (pi-style: a prompt of about 1,000 tokens and four tools), `standard` (the H2 toolset and compaction) and `code-mode`. A model score names its profile and version, so it means the same thing across releases.
 - **Harness as an experiment variable.** Let a run sweep harness configurations (profile, context strategy, hooks, tools) like it sweeps models. Report a harness × model matrix with confidence intervals, so a team can tell whether a change helped the harness or the model.
+- **Cost beside every score (after Evo2).** Report tokens and model calls per task next to each score, and compare harnesses on score for a given budget. Evo2 found a harness that scored higher with 3.6K tokens and 10 calls per task, where two baselines used 6.6K to 6.9K tokens and 26 to 37 calls.
+- **Held-out and transfer runs (after Evo2).** A profile tuned on one benchmark is also scored on others it was not tuned on, and the report separates the two. This keeps a profile that only fits its tuning set from looking good.
+- **A mechanism-ran check (after Evo2).** When a run changes a harness setting, an evaluator checks the traces for evidence that the changed mechanism actually executed, so a gain is not credited to a change that never ran.
 
 Exit criteria: CI runs each CLI reader and the ACP connector against recorded fixtures. A run compares two harness profiles on the same model and reports the difference with its interval. The kind e2e job runs one CLI agent end to end when a model key is set.
 
@@ -99,6 +107,7 @@ The goal is to cover the main agent task types: terminal, repository, web, deskt
 
 - **Multi-service environments.** Add a Compose-like `services` list (a database, an API, a browser) on a shared private network inside the sandbox rung. This closes the 22 Terminal-Bench 1 tasks that do not import, and Harbor tasks with services.
 - **Browser and computer use.** Add a Playwright browser environment with a `browser` tool set (accessibility tree, screenshots, actions), and a desktop environment for computer-use tools with screenshot steps recorded as images. Then build the WebArena/BrowserGym and GAIA importers.
+- **Long-document importers (after LongHarness).** Add OfficeQA Pro and AA-LCR importers for tasks over a document corpus that exceeds the context window. They give the H2 context strategies a long-horizon task that is not a coding task. OfficeQA Pro needs corpus hosting in the sandbox, which the multi-service item above provides.
 - **Mid-run user messages (after pi's steering queue).** The simulated user can interject while the agent works (a correction, a new constraint, a cancellation), timed by step or by event. Evaluators then score whether the agent took it into account.
 - **Stateful tool environments.** Add a database-backed tool environment for τ-bench-style domains, so the checker reads the final database state.
 - **Checker isolation.** Run the checker from a clean copy of the setup snapshot, with only the agent's declared outputs or its diff applied. A checker can still opt in to running in the agent's sandbox. Hash protected files, and record any change to them as a policy event.
@@ -112,6 +121,8 @@ The goal is grades that are trustworthy.
 - **Prompt-injection faults.** Add a fault type that plants instructions in tool results, files or web pages, and an evaluator that scores whether the agent followed them.
 - **Reward-hacking signals.** Detect test tampering, hard-coded expected outputs and checker probing, and mark the trial so pass@k can exclude it.
 - **Contamination canaries.** Put canary strings in imported tasks, and add a probe that checks whether a model reproduces them.
+- **Evidence-stage audit (after LongHarness).** An evaluator in the `agent` pack that splits each trajectory into three stages: was the required evidence retrieved, was it kept and used in the final decision, and was it converted into a correct answer. The last two rates are conditional on the stage before. It tells a team where an agent fails, not only that it fails. LongHarness's version uses an LLM judge, so ours must be checked against human labels before it is trusted, and it reports the judge's agreement.
+- **Citation grounding.** A check that every claim an agent submits cites a passage it actually read, and that the citation resolves to the current version of that evidence. It works on any BYO agent's trajectory, and a failed check is also a reward-hacking signal.
 - **Determinism report.** For each run, record seeds, model snapshots, tool versions and image digests. A replay that differs points to the step where it diverged.
 - **Variance-aware defaults.** Recommend a number of trials from the variance seen per task, and report pass^k next to pass@k by default.
 
@@ -132,6 +143,7 @@ Exit criteria: a verifiers or OpenEnv trainer runs one real training step on a G
 
 - **A general agent framework.** The built-in agent stays a small reference for comparing models and harness configurations. Hooks and profiles make it configurable; anything bigger, such as a TUI, an extension marketplace or a plan mode, belongs in the BYO path, where pi, dsh and others already do it well.
 - **Provider SDKs as dependencies.** The model clients keep speaking HTTP directly, so the harness stays light.
+- **Automated harness search, and training an evolver.** Evo2 shows harness variants can be searched and a model trained to propose edits. We provide the trusted score such a search needs (H3 and H5), but we do not build the search. It would optimize whatever the score rewards, so it waits until checker isolation (H4) and the reward-hacking signals (H5) are in place, and until a team asks for it.
 - **Hosting agents.** Evals.si runs agents in sandboxes for evaluation. It does not serve them in production.
 
 ## Tracking
