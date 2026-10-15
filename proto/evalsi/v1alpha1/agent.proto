@@ -204,6 +204,17 @@ message BuiltinHarness {
   // Keeps long runs inside the model's context window. Unset: the whole
   // conversation is resent every step.
   ContextManagement context = 10;
+  // Python hooks at the agent's lifecycle points, called in this order.
+  repeated Hook hooks = 11;
+}
+
+// A Python class "module:Class" with any of before_model, before_tool,
+// after_tool, on_compaction and on_stop methods, built as Class(config). On a
+// server the class must be listed under agents.trusted_python. A recording
+// replays only with the same hooks.
+message Hook {
+  string python = 1;
+  google.protobuf.Struct config = 2;
 }
 
 // How the built-in agent handles a conversation that grows past its context

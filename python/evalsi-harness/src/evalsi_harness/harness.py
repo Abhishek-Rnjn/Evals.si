@@ -32,6 +32,7 @@ from evalsi_harness.checker import run_checker
 from evalsi_harness.context import ContextConfig, context_config
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
+from evalsi_harness.hooks import Hooks, load_hooks
 from evalsi_harness.loop import DEFAULT_SYSTEM, AgentLoop, LoopConfig
 from evalsi_harness.mcp import MCPClient, MCPTool
 from evalsi_harness.models import ChatModel, create_model
@@ -263,6 +264,15 @@ class BuiltinHarness:
             return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
         return {}
 
+    def _hooks(self, live: LiveTask) -> Hooks:
+        refs = [
+            (h.python, json_format.MessageToDict(h.config) if h.HasField("config") else {})
+            for h in self.config.hooks
+        ]
+        hooks = load_hooks(refs, self.ctx.trust)
+        hooks.bind(live.task.id, live.task.trial)
+        return hooks
+
     def _context(self, live: LiveTask) -> ContextConfig:
         try:
             return context_config(self.config.context)
@@ -422,6 +432,7 @@ class BuiltinHarness:
             rec.mode,
             branch_at_step=rec.branch_at_step,
             context=self._context(live).describe(),
+            hooks=[h.python for h in self.config.hooks],
         )
 
     async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:
@@ -448,7 +459,8 @@ class BuiltinHarness:
             ]
         assert model is not None
         user = self._user_simulator(task)
-        loop = AgentLoop(model, tools, self._loop_config(live), emit, user=user)
+        hooks = self._hooks(live)
+        loop = AgentLoop(model, tools, self._loop_config(live), emit, user=user, hooks=hooks)
         conversation = await self._conversation(live, user, emit)
         try:
             return await loop.run(conversation)

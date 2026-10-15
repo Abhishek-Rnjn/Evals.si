@@ -1,6 +1,7 @@
 package runs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -97,6 +98,18 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 	if err := validateContext(b.GetContext()); err != nil {
 		return err
 	}
+	if len(b.GetHooks()) > maxHooks {
+		return invalid("spec.harness.builtin.hooks can hold at most %d hooks", maxHooks)
+	}
+	for i, h := range b.GetHooks() {
+		mod, class, ok := strings.Cut(h.GetPython(), ":")
+		if !ok || mod == "" || class == "" {
+			return invalid("spec.harness.builtin.hooks[%d].python must be module:Class", i)
+		}
+		if err := m.trustPython(h.GetPython(), fmt.Sprintf("spec.harness.builtin.hooks[%d].python", i)); err != nil {
+			return err
+		}
+	}
 	switch rec := b.GetRecording(); rec.GetMode() {
 	case "", "off":
 	case "record", "replay":
@@ -182,6 +195,9 @@ func (m *Manager) workerSpec(spec *evalsiv1alpha1.RunSpec) (*evalsiv1alpha1.RunS
 	out.GetHarness().GetBuiltin().GetRecording().Dir = dir
 	return out, nil
 }
+
+// maxHooks bounds the hooks of one run.
+const maxHooks = 8
 
 // builtinTools are the optional built-in tools a spec may list.
 var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch"}

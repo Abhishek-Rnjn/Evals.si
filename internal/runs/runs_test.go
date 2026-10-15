@@ -725,6 +725,17 @@ func TestAgentRunValidation(t *testing.T) {
 			off := false
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off, Builtin: []string{"grep"}}
 		},
+		"hook without a class": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "acme.hooks"}}
+		},
+		"untrusted hook": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "os:system"}}
+		},
+		"too many hooks": func(s *evalsiv1alpha1.RunSpec) {
+			for range maxHooks + 1 {
+				s.GetHarness().GetBuiltin().Hooks = append(s.GetHarness().GetBuiltin().Hooks, &evalsiv1alpha1.Hook{Python: "evalsi_x:H"})
+			}
+		},
 		"unknown context strategy": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "forget", WindowTokens: 100000}
 		},
@@ -767,6 +778,9 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"trusted hooks": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Hooks = []*evalsiv1alpha1.Hook{{Python: "acme.check:parse"}, {Python: "evalsi_gate:Gate"}}
 		},
 		"optional built-in tools": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"edit_file", "glob", "grep", "apply_patch"}}

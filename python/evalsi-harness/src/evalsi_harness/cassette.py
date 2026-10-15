@@ -76,6 +76,7 @@ class Cassette:
         *,
         branch_at_step: int = 0,
         context: dict[str, Any] | None = None,
+        hooks: list[str] | None = None,
     ) -> None:
         if mode not in ("record", "replay"):
             raise ValueError(f"recording mode must be off, record or replay, not {mode!r}")
@@ -89,21 +90,31 @@ class Cassette:
         # The context strategy the recording is valid for: a replay under
         # another one would send the model different conversations.
         self.context = context if context is not None else {"strategy": "none"}
+        # Hooks change what the agent sees and does, so they are part of what a
+        # recording is valid for, too.
+        self.hooks = hooks or []
         self.live = mode == "record"
         if mode == "replay":
             if not path.exists():
                 raise CassetteError(f"no cassette to replay at {path}")
             recorded: dict[str, Any] = {"strategy": "none"}  # version 1 files have no header
+            recorded_hooks: list[str] = []
             for line in path.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
                     continue
                 entry = json.loads(line)
                 if entry["kind"] == "header":
                     recorded = entry.get("context") or {"strategy": "none"}
+                    recorded_hooks = entry.get("hooks") or []
                 elif entry["kind"] == "model":
                     self._turns.append(entry["turn"])
                 elif entry["kind"] == "tool":
                     self._tools[(entry["name"], _args_key(entry["args"]))].append(entry["result"])
+            if recorded_hooks != self.hooks:
+                raise CassetteError(
+                    f"cassette {path.name} was recorded with hooks {recorded_hooks}, but the spec "
+                    f"lists {self.hooks}; a replay needs the same hooks in the same order"
+                )
             if recorded != self.context:
                 raise CassetteError(
                     f"cassette {path.name} was recorded with context management "
@@ -153,7 +164,12 @@ class Cassette:
             # Version 2 records thinking, reasoning items, cache and reasoning
             # tokens and model switches. Version 1 files have no header, lack
             # those fields, and replay unchanged (as context management "none").
-            header = {"kind": "header", "version": CASSETTE_VERSION, "context": self.context}
+            header = {
+                "kind": "header",
+                "version": CASSETTE_VERSION,
+                "context": self.context,
+                "hooks": self.hooks,
+            }
             f.write(json.dumps(header) + "\n")
             for entry in self.entries:
                 f.write(json.dumps(entry) + "\n")

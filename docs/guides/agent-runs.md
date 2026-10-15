@@ -116,6 +116,20 @@ The prompt size is the model's last reported `input_tokens`, scaled by character
 
 A recording replays only under the strategy and window it was recorded with (the cassette header names them), since another strategy would send the model different conversations; the summary call is recorded in sequence like any other model call.
 
+### Hooks
+
+`harness.builtin.hooks` lists Python classes (`module:Class`, with an optional `config`) that run at the agent's lifecycle points, so changing the prompt, gating a tool or reacting to a compaction does not mean forking the loop. A class is built as `Class(config)` and has any of these methods, sync or async:
+
+| Method | Returns |
+|---|---|
+| `before_model(ctx, request)` | `None`, or a `ModelRequest(messages, system)` to send for this call only; the conversation itself is unchanged |
+| `before_tool(ctx, call)` | `None` to allow, `Deny(reason)` (the agent sees the reason as the tool's error and the tool does not run), or `Rewrite(arguments)` |
+| `after_tool(ctx, call, result)` | `None`, or a `ToolResult` to take its place |
+| `on_compaction(ctx, step)` | nothing; sees each context-management step |
+| `on_stop(ctx, final)` | `None` to let the agent finish, or `Continue(message)` to send it one more user message (at most three times a run), for example to ask it to run the tests |
+
+Every decision is a step named `hook:<module:Class>` with `evalsi.hook.event`, `decision`, `reason` and, for a rewrite, `original_arguments`, so evaluators see what a hook changed. Hooks are called in the order listed, and a `Deny` stops the hooks after it. For parallel tool calls the hooks see the calls one at a time, in order, before any runs. An exception in a hook ends the run with the error: a gate that silently stopped gating would be worse. On a server the class must be listed under `agents.trusted_python`, like other Python the worker runs, and a recording replays only with the same hooks in the same order.
+
 ### Model options
 
 The built-in agent calls `spec.target`. Besides `connector`, `model`, `base_url`, `api_key_env`, `max_tokens`, `temperature` and `effort`, the target takes these options (they apply to the built-in agent only):

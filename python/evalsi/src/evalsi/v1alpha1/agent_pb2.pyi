@@ -696,6 +696,7 @@ class BuiltinHarness(_message.Message):
     PARALLEL_TOOL_CALLS_FIELD_NUMBER: _builtins.int
     INSTRUCTIONS_FIELD_NUMBER: _builtins.int
     CONTEXT_FIELD_NUMBER: _builtins.int
+    HOOKS_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
@@ -720,6 +721,10 @@ class BuiltinHarness(_message.Message):
         conversation is resent every step.
         """
 
+    @_builtins.property
+    def hooks(self) -> _containers.RepeatedCompositeFieldContainer[Global___Hook]:
+        """Python hooks at the agent's lifecycle points, called in this order."""
+
     def __init__(
         self,
         *,
@@ -733,16 +738,45 @@ class BuiltinHarness(_message.Message):
         parallel_tool_calls: _builtins.bool | None = ...,
         instructions: _builtins.str = ...,
         context: Global___ContextManagement | None = ...,
+        hooks: _abc.Iterable[Global___Hook] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType__parallel_tool_calls) -> _WhichOneofReturnType__parallel_tool_calls | None: ...
 
 Global___BuiltinHarness: _TypeAlias = BuiltinHarness  # noqa: Y015
+
+@_typing.final
+class Hook(_message.Message):
+    """A Python class "module:Class" with any of before_model, before_tool,
+    after_tool, on_compaction and on_stop methods, built as Class(config). On a
+    server the class must be listed under agents.trusted_python. A recording
+    replays only with the same hooks.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PYTHON_FIELD_NUMBER: _builtins.int
+    CONFIG_FIELD_NUMBER: _builtins.int
+    python: _builtins.str
+    @_builtins.property
+    def config(self) -> _struct_pb2.Struct: ...
+    def __init__(
+        self,
+        *,
+        python: _builtins.str = ...,
+        config: _struct_pb2.Struct | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["config", b"config"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["config", b"config", "python", b"python"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___Hook: _TypeAlias = Hook  # noqa: Y015
 
 @_typing.final
 class ContextManagement(_message.Message):

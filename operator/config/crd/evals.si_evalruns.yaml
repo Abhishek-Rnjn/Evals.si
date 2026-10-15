@@ -1011,6 +1011,17 @@ spec:
                             type: array
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                      hooks:
+                        items:
+                          properties:
+                            config:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                            python:
+                              type: string
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type: array
                       instructions:
                         type: string
                       max_steps:

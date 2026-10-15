@@ -16,6 +16,7 @@ from typing import Any
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.context import ContextConfig, ContextView, make_strategy
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
+from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
 from evalsi_harness.models import (
     ChatModel,
     ModelError,
@@ -82,6 +83,7 @@ class AgentLoop:
         emit: Emit,
         *,
         user: UserSimulator | None = None,
+        hooks: Hooks | None = None,
     ) -> None:
         names = [t.spec.name for t in tools]
         dupes = {n for n in names if names.count(n) > 1}
@@ -93,6 +95,8 @@ class AgentLoop:
         self.emit = emit
         self.user = user
         self.state = LoopState()
+        self.hooks = hooks or Hooks()
+        self.stop_continues = 0
         self.root = span_id()
         self.strategy = make_strategy(config.context)
         self.view = ContextView(
@@ -177,7 +181,13 @@ class AgentLoop:
                 messages[:] = prepared.messages
             for step in prepared.steps:
                 self.emit(StepEvent(step))
-            turn = await self._call_model(messages, specs)
+                if step.name.startswith("context:"):
+                    await self.hooks.on_compaction(step, parent=self.root)
+            request = await self.hooks.before_model(
+                ModelRequest(messages, self.config.system), step=self.state.steps, parent=self.root
+            )
+            self._emit_hook_steps()
+            turn = await self._call_model(request.messages, specs, request.system)
             last_text = turn.text or last_text
             if turn.truncated:
                 # Cut off by the output limit: a tool call may be half-written
@@ -193,7 +203,10 @@ class AgentLoop:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
             if self.user is None:
-                return self._final(turn.text, "completed")
+                final = await self._finish(turn.text, messages)
+                if final is not None:
+                    return final
+                continue
             reply = await self.user.reply(messages)
             _add(self.state.user_usage, reply.usage)
             if reply.message:
@@ -209,8 +222,28 @@ class AgentLoop:
                     )
                 )
             if reply.done or not reply.message:
-                return self._final(turn.text, "completed")
+                final = await self._finish(turn.text, messages)
+                if final is not None:
+                    return final
+                continue
             messages.append({"role": "user", "content": reply.message})
+
+    def _emit_hook_steps(self) -> None:
+        for step in self.hooks.drain():
+            self.emit(StepEvent(step))
+
+    async def _finish(self, text: str, messages: list[dict[str, Any]]) -> FinalEvent | None:
+        """The final event for a normal finish, or None when an ``on_stop`` hook
+        sent the agent back to work with one more message."""
+        final = self._final(text, "completed")
+        if self.hooks and self.stop_continues < MAX_CONTINUES:
+            more = await self.hooks.on_stop(final, step=self.state.steps, parent=self.root)
+            self._emit_hook_steps()
+            if more is not None:
+                self.stop_continues += 1
+                messages.append({"role": "user", "content": more.message})
+                return None
+        return final
 
     def _bill(self, turn: ModelTurn) -> None:
         """Spend on a model call that is not a step (a summary)."""
@@ -222,12 +255,14 @@ class AgentLoop:
         self.state.cache_write_tokens += turn.cache_write_tokens
         self.state.reasoning_tokens += turn.reasoning_tokens
 
-    async def _call_model(self, messages: list[dict[str, Any]], specs: list[Any]) -> ModelTurn:
+    async def _call_model(
+        self, messages: list[dict[str, Any]], specs: list[Any], system: str
+    ) -> ModelTurn:
         """One model step. A turn cut off by the output limit is tried again,
         once, with a higher limit; both calls are steps and both are billed."""
         step_span = span_id()
         start_ns = time.time_ns()
-        turn = await self.model.complete(messages, specs, system=self.config.system)
+        turn = await self.model.complete(messages, specs, system=system)
         self.view.observe(messages, turn.usage.input_tokens)
         self.state.steps += 1
         self._account(turn)
@@ -238,7 +273,9 @@ class AgentLoop:
             return turn
         self.state.truncation_retries += 1
         try:
-            return await self._retry_cut_off(messages, specs, self.config.truncation_retry_tokens)
+            return await self._retry_cut_off(
+                messages, specs, system, self.config.truncation_retry_tokens
+            )
         except ModelError:
             # The provider refused the higher limit (above its output cap, or
             # past the context window). The cut-off turn stands, so the run
@@ -246,13 +283,11 @@ class AgentLoop:
             return turn
 
     async def _retry_cut_off(
-        self, messages: list[dict[str, Any]], specs: list[Any], limit: int
+        self, messages: list[dict[str, Any]], specs: list[Any], system: str, limit: int
     ) -> ModelTurn:
         step_span = span_id()
         start_ns = time.time_ns()
-        turn = await self.model.complete(
-            messages, specs, system=self.config.system, max_tokens=limit
-        )
+        turn = await self.model.complete(messages, specs, system=system, max_tokens=limit)
         self.state.steps += 1
         self._account(turn)
         self.emit(StepEvent(self._llm_step(turn, step_span), start_ns=start_ns))
@@ -301,10 +336,27 @@ class AgentLoop:
     async def _call_tools(
         self, calls: list[ToolCallRequest], messages: list[dict[str, Any]]
     ) -> None:
-        async def one(call: ToolCallRequest) -> tuple[ToolCallRequest, ToolResult, Step]:
+        step_no = self.state.steps
+        # Hooks see the calls one at a time, in order, before any runs, so what
+        # they decide does not depend on how long the tools take.
+        prepared: list[tuple[ToolCallRequest, Deny | None]] = []
+        for call in calls:
+            prepared.append(await self.hooks.before_tool(call, step=step_no, parent=self.root))
+        self._emit_hook_steps()
+
+        async def one(
+            call: ToolCallRequest, denied: Deny | None
+        ) -> tuple[ToolCallRequest, ToolResult, Step]:
             span = span_id()
             start = time.perf_counter()
             tool = self.tools.get(call.name)
+            if denied is not None:
+                result = ToolResult(
+                    f"this call was denied by a hook: {denied.reason}",
+                    is_error=True,
+                    metadata={"hook_denied": True},
+                )
+                return call, result, self._tool_step(call, result, span, start)
             try:
                 args = json.loads(call.arguments or "{}")
             except json.JSONDecodeError as exc:
@@ -319,27 +371,20 @@ class AgentLoop:
                     )
                 else:
                     result = await tool.call(args, span=span)
-            step = Step(
-                type="tool",
-                name=call.name,
-                input=Content(text=call.arguments),
-                output=Content(text=result.content),
-                error=result.content[:500] if result.is_error else "",
-                span_id=span,
-                parent_span_id=self.root,
-                duration_ms=(time.perf_counter() - start) * 1000,
-                attributes={
-                    "gen_ai.tool.call.id": call.id,
-                    **{f"evalsi.tool.{k}": v for k, v in result.metadata.items()},
-                },
-            )
-            return call, result, step
+            return call, result, self._tool_step(call, result, span, start)
 
         if self.config.parallel and len(calls) > 1:
-            done = await asyncio.gather(*(one(c) for c in calls))
+            done = await asyncio.gather(*(one(c, d) for c, d in prepared))
         else:
-            done = [await one(c) for c in calls]
-        for call, result, step in done:
+            done = [await one(c, d) for c, d in prepared]
+        for call, ran, step in done:
+            result = ran
+            if self.hooks:
+                result = await self.hooks.after_tool(call, ran, step=step_no, parent=self.root)
+                if result is not ran:
+                    step.output = Content(text=result.content)
+                    step.error = result.content[:500] if result.is_error else ""
+                self._emit_hook_steps()
             self.state.tool_calls += 1
             self.emit(StepEvent(step))
             messages.append(
@@ -350,3 +395,21 @@ class AgentLoop:
                     "is_error": result.is_error,
                 }
             )
+
+    def _tool_step(
+        self, call: ToolCallRequest, result: ToolResult, span: str, start: float
+    ) -> Step:
+        return Step(
+            type="tool",
+            name=call.name,
+            input=Content(text=call.arguments),
+            output=Content(text=result.content),
+            error=result.content[:500] if result.is_error else "",
+            span_id=span,
+            parent_span_id=self.root,
+            duration_ms=(time.perf_counter() - start) * 1000,
+            attributes={
+                "gen_ai.tool.call.id": call.id,
+                **{f"evalsi.tool.{k}": v for k, v in result.metadata.items()},
+            },
+        )
