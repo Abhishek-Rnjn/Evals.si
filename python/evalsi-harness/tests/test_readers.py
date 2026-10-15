@@ -2,35 +2,48 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from evalsi_harness.formats import FORMATS, parse_output
+from evalsi_harness.readers import Parsed
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def read(fmt: str, name: str):
+def read(fmt: str, name: str) -> Parsed:
     run = parse_output(fmt, (FIXTURES / name).read_text())
     assert run is not None
     return run
 
 
-def kinds(run) -> list[tuple[str, str]]:
+def kinds(run: Parsed) -> list[tuple[str, str]]:
     return [(s.type, s.name) for s in run.steps]
 
 
 def test_claude_code_run_with_a_sub_agent() -> None:
-    run = read("claude-stream-json", "claude-code-2.x-fix-calc.jsonl")
+    run = read("claude-stream-json", "claude-code-0.3.300-fix-calc.jsonl")
     assert run.answer == "Fixed add."
     assert run.session_id == "c1"
     assert run.model == "claude-sonnet-5-5"
     assert run.error == ""
     assert run.usage.cost_usd == pytest.approx(0.0123)
-    # Cache reads and writes count as input the model was sent.
-    assert run.usage.input_tokens == (10 + 105) + 3 + 2 + 4
-    assert run.usage.output_tokens == 20 + 8 + 4 + 5
+    # The result's per-model totals cover sub-agents; cache reads and writes
+    # count as input the model was sent.
+    assert run.usage.input_tokens == 19 + 100 + 5
+    assert run.usage.output_tokens == 37
+    # One response arrives as several events with one message id: one step.
+    llms = [s for s in run.steps if s.type == "llm" and not s.parent_span_id]
+    assert len(llms) == 3
+    assert llms[0].output is not None
+    assert llms[0].output.messages is not None
+    (first,) = llms[0].output.messages
+    assert first.content == "Let me look."
+    assert [c.name for c in first.tool_calls] == ["Bash"]
+    assert llms[0].usage is not None
+    assert llms[0].usage.input_tokens == 10 + 100 + 5  # once, though two events carried it
     assert run.tools == ["Bash", "Task", "Bash"]
 
     by_id = {s.attributes.get("call_id"): s for s in run.steps if s.type == "tool"}
@@ -56,7 +69,7 @@ def test_claude_code_error_result_is_the_runs_error() -> None:
 
 
 def test_codex_items_attach_to_the_message_that_follows_them() -> None:
-    run = read("codex-json", "codex-0.x-fix-calc.jsonl")
+    run = read("codex-json", "codex-0.162.1-fix-calc.jsonl")
     assert run.answer == "Fixed add."
     assert run.session_id == "th1"
     assert kinds(run) == [
@@ -97,7 +110,7 @@ def test_codex_failed_turn() -> None:
 
 
 def test_gemini_stream() -> None:
-    run = read("gemini-json", "gemini-0.x-fix-calc.jsonl")
+    run = read("gemini-json", "gemini-0.64.0-fix-calc.jsonl")
     assert run.answer == "Fixed add."
     assert run.model == "gemini-3-pro"
     assert run.tools == ["read_file", "run_shell_command"]
@@ -107,6 +120,14 @@ def test_gemini_stream() -> None:
     first = next(s for s in run.steps if s.type == "llm")
     assert first.output is not None
     assert first.output.as_text() == "Reading the file."
+
+
+def test_gemini_json_object_with_session_metrics() -> None:
+    stats = {"models": {"m": {"tokens": {"prompt": 40, "candidates": 9, "total": 49}}}}
+    out = json.dumps({"session_id": "s", "response": "done", "stats": stats})
+    run = parse_output("gemini-json", out)
+    assert run is not None
+    assert (run.usage.input_tokens, run.usage.output_tokens) == (40, 9)
 
 
 def test_gemini_single_json_object() -> None:
@@ -120,7 +141,7 @@ def test_gemini_single_json_object() -> None:
 
 
 def test_pi_messages_and_cost() -> None:
-    run = read("pi-json", "pi-0.x-fix-calc.jsonl")
+    run = read("pi-json", "pi-0.73.1-fix-calc.jsonl")
     assert run.answer == "Fixed add."
     assert run.tools == ["read"]
     assert run.usage.input_tokens == 30 + 15

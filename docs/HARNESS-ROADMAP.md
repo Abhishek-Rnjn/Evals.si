@@ -18,7 +18,7 @@ The weak spots are in what frontier agents need today:
 | Stop reasons | `max_tokens`, `pause_turn` and `refusal` are treated as a normal answer. A tool call truncated by `max_tokens` ends the run as "completed". | `loop.py` (`_loop`) |
 | Rate limits | Retries use fixed exponential backoff and ignore `retry-after`. There is no streaming, so very long outputs hit the HTTP timeout. | `models.py` (`_post`) |
 | Tools | `bash`, `read_file` and `write_file` only. There is no exact-match edit, search, patch, background process or web tool, and every MCP tool is loaded up front. | `tools.py`, `mcp.py` |
-| CLI agents | Only DeepSeek Harness (`dsh-json`) reports a trajectory. Other coding-agent CLIs return only their final stdout. | `formats.py` (`FORMATS`) |
+| CLI agents | DeepSeek Harness, Claude Code, Codex, Gemini CLI and pi report a trajectory (`dsh-json`, `claude-stream-json`, `codex-json`, `gemini-json`, `pi-json`). Other CLIs return only their final stdout. | `formats.py` (`FORMATS`), `readers.py` |
 | Environments | One sandbox per task. There are no multi-service tasks (22 of the 241 Terminal-Bench 1 tasks do not import), no browser or desktop environments, and WebArena/BrowserGym and GAIA, listed in DESIGN §8, are not built. | `environment.py`, `benchmarks/` |
 | Grading integrity | The checker runs in the sandbox the agent just controlled. Its files are rewritten, but the agent can still change the interpreter, `PATH`, `conftest.py` or test dependencies. | `checker.py` (`run_checker`) |
 | Connectors | No ACP (Agent Client Protocol) connector, though DeepSeek Harness and Deep Agents both ship ACP servers and the PRD's demo table lists ACP targets. | `connectors.py` (`connector_for`) |

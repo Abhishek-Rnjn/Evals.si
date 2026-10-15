@@ -128,6 +128,7 @@ def parse_dsh_events(stdout: str) -> ParsedRun:
                 elif reason.get("kind") not in (None, "completed"):
                     run.error = f"the turn ended: {reason.get('kind')}"
 
+    run.tools = [s.name for s in run.steps if s.type == "tool"]
     run.answer = final if final is not None else "\n".join(t for t in texts if t)
     if seen_usage:
         run.usage = Usage(input_tokens=total_in, output_tokens=total_out)

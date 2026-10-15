@@ -2,10 +2,7 @@
 
 Each reader turns one CLI's event stream into a ``ParsedRun``: the answer, one
 ``llm`` step per model message with the tool calls it made, one ``tool`` step
-per call with its result, and token counts. They are written to the CLIs'
-documented schemas, and each is pinned to the version its fixture claims (see
-``VERSIONS``); a fixture here is written from that schema, not captured from a
-real run, so see docs/LEFTOVERS.md before trusting a reader on a newer CLI.
+per call with its result, and token counts.
 
 * ``claude-stream-json``: ``claude -p --output-format stream-json --verbose``.
   Sub-agent messages carry ``parent_tool_use_id``; their steps are parented to
@@ -19,6 +16,11 @@ real run, so see docs/LEFTOVERS.md before trusting a reader on a newer CLI.
 A reader never raises on an event it does not know; it skips it. A stream with
 no recognizable event at all is an error on the run, so a wrong ``output_format``
 is not mistaken for an agent that did nothing.
+
+Each reader was checked against the published type definitions of the package
+named in ``VERSIONS`` (Claude's agent SDK, Codex's SDK, Gemini CLI's core, pi's
+docs and types). The fixtures are written from those types, not captured from a
+CLI run; see docs/LEFTOVERS.md.
 """
 
 from __future__ import annotations
@@ -31,11 +33,12 @@ from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.events import span_id
 
 # The CLI release each reader's fixture was written against.
+# Each names the published type definitions the reader was checked against.
 VERSIONS = {
-    "claude-stream-json": "claude-code 2.x",
-    "codex-json": "codex-cli 0.x",
-    "gemini-json": "gemini-cli 0.x",
-    "pi-json": "pi 0.x",
+    "claude-stream-json": "@anthropic-ai/claude-agent-sdk 0.3.300",
+    "codex-json": "@openai/codex-sdk 0.162.1",
+    "gemini-json": "@google/gemini-cli-core 0.64.0",
+    "pi-json": "@mariozechner/pi-coding-agent 0.73.1",
 }
 
 # Bounds on what a hostile or runaway agent can make a reader hold.
@@ -166,15 +169,48 @@ def _unrecognized(run: Parsed, fmt: str, evs: list[dict[str, Any]], known: set[s
 # --- Claude Code -----------------------------------------------------------------
 
 
+def _claude_usage(u: Any) -> Usage | None:
+    if not isinstance(u, dict):
+        return None
+    tokens_in, tokens_out = _int(u.get("input_tokens")), _int(u.get("output_tokens"))
+    if tokens_in is None and tokens_out is None:
+        return None
+    # Cache reads and writes are input the model was sent.
+    extra = sum(
+        _int(u.get(k)) or 0 for k in ("cache_read_input_tokens", "cache_creation_input_tokens")
+    )
+    return Usage(
+        input_tokens=None if tokens_in is None else tokens_in + extra, output_tokens=tokens_out
+    )
+
+
+def _claude_model_usage(table: Any) -> tuple[int, int] | None:
+    """The result's per-model totals, which include sub-agents and compaction."""
+    if not isinstance(table, dict) or not table:
+        return None
+    tin = tout = 0
+    for entry in table.values():
+        if not isinstance(entry, dict):
+            continue
+        tin += sum(
+            _int(entry.get(k)) or 0
+            for k in ("inputTokens", "cacheReadInputTokens", "cacheCreationInputTokens")
+        )
+        tout += _int(entry.get("outputTokens")) or 0
+    return tin, tout
+
+
 def parse_claude(stdout: str) -> Parsed:  # noqa: PLR0915
     run = Parsed(answer="")
     evs = events(stdout)
-    pending: dict[str, tuple[Step, ToolCall]] = {}  # tool_use id -> its tool step
+    pending: dict[str, Step] = {}  # tool_use id -> its tool step
+    # One model response arrives as several ``assistant`` events, one per
+    # content block, all with the same message id and the same usage.
+    by_message: dict[str, Step] = {}
     result_text: str | None = None
-    texts: list[str] = []
-    tin = tout = 0
-    seen = False
+    last_text = ""
     cost: float | None = None
+    totals: tuple[int, int] | None = None
 
     for e in evs:
         kind = e.get("type")
@@ -201,33 +237,30 @@ def parse_claude(stdout: str) -> Parsed:  # noqa: PLR0915
                 for b in blocks
                 if isinstance(b, dict) and b.get("type") == "tool_use"
             ]
-            u = msg.get("usage") or {}
-            tokens_in = _int(u.get("input_tokens"))
-            tokens_out = _int(u.get("output_tokens"))
-            # Cache reads and writes are input the model was sent.
-            extra = sum(
-                _int(u.get(k)) or 0
-                for k in ("cache_read_input_tokens", "cache_creation_input_tokens")
-            )
-            if tokens_in is not None:
-                tokens_in += extra
-            usage = None
-            if tokens_in is not None or tokens_out is not None:
-                seen = True
-                tin += tokens_in or 0
-                tout += tokens_out or 0
-                usage = Usage(input_tokens=tokens_in, output_tokens=tokens_out)
             parent_call = str(e.get("parent_tool_use_id") or "")
-            parent = pending[parent_call][0].span_id if parent_call in pending else ""
-            attrs = {"claude.parent_tool_use_id": parent_call} if parent_call else {}
-            llm = _llm("claude", body, calls, usage, parent, attrs)
-            run.steps.append(llm)
-            if not parent_call:
-                texts = [body] if body else texts
+            ident = str(msg.get("id") or "")
+            llm = by_message.get(f"{parent_call}/{ident}") if ident else None
+            usage = _claude_usage(msg.get("usage"))
+            if llm is None:
+                parent = pending[parent_call].span_id if parent_call in pending else ""
+                attrs = {"claude.parent_tool_use_id": parent_call} if parent_call else {}
+                llm = _llm("claude", body, calls, usage, parent, attrs)
+                run.steps.append(llm)
+                if ident:
+                    by_message[f"{parent_call}/{ident}"] = llm
+            else:
+                assert llm.output is not None
+                assert llm.output.messages is not None
+                first = llm.output.messages[0]
+                first.content = "\n".join(t for t in (str(first.content), body) if t)
+                first.tool_calls.extend(calls)
+                llm.usage = usage or llm.usage
+            if body and not parent_call:
+                last_text = body
             for call in calls:
                 tool = _tool(call.name, call.id, call.arguments, "", "", llm.span_id)
                 run.steps.append(tool)
-                pending[call.id] = (tool, call)
+                pending[call.id] = tool
         elif kind == "user":
             blocks = (e.get("message") or {}).get("content")
             if not isinstance(blocks, list):
@@ -239,22 +272,31 @@ def parse_claude(stdout: str) -> Parsed:  # noqa: PLR0915
                 if hit is None:
                     continue
                 text = _text(b.get("content"))
-                hit[0].output = Content(text=text)
+                hit.output = Content(text=text)
                 if b.get("is_error"):
-                    hit[0].error = text or "the tool reported an error"
+                    hit.error = text or "the tool reported an error"
         elif kind == "result":
             if isinstance(e.get("result"), str):
                 result_text = e["result"]
             if isinstance(e.get("total_cost_usd"), int | float):
                 cost = float(e["total_cost_usd"])
+            totals = _claude_model_usage(e.get("modelUsage")) or totals
             if e.get("is_error") or str(e.get("subtype", "success")) != "success":
                 sub = str(e.get("subtype", "error"))
                 detail = result_text or ""
                 run.error = f"{sub}: {detail}" if detail else sub
 
-    run.answer = result_text if result_text is not None else (texts[-1] if texts else "")
+    run.answer = result_text if result_text is not None else last_text
     _unrecognized(run, "claude-stream-json", evs, {"system", "assistant", "user", "result"})
-    return _finish(run, seen, tin, tout, cost)
+    if totals is None:
+        # No result totals (the run was cut off): add up each response once.
+        usages = [s.usage for s in run.steps if s.type == "llm" and s.usage is not None]
+        if usages:
+            totals = (
+                sum(u.input_tokens or 0 for u in usages),
+                sum(u.output_tokens or 0 for u in usages),
+            )
+    return _finish(run, totals is not None, *(totals or (0, 0)), cost)
 
 
 # --- Codex -----------------------------------------------------------------------
@@ -464,8 +506,19 @@ def parse_gemini(stdout: str) -> Parsed:  # noqa: PLR0915
 
 
 def _stats(stats: Any) -> tuple[int | None, int | None]:
+    """Totals from a stream's ``result`` stats or a json object's session metrics."""
     if not isinstance(stats, dict):
         return None, None
+    if isinstance(stats.get("models"), dict) and "input_tokens" not in stats:
+        tin = tout = 0
+        seen = False
+        for entry in stats["models"].values():
+            tokens = entry.get("tokens") if isinstance(entry, dict) else None
+            if isinstance(tokens, dict):
+                seen = True
+                tin += _int(tokens.get("prompt")) or 0
+                tout += _int(tokens.get("candidates")) or 0
+        return (tin, tout) if seen else (None, None)
     return _int(stats.get("input_tokens")), _int(stats.get("output_tokens"))
 
 
@@ -520,6 +573,7 @@ def parse_pi(stdout: str) -> Parsed:  # noqa: PLR0915
                 saw_cost = True
                 cost += float(total)
             llm = _llm("pi", body, calls, usage)
+            run.model = run.model or str(msg.get("model", ""))
             run.steps.append(llm)
             if msg.get("stopReason") == "error":
                 run.error = run.error or str(msg.get("errorMessage", "the model call failed"))
