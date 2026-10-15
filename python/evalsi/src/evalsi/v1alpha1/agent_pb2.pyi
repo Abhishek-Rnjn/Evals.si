@@ -808,6 +808,7 @@ class BuiltinHarness(_message.Message):
     CONTEXT_FIELD_NUMBER: _builtins.int
     HOOKS_FIELD_NUMBER: _builtins.int
     DELEGATE_STEPS_FIELD_NUMBER: _builtins.int
+    PROFILE_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
@@ -817,6 +818,15 @@ class BuiltinHarness(_message.Message):
     delegate_steps: _builtins.int
     """With "delegate" among tools.builtin: the model calls a sub-agent may make
     for one task (default 20). Its budget comes out of the parent's.
+    """
+    profile: _builtins.str
+    """A versioned profile of the agent: "minimal" (a short prompt and four
+    tools: bash, read_file, write_file, edit_file; no escalation tool),
+    "standard" (the H2 toolset, and compaction when context.window_tokens is
+    set without a strategy) or "code-mode" (run_code over edit_file, glob and
+    grep). "name" is the latest version, "name@1" pins one. A profile owns the
+    toolset, so it cannot be combined with tools.builtin. The run's metadata
+    and a recording's guard carry the resolved "name@version".
     """
     @_builtins.property
     def budget(self) -> Global___AgentBudget: ...
@@ -855,10 +865,11 @@ class BuiltinHarness(_message.Message):
         context: Global___ContextManagement | None = ...,
         hooks: _abc.Iterable[Global___Hook] | None = ...,
         delegate_steps: _builtins.int = ...,
+        profile: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "profile", b"profile", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015

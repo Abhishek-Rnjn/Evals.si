@@ -1428,6 +1428,14 @@ type BuiltinHarness struct {
 	// With "delegate" among tools.builtin: the model calls a sub-agent may make
 	// for one task (default 20). Its budget comes out of the parent's.
 	DelegateSteps int32 `protobuf:"varint,12,opt,name=delegate_steps,json=delegateSteps,proto3" json:"delegate_steps,omitempty"`
+	// A versioned profile of the agent: "minimal" (a short prompt and four
+	// tools: bash, read_file, write_file, edit_file; no escalation tool),
+	// "standard" (the H2 toolset, and compaction when context.window_tokens is
+	// set without a strategy) or "code-mode" (run_code over edit_file, glob and
+	// grep). "name" is the latest version, "name@1" pins one. A profile owns the
+	// toolset, so it cannot be combined with tools.builtin. The run's metadata
+	// and a recording's guard carry the resolved "name@version".
+	Profile       string `protobuf:"bytes,13,opt,name=profile,proto3" json:"profile,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1544,6 +1552,13 @@ func (x *BuiltinHarness) GetDelegateSteps() int32 {
 		return x.DelegateSteps
 	}
 	return 0
+}
+
+func (x *BuiltinHarness) GetProfile() string {
+	if x != nil {
+		return x.Profile
+	}
+	return ""
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,
@@ -2320,7 +2335,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\x12\x17\n" +
 	"\afork_as\x18\x04 \x01(\tR\x06forkAs\"(\n" +
 	"\x10EscalationPolicy\x12\x14\n" +
-	"\x05allow\x18\x01 \x03(\tR\x05allow\"\x8c\x05\n" +
+	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xa6\x05\n" +
 	"\x0eBuiltinHarness\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x124\n" +
 	"\x06budget\x18\x02 \x01(\v2\x1c.evalsi.v1alpha1.AgentBudgetR\x06budget\x122\n" +
@@ -2336,7 +2351,8 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\acontext\x18\n" +
 	" \x01(\v2\".evalsi.v1alpha1.ContextManagementR\acontext\x12+\n" +
 	"\x05hooks\x18\v \x03(\v2\x15.evalsi.v1alpha1.HookR\x05hooks\x12%\n" +
-	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateStepsB\x16\n" +
+	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateSteps\x12\x18\n" +
+	"\aprofile\x18\r \x01(\tR\aprofileB\x16\n" +
 	"\x14_parallel_tool_calls\"O\n" +
 	"\x04Hook\x12\x16\n" +
 	"\x06python\x18\x01 \x01(\tR\x06python\x12/\n" +

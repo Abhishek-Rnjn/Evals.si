@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -90,6 +91,18 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			}
 		}
 	}
+	if p := b.GetProfile(); p != "" {
+		name, ver, _ := strings.Cut(p, "@")
+		if !slices.Contains(harnessProfiles, name) {
+			return invalid("spec.harness.builtin.profile: unknown profile %q (choose from %s)", name, strings.Join(harnessProfiles, ", "))
+		}
+		if v, err := strconv.Atoi(ver); ver != "" && (err != nil || v < 1) {
+			return invalid("spec.harness.builtin.profile: %q is not name or name@version", p)
+		}
+		if len(b.GetTools().GetBuiltin()) > 0 {
+			return invalid("spec.harness.builtin.profile sets the toolset; remove tools.builtin or the profile")
+		}
+	}
 	for _, name := range b.GetTools().GetBuiltin() {
 		if !slices.Contains(builtinTools, name) {
 			return invalid("spec.harness.builtin.tools.builtin: unknown tool %q (choose from %s)", name, strings.Join(builtinTools, ", "))
@@ -99,6 +112,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 	// fresh-rounds keeps its notes in the memory tool, which it adds on its own.
 	if noSandbox && b.GetContext().GetStrategy() == "fresh-rounds" {
 		return invalid("spec.harness.builtin.context: fresh-rounds keeps its notes with the memory tool, which needs the sandbox tools that tools.sandbox turned off")
+	}
+	if b.GetProfile() != "" && noSandbox {
+		return invalid("spec.harness.builtin.profile needs the sandbox tools, which tools.sandbox turned off")
 	}
 	if len(b.GetTools().GetBuiltin()) > 0 && noSandbox {
 		return invalid("spec.harness.builtin.tools.builtin needs the sandbox tools, which tools.sandbox turned off")
@@ -232,6 +248,9 @@ const maxRounds = 50
 
 // maxHooks bounds the hooks of one run.
 const maxHooks = 8
+
+// harnessProfiles are the built-in agent's profiles (python/evalsi-harness profiles.py).
+var harnessProfiles = []string{"minimal", "standard", "code-mode"}
 
 // builtinTools are the optional built-in tools a spec may list.
 var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search", "delegate", "tool_search", "code_mode"}

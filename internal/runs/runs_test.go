@@ -706,6 +706,17 @@ func TestAgentRunValidation(t *testing.T) {
 		"cli with an unknown output format": func(s *evalsiv1alpha1.RunSpec) {
 			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{Command: []string{"agent"}, OutputFormat: "claude-json"}}}
 		},
+		"unknown profile": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Profile = "tiny"
+		},
+		"profile with a malformed version": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Profile = "minimal@x"
+		},
+		"profile with its own toolset": func(s *evalsiv1alpha1.RunSpec) {
+			b := s.GetHarness().GetBuiltin()
+			b.Profile = "standard"
+			b.Tools = &evalsiv1alpha1.Tools{Builtin: []string{"grep"}}
+		},
 		"untrusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"rm", "-rf", "/"}}}}
 		},

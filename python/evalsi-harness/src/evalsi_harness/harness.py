@@ -44,6 +44,7 @@ from evalsi_harness.mcp import (
     answer_from_text,
 )
 from evalsi_harness.models import ChatModel, create_model
+from evalsi_harness.profiles import Profile, resolve
 from evalsi_harness.task import Task, TaskError
 from evalsi_harness.tools import (
     Fault,
@@ -195,6 +196,21 @@ class BuiltinHarness:
     def __init__(self, ctx: HarnessContext, config: agent_pb2.BuiltinHarness | None = None) -> None:
         self.ctx = ctx
         self.config = config or agent_pb2.BuiltinHarness()
+        self.profile: Profile | None = None
+        self._profile_error = ""
+        try:
+            self.profile = resolve(self.config.profile, list(self.config.tools.builtin))
+        except ValueError as exc:
+            self._profile_error = str(exc)
+        if self.profile is not None:
+            # The profile's toolset and default strategy are the spec's from here on.
+            resolved = agent_pb2.BuiltinHarness()
+            resolved.CopyFrom(self.config)
+            resolved.tools.builtin.extend(self.profile.builtin)
+            ctx = resolved.context
+            if self.profile.compact_with_window and not ctx.strategy and ctx.window_tokens:
+                ctx.strategy = "compact"
+            self.config = resolved
         self._pool: EnvironmentPool | None = None
         self._pool_lock = asyncio.Lock()
         self._live: dict[str, LiveTask] = {}
@@ -279,6 +295,8 @@ class BuiltinHarness:
                 for event in live.env.policy_events:
                     queue.put_nowait(event)
                 live.env.policy_events.clear()
+            if self.profile is not None and not _agent_kind(live.task):
+                final.extra["profile"] = self.profile.ident
             queue.put_nowait(final)
             queue.put_nowait(None)
 
@@ -339,7 +357,8 @@ class BuiltinHarness:
                 "(reading many files, long searches, debugging a long command), use delegate: a "
                 "sub-agent does it in a fresh context and you get only its report."
             )
-        parts = [DEFAULT_SYSTEM, *notes, *([c.instructions] if c.instructions else [])]
+        base = self.profile.system if self.profile and self.profile.system else DEFAULT_SYSTEM
+        parts = [base, *notes, *([c.instructions] if c.instructions else [])]
         return "\n\n".join(parts)
 
     @staticmethod
@@ -449,10 +468,9 @@ class BuiltinHarness:
                 raise TaskError("tools.sandbox is on but the task has no environment")
             # Always offered: asking is itself evidence for safety evaluators,
             # even when the policy (by default) denies it.
-            tools += [
-                *sandbox_tools(live.env, spill_outputs=self._context(live).spill_outputs),
-                self._escalation_tool(live),
-            ]
+            tools += sandbox_tools(live.env, spill_outputs=self._context(live).spill_outputs)
+            if self.profile is None or self.profile.escalation:
+                tools.append(self._escalation_tool(live))
         builtin = self._builtin_names(live)
         if builtin:
             if not use_sandbox or live.env is None:
@@ -612,6 +630,7 @@ class BuiltinHarness:
                 toolset={
                     "builtin": list(self.config.tools.builtin),
                     "delegate_steps": self.config.delegate_steps,
+                    **({"profile": self.profile.ident} if self.profile else {}),
                 },
                 fork_to=fork_to,
             )
@@ -620,6 +639,8 @@ class BuiltinHarness:
 
     async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:
         task = live.task
+        if self._profile_error:
+            raise TaskError(f"harness.builtin.profile: {self._profile_error}")
         no_model = not task.spec.HasField("target") or not task.spec.target.model
         if no_model and self.config.recording.mode != "replay":
             raise TaskError(

@@ -1054,6 +1054,8 @@ spec:
                             type: number
                         type: object
                         x-kubernetes-preserve-unknown-fields: true
+                      profile:
+                        type: string
                       recording:
                         properties:
                           branch_at_step:

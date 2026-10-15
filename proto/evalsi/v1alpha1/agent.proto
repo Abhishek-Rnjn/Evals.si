@@ -256,6 +256,14 @@ message BuiltinHarness {
   // With "delegate" among tools.builtin: the model calls a sub-agent may make
   // for one task (default 20). Its budget comes out of the parent's.
   int32 delegate_steps = 12;
+  // A versioned profile of the agent: "minimal" (a short prompt and four
+  // tools: bash, read_file, write_file, edit_file; no escalation tool),
+  // "standard" (the H2 toolset, and compaction when context.window_tokens is
+  // set without a strategy) or "code-mode" (run_code over edit_file, glob and
+  // grep). "name" is the latest version, "name@1" pins one. A profile owns the
+  // toolset, so it cannot be combined with tools.builtin. The run's metadata
+  // and a recording's guard carry the resolved "name@version".
+  string profile = 13;
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,
