@@ -1120,8 +1120,10 @@ type Tools struct {
 	// glob, grep, apply_patch (a unified diff), memory (notes that survive
 	// context management), session_search (find and re-read what context
 	// management removed) delegate (hand a subtask to a sub-agent with a
-	// fresh context and keep only its report) and tool_search (the MCP tools
-	// start unloaded and the agent loads the ones it needs by searching). Off by default, so a comparison between models uses
+	// fresh context and keep only its report) tool_search (the MCP tools
+	// start unloaded and the agent loads the ones it needs by searching) and
+	// code_mode (the agent sees one tool, run_code, and acts by writing a script
+	// that calls the other tools as functions; only what it prints comes back). Off by default, so a comparison between models uses
 	// the same toolset unless a spec says so.
 	Builtin       []string `protobuf:"bytes,5,rep,name=builtin,proto3" json:"builtin,omitempty"`
 	unknownFields protoimpl.UnknownFields

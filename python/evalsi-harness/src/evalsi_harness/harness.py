@@ -296,6 +296,12 @@ class BuiltinHarness:
                 "Earlier parts of this task may be cleared or summarized. session_search finds "
                 "and re-reads any of it."
             )
+        if "code_mode" in c.tools.builtin:
+            notes.append(
+                "You act by writing scripts with run_code, which calls the task's tools as "
+                "functions. Do a whole step of work in one script (look, filter, change, check) "
+                "and print only what you need to see."
+            )
         if "delegate" in c.tools.builtin:
             notes.append(
                 "For work that would fill your context with output you do not need to keep "
@@ -376,6 +382,7 @@ class BuiltinHarness:
             output_per_mtok=c.pricing.output_per_mtok,
             truncation_retry_tokens=self._truncation_retry(live),
             session_search="session_search" in self.config.tools.builtin,
+            code_mode="code_mode" in self.config.tools.builtin,
             delegate_steps=(self.config.delegate_steps or 20)
             if "delegate" in self.config.tools.builtin
             else 0,

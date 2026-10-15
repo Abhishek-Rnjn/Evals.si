@@ -16,6 +16,7 @@ from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.archive import Archive, SessionSearchTool
+from evalsi_harness.codemode import RunCodeTool
 from evalsi_harness.context import (
     PROGRESS_NOTE,
     ROUND_DONE,
@@ -71,6 +72,8 @@ class LoopConfig:
     truncation_retry_tokens: int = 0
     # Offer session_search over the run's unabridged history.
     session_search: bool = False
+    # Code mode: the model sees one tool, run_code, and acts through scripts.
+    code_mode: bool = False
     # Offer delegate, with sub-agents of up to this many steps (0: not offered).
     delegate_steps: int = 0
     context: ContextConfig = field(default_factory=ContextConfig)
@@ -124,10 +127,15 @@ class AgentLoop:
         self.tools = {t.spec.name: t for t in tools}
         # Tools that start unloaded (tool_search loads them as the agent needs).
         self.deferred = {t.spec.name for t in tools if getattr(t, "deferred", False)}
+        # Tools the model cannot call directly (code mode: run_code calls them).
+        self.hidden: set[str] = set()
+        self._inner_calls = 0
         self.active: set[str] = set()
         if self.deferred:
             search = ToolSearchTool(self)
             self.tools[search.spec.name] = search
+        if config.code_mode:
+            self._enable_code_mode()
         self.config = config
         self.emit = emit
         self.user = user
@@ -222,12 +230,36 @@ class AgentLoop:
             },
         )
 
+    def _enable_code_mode(self) -> None:
+        """The model sees run_code alone; the rest of the tools become functions in it."""
+        scripted = {
+            name: t.spec
+            for name, t in self.tools.items()
+            if name not in self.deferred and name not in ("tool_search", "delegate")
+        }
+        loop = self
+
+        class Bridge(RunCodeTool):
+            async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
+                def bound(name: str) -> Any:
+                    async def go(arguments: dict[str, Any]) -> ToolResult:
+                        return await loop.inner_call(name, arguments, span)
+
+                    return go
+
+                self.callables = {name: bound(name) for name in scripted}
+                return await super().call(args, span=span)
+
+        tool = Bridge({}, scripted)
+        self.tools[tool.spec.name] = tool
+        self.hidden = set(scripted)
+
     def _specs(self) -> list[Any]:
         """The tools the model sees now: all but the deferred ones not yet loaded."""
         return [
             t.spec
             for name, t in self.tools.items()
-            if name not in self.deferred or name in self.active
+            if (name not in self.deferred or name in self.active) and name not in self.hidden
         ]
 
     def sub_tools(self) -> list[Tool]:
@@ -504,35 +536,8 @@ class AgentLoop:
         async def one(
             call: ToolCallRequest, denied: Deny | None
         ) -> tuple[ToolCallRequest, ToolResult, Step]:
-            span = span_id()
-            start = time.perf_counter()
-            tool = self.tools.get(call.name)
-            if denied is not None:
-                result = ToolResult(
-                    f"this call was denied by a hook: {denied.reason}",
-                    is_error=True,
-                    metadata={"hook_denied": True},
-                )
-                return call, result, self._tool_step(call, result, span, start)
-            try:
-                args = json.loads(call.arguments or "{}")
-            except json.JSONDecodeError as exc:
-                result = ToolResult(f"the arguments are not valid JSON: {exc}", is_error=True)
-            else:
-                if not isinstance(args, dict):
-                    result = ToolResult("the arguments must be a JSON object", is_error=True)
-                elif call.name in self.deferred and call.name not in self.active:
-                    result = ToolResult(
-                        f"{call.name} is not loaded yet: call tool_search to load it", is_error=True
-                    )
-                elif tool is None:
-                    known = ", ".join(sorted(self.tools)) or "none"
-                    result = ToolResult(
-                        f"there is no tool {call.name!r} (tools: {known})", is_error=True
-                    )
-                else:
-                    result = await tool.call(args, span=span)
-            return call, result, self._tool_step(call, result, span, start)
+            result, step = await self._execute(call, denied, self.root)
+            return call, result, step
 
         # delegate calls run in order: a sub-agent's model calls are recorded in sequence.
         concurrent = self.config.parallel and not any(c.name == "delegate" for c in calls)
@@ -560,8 +565,67 @@ class AgentLoop:
             )
             self.archive.add({**messages[-1], "name": call.name})
 
+    async def _execute(
+        self, call: ToolCallRequest, denied: Deny | None, parent: str, *, inner: bool = False
+    ) -> tuple[ToolResult, Step]:
+        """Runs one tool call (unless a hook denied it) and builds its step, a
+        child of ``parent``. ``inner`` is a call made from a code-mode script."""
+        span = span_id()
+        start = time.perf_counter()
+        tool = self.tools.get(call.name)
+        if denied is not None:
+            result = ToolResult(
+                f"this call was denied by a hook: {denied.reason}",
+                is_error=True,
+                metadata={"hook_denied": True},
+            )
+            return result, self._tool_step(call, result, span, start, parent)
+        try:
+            args = json.loads(call.arguments or "{}")
+        except json.JSONDecodeError as exc:
+            result = ToolResult(f"the arguments are not valid JSON: {exc}", is_error=True)
+        else:
+            if not isinstance(args, dict):
+                result = ToolResult("the arguments must be a JSON object", is_error=True)
+            elif call.name in self.deferred and call.name not in self.active:
+                result = ToolResult(
+                    f"{call.name} is not loaded yet: call tool_search to load it", is_error=True
+                )
+            elif call.name in self.hidden and not inner:
+                result = ToolResult(
+                    f"{call.name} is only available inside a run_code script", is_error=True
+                )
+            elif tool is None:
+                known = ", ".join(sorted(self.tools)) or "none"
+                result = ToolResult(
+                    f"there is no tool {call.name!r} (tools: {known})", is_error=True
+                )
+            else:
+                result = await tool.call(args, span=span)
+        return result, self._tool_step(call, result, span, start, parent)
+
+    async def inner_call(self, name: str, arguments: dict[str, Any], parent: str) -> ToolResult:
+        """A tool call made by a code-mode script. It goes through hooks, is a step
+        under the ``run_code`` step, and is recorded and replayed like any other."""
+        self._inner_calls += 1
+        call = ToolCallRequest(f"inner-{self._inner_calls}", name, json.dumps(arguments))
+        step_no = self.state.steps
+        call, denied = await self.hooks.before_tool(call, step=step_no, parent=parent)
+        self._emit_hook_steps()
+        ran, step = await self._execute(call, denied, parent, inner=True)
+        result = ran
+        if self.hooks:
+            result = await self.hooks.after_tool(call, ran, step=step_no, parent=parent)
+            if result is not ran:
+                step.output = Content(text=result.content)
+                step.error = result.content[:500] if result.is_error else ""
+            self._emit_hook_steps()
+        self.state.tool_calls += 1
+        self.emit(StepEvent(step))
+        return result
+
     def _tool_step(
-        self, call: ToolCallRequest, result: ToolResult, span: str, start: float
+        self, call: ToolCallRequest, result: ToolResult, span: str, start: float, parent: str
     ) -> Step:
         return Step(
             type="tool",
@@ -570,7 +634,7 @@ class AgentLoop:
             output=Content(text=result.content),
             error=result.content[:500] if result.is_error else "",
             span_id=span,
-            parent_span_id=self.root,
+            parent_span_id=parent,
             duration_ms=(time.perf_counter() - start) * 1000,
             attributes={
                 "gen_ai.tool.call.id": call.id,
