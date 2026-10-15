@@ -718,6 +718,13 @@ func TestAgentRunValidation(t *testing.T) {
 		"bad network": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Sandbox = &evalsiv1alpha1.SandboxPolicy{Network: "allowlist"}
 		},
+		"unknown built-in tool": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"rm_rf"}}
+		},
+		"built-in tools without the sandbox": func(s *evalsiv1alpha1.RunSpec) {
+			off := false
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Sandbox: &off, Builtin: []string{"grep"}}
+		},
 		"unknown context strategy": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "forget", WindowTokens: 100000}
 		},
@@ -760,6 +767,9 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}
+		},
+		"optional built-in tools": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Builtin: []string{"edit_file", "glob", "grep", "apply_patch"}}
 		},
 		"context management": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Context = &evalsiv1alpha1.ContextManagement{Strategy: "compact", WindowTokens: 200000, Trigger: 0.9, Target: 0.6, SpillOutputs: true}

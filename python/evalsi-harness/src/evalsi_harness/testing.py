@@ -230,6 +230,8 @@ class LocalSandbox:
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode() if isinstance(content, str) else content)
+            if mode:
+                path.chmod(mode)
 
     async def read_files(self, paths: Sequence[str], max_bytes: int = 0) -> dict[str, bytes]:
         out: dict[str, bytes] = {}

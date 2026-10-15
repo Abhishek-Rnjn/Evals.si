@@ -986,10 +986,14 @@ type Tools struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The sandbox tools (bash, read_file, write_file, list_files). On by
 	// default when the task has an environment.
-	Sandbox       *bool        `protobuf:"varint,1,opt,name=sandbox,proto3,oneof" json:"sandbox,omitempty"`
-	Mcp           []*MCPServer `protobuf:"bytes,2,rep,name=mcp,proto3" json:"mcp,omitempty"`
-	Mocks         []*MockTool  `protobuf:"bytes,3,rep,name=mocks,proto3" json:"mocks,omitempty"`
-	Faults        []*ToolFault `protobuf:"bytes,4,rep,name=faults,proto3" json:"faults,omitempty"`
+	Sandbox *bool        `protobuf:"varint,1,opt,name=sandbox,proto3,oneof" json:"sandbox,omitempty"`
+	Mcp     []*MCPServer `protobuf:"bytes,2,rep,name=mcp,proto3" json:"mcp,omitempty"`
+	Mocks   []*MockTool  `protobuf:"bytes,3,rep,name=mocks,proto3" json:"mocks,omitempty"`
+	Faults  []*ToolFault `protobuf:"bytes,4,rep,name=faults,proto3" json:"faults,omitempty"`
+	// More built-in tools to offer, by name: edit_file (exact-match replace),
+	// glob, grep and apply_patch (a unified diff). Off by default, so a
+	// comparison between models uses the same toolset unless a spec says so.
+	Builtin       []string `protobuf:"bytes,5,rep,name=builtin,proto3" json:"builtin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1048,6 +1052,13 @@ func (x *Tools) GetMocks() []*MockTool {
 func (x *Tools) GetFaults() []*ToolFault {
 	if x != nil {
 		return x.Faults
+	}
+	return nil
+}
+
+func (x *Tools) GetBuiltin() []string {
+	if x != nil {
+		return x.Builtin
 	}
 	return nil
 }
@@ -2016,12 +2027,13 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tToolFault\x12\x12\n" +
 	"\x04tool\x18\x01 \x01(\tR\x04tool\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04rate\x18\x03 \x01(\x01R\x04rate\"\xc5\x01\n" +
+	"\x04rate\x18\x03 \x01(\x01R\x04rate\"\xdf\x01\n" +
 	"\x05Tools\x12\x1d\n" +
 	"\asandbox\x18\x01 \x01(\bH\x00R\asandbox\x88\x01\x01\x12,\n" +
 	"\x03mcp\x18\x02 \x03(\v2\x1a.evalsi.v1alpha1.MCPServerR\x03mcp\x12/\n" +
 	"\x05mocks\x18\x03 \x03(\v2\x19.evalsi.v1alpha1.MockToolR\x05mocks\x122\n" +
-	"\x06faults\x18\x04 \x03(\v2\x1a.evalsi.v1alpha1.ToolFaultR\x06faultsB\n" +
+	"\x06faults\x18\x04 \x03(\v2\x1a.evalsi.v1alpha1.ToolFaultR\x06faults\x12\x18\n" +
+	"\abuiltin\x18\x05 \x03(\tR\abuiltinB\n" +
 	"\n" +
 	"\b_sandbox\"p\n" +
 	"\rUserSimulator\x12\x14\n" +

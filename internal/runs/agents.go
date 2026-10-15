@@ -81,6 +81,14 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			}
 		}
 	}
+	for _, name := range b.GetTools().GetBuiltin() {
+		if !slices.Contains(builtinTools, name) {
+			return invalid("spec.harness.builtin.tools.builtin: unknown tool %q (choose from %s)", name, strings.Join(builtinTools, ", "))
+		}
+	}
+	if len(b.GetTools().GetBuiltin()) > 0 && b.GetTools() != nil && b.GetTools().Sandbox != nil && !b.GetTools().GetSandbox() {
+		return invalid("spec.harness.builtin.tools.builtin needs the sandbox tools, which tools.sandbox turned off")
+	}
 	for _, f := range b.GetTools().GetFaults() {
 		if !slices.Contains([]string{"timeout", "error", "malformed"}, f.GetKind()) || f.GetRate() < 0 || f.GetRate() > 1 {
 			return invalid("tool faults need a kind (timeout, error or malformed) and a rate from 0 to 1")
@@ -174,6 +182,9 @@ func (m *Manager) workerSpec(spec *evalsiv1alpha1.RunSpec) (*evalsiv1alpha1.RunS
 	out.GetHarness().GetBuiltin().GetRecording().Dir = dir
 	return out, nil
 }
+
+// builtinTools are the optional built-in tools a spec may list.
+var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch"}
 
 // minContextWindow is the smallest window a strategy can work in: below it the
 // summary and the kept turns alone would not fit.

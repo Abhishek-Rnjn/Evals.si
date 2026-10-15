@@ -561,6 +561,7 @@ class Tools(_message.Message):
     MCP_FIELD_NUMBER: _builtins.int
     MOCKS_FIELD_NUMBER: _builtins.int
     FAULTS_FIELD_NUMBER: _builtins.int
+    BUILTIN_FIELD_NUMBER: _builtins.int
     sandbox: _builtins.bool
     """The sandbox tools (bash, read_file, write_file, list_files). On by
     default when the task has an environment.
@@ -571,6 +572,13 @@ class Tools(_message.Message):
     def mocks(self) -> _containers.RepeatedCompositeFieldContainer[Global___MockTool]: ...
     @_builtins.property
     def faults(self) -> _containers.RepeatedCompositeFieldContainer[Global___ToolFault]: ...
+    @_builtins.property
+    def builtin(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """More built-in tools to offer, by name: edit_file (exact-match replace),
+        glob, grep and apply_patch (a unified diff). Off by default, so a
+        comparison between models uses the same toolset unless a spec says so.
+        """
+
     def __init__(
         self,
         *,
@@ -578,10 +586,11 @@ class Tools(_message.Message):
         mcp: _abc.Iterable[Global___MCPServer] | None = ...,
         mocks: _abc.Iterable[Global___MockTool] | None = ...,
         faults: _abc.Iterable[Global___ToolFault] | None = ...,
+        builtin: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox", "sandbox", b"sandbox"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox", "faults", b"faults", "mcp", b"mcp", "mocks", b"mocks", "sandbox", b"sandbox"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox", "builtin", b"builtin", "faults", b"faults", "mcp", b"mcp", "mocks", b"mocks", "sandbox", b"sandbox"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__sandbox: _TypeAlias = _typing.Literal["sandbox"]  # noqa: Y015
     _WhichOneofArgType__sandbox: _TypeAlias = _typing.Literal["_sandbox", b"_sandbox"]  # noqa: Y015

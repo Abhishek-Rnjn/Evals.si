@@ -152,6 +152,10 @@ message Tools {
   repeated MCPServer mcp = 2;
   repeated MockTool mocks = 3;
   repeated ToolFault faults = 4;
+  // More built-in tools to offer, by name: edit_file (exact-match replace),
+  // glob, grep and apply_patch (a unified diff). Off by default, so a
+  // comparison between models uses the same toolset unless a spec says so.
+  repeated string builtin = 5;
 }
 
 // An LLM-driven simulated user with a persona and goal, for multi-turn tasks

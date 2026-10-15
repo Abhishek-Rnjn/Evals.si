@@ -1047,6 +1047,10 @@ spec:
                         x-kubernetes-preserve-unknown-fields: true
                       tools:
                         properties:
+                          builtin:
+                            items:
+                              type: string
+                            type: array
                           faults:
                             items:
                               properties:

@@ -94,6 +94,7 @@ Notes on environments:
 | `instructions` | appended to the system prompt |
 | `tools.mcp` | MCP servers (streamable HTTP, or stdio commands) whose tools the agent gets |
 | `tools.mocks` | canned tools: one `response`, or `responses` keyed by arguments |
+| `tools.builtin` | more built-in tools, by name: `edit_file` (replace exact text; fails if the text is missing or not unique, keeps a script executable), `glob`, `grep` (extended regular expressions, binary files skipped) and `apply_patch` (a unified diff, checked first and applied all or nothing, through `git apply` or `patch`). Off by default, so a comparison between models uses the same toolset unless a spec lists them; `edit_file` and `apply_patch` run again on replay, like `bash` |
 | `tools.faults` | deterministic fault injection (`error`, `timeout`, `malformed`) per tool, at a rate |
 | `user_simulator: {persona, goal, max_turns, judge}` | an LLM user for multi-turn tasks, speaking through a judge |
 | `recording: {mode: record\|replay, dir, branch_at_step}` | captures model calls and tool I/O. Replay reruns sandbox commands, so the environment is rebuilt; `branch_at_step: N` replays N steps, then continues live |

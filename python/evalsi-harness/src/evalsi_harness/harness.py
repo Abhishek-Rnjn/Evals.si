@@ -45,6 +45,7 @@ from evalsi_harness.tools import (
     ToolResult,
     sandbox_tools,
 )
+from evalsi_harness.toolset import MUTATING, extra_tools
 from evalsi_harness.trust import Trust
 from evalsi_harness.user_sim import UserSimulator
 
@@ -307,6 +308,13 @@ class BuiltinHarness:
                 *sandbox_tools(live.env, spill_outputs=self._context(live).spill_outputs),
                 self._escalation_tool(live),
             ]
+        if cfg.builtin:
+            if not use_sandbox or live.env is None:
+                raise TaskError("tools.builtin needs the sandbox tools and an environment")
+            try:
+                tools += extra_tools(live.env, list(cfg.builtin))
+            except ValueError as exc:
+                raise TaskError(f"tools.builtin: {exc}") from exc
         for server in cfg.mcp:
             if server.command:
                 self.ctx.trust.check_command(list(server.command), f"MCP server {server.name}")
@@ -434,7 +442,7 @@ class BuiltinHarness:
         cassette = live.cassette = self._cassette(live)
         if cassette is not None:
             model = CassetteModel(cassette, model)
-            sandbox_names = {"bash", "write_file"}
+            sandbox_names = {"bash", "write_file", *MUTATING}
             tools = [
                 CassetteTool(cassette, t, reexecute=t.spec.name in sandbox_names) for t in tools
             ]
