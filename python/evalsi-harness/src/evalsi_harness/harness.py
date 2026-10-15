@@ -207,9 +207,9 @@ class BuiltinHarness:
             resolved = agent_pb2.BuiltinHarness()
             resolved.CopyFrom(self.config)
             resolved.tools.builtin.extend(self.profile.builtin)
-            ctx = resolved.context
-            if self.profile.compact_with_window and not ctx.strategy and ctx.window_tokens:
-                ctx.strategy = "compact"
+            window = resolved.context
+            if self.profile.compact_with_window and not window.strategy and window.window_tokens:
+                window.strategy = "compact"
             self.config = resolved
         self._pool: EnvironmentPool | None = None
         self._pool_lock = asyncio.Lock()

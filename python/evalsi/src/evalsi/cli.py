@@ -176,6 +176,22 @@ def _add_run(sub: Any) -> None:
     add_credential_args(cmp)
     cmp.set_defaults(func=_cmd_compare)
 
+    mx = sub.add_parser(
+        "matrix",
+        help="harness-by-model matrix over results files, with cost beside each score",
+    )
+    mx.add_argument("results", nargs="+", help="results files from `evalsi run --output`")
+    mx.add_argument("--metric", required=True)
+    mx.add_argument(
+        "--tuned-on",
+        action="append",
+        default=[],
+        help="a results file name, run name or dataset hash the harness was tuned on; "
+        "cells are then split into tuned and held-out",
+    )
+    mx.add_argument("--format", choices=["table", "json"], default="table")
+    mx.set_defaults(func=_cmd_matrix)
+
     delete = sub.add_parser("delete-run", help="delete a finished server run and its stored data")
     delete.add_argument("id")
     delete.add_argument("--server", required=True)
@@ -861,6 +877,29 @@ def _cmd_policy(args: argparse.Namespace) -> int:
         except ServerError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
+    return 0
+
+
+def _cmd_matrix(args: argparse.Namespace) -> int:
+    from evalsi import matrix
+
+    loaded = []
+    for path in args.results:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                loaded.append((os.path.basename(path), json.load(handle)))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: {path}: {exc}", file=sys.stderr)
+            return 2
+    try:
+        cells = matrix.build(loaded, args.metric, tuned_on=args.tuned_on)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.format == "json":
+        print(json.dumps([c.to_dict() for c in cells], indent=2))
+    else:
+        print(matrix.table(cells))
     return 0
 
 

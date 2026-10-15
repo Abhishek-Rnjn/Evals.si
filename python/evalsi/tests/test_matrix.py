@@ -1,0 +1,123 @@
+"""The harness-by-model matrix over results files (H3)."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from evalsi import matrix
+from evalsi.cli import main
+
+
+def results(
+    profile: str,
+    scores: list[float],
+    *,
+    tokens: int,
+    steps: int,
+    name: str = "run",
+    dataset: str = "d" * 64,
+    model: str = "m1",
+) -> dict[str, Any]:
+    n = len(scores)
+    mean = sum(scores) / n
+    return {
+        "manifest": {
+            "name": name,
+            "dataset": {"sha256": dataset},
+            "target": {"connector": "openai-compatible", "model": model},
+            "spec": {"harness": {"builtin": {"profile": profile}}},
+        },
+        "summaries": [
+            {
+                "metric": "task-success",
+                "n": n,
+                "mean": mean,
+                "ci": {"low": mean - 0.2, "high": min(1.0, mean + 0.2), "level": 0.95},
+            }
+        ],
+        "results": [
+            {
+                "record_id": f"t{i}",
+                "evaluator": "task-success",
+                "outcome": "scored",
+                "trial": 0,
+                "scores": [{"name": "task-success", "number": v}],
+            }
+            for i, v in enumerate(scores)
+        ],
+        "records": [
+            {
+                "id": f"t{i}",
+                "usage": {"input_tokens": tokens - 100, "output_tokens": 100, "cost_usd": 0.01},
+                "metadata": {"agent": {"steps": steps, "profile": profile}},
+            }
+            for i in range(n)
+        ],
+    }
+
+
+A = results("standard@1", [1, 1, 0, 1, 1, 0, 1, 1, 1, 0], tokens=6600, steps=26)
+B = results("minimal@1", [1, 1, 1, 1, 1, 0, 1, 1, 1, 1], tokens=3600, steps=10)
+
+
+def test_cost_sits_beside_the_score_and_the_difference_has_an_interval() -> None:
+    cells = matrix.build([("standard", A), ("minimal", B)], "task-success")
+    base, cand = cells
+    assert (base.harness, cand.harness) == ("standard@1", "minimal@1")
+    assert base.model == "m1"
+    assert (base.cost.calls, base.cost.tokens, base.cost.usd) == (26, 6600, 0.01)
+    assert (cand.cost.calls, cand.cost.tokens) == (10, 3600)
+    # Cheaper and no worse: the score per thousand tokens shows it.
+    assert cand.score_per_ktok is not None
+    assert base.score_per_ktok is not None
+    assert cand.score_per_ktok > base.score_per_ktok
+    assert base.diff is None
+    assert cand.diff is not None
+    assert cand.diff == pytest.approx(0.2)
+    assert cand.diff_low is not None
+    assert cand.diff_high is not None
+    assert cand.diff_low <= cand.diff <= cand.diff_high
+    text = matrix.table(cells)
+    assert "minimal@1" in text
+    assert "tokens/task" in text
+
+
+def test_a_cell_missing_the_metric_or_the_cost_is_reported_not_guessed() -> None:
+    with pytest.raises(ValueError, match="no metric 'nope'"):
+        matrix.build([("a", A)], "nope")
+    bare = {"summaries": A["summaries"], "results": A["results"], "records": [], "manifest": {}}
+    (cell,) = matrix.build([("bare", bare)], "task-success")
+    assert cell.cost.tokens is None
+    assert cell.score_per_ktok is None
+    assert cell.harness == "custom"
+    assert "-" in matrix.table([cell])
+
+
+def test_tuned_and_held_out_cells_are_split() -> None:
+    held = results("minimal@1", [1, 0, 1, 1], tokens=3000, steps=9, name="other", dataset="e" * 64)
+    cells = matrix.build(
+        [("standard", A), ("minimal", B), ("held", held)],
+        "task-success",
+        tuned_on=["d" * 64],
+    )
+    assert [c.split for c in cells] == ["tuned", "tuned", "held-out"]
+    assert matrix.build([("a", A)], "task-success")[0].split == ""
+
+
+def test_the_cli_prints_a_table_and_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pa, pb = tmp_path / "a.json", tmp_path / "b.json"
+    pa.write_text(json.dumps(A))
+    pb.write_text(json.dumps(B))
+    assert main(["matrix", str(pa), str(pb), "--metric", "task-success"]) == 0
+    assert "minimal@1" in capsys.readouterr().out
+    assert main(["matrix", str(pa), str(pb), "--metric", "task-success", "--format", "json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["harness"] for r in rows] == ["standard@1", "minimal@1"]
+    assert main(["matrix", str(pa), "--metric", "nope"]) == 2
+    assert main(["matrix", str(tmp_path / "missing.json"), "--metric", "x"]) == 2
