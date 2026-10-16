@@ -767,12 +767,21 @@ def test_a_cassette_carries_its_version_and_old_ones_replay(tmp_path: Any) -> No
     lines = [json.loads(x) for x in path.read_text().splitlines()]
     assert lines[0] == {
         "kind": "header",
-        "version": 2,
+        "version": 3,
         "context": {"strategy": "none"},
         "hooks": [],
         "toolset": {"builtin": [], "delegate_steps": 0},
+        "user_simulator": None,
     }
     assert Cassette(path, "replay").next_turn() is not None
+    # Version 2 headers predate simulated-user recording. Ordinary logs
+    # remain replayable without a simulator, as they were before v3.
+    old_header = {**lines[0], "version": 2}
+    del old_header["user_simulator"]
+    path.write_text("\n".join(json.dumps(x) for x in [old_header, *lines[1:]]) + "\n")
+    replayed = Cassette(path, "replay").next_turn()
+    assert replayed is not None
+    assert replayed.text == "hi"
     # A version 1 file has no header.
     path.write_text("\n".join(json.dumps(x) for x in lines[1:]) + "\n")
     assert Cassette(path, "replay").next_turn() is not None
