@@ -231,8 +231,35 @@ A turn cut off by `max_tokens` is tried once more with twice the limit (up to 12
 | `code-quality` | the agent's git diff (recorded when the workdir is a git repository) | a judge review on correctness, regression safety, cleanliness, tests, scope and maintainability; a weighted `code-quality` score and `mergeable` (every dimension at least `merge_bar`, default 4 of 5) |
 | `policy-violations` | sandbox policy events | `policy-clean`, `policy-events`, `escalation-requests` |
 | `agent-efficiency` | the trajectory and usage | `within-budget`, `agent-steps`, `agent-tokens`, `agent-cost-usd` |
+| `mechanism-ran` | tool steps or recorded harness context counters | a pass when the named mechanism executed; pass rate across tasks |
 
 The trajectory-based evaluators of the `agent` pack also apply: tool-call accuracy, trajectory match, loops and goal completion. Every step is also exported as an OTel span, so an agent run shows up in your tracing backend.
+
+To gate on whether a harness change was exercised, add `mechanism-ran` alongside
+the task's quality evaluators:
+
+```yaml
+evaluators:
+  - ref: task-success
+  - ref: mechanism-ran
+    params:
+      mechanism: tool:grep
+gates:
+  - metric: mechanism-ran
+    min: 1.0
+```
+
+`tool:<name>` passes when a tool step names that tool, including nested calls
+and calls that returned errors. Offering the tool alone does not pass, and an
+invocation does not establish that the tool succeeded or improved quality.
+`context:<strategy>` supports `clear-tool-results`, `compact`, `fresh-rounds`
+and `evidence-state`: it requires the matching recorded strategy and positive
+activity counters. Compact includes clearing tool results as well as summaries;
+fresh rounds count a recorded round, and evidence state counts recorded entries
+or conclusions. A strategy that was enabled but never acted fails. Context
+records without strategy or activity metadata are skipped; records without a
+trajectory are skipped for either kind. Use evaluator aliases to check several
+mechanisms in one run. `evalsi matrix --mechanisms` uses the same activity rules.
 
 `code-quality` takes `weights` (per dimension), `merge_bar` and `max_diff_chars`. The diff covers changes against `HEAD` plus untracked files. It leaves out the files Evals.si places itself (`.evalsi-*`) and is captured before the checker runs.
 
