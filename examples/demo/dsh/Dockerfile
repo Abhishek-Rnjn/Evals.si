@@ -5,7 +5,7 @@
 # dsh is a developer preview whose behaviour changes between releases, so the
 # version is pinned. 0.2.1-alpha.2 is the npm release of commit
 # d743267388641bc76f17c45ce8b4c231aed1d32c of deepseek-ai/deepseek-harness.
-FROM node:22-slim
+FROM node:25-slim
 ARG DSH_VERSION=0.2.1-alpha.2
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 \
     && rm -rf /var/lib/apt/lists/* \
