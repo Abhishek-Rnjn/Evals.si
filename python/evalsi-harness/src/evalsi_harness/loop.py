@@ -80,6 +80,8 @@ class LoopConfig:
     # Offer delegate, with sub-agents of up to this many steps (0: not offered).
     delegate_steps: int = 0
     context: ContextConfig = field(default_factory=ContextConfig)
+    # Scripted user messages, (after this many model calls, text), in order.
+    interjections: list[tuple[int, str]] = field(default_factory=list)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
 
@@ -147,6 +149,7 @@ class AgentLoop:
         self.state = LoopState()
         self.hooks = hooks or Hooks()
         self.stop_continues = 0
+        self.delivered: list[str] = []
         # fresh-rounds: reads the notes a round leaves for the next.
         self.progress = progress
         self._round_start = 0
@@ -218,6 +221,7 @@ class AgentLoop:
                 "cache_write_tokens": self.state.cache_write_tokens,
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
+                **({"interjections": len(self.delivered)} if self.config.interjections else {}),
                 # What the model was shown, by the rule its requests use.
                 "tools_offered": sorted({t.name for t in self._specs()}),
                 **(
@@ -370,6 +374,7 @@ class AgentLoop:
         while True:
             if reason := self._over_budget(started):
                 return self._final(last_text, reason)
+            self._interject(messages)
             prepared = await self.strategy.prepare(messages, self.view, parent=self.root)
             if prepared.messages is not messages:
                 messages[:] = prepared.messages
@@ -378,7 +383,10 @@ class AgentLoop:
                 if step.name.startswith("context:"):
                     await self.hooks.on_compaction(step, parent=self.root)
             request = await self.hooks.before_model(
-                ModelRequest([*messages, *prepared.transient], self.config.system),
+                ModelRequest(
+                    [*messages, *prepared.transient, *self._interjection_reminder()],
+                    self.config.system,
+                ),
                 step=self.state.steps,
                 parent=self.root,
             )
@@ -399,6 +407,8 @@ class AgentLoop:
             if turn.tool_calls:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
+            if self._interject(messages):
+                continue  # a message came in while the agent was working: it reads it
             if self.user is None:
                 final = await self._finish(turn.text, messages)
                 if final is not None:
@@ -425,6 +435,47 @@ class AgentLoop:
                 continue
             messages.append({"role": "user", "content": reply.message})
             self.archive.add(messages[-1])
+
+    def _interject(self, messages: list[dict[str, Any]]) -> bool:
+        """Deliver the scripted user messages that are due, in order. True if any were."""
+        sent = False
+        due = self.config.interjections
+        while len(self.delivered) < len(due) and due[len(self.delivered)][0] <= self.state.steps:
+            at_step, text = due[len(self.delivered)]
+            self.delivered.append(text)
+            messages.append({"role": "user", "content": text})
+            self.archive.add(messages[-1])
+            self.emit(
+                StepEvent(
+                    Step(
+                        type="user",
+                        name="user-interjection",
+                        output=Content(text=text),
+                        span_id=span_id(),
+                        parent_span_id=self.root,
+                        attributes={
+                            "evalsi.interjection.at_step": at_step,
+                            "evalsi.interjection.delivered_at": self.state.steps,
+                        },
+                    )
+                )
+            )
+            sent = True
+        return sent
+
+    def _interjection_reminder(self) -> list[dict[str, Any]]:
+        """With a context strategy, history can be cleared or summarized, and the user's
+        mid-run instructions with it; they are repeated on every call, not kept in it."""
+        if not self.delivered or self.config.context.strategy == "none":
+            return []
+        lines = "\n".join(f"{i}. {t}" for i, t in enumerate(self.delivered, 1))
+        return [
+            {
+                "role": "user",
+                "content": "Reminder: the user told you the following while you worked, and "
+                f"it still applies:\n{lines}",
+            }
+        ]
 
     def _emit_hook_steps(self) -> None:
         for step in self.hooks.drain():

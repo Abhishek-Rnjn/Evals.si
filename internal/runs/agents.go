@@ -103,6 +103,14 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("spec.harness.builtin.profile sets the toolset; remove tools.builtin or the profile")
 		}
 	}
+	if len(b.GetInterjections()) > maxInterjections {
+		return invalid("spec.harness.builtin.interjections can hold at most %d messages", maxInterjections)
+	}
+	for i, j := range b.GetInterjections() {
+		if j.GetAtStep() < 1 || strings.TrimSpace(j.GetMessage()) == "" || len(j.GetMessage()) > 4000 {
+			return invalid("spec.harness.builtin.interjections[%d] needs at_step of at least 1 and a message of 1 to 4000 characters", i)
+		}
+	}
 	for _, name := range b.GetTools().GetBuiltin() {
 		if !slices.Contains(builtinTools, name) {
 			return invalid("spec.harness.builtin.tools.builtin: unknown tool %q (choose from %s)", name, strings.Join(builtinTools, ", "))
@@ -159,6 +167,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 		}
 	default:
 		return invalid("spec.harness.builtin.recording.mode must be off, record, replay, resume or fork")
+	}
+	if err := validateProtect(env.GetChecker()); err != nil {
+		return err
 	}
 	if p := env.GetChecker().GetParser(); strings.Contains(p, ":") && !strings.HasPrefix(p, "junit:") {
 		if err := m.trustPython(p, "spec.environment.checker.parser"); err != nil {
@@ -336,4 +347,26 @@ var cliOutputFormats = map[string]bool{
 	"codex-json":         true,
 	"gemini-json":        true,
 	"pi-json":            true,
+}
+
+// maxInterjections bounds the scripted mid-run user messages.
+const maxInterjections = 20
+
+// maxProtect bounds the patterns a checker may protect.
+const maxProtect = 50
+
+func validateProtect(c *evalsiv1alpha1.Checker) error {
+	const f = "spec.environment.checker"
+	if m := c.GetOnChange(); m != "" && m != "fail" && m != "restore" {
+		return invalid("%s.on_change must be fail or restore", f)
+	}
+	if len(c.GetProtect()) > maxProtect {
+		return invalid("%s.protect can hold at most %d patterns", f, maxProtect)
+	}
+	for _, p := range c.GetProtect() {
+		if p == "" || len(p) > 120 || strings.HasPrefix(p, "/") || slices.Contains(strings.Split(p, "/"), "..") {
+			return invalid("%s.protect: %q must be a relative pattern of at most 120 characters, without ..", f, p)
+		}
+	}
+	return nil
 }

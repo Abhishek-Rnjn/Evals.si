@@ -74,6 +74,8 @@ environment:
     command: [python3, -m, pytest, -q]
     parser: exit-code                          # exit-code | json | junit:<path> | module:function
     timeout: 10m
+    protect: ["tests/**", "**/conftest.py"]    # the agent must not change these
+    on_change: fail                            # fail (default) | restore
   command_timeout: 2m
 ```
 
@@ -82,6 +84,7 @@ Notes on environments:
 - **Setup is shared.** Setup runs once per distinct environment, and every trial restores from the snapshot.
 - **Network.** All traffic goes through a logging egress proxy, so refused hosts show up as policy events.
 - **Writable root.** An image root is a private writable copy unless `read_only_root` is set.
+- **Protected files.** `checker.protect` lists globs, relative to the workdir, of files the checker relies on. Their contents are hashed when each trial starts and compared before the checker runs. A file modified, deleted, or created under a pattern is a change; it appears as a `sandbox.protected_file_modified` guardrail step and in `metadata.policy_events`, and `metadata.protected_files` lists what changed. With `on_change: fail` the trial fails (a failed check, not an error) without running the checker, since the state it would grade cannot be trusted; with `restore` the originals are written back and new files removed, and the checker then grades what the agent really did. This covers the workdir only: a `sitecustomize.py` on the Python path, a shim earlier on `PATH` or the installed packages are outside it (`sandbox.read_only_root` closes those), and symlinks are never followed: a link under a pattern is inventoried with its target, a new or retargeted link is a change, a protected file swapped for a link counts as deleted, and `restore` removes links and directories standing where an original was before writing it back. Running the checker on a clean copy of the setup snapshot with only the agent's diff applied is not built. Up to 5,000 protected files and 500 links, 8 MiB per file and 64 MiB in all; a file over the limit makes the trial an error, never a pass.
 - **Infrastructure errors are not scores.** A task whose environment fails (an image that does not pull, failing setup, a checker that cannot run) is reported as an error, never as a failed task.
 
 ## Harness options
@@ -148,6 +151,10 @@ Every call a script makes goes through the same path as a direct one: it is a to
 Naming `delegate` in `tools.builtin` gives the agent a tool that starts a sub-agent on a task. The sub-agent has a clean context, the parent's tools (without `delegate`, so there is one level) and the same model, and runs for up to `delegate_steps` model calls (default 20; the agent may ask for fewer). Everything it reads and tries stays in its own conversation, and the parent gets its final report as the tool result, so a token-heavy subtask costs the parent a paragraph, not a context. This is the `offload` pattern, and it combines with the context strategies; a sub-agent has one job and one reply, so it runs with `fresh-rounds` turned off.
 
 Its spend is the parent's: tokens, spend and wall-clock time come out of what the parent has left (a `delegate` with nothing left is an error the agent sees), and `agent.subagents` and `agent.subagent_steps` total them. Its steps are on the trajectory under a `subagent` step that hangs from the `delegate` call, so a multi-agent run reads as a tree. Hooks apply to the sub-agent's tool calls too. Its model and tool calls are recorded in order with the parent's, so a replay reproduces them; `delegate` calls in one turn therefore run one after another.
+
+### Messages from the user mid-run
+
+`harness.builtin.interjections` is a list of `{at_step, message}`. Each message is delivered as a user message once the agent has made `at_step` model calls, at the start of the next call (after that call's tool results; with Anthropic it joins the same user turn), and it is a `user-interjection` step on the trajectory, so an evaluator can score whether the agent took a correction or a new constraint into account. A message still due when the agent tries to finish is read before it can. They are scripted, not generated: replays and comparisons see the same words at the same points, and a recording replays only with the same messages. With a context strategy, the messages are repeated on every call after they arrive, so clearing or summarizing history cannot lose them. Built-in agent only (a CLI agent runs to completion), and sub-agents are not interrupted.
 
 ### Profiles: a harness a score can name
 

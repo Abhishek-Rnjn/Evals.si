@@ -67,6 +67,10 @@ class CheckerConfig:
     files: dict[str, str] = field(default_factory=dict)
     timeout_s: float = 600.0
     parser: str = "exit-code"
+    # Globs (relative to the workdir) of files the agent must not change, and
+    # what to do when it does: "fail" or "restore" (see protect.py).
+    protect: list[str] = field(default_factory=list)
+    on_change: str = "fail"
 
 
 @dataclass
@@ -168,7 +172,17 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
             files={str(k): str(v) for k, v in (raw_checker.get("files") or {}).items()},
             timeout_s=seconds(raw_checker.get("timeout"), 600.0),
             parser=str(raw_checker.get("parser") or "exit-code"),
+            protect=[str(p) for p in raw_checker.get("protect") or []],
+            on_change=str(raw_checker.get("on_change") or "fail"),
         )
+        from evalsi_harness.protect import MODES, validate_patterns
+
+        if checker.on_change not in MODES:
+            raise TaskError(f"checker.on_change must be one of {', '.join(MODES)}")
+        try:
+            validate_patterns(checker.protect)
+        except ValueError as exc:
+            raise TaskError(f"checker.protect: {exc}") from exc
     return EnvironmentConfig(
         image=str(data.get("image", "")),
         files={str(k): str(v) for k, v in (data.get("files") or {}).items()},

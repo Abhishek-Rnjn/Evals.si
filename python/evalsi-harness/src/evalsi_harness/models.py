@@ -258,7 +258,12 @@ def to_anthropic(messages: list[Message]) -> list[dict[str, Any]]:
                 )
             out.append({"role": "assistant", "content": blocks or ""})
         elif role == "user":
-            out.append({"role": "user", "content": msg.get("content") or ""})
+            text = msg.get("content") or ""
+            if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list):
+                # Text that follows tool results goes in the same user turn.
+                out[-1]["content"].append({"type": "text", "text": text})
+            else:
+                out.append({"role": "user", "content": text})
     return out
 
 

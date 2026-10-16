@@ -91,6 +91,8 @@ class DelegateTool:
                 wall_clock_s=budget["wall_clock_s"],
                 system=SUBAGENT_SYSTEM,
                 delegate_steps=0,
+                # The user is talking to the agent they hired, not to its helpers.
+                interjections=[],
                 # A sub-agent has one job and one reply. fresh-rounds needs a progress
                 # reader and a completion marker it was never told about.
                 context=replace(loop.config.context, strategy="none")

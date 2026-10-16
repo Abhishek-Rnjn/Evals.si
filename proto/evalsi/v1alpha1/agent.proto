@@ -269,6 +269,18 @@ message BuiltinHarness {
   // toolset, so it cannot be combined with tools.builtin. The run's metadata
   // and a recording's guard carry the resolved "name@version".
   string profile = 13;
+  // Messages the user sends while the agent works, at fixed points. Each is
+  // delivered as a user message at the start of the model call after the
+  // agent's at_step-th call (or when the agent tries to finish with one still
+  // due), recorded as a "user-interjection" step. Built-in agent only.
+  repeated Interjection interjections = 14;
+}
+
+// A scripted message from the simulated user, mid-run.
+message Interjection {
+  // Delivered once the agent has made this many model calls (at least 1).
+  int32 at_step = 1;
+  string message = 2;
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,
@@ -361,6 +373,16 @@ message Checker {
   // stdout is {"passed": bool, "score": number, "tests": {...}}); "junit:<path>";
   // or a Python function "module:function" taking (stdout, stderr, exit_code, task).
   string parser = 4;
+  // Glob patterns, relative to the workdir ("tests/**", "**/conftest.py"), of
+  // files the agent must not change. They are hashed when each trial starts and
+  // compared before the checker runs; a change (modified, deleted or new under
+  // a pattern) is a guardrail step on the trajectory. Workdir only: tampering
+  // outside it needs sandbox.read_only_root.
+  repeated string protect = 5;
+  // What a change does: "fail" (default) fails the trial without running the
+  // checker; "restore" writes the originals back and removes new files, then
+  // runs the checker.
+  string on_change = 6;
 }
 
 // Environment is where a task runs. Spec-level values apply to every record;
