@@ -24,6 +24,7 @@ import json
 import os
 from collections import defaultdict, deque
 from collections.abc import Callable
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,8 @@ from evalsi_harness.models import (
 from evalsi_harness.tools import Tool, ToolResult
 from evalsi_harness.user_sim import UserSimulator, UserTurn
 
-CASSETTE_VERSION = 3
+CASSETTE_VERSION = 4
+_TOOL_OWNER: ContextVar[str | None] = ContextVar("cassette_tool_owner", default=None)
 EMPTY_TOOLSET: dict[str, Any] = {"builtin": [], "delegate_steps": 0}
 
 
@@ -118,6 +120,9 @@ class Cassette:
         self._turns: deque[dict[str, Any]] = deque()
         self._tools: dict[tuple[str, str], deque[dict[str, Any]]] = defaultdict(deque)
         self._users: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+        self._owned_tools: dict[str, dict[str, Any]] = {}
+        self._invocations: dict[tuple[str, str], int] = defaultdict(int)
+        self.user: CassetteUserSimulator | None = None
         self.user_simulator = user_simulator
         self.turns_served = 0
         # The context strategy the recording is valid for: a replay under
@@ -150,6 +155,7 @@ class Cassette:
         recorded_hooks: list[Any] = []
         recorded_toolset: dict[str, Any] = EMPTY_TOOLSET
         recorded_user: dict[str, Any] | None = None
+        version = 1
         good: list[str] = []
         lines = [ln for ln in self.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
         for line in lines:
@@ -165,25 +171,14 @@ class Cassette:
                 ) from None
             good.append(line)
             if entry["kind"] == "header":
+                version = entry.get("version", 1)
                 recorded = entry.get("context") or {"strategy": "none"}
                 recorded_hooks = entry.get("hooks") or []
                 recorded_toolset = entry.get("toolset") or EMPTY_TOOLSET
                 recorded_user = entry.get("user_simulator")
             else:
-                self._next_id = max(self._next_id, entry.get("id", self._next_id) + 1)
-                self._last_id = entry.get("id", self._last_id)
-                if entry["kind"] == "model":
-                    self._turns.append(entry["turn"])
-                elif entry["kind"] == "tool":
-                    key = (entry["name"], _args_key(entry["args"]))
-                    self._tools[key].append(entry["result"])
-                elif entry["kind"] == "user":
-                    self._users[entry["conversation"]].append(entry["result"])
-        if recorded_user != self.user_simulator:
-            raise CassetteError(
-                f"cassette {self.path.name} needs the same recorded user simulator; "
-                "older logs without user turns cannot replay simulated-user tasks"
-            )
+                self._load_entry(entry)
+        self._check_user(recorded_user, version)
         if self.mode == "resume":
             # A refusal at the very end is where the trial died (a provider that went away),
             # not an outcome the run handled: resuming tries that call again.
@@ -221,6 +216,32 @@ class Cassette:
             tmp = self.path.with_suffix(self.path.suffix + ".tmp")
             tmp.write_text("\n".join(good) + "\n" if good else "", encoding="utf-8")
             os.replace(tmp, self.path)
+
+    def _load_entry(self, entry: dict[str, Any]) -> None:
+        self._next_id = max(self._next_id, entry.get("id", self._next_id) + 1)
+        self._last_id = entry.get("id", self._last_id)
+        if entry["kind"] == "model":
+            self._turns.append(entry["turn"])
+        elif entry["kind"] == "tool":
+            key = (entry["name"], _args_key(entry["args"]))
+            if entry.get("owner") is not None:
+                self._owned_tools[entry["owner"]] = entry["result"]
+            else:
+                self._tools[key].append(entry["result"])
+        elif entry["kind"] == "user":
+            self._users[entry["conversation"]].append(entry)
+
+    def _check_user(self, recorded: dict[str, Any] | None, version: int) -> None:
+        if recorded is not None and version < 4:
+            raise CassetteError(
+                "user simulator replay needs a version 4 recording "
+                "with state and elicitation ownership"
+            )
+        if recorded != self.user_simulator:
+            raise CassetteError(
+                f"cassette {self.path.name} needs the same recorded user simulator; "
+                "older logs without user turns cannot replay simulated-user tasks"
+            )
 
     # --- writing ---
 
@@ -294,17 +315,21 @@ class Cassette:
             raise ModelError(entry["error"])
         return _turn_from_dict(entry)
 
-    def tool_result(self, name: str, args: dict[str, Any]) -> ToolResult | None:
+    def tool_result(
+        self, name: str, args: dict[str, Any], *, owner: str | None = None
+    ) -> ToolResult | None:
         if self.live:
             return None
         queue = self._tools.get((name, _args_key(args)))
-        if not queue:
+        data = self._owned_tools.pop(owner, None) if owner is not None else None
+        if data is None and queue:
+            data = queue.popleft()
+        if data is None:
             if self.mode == "resume":
                 return None  # the trial died before this call finished: run it
             raise CassetteError(
                 f"cassette {self.path.name} has no result for {name}({_args_key(args)})"
             )
-        data = queue.popleft()
         return ToolResult(
             data["content"],
             is_error=data.get("is_error", False),
@@ -376,23 +401,66 @@ class CassetteModel:
 
 
 class CassetteUserSimulator(UserSimulator):
-    """Replays user decisions; creates the judge only when execution goes live."""
+    """Replays decisions and simulator state without resolving a live judge."""
 
     def __init__(self, cassette: Cassette, factory: Callable[[], UserSimulator]) -> None:
         self.cassette = cassette
+        cassette.user = self
         self.factory = factory
         self.inner: UserSimulator | None = None
         self.turns = 0
+        self.elicitations = 0
+
+    def _restore(self, data: dict[str, Any]) -> UserTurn:
+        state = data.get("state") or {}
+        if state:
+            if self.inner is None:
+                self.inner = self.factory()
+            self.inner.restore_replay_state(state)
+        return UserTurn(data["message"], data["done"], Usage.from_dict(data["usage"]))
+
+    def replay_owned(self, owner: str) -> None:
+        """Advance decisions skipped when their owning tool result is cached."""
+        entries = []
+        for queue in self.cassette._users.values():
+            while queue and queue[0].get("owner") == owner:
+                entries.append(queue.popleft())
+        for entry in sorted(entries, key=lambda e: e["id"]):
+            self._restore(entry["result"])
+            self.elicitations += 1
+            self.cassette.record(
+                {k: v for k, v in entry.items() if k not in ("id", "parent")}, replayed=True
+            )
+
+    async def elicit(self, message: str, schema: dict[str, Any]) -> UserTurn:
+        return await self._reply(
+            [{"role": "assistant", "content": message}],
+            owner=_TOOL_OWNER.get(),
+            schema=schema,
+        )
 
     async def reply(self, conversation: list[dict[str, Any]]) -> UserTurn:
+        return await self._reply(conversation)
+
+    async def _reply(
+        self,
+        conversation: list[dict[str, Any]],
+        *,
+        owner: str | None = None,
+        schema: dict[str, Any] | None = None,
+    ) -> UserTurn:
         tape = self.cassette
-        key = json.dumps(conversation, sort_keys=True, separators=(",", ":"))
+        key = json.dumps(
+            {"conversation": conversation, "owner": owner, "schema": schema},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         queue = tape._users.get(key)
         replayed = not tape.live and bool(queue)
         if replayed:
             assert queue is not None
-            data = queue.popleft()
-            result = UserTurn(data["message"], data["done"], Usage.from_dict(data["usage"]))
+            data = queue.popleft()["result"]
+            result = self._restore(data)
         else:
             if not tape.live and (tape.mode != "resume" or tape._turns):
                 raise CassetteError("cassette has no user turn for this conversation")
@@ -400,17 +468,15 @@ class CassetteUserSimulator(UserSimulator):
                 self.inner = self.factory()
             self.inner.turns = self.turns
             result = await self.inner.reply(conversation)
+            data = {
+                "message": result.message,
+                "done": result.done,
+                "usage": result.usage.to_dict(),
+                "state": self.inner.replay_state(),
+            }
         self.turns += 1
         tape.record(
-            {
-                "kind": "user",
-                "conversation": key,
-                "result": {
-                    "message": result.message,
-                    "done": result.done,
-                    "usage": result.usage.to_dict(),
-                },
-            },
+            {"kind": "user", "conversation": key, "owner": owner, "result": data},
             replayed=replayed,
         )
         return result
@@ -432,15 +498,29 @@ class CassetteTool:
         self.deferred = getattr(inner, "deferred", False)
 
     async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
-        result = self.cassette.tool_result(self.spec.name, args)
+        tape = self.cassette
+        key = (self.spec.name, _args_key(args))
+        tape._invocations[key] += 1
+        owner = json.dumps([*key, tape._invocations[key]], separators=(",", ":"))
+        token = _TOOL_OWNER.set(owner)
+        try:
+            return await self._call(args, owner=owner, span=span)
+        finally:
+            _TOOL_OWNER.reset(token)
+
+    async def _call(self, args: dict[str, Any], *, owner: str, span: str) -> ToolResult:
+        result = self.cassette.tool_result(self.spec.name, args, owner=owner)
         replayed = result is not None
         if result is None:
             result = await self.inner.call(args, span=span)
         elif self.reexecute:
             await self.inner.call(args, span=span)
+        elif self.cassette.user is not None:
+            self.cassette.user.replay_owned(owner)
         self.cassette.record(
             {
                 "kind": "tool",
+                "owner": owner,
                 "name": self.spec.name,
                 "args": args,
                 "result": {

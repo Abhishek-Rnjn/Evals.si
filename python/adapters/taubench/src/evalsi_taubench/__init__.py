@@ -238,14 +238,23 @@ class TauBenchHarness(BuiltinHarness):
             )
         return tools
 
+    def _user_simulator_identity(self, task: Task) -> dict[str, Any]:
+        return {
+            "adapter": "taubench",
+            "version": 1,
+            "config": json_format.MessageToDict(self.config.user_simulator),
+            "scenario": task.record.metadata["taubench"],
+        }
+
+    def _reexecute_tool(self, live: LiveTask, tool: Tool) -> bool:
+        return tool.spec.name in self._state(live).tool_names or super()._reexecute_tool(live, tool)
+
     def _user_simulator(self, task: Task) -> UserSimulator | None:
-        if self.ctx.judge is None:
-            raise TaskError("the simulated user needs a judge model (spec.judge)")
         us = self.config.user_simulator
-        try:
-            judge = self.ctx.judge(us.judge)
-        except ValueError as exc:
-            raise TaskError(str(exc)) from exc
+
+        def judge() -> Any:
+            return self._user_judge(us.judge)
+
         state = next((st for st in self._tau.values() if st.source is task), None)
         if state is not None and state.env.user_tools is not None:
             state.user = ToolUser(
@@ -438,6 +447,37 @@ class ToolUser(UserSimulator):
         self.exchanges: list[list[Any]] = []
         self.pending: list[Any] = []
         self.calls = 0
+        self._replay_calls: list[list[str]] = []
+
+    def replay_state(self) -> dict[str, Any]:
+        state = {
+            "actions": self._replay_calls,
+            "transcript": list(self.transcript),
+            "seen": self.seen,
+            "calls": self.calls,
+            "exchanges": [[m.model_dump(mode="json") for m in ex] for ex in self.exchanges],
+            "pending": [m.model_dump(mode="json") for m in self.pending],
+        }
+        self._replay_calls = []
+        return state
+
+    def restore_replay_state(self, state: dict[str, Any]) -> None:
+        from tau2.data_model.message import ToolMessage, UserMessage
+
+        # Apply this turn's actions at the same point relative to agent calls.
+        for name, raw in state["actions"]:
+            self._call(name, raw)
+        self._replay_calls = []
+        self.transcript = list(state["transcript"])
+        self.seen = state["seen"]
+        self.calls = state["calls"]
+
+        def message(data: dict[str, Any]) -> Any:
+            cls = ToolMessage if data["role"] == "tool" else UserMessage
+            return cls.model_validate(data)
+
+        self.exchanges = [[message(m) for m in ex] for ex in state["exchanges"]]
+        self.pending = [message(m) for m in state["pending"]]
 
     def _tool_list(self) -> str:
         lines = []
@@ -498,6 +538,7 @@ class ToolUser(UserSimulator):
     def _call(self, name: str, raw: str) -> None:
         from tau2.data_model.message import ToolCall, UserMessage
 
+        self._replay_calls.append([name, raw])
         self.calls += 1
         call_id = f"user-{self.calls}"
         try:

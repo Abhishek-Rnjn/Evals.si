@@ -8,6 +8,7 @@ would see: the conversation, never the agent's tool calls.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,16 +45,41 @@ class UserTurn:
 
 
 class UserSimulator:
+    elicitations: int = 0
+
     def __init__(
-        self, judge: JudgeClient, *, persona: str, goal: str, max_turns: int = 10, seed: str = ""
+        self,
+        judge: JudgeClient | Callable[[], JudgeClient],
+        *,
+        persona: str,
+        goal: str,
+        max_turns: int = 10,
+        seed: str = "",
     ) -> None:
-        self.judge = judge
+        self._judge = judge
         self.persona = persona
         self.goal = goal
         self.max_turns = max_turns or 10
         # Part of the prompt, so cached replies differ between trials.
         self.seed = seed
         self.turns = 0
+
+    @property
+    def judge(self) -> JudgeClient:
+        """Resolve the judge only for live generation, never state restoration."""
+        if callable(self._judge):
+            self._judge = self._judge()
+        return self._judge
+
+    def replay_state(self) -> dict[str, Any]:
+        """State and actions produced since the previous recorded reply."""
+        return {}
+
+    def restore_replay_state(self, state: dict[str, Any]) -> None:
+        """Restore a recorded reply without generating another user decision."""
+
+    async def elicit(self, message: str, schema: dict[str, Any]) -> UserTurn:
+        return await self.reply([{"role": "assistant", "content": message}])
 
     async def reply(self, conversation: list[dict[str, Any]]) -> UserTurn:
         """The user's next message, given the conversation so far (user and

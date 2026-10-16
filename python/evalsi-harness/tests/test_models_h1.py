@@ -767,7 +767,7 @@ def test_a_cassette_carries_its_version_and_old_ones_replay(tmp_path: Any) -> No
     lines = [json.loads(x) for x in path.read_text().splitlines()]
     assert lines[0] == {
         "kind": "header",
-        "version": 3,
+        "version": 4,
         "context": {"strategy": "none"},
         "hooks": [],
         "toolset": {"builtin": [], "delegate_steps": 0},

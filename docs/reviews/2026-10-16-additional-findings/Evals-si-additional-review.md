@@ -101,4 +101,13 @@ From the repository root, with the local SDK and harness packages and pytest ins
 python -m pytest -q python/evalsi-harness/tests/test_review_regressions.py
 ```
 
-The regressions now assert bounded slice assignment, literal HTTP input, prompt failure and cleanup after malformed responses, and deterministic user-turn replay without a judge. They also cover resume/fork budgets, old-log compatibility, valid slice operations and cancellation. Validation: 80 targeted tests passed; Ruff checks and formatting passed; mypy passed for all five changed Python source/test files. Cassette v3 records simulator configuration and decisions; older logs without those decisions are rejected for simulated-user replay.
+The regressions now assert bounded slice assignment, literal HTTP input, prompt failure and cleanup after malformed responses, and deterministic user-turn replay without a judge. They also cover resume/fork budgets, old-log compatibility, valid slice operations and cancellation. Validation: 80 targeted tests passed; Ruff checks and formatting passed; mypy passed for all five changed Python source/test files. Cassette v4 records simulator identity, decisions, state and tool-invocation ownership; older logs without these fields are rejected for simulated-user replay. Logs without a simulator retain v1/v2 compatibility.
+
+
+### Follow-up replay review
+
+- Adapter simulators declare their effective identity even when their builtin user config is empty. TauBench defaults now use the same replay wrapper and compatibility checks as explicit simulators.
+- Stateful simulators can snapshot and restore each reply. TauBench records user actions, transcript position, call IDs and grading exchanges; replay reapplies actions to the fresh environment without resolving a judge. Domain agent tools also rebuild environment state before a resumed or forked continuation.
+- Elicitation decisions include the owning tool invocation and requested schema. Cached tool replay advances its decisions and elicitation allowance, including when creating a fork. An unfinished invocation cannot consume a completed invocation's answer, even when their arguments and question match.
+
+Regression coverage includes default mock/telecom replay without a judge, telecom device actions and history across resume/fork, and interruption immediately before or after a repeated elicitation question.

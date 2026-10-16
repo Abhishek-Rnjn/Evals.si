@@ -239,3 +239,155 @@ def test_replay_preserves_user_turns_without_judge(tmp_path: Path) -> None:
     before = original.record.output.as_text()
     after = replay.record.output.as_text()
     assert before == after == "Order 42 ships tomorrow."
+
+
+@pytest.mark.parametrize("decision_recorded", [False, True])
+def test_elicitation_belongs_to_its_tool_invocation(
+    tmp_path: Path, decision_recorded: bool
+) -> None:
+    from evalsi_harness.cassette import CassetteTool
+    from evalsi_harness.harness import _elicitation
+    from evalsi_harness.models import ToolSpec
+    from evalsi_harness.tools import ToolResult
+
+    class User(UserSimulator):
+        def __init__(self, answers: list[str]) -> None:
+            self.answers = iter(answers)
+            self.turns = 0
+
+        async def reply(self, conversation: list[dict[str, Any]]) -> UserTurn:
+            self.turns += 1
+            return UserTurn(next(self.answers), False, Usage())
+
+    class Question:
+        spec = ToolSpec(name="question", description="", input_schema={})
+
+        def __init__(self, user: UserSimulator) -> None:
+            self.answer = _elicitation(user)
+            self.calls = 0
+            self.fail = True
+
+        async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
+            self.calls += 1
+            if self.calls == 2 and self.fail and not decision_recorded:
+                raise RuntimeError("interrupted before elicitation")
+            result = await self.answer(
+                "Proceed?",
+                {
+                    "type": "object",
+                    "properties": {"answer": {"type": "string"}},
+                },
+            )
+            if self.calls == 2 and self.fail:
+                raise RuntimeError("interrupted after elicitation")
+            return ToolResult(json.dumps(result))
+
+    async def go() -> None:
+        path = tmp_path / "session.jsonl"
+        tape = Cassette(path, "record", user_simulator={"persona": "customer"})
+        user = CassetteUserSimulator(tape, lambda: User(["first", "second"]))
+        tool = CassetteTool(tape, Question(user))
+        tape.record({"kind": "model", "turn": {"text": "first"}})
+        assert "first" in (await tool.call({})).content
+        tape.record({"kind": "model", "turn": {"text": "second"}})
+        with pytest.raises(RuntimeError, match="interrupted"):
+            await tool.call({})
+        tape.save()
+        resumed = Cassette(path, "resume", user_simulator={"persona": "customer"})
+        user = CassetteUserSimulator(resumed, lambda: User(["new second"]))
+        inner = Question(user)
+        inner.fail = False
+        tool = CassetteTool(resumed, inner)
+        assert resumed.next_turn() is not None
+        assert "first" in (await tool.call({})).content
+        assert inner.calls == 0
+        assert user.elicitations == 1
+        assert resumed.next_turn() is not None
+        result = await tool.call({})
+        assert ("second" if decision_recorded else "new second") in result.content
+        assert "first" not in result.content
+        assert user.turns == 0
+        assert user.elicitations == 2
+        resumed.save()
+        # No completed invocation leaves a stale decision for the continuation.
+        assert all(not queue for queue in resumed._users.values())
+
+    asyncio.run(go())
+
+
+def test_parallel_elicitations_and_cached_fork_keep_invocation_order(tmp_path: Path) -> None:
+    from evalsi_harness.cassette import CassetteTool
+    from evalsi_harness.harness import _elicitation
+    from evalsi_harness.tools import FunctionTool
+
+    class User(UserSimulator):
+        def __init__(self) -> None:
+            self.turns = 0
+            self.answers = iter(["first", "second"])
+
+        async def reply(self, conversation: list[dict[str, Any]]) -> UserTurn:
+            return UserTurn(next(self.answers), False, Usage())
+
+    async def go() -> None:
+        path = tmp_path / "session.jsonl"
+        child = tmp_path / "child.jsonl"
+        config = {"persona": "customer"}
+        tape = Cassette(path, "record", user_simulator=config)
+        answer = _elicitation(CassetteUserSimulator(tape, User))
+        second_finished = asyncio.Event()
+        called = 0
+
+        async def ask() -> str:
+            nonlocal called
+            called += 1
+            first = called == 1
+            result = await answer(
+                "Same question",
+                {
+                    "type": "object",
+                    "properties": {"answer": {"type": "string"}},
+                },
+            )
+            if first:
+                await second_finished.wait()
+            else:
+                second_finished.set()
+            return json.dumps(result)
+
+        tape.record({"kind": "model", "turn": {"text": "ask twice"}})
+        tool = CassetteTool(tape, FunctionTool("ask", ask))
+        original = await asyncio.gather(tool.call({}), tool.call({}))
+        assert "first" in original[0].content
+        assert "second" in original[1].content
+        tape.save()
+        # Both calls have identical names/args and finish in reverse order.
+        for mode, source in [("fork", path), ("replay", child)]:
+            cached = Cassette(
+                source,
+                mode,
+                user_simulator=config,
+                branch_at_step=1 if mode == "fork" else 0,
+                fork_to=child if mode == "fork" else None,
+            )
+            user = CassetteUserSimulator(cached, User)
+            assert cached.next_turn() is not None
+            cached.record({"kind": "model", "turn": {"text": "ask twice"}}, replayed=True)
+            wrapper = CassetteTool(cached, FunctionTool("ask", ask))
+            results = await asyncio.gather(wrapper.call({}), wrapper.call({}))
+            assert results == original
+            assert user.elicitations == 2
+            assert called == 2
+            cached.save()
+        entries = [json.loads(line) for line in child.read_text().splitlines()[1:]]
+        assert len({entry["id"] for entry in entries}) == len(entries)
+        assert [entry["parent"] for entry in entries[1:]] == [e["id"] for e in entries[:-1]]
+
+    asyncio.run(go())
+
+
+def test_v3_simulator_logs_require_a_new_recording(tmp_path: Path) -> None:
+    path = tmp_path / "old.jsonl"
+    config = {"persona": "customer"}
+    path.write_text(json.dumps({"kind": "header", "version": 3, "user_simulator": config}))
+    with pytest.raises(CassetteError, match="version 4"):
+        Cassette(path, "resume", user_simulator=config)

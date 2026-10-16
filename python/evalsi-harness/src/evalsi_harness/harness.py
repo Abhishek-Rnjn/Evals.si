@@ -66,19 +66,21 @@ MAX_ELICITATIONS = 10
 def _elicitation(user: UserSimulator) -> Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]:
     """Answers an MCP server's question with the simulated user."""
 
-    asked = 0
-
     async def answer(message: str, schema: dict[str, Any]) -> dict[str, Any]:
-        nonlocal asked
-        asked += 1
-        if asked > MAX_ELICITATIONS:
+        user.elicitations = getattr(user, "elicitations", 0) + 1
+        if user.elicitations > MAX_ELICITATIONS:
             return {"action": "cancel"}
         # The conversation's turn allowance is not spent here: a replay serves the
         # tool's recorded result without asking, so a turn taken now would be a turn
         # the replay (or a resume) does not take, and the two would drift apart.
         turns = user.turns
         try:
-            reply = await user.reply([{"role": "assistant", "content": message}])
+            elicit = getattr(user, "elicit", None)
+            reply = (
+                await elicit(message, schema)
+                if elicit is not None
+                else await user.reply([{"role": "assistant", "content": message}])
+            )
         finally:
             user.turns = turns
         if not reply.message:
@@ -612,18 +614,25 @@ class BuiltinHarness:
             },
         )
 
-    def _user_simulator(self, task: Task) -> UserSimulator | None:
+    def _user_simulator_identity(self, task: Task) -> dict[str, Any] | None:
+        """Override for adapters that enable a simulator without builtin config."""
         us = self.config.user_simulator
-        if not us.ByteSize():
-            return None
+        return json_format.MessageToDict(us) if us.ByteSize() else None
+
+    def _user_judge(self, name: str) -> JudgeClient:
         if self.ctx.judge is None:
             raise TaskError("the user simulator needs a judge model")
         try:
-            judge = self.ctx.judge(us.judge)
+            return self.ctx.judge(name)
         except ValueError as exc:
             raise TaskError(str(exc)) from exc
+
+    def _user_simulator(self, task: Task) -> UserSimulator | None:
+        us = self.config.user_simulator
+        if self._user_simulator_identity(task) is None:
+            return None
         return UserSimulator(
-            judge,
+            lambda: self._user_judge(us.judge),
             persona=us.persona,
             goal=us.goal or task.instruction,
             max_turns=us.max_turns,
@@ -670,14 +679,13 @@ class BuiltinHarness:
                     **({"profile": self.profile.ident} if self.profile else {}),
                 },
                 fork_to=fork_to,
-                user_simulator=(
-                    json_format.MessageToDict(self.config.user_simulator)
-                    if self.config.user_simulator.ByteSize()
-                    else None
-                ),
+                user_simulator=self._user_simulator_identity(live.task),
             )
         except ValueError as exc:
             raise TaskError(f"harness.builtin.recording: {exc}") from exc
+
+    def _reexecute_tool(self, live: LiveTask, tool: Tool) -> bool:
+        return tool.spec.name in {"bash", "write_file", *MUTATING}
 
     async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:
         task = live.task
@@ -704,15 +712,14 @@ class BuiltinHarness:
 
         user = live.user = (
             CassetteUserSimulator(cassette, make_user)
-            if cassette is not None and self.config.user_simulator.ByteSize()
+            if cassette is not None and self._user_simulator_identity(task) is not None
             else self._user_simulator(task)
         )
         tools = await self._tools(live)
         if cassette is not None:
             model = CassetteModel(cassette, model)
-            sandbox_names = {"bash", "write_file", *MUTATING}
             tools = [
-                CassetteTool(cassette, t, reexecute=t.spec.name in sandbox_names) for t in tools
+                CassetteTool(cassette, t, reexecute=self._reexecute_tool(live, t)) for t in tools
             ]
         assert model is not None
         hooks = self._hooks(live)
