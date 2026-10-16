@@ -42,6 +42,34 @@ cluster to re-check.
 | **Known limit, not planned** (15) | User-namespaced bubblewrap pools (a host limit); cgroup v2 limits in an unprivileged container; the limits left after the reviews; sandbox-time quota coverage; keyless verification of sandbox images; separate process roles; pod-rung snapshots; Firecracker egress through a tap device; the four benchmark gaps (BFCL memory and web search, tau2's own user, multi-stage Terminal-Bench tasks, FrontierCode and CursorBench); Wasm evaluators with a judge or the sandbox; an Azure ML trace source (its MLflow server has no V3 trace API); server-side SQL over runs (see below) | Revisit only if a user needs it |
 | **Needs a decision** (3) | Webhook URLs open to internal addresses (they are how the server reaches in-cluster services); feeding scores back into agentgateway (depends on its extension points); checkpoint model serving (which serving strategy to support) | A product choice, then it becomes buildable |
 
+## Production-readiness review (2026-10-16)
+
+A review of the repository against a generic production checklist for software that serves paying customers. Evals.si is self-hosted, so the billing, SOC 2/HIPAA/PCI, account-system (SAML, SCIM, MFA, password reset, impersonation), status-page, CDN, email-deliverability and consumer-UX items do not apply: the operator's identity provider and platform own them. They become relevant only if someone runs Evals.si as a hosted service.
+
+**Fixed on the review branch:**
+
+| Item | What changed |
+|------|--------------|
+| Judge prompt fences could be closed by the text they hold | `fence()` in `python/evalsi/src/evalsi/packs/judge.py` turns the opening `<` of any fence tag (`response`, `context`, `question`, `reference`, `trajectory`, `task`, `tests`, `diff` and the rest) in untrusted text into `&lt;`. Every prompt that fences model output, retrieved context, references, trajectories, tasks and diffs uses it (judge, rag and agent packs). A response containing `</response>` can no longer write instructions outside its fence. Tested in `test_judge.py` and `test_packs.py`. The system prompt already told the judge to treat fenced text as data; this closes the way out of the fence. |
+| No dependency vulnerability scanning | `.github/workflows/security.yml` runs `govulncheck`, `pip-audit` (on the locked `uv` set) and `npm audit` (website and UI test) on pull requests, on dependency changes on `main`, and weekly. `.github/dependabot.yml` opens grouped weekly updates for Go, Python (`uv`), npm, Docker and GitHub Actions. |
+
+Checked locally when this was added: `pip-audit` found nothing in the locked Python set, and `npm audit` found no high or critical issues (the website has 10 moderate ones, in the docs theme's `postcss` dependencies). `govulncheck` could not be run in the build sandbox (`vuln.go.dev` is blocked), so its first CI run may report findings that need triage.
+
+**Open (needs more than a small change here):**
+
+| Item | Why it is open | Next step |
+|------|----------------|-----------|
+| Audit hardening | Proposed, nothing built: the audit write fails open, reads are not audited, entries are not tamper-evident, and export is best effort. Enterprise buyers ask for this first. | Build [decision 0026](decisions/0026-enterprise-audit-and-delegation.md), starting with strict mode and read auditing. |
+| Per-caller rate limits on the API and OTLP ingest | Only request-size caps exist (`MaxBytesReader`), plus an audit-log limiter and a JWKS refetch limit. A leaked API key has no throttle. | Decide the unit (key, principal or project) and the defaults, add a limiter to the access interceptor and to ingest, and document the limits. Needs a design note. |
+| Versioned, reversible schema migrations | `migrate()` in `internal/store/store.go` rewrites tables in place and `sqldb.go` adds columns with `ALTER TABLE`. There is no migration table, no down step, and no statement of which changes are safe while N and N-1 run together. Operations says rollback is a restore into a fresh release, and that rolling-upgrade compatibility has not passed its test. | Add a `schema_migrations` table and ordered steps, an expand-then-contract rule in CONTRIBUTING, and a CI test that runs N-1 against the N schema. |
+| A tested restore, and point-in-time recovery guidance | [Operations](guides/operations.md) has a good manual backup and restore procedure, but nothing records that a restore has been run, and recovery to a point in time is left to the operator's managed Postgres and ClickHouse. | Run the documented restore on a cluster and record it in `docs/verification/`. Document WAL archiving for the bundled Postgres and the managed equivalents. |
+| Deletion beyond `DeleteRun` | Deletes are hard. There is no soft delete or undo window, no per-label retention, and no erasure path that covers backups and logs. Already noted under "Run archiving". | Add a grace period before hard delete, per-label retention, and a documented erasure procedure for each store. |
+| Webhook URLs open to internal addresses | Listed under "Needs a decision". Trace sources already refuse private, loopback and link-local hosts (`internal/source/guard.go`); webhooks do not, because they reach in-cluster services. | Give webhooks the same guard with an explicit allow list like `sources.allow_hosts`, once the default is decided. |
+| Judge robustness against injected text, measured | `fence()` stops tag breakout, but whether a judge model resists instructions inside a fence is a property of the model. | Add prompt-injection fixtures to the safety pack and run them against the judges in use, once model keys are available. |
+| Web UI accessibility | The UI (`internal/webui/static`) is small and hand-written, with no accessibility check in CI. | Run an automated check (axe in the `ui-browser` job) and fix keyboard and screen-reader findings. |
+| An independent penetration test and a security questionnaire pack | Needs an outside tester and evidence. [SECURITY.md](../SECURITY.md) covers disclosure only. | Commission a test before the first enterprise evaluation, and keep answers with evidence in `docs/`. |
+| A second maintainer | `.github/CODEOWNERS` names one owner for every path, and the file says so. | Add a second owner for `/.github/`, `/deploy/` and `SECURITY.md`, so release and review do not depend on one person. |
+
 ## Verified only with stand-ins (needs real infrastructure)
 
 [Bounded EKS verification on 2026-10-12](verification/EKS-2026-10-12.md) closed

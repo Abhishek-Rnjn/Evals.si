@@ -1,0 +1,40 @@
+# Weekly dependency updates, one grouped pull request per ecosystem so a
+# maintainer reviews a handful of changes a week, not dozens. Security updates
+# are opened as soon as they are published, outside this schedule.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      go-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The Python workspace is locked by python/uv.lock.
+  - package-ecosystem: uv
+    directory: /python
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories: [/, /deploy/collector, /examples/demo/dsh, /examples/demo/deepagents]
+    schedule: {interval: weekly}
+
+  - package-ecosystem: npm
+    directories: [/website, /tests/ui, /examples/demo/dsh/plugin]
+    schedule: {interval: weekly}
+    open-pull-requests-limit: 3
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]

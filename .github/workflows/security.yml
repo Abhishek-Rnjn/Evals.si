@@ -1,0 +1,66 @@
+name: security
+
+# Scans the dependencies for published vulnerabilities. It runs on every pull
+# request, and weekly on main, because a new advisory can land against code
+# that has not changed. It is separate from `ci` so that an advisory against an
+# unrelated dependency does not turn the build checks red.
+on:
+  push:
+    branches: [main]
+    paths: ['go.mod', 'go.sum', 'python/uv.lock', 'python/**/pyproject.toml', '.github/workflows/security.yml']
+  pull_request:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOPROXY: https://proxy.golang.org|direct
+
+jobs:
+  govulncheck:
+    # Reports only vulnerabilities in code the module can actually reach.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+      - run: "$(go env GOPATH)/bin/govulncheck ./..."
+
+  pip-audit:
+    # The locked versions of every package in the Python workspace.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv export --locked --all-packages --no-emit-workspace --no-hashes --format requirements-txt -o "$RUNNER_TEMP/requirements.txt"
+      - run: uvx pip-audit@2.9.0 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+
+  npm-audit:
+    # The website and the UI browser test; the dsh plugin is audited in `ci`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [website, tests/ui]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: npm audit --audit-level=high
+        working-directory: ${{ matrix.dir }}
