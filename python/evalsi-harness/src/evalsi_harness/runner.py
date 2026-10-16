@@ -97,7 +97,10 @@ async def run_task(  # noqa: PLR0915
         late_of = getattr(harness, "late_events", None)
         if callable(late_of):
             # Raised by the check, after the agent's own stream ended.
-            events.extend(late_of(handle))
+            for late in late_of(handle):
+                events.append(late)
+                if on_event is not None:
+                    on_event(late)
     except TaskError as exc:
         return TaskOutcome(None, error=str(exc), events=events)
     finally:

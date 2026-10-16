@@ -154,3 +154,26 @@ def test_a_sub_agent_is_not_interrupted(model: Model, sandboxes: LocalSandboxCli
     assert rec is not None
     assert sent, "the sub-agent ran"
     assert all(NOTE not in text for text in sent)
+
+
+def test_messages_are_delivered_in_step_order_whatever_the_order_given(
+    model: Model, sandboxes: LocalSandboxClient
+) -> None:
+    server = model(script())
+    spec = spec_of(
+        {
+            "target": target(server),
+            "harness": {
+                "builtin": {
+                    "interjections": [
+                        {"at_step": 3, "message": "LATE one"},
+                        {"at_step": 1, "message": "EARLY one"},
+                    ]
+                }
+            },
+            "environment": {"checker": CHECK_HELLO},
+        }
+    )
+    run(spec, record(), sandboxes)
+    assert "EARLY one" in str(server.requests[1])  # after the first call, not after the third
+    assert "LATE one" not in str(server.requests[1])

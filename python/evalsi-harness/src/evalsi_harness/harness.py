@@ -468,7 +468,9 @@ class BuiltinHarness:
             if "delegate" in self.config.tools.builtin
             else 0,
             context=self._context(live),
-            interjections=[(j.at_step, j.message) for j in c.interjections],
+            interjections=sorted(
+                ((j.at_step, j.message) for j in c.interjections), key=lambda j: j[0]
+            ),
             **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,
