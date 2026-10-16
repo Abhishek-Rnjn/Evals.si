@@ -62,7 +62,7 @@ SCHEMA: dict[str, Any] = {
 
 PROMPT_VERSION = hashlib.sha256((SYSTEM_PROMPT + repr(SCHEMA)).encode()).hexdigest()[:12]
 
-# The tags the judge prompts use to fence untrusted text.
+# The tags the judge and simulated-user prompts use to fence untrusted text.
 _FENCE_TAGS = (
     "rubric",
     "question",
@@ -74,6 +74,10 @@ _FENCE_TAGS = (
     "task",
     "tests",
     "diff",
+    "persona",
+    "goal",
+    "conversation",
+    "your_tools",
 )
 _FENCE_TAG = re.compile(r"<(/?)(" + "|".join(_FENCE_TAGS) + r")(?![A-Za-z0-9_-])", re.IGNORECASE)
 

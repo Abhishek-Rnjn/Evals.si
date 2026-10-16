@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from evalsi.judges import JudgeClient
+from evalsi.packs.judge import fence
 from evalsi.types import Usage
 
 SCHEMA: dict[str, Any] = {
@@ -67,9 +68,9 @@ class UserSimulator:
             if m["role"] in ("user", "assistant") and (m.get("content") or "").strip()
         )
         prompt = (
-            f"<persona>\n{self.persona or 'An ordinary customer.'}\n</persona>\n"
-            f"<goal>\n{self.goal}\n</goal>\n"
-            f'<conversation id="{self.seed}">\n{transcript}\n</conversation>\n'
+            f"<persona>\n{fence(self.persona or 'An ordinary customer.')}\n</persona>\n"
+            f"<goal>\n{fence(self.goal)}\n</goal>\n"
+            f'<conversation id="{self.seed}">\n{fence(transcript)}\n</conversation>\n'
             "Write the user's next message."
         )
         response = await self.judge.backend.complete_json(

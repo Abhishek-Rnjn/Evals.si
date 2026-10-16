@@ -49,6 +49,7 @@ from typing import Any
 
 from google.protobuf import json_format
 
+from evalsi.packs.judge import fence
 from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness import BuiltinHarness, FunctionTool, HarnessContext, Task, TaskError, ToolResult
@@ -465,9 +466,9 @@ class ToolUser(UserSimulator):
         usage = Usage(input_tokens=0, output_tokens=0)
         for _ in range(MAX_USER_TOOL_CALLS + 1):
             prompt = (
-                f"<your_tools>\n{self._tool_list()}\n</your_tools>\n"
+                f"<your_tools>\n{fence(self._tool_list())}\n</your_tools>\n"
                 f'<conversation id="{self.seed}">\n'
-                + "\n".join(self.transcript)
+                + fence("\n".join(self.transcript))
                 + "\n</conversation>\n"
                 "Either write your next message to the agent (tool empty), or call one of your "
                 "tools (message empty), never both. Use the stop tokens as your guidelines say."

@@ -1,6 +1,8 @@
 # Weekly dependency updates, one grouped pull request per ecosystem so a
-# maintainer reviews a handful of changes a week, not dozens. Security updates
-# are opened as soon as they are published, outside this schedule.
+# maintainer reviews a handful of changes a week, not dozens. Dependabot
+# security updates, which are opened as soon as an advisory is published and
+# ignore this schedule, are a repository setting: turn on Dependabot alerts and
+# security updates under Settings > Advanced Security.
 version: 2
 updates:
   - package-ecosystem: gomod
