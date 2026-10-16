@@ -1042,6 +1042,18 @@ spec:
                         type: array
                       instructions:
                         type: string
+                      interjections:
+                        items:
+                          properties:
+                            at_step:
+                              type: integer
+                            atStep:
+                              type: integer
+                            message:
+                              type: string
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type: array
                       max_steps:
                         type: integer
                       maxSteps:

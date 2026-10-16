@@ -468,6 +468,7 @@ class BuiltinHarness:
             if "delegate" in self.config.tools.builtin
             else 0,
             context=self._context(live),
+            interjections=[(j.at_step, j.message) for j in c.interjections],
             **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,
@@ -644,6 +645,15 @@ class BuiltinHarness:
                 toolset={
                     "builtin": list(self.config.tools.builtin),
                     "delegate_steps": self.config.delegate_steps,
+                    **(
+                        {
+                            "interjections": [
+                                [j.at_step, j.message] for j in self.config.interjections
+                            ]
+                        }
+                        if self.config.interjections
+                        else {}
+                    ),
                     **({"profile": self.profile.ident} if self.profile else {}),
                 },
                 fork_to=fork_to,

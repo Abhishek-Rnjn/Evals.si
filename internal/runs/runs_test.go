@@ -723,6 +723,12 @@ func TestAgentRunValidation(t *testing.T) {
 		"unknown on_change": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Protect: []string{"tests/**"}, OnChange: "ignore"}
 		},
+		"interjection before the first step": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Interjections = []*evalsiv1alpha1.Interjection{{AtStep: 0, Message: "stop"}}
+		},
+		"empty interjection": func(s *evalsiv1alpha1.RunSpec) {
+			s.GetHarness().GetBuiltin().Interjections = []*evalsiv1alpha1.Interjection{{AtStep: 2, Message: " "}}
+		},
 		"untrusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"rm", "-rf", "/"}}}}
 		},

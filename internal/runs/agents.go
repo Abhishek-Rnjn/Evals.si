@@ -103,6 +103,14 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("spec.harness.builtin.profile sets the toolset; remove tools.builtin or the profile")
 		}
 	}
+	if len(b.GetInterjections()) > maxInterjections {
+		return invalid("spec.harness.builtin.interjections can hold at most %d messages", maxInterjections)
+	}
+	for i, j := range b.GetInterjections() {
+		if j.GetAtStep() < 1 || strings.TrimSpace(j.GetMessage()) == "" || len(j.GetMessage()) > 4000 {
+			return invalid("spec.harness.builtin.interjections[%d] needs at_step of at least 1 and a message of 1 to 4000 characters", i)
+		}
+	}
 	for _, name := range b.GetTools().GetBuiltin() {
 		if !slices.Contains(builtinTools, name) {
 			return invalid("spec.harness.builtin.tools.builtin: unknown tool %q (choose from %s)", name, strings.Join(builtinTools, ", "))
@@ -340,6 +348,9 @@ var cliOutputFormats = map[string]bool{
 	"gemini-json":        true,
 	"pi-json":            true,
 }
+
+// maxInterjections bounds the scripted mid-run user messages.
+const maxInterjections = 20
 
 // maxProtect bounds the patterns a checker may protect.
 const maxProtect = 50

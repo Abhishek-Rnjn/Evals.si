@@ -269,6 +269,18 @@ message BuiltinHarness {
   // toolset, so it cannot be combined with tools.builtin. The run's metadata
   // and a recording's guard carry the resolved "name@version".
   string profile = 13;
+  // Messages the user sends while the agent works, at fixed points. Each is
+  // delivered as a user message at the start of the model call after the
+  // agent's at_step-th call (or when the agent tries to finish with one still
+  // due), recorded as a "user-interjection" step. Built-in agent only.
+  repeated Interjection interjections = 14;
+}
+
+// A scripted message from the simulated user, mid-run.
+message Interjection {
+  // Delivered once the agent has made this many model calls (at least 1).
+  int32 at_step = 1;
+  string message = 2;
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,

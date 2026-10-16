@@ -818,6 +818,7 @@ class BuiltinHarness(_message.Message):
     HOOKS_FIELD_NUMBER: _builtins.int
     DELEGATE_STEPS_FIELD_NUMBER: _builtins.int
     PROFILE_FIELD_NUMBER: _builtins.int
+    INTERJECTIONS_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
@@ -859,6 +860,14 @@ class BuiltinHarness(_message.Message):
     def hooks(self) -> _containers.RepeatedCompositeFieldContainer[Global___Hook]:
         """Python hooks at the agent's lifecycle points, called in this order."""
 
+    @_builtins.property
+    def interjections(self) -> _containers.RepeatedCompositeFieldContainer[Global___Interjection]:
+        """Messages the user sends while the agent works, at fixed points. Each is
+        delivered as a user message at the start of the model call after the
+        agent's at_step-th call (or when the agent tries to finish with one still
+        due), recorded as a "user-interjection" step. Built-in agent only.
+        """
+
     def __init__(
         self,
         *,
@@ -875,16 +884,39 @@ class BuiltinHarness(_message.Message):
         hooks: _abc.Iterable[Global___Hook] | None = ...,
         delegate_steps: _builtins.int = ...,
         profile: _builtins.str = ...,
+        interjections: _abc.Iterable[Global___Interjection] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "profile", b"profile", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "interjections", b"interjections", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "profile", b"profile", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType__parallel_tool_calls) -> _WhichOneofReturnType__parallel_tool_calls | None: ...
 
 Global___BuiltinHarness: _TypeAlias = BuiltinHarness  # noqa: Y015
+
+@_typing.final
+class Interjection(_message.Message):
+    """A scripted message from the simulated user, mid-run."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    AT_STEP_FIELD_NUMBER: _builtins.int
+    MESSAGE_FIELD_NUMBER: _builtins.int
+    at_step: _builtins.int
+    """Delivered once the agent has made this many model calls (at least 1)."""
+    message: _builtins.str
+    def __init__(
+        self,
+        *,
+        at_step: _builtins.int = ...,
+        message: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["at_step", b"at_step", "message", b"message"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___Interjection: _TypeAlias = Interjection  # noqa: Y015
 
 @_typing.final
 class Hook(_message.Message):

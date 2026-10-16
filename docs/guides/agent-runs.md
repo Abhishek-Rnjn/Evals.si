@@ -152,6 +152,10 @@ Naming `delegate` in `tools.builtin` gives the agent a tool that starts a sub-ag
 
 Its spend is the parent's: tokens, spend and wall-clock time come out of what the parent has left (a `delegate` with nothing left is an error the agent sees), and `agent.subagents` and `agent.subagent_steps` total them. Its steps are on the trajectory under a `subagent` step that hangs from the `delegate` call, so a multi-agent run reads as a tree. Hooks apply to the sub-agent's tool calls too. Its model and tool calls are recorded in order with the parent's, so a replay reproduces them; `delegate` calls in one turn therefore run one after another.
 
+### Messages from the user mid-run
+
+`harness.builtin.interjections` is a list of `{at_step, message}`. Each message is delivered as a user message once the agent has made `at_step` model calls, at the start of the next call (after that call's tool results; with Anthropic it joins the same user turn), and it is a `user-interjection` step on the trajectory, so an evaluator can score whether the agent took a correction or a new constraint into account. A message still due when the agent tries to finish is read before it can. They are scripted, not generated: replays and comparisons see the same words at the same points, and a recording replays only with the same messages. With a context strategy, the messages are repeated on every call after they arrive, so clearing or summarizing history cannot lose them. Built-in agent only (a CLI agent runs to completion), and sub-agents are not interrupted.
+
 ### Profiles: a harness a score can name
 
 `harness.builtin.profile` picks a versioned profile of the built-in agent, so a model's score names the harness it was measured on and means the same thing across releases:
