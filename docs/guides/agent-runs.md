@@ -232,6 +232,8 @@ A turn cut off by `max_tokens` is tried once more with twice the limit (up to 12
 | `policy-violations` | sandbox policy events | `policy-clean`, `policy-events`, `escalation-requests` |
 | `agent-efficiency` | the trajectory and usage | `within-budget`, `agent-steps`, `agent-tokens`, `agent-cost-usd` |
 | `mechanism-ran` | tool steps or recorded harness context counters | a pass when the named mechanism executed; pass rate across tasks |
+| `citation-grounding` | explicit final citations, evidence snapshot and recorded reads | whether the cited evidence is active and its verbatim quote was read |
+| `handoff-correctness` | explicit handoff steps and span parent links | whether each transfer links a source to a target without broken IDs or cycles |
 
 The trajectory-based evaluators of the `agent` pack also apply: tool-call accuracy, trajectory match, loops and goal completion. Every step is also exported as an OTel span, so an agent run shows up in your tracing backend.
 
@@ -260,6 +262,57 @@ or conclusions. A strategy that was enabled but never acted fails. Context
 records without strategy or activity metadata are skipped; records without a
 trajectory are skipped for either kind. Use evaluator aliases to check several
 mechanisms in one run. `evalsi matrix --mechanisms` uses the same activity rules.
+
+### Grounding recorded evidence
+
+`citation-grounding` checks final-answer citations such as `[E1]`. The built-in
+`evidence-state` strategy exports `metadata.agent.evidence_state` with this schema;
+a BYO harness can supply the same data:
+
+```json
+{"version": 1, "evidence": [
+  {"id": "E1", "statement": "Signed in 1847", "source": "treaty.txt",
+   "quote": "The treaty was signed in 1847.", "status": "active"}
+], "claims": [
+  {"id": "C1", "claim": "Signed in 1847", "status": "supported", "support": ["E1"]}
+]}
+```
+
+Each cited or supporting entry must exist, remain active, carry a source label,
+and quote text found in the recorded task input or a tool/retrieval output.
+Whitespace is normalized. Assistant text, `evidence` outputs and `session_search`
+echoes do not establish a read. A supported claim must have valid support and
+at least one supporting ID cited in the answer. Open claims are not treated as
+submitted supported claims. Missing snapshots are skipped; stale, duplicate,
+unknown or unread citations fail. Citations are required by default, configurable
+with `require_citation: false`.
+
+This is a provenance check over explicit citations and declared claims. It does
+not identify uncited claims in free text, verify the source label against a
+particular file, prove that the quote supports the statement, or certify that a
+BYO trace is truthful. Semantic grounding and the human-validated evidence-stage
+audit remain separate work.
+
+### Checking delegation links
+
+`handoff-correctness` requires explicit `handoff` steps. Each needs a unique
+`span_id`, a `parent_span_id` naming its recorded source, and at least one child
+step whose `parent_span_id` is that handoff. Duplicate IDs, parent cycles,
+missing endpoints and a handoff's own error fail. Outer roots may be outside the
+exported trajectory. Records with no explicit handoffs are skipped. The score
+checks structure, not whether delegation was useful or the chosen agent was right.
+
+The built-in `delegate` and Claude CLI reader emit these steps. The Claude reader
+uses `parent_tool_use_id` and resolves interleaved children after the full stream
+is parsed. A2A has no standard delegation-parent field: a BYO server can opt in
+with `metadata: {evalsi: {parent_task_id: "parent-task"}}` on child task/status
+events. Both task IDs must have recorded steps in the conversation. Ordinary
+`referenceTaskIds` do not imply a handoff. Other CLI readers retain their exposed
+parent links and do not fabricate missing agent relationships.
+
+The opt-in [live CLI kind check](../../tests/cli-agent/README.md) exercises a real
+Claude CLI in a pod sandbox when a model key is configured. Its default-off CI
+hook and offline verifier tests do not establish a completed live run.
 
 `code-quality` takes `weights` (per dimension), `merge_bar` and `max_diff_chars`. The diff covers changes against `HEAD` plus untracked files. It leaves out the files Evals.si places itself (`.evalsi-*`) and is captured before the checker runs.
 

@@ -20,6 +20,7 @@ from typing import Any
 from evalsi.evaluator import EvalContext, MetricSpec, Requirements, ScoreType, SkipRecord, evaluator
 from evalsi.judges import JudgeError
 from evalsi.mechanisms import CONTEXT_COUNTERS, called_tools, context_acted
+from evalsi.packs.agent_checks import citation_grounding, handoff_correctness
 from evalsi.packs.judge import judge_cost, judge_metadata, rubric_score
 from evalsi.registry import Pack
 from evalsi.types import Record, Score, ToolUse, Trajectory
@@ -561,6 +562,8 @@ PACK = Pack(
         trajectory_match,
         tool_errors,
         mechanism_ran,
+        citation_grounding,
+        handoff_correctness,
         loop_detection,
         step_budget,
         goal_completion,

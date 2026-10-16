@@ -240,7 +240,11 @@ class AgentLoop:
                     if self.config.context.strategy != "none"
                     else {}
                 ),
-                **({"evidence": self.evidence.counts()} if self.evidence is not None else {}),
+                **(
+                    {"evidence": self.evidence.counts(), "evidence_state": self.evidence.snapshot()}
+                    if self.evidence is not None
+                    else {}
+                ),
             },
         )
 
