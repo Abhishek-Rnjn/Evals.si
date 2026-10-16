@@ -717,6 +717,12 @@ func TestAgentRunValidation(t *testing.T) {
 			b.Profile = "standard"
 			b.Tools = &evalsiv1alpha1.Tools{Builtin: []string{"grep"}}
 		},
+		"protect pattern escaping the workdir": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Protect: []string{"../x"}}
+		},
+		"unknown on_change": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Protect: []string{"tests/**"}, OnChange: "ignore"}
+		},
 		"untrusted mcp command": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Tools = &evalsiv1alpha1.Tools{Mcp: []*evalsiv1alpha1.MCPServer{{Name: "x", Command: []string{"rm", "-rf", "/"}}}}
 		},

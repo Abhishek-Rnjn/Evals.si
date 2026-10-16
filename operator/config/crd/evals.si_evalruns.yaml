@@ -840,8 +840,16 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
+                      on_change:
+                        type: string
+                      onChange:
+                        type: string
                       parser:
                         type: string
+                      protect:
+                        items:
+                          type: string
+                        type: array
                       timeout:
                         description: 'A duration: "250ms", "30s", "10m", "1.5h", or
                           a number of seconds.'

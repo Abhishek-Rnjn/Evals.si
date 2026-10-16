@@ -45,6 +45,7 @@ from evalsi_harness.mcp import (
 )
 from evalsi_harness.models import ChatModel, create_model
 from evalsi_harness.profiles import Profile, resolve
+from evalsi_harness.protect import Baseline, ProtectError
 from evalsi_harness.task import Task, TaskError
 from evalsi_harness.tools import (
     Fault,
@@ -154,6 +155,11 @@ class LiveTask:
     # What the agent changed in the workdir (a git diff), for code review
     # evaluators; captured before the checker runs.
     diff: str | None = None
+    # The checker's protected files as the trial began, and the policy events the
+    # check produced (they arrive after the agent's stream has ended).
+    protect: Baseline | None = None
+    late_events: list[PolicyEvent] = field(default_factory=list)
+    protect_result: dict[str, Any] = field(default_factory=dict)
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -258,6 +264,14 @@ class BuiltinHarness:
             live.isolation = env.isolation.to_dict()
             live.closers.append(env.sandbox.destroy)
         self._live[handle] = live
+        checker = task.environment.checker if task.environment else None
+        if env is not None and checker is not None and checker.protect:
+            # Per trial, after the environment's files and installs are in place.
+            try:
+                live.protect = await Baseline.take(env, checker.protect, checker.on_change)
+            except ProtectError as exc:
+                await self.teardown(handle)
+                raise TaskError(f"checker.protect: {exc}") from exc
         return handle
 
     def _get(self, handle: str) -> LiveTask:
@@ -704,15 +718,58 @@ class BuiltinHarness:
         parser = env_config.checker.parser
         if ":" in parser and not parser.startswith("junit:"):
             self.ctx.trust.check_python(parser, "checker parser")
+        if live.protect is not None:
+            verdict = await self._protected(live)
+            if verdict is not None:
+                return verdict
         return await run_checker(live.env, env_config.checker, live.task)
+
+    async def _protected(self, live: LiveTask) -> TaskCheck | None:
+        """Compare the protected files with the baseline. A failing check when the
+        trial must fail, None to go on to the checker (nothing changed, or the
+        originals were restored)."""
+        assert live.protect is not None
+        assert live.env is not None
+        base = live.protect
+        try:
+            changes = await base.compare(live.env)
+            live.protect_result = {
+                "mode": base.mode,
+                "files": len(base.hashes),
+                "changed": changes.to_dict(),
+            }
+            if not changes:
+                return None
+            live.late_events.append(
+                PolicyEvent(kind="protected_file_modified", detail=changes.describe())
+            )
+            if base.mode == "restore":
+                await base.restore(live.env, changes)
+                return None
+        except ProtectError as exc:
+            return TaskCheck(passed=False, error=f"protected files could not be checked: {exc}")
+        return TaskCheck(
+            passed=False,
+            details=changes.describe(),
+            tests={p: "modified" for p in changes.modified}
+            | {p: "deleted" for p in changes.deleted}
+            | {p: "created" for p in changes.created},
+        )
+
+    def late_events(self, handle: str) -> list[PolicyEvent]:
+        """Policy events raised after the agent finished (by the check)."""
+        return list(self._get(handle).late_events)
 
     def isolation(self, handle: str) -> dict[str, Any]:
         return self._get(handle).isolation
 
     def artifacts(self, handle: str) -> dict[str, Any]:
         """Extra record metadata: the agent's diff, when the workdir is a git repository."""
-        diff = self._get(handle).diff
-        return {"diff": diff} if diff is not None else {}
+        live = self._get(handle)
+        out: dict[str, Any] = {"diff": live.diff} if live.diff is not None else {}
+        if live.protect_result:
+            out["protected_files"] = live.protect_result
+        return out
 
     async def teardown(self, handle: str) -> None:
         live = self._live.pop(handle, None)

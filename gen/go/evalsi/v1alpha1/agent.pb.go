@@ -2032,7 +2032,17 @@ type Checker struct {
 	// How to read the result: "exit-code" (default); "json" (the last line of
 	// stdout is {"passed": bool, "score": number, "tests": {...}}); "junit:<path>";
 	// or a Python function "module:function" taking (stdout, stderr, exit_code, task).
-	Parser        string `protobuf:"bytes,4,opt,name=parser,proto3" json:"parser,omitempty"`
+	Parser string `protobuf:"bytes,4,opt,name=parser,proto3" json:"parser,omitempty"`
+	// Glob patterns, relative to the workdir ("tests/**", "**/conftest.py"), of
+	// files the agent must not change. They are hashed when each trial starts and
+	// compared before the checker runs; a change (modified, deleted or new under
+	// a pattern) is a guardrail step on the trajectory. Workdir only: tampering
+	// outside it needs sandbox.read_only_root.
+	Protect []string `protobuf:"bytes,5,rep,name=protect,proto3" json:"protect,omitempty"`
+	// What a change does: "fail" (default) fails the trial without running the
+	// checker; "restore" writes the originals back and removes new files, then
+	// runs the checker.
+	OnChange      string `protobuf:"bytes,6,opt,name=on_change,json=onChange,proto3" json:"on_change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2091,6 +2101,20 @@ func (x *Checker) GetTimeout() *durationpb.Duration {
 func (x *Checker) GetParser() string {
 	if x != nil {
 		return x.Parser
+	}
+	return ""
+}
+
+func (x *Checker) GetProtect() []string {
+	if x != nil {
+		return x.Protect
+	}
+	return nil
+}
+
+func (x *Checker) GetOnChange() string {
+	if x != nil {
+		return x.OnChange
 	}
 	return ""
 }
@@ -2401,12 +2425,14 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tmemory_mb\x18\x04 \x01(\x05R\bmemoryMb\x12\x1b\n" +
 	"\tmax_procs\x18\x05 \x01(\x05R\bmaxProcs\x12\x18\n" +
 	"\aworkdir\x18\x06 \x01(\tR\aworkdir\x12$\n" +
-	"\x0eread_only_root\x18\a \x01(\bR\freadOnlyRoot\"\xe5\x01\n" +
+	"\x0eread_only_root\x18\a \x01(\bR\freadOnlyRoot\"\x9c\x02\n" +
 	"\aChecker\x12\x18\n" +
 	"\acommand\x18\x01 \x03(\tR\acommand\x129\n" +
 	"\x05files\x18\x02 \x03(\v2#.evalsi.v1alpha1.Checker.FilesEntryR\x05files\x123\n" +
 	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x16\n" +
-	"\x06parser\x18\x04 \x01(\tR\x06parser\x1a8\n" +
+	"\x06parser\x18\x04 \x01(\tR\x06parser\x12\x18\n" +
+	"\aprotect\x18\x05 \x03(\tR\aprotect\x12\x1b\n" +
+	"\ton_change\x18\x06 \x01(\tR\bonChange\x1a8\n" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

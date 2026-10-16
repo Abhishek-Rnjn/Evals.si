@@ -160,6 +160,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 	default:
 		return invalid("spec.harness.builtin.recording.mode must be off, record, replay, resume or fork")
 	}
+	if err := validateProtect(env.GetChecker()); err != nil {
+		return err
+	}
 	if p := env.GetChecker().GetParser(); strings.Contains(p, ":") && !strings.HasPrefix(p, "junit:") {
 		if err := m.trustPython(p, "spec.environment.checker.parser"); err != nil {
 			return err
@@ -336,4 +339,23 @@ var cliOutputFormats = map[string]bool{
 	"codex-json":         true,
 	"gemini-json":        true,
 	"pi-json":            true,
+}
+
+// maxProtect bounds the patterns a checker may protect.
+const maxProtect = 50
+
+func validateProtect(c *evalsiv1alpha1.Checker) error {
+	const f = "spec.environment.checker"
+	if m := c.GetOnChange(); m != "" && m != "fail" && m != "restore" {
+		return invalid("%s.on_change must be fail or restore", f)
+	}
+	if len(c.GetProtect()) > maxProtect {
+		return invalid("%s.protect can hold at most %d patterns", f, maxProtect)
+	}
+	for _, p := range c.GetProtect() {
+		if p == "" || len(p) > 120 || strings.HasPrefix(p, "/") || slices.Contains(strings.Split(p, "/"), "..") {
+			return invalid("%s.protect: %q must be a relative pattern of at most 120 characters, without ..", f, p)
+		}
+	}
+	return nil
 }

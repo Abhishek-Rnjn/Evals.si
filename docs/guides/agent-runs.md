@@ -74,6 +74,8 @@ environment:
     command: [python3, -m, pytest, -q]
     parser: exit-code                          # exit-code | json | junit:<path> | module:function
     timeout: 10m
+    protect: ["tests/**", "**/conftest.py"]    # the agent must not change these
+    on_change: fail                            # fail (default) | restore
   command_timeout: 2m
 ```
 
@@ -82,6 +84,7 @@ Notes on environments:
 - **Setup is shared.** Setup runs once per distinct environment, and every trial restores from the snapshot.
 - **Network.** All traffic goes through a logging egress proxy, so refused hosts show up as policy events.
 - **Writable root.** An image root is a private writable copy unless `read_only_root` is set.
+- **Protected files.** `checker.protect` lists globs, relative to the workdir, of files the checker relies on. Their contents are hashed when each trial starts and compared before the checker runs. A file modified, deleted, or created under a pattern is a change; it appears as a `sandbox.protected_file_modified` guardrail step and in `metadata.policy_events`, and `metadata.protected_files` lists what changed. With `on_change: fail` the trial fails (a failed check, not an error) without running the checker, since the state it would grade cannot be trusted; with `restore` the originals are written back and new files removed, and the checker then grades what the agent really did. This covers the workdir only: a `sitecustomize.py` on the Python path, a shim earlier on `PATH` or the installed packages are outside it (`sandbox.read_only_root` closes those), and symlinks are not followed (a protected file swapped for a symlink counts as deleted). Running the checker on a clean copy of the setup snapshot with only the agent's diff applied is not built. Up to 5,000 protected files, 8 MiB each and 64 MiB in all.
 - **Infrastructure errors are not scores.** A task whose environment fails (an image that does not pull, failing setup, a checker that cannot run) is reported as an error, never as a failed task.
 
 ## Harness options

@@ -66,7 +66,9 @@ def load_harness(task_spec: Any, ctx: HarnessContext) -> Harness:
     raise TaskError("harness.external needs one of address, command or python")
 
 
-async def run_task(task: Task, harness: Harness, *, on_event: OnEvent | None = None) -> TaskOutcome:
+async def run_task(  # noqa: PLR0915
+    task: Task, harness: Harness, *, on_event: OnEvent | None = None
+) -> TaskOutcome:
     events: list[Event] = []
     started = time.time_ns()
     try:
@@ -92,6 +94,10 @@ async def run_task(task: Task, harness: Harness, *, on_event: OnEvent | None = N
         artifacts_of = getattr(harness, "artifacts", None)
         if callable(artifacts_of):
             artifacts = artifacts_of(handle)
+        late_of = getattr(harness, "late_events", None)
+        if callable(late_of):
+            # Raised by the check, after the agent's own stream ended.
+            events.extend(late_of(handle))
     except TaskError as exc:
         return TaskOutcome(None, error=str(exc), events=events)
     finally:

@@ -361,6 +361,16 @@ message Checker {
   // stdout is {"passed": bool, "score": number, "tests": {...}}); "junit:<path>";
   // or a Python function "module:function" taking (stdout, stderr, exit_code, task).
   string parser = 4;
+  // Glob patterns, relative to the workdir ("tests/**", "**/conftest.py"), of
+  // files the agent must not change. They are hashed when each trial starts and
+  // compared before the checker runs; a change (modified, deleted or new under
+  // a pattern) is a guardrail step on the trajectory. Workdir only: tampering
+  // outside it needs sandbox.read_only_root.
+  repeated string protect = 5;
+  // What a change does: "fail" (default) fails the trial without running the
+  // checker; "restore" writes the originals back and removes new files, then
+  // runs the checker.
+  string on_change = 6;
 }
 
 // Environment is where a task runs. Spec-level values apply to every record;
