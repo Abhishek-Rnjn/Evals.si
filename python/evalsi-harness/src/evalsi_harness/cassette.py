@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 from collections import defaultdict, deque
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -36,8 +37,9 @@ from evalsi_harness.models import (
     ToolSpec,
 )
 from evalsi_harness.tools import Tool, ToolResult
+from evalsi_harness.user_sim import UserSimulator, UserTurn
 
-CASSETTE_VERSION = 2
+CASSETTE_VERSION = 3
 EMPTY_TOOLSET: dict[str, Any] = {"builtin": [], "delegate_steps": 0}
 
 
@@ -101,6 +103,7 @@ class Cassette:
         hooks: list[Any] | None = None,
         toolset: dict[str, Any] | None = None,
         fork_to: Path | None = None,
+        user_simulator: dict[str, Any] | None = None,
     ) -> None:
         if mode not in MODES:
             raise ValueError(
@@ -114,6 +117,8 @@ class Cassette:
         self.fork_to = fork_to
         self._turns: deque[dict[str, Any]] = deque()
         self._tools: dict[tuple[str, str], deque[dict[str, Any]]] = defaultdict(deque)
+        self._users: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+        self.user_simulator = user_simulator
         self.turns_served = 0
         # The context strategy the recording is valid for: a replay under
         # another one would send the model different conversations.
@@ -144,6 +149,7 @@ class Cassette:
         recorded: dict[str, Any] = {"strategy": "none"}  # version 1 files have no header
         recorded_hooks: list[Any] = []
         recorded_toolset: dict[str, Any] = EMPTY_TOOLSET
+        recorded_user: dict[str, Any] | None = None
         good: list[str] = []
         lines = [ln for ln in self.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
         for line in lines:
@@ -162,6 +168,7 @@ class Cassette:
                 recorded = entry.get("context") or {"strategy": "none"}
                 recorded_hooks = entry.get("hooks") or []
                 recorded_toolset = entry.get("toolset") or EMPTY_TOOLSET
+                recorded_user = entry.get("user_simulator")
             else:
                 self._next_id = max(self._next_id, entry.get("id", self._next_id) + 1)
                 self._last_id = entry.get("id", self._last_id)
@@ -170,10 +177,22 @@ class Cassette:
                 elif entry["kind"] == "tool":
                     key = (entry["name"], _args_key(entry["args"]))
                     self._tools[key].append(entry["result"])
+                elif entry["kind"] == "user":
+                    self._users[entry["conversation"]].append(entry["result"])
+        if recorded_user != self.user_simulator:
+            raise CassetteError(
+                f"cassette {self.path.name} needs the same recorded user simulator; "
+                "older logs without user turns cannot replay simulated-user tasks"
+            )
         if self.mode == "resume":
             # A refusal at the very end is where the trial died (a provider that went away),
             # not an outcome the run handled: resuming tries that call again.
-            while self._turns and "error" in self._turns[-1]:
+            while (
+                good
+                and json.loads(good[-1]).get("kind") == "model"
+                and self._turns
+                and "error" in self._turns[-1]
+            ):
                 self._turns.pop()
                 dropped = good.pop()
                 self._next_id = max(self._next_id - 1, 0)
@@ -223,6 +242,7 @@ class Cassette:
                     "context": self.context,
                     "hooks": self.hooks,
                     "toolset": self.toolset,
+                    "user_simulator": self.user_simulator,
                 }
                 if self.mode == "fork":
                     header["forked_from"] = {"session": self.path.name, "turns": self.branch_at}
@@ -353,6 +373,47 @@ class CassetteModel:
     async def aclose(self) -> None:
         if self.inner is not None:
             await self.inner.aclose()
+
+
+class CassetteUserSimulator(UserSimulator):
+    """Replays user decisions; creates the judge only when execution goes live."""
+
+    def __init__(self, cassette: Cassette, factory: Callable[[], UserSimulator]) -> None:
+        self.cassette = cassette
+        self.factory = factory
+        self.inner: UserSimulator | None = None
+        self.turns = 0
+
+    async def reply(self, conversation: list[dict[str, Any]]) -> UserTurn:
+        tape = self.cassette
+        key = json.dumps(conversation, sort_keys=True, separators=(",", ":"))
+        queue = tape._users.get(key)
+        replayed = not tape.live and bool(queue)
+        if replayed:
+            assert queue is not None
+            data = queue.popleft()
+            result = UserTurn(data["message"], data["done"], Usage.from_dict(data["usage"]))
+        else:
+            if not tape.live and (tape.mode != "resume" or tape._turns):
+                raise CassetteError("cassette has no user turn for this conversation")
+            if self.inner is None:
+                self.inner = self.factory()
+            self.inner.turns = self.turns
+            result = await self.inner.reply(conversation)
+        self.turns += 1
+        tape.record(
+            {
+                "kind": "user",
+                "conversation": key,
+                "result": {
+                    "message": result.message,
+                    "done": result.done,
+                    "usage": result.usage.to_dict(),
+                },
+            },
+            replayed=replayed,
+        )
+        return result
 
 
 class CassetteTool:

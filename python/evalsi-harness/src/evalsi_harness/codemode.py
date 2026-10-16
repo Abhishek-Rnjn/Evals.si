@@ -295,7 +295,22 @@ class Interpreter:
                 await self.assign(t, v, env)
         elif isinstance(target, ast.Subscript):
             container = await self.ev(target.value, env)
-            container[await self.ev(target.slice, env)] = value
+            index = await self.ev(target.slice, env)
+            if isinstance(container, list) and isinstance(index, slice):
+                # Materialize only bounded iterables before mutating the list.
+                replacement: list[Any] = []
+                for item in value:
+                    if len(replacement) >= MAX_SEQUENCE:
+                        raise Limit("that list would be too large")
+                    replacement.append(item)
+                removed = len(range(*index.indices(len(container))))
+                if len(container) - removed + len(replacement) > MAX_SEQUENCE:
+                    raise Limit("that list would be too large")
+                value = replacement
+            elif isinstance(container, dict) and index not in container:
+                if len(container) >= MAX_SEQUENCE:
+                    raise Limit("that collection would be too large")
+            container[index] = value
         else:
             raise CodeError(f"line {target.lineno}: cannot assign to that")
 

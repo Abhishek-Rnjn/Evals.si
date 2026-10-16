@@ -28,7 +28,7 @@ from evalsi.sandbox import SandboxError
 from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness._version import __version__
-from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool
+from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
 from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
@@ -284,7 +284,7 @@ class BuiltinHarness:
         live = self._get(handle)
         queue: asyncio.Queue[Event | None] = asyncio.Queue()
 
-        async def drive() -> None:
+        async def produce() -> None:
             try:
                 kind = _agent_kind(live.task)
                 if kind:
@@ -312,7 +312,18 @@ class BuiltinHarness:
             if self.profile is not None and not _agent_kind(live.task):
                 final.extra["profile"] = self.profile.ident
             queue.put_nowait(final)
-            queue.put_nowait(None)
+
+        async def drive() -> None:
+            try:
+                await produce()
+            except Exception as exc:
+                queue.put_nowait(
+                    FinalEvent(
+                        output=None, stop_reason="error", error=f"{type(exc).__name__}: {exc}"
+                    )
+                )
+            finally:
+                queue.put_nowait(None)
 
         runner = asyncio.create_task(drive())
         try:
@@ -321,8 +332,8 @@ class BuiltinHarness:
         finally:
             if not runner.done():
                 runner.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await runner
+            with contextlib.suppress(asyncio.CancelledError):
+                await runner
 
     def _wall_clock(self) -> float:
         b = self.config.budget
@@ -659,6 +670,11 @@ class BuiltinHarness:
                     **({"profile": self.profile.ident} if self.profile else {}),
                 },
                 fork_to=fork_to,
+                user_simulator=(
+                    json_format.MessageToDict(self.config.user_simulator)
+                    if self.config.user_simulator.ByteSize()
+                    else None
+                ),
             )
         except ValueError as exc:
             raise TaskError(f"harness.builtin.recording: {exc}") from exc
@@ -679,9 +695,19 @@ class BuiltinHarness:
             except ValueError as exc:
                 raise TaskError(f"target: {exc}") from exc
             live.closers.append(model.aclose)
-        user = live.user = self._user_simulator(task)
-        tools = await self._tools(live)
         cassette = live.cassette = self._cassette(live)
+
+        def make_user() -> UserSimulator:
+            result = self._user_simulator(task)
+            assert result is not None
+            return result
+
+        user = live.user = (
+            CassetteUserSimulator(cassette, make_user)
+            if cassette is not None and self.config.user_simulator.ByteSize()
+            else self._user_simulator(task)
+        )
+        tools = await self._tools(live)
         if cassette is not None:
             model = CassetteModel(cassette, model)
             sandbox_names = {"bash", "write_file", *MUTATING}

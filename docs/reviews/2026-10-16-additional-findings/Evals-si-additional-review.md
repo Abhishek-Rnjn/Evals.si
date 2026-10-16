@@ -89,16 +89,16 @@ Recording wraps the agent model and tools, but passes the simulated user directl
 - `existing-tests.txt`: existing code-mode, session, and connector suites completed with **70 passed in 6.68s**. Their passing status does not cover the four reproduced gaps. Command: `/workspace/review-venv/bin/python -m pytest -q python/evalsi-harness/tests/test_codemode.py python/evalsi-harness/tests/test_sessions.py python/evalsi-harness/tests/test_harness_connectors.py`.
 - Python dependencies were installed in `/workspace/review-venv`; repository code was imported from the pinned checkout.
 - Network responses and model/judge outputs were faked where described. No GPU, real remote agent, Kubernetes cluster or production workload was needed.
-- This review contributes documentation and opt-in evidence tests only; it does not implement fixes.
+- Fixes for R7-R10 are now implemented on this branch, with fixed-behavior regressions in `python/evalsi-harness/tests/test_review_regressions.py`. The captured logs above are historical evidence from before the fixes.
 
 Prioritize R7 and R8, then R10 and R9. This order is independent of the initial report's R1–R6 recommendations.
 
-## Running the evidence tests
+## Running the regression tests
 
 From the repository root, with the local SDK and harness packages and pytest installed:
 
 ```sh
-python -m pytest -q -s docs/reviews/2026-10-16-additional-findings/test_additional_findings.py
+python -m pytest -q python/evalsi-harness/tests/test_review_regressions.py
 ```
 
-These tests intentionally assert the reported defective behavior and should be converted to expected-correctness regressions when implementing fixes. They are stored outside the normal test suite.
+The regressions now assert bounded slice assignment, literal HTTP input, prompt failure and cleanup after malformed responses, and deterministic user-turn replay without a judge. They also cover resume/fork budgets, old-log compatibility, valid slice operations and cancellation. Validation: 80 targeted tests passed; Ruff checks and formatting passed; mypy passed for all five changed Python source/test files. Cassette v3 records simulator configuration and decisions; older logs without those decisions are rejected for simulated-user replay.
