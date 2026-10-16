@@ -235,6 +235,8 @@ class Step:
             out["duration_ms"] = self.duration_ms
         if self.usage is not None:
             out["usage"] = self.usage.to_dict()
+        if self.attributes:
+            out["attributes"] = dict(self.attributes)
         return out
 
 

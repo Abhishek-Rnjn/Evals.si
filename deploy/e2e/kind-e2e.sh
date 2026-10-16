@@ -461,6 +461,11 @@ kill "$watcher" 2>/dev/null || true
 sort -u "$work/ns2-pods.txt"
 [ -s "$work/ns2-pods.txt" ] || { echo "no sandbox pods were created in $ns2" >&2; exit 1; }
 
+if [ "${RUN_CLI_AGENT_E2E:-0}" = 1 ]; then
+  step "opt-in live Claude CLI on the pod rung"
+  bash "$root/tests/cli-agent/run.sh"
+fi
+
 if [ "$skip_landlock" = 1 ]; then
   step "DEFERRED: Landlock (SKIP_LANDLOCK=1); not verified, rerun on a supported kernel"
 else

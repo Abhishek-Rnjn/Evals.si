@@ -14,10 +14,13 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections import Counter
+from collections.abc import Mapping
 from typing import Any
 
 from evalsi.evaluator import EvalContext, MetricSpec, Requirements, ScoreType, SkipRecord, evaluator
 from evalsi.judges import JudgeError
+from evalsi.mechanisms import CONTEXT_COUNTERS, called_tools, context_acted
+from evalsi.packs.agent_checks import citation_grounding, handoff_correctness
 from evalsi.packs.judge import judge_cost, judge_metadata, rubric_score
 from evalsi.registry import Pack
 from evalsi.types import Record, Score, ToolUse, Trajectory
@@ -148,6 +151,39 @@ def tool_errors(record: Record) -> Score:
         raise SkipRecord("the trajectory has no tool calls")
     failed = [t.name for t in tools if t.error]
     return Score(number=len(failed) / len(tools), metadata={"failed": failed})
+
+
+@evaluator(
+    name="builtin/mechanism-ran",
+    version="1.0.0",
+    description=(
+        "Checks that a named harness mechanism ran: tool:<name> for a tool invocation, "
+        "or context:<strategy> for recorded context activity. Configuration alone does not pass."
+    ),
+    requires=TRAJECTORY,
+    outputs=[MetricSpec("mechanism-ran", PASSED, higher_is_better=True)],
+)
+def mechanism_ran(record: Record, *, mechanism: str = "") -> Score:
+    kind, _, name = mechanism.partition(":")
+    if not name or kind not in ("tool", "context"):
+        raise ValueError("mechanism must be tool:<name> or context:<strategy>")
+    if kind == "context" and name not in CONTEXT_COUNTERS:
+        raise ValueError(f"unknown context strategy {name!r}; choose {', '.join(CONTEXT_COUNTERS)}")
+    if kind == "tool":
+        passed = name in called_tools(record.to_dict())
+    else:
+        agent = record.metadata.get("agent")
+        if not isinstance(agent, Mapping) or not agent.get("context_strategy"):
+            raise SkipRecord("the record has no harness context strategy metadata")
+        field = "evidence" if name == "evidence-state" else "context"
+        if agent["context_strategy"] == name and not isinstance(agent.get(field), Mapping):
+            raise SkipRecord(f"the record has no harness {field} activity counters")
+        passed = context_acted(agent, name)
+    return Score(
+        passed=passed,
+        explanation=f"{mechanism} {'ran' if passed else 'did not run'}",
+        metadata={"mechanism": mechanism},
+    )
 
 
 @evaluator(
@@ -518,12 +554,16 @@ PACK = Pack(
     description=(
         "Agent trajectories and agent runs: tool-call accuracy, trajectory match, tool "
         "errors, loops, step budgets, judge-rated goal completion, environment-checked "
-        "task success, judge-reviewed code quality, sandbox policy violations and efficiency."
+        "task success, judge-reviewed code quality, sandbox policy violations, efficiency "
+        "and harness mechanism activity."
     ),
     evaluators=[
         tool_call_accuracy,
         trajectory_match,
         tool_errors,
+        mechanism_ran,
+        citation_grounding,
+        handoff_correctness,
         loop_detection,
         step_budget,
         goal_completion,

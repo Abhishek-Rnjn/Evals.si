@@ -21,7 +21,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from evalsi.types import Content, Step, Usage
-from evalsi_harness.events import StepEvent
+from evalsi_harness.events import StepEvent, span_id
 from evalsi_harness.models import ToolSpec
 from evalsi_harness.tools import ToolResult, _clip
 
@@ -103,6 +103,17 @@ class DelegateTool:
             hooks=loop.hooks,
         )
         started = time.perf_counter()
+        handoff = span_id()
+        loop.emit(
+            StepEvent(
+                Step(
+                    type="handoff",
+                    name="delegate:handoff",
+                    span_id=handoff,
+                    parent_span_id=span or loop.root,
+                )
+            )
+        )
         final = await sub.run([{"role": "user", "content": task[:MAX_TASK_CHARS]}])
         loop.bill_subagent(final, sub)
         report = final.output.as_text() if final.output is not None else ""
@@ -116,7 +127,7 @@ class DelegateTool:
                     input=Content(text=task[:MAX_TASK_CHARS]),
                     output=Content(text=report),
                     span_id=sub.root,
-                    parent_span_id=span or loop.root,
+                    parent_span_id=handoff,
                     duration_ms=(time.perf_counter() - started) * 1000,
                     usage=Usage(
                         input_tokens=final.usage.input_tokens if final.usage else None,

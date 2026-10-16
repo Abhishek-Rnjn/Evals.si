@@ -162,6 +162,49 @@ class A2AConnector:
         self.stream = cfg.stream
         self.context_id: str | None = None
         self.task_id: str | None = None
+        self._task_roots: dict[str, Step] = {}
+        self._linked_tasks: set[str] = set()
+
+    def _link_tasks(self, steps: list[Step]) -> list[Step]:
+        """A2A has no standard parent task field. Honor an explicit metadata
+        extension only: metadata.evalsi.parent_task_id; never infer a handoff
+        from referenceTaskIds, which can be ordinary references."""
+        added: list[Step] = []
+        for step in steps:
+            task = step.attributes.get("a2a.task_id")
+            if isinstance(task, str) and task and task not in self._task_roots:
+                self._task_roots[task] = step
+        for step in steps:
+            task = step.attributes.get("a2a.task_id")
+            if not isinstance(task, str) or task not in self._task_roots:
+                continue
+            root = self._task_roots[task]
+            if step is not root:
+                step.parent_span_id = root.span_id
+            parent = step.attributes.get("a2a.parent_task_id")
+            if isinstance(parent, str) and parent and task not in self._linked_tasks:
+                source = self._task_roots.get(parent)
+                handoff = Step(
+                    type="handoff",
+                    name="a2a:handoff",
+                    span_id=span_id(),
+                    parent_span_id=source.span_id if source else "",
+                    attributes={"a2a.task_id": task, "a2a.parent_task_id": parent},
+                )
+                root.parent_span_id = handoff.span_id
+                self._linked_tasks.add(task)
+                added.append(handoff)
+        return [*added, *steps]
+
+    @staticmethod
+    def _task_attributes(result: Mapping[str, Any], task_id: str) -> dict[str, Any]:
+        attrs: dict[str, Any] = {"a2a.task_id": task_id}
+        metadata = result.get("metadata")
+        ext = metadata.get("evalsi") if isinstance(metadata, Mapping) else None
+        parent = ext.get("parent_task_id") if isinstance(ext, Mapping) else None
+        if isinstance(parent, str) and parent:
+            attrs["a2a.parent_task_id"] = parent
+        return attrs
 
     async def _rpc(self, method: str, params: dict[str, Any]) -> Any:
         body = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": method, "params": params}
@@ -220,8 +263,13 @@ class A2AConnector:
             steps.append(
                 _agent_step("a2a", reply, input_text=text, error=state if state == "failed" else "")
             )
+            for step in steps:
+                step.attributes.update(self._task_attributes(result, str(result.get("id", ""))))
             return AgentReply(
-                reply, steps=steps, finished=state in TERMINAL, extra={"a2a_state": state}
+                reply,
+                steps=self._link_tasks(steps),
+                finished=state in TERMINAL,
+                extra={"a2a_state": state},
             )
         if isinstance(result, Mapping):
             self.context_id = result.get("contextId") or self.context_id
@@ -315,7 +363,9 @@ class A2AConnector:
                         input_text=text if not steps else "",
                         error=state if state == "failed" else "",
                     )
-                    step.attributes.update({"a2a.state": state, "a2a.task_id": task_id})
+                    step.attributes.update(
+                        {"a2a.state": state, **self._task_attributes(result, task_id)}
+                    )
                     steps.append(step)
                     if kind == "task":  # a snapshot may carry the artifacts so far
                         for art in result.get("artifacts") or []:
@@ -335,7 +385,7 @@ class A2AConnector:
             steps[-1].output = Content(text=reply)
         return AgentReply(
             reply,
-            steps=steps,
+            steps=self._link_tasks(steps),
             finished=state in TERMINAL or not state,
             extra={"a2a_state": state or "completed", "a2a_events": events},
         )

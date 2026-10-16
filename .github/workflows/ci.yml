@@ -9,6 +9,11 @@ on:
   pull_request:
   # Also how to run the heavy jobs below on a branch: Actions > ci > Run workflow.
   workflow_dispatch:
+    inputs:
+      cli_agent_e2e:
+        description: Run a live Claude CLI on the kind pod sandbox (requires ANTHROPIC_API_KEY)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -522,7 +527,7 @@ jobs:
     # request push, to save runner minutes.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       # The image, the bundle and two kind nodes' copies of every image do
       # not fit next to the runner's preinstalled toolchains.
@@ -534,6 +539,11 @@ jobs:
           docker image prune -af >/dev/null
           df -h /
       - uses: actions/checkout@v7
+      - name: Validate live CLI opt-in
+        if: inputs.cli_agent_e2e
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: 'test -n "$ANTHROPIC_API_KEY" || { echo "::error::cli_agent_e2e requires ANTHROPIC_API_KEY"; exit 1; }'
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -546,4 +556,15 @@ jobs:
       - run: uv sync --locked --all-packages
         working-directory: python
       - name: Kubernetes end-to-end
+        env:
+          RUN_CLI_AGENT_E2E: ${{ inputs.cli_agent_e2e && '1' || '0' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EVALSI_CLI_AGENT_ARTIFACTS: ${{ runner.temp }}/cli-agent-e2e
         run: deploy/e2e/kind-e2e.sh
+      - name: Live CLI results
+        if: always() && inputs.cli_agent_e2e
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-agent-e2e
+          path: ${{ runner.temp }}/cli-agent-e2e/results.json
+          if-no-files-found: warn

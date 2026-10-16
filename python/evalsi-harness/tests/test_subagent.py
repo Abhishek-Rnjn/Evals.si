@@ -7,7 +7,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from evalsi.types import Usage
+from evalsi.packs.agent_checks import handoff_correctness
+from evalsi.types import Record, Trajectory, Usage
 from evalsi_harness.events import StepEvent
 from evalsi_harness.loop import AgentLoop, LoopConfig
 from evalsi_harness.models import ModelTurn, ToolCallRequest
@@ -107,7 +108,10 @@ def test_the_subagents_steps_are_on_the_trajectory_under_the_delegate_call() -> 
     steps = [e.step for e in events if isinstance(e, StepEvent)]
     delegate = next(s for s in steps if s.type == "tool" and s.name == "delegate")
     sub = next(s for s in steps if s.name == "subagent")
-    assert sub.parent_span_id == delegate.span_id
+    handoff = next(s for s in steps if s.type == "handoff")
+    assert handoff.parent_span_id == delegate.span_id
+    assert sub.parent_span_id == handoff.span_id
+    assert handoff_correctness(Record(id="delegate", trajectory=Trajectory(steps=steps))).passed
     assert sub.attributes["evalsi.subagent.steps"] == 2
     assert sub.attributes["evalsi.subagent.stop_reason"] == "completed"
     inner = [s for s in steps if s.parent_span_id == sub.span_id]
