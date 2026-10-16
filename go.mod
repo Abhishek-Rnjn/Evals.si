@@ -1,6 +1,6 @@
 module github.com/abhishek-rnjn/evals.si
 
-go 1.26.0
+go 1.26.9
 
 require (
 	cel.dev/cel-go v0.32.0
