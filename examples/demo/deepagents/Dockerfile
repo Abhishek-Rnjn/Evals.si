@@ -1,6 +1,6 @@
 # evalsi-demo-deepagents: the Deep Agents demo agent (HTTP service) and dcode.
 # Build from this directory:  docker build -t evalsi-demo-deepagents .
-FROM python:3.13-slim
+FROM python:3.14-slim
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 MLFLOW_DISABLE_AGENT_HINT=1
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
