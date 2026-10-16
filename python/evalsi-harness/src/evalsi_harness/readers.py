@@ -299,6 +299,25 @@ def parse_claude(stdout: str) -> Parsed:  # noqa: PLR0915
                 sum(u.input_tokens or 0 for u in usages),
                 sum(u.output_tokens or 0 for u in usages),
             )
+    # Resolve after reading every event: a child's message may precede the
+    # parent's tool event in an interleaved CLI stream.
+    handoffs: dict[str, Step] = {}
+    for step in list(run.steps):
+        handoff_call = step.attributes.get("claude.parent_tool_use_id")
+        if not isinstance(handoff_call, str) or not handoff_call:
+            continue
+        if handoff_call not in handoffs:
+            source = pending.get(handoff_call)
+            handoff = Step(
+                type="handoff",
+                name="claude:subagent",
+                span_id=span_id(),
+                parent_span_id=source.span_id if source else "",
+                attributes={"claude.parent_tool_use_id": handoff_call},
+            )
+            handoffs[handoff_call] = handoff
+            run.steps.append(handoff)
+        step.parent_span_id = handoffs[handoff_call].span_id
     return _finish(run, totals is not None, *(totals or (0, 0)), cost)
 
 

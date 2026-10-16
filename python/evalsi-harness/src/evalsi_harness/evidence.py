@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from evalsi_harness.archive import Archive
@@ -105,6 +105,14 @@ class EvidenceState:
             "evidence_retracted": by.count("retracted"),
             "claims": len(self.claims),
             "claims_open": sum(1 for c in self.claims.values() if c.status == "open"),
+        }
+
+    def snapshot(self) -> dict[str, Any]:
+        """Bounded full quotes and current versions for provenance evaluators."""
+        return {
+            "version": 1,
+            "evidence": [asdict(e) for e in self.evidence.values()],
+            "claims": [asdict(c) for c in self.claims.values()],
         }
 
     def was_read(self, quote: str) -> bool:
@@ -277,7 +285,8 @@ class EvidenceTool:
                 "refused). Conclusions: a claim, the evidence ids that support it, and open gaps "
                 "still to close. Actions: add (statement, source, quote), supersede (id, "
                 "statement, source, quote: a corrected entry replaces the old one), retract (id, "
-                "reason), claim (claim, support, gaps; give id to update one), view."
+                "reason), claim (claim, support, gaps; give id to update one), view. "
+                "Cite evidence ids as [E1] in your final answer."
             ),
             input_schema={
                 "type": "object",

@@ -23,6 +23,7 @@ from statistics import fmean
 from typing import Any
 
 from evalsi.compare import compare_results, record_values
+from evalsi.mechanisms import called_tools, context_acted
 
 
 @dataclass
@@ -289,16 +290,6 @@ class Mechanism:
         return self.of > 0 and self.ran == 0
 
 
-def _called(record: Mapping[str, Any]) -> set[str]:
-    steps = _get(record, "trajectory", "steps") or []
-    return {
-        str(s.get("name", ""))
-        for s in steps
-        if isinstance(s, Mapping)
-        and str(s.get("type", "")).lower().removeprefix("step_type_") == "tool"
-    }
-
-
 def mechanisms(result: Mapping[str, Any]) -> list[Mechanism]:
     """Which parts of the harness were on, and in how many tasks the traces show
     them running. A gain credited to a change whose mechanism ran in none of the
@@ -312,7 +303,7 @@ def mechanisms(result: Mapping[str, Any]) -> list[Mechanism]:
         offered.update(_get(r, "metadata", "agent", "tools_offered") or [])
     for tool in OPTIONAL_TOOLS:
         if tool in offered:
-            out.append(Mechanism(f"tool:{tool}", sum(tool in _called(r) for r in records), n))
+            out.append(Mechanism(f"tool:{tool}", sum(tool in called_tools(r) for r in records), n))
     # The strategy that ran is what the run recorded (a profile may have chosen
     # it); the spec's own is the fallback for results from an older harness.
     strategy = next(
@@ -327,14 +318,7 @@ def mechanisms(result: Mapping[str, Any]) -> list[Mechanism]:
 
         def acted(r: Mapping[str, Any]) -> bool:
             agent = _get(r, "metadata", "agent") or {}
-            stats = agent.get("context") or {}
-            evidence = agent.get("evidence")
-            used = isinstance(evidence, Mapping) and any(
-                isinstance(v, int | float) and v > 0 for v in evidence.values()
-            )
-            return (
-                bool(stats.get("clears") or stats.get("compactions") or stats.get("rounds")) or used
-            )
+            return isinstance(agent, Mapping) and context_acted(agent, str(strategy))
 
         out.append(Mechanism(f"context:{strategy}", sum(acted(r) for r in records), n))
     return out

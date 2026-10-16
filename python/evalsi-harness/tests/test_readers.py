@@ -50,11 +50,13 @@ def test_claude_code_run_with_a_sub_agent() -> None:
     assert by_id["t1"].output is not None
     assert by_id["t1"].output.as_text() == "def add(a,b): return a-b"
     assert by_id["t3"].error == "1 failed"  # a list of text blocks, is_error
-    # The sub-agent's model call hangs under the Task tool step that started it.
+    # The explicit handoff links the Task tool to the sub-agent's model call.
     sub = next(
         s for s in run.steps if s.type == "llm" and s.attributes.get("claude.parent_tool_use_id")
     )
-    assert sub.parent_span_id == by_id["t2"].span_id
+    handoff = next(s for s in run.steps if s.type == "handoff")
+    assert handoff.parent_span_id == by_id["t2"].span_id
+    assert sub.parent_span_id == handoff.span_id
     assert by_id["t3"].parent_span_id == sub.span_id
 
 
