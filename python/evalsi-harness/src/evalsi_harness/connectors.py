@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shlex
 import time
 import uuid
@@ -537,10 +538,15 @@ class HTTPConnector:
     async def send(self, text: str) -> AgentReply:
         self.history.append({"role": "user", "content": text})
         template = self.cfg.body_template or '{"input": {{input}}}'
-        raw = (
-            template.replace("{{input}}", json.dumps(text))
-            .replace("{{task_id}}", json.dumps(self.task.id))
-            .replace("{{messages}}", json.dumps(self.history))
+        values = {
+            "input": text,
+            "task_id": self.task.id,
+            "messages": self.history,
+        }
+        raw = re.sub(
+            r"\{\{(input|task_id|messages)\}\}",
+            lambda match: json.dumps(values[match[1]]),
+            template,
         )
         try:
             body = json.loads(raw)

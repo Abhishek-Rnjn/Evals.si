@@ -66,7 +66,14 @@ def steps(answers: list[dict[str, Any]]) -> Script:
 
 
 def run(
-    server: ScriptedModelServer, task_id: str, user: list[dict[str, Any]], domain: str = "mock"
+    server: ScriptedModelServer,
+    task_id: str,
+    user: list[dict[str, Any]],
+    domain: str = "mock",
+    *,
+    recording: dict[str, Any] | None = None,
+    no_judge: bool = False,
+    inspect_prompt: Any = None,
 ) -> TaskOutcome:
     spec = json_format.ParseDict(
         normalize_durations(
@@ -86,14 +93,26 @@ def run(
     )
     row = load(domain, tasks=task_id)[0]
     record = Record(id=row["id"], input=Content(text=row["input"]), metadata=row["metadata"])
+    if recording is not None:
+        json_format.ParseDict({"recording": recording}, spec.harness.external.config)
     replies = iter(user)
-    judge = JudgeClient(TEST_JUDGE, ScriptedJudge(lambda prompt, schema: next(replies)))
+
+    def answer(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
+        if inspect_prompt is not None:
+            inspect_prompt(prompt)
+        return next(replies)
+
+    judge = JudgeClient(TEST_JUDGE, ScriptedJudge(answer))
 
     async def go() -> TaskOutcome:
         async def no_sandboxes() -> Any:
             raise AssertionError("tau-bench tasks need no sandbox")
 
-        ctx = HarnessContext(sandboxes=no_sandboxes, judge=lambda name: judge, base_dir=Path.cwd())
+        ctx = HarnessContext(
+            sandboxes=no_sandboxes,
+            judge=None if no_judge else lambda name: judge,
+            base_dir=Path.cwd(),
+        )
         harness = load_harness(spec, ctx)
         try:
             return await run_task(Task.build(spec, record, trial=0, run_id="r"), harness)
@@ -280,3 +299,111 @@ def test_user_tool_calls_are_replayed_in_order() -> None:
         ("UserMessage", "again"),
     ]
     assert not any(isinstance(m, AssistantMessage) for m in out)
+
+
+@pytest.mark.parametrize("domain", ["mock", "telecom"])
+def test_default_simulator_replays_without_a_judge(model: Any, tmp_path: Path, domain: str) -> None:
+    if domain == "mock":
+        server = model(
+            steps(
+                [
+                    {
+                        "tool_calls": [
+                            ("create_task", {"user_id": "user_1", "title": "Important Meeting"})
+                        ]
+                    },
+                    {"text": "The agent confirmed the task was created successfully."},
+                ]
+            )
+        )
+        task_id, user = "create_task_1", USER
+    else:
+        server = model(telecom_agent())
+        task_id, user = TELECOM, phone_user(True)
+    before = run(server, task_id, user, domain, recording={"mode": "record", "dir": str(tmp_path)})
+    sent = len(server.requests)
+    after = run(
+        server,
+        task_id,
+        [],
+        domain,
+        recording={"mode": "replay", "dir": str(tmp_path)},
+        no_judge=True,
+    )
+    assert before.error == after.error == ""
+    assert before.record is not None
+    assert after.record is not None
+    assert before.record.check is not None
+    assert after.record.check is not None
+    assert before.record.check.passed
+    assert after.record.check == before.record.check
+    assert len(server.requests) == sent
+
+
+@pytest.mark.parametrize("mode", ["resume", "fork"])
+def test_device_actions_and_user_history_survive_continuation(
+    model: Any,
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    import json
+
+    server = model(
+        steps(
+            [
+                {"text": "Please turn airplane mode off and reseat your SIM card."},
+                {"text": "Is service back?"},
+            ]
+        )
+    )
+    user = phone_user(True)
+    user[-1] = {**user[-1], "message": "I did both, and I have service now.", "done": False}
+    final = {"message": "Thanks! ###STOP###", "done": True}
+    control = run(
+        server,
+        TELECOM,
+        [*user, final],
+        "telecom",
+        recording={"mode": "record", "dir": str(tmp_path)},
+    )
+    assert control.record is not None
+    assert control.record.check is not None
+    assert control.record.check.passed
+    tape = next(tmp_path.glob("*.jsonl"))
+    if mode == "resume":
+        lines = tape.read_text().splitlines()
+        assert json.loads(lines[-1])["kind"] == "user"
+        tape.write_text("\n".join(lines[:-1]) + "\n")
+    server.script = steps([{"text": "Is service back?"}])
+    prompts = []
+
+    def inspect(prompt: str) -> None:
+        prompts.append(prompt)
+        assert "YOUR TOOL CALL toggle_airplane_mode" in prompt
+        assert "YOUR TOOL CALL reseat_sim_card" in prompt
+        assert "I did both" in prompt
+        assert "AGENT: Is service back?" in prompt
+
+    rec: dict[str, Any] = {"mode": mode, "dir": str(tmp_path)}
+    if mode == "fork":
+        rec["branch_at_step"] = 1
+    result = run(server, TELECOM, [final], "telecom", recording=rec, inspect_prompt=inspect)
+    assert result.error == ""
+    assert result.record is not None
+    assert result.record.check is not None
+    assert result.record.check == control.record.check
+    assert len(prompts) == 1
+    if mode == "fork":
+        child = next(tmp_path.glob("*.fork-1.jsonl"))
+        tape.write_text(child.read_text())
+    replay = run(
+        server,
+        TELECOM,
+        [],
+        "telecom",
+        recording={"mode": "replay", "dir": str(tmp_path)},
+        no_judge=True,
+    )
+    assert replay.error == ""
+    assert replay.record is not None
+    assert replay.record.check == control.record.check

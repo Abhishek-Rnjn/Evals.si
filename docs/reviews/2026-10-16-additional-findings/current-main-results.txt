@@ -1,0 +1,6 @@
+CONFIRMED code mode retained 2000000 elements; limit=1000000
+.CONFIRMED literal input breaks default HTTP template: http agent: body_template is not JSON after substitution: Expecting ',' delimiter: line 1 column 21 (char 20)
+.CONFIRMED invalid JSON killed producer; run_task required external cancellation
+.CONFIRMED replay called live judge and changed output: 'Order 42 ships tomorrow.' -> 'What is your order number?'
+.
+4 passed in 0.68s
