@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
 
 from evalsi.evaluator import (
@@ -61,17 +62,43 @@ SCHEMA: dict[str, Any] = {
 
 PROMPT_VERSION = hashlib.sha256((SYSTEM_PROMPT + repr(SCHEMA)).encode()).hexdigest()[:12]
 
+# The tags the judge and simulated-user prompts use to fence untrusted text.
+_FENCE_TAGS = (
+    "rubric",
+    "question",
+    "reference",
+    "context",
+    "response",
+    "trajectory",
+    "dimensions",
+    "task",
+    "tests",
+    "diff",
+    "persona",
+    "goal",
+    "conversation",
+    "your_tools",
+)
+_FENCE_TAG = re.compile(r"<(/?)(" + "|".join(_FENCE_TAGS) + r")(?![A-Za-z0-9_-])", re.IGNORECASE)
+
+
+def fence(text: str) -> str:
+    """Make text safe to place inside a prompt tag. A response that contains
+    ``</response>`` would otherwise close its own fence and write instructions
+    outside it, so the opening ``<`` of any fence tag in the text becomes ``&lt;``."""
+    return _FENCE_TAG.sub(r"&lt;\1\2", text)
+
 
 def build_prompt(record: Record, rubric_text: str) -> str:
     parts = [f"<rubric>\n{rubric_text}\n</rubric>"]
     if record.input is not None:
-        parts.append(f"<question>\n{record.input.as_text()}\n</question>")
+        parts.append(f"<question>\n{fence(record.input.as_text())}\n</question>")
     if record.reference is not None:
-        parts.append(f"<reference>\n{record.reference.as_text()}\n</reference>")
+        parts.append(f"<reference>\n{fence(record.reference.as_text())}\n</reference>")
     for i, ctx in enumerate(record.context, start=1):
-        parts.append(f'<context index="{i}">\n{ctx.as_text()}\n</context>')
+        parts.append(f'<context index="{i}">\n{fence(ctx.as_text())}\n</context>')
     assert record.output is not None
-    parts.append(f"<response>\n{record.output.as_text()}\n</response>")
+    parts.append(f"<response>\n{fence(record.output.as_text())}\n</response>")
     return "\n\n".join(parts)
 
 

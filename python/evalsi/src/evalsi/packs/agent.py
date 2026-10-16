@@ -21,7 +21,7 @@ from evalsi.evaluator import EvalContext, MetricSpec, Requirements, ScoreType, S
 from evalsi.judges import JudgeError
 from evalsi.mechanisms import CONTEXT_COUNTERS, called_tools, context_acted
 from evalsi.packs.agent_checks import citation_grounding, handoff_correctness
-from evalsi.packs.judge import judge_cost, judge_metadata, rubric_score
+from evalsi.packs.judge import fence, judge_cost, judge_metadata, rubric_score
 from evalsi.registry import Pack
 from evalsi.types import Record, Score, ToolUse, Trajectory
 
@@ -268,7 +268,7 @@ async def goal_completion(record: Record, *, ctx: EvalContext) -> Score:
         "claimed actions actually happened and succeeded; an agent that says it did "
         "something its tools never did has not completed the goal."
     )
-    transcript = f"<trajectory>\n{_transcript(_trajectory(record))}\n</trajectory>"
+    transcript = f"<trajectory>\n{fence(_transcript(_trajectory(record)))}\n</trajectory>"
     if record.output is None:
         outputs = [s.output for s in _trajectory(record).steps if s.output is not None]
         if outputs:
@@ -510,8 +510,8 @@ async def code_quality(
     rubric = "\n".join(f"- {dim}: {text}" for dim, text in QUALITY_DIMENSIONS.items())
     task = record.input.as_text() if record.input is not None else "(not recorded)"
     prompt = (
-        f"<dimensions>\n{rubric}\n</dimensions>\n\n<task>\n{task}\n</task>\n\n"
-        f"<tests>\n{_check_summary(record)}\n</tests>\n\n<diff>\n{shown}\n</diff>"
+        f"<dimensions>\n{rubric}\n</dimensions>\n\n<task>\n{fence(task)}\n</task>\n\n"
+        f"<tests>\n{fence(_check_summary(record))}\n</tests>\n\n<diff>\n{fence(shown)}\n</diff>"
     )
     response = await ctx.judge.complete_json(
         system=QUALITY_SYSTEM, prompt=prompt, schema=QUALITY_SCHEMA
