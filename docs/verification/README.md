@@ -8,6 +8,8 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 | [FINAL-RESULTS.md](FINAL-RESULTS.md) | One table of every exit criterion across the three clusters |
 | [PART-C.md](PART-C.md) | M4/M5 requested subset, native dsh integration, review fixes and final-phase verification limits |
 | [EKS-2026-10-12.md](EKS-2026-10-12.md) | Detailed bounded EKS evidence and methods: two fixes, live KEDA/NATS, sandbox/pool controls, real MLflow redaction/write-back, recovery, Playwright UI/annotation, real Operator/Alertmanager firing/delivery/resolution, isolated admission workaround, real agentgateway LLM/MCP, second-release coexistence and mounted Python/Wasm; no M4 certification |
+| [EKS-2026-10-17.md](EKS-2026-10-17.md) | Live chart host-network admission; GPU checkpoint model-selection fix, inference/auth/rollout/deletion; ambient failure and non-mesh sandbox canary controls; owned resources cleaned up |
+| [EKS-HARNESS-2026-10-17.md](EKS-HARNESS-2026-10-17.md) | Harness-first continuation: real pod/bwrap controls, live models/thinking/context/replay, SIGKILL/resume, CLI/MCP, ten framework mappings, in-cluster watcher/PVC/LoRA, PostgreSQL/S3 restore and five total fixes across both passes; full leftover inventory, validation and pending GPU-training priority. Cache reuse remains a failing control |
 
 The run used commit `c5a1de9` on 2026-10-09, on three clusters:
 
@@ -519,3 +521,33 @@ Not checked:
 
 - A chart install from the OCI charts on a cluster, an upgrade from the v0.1.0 charts (the CHANGELOG's upgrade notes are untested on a cluster), an import of the published bundle, and the arm64 images.
 - The bundled `bwrap` running a sandbox from an installed arm64 wheel (the amd64 wheel's sandbox runs in CI's `release-check`).
+
+## Multi-service environments (2026-10-17)
+
+The pod-native service lifecycle passed a bounded local kind/Calico check:
+API/Redis grading, fresh trial state, denied cross-trial connections, service
+crash errors, an adapted Terminal-Bench-format fixture, destroy and startup
+failure cleanup. See [the run record](MULTI-SERVICE-2026-10-17.md) for methods,
+environment adjustments, automated coverage and limits. The standalone CI
+bootstrap path and production-scale behavior are not certified by this run.
+
+## Leftovers audit and live checks (2026-10-17)
+
+All 50 current leftovers rows now have a result or remaining requirement. The
+[new verification record](LEFTOVERS-2026-10-17.md) covers real pod/bubblewrap
+protected-file/interjection checks, worker SIGKILL/resume, a published tokenizer
+and MCP SDK, host-network and STRICT mTLS webhooks, ambient leak detection and
+explicit opt-out, PostgreSQL/MinIO pipeline races, logical restore and WAL PITR,
+a previous-reader check, checkpoint-controller reconciliation, live push
+redaction through NATS/PostgreSQL/API, and Chromium accessibility.
+
+The [JSON record](LEFTOVERS-2026-10-17.json) separates bounded passes, partial
+results, unavailable access/hardware/scale, unimplemented features and known
+limits. These local checks do not certify production scale, external models or
+cloud providers. The historical redaction section above now has additional
+cluster push-path evidence; its other limitations still apply.
+
+PR #85 integrates the completed EKS checkpoint at `42d8127` alongside the local
+leftovers audit. The combined inventory retains 50 stable item IDs: four bounded
+verification passes and fifteen partial results. EKS/GPU measurements retain
+their separate provenance; ongoing trainer checks are not marked passed.

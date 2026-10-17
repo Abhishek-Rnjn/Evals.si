@@ -4,6 +4,7 @@ isort:skip_file
 """
 
 from collections import abc as _abc
+from evalsi.v1alpha1 import agent_pb2 as _agent_pb2
 from evalsi.v1alpha1 import record_pb2 as _record_pb2
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -120,14 +121,18 @@ class ProbeResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     RUNGS_FIELD_NUMBER: _builtins.int
+    SERVICES_SUPPORTED_FIELD_NUMBER: _builtins.int
+    services_supported: _builtins.bool
+    """The server understands service specs and rejects unsupported backends."""
     @_builtins.property
     def rungs(self) -> _containers.RepeatedCompositeFieldContainer[Global___RungStatus]: ...
     def __init__(
         self,
         *,
         rungs: _abc.Iterable[Global___RungStatus] | None = ...,
+        services_supported: _builtins.bool = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["rungs", b"rungs"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["rungs", b"rungs", "services_supported", b"services_supported"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ProbeResponse: _TypeAlias = ProbeResponse  # noqa: Y015
@@ -228,6 +233,8 @@ class SandboxSpec(_message.Message):
     WORKDIR_FIELD_NUMBER: _builtins.int
     IDLE_TIMEOUT_FIELD_NUMBER: _builtins.int
     READ_ONLY_ROOT_FIELD_NUMBER: _builtins.int
+    SERVICES_FIELD_NUMBER: _builtins.int
+    SERVICE_LIFETIME_FIELD_NUMBER: _builtins.int
     image: _builtins.str
     """An OCI image reference (registry, "oci-layout:<dir>[@ref]",
     "docker-archive:<file>" or "dir:<unpacked root>"). It becomes the root
@@ -261,6 +268,10 @@ class SandboxSpec(_message.Message):
     def idle_timeout(self) -> _duration_pb2.Duration:
         """Destroyed after this long without an Exec. Default: 30 minutes."""
 
+    @_builtins.property
+    def services(self) -> _containers.RepeatedCompositeFieldContainer[_agent_pb2.EnvironmentService]: ...
+    @_builtins.property
+    def service_lifetime(self) -> _duration_pb2.Duration: ...
     def __init__(
         self,
         *,
@@ -274,10 +285,12 @@ class SandboxSpec(_message.Message):
         workdir: _builtins.str = ...,
         idle_timeout: _duration_pb2.Duration | None = ...,
         read_only_root: _builtins.bool = ...,
+        services: _abc.Iterable[_agent_pb2.EnvironmentService] | None = ...,
+        service_lifetime: _duration_pb2.Duration | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["idle_timeout", b"idle_timeout", "network", b"network", "resources", b"resources"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["idle_timeout", b"idle_timeout", "network", b"network", "resources", b"resources", "service_lifetime", b"service_lifetime"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["env", b"env", "files", b"files", "idle_timeout", b"idle_timeout", "image", b"image", "min_isolation", b"min_isolation", "mode", b"mode", "network", b"network", "read_only_root", b"read_only_root", "resources", b"resources", "workdir", b"workdir"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["env", b"env", "files", b"files", "idle_timeout", b"idle_timeout", "image", b"image", "min_isolation", b"min_isolation", "mode", b"mode", "network", b"network", "read_only_root", b"read_only_root", "resources", b"resources", "service_lifetime", b"service_lifetime", "services", b"services", "workdir", b"workdir"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___SandboxSpec: _TypeAlias = SandboxSpec  # noqa: Y015
@@ -645,13 +658,17 @@ class StatsRequest(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     SANDBOX_ID_FIELD_NUMBER: _builtins.int
+    INCLUDE_SERVICE_LOGS_FIELD_NUMBER: _builtins.int
     sandbox_id: _builtins.str
+    include_service_logs: _builtins.bool
+    """Opt-in: logs may contain application data. At most 16 KiB per service."""
     def __init__(
         self,
         *,
         sandbox_id: _builtins.str = ...,
+        include_service_logs: _builtins.bool = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["sandbox_id", b"sandbox_id"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["include_service_logs", b"include_service_logs", "sandbox_id", b"sandbox_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___StatsRequest: _TypeAlias = StatsRequest  # noqa: Y015
@@ -698,12 +715,15 @@ class StatsResponse(_message.Message):
     CPU_TIME_FIELD_NUMBER: _builtins.int
     MAX_RSS_BYTES_FIELD_NUMBER: _builtins.int
     EGRESS_FIELD_NUMBER: _builtins.int
+    SERVICES_FIELD_NUMBER: _builtins.int
     execs: _builtins.int
     max_rss_bytes: _builtins.int
     @_builtins.property
     def cpu_time(self) -> _duration_pb2.Duration: ...
     @_builtins.property
     def egress(self) -> _containers.RepeatedCompositeFieldContainer[Global___EgressEvent]: ...
+    @_builtins.property
+    def services(self) -> _containers.RepeatedCompositeFieldContainer[Global___ServiceStatus]: ...
     def __init__(
         self,
         *,
@@ -711,13 +731,44 @@ class StatsResponse(_message.Message):
         cpu_time: _duration_pb2.Duration | None = ...,
         max_rss_bytes: _builtins.int = ...,
         egress: _abc.Iterable[Global___EgressEvent] | None = ...,
+        services: _abc.Iterable[Global___ServiceStatus] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["cpu_time", b"cpu_time"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["cpu_time", b"cpu_time", "egress", b"egress", "execs", b"execs", "max_rss_bytes", b"max_rss_bytes"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["cpu_time", b"cpu_time", "egress", b"egress", "execs", b"execs", "max_rss_bytes", b"max_rss_bytes", "services", b"services"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___StatsResponse: _TypeAlias = StatsResponse  # noqa: Y015
+
+@_typing.final
+class ServiceStatus(_message.Message):
+    """No service payloads or environment values are returned here."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    READY_FIELD_NUMBER: _builtins.int
+    RESTARTS_FIELD_NUMBER: _builtins.int
+    REASON_FIELD_NUMBER: _builtins.int
+    LOGS_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    ready: _builtins.bool
+    restarts: _builtins.int
+    reason: _builtins.str
+    logs: _builtins.str
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        ready: _builtins.bool = ...,
+        restarts: _builtins.int = ...,
+        reason: _builtins.str = ...,
+        logs: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["logs", b"logs", "name", b"name", "ready", b"ready", "reason", b"reason", "restarts", b"restarts"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ServiceStatus: _TypeAlias = ServiceStatus  # noqa: Y015
 
 @_typing.final
 class DestroyRequest(_message.Message):

@@ -124,6 +124,25 @@ func find(t *testing.T, objs []object, kind, name string) object {
 	return object{}
 }
 
+func TestDevPostgresStorageClass(t *testing.T) {
+	for _, storageClass := range []string{"", "gp3"} {
+		t.Run(fmt.Sprintf("class=%s", storageClass), func(t *testing.T) {
+			objs := render(t, "evalsi", "devPostgres.enabled=true", "devPostgres.storageClassName="+storageClass)
+			pg := find(t, objs, "StatefulSet", "evalsi-dev-postgres")
+			claims := pg.Spec["volumeClaimTemplates"].([]any)
+			spec := claims[0].(map[string]any)["spec"].(map[string]any)
+			got, present := spec["storageClassName"]
+			if storageClass == "" {
+				if present {
+					t.Fatalf("default must omit storageClassName, got %v", got)
+				}
+			} else if got != storageClass {
+				t.Fatalf("storageClassName = %v, want %q", got, storageClass)
+			}
+		})
+	}
+}
+
 // load checks a rendered evalsi.yaml the way evalsid does at startup.
 func load(t *testing.T, cm object) config.Config {
 	t.Helper()

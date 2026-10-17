@@ -22,10 +22,16 @@ type Manager struct {
 	idle time.Duration
 
 	mu        sync.Mutex
+	pending   int
+	closed    bool
 	sessions  map[string]*Session
 	snapshots map[string]*snapshot
 	stop      chan struct{}
 	wg        sync.WaitGroup
+	opening   sync.WaitGroup
+	closeOnce sync.Once
+	ctx       context.Context
+	cancel    context.CancelFunc
 	// Sandboxes created since start (metrics, tests).
 	created atomic.Int64
 }
@@ -42,9 +48,11 @@ type snapshot struct {
 
 // NewManager starts a manager over sb; Close destroys everything it holds.
 func NewManager(sb *Sandbox) *Manager {
+	ctx, cancel := context.WithCancel(context.Background())
 	m := &Manager{
 		sb: sb, max: sb.cfg.MaxSandboxes, idle: time.Duration(sb.cfg.IdleTimeoutS * float64(time.Second)),
 		sessions: map[string]*Session{}, snapshots: map[string]*snapshot{}, stop: make(chan struct{}),
+		ctx: ctx, cancel: cancel,
 	}
 	if m.max <= 0 {
 		m.max = 64
@@ -96,30 +104,59 @@ func (m *Manager) reapOnce(now time.Time) {
 func (m *Manager) reserve() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.sessions) >= m.max {
+	if m.closed {
+		return errors.New("sandbox manager is closed")
+	}
+	if len(m.sessions)+m.pending >= m.max {
 		return fmt.Errorf("too many sandboxes (max_sandboxes is %d); destroy some first", m.max)
 	}
+	m.pending++
+	m.opening.Add(1)
 	return nil
 }
 
-func (m *Manager) add(s *Session) {
-	m.created.Add(1)
+// openSession owns one admission slot through backend startup. Registering the
+// session and releasing its pending slot happen atomically, so concurrent opens
+// cannot bypass the cap. Shutdown cancels and joins pending backend creation.
+func (m *Manager) openSession(ctx context.Context, open func(context.Context) (*Session, error)) (*Session, error) {
+	if err := m.reserve(); err != nil {
+		return nil, err
+	}
+	defer m.opening.Done()
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(m.ctx, cancel)
+	defer stop()
+	defer cancel()
+	s, err := open(ctx)
+	if err == nil && ctx.Err() != nil {
+		// A backend may finish just as its caller disconnects. Do not register
+		// a session that the cancelled request can no longer receive.
+		_ = s.Close()
+		err = ctx.Err()
+	}
 	m.mu.Lock()
-	m.sessions[s.ID] = s
+	m.pending--
+	closed := m.closed
+	if err == nil && !closed {
+		m.created.Add(1)
+		m.sessions[s.ID] = s
+	}
 	m.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	if closed {
+		_ = s.Close()
+		return nil, errors.New("sandbox manager closed during creation")
+	}
+	return s, nil
 }
 
 // Create opens a sandbox for sp.
 func (m *Manager) Create(ctx context.Context, sp *Spec) (*Session, error) {
-	if err := m.reserve(); err != nil {
-		return nil, err
-	}
-	s, err := m.sb.Open(ctx, sp)
-	if err != nil {
-		return nil, err
-	}
-	m.add(s)
-	return s, nil
+	return m.openSession(ctx, func(ctx context.Context) (*Session, error) {
+		return m.sb.Open(ctx, sp)
+	})
 }
 
 // Get returns a live session.
@@ -185,9 +222,6 @@ func (m *Manager) Restore(ctx context.Context, snapID string, network *Network) 
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, snapID)
 	}
-	if err := m.reserve(); err != nil {
-		return nil, err
-	}
 	sp := snap.spec
 	if network != nil {
 		sp.Network = *network
@@ -198,12 +232,9 @@ func (m *Manager) Restore(ctx context.Context, snapID string, network *Network) 
 			return nil, fmt.Errorf("%w: %s: %v", ErrUnavailable, snap.driver.name(), err)
 		}
 	}
-	s, err := m.sb.openWith(ctx, snap.driver, &sp, filepath.Join(snap.dir, "state"))
-	if err != nil {
-		return nil, err
-	}
-	m.add(s)
-	return s, nil
+	return m.openSession(ctx, func(ctx context.Context) (*Session, error) {
+		return m.sb.openWith(ctx, snap.driver, &sp, filepath.Join(snap.dir, "state"))
+	})
 }
 
 // DeleteSnapshot removes a snapshot.
@@ -220,8 +251,17 @@ func (m *Manager) DeleteSnapshot(id string) error {
 
 // Close destroys every session and snapshot.
 func (m *Manager) Close() {
+	m.closeOnce.Do(m.close)
+}
+
+func (m *Manager) close() {
+	m.mu.Lock()
+	m.closed = true
+	m.mu.Unlock()
+	m.cancel()
 	close(m.stop)
 	m.wg.Wait()
+	m.opening.Wait()
 	m.mu.Lock()
 	sessions, snaps := m.sessions, m.snapshots
 	m.sessions, m.snapshots = map[string]*Session{}, map[string]*snapshot{}

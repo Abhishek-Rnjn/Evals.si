@@ -177,6 +177,30 @@ func TestCheckpointServerForLoRA(t *testing.T) {
 	}
 }
 
+func TestCheckpointServerCommand(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		command []string
+		want    string
+	}{
+		{name: "default", want: "vllm serve"},
+		{name: "custom", command: []string{"/opt/serve", "--debug"}, want: "/opt/serve --debug"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cs := &v1.CheckpointServer{Spec: v1.CheckpointServerSpec{
+				Image: "vllm/vllm-openai:v0.11.0", Model: "facebook/opt-125m", Command: tc.command,
+			}}
+			container := serverPod(cs, nil, "model", defaultServerPort).Spec.Containers[0]
+			if got := strings.Join(container.Command, " "); got != tc.want {
+				t.Errorf("command = %q, want %q", got, tc.want)
+			}
+			if container.Args[0] != cs.Spec.Model {
+				t.Errorf("model argument = %q, want %q", container.Args[0], cs.Spec.Model)
+			}
+		})
+	}
+}
+
 // Changing the spec changes the Deployment; a missing resource is not an error.
 func TestCheckpointServerFollowsItsSpec(t *testing.T) {
 	cs := &v1.CheckpointServer{

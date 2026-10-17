@@ -252,10 +252,12 @@ func (x *RungStatus) GetWarning() string {
 }
 
 type ProbeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Rungs         []*RungStatus          `protobuf:"bytes,1,rep,name=rungs,proto3" json:"rungs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Rungs []*RungStatus          `protobuf:"bytes,1,rep,name=rungs,proto3" json:"rungs,omitempty"`
+	// The server understands service specs and rejects unsupported backends.
+	ServicesSupported bool `protobuf:"varint,2,opt,name=services_supported,json=servicesSupported,proto3" json:"services_supported,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ProbeResponse) Reset() {
@@ -293,6 +295,13 @@ func (x *ProbeResponse) GetRungs() []*RungStatus {
 		return x.Rungs
 	}
 	return nil
+}
+
+func (x *ProbeResponse) GetServicesSupported() bool {
+	if x != nil {
+		return x.ServicesSupported
+	}
+	return false
 }
 
 type NetworkPolicy struct {
@@ -440,9 +449,11 @@ type SandboxSpec struct {
 	IdleTimeout *durationpb.Duration `protobuf:"bytes,9,opt,name=idle_timeout,json=idleTimeout,proto3" json:"idle_timeout,omitempty"`
 	// Bind the image root read-only instead of giving the sandbox a private
 	// writable copy. Faster to create; only the workdir is writable.
-	ReadOnlyRoot  bool `protobuf:"varint,10,opt,name=read_only_root,json=readOnlyRoot,proto3" json:"read_only_root,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ReadOnlyRoot    bool                           `protobuf:"varint,10,opt,name=read_only_root,json=readOnlyRoot,proto3" json:"read_only_root,omitempty"`
+	Services        []*v1alpha1.EnvironmentService `protobuf:"bytes,11,rep,name=services,proto3" json:"services,omitempty"`
+	ServiceLifetime *durationpb.Duration           `protobuf:"bytes,12,opt,name=service_lifetime,json=serviceLifetime,proto3" json:"service_lifetime,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SandboxSpec) Reset() {
@@ -543,6 +554,20 @@ func (x *SandboxSpec) GetReadOnlyRoot() bool {
 		return x.ReadOnlyRoot
 	}
 	return false
+}
+
+func (x *SandboxSpec) GetServices() []*v1alpha1.EnvironmentService {
+	if x != nil {
+		return x.Services
+	}
+	return nil
+}
+
+func (x *SandboxSpec) GetServiceLifetime() *durationpb.Duration {
+	if x != nil {
+		return x.ServiceLifetime
+	}
+	return nil
 }
 
 type CreateRequest struct {
@@ -1397,10 +1422,12 @@ func (x *RestoreResponse) GetIsolation() *v1alpha1.IsolationReport {
 }
 
 type StatsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	// Opt-in: logs may contain application data. At most 16 KiB per service.
+	IncludeServiceLogs bool `protobuf:"varint,2,opt,name=include_service_logs,json=includeServiceLogs,proto3" json:"include_service_logs,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *StatsRequest) Reset() {
@@ -1438,6 +1465,13 @@ func (x *StatsRequest) GetSandboxId() string {
 		return x.SandboxId
 	}
 	return ""
+}
+
+func (x *StatsRequest) GetIncludeServiceLogs() bool {
+	if x != nil {
+		return x.IncludeServiceLogs
+	}
+	return false
 }
 
 type EgressEvent struct {
@@ -1530,6 +1564,7 @@ type StatsResponse struct {
 	CpuTime       *durationpb.Duration   `protobuf:"bytes,2,opt,name=cpu_time,json=cpuTime,proto3" json:"cpu_time,omitempty"`
 	MaxRssBytes   int64                  `protobuf:"varint,3,opt,name=max_rss_bytes,json=maxRssBytes,proto3" json:"max_rss_bytes,omitempty"`
 	Egress        []*EgressEvent         `protobuf:"bytes,4,rep,name=egress,proto3" json:"egress,omitempty"`
+	Services      []*ServiceStatus       `protobuf:"bytes,5,rep,name=services,proto3" json:"services,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1592,6 +1627,90 @@ func (x *StatsResponse) GetEgress() []*EgressEvent {
 	return nil
 }
 
+func (x *StatsResponse) GetServices() []*ServiceStatus {
+	if x != nil {
+		return x.Services
+	}
+	return nil
+}
+
+// No service payloads or environment values are returned here.
+type ServiceStatus struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Ready         bool                   `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
+	Restarts      int32                  `protobuf:"varint,3,opt,name=restarts,proto3" json:"restarts,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Logs          string                 `protobuf:"bytes,5,opt,name=logs,proto3" json:"logs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceStatus) Reset() {
+	*x = ServiceStatus{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceStatus) ProtoMessage() {}
+
+func (x *ServiceStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceStatus.ProtoReflect.Descriptor instead.
+func (*ServiceStatus) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ServiceStatus) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ServiceStatus) GetReady() bool {
+	if x != nil {
+		return x.Ready
+	}
+	return false
+}
+
+func (x *ServiceStatus) GetRestarts() int32 {
+	if x != nil {
+		return x.Restarts
+	}
+	return 0
+}
+
+func (x *ServiceStatus) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *ServiceStatus) GetLogs() string {
+	if x != nil {
+		return x.Logs
+	}
+	return ""
+}
+
 type DestroyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
@@ -1601,7 +1720,7 @@ type DestroyRequest struct {
 
 func (x *DestroyRequest) Reset() {
 	*x = DestroyRequest{}
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[23]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1613,7 +1732,7 @@ func (x *DestroyRequest) String() string {
 func (*DestroyRequest) ProtoMessage() {}
 
 func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[23]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1626,7 +1745,7 @@ func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroyRequest.ProtoReflect.Descriptor instead.
 func (*DestroyRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{23}
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DestroyRequest) GetSandboxId() string {
@@ -1644,7 +1763,7 @@ type DestroyResponse struct {
 
 func (x *DestroyResponse) Reset() {
 	*x = DestroyResponse{}
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[24]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1656,7 +1775,7 @@ func (x *DestroyResponse) String() string {
 func (*DestroyResponse) ProtoMessage() {}
 
 func (x *DestroyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[24]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1669,7 +1788,7 @@ func (x *DestroyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroyResponse.ProtoReflect.Descriptor instead.
 func (*DestroyResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{24}
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{25}
 }
 
 type DeleteSnapshotRequest struct {
@@ -1681,7 +1800,7 @@ type DeleteSnapshotRequest struct {
 
 func (x *DeleteSnapshotRequest) Reset() {
 	*x = DeleteSnapshotRequest{}
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[25]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1693,7 +1812,7 @@ func (x *DeleteSnapshotRequest) String() string {
 func (*DeleteSnapshotRequest) ProtoMessage() {}
 
 func (x *DeleteSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[25]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1706,7 +1825,7 @@ func (x *DeleteSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{25}
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeleteSnapshotRequest) GetSnapshotId() string {
@@ -1724,7 +1843,7 @@ type DeleteSnapshotResponse struct {
 
 func (x *DeleteSnapshotResponse) Reset() {
 	*x = DeleteSnapshotResponse{}
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[26]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1736,7 +1855,7 @@ func (x *DeleteSnapshotResponse) String() string {
 func (*DeleteSnapshotResponse) ProtoMessage() {}
 
 func (x *DeleteSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[26]
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1749,14 +1868,14 @@ func (x *DeleteSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*DeleteSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{26}
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{27}
 }
 
 var File_evalsi_sandbox_v1alpha1_sandbox_proto protoreflect.FileDescriptor
 
 const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\n" +
-	"%evalsi/sandbox/v1alpha1/sandbox.proto\x12\x17evalsi.sandbox.v1alpha1\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x0e\n" +
+	"%evalsi/sandbox/v1alpha1/sandbox.proto\x12\x17evalsi.sandbox.v1alpha1\x1a\x1bevalsi/v1alpha1/agent.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x0e\n" +
 	"\fProbeRequest\"\xab\x01\n" +
 	"\n" +
 	"RungStatus\x12\x16\n" +
@@ -1764,9 +1883,10 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\x05level\x18\x02 \x01(\x0e2\x1f.evalsi.v1alpha1.IsolationLevelR\x05level\x12\x1c\n" +
 	"\tavailable\x18\x03 \x01(\bR\tavailable\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x18\n" +
-	"\awarning\x18\x05 \x01(\tR\awarning\"J\n" +
+	"\awarning\x18\x05 \x01(\tR\awarning\"y\n" +
 	"\rProbeResponse\x129\n" +
-	"\x05rungs\x18\x01 \x03(\v2#.evalsi.sandbox.v1alpha1.RungStatusR\x05rungs\"_\n" +
+	"\x05rungs\x18\x01 \x03(\v2#.evalsi.sandbox.v1alpha1.RungStatusR\x05rungs\x12-\n" +
+	"\x12services_supported\x18\x02 \x01(\bR\x11servicesSupported\"_\n" +
 	"\rNetworkPolicy\x128\n" +
 	"\x04mode\x18\x01 \x01(\x0e2$.evalsi.sandbox.v1alpha1.NetworkModeR\x04mode\x12\x14\n" +
 	"\x05allow\x18\x02 \x03(\tR\x05allow\"\x86\x01\n" +
@@ -1775,7 +1895,7 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\tmax_procs\x18\x02 \x01(\x05R\bmaxProcs\x12\x1e\n" +
 	"\vmax_file_mb\x18\x03 \x01(\x05R\tmaxFileMb\x12\x1f\n" +
 	"\vcpu_seconds\x18\x04 \x01(\x05R\n" +
-	"cpuSeconds\"\xd8\x04\n" +
+	"cpuSeconds\"\xdf\x05\n" +
 	"\vSandboxSpec\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12#\n" +
 	"\rmin_isolation\x18\x02 \x01(\tR\fminIsolation\x12\x12\n" +
@@ -1787,7 +1907,9 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\aworkdir\x18\b \x01(\tR\aworkdir\x12<\n" +
 	"\fidle_timeout\x18\t \x01(\v2\x19.google.protobuf.DurationR\vidleTimeout\x12$\n" +
 	"\x0eread_only_root\x18\n" +
-	" \x01(\bR\freadOnlyRoot\x1a6\n" +
+	" \x01(\bR\freadOnlyRoot\x12?\n" +
+	"\bservices\x18\v \x03(\v2#.evalsi.v1alpha1.EnvironmentServiceR\bservices\x12D\n" +
+	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a8\n" +
@@ -1858,10 +1980,11 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\x0fRestoreResponse\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12>\n" +
-	"\tisolation\x18\x02 \x01(\v2 .evalsi.v1alpha1.IsolationReportR\tisolation\"-\n" +
+	"\tisolation\x18\x02 \x01(\v2 .evalsi.v1alpha1.IsolationReportR\tisolation\"_\n" +
 	"\fStatsRequest\x12\x1d\n" +
 	"\n" +
-	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\xc5\x01\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x120\n" +
+	"\x14include_service_logs\x18\x02 \x01(\bR\x12includeServiceLogs\"\xc5\x01\n" +
 	"\vEgressEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
@@ -1869,12 +1992,19 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\aallowed\x18\x04 \x01(\bR\aallowed\x12\x1d\n" +
 	"\n" +
 	"bytes_sent\x18\x05 \x01(\x03R\tbytesSent\x12%\n" +
-	"\x0ebytes_received\x18\x06 \x01(\x03R\rbytesReceived\"\xbd\x01\n" +
+	"\x0ebytes_received\x18\x06 \x01(\x03R\rbytesReceived\"\x81\x02\n" +
 	"\rStatsResponse\x12\x14\n" +
 	"\x05execs\x18\x01 \x01(\x03R\x05execs\x124\n" +
 	"\bcpu_time\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\acpuTime\x12\"\n" +
 	"\rmax_rss_bytes\x18\x03 \x01(\x03R\vmaxRssBytes\x12<\n" +
-	"\x06egress\x18\x04 \x03(\v2$.evalsi.sandbox.v1alpha1.EgressEventR\x06egress\"/\n" +
+	"\x06egress\x18\x04 \x03(\v2$.evalsi.sandbox.v1alpha1.EgressEventR\x06egress\x12B\n" +
+	"\bservices\x18\x05 \x03(\v2&.evalsi.sandbox.v1alpha1.ServiceStatusR\bservices\"\x81\x01\n" +
+	"\rServiceStatus\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05ready\x18\x02 \x01(\bR\x05ready\x12\x1a\n" +
+	"\brestarts\x18\x03 \x01(\x05R\brestarts\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x12\n" +
+	"\x04logs\x18\x05 \x01(\tR\x04logs\"/\n" +
 	"\x0eDestroyRequest\x12\x1d\n" +
 	"\n" +
 	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"\x11\n" +
@@ -1921,93 +2051,98 @@ func file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_sandbox_v1alpha1_sandbox_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_evalsi_sandbox_v1alpha1_sandbox_proto_goTypes = []any{
-	(NetworkMode)(0),                 // 0: evalsi.sandbox.v1alpha1.NetworkMode
-	(Outcome)(0),                     // 1: evalsi.sandbox.v1alpha1.Outcome
-	(*ProbeRequest)(nil),             // 2: evalsi.sandbox.v1alpha1.ProbeRequest
-	(*RungStatus)(nil),               // 3: evalsi.sandbox.v1alpha1.RungStatus
-	(*ProbeResponse)(nil),            // 4: evalsi.sandbox.v1alpha1.ProbeResponse
-	(*NetworkPolicy)(nil),            // 5: evalsi.sandbox.v1alpha1.NetworkPolicy
-	(*Resources)(nil),                // 6: evalsi.sandbox.v1alpha1.Resources
-	(*SandboxSpec)(nil),              // 7: evalsi.sandbox.v1alpha1.SandboxSpec
-	(*CreateRequest)(nil),            // 8: evalsi.sandbox.v1alpha1.CreateRequest
-	(*CreateResponse)(nil),           // 9: evalsi.sandbox.v1alpha1.CreateResponse
-	(*ExecRequest)(nil),              // 10: evalsi.sandbox.v1alpha1.ExecRequest
-	(*ExecResult)(nil),               // 11: evalsi.sandbox.v1alpha1.ExecResult
-	(*ExecResponse)(nil),             // 12: evalsi.sandbox.v1alpha1.ExecResponse
-	(*File)(nil),                     // 13: evalsi.sandbox.v1alpha1.File
-	(*WriteFilesRequest)(nil),        // 14: evalsi.sandbox.v1alpha1.WriteFilesRequest
-	(*WriteFilesResponse)(nil),       // 15: evalsi.sandbox.v1alpha1.WriteFilesResponse
-	(*ReadFilesRequest)(nil),         // 16: evalsi.sandbox.v1alpha1.ReadFilesRequest
-	(*ReadFilesResponse)(nil),        // 17: evalsi.sandbox.v1alpha1.ReadFilesResponse
-	(*SnapshotRequest)(nil),          // 18: evalsi.sandbox.v1alpha1.SnapshotRequest
-	(*SnapshotResponse)(nil),         // 19: evalsi.sandbox.v1alpha1.SnapshotResponse
-	(*RestoreRequest)(nil),           // 20: evalsi.sandbox.v1alpha1.RestoreRequest
-	(*RestoreResponse)(nil),          // 21: evalsi.sandbox.v1alpha1.RestoreResponse
-	(*StatsRequest)(nil),             // 22: evalsi.sandbox.v1alpha1.StatsRequest
-	(*EgressEvent)(nil),              // 23: evalsi.sandbox.v1alpha1.EgressEvent
-	(*StatsResponse)(nil),            // 24: evalsi.sandbox.v1alpha1.StatsResponse
-	(*DestroyRequest)(nil),           // 25: evalsi.sandbox.v1alpha1.DestroyRequest
-	(*DestroyResponse)(nil),          // 26: evalsi.sandbox.v1alpha1.DestroyResponse
-	(*DeleteSnapshotRequest)(nil),    // 27: evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
-	(*DeleteSnapshotResponse)(nil),   // 28: evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
-	nil,                              // 29: evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
-	nil,                              // 30: evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
-	nil,                              // 31: evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
-	(v1alpha1.IsolationLevel)(0),     // 32: evalsi.v1alpha1.IsolationLevel
-	(*durationpb.Duration)(nil),      // 33: google.protobuf.Duration
-	(*v1alpha1.IsolationReport)(nil), // 34: evalsi.v1alpha1.IsolationReport
-	(*timestamppb.Timestamp)(nil),    // 35: google.protobuf.Timestamp
+	(NetworkMode)(0),                    // 0: evalsi.sandbox.v1alpha1.NetworkMode
+	(Outcome)(0),                        // 1: evalsi.sandbox.v1alpha1.Outcome
+	(*ProbeRequest)(nil),                // 2: evalsi.sandbox.v1alpha1.ProbeRequest
+	(*RungStatus)(nil),                  // 3: evalsi.sandbox.v1alpha1.RungStatus
+	(*ProbeResponse)(nil),               // 4: evalsi.sandbox.v1alpha1.ProbeResponse
+	(*NetworkPolicy)(nil),               // 5: evalsi.sandbox.v1alpha1.NetworkPolicy
+	(*Resources)(nil),                   // 6: evalsi.sandbox.v1alpha1.Resources
+	(*SandboxSpec)(nil),                 // 7: evalsi.sandbox.v1alpha1.SandboxSpec
+	(*CreateRequest)(nil),               // 8: evalsi.sandbox.v1alpha1.CreateRequest
+	(*CreateResponse)(nil),              // 9: evalsi.sandbox.v1alpha1.CreateResponse
+	(*ExecRequest)(nil),                 // 10: evalsi.sandbox.v1alpha1.ExecRequest
+	(*ExecResult)(nil),                  // 11: evalsi.sandbox.v1alpha1.ExecResult
+	(*ExecResponse)(nil),                // 12: evalsi.sandbox.v1alpha1.ExecResponse
+	(*File)(nil),                        // 13: evalsi.sandbox.v1alpha1.File
+	(*WriteFilesRequest)(nil),           // 14: evalsi.sandbox.v1alpha1.WriteFilesRequest
+	(*WriteFilesResponse)(nil),          // 15: evalsi.sandbox.v1alpha1.WriteFilesResponse
+	(*ReadFilesRequest)(nil),            // 16: evalsi.sandbox.v1alpha1.ReadFilesRequest
+	(*ReadFilesResponse)(nil),           // 17: evalsi.sandbox.v1alpha1.ReadFilesResponse
+	(*SnapshotRequest)(nil),             // 18: evalsi.sandbox.v1alpha1.SnapshotRequest
+	(*SnapshotResponse)(nil),            // 19: evalsi.sandbox.v1alpha1.SnapshotResponse
+	(*RestoreRequest)(nil),              // 20: evalsi.sandbox.v1alpha1.RestoreRequest
+	(*RestoreResponse)(nil),             // 21: evalsi.sandbox.v1alpha1.RestoreResponse
+	(*StatsRequest)(nil),                // 22: evalsi.sandbox.v1alpha1.StatsRequest
+	(*EgressEvent)(nil),                 // 23: evalsi.sandbox.v1alpha1.EgressEvent
+	(*StatsResponse)(nil),               // 24: evalsi.sandbox.v1alpha1.StatsResponse
+	(*ServiceStatus)(nil),               // 25: evalsi.sandbox.v1alpha1.ServiceStatus
+	(*DestroyRequest)(nil),              // 26: evalsi.sandbox.v1alpha1.DestroyRequest
+	(*DestroyResponse)(nil),             // 27: evalsi.sandbox.v1alpha1.DestroyResponse
+	(*DeleteSnapshotRequest)(nil),       // 28: evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
+	(*DeleteSnapshotResponse)(nil),      // 29: evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
+	nil,                                 // 30: evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
+	nil,                                 // 31: evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
+	nil,                                 // 32: evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
+	(v1alpha1.IsolationLevel)(0),        // 33: evalsi.v1alpha1.IsolationLevel
+	(*durationpb.Duration)(nil),         // 34: google.protobuf.Duration
+	(*v1alpha1.EnvironmentService)(nil), // 35: evalsi.v1alpha1.EnvironmentService
+	(*v1alpha1.IsolationReport)(nil),    // 36: evalsi.v1alpha1.IsolationReport
+	(*timestamppb.Timestamp)(nil),       // 37: google.protobuf.Timestamp
 }
 var file_evalsi_sandbox_v1alpha1_sandbox_proto_depIdxs = []int32{
-	32, // 0: evalsi.sandbox.v1alpha1.RungStatus.level:type_name -> evalsi.v1alpha1.IsolationLevel
+	33, // 0: evalsi.sandbox.v1alpha1.RungStatus.level:type_name -> evalsi.v1alpha1.IsolationLevel
 	3,  // 1: evalsi.sandbox.v1alpha1.ProbeResponse.rungs:type_name -> evalsi.sandbox.v1alpha1.RungStatus
 	0,  // 2: evalsi.sandbox.v1alpha1.NetworkPolicy.mode:type_name -> evalsi.sandbox.v1alpha1.NetworkMode
 	5,  // 3: evalsi.sandbox.v1alpha1.SandboxSpec.network:type_name -> evalsi.sandbox.v1alpha1.NetworkPolicy
 	6,  // 4: evalsi.sandbox.v1alpha1.SandboxSpec.resources:type_name -> evalsi.sandbox.v1alpha1.Resources
-	29, // 5: evalsi.sandbox.v1alpha1.SandboxSpec.env:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
-	30, // 6: evalsi.sandbox.v1alpha1.SandboxSpec.files:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
-	33, // 7: evalsi.sandbox.v1alpha1.SandboxSpec.idle_timeout:type_name -> google.protobuf.Duration
-	7,  // 8: evalsi.sandbox.v1alpha1.CreateRequest.spec:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec
-	34, // 9: evalsi.sandbox.v1alpha1.CreateResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
-	31, // 10: evalsi.sandbox.v1alpha1.ExecRequest.env:type_name -> evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
-	33, // 11: evalsi.sandbox.v1alpha1.ExecRequest.timeout:type_name -> google.protobuf.Duration
-	1,  // 12: evalsi.sandbox.v1alpha1.ExecResult.outcome:type_name -> evalsi.sandbox.v1alpha1.Outcome
-	33, // 13: evalsi.sandbox.v1alpha1.ExecResult.duration:type_name -> google.protobuf.Duration
-	11, // 14: evalsi.sandbox.v1alpha1.ExecResponse.result:type_name -> evalsi.sandbox.v1alpha1.ExecResult
-	13, // 15: evalsi.sandbox.v1alpha1.WriteFilesRequest.files:type_name -> evalsi.sandbox.v1alpha1.File
-	13, // 16: evalsi.sandbox.v1alpha1.ReadFilesResponse.files:type_name -> evalsi.sandbox.v1alpha1.File
-	5,  // 17: evalsi.sandbox.v1alpha1.RestoreRequest.network:type_name -> evalsi.sandbox.v1alpha1.NetworkPolicy
-	34, // 18: evalsi.sandbox.v1alpha1.RestoreResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
-	35, // 19: evalsi.sandbox.v1alpha1.EgressEvent.time:type_name -> google.protobuf.Timestamp
-	33, // 20: evalsi.sandbox.v1alpha1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
-	23, // 21: evalsi.sandbox.v1alpha1.StatsResponse.egress:type_name -> evalsi.sandbox.v1alpha1.EgressEvent
-	2,  // 22: evalsi.sandbox.v1alpha1.SandboxService.Probe:input_type -> evalsi.sandbox.v1alpha1.ProbeRequest
-	8,  // 23: evalsi.sandbox.v1alpha1.SandboxService.Create:input_type -> evalsi.sandbox.v1alpha1.CreateRequest
-	10, // 24: evalsi.sandbox.v1alpha1.SandboxService.Exec:input_type -> evalsi.sandbox.v1alpha1.ExecRequest
-	14, // 25: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:input_type -> evalsi.sandbox.v1alpha1.WriteFilesRequest
-	16, // 26: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:input_type -> evalsi.sandbox.v1alpha1.ReadFilesRequest
-	18, // 27: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:input_type -> evalsi.sandbox.v1alpha1.SnapshotRequest
-	20, // 28: evalsi.sandbox.v1alpha1.SandboxService.Restore:input_type -> evalsi.sandbox.v1alpha1.RestoreRequest
-	22, // 29: evalsi.sandbox.v1alpha1.SandboxService.Stats:input_type -> evalsi.sandbox.v1alpha1.StatsRequest
-	25, // 30: evalsi.sandbox.v1alpha1.SandboxService.Destroy:input_type -> evalsi.sandbox.v1alpha1.DestroyRequest
-	27, // 31: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:input_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
-	4,  // 32: evalsi.sandbox.v1alpha1.SandboxService.Probe:output_type -> evalsi.sandbox.v1alpha1.ProbeResponse
-	9,  // 33: evalsi.sandbox.v1alpha1.SandboxService.Create:output_type -> evalsi.sandbox.v1alpha1.CreateResponse
-	12, // 34: evalsi.sandbox.v1alpha1.SandboxService.Exec:output_type -> evalsi.sandbox.v1alpha1.ExecResponse
-	15, // 35: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:output_type -> evalsi.sandbox.v1alpha1.WriteFilesResponse
-	17, // 36: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:output_type -> evalsi.sandbox.v1alpha1.ReadFilesResponse
-	19, // 37: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:output_type -> evalsi.sandbox.v1alpha1.SnapshotResponse
-	21, // 38: evalsi.sandbox.v1alpha1.SandboxService.Restore:output_type -> evalsi.sandbox.v1alpha1.RestoreResponse
-	24, // 39: evalsi.sandbox.v1alpha1.SandboxService.Stats:output_type -> evalsi.sandbox.v1alpha1.StatsResponse
-	26, // 40: evalsi.sandbox.v1alpha1.SandboxService.Destroy:output_type -> evalsi.sandbox.v1alpha1.DestroyResponse
-	28, // 41: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:output_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
-	32, // [32:42] is the sub-list for method output_type
-	22, // [22:32] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	30, // 5: evalsi.sandbox.v1alpha1.SandboxSpec.env:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
+	31, // 6: evalsi.sandbox.v1alpha1.SandboxSpec.files:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
+	34, // 7: evalsi.sandbox.v1alpha1.SandboxSpec.idle_timeout:type_name -> google.protobuf.Duration
+	35, // 8: evalsi.sandbox.v1alpha1.SandboxSpec.services:type_name -> evalsi.v1alpha1.EnvironmentService
+	34, // 9: evalsi.sandbox.v1alpha1.SandboxSpec.service_lifetime:type_name -> google.protobuf.Duration
+	7,  // 10: evalsi.sandbox.v1alpha1.CreateRequest.spec:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec
+	36, // 11: evalsi.sandbox.v1alpha1.CreateResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
+	32, // 12: evalsi.sandbox.v1alpha1.ExecRequest.env:type_name -> evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
+	34, // 13: evalsi.sandbox.v1alpha1.ExecRequest.timeout:type_name -> google.protobuf.Duration
+	1,  // 14: evalsi.sandbox.v1alpha1.ExecResult.outcome:type_name -> evalsi.sandbox.v1alpha1.Outcome
+	34, // 15: evalsi.sandbox.v1alpha1.ExecResult.duration:type_name -> google.protobuf.Duration
+	11, // 16: evalsi.sandbox.v1alpha1.ExecResponse.result:type_name -> evalsi.sandbox.v1alpha1.ExecResult
+	13, // 17: evalsi.sandbox.v1alpha1.WriteFilesRequest.files:type_name -> evalsi.sandbox.v1alpha1.File
+	13, // 18: evalsi.sandbox.v1alpha1.ReadFilesResponse.files:type_name -> evalsi.sandbox.v1alpha1.File
+	5,  // 19: evalsi.sandbox.v1alpha1.RestoreRequest.network:type_name -> evalsi.sandbox.v1alpha1.NetworkPolicy
+	36, // 20: evalsi.sandbox.v1alpha1.RestoreResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
+	37, // 21: evalsi.sandbox.v1alpha1.EgressEvent.time:type_name -> google.protobuf.Timestamp
+	34, // 22: evalsi.sandbox.v1alpha1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
+	23, // 23: evalsi.sandbox.v1alpha1.StatsResponse.egress:type_name -> evalsi.sandbox.v1alpha1.EgressEvent
+	25, // 24: evalsi.sandbox.v1alpha1.StatsResponse.services:type_name -> evalsi.sandbox.v1alpha1.ServiceStatus
+	2,  // 25: evalsi.sandbox.v1alpha1.SandboxService.Probe:input_type -> evalsi.sandbox.v1alpha1.ProbeRequest
+	8,  // 26: evalsi.sandbox.v1alpha1.SandboxService.Create:input_type -> evalsi.sandbox.v1alpha1.CreateRequest
+	10, // 27: evalsi.sandbox.v1alpha1.SandboxService.Exec:input_type -> evalsi.sandbox.v1alpha1.ExecRequest
+	14, // 28: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:input_type -> evalsi.sandbox.v1alpha1.WriteFilesRequest
+	16, // 29: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:input_type -> evalsi.sandbox.v1alpha1.ReadFilesRequest
+	18, // 30: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:input_type -> evalsi.sandbox.v1alpha1.SnapshotRequest
+	20, // 31: evalsi.sandbox.v1alpha1.SandboxService.Restore:input_type -> evalsi.sandbox.v1alpha1.RestoreRequest
+	22, // 32: evalsi.sandbox.v1alpha1.SandboxService.Stats:input_type -> evalsi.sandbox.v1alpha1.StatsRequest
+	26, // 33: evalsi.sandbox.v1alpha1.SandboxService.Destroy:input_type -> evalsi.sandbox.v1alpha1.DestroyRequest
+	28, // 34: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:input_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
+	4,  // 35: evalsi.sandbox.v1alpha1.SandboxService.Probe:output_type -> evalsi.sandbox.v1alpha1.ProbeResponse
+	9,  // 36: evalsi.sandbox.v1alpha1.SandboxService.Create:output_type -> evalsi.sandbox.v1alpha1.CreateResponse
+	12, // 37: evalsi.sandbox.v1alpha1.SandboxService.Exec:output_type -> evalsi.sandbox.v1alpha1.ExecResponse
+	15, // 38: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:output_type -> evalsi.sandbox.v1alpha1.WriteFilesResponse
+	17, // 39: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:output_type -> evalsi.sandbox.v1alpha1.ReadFilesResponse
+	19, // 40: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:output_type -> evalsi.sandbox.v1alpha1.SnapshotResponse
+	21, // 41: evalsi.sandbox.v1alpha1.SandboxService.Restore:output_type -> evalsi.sandbox.v1alpha1.RestoreResponse
+	24, // 42: evalsi.sandbox.v1alpha1.SandboxService.Stats:output_type -> evalsi.sandbox.v1alpha1.StatsResponse
+	27, // 43: evalsi.sandbox.v1alpha1.SandboxService.Destroy:output_type -> evalsi.sandbox.v1alpha1.DestroyResponse
+	29, // 44: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:output_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
+	35, // [35:45] is the sub-list for method output_type
+	25, // [25:35] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_sandbox_v1alpha1_sandbox_proto_init() }
@@ -2026,7 +2161,7 @@ func file_evalsi_sandbox_v1alpha1_sandbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc), len(file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   30,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

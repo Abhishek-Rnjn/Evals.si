@@ -1,0 +1,37 @@
+services:
+  client:
+    build: .
+    depends_on:
+    - api
+  api:
+    image: python:3.13-slim
+    entrypoint:
+    - python
+    - -u
+    - -c
+    - "from http.server import BaseHTTPRequestHandler, HTTPServer\nimport socket\n\
+      class Handler(BaseHTTPRequestHandler):\n    def do_GET(self):\n        with\
+      \ socket.create_connection((\"db\", 6379), timeout=2) as s:\n            s.sendall(b\"\
+      GET answer\\r\\n\")\n            data = s.recv(1024).split(b\"\\r\\n\")\n  \
+      \      value = data[1] if len(data) > 1 and data[0] != b\"$-1\" else b\"unset\"\
+      \n        self.send_response(200)\n        self.end_headers()\n        self.wfile.write(value)\n\
+      HTTPServer((\"0.0.0.0\", 8080), Handler).serve_forever()\n"
+    depends_on:
+    - db
+    x-evalsi:
+      port: 8080
+      memory_mb: 64
+      cpu_millis: 100
+  db:
+    image: redis:7-alpine
+    entrypoint:
+    - redis-server
+    - --save
+    - ''
+    - --appendonly
+    - 'no'
+    depends_on: []
+    x-evalsi:
+      port: 6379
+      memory_mb: 64
+      cpu_millis: 100

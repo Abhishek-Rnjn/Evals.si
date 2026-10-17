@@ -4,6 +4,13 @@ Evals.si grades an agent from its traces. Instrument the agent with one of the u
 
 The five frameworks below are tested. For each instrumentation listed, a real run of the framework was recorded and checked in. The run asks one research question, makes one `search_docs` tool call and writes a report, against the demo's mock model. A test checks that each recording becomes the same record ([`internal/ingest/frameworks_test.go`](../../internal/ingest/frameworks_test.go)). The recorders and the exact versions they used are in [`tests/frameworks`](../../tests/frameworks/README.md).
 
+The [2026-10-17 EKS follow-up](../verification/EKS-HARNESS-2026-10-17.md)
+also ran all ten pinned recorder configurations against real GPU/Anthropic
+models and checked their mappings inside EKS. This preserves the omissions
+in the table below: a missing answer, tool span or streamed usage is not
+fabricated. Native OpenAI Responses, CrewAI through LiteLLM, retries and
+multi-agent mappings remain unverified.
+
 | Framework | Instrumentation | Question and answer | Model calls | Tool calls | Tokens |
 |---|---|---|---|---|---|
 | LangGraph / LangChain | OpenInference | Yes | Yes, with the tool call asked for | Yes, with arguments and result | Yes |
@@ -129,6 +136,10 @@ OTEL_LOG_USER_PROMPTS=1  OTEL_LOG_TOOL_DETAILS=1  OTEL_LOG_TOOL_CONTENT=1  OTEL_
 ```
 
 These give model calls with tokens, tools with their results (`OTEL_LOG_TOOL_CONTENT`), and the prompt. The spans do not include the model's output, even with `OTEL_LOG_ASSISTANT_RESPONSES`, so the records have no answer. The CLI joins a trace named by a `TRACEPARENT` in its environment: if that trace is marked as not sampled, the CLI records nothing.
+
+Native Claude input usage is the sum of its uncached `input_tokens`,
+`cache_read_tokens` and `cache_creation_tokens`. An explicit canonical
+`gen_ai.usage.input_tokens` total takes precedence and is not counted twice.
 
 ## Other frameworks
 

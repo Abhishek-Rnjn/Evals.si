@@ -24,7 +24,10 @@ from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTrace
 
 # The question every recorder asks. The mock model's solutions.json answers it
 # with one search_docs call and then a fixed report.
-QUESTION = "Research how retrieval-augmented generation is evaluated and write a short report."
+QUESTION = (
+    "Research how retrieval-augmented generation is evaluated and write a short report. "
+    "Use search_docs at least once before answering."
+)
 TOOL_RESULT = (
     "[rag-evaluation] RAG is evaluated in two parts: context quality (are the retrieved "
     "documents relevant) and answer quality (is the answer faithful to them)."
@@ -32,7 +35,7 @@ TOOL_RESULT = (
 
 # A model name the frameworks know, so they use native tool calling; the mock
 # answers the same whatever the name.
-MODEL = "gpt-4o-mini"
+MODEL = os.environ.get("EVALSI_FRAMEWORK_MODEL", "gpt-4o-mini")
 MOCK_URL = os.environ.get("MOCK_MODEL_URL", "http://127.0.0.1:8124/v1")
 
 FIXTURES = Path(__file__).resolve().parents[2] / "internal" / "ingest" / "testdata" / "frameworks"

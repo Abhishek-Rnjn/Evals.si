@@ -159,9 +159,20 @@ func (r *SandboxClassReconciler) podSpec(sc *v1.SandboxClass, name string, spec 
 		Name: "sandboxd", Image: r.Image, Command: []string{"evalsid"}, Args: args,
 		Ports:     []corev1.ContainerPort{{Name: "sandbox", ContainerPort: SandboxPort}},
 		Resources: sc.Spec.Resources,
-		Env: []corev1.EnvVar{{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
-		}}},
+		Env: []corev1.EnvVar{
+			{Name: "POD_NAMESPACE", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+			}},
+			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+			}},
+			{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
+			}},
+			{Name: "POD_UID", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.uid"},
+			}},
+		},
 		ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{
 			TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(SandboxPort)},
 		}, PeriodSeconds: 5},

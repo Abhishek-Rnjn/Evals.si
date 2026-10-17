@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package evalsi.sandbox.v1alpha1;
 
+import "evalsi/v1alpha1/agent.proto";
 import "evalsi/v1alpha1/record.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -46,6 +47,8 @@ message RungStatus {
 
 message ProbeResponse {
   repeated RungStatus rungs = 1;
+  // The server understands service specs and rejects unsupported backends.
+  bool services_supported = 2;
 }
 
 enum NetworkMode {
@@ -95,6 +98,8 @@ message SandboxSpec {
   // Bind the image root read-only instead of giving the sandbox a private
   // writable copy. Faster to create; only the workdir is writable.
   bool read_only_root = 10;
+  repeated evalsi.v1alpha1.EnvironmentService services = 11;
+  google.protobuf.Duration service_lifetime = 12;
 }
 
 message CreateRequest {
@@ -203,6 +208,8 @@ message RestoreResponse {
 
 message StatsRequest {
   string sandbox_id = 1;
+  // Opt-in: logs may contain application data. At most 16 KiB per service.
+  bool include_service_logs = 2;
 }
 
 message EgressEvent {
@@ -219,6 +226,16 @@ message StatsResponse {
   google.protobuf.Duration cpu_time = 2;
   int64 max_rss_bytes = 3;
   repeated EgressEvent egress = 4;
+  repeated ServiceStatus services = 5;
+}
+
+// No service payloads or environment values are returned here.
+message ServiceStatus {
+  string name = 1;
+  bool ready = 2;
+  int32 restarts = 3;
+  string reason = 4;
+  string logs = 5;
 }
 
 message DestroyRequest {

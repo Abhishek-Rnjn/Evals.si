@@ -2205,8 +2205,12 @@ type Environment struct {
 	Env             map[string]string `protobuf:"bytes,9,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Per-command timeout for the agent's sandbox commands; default 120s.
 	CommandTimeout *durationpb.Duration `protobuf:"bytes,10,opt,name=command_timeout,json=commandTimeout,proto3" json:"command_timeout,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Pod backend only. Private, per-trial services; no shared persistent data.
+	Services []*EnvironmentService `protobuf:"bytes,11,rep,name=services,proto3" json:"services,omitempty"`
+	// Required with services, from 1s to 24h. Bounds orphaned service execution.
+	ServiceLifetime *durationpb.Duration `protobuf:"bytes,12,opt,name=service_lifetime,json=serviceLifetime,proto3" json:"service_lifetime,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Environment) Reset() {
@@ -2307,6 +2311,127 @@ func (x *Environment) GetCommandTimeout() *durationpb.Duration {
 		return x.CommandTimeout
 	}
 	return nil
+}
+
+func (x *Environment) GetServices() []*EnvironmentService {
+	if x != nil {
+		return x.Services
+	}
+	return nil
+}
+
+func (x *Environment) GetServiceLifetime() *durationpb.Duration {
+	if x != nil {
+		return x.ServiceLifetime
+	}
+	return nil
+}
+
+// EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+).
+// Services share the trial's network, but not its filesystem or credentials.
+type EnvironmentService struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// DNS label, also a loopback hostname inside this trial.
+	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Image string `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
+	// Explicit argv; image entrypoints are not implicitly executed.
+	Command []string          `protobuf:"bytes,3,rep,name=command,proto3" json:"command,omitempty"`
+	Env     map[string]string `protobuf:"bytes,4,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// TCP readiness port, unique within the trial; 7070 is reserved.
+	Port int32 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`
+	// Services that must be ready first. Cycles are invalid.
+	DependsOn []string `protobuf:"bytes,6,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	// Required limits; CPU in millicores, memory in MiB.
+	MemoryMb      int32 `protobuf:"varint,7,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
+	CpuMillis     int32 `protobuf:"varint,8,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnvironmentService) Reset() {
+	*x = EnvironmentService{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnvironmentService) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnvironmentService) ProtoMessage() {}
+
+func (x *EnvironmentService) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnvironmentService.ProtoReflect.Descriptor instead.
+func (*EnvironmentService) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *EnvironmentService) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *EnvironmentService) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *EnvironmentService) GetCommand() []string {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetEnv() map[string]string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *EnvironmentService) GetDependsOn() []string {
+	if x != nil {
+		return x.DependsOn
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetMemoryMb() int32 {
+	if x != nil {
+		return x.MemoryMb
+	}
+	return 0
+}
+
+func (x *EnvironmentService) GetCpuMillis() int32 {
+	if x != nil {
+		return x.CpuMillis
+	}
+	return 0
 }
 
 var File_evalsi_v1alpha1_agent_proto protoreflect.FileDescriptor
@@ -2506,7 +2631,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe6\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xed\x05\n" +
 	"\vEnvironment\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12=\n" +
 	"\x05files\x18\x02 \x03(\v2'.evalsi.v1alpha1.Environment.FilesEntryR\x05files\x12\x14\n" +
@@ -2518,11 +2643,27 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\achecker\x18\b \x01(\v2\x18.evalsi.v1alpha1.CheckerR\achecker\x127\n" +
 	"\x03env\x18\t \x03(\v2%.evalsi.v1alpha1.Environment.EnvEntryR\x03env\x12B\n" +
 	"\x0fcommand_timeout\x18\n" +
-	" \x01(\v2\x19.google.protobuf.DurationR\x0ecommandTimeout\x1a8\n" +
+	" \x01(\v2\x19.google.protobuf.DurationR\x0ecommandTimeout\x12?\n" +
+	"\bservices\x18\v \x03(\v2#.evalsi.v1alpha1.EnvironmentServiceR\bservices\x12D\n" +
+	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x1a8\n" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a6\n" +
+	"\bEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbf\x02\n" +
+	"\x12EnvironmentService\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05image\x18\x02 \x01(\tR\x05image\x12\x18\n" +
+	"\acommand\x18\x03 \x03(\tR\acommand\x12>\n" +
+	"\x03env\x18\x04 \x03(\v2,.evalsi.v1alpha1.EnvironmentService.EnvEntryR\x03env\x12\x12\n" +
+	"\x04port\x18\x05 \x01(\x05R\x04port\x12\x1d\n" +
+	"\n" +
+	"depends_on\x18\x06 \x03(\tR\tdependsOn\x12\x1b\n" +
+	"\tmemory_mb\x18\a \x01(\x05R\bmemoryMb\x12\x1d\n" +
+	"\n" +
+	"cpu_millis\x18\b \x01(\x05R\tcpuMillis\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\xc7\x01\n" +
@@ -2541,7 +2682,7 @@ func file_evalsi_v1alpha1_agent_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_agent_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	(*AgentTarget)(nil),         // 0: evalsi.v1alpha1.AgentTarget
 	(*A2AAgent)(nil),            // 1: evalsi.v1alpha1.A2AAgent
@@ -2569,18 +2710,20 @@ var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	(*SandboxPolicy)(nil),       // 23: evalsi.v1alpha1.SandboxPolicy
 	(*Checker)(nil),             // 24: evalsi.v1alpha1.Checker
 	(*Environment)(nil),         // 25: evalsi.v1alpha1.Environment
-	nil,                         // 26: evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
-	nil,                         // 27: evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
-	nil,                         // 28: evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
-	nil,                         // 29: evalsi.v1alpha1.CLIAgent.EnvFromEntry
-	nil,                         // 30: evalsi.v1alpha1.MCPServer.HeadersEnvEntry
-	nil,                         // 31: evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
-	nil,                         // 32: evalsi.v1alpha1.MockTool.ResponsesEntry
-	nil,                         // 33: evalsi.v1alpha1.Checker.FilesEntry
-	nil,                         // 34: evalsi.v1alpha1.Environment.FilesEntry
-	nil,                         // 35: evalsi.v1alpha1.Environment.EnvEntry
-	(*durationpb.Duration)(nil), // 36: google.protobuf.Duration
-	(*structpb.Struct)(nil),     // 37: google.protobuf.Struct
+	(*EnvironmentService)(nil),  // 26: evalsi.v1alpha1.EnvironmentService
+	nil,                         // 27: evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
+	nil,                         // 28: evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
+	nil,                         // 29: evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
+	nil,                         // 30: evalsi.v1alpha1.CLIAgent.EnvFromEntry
+	nil,                         // 31: evalsi.v1alpha1.MCPServer.HeadersEnvEntry
+	nil,                         // 32: evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
+	nil,                         // 33: evalsi.v1alpha1.MockTool.ResponsesEntry
+	nil,                         // 34: evalsi.v1alpha1.Checker.FilesEntry
+	nil,                         // 35: evalsi.v1alpha1.Environment.FilesEntry
+	nil,                         // 36: evalsi.v1alpha1.Environment.EnvEntry
+	nil,                         // 37: evalsi.v1alpha1.EnvironmentService.EnvEntry
+	(*durationpb.Duration)(nil), // 38: google.protobuf.Duration
+	(*structpb.Struct)(nil),     // 39: google.protobuf.Struct
 }
 var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	1,  // 0: evalsi.v1alpha1.AgentTarget.a2a:type_name -> evalsi.v1alpha1.A2AAgent
@@ -2588,23 +2731,23 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	3,  // 2: evalsi.v1alpha1.AgentTarget.responses:type_name -> evalsi.v1alpha1.ResponsesAgent
 	4,  // 3: evalsi.v1alpha1.AgentTarget.http:type_name -> evalsi.v1alpha1.HTTPAgent
 	5,  // 4: evalsi.v1alpha1.AgentTarget.cli:type_name -> evalsi.v1alpha1.CLIAgent
-	26, // 5: evalsi.v1alpha1.A2AAgent.headers_env:type_name -> evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
-	36, // 6: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
-	27, // 7: evalsi.v1alpha1.MCPAgent.headers_env:type_name -> evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
-	36, // 8: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
-	36, // 9: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
-	28, // 10: evalsi.v1alpha1.HTTPAgent.headers_env:type_name -> evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
-	36, // 11: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
-	29, // 12: evalsi.v1alpha1.CLIAgent.env_from:type_name -> evalsi.v1alpha1.CLIAgent.EnvFromEntry
-	36, // 13: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
+	27, // 5: evalsi.v1alpha1.A2AAgent.headers_env:type_name -> evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
+	38, // 6: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
+	28, // 7: evalsi.v1alpha1.MCPAgent.headers_env:type_name -> evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
+	38, // 8: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
+	38, // 9: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
+	29, // 10: evalsi.v1alpha1.HTTPAgent.headers_env:type_name -> evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
+	38, // 11: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
+	30, // 12: evalsi.v1alpha1.CLIAgent.env_from:type_name -> evalsi.v1alpha1.CLIAgent.EnvFromEntry
+	38, // 13: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
 	17, // 14: evalsi.v1alpha1.Harness.builtin:type_name -> evalsi.v1alpha1.BuiltinHarness
 	21, // 15: evalsi.v1alpha1.Harness.external:type_name -> evalsi.v1alpha1.ExternalHarness
-	36, // 16: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
-	30, // 17: evalsi.v1alpha1.MCPServer.headers_env:type_name -> evalsi.v1alpha1.MCPServer.HeadersEnvEntry
-	31, // 18: evalsi.v1alpha1.MCPServer.tool_timeout_s:type_name -> evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
+	38, // 16: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
+	31, // 17: evalsi.v1alpha1.MCPServer.headers_env:type_name -> evalsi.v1alpha1.MCPServer.HeadersEnvEntry
+	32, // 18: evalsi.v1alpha1.MCPServer.tool_timeout_s:type_name -> evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
 	10, // 19: evalsi.v1alpha1.MCPServer.oauth:type_name -> evalsi.v1alpha1.MCPOAuth
-	37, // 20: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
-	32, // 21: evalsi.v1alpha1.MockTool.responses:type_name -> evalsi.v1alpha1.MockTool.ResponsesEntry
+	39, // 20: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
+	33, // 21: evalsi.v1alpha1.MockTool.responses:type_name -> evalsi.v1alpha1.MockTool.ResponsesEntry
 	9,  // 22: evalsi.v1alpha1.Tools.mcp:type_name -> evalsi.v1alpha1.MCPServer
 	11, // 23: evalsi.v1alpha1.Tools.mocks:type_name -> evalsi.v1alpha1.MockTool
 	12, // 24: evalsi.v1alpha1.Tools.faults:type_name -> evalsi.v1alpha1.ToolFault
@@ -2617,22 +2760,25 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	20, // 31: evalsi.v1alpha1.BuiltinHarness.context:type_name -> evalsi.v1alpha1.ContextManagement
 	19, // 32: evalsi.v1alpha1.BuiltinHarness.hooks:type_name -> evalsi.v1alpha1.Hook
 	18, // 33: evalsi.v1alpha1.BuiltinHarness.interjections:type_name -> evalsi.v1alpha1.Interjection
-	37, // 34: evalsi.v1alpha1.Hook.config:type_name -> google.protobuf.Struct
+	39, // 34: evalsi.v1alpha1.Hook.config:type_name -> google.protobuf.Struct
 	22, // 35: evalsi.v1alpha1.ExternalHarness.command:type_name -> evalsi.v1alpha1.CommandHarness
-	37, // 36: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
-	33, // 37: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
-	36, // 38: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
-	34, // 39: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
-	36, // 40: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
+	39, // 36: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
+	34, // 37: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
+	38, // 38: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
+	35, // 39: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
+	38, // 40: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
 	23, // 41: evalsi.v1alpha1.Environment.sandbox:type_name -> evalsi.v1alpha1.SandboxPolicy
 	24, // 42: evalsi.v1alpha1.Environment.checker:type_name -> evalsi.v1alpha1.Checker
-	35, // 43: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
-	36, // 44: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
-	45, // [45:45] is the sub-list for method output_type
-	45, // [45:45] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	36, // 43: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
+	38, // 44: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
+	26, // 45: evalsi.v1alpha1.Environment.services:type_name -> evalsi.v1alpha1.EnvironmentService
+	38, // 46: evalsi.v1alpha1.Environment.service_lifetime:type_name -> google.protobuf.Duration
+	37, // 47: evalsi.v1alpha1.EnvironmentService.env:type_name -> evalsi.v1alpha1.EnvironmentService.EnvEntry
+	48, // [48:48] is the sub-list for method output_type
+	48, // [48:48] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_agent_proto_init() }
@@ -2664,7 +2810,7 @@ func file_evalsi_v1alpha1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_agent_proto_rawDesc), len(file_evalsi_v1alpha1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   36,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

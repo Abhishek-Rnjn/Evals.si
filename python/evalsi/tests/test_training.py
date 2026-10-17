@@ -278,6 +278,80 @@ def test_runner_evaluates_in_order_in_the_background(tmp_path: Path, models: Fak
     assert runner.regressed
 
 
+@pytest.mark.parametrize(
+    ("base_outcome", "outcomes", "expected"),
+    [
+        (None, ("ok", "ok"), 0),
+        (None, ("error", "ok"), 1),
+        (None, ("ok", "error"), 1),
+        (None, ("gate", "ok"), EXIT_GATES_FAILED),
+        (None, ("ok", "gate"), EXIT_GATES_FAILED),
+        (None, ("gate", "error"), 1),
+        (None, ("error", "gate"), 1),
+        ("error", ("ok", "ok"), 1),
+        ("gate", ("ok", "ok"), EXIT_GATES_FAILED),
+    ],
+)
+def test_watch_once_reports_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    base_outcome: str | None,
+    outcomes: tuple[str, str],
+    expected: int,
+) -> None:
+    from evalsi import cli_training
+
+    for step in (10, 20):
+        checkpoint = tmp_path / f"checkpoint-{step}"
+        checkpoint.mkdir()
+        (checkpoint / "config.json").write_text("{}")
+    remaining = iter(outcomes)
+    evaluated: list[str] = []
+
+    def result(outcome: str, step: str) -> StepResult:
+        evaluated.append(step)
+        return StepResult(
+            "run",
+            step,
+            "",
+            gates_passed=outcome != "gate",
+            error="provider HTTP 404" if outcome == "error" else "",
+        )
+
+    class Evaluator:
+        def get(self, step: str) -> None:
+            return None
+
+        def history(self) -> list[StepResult]:
+            return []
+
+        def evaluate_base(self, model: str) -> StepResult:
+            assert base_outcome is not None
+            return result(base_outcome, "base")
+
+        def evaluate(self, checkpoint: str, step: int) -> StepResult:
+            return result(next(remaining), str(step))
+
+    monkeypatch.setattr(cli_training, "_evaluator", lambda args: Evaluator())
+    code = main(
+        [
+            "checkpoints",
+            "watch",
+            str(tmp_path),
+            "--once",
+            "--settle",
+            "0",
+            "-f",
+            str(write_spec(tmp_path)),
+            "--training-run",
+            "run",
+            *(["--base", "base-model"] if base_outcome is not None else []),
+        ]
+    )
+    assert code == expected
+    assert evaluated == (["base"] if base_outcome is not None else []) + ["10", "20"]
+
+
 def test_cli_watch_and_curve(
     tmp_path: Path, models: FakeModels, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -472,7 +546,7 @@ def test_mlflow_registry_and_stop_file(
                 *common,
             ]
         )
-        assert code == 0
+        assert code == EXIT_GATES_FAILED
         assert json.loads(stop.read_text()) == {"step": "100", "regressed": ["exact-match"]}
     finally:
         mlflow.server.shutdown()

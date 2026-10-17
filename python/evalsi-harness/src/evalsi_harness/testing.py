@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from evalsi.sandbox import SandboxError
 from evalsi.sandbox.client import (
     EgressEvent,
     ExecResult,
@@ -193,6 +194,9 @@ class LocalSandbox:
         )
         self.image_digest = ""
 
+    async def services(self, *, include_logs: bool = False) -> list[dict[str, Any]]:
+        return []
+
     async def exec(
         self,
         command: Sequence[str],
@@ -289,6 +293,8 @@ class LocalSandboxClient:
 
     async def create(self, spec: SandboxSpec | None = None) -> LocalSandbox:
         spec = spec or SandboxSpec()
+        if spec.services:
+            raise SandboxError("services require the pod backend")
         self.created.append(spec)
         root = Path(tempfile.mkdtemp(prefix="evalsi-local-"))
         sandbox = LocalSandbox(root, spec, snapshots=self.snapshots)

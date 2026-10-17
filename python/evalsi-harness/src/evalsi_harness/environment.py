@@ -48,6 +48,8 @@ class SandboxLike(Protocol):
 
     async def read_files(self, paths: Sequence[str], max_bytes: int = ...) -> dict[str, bytes]: ...
 
+    async def services(self, *, include_logs: bool = ...) -> list[dict[str, Any]]: ...
+
     async def snapshot(self) -> str: ...
 
     async def egress(self) -> list[EgressEvent]: ...
@@ -115,6 +117,8 @@ def _spec(config: EnvironmentConfig, network: str, allow_hosts: Sequence[str]) -
         env=dict(config.env),
         files=dict(config.files),
         workdir=sb.workdir,
+        services=list(config.services),
+        service_lifetime_s=config.service_lifetime_s,
     )
 
 
@@ -139,6 +143,9 @@ class EnvironmentPool:
         if extra_allow_hosts and network != "allow":
             network, allow = "allowlist", [*allow, *extra_allow_hosts]
         try:
+            if config.services:
+                # Sidecar state is deliberately never snapshotted or reused.
+                return await self._set_up_in_place(config, network, allow)
             if not config.setup:
                 sandbox = await self.client.create(_spec(config, network, allow))
                 return TaskEnvironment(sandbox, config)

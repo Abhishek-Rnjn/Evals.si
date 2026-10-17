@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "axe-core": "4.10.3",
     "playwright-core": "1.56.1"
   },
-  "scripts": {"test": "node --test --test-timeout=120000 ui.test.mjs"}
+  "scripts": {
+    "test": "node --test --test-timeout=120000 ui.test.mjs"
+  }
 }

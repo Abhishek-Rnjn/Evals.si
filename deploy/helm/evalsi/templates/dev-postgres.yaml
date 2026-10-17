@@ -59,6 +59,9 @@ spec:
     - metadata: {name: data}
       spec:
         accessModes: [ReadWriteOnce]
+        {{- with .Values.devPostgres.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
         resources: {requests: {storage: {{ .Values.devPostgres.storage }}}}
 ---
 apiVersion: v1

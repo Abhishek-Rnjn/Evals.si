@@ -507,3 +507,88 @@ def test_resources_and_prompts_flags_add_their_tools_to_a_run(
     assert "ops_prompts" in names
     result = next(m for m in srv.requests[1]["messages"] if m["role"] == "tool")["content"]
     assert result == "Rule 1: write tests."
+
+
+def test_http_session_close_authenticates_and_refreshes_once() -> None:
+    import httpx
+
+    from evalsi_harness.mcp import _HTTPTransport
+
+    async def body() -> None:
+        requests: list[httpx.Request] = []
+
+        def handle(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            if request.url.path == "/token":
+                return httpx.Response(200, json={"access_token": "fresh"})
+            assert request.method == "DELETE"
+            assert request.headers["Mcp-Session-Id"] == "session"
+            assert request.headers["MCP-Protocol-Version"] == "2025-06-18"
+            assert request.headers["X-Private-Header"] == "configured"
+            return httpx.Response(
+                204 if request.headers.get("Authorization") == "Bearer fresh" else 401
+            )
+
+        oauth = OAuth(
+            "https://mcp.example/token",
+            "id",
+            "secret",
+            _token="expired",
+            _expires=time.monotonic() + 60,
+        )
+        transport = _HTTPTransport(
+            "https://mcp.example/mcp", {"X-Private-Header": "configured"}, 10, oauth
+        )
+        await transport.client.aclose()
+        transport.client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+        transport.session = "session"
+        await transport.aclose()
+        assert [r.method for r in requests] == ["DELETE", "POST", "DELETE"]
+        assert transport.client.is_closed
+
+    go(body())
+
+
+def test_http_session_close_releases_client_if_token_refresh_fails() -> None:
+    import httpx
+
+    from evalsi_harness.mcp import _HTTPTransport
+
+    async def body() -> None:
+        transport = _HTTPTransport(
+            "https://mcp.example/mcp", {}, 10, OAuth("https://mcp.example/token", "id", "secret")
+        )
+        await transport.client.aclose()
+        transport.client = httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda req: httpx.Response(401))
+        )
+        transport.session = "session"
+        await transport.aclose()
+        assert transport.client.is_closed
+
+    go(body())
+
+
+def test_closing_survives_a_failing_token_refresh() -> None:
+    """Session termination is best effort: an expired token whose refresh gets
+    a non-JSON answer (a proxy's HTML page) must not raise out of cleanup."""
+    import httpx
+
+    from evalsi_harness.mcp import _HTTPTransport
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/token":
+            return httpx.Response(200, text="<html>proxy</html>")
+        return httpx.Response(200)
+
+    async def body() -> None:
+        transport = _HTTPTransport(
+            "http://mcp.test/mcp", {}, 5.0, OAuth("http://mcp.test/token", "id", "secret")
+        )
+        await transport.client.aclose()
+        transport.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        transport.session = "session"
+        await transport.aclose()
+        assert transport.client.is_closed
+
+    go(body())
