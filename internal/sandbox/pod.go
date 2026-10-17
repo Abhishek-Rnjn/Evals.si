@@ -35,6 +35,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -199,10 +200,31 @@ func (k *kube) do(ctx context.Context, method, path string, body, out any) error
 		}
 		return fmt.Errorf("kubernetes API: %s %s: %d", method, path, resp.StatusCode)
 	}
+	if log, ok := out.(*string); ok {
+		data, err := io.ReadAll(io.LimitReader(resp.Body, 16384))
+		*log = strings.ToValidUTF8(string(data), "?")
+		return err
+	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)
 	}
 	return nil
+}
+
+type containerStatus struct {
+	Name         string `json:"name"`
+	Ready        bool   `json:"ready"`
+	RestartCount int32  `json:"restartCount"`
+	State        struct {
+		Waiting *struct {
+			Reason  string
+			Message string
+		} `json:"waiting"`
+		Terminated *struct {
+			Reason   string
+			ExitCode int
+		} `json:"terminated"`
+	} `json:"state"`
 }
 
 type podStatus struct {
@@ -210,23 +232,12 @@ type podStatus struct {
 		Name string `json:"name"`
 	} `json:"metadata"`
 	Status struct {
-		Phase             string `json:"phase"`
-		PodIP             string `json:"podIP"`
-		Reason            string `json:"reason"`
-		Message           string `json:"message"`
-		ContainerStatuses []struct {
-			Ready bool `json:"ready"`
-			State struct {
-				Waiting *struct {
-					Reason  string `json:"reason"`
-					Message string `json:"message"`
-				} `json:"waiting"`
-				Terminated *struct {
-					Reason   string `json:"reason"`
-					ExitCode int    `json:"exitCode"`
-				} `json:"terminated"`
-			} `json:"state"`
-		} `json:"containerStatuses"`
+		Phase                 string            `json:"phase"`
+		PodIP                 string            `json:"podIP"`
+		Reason                string            `json:"reason"`
+		Message               string            `json:"message"`
+		ContainerStatuses     []containerStatus `json:"containerStatuses"`
+		InitContainerStatuses []containerStatus `json:"initContainerStatuses"`
 	} `json:"status"`
 }
 
@@ -238,11 +249,15 @@ type podDriver struct {
 
 	// netLeak is set by verify when a canary connection got out of a pod the
 	// NetworkPolicy should have confined: the declaration is then not trusted.
-	netLeak atomic.Bool
+	netLeak         atomic.Bool
+	netVerified     atomic.Bool
+	serviceMu       sync.Mutex
+	serviceReaped   bool
+	serviceInstance string
 }
 
 func newPodDriver(s *Sandbox) *podDriver {
-	d := &podDriver{sb: s, cfg: s.cfg.Pod}
+	d := &podDriver{sb: s, cfg: s.cfg.Pod, serviceInstance: randomToken()}
 	if d.cfg == nil {
 		d.err = errors.New("no sandbox.pod section")
 		return d
@@ -291,12 +306,32 @@ func (d *podDriver) verify(ctx context.Context, b backend) string {
 		d.netLeak.Store(true)
 		return "NetworkPolicy is declared enforced, but a sandbox pod connected to " + target + ": the CNI does not enforce it for these pods (some meshes, such as Istio ambient, bypass it), so sandbox network isolation is the egress proxy only"
 	case res.Outcome == OutcomeExit && res.ExitCode == exitDialFailed:
+		d.netVerified.Store(true)
 		return ""
 	}
 	return "NetworkPolicy is declared enforced but the canary could not run: " + firstLine(res.Error)
 }
 
-func (d *podDriver) supports(*Spec) error { return nil }
+func (d *podDriver) supports(sp *Spec) error {
+	if len(sp.Services) > 0 && (os.Getenv("POD_NAME") == "" || os.Getenv("POD_UID") == "") {
+		return errors.New("services require pool POD_NAME and POD_UID for lifecycle ownership")
+	}
+	if len(sp.Services) > 0 {
+		namespace := os.Getenv("POD_NAMESPACE")
+		if namespace == "" {
+			if data, err := os.ReadFile(saDir + "/namespace"); err == nil {
+				namespace = strings.TrimSpace(string(data))
+			}
+		}
+		if namespace == "" || namespace != d.cfg.Namespace {
+			return errors.New("services require sandbox pods in the owning pool's namespace")
+		}
+	}
+	if len(sp.Services) > 0 && (!d.cfg.NetworkPolicyEnforced || d.netLeak.Load()) {
+		return errors.New("services require enforced pod NetworkPolicy")
+	}
+	return nil
+}
 
 func (d *podDriver) advertiseIP() string {
 	if d.cfg.AdvertiseIP != "" {
@@ -405,6 +440,9 @@ func (d *podDriver) manifest(sp *Spec, image, token, egress string) map[string]a
 		}},
 		"volumes": volumes,
 	}
+	if len(sp.Services) > 0 {
+		d.addServices(spec, sp)
+	}
 	if c.RuntimeClassName != "" {
 		spec["runtimeClassName"] = c.RuntimeClassName
 	}
@@ -421,16 +459,26 @@ func (d *podDriver) manifest(sp *Spec, image, token, egress string) map[string]a
 		}
 		spec["imagePullSecrets"] = secrets
 	}
+	metadata := map[string]any{"generateName": "evalsi-sandbox-", "namespace": c.Namespace, "labels": labels}
+	if len(sp.Services) > 0 {
+		delete(metadata, "generateName")
+		metadata["name"] = "evalsi-sandbox-" + randomToken()[:24]
+		labels[serviceOwnerLabel] = os.Getenv("POD_UID")
+		labels[serviceInstanceLabel] = d.serviceInstance
+		if name, uid := os.Getenv("POD_NAME"), os.Getenv("POD_UID"); name != "" && uid != "" {
+			metadata["ownerReferences"] = []map[string]any{{"apiVersion": "v1", "kind": "Pod", "name": name, "uid": uid}}
+		}
+	}
 	return map[string]any{
 		"apiVersion": "v1", "kind": "Pod",
-		"metadata": map[string]any{"generateName": "evalsi-sandbox-", "namespace": c.Namespace, "labels": labels},
+		"metadata": metadata,
 		"spec":     spec,
 	}
 }
 
 // waitRunning waits for the pod's agent to be reachable, or fails with what
 // Kubernetes reports (an image that does not pull, a failed init container).
-func (d *podDriver) waitRunning(ctx context.Context, name string) (string, error) {
+func (d *podDriver) waitRunning(ctx context.Context, name string, services ...[]ServiceSpec) (string, error) {
 	timeout := 5 * time.Minute
 	if d.cfg.StartTimeout != "" {
 		timeout, _ = time.ParseDuration(d.cfg.StartTimeout)
@@ -454,7 +502,17 @@ func (d *podDriver) waitRunning(ctx context.Context, name string) (string, error
 				return "", fmt.Errorf("sandbox pod %s: the guest agent exited (%s, %d)", name, t.Reason, t.ExitCode)
 			}
 		}
-		if s.Phase == "Running" && s.PodIP != "" && len(s.ContainerStatuses) > 0 && s.ContainerStatuses[0].Ready {
+		serviceReady := true
+		if len(services) > 0 && len(services[0]) > 0 {
+			states := serviceStates(&st, services[0])
+			for _, state := range states {
+				if state.Restarts > 0 || state.Reason != "" {
+					return "", fmt.Errorf("service %s failed during startup: %s (restarts %d)", state.Name, state.Reason, state.Restarts)
+				}
+				serviceReady = serviceReady && state.Ready
+			}
+		}
+		if serviceReady && s.Phase == "Running" && s.PodIP != "" && len(s.ContainerStatuses) > 0 && s.ContainerStatuses[0].Ready {
 			return s.PodIP, nil
 		}
 		if time.Now().After(deadline) {
@@ -483,12 +541,24 @@ func (d *podDriver) open(ctx context.Context, sp *Spec, dir, from string) (backe
 	if from != "" {
 		return nil, ErrNoSnapshots
 	}
+	// The canary may have found a leak after supports ran during selection.
+	if err := d.supports(sp); err != nil {
+		return nil, err
+	}
+	if len(sp.Services) > 0 && !d.netVerified.Load() {
+		return nil, errors.New("services require a successful NetworkPolicy canary check")
+	}
 	image := sp.Image
 	if image == "" {
 		image = d.cfg.DefaultImage
 	}
 	if image == "" {
 		return nil, errors.New("the pod rung needs an image (or sandbox.pod.default_image)")
+	}
+	if len(sp.Services) > 0 {
+		if err := d.reapPreviousServices(ctx); err != nil {
+			return nil, err
+		}
 	}
 	p := &podSandbox{d: d}
 	p.driver, p.sp, p.agentEnv = d.name(), sp, true
@@ -503,12 +573,16 @@ func (d *podDriver) open(ctx context.Context, sp *Spec, dir, from string) (backe
 	}
 	token := randomToken()
 	var created podStatus
-	if err := d.kube.do(ctx, http.MethodPost, "/api/v1/namespaces/"+d.cfg.Namespace+"/pods", d.manifest(sp, image, token, egress), &created); err != nil {
-		p.closeProxy()
+	manifest := d.manifest(sp, image, token, egress)
+	if len(sp.Services) > 0 {
+		p.pod = manifest["metadata"].(map[string]any)["name"].(string)
+	}
+	if err := d.kube.do(ctx, http.MethodPost, "/api/v1/namespaces/"+d.cfg.Namespace+"/pods", manifest, &created); err != nil {
+		_ = p.close()
 		return nil, err
 	}
 	p.pod = created.Metadata.Name
-	ip, err := d.waitRunning(ctx, p.pod)
+	ip, err := d.waitRunning(ctx, p.pod, sp.Services)
 	if err != nil {
 		_ = p.close()
 		return nil, err

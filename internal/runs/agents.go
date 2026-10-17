@@ -14,6 +14,7 @@ import (
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
+	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
 )
 
 // validateAgent checks an agent run's spec: the agent or the built-in
@@ -24,6 +25,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 	builtin := spec.GetHarness().GetExternal() == nil
 	replay := spec.GetHarness().GetBuiltin().GetRecording().GetMode() == "replay"
 	env := spec.GetEnvironment()
+	if err := sandbox.ValidateServices(sandbox.ServicesFromProto(env.GetServices()), env.GetServiceLifetime().AsDuration()); err != nil {
+		return invalid("spec.environment: %s", err)
+	}
 	switch {
 	case agent.GetA2A() != nil:
 		if agent.GetA2A().GetUrl() == "" {

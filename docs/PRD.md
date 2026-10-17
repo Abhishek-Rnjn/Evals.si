@@ -137,6 +137,19 @@ dsh's built-in telemetry does not export session traces. The demo includes a sep
 
 Both runtimes change quickly, and dsh warns of breaking changes, so the demos pin versions and the CI job (R7) catches drift when a pin moves.
 
+### Agent environment expansion (2026-10-17)
+
+The pod sandbox backend now supports fresh per-trial services: explicit images
+and argv, dependency/TCP readiness, resource limits, private local hostnames,
+a required lifetime, status and bounded opt-in logs. The harness reruns setup
+per trial and reports service crashes/restarts as infrastructure errors.
+A restricted Terminal-Bench 1 Compose importer and an API/Redis fixture are
+built ([decision 0027](decisions/0027-multi-service-environments.md),
+[example](../examples/multi-service/README.md)). Bubblewrap/Firecracker service
+groups, full Compose compatibility, browser environments and the original
+upstream benchmark coverage count remain open. Verification is recorded
+[separately](verification/README.md#multi-service-environments-2026-10-17).
+
 ## Goals, non-goals and success metrics
 
 **Goals**

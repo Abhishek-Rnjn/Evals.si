@@ -1,0 +1,2 @@
+instruction: Set answer in Redis to 42 so the API returns 42.
+parser_name: pytest

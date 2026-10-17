@@ -519,3 +519,12 @@ Not checked:
 
 - A chart install from the OCI charts on a cluster, an upgrade from the v0.1.0 charts (the CHANGELOG's upgrade notes are untested on a cluster), an import of the published bundle, and the arm64 images.
 - The bundled `bwrap` running a sandbox from an installed arm64 wheel (the amd64 wheel's sandbox runs in CI's `release-check`).
+
+## Multi-service environments (2026-10-17)
+
+The pod-native service lifecycle passed a bounded local kind/Calico check:
+API/Redis grading, fresh trial state, denied cross-trial connections, service
+crash errors, an adapted Terminal-Bench-format fixture, destroy and startup
+failure cleanup. See [the run record](MULTI-SERVICE-2026-10-17.md) for methods,
+environment adjustments, automated coverage and limits. The standalone CI
+bootstrap path and production-scale behavior are not certified by this run.

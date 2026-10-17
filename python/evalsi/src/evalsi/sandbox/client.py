@@ -28,7 +28,7 @@ from grpc import aio
 from evalsi.sandbox import SandboxError, sandbox_binary
 from evalsi.sandbox.v1alpha1 import sandbox_pb2 as pb
 from evalsi.sandbox.v1alpha1 import sandbox_pb2_grpc as pb_grpc
-from evalsi.v1alpha1 import record_pb2
+from evalsi.v1alpha1 import agent_pb2, record_pb2
 
 _NETWORK = {
     "deny": pb.NETWORK_MODE_DENY,
@@ -59,6 +59,36 @@ class SnapshotsUnsupported(SandboxError):
 
 
 @dataclass
+class ServiceSpec:
+    """Private per-trial pod sidecar. Limits and a TCP readiness port are required."""
+
+    name: str
+    image: str
+    command: list[str]
+    port: int
+    memory_mb: int
+    cpu_millis: int
+    env: dict[str, str] = field(default_factory=dict)
+    depends_on: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ServiceSpec:
+        return cls(**dict(data))
+
+    def to_proto(self) -> agent_pb2.EnvironmentService:
+        return agent_pb2.EnvironmentService(
+            name=self.name,
+            image=self.image,
+            command=self.command,
+            port=self.port,
+            memory_mb=self.memory_mb,
+            cpu_millis=self.cpu_millis,
+            env=self.env,
+            depends_on=self.depends_on,
+        )
+
+
+@dataclass
 class SandboxSpec:
     """What a sandbox looks like; mirrors ``SandboxSpec`` in the proto."""
 
@@ -75,6 +105,8 @@ class SandboxSpec:
     files: dict[str, bytes | str] = field(default_factory=dict)
     workdir: str = ""
     idle_timeout_s: float = 0.0
+    services: list[ServiceSpec] = field(default_factory=list)
+    service_lifetime_s: float = 0.0
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> SandboxSpec:
@@ -82,7 +114,9 @@ class SandboxSpec:
         unknown = set(data) - known
         if unknown:
             raise ValueError(f"unknown sandbox field(s): {', '.join(sorted(unknown))}")
-        return cls(**dict(data))
+        values = dict(data)
+        values["services"] = [ServiceSpec.from_dict(s) for s in values.get("services", [])]
+        return cls(**values)
 
     def to_proto(self) -> pb.SandboxSpec:
         if self.network not in _NETWORK:
@@ -99,6 +133,8 @@ class SandboxSpec:
             env=self.env,
             files={k: v.encode() if isinstance(v, str) else v for k, v in self.files.items()},
             workdir=self.workdir,
+            services=[s.to_proto() for s in self.services],
+            service_lifetime=_duration(self.service_lifetime_s),
         )
         if self.idle_timeout_s:
             spec.idle_timeout.CopyFrom(_duration(self.idle_timeout_s))
@@ -180,6 +216,25 @@ class Sandbox:
         self.id = sandbox_id
         self.isolation = isolation
         self.image_digest = ""
+
+    async def services(self, *, include_logs: bool = False) -> list[dict[str, Any]]:
+        """Return service readiness and restart counts (no environment values)."""
+        try:
+            response = await self.client.stub.Stats(
+                pb.StatsRequest(sandbox_id=self.id, include_service_logs=include_logs)
+            )
+        except grpc.aio.AioRpcError as exc:
+            _raise(exc)
+        return [
+            {
+                "name": s.name,
+                "ready": s.ready,
+                "restarts": s.restarts,
+                "reason": s.reason,
+                "logs": s.logs,
+            }
+            for s in response.services
+        ]
 
     async def exec(
         self,
@@ -319,6 +374,10 @@ class SandboxClient:
 
     async def create(self, spec: SandboxSpec | None = None) -> Sandbox:
         try:
+            if spec and spec.services:
+                capabilities = await self.stub.Probe(pb.ProbeRequest())
+                if not capabilities.services_supported:
+                    raise SandboxUnavailable("sandbox server does not support services; upgrade it")
             resp = await self.stub.Create(pb.CreateRequest(spec=(spec or SandboxSpec()).to_proto()))
         except grpc.aio.AioRpcError as exc:
             _raise(exc)

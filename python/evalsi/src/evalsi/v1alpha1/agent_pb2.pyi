@@ -1245,6 +1245,8 @@ class Environment(_message.Message):
     CHECKER_FIELD_NUMBER: _builtins.int
     ENV_FIELD_NUMBER: _builtins.int
     COMMAND_TIMEOUT_FIELD_NUMBER: _builtins.int
+    SERVICES_FIELD_NUMBER: _builtins.int
+    SERVICE_LIFETIME_FIELD_NUMBER: _builtins.int
     image: _builtins.str
     """OCI image for the root filesystem; empty: the host's system directories."""
     setup_network: _builtins.str
@@ -1273,6 +1275,14 @@ class Environment(_message.Message):
     def command_timeout(self) -> _duration_pb2.Duration:
         """Per-command timeout for the agent's sandbox commands; default 120s."""
 
+    @_builtins.property
+    def services(self) -> _containers.RepeatedCompositeFieldContainer[Global___EnvironmentService]:
+        """Pod backend only. Private, per-trial services; no shared persistent data."""
+
+    @_builtins.property
+    def service_lifetime(self) -> _duration_pb2.Duration:
+        """Required with services, from 1s to 24h. Bounds orphaned service execution."""
+
     def __init__(
         self,
         *,
@@ -1286,10 +1296,80 @@ class Environment(_message.Message):
         checker: Global___Checker | None = ...,
         env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         command_timeout: _duration_pb2.Duration | None = ...,
+        services: _abc.Iterable[Global___EnvironmentService] | None = ...,
+        service_lifetime: _duration_pb2.Duration | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "sandbox", b"sandbox", "setup_timeout", b"setup_timeout"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "setup_timeout", b"setup_timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "env", b"env", "files", b"files", "image", b"image", "sandbox", b"sandbox", "setup", b"setup", "setup_allow_hosts", b"setup_allow_hosts", "setup_network", b"setup_network", "setup_timeout", b"setup_timeout"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "env", b"env", "files", b"files", "image", b"image", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "services", b"services", "setup", b"setup", "setup_allow_hosts", b"setup_allow_hosts", "setup_network", b"setup_network", "setup_timeout", b"setup_timeout"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Environment: _TypeAlias = Environment  # noqa: Y015
+
+@_typing.final
+class EnvironmentService(_message.Message):
+    """EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+).
+    Services share the trial's network, but not its filesystem or credentials.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class EnvEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    NAME_FIELD_NUMBER: _builtins.int
+    IMAGE_FIELD_NUMBER: _builtins.int
+    COMMAND_FIELD_NUMBER: _builtins.int
+    ENV_FIELD_NUMBER: _builtins.int
+    PORT_FIELD_NUMBER: _builtins.int
+    DEPENDS_ON_FIELD_NUMBER: _builtins.int
+    MEMORY_MB_FIELD_NUMBER: _builtins.int
+    CPU_MILLIS_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    """DNS label, also a loopback hostname inside this trial."""
+    image: _builtins.str
+    port: _builtins.int
+    """TCP readiness port, unique within the trial; 7070 is reserved."""
+    memory_mb: _builtins.int
+    """Required limits; CPU in millicores, memory in MiB."""
+    cpu_millis: _builtins.int
+    @_builtins.property
+    def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Explicit argv; image entrypoints are not implicitly executed."""
+
+    @_builtins.property
+    def env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    @_builtins.property
+    def depends_on(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Services that must be ready first. Cycles are invalid."""
+
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        image: _builtins.str = ...,
+        command: _abc.Iterable[_builtins.str] | None = ...,
+        env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        port: _builtins.int = ...,
+        depends_on: _abc.Iterable[_builtins.str] | None = ...,
+        memory_mb: _builtins.int = ...,
+        cpu_millis: _builtins.int = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "cpu_millis", b"cpu_millis", "depends_on", b"depends_on", "env", b"env", "image", b"image", "memory_mb", b"memory_mb", "name", b"name", "port", b"port"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___EnvironmentService: _TypeAlias = EnvironmentService  # noqa: Y015

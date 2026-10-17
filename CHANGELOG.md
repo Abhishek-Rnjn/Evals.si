@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- Agent environments can declare per-trial services on the pod backend, with
+  dependency readiness, CPU/memory limits, private service names and a required
+  lifetime. Failed or restarted services produce infrastructure errors. The
+  sandbox SDK exposes status and optional bounded logs. Requires native
+  Kubernetes sidecars and a passing NetworkPolicy canary.
+- A restricted multi-service Terminal-Bench 1 Compose importer, an API/Redis
+  example, and a model-free kind/Calico lifecycle check. See decision 0027.
+
 - **Agent provenance and handoff checks.** The agent pack adds deterministic `citation-grounding` over explicit evidence citations and `handoff-correctness` over source/transfer/target links. Evidence-state runs export versioned snapshots; built-in delegation, Claude CLI child events and explicit A2A parent-task metadata emit handoff steps. Step attributes survive JSON exports. An opt-in `cli_agent_e2e` workflow exercises a real Claude CLI on the kind pod rung when a model key is supplied; offline tests cover its spec and artifact verifier, while live verification remains pending.
 
 - **Scored harness mechanism checks.** The agent pack adds `mechanism-ran`, a pass/fail evaluator for `tool:<name>` invocations and `context:<strategy>` activity. It shares activity rules with `evalsi matrix --mechanisms`; configuration alone does not pass, missing context evidence is skipped, and the score can gate a run.

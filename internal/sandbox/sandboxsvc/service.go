@@ -109,7 +109,7 @@ func Report(iso sandbox.Isolation) *evalsiv1alpha1.IsolationReport {
 }
 
 func (s *Service) Probe(ctx context.Context, _ *connect.Request[sandboxv1alpha1.ProbeRequest]) (*connect.Response[sandboxv1alpha1.ProbeResponse], error) {
-	out := &sandboxv1alpha1.ProbeResponse{}
+	out := &sandboxv1alpha1.ProbeResponse{ServicesSupported: true}
 	for _, r := range s.m.Sandbox().Probe(ctx) {
 		out.Rungs = append(out.Rungs, &sandboxv1alpha1.RungStatus{Driver: r.Driver, Level: levels[r.Level], Available: r.Available, Reason: r.Reason, Warning: r.Warning})
 	}
@@ -134,6 +134,8 @@ func SpecFromProto(p *sandboxv1alpha1.SandboxSpec) *sandbox.Spec {
 		},
 		Env: p.GetEnv(), Files: p.GetFiles(), Workdir: p.GetWorkdir(), IdleTimeout: p.GetIdleTimeout().AsDuration(),
 	}
+	sp.Services = sandbox.ServicesFromProto(p.GetServices())
+	sp.ServiceLifetime = p.GetServiceLifetime().AsDuration()
 	return sp
 }
 
@@ -242,7 +244,7 @@ func (s *Service) Restore(ctx context.Context, req *connect.Request[sandboxv1alp
 	return connect.NewResponse(&sandboxv1alpha1.RestoreResponse{SandboxId: sess.ID, Isolation: Report(sess.Isolation())}), nil
 }
 
-func (s *Service) Stats(_ context.Context, req *connect.Request[sandboxv1alpha1.StatsRequest]) (*connect.Response[sandboxv1alpha1.StatsResponse], error) {
+func (s *Service) Stats(ctx context.Context, req *connect.Request[sandboxv1alpha1.StatsRequest]) (*connect.Response[sandboxv1alpha1.StatsResponse], error) {
 	sess, err := s.m.Get(req.Msg.GetSandboxId())
 	if err != nil {
 		return nil, toErr(err)
@@ -254,6 +256,13 @@ func (s *Service) Stats(_ context.Context, req *connect.Request[sandboxv1alpha1.
 			Time: timestamppb.New(ev.Time), Host: ev.Host, Port: int32(ev.Port), Allowed: ev.Allowed,
 			BytesSent: ev.BytesSent, BytesReceived: ev.BytesReceived,
 		})
+	}
+	services, err := sess.Services(ctx, req.Msg.GetIncludeServiceLogs())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	for _, st := range services {
+		out.Services = append(out.Services, &sandboxv1alpha1.ServiceStatus{Name: st.Name, Ready: st.Ready, Restarts: st.Restarts, Reason: st.Reason, Logs: st.Logs})
 	}
 	return connect.NewResponse(out), nil
 }

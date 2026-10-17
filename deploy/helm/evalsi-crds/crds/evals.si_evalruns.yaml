@@ -906,6 +906,50 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
+                  service_lifetime:
+                    description: 'A duration: "250ms", "30s", "10m", "1.5h", or a
+                      number of seconds.'
+                    x-kubernetes-int-or-string: true
+                  serviceLifetime:
+                    description: 'A duration: "250ms", "30s", "10m", "1.5h", or a
+                      number of seconds.'
+                    x-kubernetes-int-or-string: true
+                  services:
+                    items:
+                      properties:
+                        command:
+                          items:
+                            type: string
+                          type: array
+                        cpu_millis:
+                          type: integer
+                        cpuMillis:
+                          type: integer
+                        depends_on:
+                          items:
+                            type: string
+                          type: array
+                        dependsOn:
+                          items:
+                            type: string
+                          type: array
+                        env:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        image:
+                          type: string
+                        memory_mb:
+                          type: integer
+                        memoryMb:
+                          type: integer
+                        name:
+                          type: string
+                        port:
+                          type: integer
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    type: array
                   setup:
                     items:
                       type: string

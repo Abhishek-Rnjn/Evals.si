@@ -568,3 +568,19 @@ jobs:
           name: cli-agent-e2e
           path: ${{ runner.temp }}/cli-agent-e2e/results.json
           if-no-files-found: warn
+
+  service-environments:
+    # Uses a CNI that enforces NetworkPolicy; kind's default CNI cannot prove isolation.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v0.33.0
+      - name: Service lifecycle and trial isolation
+        run: deploy/e2e/services-kind.sh

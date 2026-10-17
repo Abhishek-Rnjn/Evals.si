@@ -458,3 +458,18 @@ agents:
 ```
 
 References in the `evalsi_*` packages, which include every benchmark harness and parser above, are always allowed. The secrets an agent run names (`headers_env`, `api_key_env`, `env_from`) must be granted to its project under `credentials.grants`; see the [identity guide](identity.md#8-credentials-which-worker-secrets-a-project-may-use). Authorization rules see agent runs as `resource.agent` (`kind`, `harness`, `image`, `network`, `min_isolation`), and `resource.runs_code` is true for them. See the [identity guide](identity.md#4-global-rules).
+
+
+## Multi-service task environments
+
+The pod backend can start a private API, database or other services for each
+trial through `environment.services`. Services have explicit images, argv,
+TCP readiness ports, dependencies, memory/CPU limits and a required
+`service_lifetime`. They run during setup, the agent and checker, with fresh
+state for every trial. Failed or restarted services are infrastructure errors.
+
+See the [API/Redis example](../../examples/multi-service/README.md) for a runnable
+spec, requirements, inspection and the supported Terminal-Bench Compose subset.
+This requires Kubernetes native sidecars and an enforced NetworkPolicy whose
+canary passes; other sandbox backends reject service tasks. The checker still
+runs in the agent's sandbox, as it does for existing task environments.

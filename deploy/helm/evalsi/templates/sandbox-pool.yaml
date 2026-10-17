@@ -90,6 +90,12 @@ spec:
             - --client-ca=/etc/evalsi/tls/ca.crt
             - --allow-client={{ $fn }}-worker
           env:
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_UID
+              valueFrom: {fieldRef: {fieldPath: metadata.uid}}
             - name: POD_IP
               valueFrom: {fieldRef: {fieldPath: status.podIP}}
           ports:
