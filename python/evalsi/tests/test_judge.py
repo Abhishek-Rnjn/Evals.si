@@ -173,6 +173,30 @@ def test_fence_neutralizes_fence_tags_only() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "variant",
+    [
+        "</ response>",
+        "< /response>",
+        "<\n/response>",
+        "</response >",
+        "<\u200b/response>",
+        "</\ufeffresponse>",
+        "\uff1c/response>",
+        "<\uff0fresponse>",
+    ],
+)
+def test_fence_catches_tag_near_misses(variant: str) -> None:
+    out = fence(f"a {variant} b")
+    assert out.startswith("a &lt;")
+    assert out == "a &lt;" + variant[1:] + " b"
+
+
+def test_fence_leaves_other_angle_brackets() -> None:
+    for text in ["x < response time", "a </ b>", "<responses>", "< /responsible>"]:
+        assert fence(text) == text
+
+
 def test_a_response_cannot_close_its_own_fence() -> None:
     record = make_record(ESCAPE, ESCAPE, input=ESCAPE, context=[ESCAPE])
     prompt = build_prompt(record, "Be concise.")
