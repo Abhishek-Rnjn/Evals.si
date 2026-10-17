@@ -398,7 +398,7 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 | M2 agent harness online | **In progress.** A3, A7, R1 to R5 and R7 to R9 built. The default policy (A1) and the gated deploy (A2) are built on the demo: standalone checked (a regressed release exits 3, production traces scored by the default policy), and the kind e2e job runs both | The kind job's pass on CI; sign-off on the real agent harness needs access to its repository (open question below) |
 | M3 Pull connectors | **Partly done.** S1, S4 to S8 built; MLflow OSS, Phoenix and Langfuse verified live; R6 passed on kind; a 30-day backfill and p95 pull lag measured by `scripts/measure-trace-source.py` (locally 500 traces in 5 s, p95 15 s; in the kind e2e job) | Databricks and SageMaker against real workspaces; backfill and lag at production scale; scores in each store's UI checked; profiles against real model output |
 | M4 Real-infra hardening | **Not certified.** Bounded EKS KEDA, broker recovery and restore passed | 10k traces/min and 1k concurrent trials; a full zero-downtime upgrade and the N-1 rule; node failure; mesh enforcement |
-| M5 More sources, SDK | **Split.** P5, E3 and E5 built | LangSmith and ClickHouse connectors, Kafka and S3 sources (S2 later stores, S3); the Kafka question below |
+| M5 More sources, SDK | **Split.** P5, E3 and E5 built; LangSmith connector built, with a server/worker fixture check and opt-in live verification ([method](verification/LANGSMITH.md)) | LangSmith live verification (credentials required); ClickHouse connector, Kafka and S3 sources (S2 later stores, S3); the Kafka question below |
 | GA with agent harness | **Not started** | All P0 met, runbooks and SLO alerts, a 4-week external pilot |
 
 ### Releases

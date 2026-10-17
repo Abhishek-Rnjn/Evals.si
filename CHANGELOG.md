@@ -24,6 +24,12 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- LangSmith verification through `evalsid` and the Python worker: historical
+  pull, completion deferral, scoring, tail deduplication and feedback
+  create/update/replay/recreation. Ordinary e2e CI uses a derived fixture; an
+  opt-in live check and manually dispatched workflow create and clean up a
+  disposable project. Live verification still requires provider credentials.
+
 - Live leftovers verification scripts and a complete 50-row inventory, including
   backup/restore and WAL recovery, pipeline concurrency, mesh controls, actual
   sandbox harness checks and published MCP/tokenizer interoperability. The web
