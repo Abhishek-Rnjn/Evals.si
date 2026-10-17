@@ -68,7 +68,7 @@ Issues = "https://github.com/Abhishek-Rnjn/Evals.si/issues"
 Changelog = "https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md"
 
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
