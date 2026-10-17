@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [EKS-PAUSED-2026-10-18.md](EKS-PAUSED-2026-10-18.md) | Cluster-deletion handoff: disposition of all 49 starting rows, exact unfinished checks, GPU-first resume order, environment reconstruction and evidence/storage caveats; live verification paused |
 | [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md) | The full run: setup, every exit criterion with its evidence, product bugs F1–F6, doc differences D1–D15 and environment problems R1–R2 |
 | [FINAL-RESULTS.md](FINAL-RESULTS.md) | One table of every exit criterion across the three clusters |
 | [PART-C.md](PART-C.md) | M4/M5 requested subset, native dsh integration, review fixes and final-phase verification limits |

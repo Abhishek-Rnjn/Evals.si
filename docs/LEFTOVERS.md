@@ -2,6 +2,24 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
+## EKS verification paused, 2026-10-18
+
+The user is deleting the cluster for now. Live checks are paused, not
+complete. The [committed handoff](verification/EKS-PAUSED-2026-10-18.md)
+records every original inventory row, the GPU-first resume order, exact
+unfinished CPU checks, infrastructure/access blockers and reconstruction
+requirements. Historical resource-state statements in the run reports
+describe the last observation, not a claim that the cluster still exists.
+
+Completed work is in `42d8127` and `cc70404` on `verify/eks-leftovers`.
+Native verl 0.9.1 and OpenRLHF **0.9.0** GPU updates passed; current
+OpenRLHF 0.11.2 and trainer-backed OpenEnv/verifiers remain unverified.
+The CPU concurrent-create probe still needs same-key reconciliation, its
+subsequent direct S3-import call was never reached, and UI accessibility,
+mesh, broader harness/provider and production recovery/scale checks remain.
+PR #85 is still excluded. Cluster-only weights/PVCs are not saved by a Git
+commit; preserve them separately if needed.
+
 ## Milestones
 
 The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milestones-and-phased-rollout). Where they stand on 2026-10-13:
@@ -34,7 +52,7 @@ user-namespaced bwrap passed on these EKS hosts. Direct harness cache-hit
 controls still fail. The report inventories all 49 starting item-table rows
 and explicitly separates pending, blocked, unbuilt and PR #85-excluded work.
 
-Last updated: 2026-10-17 (bounded EKS/GPU verification, checkpoint launch fix and ambient/non-mesh controls); before that 2026-10-16 (production-readiness review: judge prompt fences and dependency scanning fixed, seven rows added, three extended; see the review note below); before that 2026-10-13 (v0.2.0 released and verified; the two buildable rows built: verl and OpenRLHF reward paths and Claude Code over MCP in CI; backfill and lag measured; E6 imports); before that 2026-10-12 (bounded EKS verification, [report](verification/EKS-2026-10-12.md); server-side slicing, run archiving, environment specs, platform wheels, operator checkpoint serving and a hosted Wasm plugin built; the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+Last updated: 2026-10-18 (cluster-deletion pause, complete remaining-check handoff and native GPU training evidence); before that 2026-10-17 (bounded EKS/GPU verification, checkpoint launch fix and ambient/non-mesh controls); before that 2026-10-16 (production-readiness review: judge prompt fences and dependency scanning fixed, seven rows added, three extended; see the review note below); before that 2026-10-13 (v0.2.0 released and verified; the two buildable rows built: verl and OpenRLHF reward paths and Claude Code over MCP in CI; backfill and lag measured; E6 imports); before that 2026-10-12 (bounded EKS verification, [report](verification/EKS-2026-10-12.md); server-side slicing, run archiving, environment specs, platform wheels, operator checkpoint serving and a hosted Wasm plugin built; the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 Trace redaction on push and pull is now built and locally regression-tested,
 including source overrides, storage bytes, evaluator queues, result callbacks

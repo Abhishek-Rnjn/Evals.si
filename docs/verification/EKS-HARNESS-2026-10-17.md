@@ -6,6 +6,11 @@ verification inventory and a bounded run record, **not a claim that every
 leftover is verified**. Provider credentials, gateway URLs and cluster
 identities are deliberately omitted.
 
+**Pause update, 2026-10-18:** the user is deleting the cluster for now.
+The [remaining-work handoff](EKS-PAUSED-2026-10-18.md) records the complete
+inventory, blockers and resume prerequisites. Resource-state statements
+below are historical, not a claim that these resources remain available.
+
 ## Checkpoint before GPU training
 
 This section captures checkpoint commit `42d8127`, before prioritizing the
