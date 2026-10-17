@@ -69,6 +69,20 @@ func (vm *guestConn) env(e *Exec) []string {
 	for k, v := range e.Env {
 		vars[k] = v
 	}
+	if vm.proxy != nil && len(vm.sp.Services) > 0 {
+		// Private services resolve to this pod's loopback, so they must not
+		// travel through the pool's external egress proxy. Keep caller exclusions.
+		for _, key := range []string{"NO_PROXY", "no_proxy"} {
+			hosts := []string{}
+			if vars[key] != "" {
+				hosts = append(hosts, vars[key])
+			}
+			for _, service := range vm.sp.Services {
+				hosts = append(hosts, service.Name)
+			}
+			vars[key] = strings.Join(hosts, ",")
+		}
+	}
 	out := make([]string, 0, len(vars))
 	for k, v := range vars {
 		out = append(out, k+"="+v)

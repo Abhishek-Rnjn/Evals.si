@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
+- Private service names bypass the sandbox's external egress proxy in both
+  `NO_PROXY` and `no_proxy`, preserving caller exclusions. HTTP sidecars remain
+  reachable when agent networking uses `allow` or `allowlist`.
+
 - **Trial PostgreSQL can select a StorageClass.** `devPostgres.storageClassName` now reaches the database PVC, allowing installation on clusters without a default StorageClass. An empty value retains the existing default-class behavior.
 
 - **One-shot checkpoint watches propagate evaluation failures.** `evalsi checkpoints watch --once` now exits 1 when an attempted base/checkpoint evaluation errors, or 3 on failed gates/regressions, rather than always returning success. Errors take precedence over gate failures; continuous watching and stop-file behavior are unchanged.

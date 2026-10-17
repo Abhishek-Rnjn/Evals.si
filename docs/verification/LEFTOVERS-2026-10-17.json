@@ -739,5 +739,31 @@
       "EKS-HARNESS-2026-10-17.md"
     ],
     "provenance": "Completed EKS checkpoint imported into PR #85; measurements were made separately, excluding multi-service changes. GPU training remains ongoing, not certified by this checkpoint."
+  },
+  "combined_regressions": {
+    "python": {
+      "passed": 924,
+      "skipped": 3,
+      "seconds": 80.82
+    },
+    "optin_eks_collection": {
+      "skipped": 30,
+      "live_rerun": false
+    },
+    "python_static": {
+      "ruff": "passed",
+      "format": "passed",
+      "mypy_source_files": 233
+    },
+    "private_service_proxy": {
+      "before_fix": "all six routing cases failed",
+      "after_fix_race_repetitions": 100,
+      "all_service_tests": "passed",
+      "live_cluster_rerun": false,
+      "all_service_tests_race_repetitions": 100
+    },
+    "replay_dockerfile": "build and nonroot binary/import smoke passed before EKS merge",
+    "go_vet": "passed: ingest, operator/..., operator command, Helm and sandbox",
+    "imported_runtime_live_test_mypy_source_files": 6
   }
 }

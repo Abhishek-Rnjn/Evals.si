@@ -122,6 +122,21 @@ Ruff/format passed, and mypy was run with the repository's locked development
 set rather than the optional live-tool dependencies. Browser npm audit found
 zero vulnerabilities. No tests were disabled.
 
+The existing PR review also identified private service HTTP requests being sent
+through the external egress proxy. All six new routing regressions failed before
+the fix (allow/allowlist modes, default/spec/command exclusions). Both `NO_PROXY`
+and `no_proxy` now append declared service names after environment overrides,
+preserving existing exclusions. The regression checks private direct routing and
+external proxy selection; it passed 100 race-detector repetitions, and the full
+service-test selection passed, including 100 repetitions after validating the
+allow/allowlist fixture configurations. This routing regression is local Go coverage,
+not a new live-cluster run after teardown.
+
+The combined-source Go vet checks passed for ingest, all operator packages,
+the operator command, Helm tests and sandbox. Additional type checking passed
+for the six imported harness/training runtime and unit/integration modules.
+Optional EKS recorder dependencies are not included in that type-check claim.
+
 ## Replaying the checks
 
 Use a fresh disposable cluster for the infrastructure-changing checks. The

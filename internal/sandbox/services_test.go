@@ -6,10 +6,61 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/net/http/httpproxy"
 )
+
+func TestServiceProxyRouting(t *testing.T) {
+	for _, mode := range []string{NetworkAllow, NetworkAllowlist} {
+		for _, override := range []string{"default", "spec", "exec"} {
+			t.Run(mode+"/"+override, func(t *testing.T) {
+				sp := &Spec{Network: Network{Mode: mode}, Services: []ServiceSpec{testService("api", 8080), testService("db", 6379)}, ServiceLifetime: time.Hour}
+				if mode == NetworkAllowlist {
+					sp.Network.Allow = []string{"external.example:8080"}
+				}
+				if err := sp.Validate(); err != nil {
+					t.Fatal(err)
+				}
+				e := &Exec{}
+				if override == "spec" {
+					sp.Env = map[string]string{"NO_PROXY": "custom.internal", "no_proxy": "lower.internal"}
+				} else if override == "exec" {
+					e.Env = map[string]string{"NO_PROXY": "custom.internal", "no_proxy": "lower.internal"}
+				}
+				vm := &guestConn{driver: "pod", sp: sp, proxy: &egressProxy{}, proxyAddr: "127.0.0.1:9090"}
+				env := map[string]string{}
+				for _, kv := range vm.env(e) {
+					k, v, _ := strings.Cut(kv, "=")
+					env[k] = v
+				}
+				for _, key := range []string{"NO_PROXY", "no_proxy"} {
+					proxy := (&httpproxy.Config{HTTPProxy: env["HTTP_PROXY"], NoProxy: env[key]}).ProxyFunc()
+					for _, host := range []string{"api:8080", "db:6379", "external.example:8080"} {
+						u, _ := url.Parse("http://" + host)
+						got, err := proxy(u)
+						if err != nil || (got != nil) != strings.HasPrefix(host, "external.") {
+							t.Fatalf("%s routing %s: proxy=%v error=%v; bypass=%q", key, host, got, err, env[key])
+						}
+					}
+					want := "localhost,127.0.0.1,::1"
+					if override != "default" {
+						want = "custom.internal"
+						if key == "no_proxy" {
+							want = "lower.internal"
+						}
+					}
+					if !strings.HasPrefix(env[key], want+",") {
+						t.Fatalf("lost existing %s exclusions: %q", key, env[key])
+					}
+				}
+			})
+		}
+	}
+}
 
 func testService(name string, port int) ServiceSpec {
 	return ServiceSpec{Name: name, Image: "redis:7-alpine", Command: []string{"redis-server", "--port", "6379"}, Port: port, MemoryMB: 64, CPUMillis: 100}
