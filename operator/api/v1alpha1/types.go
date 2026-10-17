@@ -414,8 +414,7 @@ type CheckpointServer struct {
 }
 
 type CheckpointServerSpec struct {
-	// The vLLM image; its entrypoint must take `vllm serve` arguments (as
-	// vllm/vllm-openai does) unless command says otherwise.
+	// The vLLM image; must provide `vllm serve` unless command says otherwise.
 	// +kubebuilder:validation:MinLength=1
 	Image string `json:"image"`
 	// What to serve: a path inside the container (under the mounted
@@ -441,7 +440,7 @@ type CheckpointServerSpec struct {
 	// Replicas; default 1.
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
-	// Replaces the image's entrypoint.
+	// Replaces the serving command; default ["vllm", "serve"].
 	// +optional
 	Command []string `json:"command,omitempty"`
 	// More `vllm serve` arguments, after the ones the operator sets.

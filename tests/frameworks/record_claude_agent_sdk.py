@@ -18,11 +18,13 @@ from typing import Any
 
 from otlp_capture import MOCK_URL, QUESTION, Capture, search_docs, tracer_provider
 
-MODEL = "claude-sonnet-4-5"
+MODEL = os.environ.get("EVALSI_FRAMEWORK_MODEL", "claude-sonnet-4-5")
 
 
 def main() -> None:
     mode = sys.argv[1]
+    key_env = os.environ.get("EVALSI_FRAMEWORK_API_KEY_ENV")
+    key = os.environ[key_env] if key_env else "unused"
     # The CLI inherits this process's environment. Keep only what it needs:
     # a session the recorder runs in must not leak into it (a TRACEPARENT
     # marked as not sampled silences its spans).
@@ -35,7 +37,7 @@ def main() -> None:
         "HOME": home,
         "CLAUDE_CONFIG_DIR": home,
         "ANTHROPIC_BASE_URL": MOCK_URL.removesuffix("/v1"),
-        "ANTHROPIC_API_KEY": "unused",
+        "ANTHROPIC_API_KEY": key,
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
         "DISABLE_AUTOUPDATER": "1",
     }

@@ -40,8 +40,16 @@ func claudeCodeStep(sp *tracepb.Span, a Attrs, step *evalsiv1alpha1.Step) {
 		}
 	case "llm_request":
 		step.Type = evalsiv1alpha1.StepType_STEP_TYPE_LLM
-		if step.GetUsage().InputTokens == nil && step.GetUsage().OutputTokens == nil {
-			step.Usage.InputTokens, step.Usage.OutputTokens = a.int("input_tokens"), a.int("output_tokens")
+		if step.GetUsage().InputTokens == nil {
+			// Claude reports uncached input separately from cache reads and creation.
+			for _, key := range []string{"input_tokens", "cache_read_tokens", "cache_creation_tokens"} {
+				if value := a.int(key); value != nil {
+					step.Usage.InputTokens = proto.Int64(step.GetUsage().GetInputTokens() + *value)
+				}
+			}
+		}
+		if step.GetUsage().OutputTokens == nil {
+			step.Usage.OutputTokens = a.int("output_tokens")
 		}
 	case "tool":
 		step.Type = evalsiv1alpha1.StepType_STEP_TYPE_TOOL

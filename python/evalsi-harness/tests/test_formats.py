@@ -73,6 +73,39 @@ def test_formats() -> None:
         parse_output("stream-json", "")
 
 
+@pytest.mark.parametrize(
+    ("command", "timeout", "expected"),
+    [
+        (
+            "echo 'runtime dependency missing' >&2; exit 127",
+            "1s",
+            "exit 127: runtime dependency missing",
+        ),
+        ("sleep 2", "0.05s", "timed out after 0.05s"),
+    ],
+)
+def test_cli_process_failure_is_not_hidden_by_missing_events(
+    sandboxes: LocalSandboxClient, command: str, timeout: str, expected: str
+) -> None:
+    spec = spec_of(
+        {
+            "target": {
+                "agent": {
+                    "cli": {
+                        "command": ["sh", "-c", command],
+                        "output_format": "claude-stream-json",
+                        "timeout": timeout,
+                    }
+                }
+            },
+            "environment": {"checker": {"command": ["true"]}},
+        }
+    )
+    outcome = run(spec, record("fix it"), sandboxes)
+    assert outcome.record is None
+    assert outcome.error == f"cli agent: {expected}"
+
+
 def test_a_cli_agent_with_the_format_has_a_trajectory(sandboxes: LocalSandboxClient) -> None:
     fixture = FIXTURES / "dsh-0.2.1-alpha.2-fix-calc.jsonl"
     spec = spec_of(

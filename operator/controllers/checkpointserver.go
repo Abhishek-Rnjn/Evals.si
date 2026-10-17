@@ -105,6 +105,10 @@ func deploymentCurrentAndReady(dep *appsv1.Deployment) bool {
 
 // serverPod is the pod template of a CheckpointServer.
 func serverPod(cs *v1.CheckpointServer, labels map[string]string, served string, port int32) corev1.PodTemplateSpec {
+	command := cs.Spec.Command
+	if len(command) == 0 {
+		command = []string{"vllm", "serve"}
+	}
 	args := []string{cs.Spec.Model, "--host", "0.0.0.0", "--port", fmt.Sprint(port), "--served-model-name", served}
 	env := append([]corev1.EnvVar{}, cs.Spec.Env...)
 	if cs.Spec.LoRA {
@@ -141,7 +145,7 @@ func serverPod(cs *v1.CheckpointServer, labels map[string]string, served string,
 			Tolerations:                  cs.Spec.Tolerations,
 			Volumes:                      volumes,
 			Containers: []corev1.Container{{
-				Name: "vllm", Image: cs.Spec.Image, Command: cs.Spec.Command, Args: args, Env: env,
+				Name: "vllm", Image: cs.Spec.Image, Command: command, Args: args, Env: env,
 				Resources:    cs.Spec.Resources,
 				Ports:        []corev1.ContainerPort{{Name: "http", ContainerPort: port}},
 				VolumeMounts: mounts,

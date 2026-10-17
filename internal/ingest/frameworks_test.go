@@ -164,6 +164,121 @@ func TestFrameworkProfiles(t *testing.T) {
 	}
 }
 
+func TestLiveFrameworkProfiles(t *testing.T) {
+	dir := os.Getenv("EVALSI_FRAMEWORK_RECORDINGS")
+	if dir == "" {
+		t.Skip("set EVALSI_FRAMEWORK_RECORDINGS to live EKS recordings")
+	}
+	model := os.Getenv("EVALSI_FRAMEWORK_MODEL")
+	if model == "" {
+		t.Fatal("EVALSI_FRAMEWORK_MODEL must identify the actual served model")
+	}
+	paths, err := filepath.Glob(filepath.Join(dir, "*.otlp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no live framework recordings")
+	}
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			name := strings.TrimSuffix(filepath.Base(path), ".otlp.json")
+			want, ok := frameworkFixtures[name]
+			if !ok {
+				t.Fatalf("no mapping contract for %s", name)
+			}
+			expectedModel := model
+			if strings.HasPrefix(name, "claude-agent-sdk-") {
+				expectedModel = os.Getenv("EVALSI_FRAMEWORK_ANTHROPIC_MODEL")
+				if expectedModel == "" {
+					t.Fatal("EVALSI_FRAMEWORK_ANTHROPIC_MODEL must identify the live Claude model")
+				}
+			}
+			trace := loadFixture(t, path)
+			rec, info := ToRecord(trace)
+			if !strings.Contains(fixtureText(rec.GetInput()), fixtureQuestion) || (!want.noAnswer && fixtureText(rec.GetOutput()) == "") {
+				t.Errorf("missing task input or final model output")
+			}
+			var llm, tools int
+			for _, step := range rec.GetTrajectory().GetSteps() {
+				switch step.GetType() {
+				case evalsiv1alpha1.StepType_STEP_TYPE_LLM:
+					llm++
+				case evalsiv1alpha1.StepType_STEP_TYPE_TOOL:
+					tools++
+					output := fixtureText(step.GetOutput()) + step.GetOutput().GetJson().String()
+					if !strings.HasSuffix(step.GetName(), "search_docs") || (want.toolIO && !strings.Contains(output, fixtureResult)) {
+						t.Errorf("missing tool name or result for %q", step.GetName())
+					}
+				}
+			}
+			if llm < want.llm || tools < want.tool || info.Error || strings.Join(info.Models, ",") != expectedModel {
+				t.Errorf("llm=%d tools=%d error=%v models=%v", llm, tools, info.Error, info.Models)
+			}
+			if len(info.Tools) == 0 {
+				t.Error("no executed tool or model tool request mapped")
+			}
+			for _, tool := range info.Tools {
+				if !strings.HasSuffix(tool, "search_docs") {
+					t.Errorf("unexpected mapped tool %q", tool)
+				}
+			}
+			if want.inTokens > 0 && (rec.GetUsage().GetInputTokens() <= 0 || rec.GetUsage().GetOutputTokens() <= 0) {
+				t.Errorf("missing actual token usage: %v", rec.GetUsage())
+			}
+			if name == "claude-agent-sdk-native" {
+				var total int64
+				for _, span := range trace.Spans {
+					attrs := ToAttrs(span.Span.GetAttributes())
+					if attrs.str("span.type") == "llm_request" {
+						for _, key := range []string{"input_tokens", "cache_read_tokens", "cache_creation_tokens"} {
+							if value := attrs.int(key); value != nil {
+								total += *value
+							}
+						}
+					}
+				}
+				if rec.GetUsage().GetInputTokens() != total {
+					t.Errorf("input tokens %d, want uncached+read+creation total %d", rec.GetUsage().GetInputTokens(), total)
+				}
+			}
+			t.Logf("llm=%d tools=%d input=%d output=%d", llm, tools, rec.GetUsage().GetInputTokens(), rec.GetUsage().GetOutputTokens())
+		})
+	}
+}
+
+func TestClaudeCodeCachedInputTokens(t *testing.T) {
+	for name, tc := range map[string]struct {
+		attrs map[string]int
+		input int64
+	}{
+		"uncached": {attrs: map[string]int{"input_tokens": 2}, input: 2},
+		"read and creation": {attrs: map[string]int{
+			"input_tokens": 2, "cache_read_tokens": 789, "cache_creation_tokens": 343,
+		}, input: 1134},
+		"only cache reported": {attrs: map[string]int{"cache_read_tokens": 789}, input: 789},
+		"canonical input wins": {attrs: map[string]int{
+			"input_tokens": 2, "cache_read_tokens": 789, "cache_creation_tokens": 343,
+			"gen_ai.usage.input_tokens": 1134,
+		}, input: 1134},
+		"canonical output only": {attrs: map[string]int{
+			"input_tokens": 2, "cache_read_tokens": 789, "cache_creation_tokens": 343,
+			"gen_ai.usage.output_tokens": 95,
+		}, input: 1134},
+	} {
+		t.Run(name, func(t *testing.T) {
+			attrs := []*commonpb.KeyValue{kv("span.type", "llm_request"), kv("output_tokens", 95)}
+			for key, value := range tc.attrs {
+				attrs = append(attrs, kv(key, value))
+			}
+			step := ToStep(Span{Span: span(1, 0, "claude_code.llm_request", 0, 1, attrs...)})
+			if step.GetUsage().GetInputTokens() != tc.input || step.GetUsage().GetOutputTokens() != 95 {
+				t.Errorf("usage %v, want %d/95", step.GetUsage(), tc.input)
+			}
+		})
+	}
+}
+
 // fixtureText is a content's text: the last assistant message (or the last
 // message) of a list, else the text.
 func fixtureText(c *evalsiv1alpha1.Content) string {

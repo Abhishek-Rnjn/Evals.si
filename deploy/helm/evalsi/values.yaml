@@ -105,6 +105,7 @@ devPostgres:
   enabled: false
   image: postgres:17
   storage: 5Gi
+  storageClassName: ""
   nodeSelector: {}
   tolerations: []
   serviceLabels: {}       # e.g. istio.io/use-waypoint: none

@@ -18,6 +18,27 @@ uv venv /tmp/fw-crewai && VIRTUAL_ENV=/tmp/fw-crewai uv pip install -r requireme
 /tmp/fw-crewai/bin/python record_crewai.py mlflow          # or openinference, openllmetry
 ```
 
+For a live OpenAI-compatible model, set `MOCK_MODEL_URL` to its `/v1` endpoint
+and `EVALSI_FRAMEWORK_MODEL` to its served model ID. The default remains the
+mock's `gpt-4o-mini` alias. Use a disposable checkout: recorders overwrite their
+named fixtures. A successful recording is not by itself a mapping-profile
+verification; check the exported model/tool/usage fields and run the profile
+tests against the recording before claiming compatibility.
+
+For live recordings, build the ingest test binary for the runner's platform
+and execute `TestLiveFrameworkProfiles` there with
+`EVALSI_FRAMEWORK_RECORDINGS` pointing to the exports and
+`EVALSI_FRAMEWORK_MODEL` naming the actual OpenAI-compatible model. Include
+`EVALSI_FRAMEWORK_ANTHROPIC_MODEL` when the directory contains Claude exports.
+The test uses each instrumentation's existing contract, including documented
+missing answers, tool spans and usage, rather than treating them as present.
+
+The Claude Agent SDK recorder also accepts `EVALSI_FRAMEWORK_MODEL`.
+For live Anthropic access, explicitly set `EVALSI_FRAMEWORK_API_KEY_ENV` to
+the name of the variable holding its key and set `MOCK_MODEL_URL` to the
+gateway's `/v1` URL. No ambient credentials or Claude configuration are
+inherited; the default remains the credential-free mock.
+
 | Recorder | Modes |
 |---|---|
 | `record_crewai.py` | `mlflow`, `openinference`, `openllmetry` |

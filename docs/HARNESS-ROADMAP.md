@@ -4,6 +4,15 @@ This plan is for making `evalsi-harness` (`python/evalsi-harness/`) a strong har
 
 Written 2026-10-14, at v0.2.0. Every gap below was found by reading the code at that release, and the file it lives in is named.
 
+Verification update, 2026-10-17: [live EKS checks](verification/EKS-HARNESS-2026-10-17.md)
+now cover signed thinking/streaming/cassette replay, GPU and Anthropic
+profiles including real code mode, four bounded context strategies with
+mechanism evidence, actual SIGKILL/resume, pinned Claude CLI/MCP and
+pod/bwrap checker/interjection controls. Prompt-cache creation was observed,
+but direct harness cache-hit controls failed. These checks do not close the
+300-step/200k-window, thinking-plus-tool, native OpenAI Responses or full
+held-out/transfer exit criteria below.
+
 ## Where it stands
 
 The foundations are sound. There is a small, dependency-light tool loop with budgets. The harness protocol (`HarnessService`) lets anyone bring their own harness. Five BYO agent connectors exist: A2A, MCP, Responses, HTTP and CLI. The sandbox ladder runs underneath. There are record and replay with branching, fault injection, a simulated user, OTel spans, Harbor and Terminal-Bench importers, and OpenEnv and verifiers environments.
