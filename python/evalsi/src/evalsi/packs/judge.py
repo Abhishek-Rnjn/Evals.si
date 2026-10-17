@@ -79,14 +79,22 @@ _FENCE_TAGS = (
     "conversation",
     "your_tools",
 )
-_FENCE_TAG = re.compile(r"<(/?)(" + "|".join(_FENCE_TAGS) + r")(?![A-Za-z0-9_-])", re.IGNORECASE)
+# A model can read near-misses as closing tags too: whitespace or invisible
+# characters around the slash (`</ response>`, `<\u200b/response>`) and full-width brackets.
+_GAP = r"[\s\u200b-\u200f\u2060\ufeff]*"
+_FENCE_TAG = re.compile(
+    r"[<\uff1c](?:" + _GAP + r"[/\uff0f]" + _GAP + r")?(?:" + "|".join(_FENCE_TAGS) + r")"
+    r"(?![A-Za-z0-9_-])",
+    re.IGNORECASE,
+)
 
 
 def fence(text: str) -> str:
     """Make text safe to place inside a prompt tag. A response that contains
     ``</response>`` would otherwise close its own fence and write instructions
-    outside it, so the opening ``<`` of any fence tag in the text becomes ``&lt;``."""
-    return _FENCE_TAG.sub(r"&lt;\1\2", text)
+    outside it, so the opening bracket of anything that reads as a fence tag in
+    the text becomes ``&lt;``."""
+    return _FENCE_TAG.sub(lambda m: "&lt;" + m.group(0)[1:], text)
 
 
 def build_prompt(record: Record, rubric_text: str) -> str:
