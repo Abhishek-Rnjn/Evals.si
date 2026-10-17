@@ -764,6 +764,19 @@
     },
     "replay_dockerfile": "build and nonroot binary/import smoke passed before EKS merge",
     "go_vet": "passed: ingest, operator/..., operator command, Helm and sandbox",
-    "imported_runtime_live_test_mypy_source_files": 6
+    "imported_runtime_live_test_mypy_source_files": 6,
+    "go_race": {
+      "packages": [
+        "internal/ingest",
+        "operator/controllers",
+        "operator/api/v1alpha1",
+        "operator/spec",
+        "tests/helm"
+      ],
+      "result": "passed",
+      "helm_required": true,
+      "webhook": "no standalone test files",
+      "envtest_claimed": false
+    }
   }
 }

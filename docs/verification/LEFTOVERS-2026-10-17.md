@@ -132,7 +132,10 @@ service-test selection passed, including 100 repetitions after validating the
 allow/allowlist fixture configurations. This routing regression is local Go coverage,
 not a new live-cluster run after teardown.
 
-The combined-source Go vet checks passed for ingest, all operator packages,
+The combined-source Go race suite passed for `internal/ingest`,
+`operator/controllers`, `operator/api/v1alpha1`, `operator/spec` and
+`tests/helm`, with `EVALSI_REQUIRE_HELM=1`; `operator/webhook` has no standalone
+test files. Optional envtest is not claimed. The combined-source Go vet checks passed for ingest, all operator packages,
 the operator command, Helm tests and sandbox. Additional type checking passed
 for the six imported harness/training runtime and unit/integration modules.
 Optional EKS recorder dependencies are not included in that type-check claim.
