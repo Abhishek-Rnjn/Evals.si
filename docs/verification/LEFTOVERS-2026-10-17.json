@@ -1,0 +1,782 @@
+{
+  "date": "2026-10-17",
+  "starting_revision": "b342df89666e73547ac518fab4489299edc977d3",
+  "runtime": {
+    "kubernetes": "1.35.0",
+    "calico": "3.30.3",
+    "istio": "1.30.6",
+    "nodes": 1,
+    "allocatable_cpu": 3,
+    "workspace_gib": 32,
+    "kvm": false,
+    "gpu": false,
+    "kata_runtimeclass": false,
+    "cgroup_delegation": false,
+    "configured_model_or_cloud_identities": false
+  },
+  "item_count": 50,
+  "status_counts": {
+    "blocked_hardware": 2,
+    "checked_passed": 4,
+    "checked_partial": 15,
+    "blocked_credentials": 3,
+    "implementation_required": 7,
+    "blocked_scale": 3,
+    "known_limit": 8,
+    "decision_required": 3,
+    "previously_verified": 1,
+    "blocked_external": 2,
+    "blocked_access": 1,
+    "pending_verification": 1
+  },
+  "items": [
+    {
+      "id": "L01",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Firecracker with the stock image and chart values",
+      "title": "Stock Firecracker",
+      "status": "blocked_hardware",
+      "evidence_or_blocker": "No /dev/kvm; no stock-image microVM claim."
+    },
+    {
+      "id": "L02",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "User-namespaced bubblewrap pools (`mode: bwrap`, `hostUsers: false`)",
+      "title": "User-namespaced bwrap pools",
+      "status": "checked_passed",
+      "evidence_or_blocker": "Stock source chart with hostUsers:false passed mTLS/full-enforcement probe, good/bad execution and eight H4 controls on EKS AL2023/containerd. Nested kind UID-mapping preflight failed; AKS/idmap host limits remain.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L03",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Sandbox egress NetworkPolicy on Calico with Istio ambient",
+      "title": "Calico with Istio ambient",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Reproduced canary leakage and partial isolation; unsafe service allocation refused. Explicit pool and trial mesh opt-out passed real isolation checks."
+    },
+    {
+      "id": "L04",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Admission webhooks on EKS with Calico's overlay",
+      "title": "EKS overlay webhooks / hostNetwork",
+      "status": "checked_passed",
+      "evidence_or_blocker": "Actual chart hostNetwork admission passed on EKS with invalid-gate rejection, unavailable-webhook fail-closed and recovery controls; local kind chart admission also passed. Overlay pod routing is not certified.",
+      "additional_evidence": "EKS-2026-10-17.md"
+    },
+    {
+      "id": "L05",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Admission webhooks under mesh-wide STRICT mTLS",
+      "title": "STRICT mTLS webhooks",
+      "status": "checked_passed",
+      "evidence_or_blocker": "Real Istio sidecar operator under mesh-wide STRICT: valid request blocked without exception, admitted after chart policy restored; invalid request rejected."
+    },
+    {
+      "id": "L06",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "PR #12 fixes on real clusters",
+      "title": "PR #12 cloud/mesh recheck",
+      "status": "checked_partial",
+      "evidence_or_blocker": "New local Istio admission and sandbox controls exercised relevant paths; AKS/KVM/waypoint-specific fixes remain open."
+    },
+    {
+      "id": "L07",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Trace sources (milestone M3)",
+      "title": "Trace sources / M3",
+      "status": "blocked_credentials",
+      "evidence_or_blocker": "No Databricks, SageMaker or LangSmith/provider credentials. New cluster push-redaction check covers NATS, PostgreSQL and API, not those pull providers."
+    },
+    {
+      "id": "L08",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "The reference demos (`examples/demo`)",
+      "title": "Reference demos",
+      "status": "blocked_credentials",
+      "evidence_or_blocker": "Deep-research and Terminal-Bench 2 require real model/judge access; existing small-repo evidence is retained."
+    },
+    {
+      "id": "L09",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Frontier-model handling in the built-in agent (H1)",
+      "title": "Frontier models / H1",
+      "status": "checked_partial",
+      "evidence_or_blocker": "EKS live Anthropic tools/streaming, signed thinking and exact cassette replay passed. Direct prompt-cache reads failed in both modes; native Responses and thinking-plus-tool roundtrip remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L10",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Long-horizon agents (H2)",
+      "title": "Long-horizon agents / H2",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Published ByT5 tokenizer exercised four strategies; real MCP SDK/Authlib OAuth/elicitation and local SIGKILL/resume passed. EKS live four-strategy checker/replay and fresh-pod process resume passed; 300-step/context-quality and external-side-effect idempotency remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L11",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Persistent background processes for the built-in agent (H2)",
+      "title": "Persistent shell processes",
+      "status": "implementation_required",
+      "evidence_or_blocker": "A persistent interactive shell is not built; per-trial sidecars do not implement it."
+    },
+    {
+      "id": "L12",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Agents under test (H3), in progress",
+      "title": "CLI agents / H3",
+      "status": "checked_partial",
+      "evidence_or_blocker": "EKS pinned Claude Code 2.1.296, live GPU/Anthropic profiles and fresh-pod replay passed. Qwen code-mode failed. Other CLIs, ACP and transfer experiments remain open; the GitHub live workflow is separate.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L13",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Environments (H4), in progress",
+      "title": "Environments / H4",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Honest/tampering/restore/symlink/interjection checks passed on real pod and bwrap pools. Browser/desktop importers and clean-snapshot checker are not built."
+    },
+    {
+      "id": "L14",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Agent framework mapping profiles",
+      "title": "Framework mapping profiles",
+      "status": "checked_partial",
+      "evidence_or_blocker": "All ten pinned live framework recorder configurations passed mapping contracts in EKS. Native Claude cached-input total fixed. Missing source usage/answers remain absent; native Responses, retries and multi-agent coverage remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L15",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "10k+ concurrent agent trials (\u00a714 target)",
+      "title": "10k concurrent agent trials",
+      "status": "blocked_scale",
+      "evidence_or_blocker": "One 3-CPU node is insufficient. The PR records 48 trials at concurrency four, not 10k certification."
+    },
+    {
+      "id": "L16",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Real SWE-bench Verified images",
+      "title": "Real SWE-bench Verified images",
+      "status": "blocked_scale",
+      "evidence_or_blocker": "Public sympy__sympy-20590 image manifest inspected (1,088,521,647 compressed layer bytes). A multi-GB image plus Docker/native copies exceeds the safe spare-disk budget of this 32-GB workspace; dataset filter endpoint also returned HTTP 500. No real-task execution claimed."
+    },
+    {
+      "id": "L17",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "cgroup v2 limits in an unprivileged container",
+      "title": "Unprivileged cgroup limits",
+      "status": "known_limit",
+      "evidence_or_blocker": "/sys/fs/cgroup is not writable; this runtime cannot certify delegated cgroup limits."
+    },
+    {
+      "id": "L18",
+      "section": "Verified only with stand-ins (needs real infrastructure)",
+      "item": "Kata Containers as the `vm` level on the owner's cluster (D13)",
+      "title": "Kata Containers",
+      "status": "blocked_hardware",
+      "evidence_or_blocker": "No Kata RuntimeClass installed and no /dev/kvm."
+    },
+    {
+      "id": "L19",
+      "section": "Deferred features",
+      "item": "Webhook URLs open to internal addresses",
+      "title": "Private webhook destinations",
+      "status": "decision_required",
+      "evidence_or_blocker": "Private addresses are intentional; a default/allow-list policy must be chosen before a restriction can be verified."
+    },
+    {
+      "id": "L20",
+      "section": "Deferred features",
+      "item": "Server-side SQL over runs",
+      "title": "Server-side arbitrary SQL",
+      "status": "known_limit",
+      "evidence_or_blocker": "Not planned; implemented server-side slices are distinct from unrestricted SQL."
+    },
+    {
+      "id": "L21",
+      "section": "Deferred features",
+      "item": "Platform wheels bundling evalsid",
+      "title": "Platform wheels",
+      "status": "previously_verified",
+      "evidence_or_blocker": "Linux wheels are already verified in the existing release record; macOS/Windows sandbox archives do not exist."
+    },
+    {
+      "id": "L22",
+      "section": "Deferred features",
+      "item": "Run archiving",
+      "title": "Run archiving / retention",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Live PostgreSQL archiving retained summary and denied result reads, including after restore; grace periods/backup erasure/per-label retention are not built."
+    },
+    {
+      "id": "L23",
+      "section": "Deferred features",
+      "item": "Limits left after the reviews of items 3 to 6 and Part C",
+      "title": "Prior review limits",
+      "status": "known_limit",
+      "evidence_or_blocker": "Existing specified limits remain: double dataset spooling, no log retry, and skipped source omissions; no new implementation claim."
+    },
+    {
+      "id": "L24",
+      "section": "Deferred features",
+      "item": "Pipeline and schedule certification",
+      "title": "Pipeline / schedule certification",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Real MinIO/S3 upload hash, two-API PostgreSQL idempotency create/delete races, terminal results and archive passed. AWS S3, database failover, MCP idempotency, schedule write-back and production load remain open."
+    },
+    {
+      "id": "L25",
+      "section": "Deferred features",
+      "item": "Sandbox-time quotas: what they do not cover",
+      "title": "Sandbox-time quota boundaries",
+      "status": "known_limit",
+      "evidence_or_blocker": "Existing metering exclusions and per-replica concurrency remain documented; no broader quota implementation exists to certify."
+    },
+    {
+      "id": "L26",
+      "section": "Deferred features",
+      "item": "Keyless image signatures",
+      "title": "Keyless sandbox image verification",
+      "status": "implementation_required",
+      "evidence_or_blocker": "Sandbox-image keyless/referrer verification is not built; existing release-signature verification remains separate."
+    },
+    {
+      "id": "L27",
+      "section": "Deferred features",
+      "item": "Enterprise-grade audit, and delegation-ready identity",
+      "title": "Enterprise audit / delegation",
+      "status": "implementation_required",
+      "evidence_or_blocker": "Strict/read auditing, identity context, hash chaining and export guarantees are proposed, not implemented."
+    },
+    {
+      "id": "L28",
+      "section": "Deferred features",
+      "item": "Harness items from the LongHarness and Evo2 papers",
+      "title": "LongHarness / Evo2 follow-ups",
+      "status": "blocked_credentials",
+      "evidence_or_blocker": "Live held-out experiments, semantic support and judge/human-label stage validation need models/data; missing long-document importers remain unbuilt."
+    },
+    {
+      "id": "L29",
+      "section": "Deferred features",
+      "item": "Feeding scores back into agentgateway",
+      "title": "agentgateway score feedback",
+      "status": "decision_required",
+      "evidence_or_blocker": "Requires a supported routing-extension design before implementation/testing."
+    },
+    {
+      "id": "L30",
+      "section": "Deferred features",
+      "item": "Separate process roles",
+      "title": "Separate process roles",
+      "status": "known_limit",
+      "evidence_or_blocker": "Not planned absent load evidence; shared API/ingest roles remain."
+    },
+    {
+      "id": "L31",
+      "section": "Deferred features",
+      "item": "Pod-rung snapshots",
+      "title": "Pod snapshots",
+      "status": "implementation_required",
+      "evidence_or_blocker": "Pod snapshots are not implemented; setup runs per trial."
+    },
+    {
+      "id": "L32",
+      "section": "Deferred features",
+      "item": "Firecracker egress through a tap device and nftables",
+      "title": "Firecracker tap/nftables",
+      "status": "known_limit",
+      "evidence_or_blocker": "Not planned; current vsock/proxy path is intentional, and KVM is absent here."
+    },
+    {
+      "id": "L33",
+      "section": "Deferred features",
+      "item": "Per-caller rate limits (review 2026-10-16)",
+      "title": "Per-caller rate limits",
+      "status": "implementation_required",
+      "evidence_or_blocker": "Only existing size/audit/JWKS limits exist; throttling unit/defaults are not designed or built."
+    },
+    {
+      "id": "L34",
+      "section": "Deferred features",
+      "item": "Versioned, reversible schema migrations (review 2026-10-16)",
+      "title": "Versioned reversible migrations",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Published v0.1.0 server and matching worker read 16 results and an archived summary from a PR-schema database copy. Migration table/down steps and N/N-1 concurrent writers remain unimplemented/unverified."
+    },
+    {
+      "id": "L35",
+      "section": "Deferred features",
+      "item": "A restore drill and point-in-time recovery (review 2026-10-16)",
+      "title": "Restore and PITR",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Quiesced PostgreSQL/dataset backup restored into empty namespace/database/bucket; authenticated old run and 16-record rerun passed. Disposable WAL recovery is recorded separately; managed/off-site recovery and production RPO/RTO remain open."
+    },
+    {
+      "id": "L36",
+      "section": "Deferred features",
+      "item": "Judge robustness against injected text (review 2026-10-16)",
+      "title": "Judge prompt injection",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Six live EKS/Anthropic positive, wrong-answer and injection controls passed explicit thresholds. Broader deployed-judge coverage and human-labelled calibration remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L37",
+      "section": "Deferred features",
+      "item": "Web UI accessibility (review 2026-10-16)",
+      "title": "UI accessibility",
+      "status": "checked_passed",
+      "evidence_or_blocker": "axe-core 4.10.3 WCAG 2 A/AA and 2.1 A/AA scans, light/dark main sections, sign-in, annotation, and keyboard navigation passed in actual Chromium. Automated coverage is not a complete manual accessibility audit."
+    },
+    {
+      "id": "L38",
+      "section": "Deferred features",
+      "item": "Penetration test and security questionnaire pack (review 2026-10-16)",
+      "title": "Independent penetration test",
+      "status": "blocked_external",
+      "evidence_or_blocker": "An independent tester/security assessment is unavailable; self-tests cannot replace that requirement."
+    },
+    {
+      "id": "L39",
+      "section": "Deferred features",
+      "item": "A second maintainer (review 2026-10-16)",
+      "title": "Second maintainer",
+      "status": "blocked_external",
+      "evidence_or_blocker": "Requires an actual willing person and repository access; no owner is invented."
+    },
+    {
+      "id": "L40",
+      "section": "Benchmark coverage gaps",
+      "item": "BFCL memory and web-search categories (multi-turn now runs)",
+      "title": "BFCL memory / web search",
+      "status": "implementation_required",
+      "evidence_or_blocker": "Categories are not implemented; existing multi-turn support is retained."
+    },
+    {
+      "id": "L41",
+      "section": "Benchmark coverage gaps",
+      "item": "\u03c4-bench: tau2's own LiteLLM user. Evals.si's simulated user speaks through the run's judge; in telecom it follows tau2's user prompt and calls its tools through structured output rather than native tool calls.",
+      "title": "tau2 native LiteLLM user",
+      "status": "known_limit",
+      "evidence_or_blocker": "Current judge-driven user is intentional; no native LiteLLM-user implementation is claimed."
+    },
+    {
+      "id": "L42",
+      "section": "Benchmark coverage gaps",
+      "item": "Multi-service/multi-stage Terminal-Bench coverage: the pod backend and a restricted Compose importer now support adapted multi-service tasks; the pinned upstream re-audit still imports 219/241 (12 original Compose tasks and 10 other tasks refused); an adapted upstream task is exercised separately, and multi-stage builds remain unsupported",
+      "title": "Terminal-Bench unsupported subset",
+      "status": "checked_partial",
+      "evidence_or_blocker": "The PR already audited 241 tasks, imported 219, and ran an adapted original task with positive/negative controls. Full Compose and multi-stage builds remain unsupported."
+    },
+    {
+      "id": "L43",
+      "section": "Benchmark coverage gaps",
+      "item": "FrontierCode (task format not public in a verifiable form); CursorBench (tasks are private)",
+      "title": "FrontierCode / CursorBench",
+      "status": "blocked_access",
+      "evidence_or_blocker": "Publicly verifiable task format/private task data is unavailable."
+    },
+    {
+      "id": "L44",
+      "section": "Phase 5: fine-tuning and RL",
+      "item": "verl and OpenRLHF inside a training run",
+      "title": "verl / OpenRLHF training",
+      "status": "pending_verification",
+      "evidence_or_blocker": "GPU training work is ongoing separately on verify/eks-leftovers. Its published checkpoint records inference, not actual verl/OpenRLHF training steps; no training completion claimed here.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L45",
+      "section": "Phase 5: fine-tuning and RL",
+      "item": "Reward throughput at the \u00a712 scale",
+      "title": "Reward throughput at target scale",
+      "status": "blocked_scale",
+      "evidence_or_blocker": "Target assumes 256 warm microVMs; no KVM or appropriately sized pool here."
+    },
+    {
+      "id": "L46",
+      "section": "Phase 5: fine-tuning and RL",
+      "item": "Operator-managed checkpoint serving",
+      "title": "Operator checkpoint serving",
+      "status": "checked_partial",
+      "evidence_or_blocker": "EKS actual L40S/vLLM model identity, inference, API-key rollout/deletion and source CLI watcher over two PVC checkpoints passed. Read-only controls, LoRA load/infer/unload and error cleanup passed; wrong-model launch and one-shot exit status fixed. Fixed image release and training quality remain separate.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L47",
+      "section": "Phase 5: fine-tuning and RL",
+      "item": "Checkpoint model serving",
+      "title": "Checkpoint serving strategy",
+      "status": "decision_required",
+      "evidence_or_blocker": "Compatible serving of arbitrary state dictionaries/Lightning checkpoints needs a serving-strategy choice."
+    },
+    {
+      "id": "L48",
+      "section": "Phase 5: fine-tuning and RL",
+      "item": "Environment-spec compatibility",
+      "title": "Environment-spec expansion/training",
+      "status": "implementation_required",
+      "evidence_or_blocker": "Published OpenEnv/verifiers integration evidence remains; other adapters/shared setup/trainers are not implemented or need an actual training workload."
+    },
+    {
+      "id": "L49",
+      "section": "Phase 6: MCP, classic ML and ecosystem",
+      "item": "A coding agent product over MCP in CI",
+      "title": "Coding-agent MCP CI",
+      "status": "checked_partial",
+      "evidence_or_blocker": "Actual EKS Claude CLI invoked source MCP over stdio; independent artifact checks confirmed mean 2/3 and failed gate. GitHub mcp-agent secret/first CI run, other coding products and external remote OAuth remain separate.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
+    },
+    {
+      "id": "L50",
+      "section": "Phase 6: MCP, classic ML and ecosystem",
+      "item": "Wasm evaluators with a judge or the sandbox; an Azure ML trace source (its MLflow server has no V3 trace API); server-side SQL over runs (see below)",
+      "title": "Wasm I/O / Azure ML / SQL limits",
+      "status": "known_limit",
+      "evidence_or_blocker": "Wasm I/O is deliberately absent, Azure ML lacks the required V3 trace API, and arbitrary server SQL is not planned."
+    }
+  ],
+  "checks": {
+    "harness-pod": {
+      "driver": "pod",
+      "model": "scripted",
+      "cases": [
+        {
+          "case": "honest",
+          "passed": true
+        },
+        {
+          "case": "tamper",
+          "passed": false
+        },
+        {
+          "case": "restore-cheat",
+          "passed": false
+        },
+        {
+          "case": "restore-fix",
+          "passed": true
+        },
+        {
+          "case": "restore-symlink",
+          "passed": true
+        },
+        {
+          "case": "interjection",
+          "passed": true
+        }
+      ]
+    },
+    "harness-bwrap": {
+      "driver": "bwrap",
+      "model": "scripted",
+      "cases": [
+        {
+          "case": "honest",
+          "passed": true
+        },
+        {
+          "case": "tamper",
+          "passed": false
+        },
+        {
+          "case": "restore-cheat",
+          "passed": false
+        },
+        {
+          "case": "restore-fix",
+          "passed": true
+        },
+        {
+          "case": "restore-symlink",
+          "passed": true
+        },
+        {
+          "case": "interjection",
+          "passed": true
+        }
+      ]
+    },
+    "mcp": {
+      "mcp": "1.26.0",
+      "authlib": "1.6.5",
+      "transport": "streamable HTTP/SSE",
+      "passed": [
+        "anonymous rejected",
+        "wrong client secret rejected",
+        "tools and resources",
+        "server-initiated elicitation",
+        "token cache",
+        "401 token refresh",
+        "authenticated session termination"
+      ]
+    },
+    "resume": {
+      "worker_exit": "SIGKILL",
+      "sandbox": "bwrap",
+      "model": "scripted",
+      "completed_tool_turns_before_kill": 2,
+      "new_model_turns_on_resume": 3,
+      "unique_cassette_events": 9,
+      "finished_replay_model_calls": 0,
+      "checker": "passed"
+    },
+    "tokenizer": {
+      "transformers": "4.57.1",
+      "encoding": "ByT5Tokenizer UTF-8 bytes",
+      "window": 64000,
+      "model": "scripted",
+      "cases": [
+        {
+          "strategy": "none",
+          "control": "window exceeded",
+          "calls": 5,
+          "peak": 67625
+        },
+        {
+          "strategy": "clear-tool-results",
+          "calls": 121,
+          "peak": 52347,
+          "context": {
+            "clears": 90,
+            "compactions": 0,
+            "results_cleared": 119,
+            "chars_removed": 1106354,
+            "tokens_removed": 2264082,
+            "turns_summarized": 0,
+            "summary_failures": 0,
+            "rounds": 0
+          }
+        },
+        {
+          "strategy": "compact",
+          "calls": 121,
+          "peak": 51043,
+          "context": {
+            "clears": 88,
+            "compactions": 1,
+            "results_cleared": 118,
+            "chars_removed": 1097056,
+            "tokens_removed": 2244842,
+            "turns_summarized": 114,
+            "summary_failures": 0,
+            "rounds": 0
+          }
+        },
+        {
+          "strategy": "evidence-state",
+          "calls": 121,
+          "peak": 51142,
+          "context": {
+            "clears": 89,
+            "compactions": 1,
+            "results_cleared": 117,
+            "chars_removed": 1087758,
+            "tokens_removed": 2276415,
+            "turns_summarized": 111,
+            "summary_failures": 0,
+            "rounds": 0
+          }
+        },
+        {
+          "strategy": "fresh-rounds",
+          "calls": 121,
+          "peak": 41171,
+          "context": {
+            "clears": 0,
+            "compactions": 0,
+            "results_cleared": 0,
+            "chars_removed": 0,
+            "tokens_removed": 0,
+            "turns_summarized": 0,
+            "summary_failures": 0,
+            "rounds": 30
+          }
+        }
+      ]
+    },
+    "checkpoint": {
+      "controller": "real Kubernetes/operator",
+      "serving": "HTTP fixture",
+      "gpu_vllm": "not verified",
+      "passed": [
+        "deployment/service creation",
+        "owner references",
+        "ready endpoint",
+        "Recreate strategy",
+        "no service-account token",
+        "scale-to-zero readiness"
+      ]
+    },
+    "mesh": {
+      "istio": "1.30.6",
+      "cni": "Calico 3.30.3",
+      "ambient_ipv6": false,
+      "ambient_canary": "leak detected, partial isolation",
+      "unsafe_service_request": "refused",
+      "explicit_opt_out": "pool and sandbox pods",
+      "opt_out_checks": "readiness, positive/negative grades, fresh state, denied cross-trial TCP, crash and cleanup passed"
+    },
+    "redaction": {
+      "input": "synthetic OTLP credential fields and JSON input",
+      "broker_messages_checked": 1,
+      "raw_sentinel": "absent from NATS, PostgreSQL record and authenticated API",
+      "replacement": "present in all three",
+      "scope": "push ingestion; pull and ClickHouse not exercised"
+    },
+    "compat": {
+      "reader": "published evalsid 0.1.0",
+      "worker": "published evalsi 0.1.0",
+      "schema": "PR b342df8",
+      "database": "isolated restored copy",
+      "completed_results_read": 16,
+      "archived_summary_read": true,
+      "rolling_upgrade_certified": false
+    },
+    "pitr": {
+      "postgres": "17-alpine",
+      "source_rows": [
+        1,
+        2,
+        3
+      ],
+      "recovered_rows": [
+        1,
+        2
+      ],
+      "after_target_commit_excluded": true,
+      "promoted": true,
+      "recovery_elapsed_s": 5.902,
+      "archive": "local fixture PVC copied off-pod for restore",
+      "production_pitr_certified": false
+    },
+    "pipeline": {
+      "pipeline": "S3-compatible MinIO, PostgreSQL, NATS, two API replicas",
+      "records": 16,
+      "create_requests": 16,
+      "unique_runs": 1,
+      "delete_requests": 16,
+      "archive": "summary retained, results removed"
+    },
+    "backup": {
+      "postgres_sha256": "ec6d3f1229a4f972bb3ac5f909a33d15dbde290af881e824b0465225f4a900b3",
+      "objects": 1,
+      "quiesced": true,
+      "scope": "SQL and dataset bucket; no pending jobs or ClickHouse in this fixture"
+    },
+    "restore": {
+      "objects_restored": 1,
+      "empty_database_guard": true
+    },
+    "check-restored": {
+      "authenticated_completed_run": true,
+      "archived_summary": true,
+      "restored_dataset_rerun_records": 16
+    },
+    "webhooks": {
+      "hostNetwork": "passed on kind with chart option",
+      "strict": "passed namespace and mesh-wide STRICT positive/negative/restore controls",
+      "istio": "1.30.6",
+      "operator": "actual Istio sidecar and PR operator; no vLLM/model substitution",
+      "strict_runner": {
+        "mode": "strict",
+        "passed": [
+          "meshed operator",
+          "valid admission",
+          "invalid gate rejection",
+          "STRICT rejection without port exception",
+          "admission restored with chart exception"
+        ]
+      }
+    },
+    "ui": {
+      "tests": 5,
+      "failures": 0,
+      "axe": "4.10.3",
+      "scan_count": 20,
+      "tags": [
+        "wcag2a",
+        "wcag2aa",
+        "wcag21a",
+        "wcag21aa"
+      ],
+      "browser": "/usr/bin/chromium",
+      "keyboard": "tab and enter across navigation",
+      "palettes": [
+        "light",
+        "dark"
+      ],
+      "npm_audit_vulnerabilities": 0
+    },
+    "userns-preflight": {
+      "profile": "hostUsers:false, capabilities dropped",
+      "phase": "Pending",
+      "warnings": [
+        "Error: failed to create containerd container: mount callback failed on /var/lib/containerd/tmpmounts/containerd-mount3975380301: container ID 2073755648 cannot be mapped to a host ID"
+      ]
+    }
+  },
+  "automated": {
+    "python": {
+      "passed": 913,
+      "skipped": 3
+    },
+    "mcp_regressions": 2,
+    "probe_warning_regressions": 1,
+    "mypy": "passed with locked development dependencies",
+    "ruff": "passed"
+  },
+  "additional_verification": {
+    "branch": "verify/eks-leftovers",
+    "revision": "42d812704e87ee0ec9a2fcfcba68a2dad5b59e40",
+    "records": [
+      "EKS-2026-10-17.md",
+      "EKS-HARNESS-2026-10-17.md"
+    ],
+    "provenance": "Completed EKS checkpoint imported into PR #85; measurements were made separately, excluding multi-service changes. GPU training remains ongoing, not certified by this checkpoint."
+  },
+  "combined_regressions": {
+    "python": {
+      "passed": 924,
+      "skipped": 3,
+      "seconds": 80.82
+    },
+    "optin_eks_collection": {
+      "skipped": 30,
+      "live_rerun": false
+    },
+    "python_static": {
+      "ruff": "passed",
+      "format": "passed",
+      "mypy_source_files": 233
+    },
+    "private_service_proxy": {
+      "before_fix": "all six routing cases failed",
+      "after_fix_race_repetitions": 100,
+      "all_service_tests": "passed",
+      "live_cluster_rerun": false,
+      "all_service_tests_race_repetitions": 100
+    },
+    "replay_dockerfile": "build and nonroot binary/import smoke passed before EKS merge",
+    "go_vet": "passed: ingest, operator/..., operator command, Helm and sandbox",
+    "imported_runtime_live_test_mypy_source_files": 6,
+    "go_race": {
+      "packages": [
+        "internal/ingest",
+        "operator/controllers",
+        "operator/api/v1alpha1",
+        "operator/spec",
+        "tests/helm"
+      ],
+      "result": "passed",
+      "helm_required": true,
+      "webhook": "no standalone test files",
+      "envtest_claimed": false
+    }
+  }
+}

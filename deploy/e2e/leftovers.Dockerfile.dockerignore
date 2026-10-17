@@ -1,0 +1,15 @@
+**
+!bin
+!bin/evalsid
+!bin/evalsi-guest
+!bin/evalsi-operator
+!python
+!python/evalsi
+!python/evalsi/**
+!python/evalsi-harness
+!python/evalsi-harness/**
+**/.venv
+**/__pycache__
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache

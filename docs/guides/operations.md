@@ -136,6 +136,40 @@ Read a known completed run through the authenticated API and run a restored
 dataset. Check pending webhooks before enabling external delivery to avoid
 surprises. Switch traffic only after these checks; resume producers last.
 
+## WAL archiving and PITR for the bundled trial database
+
+`devPostgres` is a single trial database. The chart does not configure a durable
+WAL archive, continuous base backups, PITR retention or automatic recovery.
+A `pg_dump` supports logical restore; it cannot recover to an arbitrary time.
+For production, prefer a managed PostgreSQL service or a PostgreSQL operator
+with tested base-backup/WAL management, and supply its DSN through
+`storage.postgres.dsnSecret`.
+
+A custom deployment needs `wal_level=replica`, `archive_mode=on`, and an
+`archive_command` or supported archive library that durably copies every
+completed WAL segment to independent storage. Do not treat a directory on the
+same database PVC as an independent backup. Keep continuous WAL from each
+retained physical base backup, monitor `pg_stat_archiver` failures and archive
+age, and test restoring the selected base backup plus WAL before expiring it.
+Preserve encryption keys and credentials outside the failed installation.
+
+On an empty PostgreSQL data directory, restore a matching physical base backup,
+configure `restore_command` to retrieve the archived segments, create
+`recovery.signal`, select `recovery_target_time`, and choose whether recovery
+pauses or promotes. Check both retained-before-target data and excluded
+after-target commits before accepting traffic. PostgreSQL major versions,
+timelines and backup consistency must match. Merely enabling `archive_mode`
+does not establish a usable PITR chain.
+
+A [disposable kind drill](../verification/LEFTOVERS-2026-10-17.md) now records
+both a quiesced logical/database-and-bucket restore and real physical/WAL
+recovery: rows 1 and 2 survived the selected target, committed row 3 did not,
+and the recovery instance promoted. Its WAL archive was on the fixture PVC and
+copied off-pod for recovery. This verifies mechanics, not independent storage
+failure, managed-provider recovery, ClickHouse/JetStream backups or production
+RPO/RTO. The script enables local archiving only on its synthetic restored
+fixture; do not use that layout as the production archive destination.
+
 ## Reference cluster values (D11)
 
 Clusters without a default StorageClass must select one explicitly for every

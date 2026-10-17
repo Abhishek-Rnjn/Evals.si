@@ -5,6 +5,14 @@ The user is deleting the Kubernetes cluster for now. Live verification is
 is available; it does not assert that cluster deletion, volume retention or
 AWS resource cleanup has been verified. PR #85 remains excluded.
 
+**Main integration update:** PR #85's implementation and its separate
+[kind verification](LEFTOVERS-2026-10-17.md) are now in the merged branch.
+They were outside this EKS exercise, not absent from the codebase. The kind
+record covers all 50 original rows, including the host-network admission
+row that the EKS follow-up's 49-row snapshot excluded. Preserve both sets
+of evidence and their platform boundaries; the original EKS follow-ups
+below do not erase newer bounded kind passes.
+
 ## Durable checkpoint
 
 Branch: `verify/eks-leftovers`. Existing implementation and evidence commits:
@@ -65,7 +73,14 @@ download the real Qwen 0.5B model/tokenizer, and use the opt-in command in
 the GPU record. Reusing the old pod path or finding a saved checkpoint
 does not by itself rerun or prove the test.
 
-### First CPU-only follow-ups
+### Original EKS CPU-only follow-ups and newer kind evidence
+
+Main's independent kind run passed 16 same-key concurrent creates/deletion
+retries across two PostgreSQL-backed APIs, MinIO upload/hash, automated
+Chromium/axe accessibility, STRICT-mTLS admission and disposable PostgreSQL
+WAL recovery. These were not rerun on the paused EKS cluster. Do not repeat
+them as if no evidence exists or claim their production/platform limits
+are closed.
 
 - **Concurrent PostgreSQL CreateRun:** restore two ready API replicas and
   actual CPU workers, submit concurrent requests with the same idempotency
@@ -77,8 +92,9 @@ does not by itself rerun or prove the test.
   imported records and resulting evaluation. The call after the concurrent
   probe was never reached. Reading restored S3 data in a new run passed,
   but is not a substitute for that import path.
-- **UI accessibility:** perform the automated/browser checks, fix confirmed
-  issues and rerun them. Backend tests do not establish accessibility.
+- **UI accessibility:** automated browser/axe and keyboard checks passed
+  on kind. Manual screen-reader coverage and broader accessibility remain;
+  backend tests alone are not evidence for either.
 - Continue the live harness/provider, real-task, mesh, scheduler and recovery
   checks below. Keep failed controls strict; fix product behavior only after
   a reproducible failure identifies it.
@@ -93,8 +109,8 @@ retains detailed original references and design limits.
 |---|---|---|
 | 1 | Stock Firecracker | Recreate on KVM-capable hosts and verify stock image/chart values. Both sampled old node types lacked `/dev/kvm`. |
 | 2 | User-namespaced bubblewrap | Bounded EKS pass complete. Recheck on a replacement kernel; not certified on every host. |
-| 3 | Calico + Istio ambient egress | Resolve NATS timeouts and sandbox guest resets first, then measure deny/allow/restore enforcement. Non-mesh recovery passed but does not certify ambient. |
-| 4 | STRICT-mTLS admission | Verify valid/invalid admission, fail-closed behavior and recovery under actual mesh-wide STRICT mTLS. Host-network/non-mesh controls are not substitutes. |
+| 3 | Calico + Istio ambient egress | EKS stopped on NATS timeouts/guest resets. Kind separately reproduced the ambient leak and verified explicit ambient-opt-out controls; native ambient enforcement is not certified. |
+| 4 | STRICT-mTLS admission | Actual sidecar/mesh-wide STRICT controls passed on kind with the chart port exception. EKS-specific rechecks remain; host-network/non-mesh controls alone are not substitutes. |
 | 5 | PR #12 on AKS/Istio | Re-run on those actual platforms; EKS cannot certify AKS. |
 | 6 | Trace sources | Live Databricks experiments/Unity Catalog/OAuth, SageMaker and LangSmith remain; also production backfill/lag, provider UI/external alerts, Langfuse Cloud/TLS/arm64 and fresh incoming-trace redaction coverage. Missing connector locations/ambient credentials and Azure ML API support require implementation/provider decisions. |
 | 7 | Deep-research / Terminal-Bench reference demos | Run the actual suites with a real model and judge, plus the outstanding interactive dsh web export. Small-repo/calc tasks do not close them. |
@@ -113,7 +129,7 @@ retains detailed original references and design limits.
 | 20 | Platform wheels | Linux release evidence exists. macOS/Windows sandbox bundles are not built; Linux sandbox support must not be relabeled cross-platform. |
 | 21 | Run archiving | Per-label retention, deletion grace period and an erasure path covering backups/logs remain unbuilt; archived runs still count toward the stored-run quota. |
 | 22 | Prior-review limits | Keyed upload double-spooling/slot use, no SDK failed-batch retry, and incomplete/empty connector-page behavior remain documented. Any future retries must preserve idempotency. |
-| 23 | Pipeline/schedule certification | Complete same-key concurrent-create reconciliation and the unreached direct S3 import first; then real scheduled source write-back, lease/HA races, production load and MCP tool-idempotency coverage as supported. |
+| 23 | Pipeline/schedule certification | Kind verified MinIO upload/hash and same-key PostgreSQL create/delete races. Original EKS reconciliation/direct-import follow-ups were unfinished. AWS S3, scheduled write-back, HA races, production load and MCP tool-idempotency coverage remain. |
 | 24 | Sandbox quota boundaries | Documented exclusions and per-replica concurrency remain; global enforcement is not established. |
 | 25 | Keyless sandbox-image verification | Offline key-signature verification does not support Fulcio/Rekor or bundle-as-referrer verification. Release-image keyless signing is a different capability. |
 | 26 | Enterprise audit/delegation | Implement decision 0026: strict/read auditing and identity/configuration context, integrity/export/holds; token exchange remains deliberately unbuilt. Not a verification-only task. |
@@ -123,15 +139,15 @@ retains detailed original references and design limits.
 | 30 | Pod snapshots | Unsupported; setup is reconstructed per trial. Fresh-pod replay passed, not snapshot restore. |
 | 31 | Firecracker tap networking | Intentionally uses vsock/host egress proxy; raw tap/nftables networking is not built. |
 | 32 | Per-caller rate limits | Decide key/principal/project units, defaults and response contract, then implement/test API and OTLP throttling. |
-| 33 | Reversible migrations | Add versioned ordered/down migrations and expand/contract rules, then verify mixed N/N-1 operation and rollback. Same-version two-replica readiness is not rolling-upgrade compatibility. |
-| 34 | Restore/PITR | Drained same-version PostgreSQL/S3 restore passed. PITR/WAL, PostgreSQL HA/failover, ClickHouse/JetStream, source cursors, pending webhooks and in-flight recovery remain. |
+| 33 | Reversible migrations | Kind's v0.1.0 reader/worker read a copy of the newer schema. Versioned/down migrations, expand/contract rules, concurrent N/N-1 writers and rolling rollback remain unimplemented/unverified. |
+| 34 | Restore/PITR | EKS drained PostgreSQL/S3 restore and separate kind fixture WAL/PITR passed. Managed/off-site PITR, production RPO/RTO, PostgreSQL HA/failover, ClickHouse/JetStream, cursors, callbacks and in-flight recovery remain. |
 | 35 | Judge injection robustness | Expand beyond six bounded live controls with model-specific/wider cases; do not infer universal robustness. |
-| 36 | UI accessibility | Automated/browser audit and fixes remain; no accessibility certification yet. |
+| 36 | UI accessibility | Kind Chromium/axe WCAG and keyboard checks passed. Full manual/screen-reader accessibility is not certified. |
 | 37 | Independent penetration test | Requires an outside tester and the security-questionnaire work, not a self-certification by this EKS exercise. |
 | 38 | Second maintainer | Requires another person/onboarding; infrastructure cannot close it. |
 | 39 | BFCL memory/web search | Unsupported categories, not implemented. |
 | 40 | Native tau2 user | Current judge/structured-output adapter is not tau2's native LiteLLM user; implement only after a scope decision. |
-| 41 | Multi-service Terminal-Bench | Excluded PR #85 scope, not completed by this branch. |
+| 41 | Multi-service Terminal-Bench | PR #85 support and separate bounded kind verification are now merged from main, but excluded from this EKS exercise. Upstream import refusals and multi-stage limitations remain. |
 | 42 | FrontierCode/CursorBench | Requires access to real, verifiable datasets; private/unpublished data cannot be invented. |
 | 43 | verl/OpenRLHF training | verl 0.9.1 and OpenRLHF 0.9.0 native bounded updates passed. Current 0.11.2 and training quality/stability/scale remain as described above. |
 | 44 | 4,096-rollout reward scale | Requires 256 warm microVMs and sized KVM capacity; no such scale pass occurred. |

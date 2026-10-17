@@ -137,6 +137,28 @@ dsh's built-in telemetry does not export session traces. The demo includes a sep
 
 Both runtimes change quickly, and dsh warns of breaking changes, so the demos pin versions and the CI job (R7) catches drift when a pin moves.
 
+### Agent environment expansion (2026-10-17)
+
+The pod sandbox backend now supports fresh per-trial services: explicit images
+and argv, dependency/TCP readiness, resource limits, private local hostnames,
+a required lifetime, status and bounded opt-in logs. The harness reruns setup
+per trial and reports service crashes/restarts as infrastructure errors.
+A restricted Terminal-Bench 1 Compose importer and an API/Redis fixture are
+built ([decision 0027](decisions/0027-multi-service-environments.md),
+[example](../examples/multi-service/README.md)). Bubblewrap/Firecracker service
+groups, full Compose compatibility and browser environments remain open. A pinned
+upstream audit still imports 219/241 tasks; adapted-task execution and bounded
+lifecycle/load evidence are recorded
+[separately](verification/README.md#multi-service-environments-2026-10-17).
+The [leftovers audit](verification/LEFTOVERS-2026-10-17.md) adds real pod/bubblewrap
+checker/interjection checks, worker SIGKILL/resume, MCP/tokenizer interoperability,
+mesh controls, recovery drills, pipeline races, redaction and browser accessibility;
+its 50-row inventory keeps remaining implementation, model, hardware and scale
+requirements explicit. The completed `verify/eks-leftovers@42d8127` checkpoint is
+also included: live EKS/model checks and five runtime fixes are recorded in the
+[EKS follow-up](verification/EKS-HARNESS-2026-10-17.md). Its separate GPU training
+work remains in progress; inference evidence does not establish training.
+
 ## Goals, non-goals and success metrics
 
 **Goals**

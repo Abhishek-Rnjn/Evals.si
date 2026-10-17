@@ -348,6 +348,15 @@ def _seconds(value: Any) -> str | None:
     return f"{float(value):g}s" if value else None
 
 
+def _service_lifetime(config: dict[str, Any]) -> str | None:
+    """Services are stopped at this hard deadline, so it must outlast the
+    agent's and the checker's limits, with room for setup and image pulls:
+    at least an hour, at most the 24 hours services allow."""
+    agent = float(config.get("max_agent_timeout_sec") or 0)
+    test = float(config.get("max_test_timeout_sec") or 180)
+    return _seconds(min(max(3600.0, agent + test + 1800), 86400.0))
+
+
 def _environment(
     *,
     build: Build | None,
@@ -523,13 +532,7 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
     parser = config.get("parser_name") or "pytest"
     if parser != "pytest":
         raise TaskFormatError(f"parser {parser!r} is not supported (only pytest)")
-    compose = d / "docker-compose.yaml"
-    if compose.is_file():
-        services = (yaml.safe_load(compose.read_text()) or {}).get("services") or {}
-        if len(services) > 1:
-            raise TaskFormatError(
-                f"tasks with several services ({', '.join(services)}) are not supported"
-            )
+    services = _compose_services(d / "docker-compose.yaml")
     instruction = config.get("instruction") or ""
     if not instruction:
         descriptions = config.get("descriptions") or []
@@ -583,17 +586,24 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
                 "agent_timeout_sec": config.get("max_agent_timeout_sec"),
                 "ignored_dockerfile_instructions": build.ignored if build else [],
             },
-            "environment": _environment(
-                build=build,
-                image=image,
-                workdir=workdir,
-                network=_network(options.get("network"), ""),
-                env={"TEST_DIR": "/tests"},
-                files=files,
-                executable=[],
-                checker=checker,
-                setup_timeout=None,
-            ),
+            "environment": {
+                **(
+                    {"services": services, "service_lifetime": _service_lifetime(config)}
+                    if services
+                    else {}
+                ),
+                **_environment(
+                    build=build,
+                    image=image,
+                    workdir=workdir,
+                    network=_network(options.get("network"), ""),
+                    env={"TEST_DIR": "/tests"},
+                    files=files,
+                    executable=[],
+                    checker=checker,
+                    setup_timeout=None,
+                ),
+            },
         },
     }
 
@@ -696,3 +706,78 @@ __all__ = [
     "load_terminal_bench",
     "translate_dockerfile",
 ]
+
+
+def _compose_services(path: Path) -> list[dict[str, Any]]:
+    """An explicit, fail-closed subset; never silently discard Docker privileges."""
+    import yaml
+
+    if not path.is_file():
+        return []
+    doc = yaml.safe_load(path.read_text()) or {}
+    if not isinstance(doc, dict):
+        raise TaskFormatError("Compose document must be a mapping")
+    services = doc.get("services") or {}
+    if not isinstance(services, dict):
+        raise TaskFormatError("Compose services must be a mapping")
+    if len(services) <= 1:
+        return []
+    if set(doc) - {"services", "version", "name"}:
+        raise TaskFormatError("multi-service Compose networks/volumes/extensions are unsupported")
+    if "client" not in services:
+        raise TaskFormatError("multi-service Compose needs the agent service named client")
+    # The existing importer builds the client from Dockerfile. Do not claim
+    # support for client networking, mounts or execution overrides.
+    client = services["client"]
+    if not isinstance(client, dict) or set(client) - {"build", "depends_on"}:
+        raise TaskFormatError("multi-service Compose client supports only build and depends_on")
+    if client.get("build", ".") != ".":
+        raise TaskFormatError("multi-service Compose client build must be '.'")
+    client_deps = client.get("depends_on") or []
+    if not isinstance(client_deps, list) or any(d not in services for d in client_deps):
+        raise TaskFormatError("client depends_on must list existing services")
+    out = []
+    allowed = {"image", "entrypoint", "command", "environment", "depends_on", "expose", "x-evalsi"}
+    for name, config in services.items():
+        if name == "client":
+            continue
+        if not isinstance(config, dict):
+            raise TaskFormatError(f"service {name}: configuration must be a mapping")
+        unknown = set(config) - allowed
+        if unknown:
+            raise TaskFormatError(f"service {name}: unsupported Compose fields {sorted(unknown)}")
+        entrypoint = config.get("entrypoint")
+        command = config.get("command", [])
+        if not isinstance(entrypoint, list) or not entrypoint or not isinstance(command, list):
+            raise TaskFormatError(
+                f"service {name}: explicit entrypoint argv and command argv are required"
+            )
+        limits = config.get("x-evalsi") or {}
+        if set(limits) != {"port", "memory_mb", "cpu_millis"}:
+            raise TaskFormatError(
+                f"service {name}: x-evalsi requires port, memory_mb and cpu_millis"
+            )
+        exposed = config.get("expose", [])
+        if exposed and [str(p) for p in exposed] != [str(limits["port"])]:
+            raise TaskFormatError(f"service {name}: expose must match the readiness port")
+        deps = config.get("depends_on") or []
+        if not isinstance(deps, list) or any(d == "client" or d not in services for d in deps):
+            raise TaskFormatError(f"service {name}: depends_on must be a list")
+        env = config.get("environment") or {}
+        if not isinstance(env, dict) or any(not isinstance(v, str) for v in env.values()):
+            raise TaskFormatError(
+                f"service {name}: environment must contain explicit string values"
+            )
+        if re.search(r"\$(?:[A-Za-z_{$]|\d)", json.dumps(config)):
+            raise TaskFormatError(f"service {name}: Compose interpolation is unsupported")
+        out.append(
+            {
+                "name": name,
+                "image": config.get("image", ""),
+                "command": entrypoint + command,
+                "env": env,
+                "depends_on": deps,
+                **limits,
+            }
+        )
+    return out

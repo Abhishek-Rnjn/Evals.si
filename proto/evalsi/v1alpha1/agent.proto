@@ -404,4 +404,26 @@ message Environment {
   map<string, string> env = 9;
   // Per-command timeout for the agent's sandbox commands; default 120s.
   google.protobuf.Duration command_timeout = 10;
+  // Pod backend only. Private, per-trial services; no shared persistent data.
+  repeated EnvironmentService services = 11;
+  // Required with services, from 1s to 24h. Bounds orphaned service execution.
+  google.protobuf.Duration service_lifetime = 12;
+}
+
+// EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+).
+// Services share the trial's network, but not its filesystem or credentials.
+message EnvironmentService {
+  // DNS label, also a loopback hostname inside this trial.
+  string name = 1;
+  string image = 2;
+  // Explicit argv; image entrypoints are not implicitly executed.
+  repeated string command = 3;
+  map<string, string> env = 4;
+  // TCP readiness port, unique within the trial; 7070 is reserved.
+  int32 port = 5;
+  // Services that must be ready first. Cycles are invalid.
+  repeated string depends_on = 6;
+  // Required limits; CPU in millicores, memory in MiB.
+  int32 memory_mb = 7;
+  int32 cpu_millis = 8;
 }

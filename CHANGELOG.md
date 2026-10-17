@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
+- Private service names bypass the sandbox's external egress proxy in both
+  `NO_PROXY` and `no_proxy`, preserving caller exclusions. HTTP sidecars remain
+  reachable when agent networking uses `allow` or `allowlist`.
+
 - **Trial PostgreSQL can select a StorageClass.** `devPostgres.storageClassName` now reaches the database PVC, allowing installation on clusters without a default StorageClass. An empty value retains the existing default-class behavior.
 
 - **One-shot checkpoint watches propagate evaluation failures.** `evalsi checkpoints watch --once` now exits 1 when an attempted base/checkpoint evaluation errors, or 3 on failed gates/regressions, rather than always returning success. Errors take precedence over gate failures; continuous watching and stop-file behavior are unchanged.
@@ -14,9 +18,32 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - **CLI-agent startup and timeout diagnostics survive structured-output parsing.** When a CLI exits or times out before emitting recognizable events, the harness reports its bounded process error instead of incorrectly suggesting an output-format mismatch.
 
-- **Checkpoint servers load the requested model in the stock vLLM image.** The operator now explicitly runs `vllm serve` by default, while preserving `spec.command` overrides. The stock v0.11.0 image's API-server entrypoint accepted the positional model as `model_tag` but loaded its default model instead.
+- **Checkpoint servers load the requested model in the stock vLLM image.** The operator now explicitly runs `vllm serve` by default, while preserving `spec.command` overrides. The stock v0.11.0 image's API-server entrypoint accepted the positional model as `model_tag` but loaded its default model instead. **Upgrade note:** existing CheckpointServers roll to the new pod template; one whose image relies on its own entrypoint (a wrapper script, or no `vllm` on `PATH`) must set `spec.command` to that entrypoint.
+
+- **Per-trial services tolerate transient faults without losing results.** A single slow readiness probe no longer fails a command (three misses are needed); service status reads retry API errors and outlive a cancelled caller, so a finished command keeps its real exit code; a healthy check is reused briefly by the next command's pre-check, halving status reads. The start timeout grows by each service's startup-probe budget, a NetworkPolicy canary that could not run is retried (at most every 30 s) instead of refusing services until restart, and `Stats` returns egress and usage even when service status is unavailable. Only `evalsid sandbox serve` reaps a previous server's service pods, so a one-shot command in the pool pod cannot delete live trials' services. Imported multi-service Terminal-Bench tasks get a service lifetime that outlasts their agent and test limits. MCP session cleanup no longer raises when a token refresh fails, and the browser tests install their CSP listener before navigating.
 
 ### Added
+
+- Live leftovers verification scripts and a complete 50-row inventory, including
+  backup/restore and WAL recovery, pipeline concurrency, mesh controls, actual
+  sandbox harness checks and published MCP/tokenizer interoperability. The web
+  UI browser tests now include automated WCAG checks and keyboard navigation.
+- Sandbox SDK probes expose backend warnings, including a leaking declared
+  NetworkPolicy. MCP session termination now authenticates, refreshes once on
+  401 and bounds cleanup. The browser CSP test waits for its expected event.
+
+- Agent environments can declare per-trial services on the pod backend, with
+  dependency readiness, CPU/memory limits, private service names and a required
+  lifetime. Failed or restarted services produce infrastructure errors. The
+  sandbox SDK exposes status and optional bounded logs. Requires native
+  Kubernetes sidecars and a passing NetworkPolicy canary.
+- A restricted multi-service Terminal-Bench 1 Compose importer, an API/Redis
+  example, and model-free kind/Calico checks for lifecycle faults, admission and
+  concurrent trials. A pinned upstream import audit and adapted task replay are
+  included. See decision 0027.
+- Fixed sandbox admission racing past `max_sandboxes` during concurrent creation
+  or restore. Pending startup now holds a slot; shutdown cancels and joins it,
+  and cancelled results are closed before registration.
 
 - **Agent provenance and handoff checks.** The agent pack adds deterministic `citation-grounding` over explicit evidence citations and `handoff-correctness` over source/transfer/target links. Evidence-state runs export versioned snapshots; built-in delegation, Claude CLI child events and explicit A2A parent-task metadata emit handoff steps. Step attributes survive JSON exports. An opt-in `cli_agent_e2e` workflow exercises a real Claude CLI on the kind pod rung when a model key is supplied; offline tests cover its spec and artifact verifier, while live verification remains pending.
 
@@ -63,7 +90,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
-- **A response could close its own fence in a judge prompt.** The judge, RAG and agent evaluators and both simulated users put model output, retrieved context, references, trajectories, diffs and conversation text inside tags such as `<response>` and tell the model to treat them as data, but text containing `</response>` ended the fence and could write instructions outside it. The opening `<` of any fence tag in such text is now sent as `&lt;`. A record whose text contains a fence tag reaches the judge escaped, so its score can differ from an earlier run.
+- **A response could close its own fence in a judge prompt.** The judge, RAG and agent evaluators and both simulated users put model output, retrieved context, references, trajectories, diffs and conversation text inside tags such as `<response>` and tell the model to treat them as data, but text containing `</response>` ended the fence and could write instructions outside it. The opening `<` of any fence tag in such text is now sent as `&lt;`. A record whose text contains a fence tag reaches the judge escaped, so its score can differ from an earlier run. Near-misses a model could still read as a closing tag are escaped too: whitespace or invisible characters around the slash (`</ response>`, `<​/response>`) and full-width brackets.
 
 - **A NaN score passed every gate.** A gate compared with `<` and `>`, and NaN fails both, so a metric whose mean was NaN passed `min` and `max` alike (in `evalsi eval` and on the server). Gates now fail on a value that is not a finite number, and a NaN or infinite score from an evaluator (a plugin, an adapter, a custom pack) is recorded as that record's error rather than scored. Before, the Python SDK also stopped the whole evaluation with a `ValueError` once a metric had two values and a NaN among them. `ImportRun` refuses non-finite scores, and a gate whose `min` or `max` is not a finite number is refused when the spec is created or loaded (a NaN bound also passed every value).
 - **pass@k and pass^k left out trials that errored.** A trial whose target or agent failed (or whose evaluation errored) has no score, and was dropped, so a task that passed once and crashed four times had pass^5 of 1. Such a trial now counts as not passed, and a task that errored in every trial counts as failing. The errored trials are reported once, in the metric's own `errors`. Gates on pass^k can fail where they passed before. The metric's own mean is unchanged: it still excludes errored records and reports them in `errors`.

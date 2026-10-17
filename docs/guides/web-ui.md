@@ -100,3 +100,11 @@ EVALSI_UI_WORKER="$PWD/../../python/.venv/bin/python -m evalsi" npm test
 ```
 
 Set `CHROMIUM_PATH` to use an installed Chromium instead.
+
+## Accessibility checks
+
+The browser suite runs axe-core 4.10.3 with WCAG 2 A/AA and 2.1 A/AA tags
+against the main sections in light/dark palettes, sign-in and annotation.
+It also checks navigation using Tab and Enter. These checks run in the existing
+`ui-browser` CI job; a [local run is recorded](../verification/LEFTOVERS-2026-10-17.md).
+Automated rules do not replace a complete manual screen-reader audit.

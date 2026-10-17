@@ -1,0 +1,165 @@
+{
+  "date": "2026-10-17",
+  "base_revision": "9718395dc5438e0e4a90ac04195ae7c1e4cf2543",
+  "initial_pr_revision": "4ee52b8e1f5f2971032ec0cc164bacdd3127cc55",
+  "runtime": {
+    "kind": "0.31.0",
+    "kubernetes": "1.35.0",
+    "calico": "3.30.3",
+    "nodes": 1,
+    "allocatable_cpu": 3,
+    "api_auth": "mutual TLS",
+    "local_image_ids": {
+      "evalsi-services:test": "sha256:e60f6c6755562f33c9b867e3cfa77a45d42df8d9f26bce4c9b3f72286d2733e0",
+      "python:3.13-slim": "sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569",
+      "redis:7-alpine": "sha256:f84b0c4678011602b9b98c227a4dcd5468bf8b088b02fdd4165cb7758bad8058",
+      "evalsi-upstream-client:test": "sha256:74e8a0c626ba569cc3a9dabf9998153d0b1b535f6d8b3f345453bf849e1e1989",
+      "evalsi-upstream-server:test": "sha256:0e48520260ce384edf60f384e8f16e7912bb1ffff8ca58416ceb078a927ca4f5"
+    }
+  },
+  "live_cases_passed": [
+    "readiness and positive/negative API/database grading",
+    "fresh concurrent trial state",
+    "cross-trial TCP denial",
+    "service crash infrastructure error",
+    "Terminal-Bench format fixture",
+    "destroy and failed-startup cleanup",
+    "cancellation during startup",
+    "cancellation during setup",
+    "kubelet hard deadline including active execution",
+    "SDK worker SIGKILL and idle reclamation",
+    "pool process SIGKILL with same pod UID and restart reconciliation",
+    "capacity burst",
+    "bounded concurrent API/database load"
+  ],
+  "measurements": {
+    "deadline_elapsed_s": 27.152,
+    "worker_reap_s": 10.048,
+    "load": {
+      "burst_requests": 16,
+      "burst_accepted": 4,
+      "completed_trials": 48,
+      "concurrency": 4,
+      "peak_service_pods": 4,
+      "elapsed_s": 165.448,
+      "trial_p50_s": 13.372,
+      "trial_p95_s": 16.299,
+      "scoring_p50_s": 0.402,
+      "scoring_p95_s": 0.891
+    }
+  },
+  "upstream": {
+    "repository": "laude-institute/terminal-bench",
+    "revision": "d28711d0da2675d0bb1d56de45ae5df6082438a3",
+    "audit_scope": "import only; not task execution",
+    "total": 241,
+    "imported": 219,
+    "rejected": [
+      {
+        "task": "ancient-puzzle",
+        "reason": "ancient-puzzle: multi-service Compose networks/volumes/extensions are unsupported"
+      },
+      {
+        "task": "conda-env-conflict-resolution",
+        "reason": "conda-env-conflict-resolution: no Dockerfile"
+      },
+      {
+        "task": "debug-long-program",
+        "reason": "debug-long-program: multi-service Compose client supports only build and depends_on"
+      },
+      {
+        "task": "extract-safely",
+        "reason": "extract-safely: no Dockerfile"
+      },
+      {
+        "task": "financial-document-processor",
+        "reason": "financial-document-processor: COPY --from (multi-stage) is not supported; use a prebuilt image"
+      },
+      {
+        "task": "find-restaurant",
+        "reason": "find-restaurant: multi-service Compose networks/volumes/extensions are unsupported"
+      },
+      {
+        "task": "home-server-https",
+        "reason": "home-server-https: multi-service Compose networks/volumes/extensions are unsupported"
+      },
+      {
+        "task": "interactive-maze-game",
+        "reason": "interactive-maze-game: multi-service Compose client supports only build and depends_on"
+      },
+      {
+        "task": "intrusion-detection",
+        "reason": "intrusion-detection: unsupported heredoc form: COPY <<EOT /app/logs/auth.log"
+      },
+      {
+        "task": "matlab-python-conversion",
+        "reason": "matlab-python-conversion: multi-stage Dockerfiles are not supported; use a prebuilt image"
+      },
+      {
+        "task": "mnist-learning-fix",
+        "reason": "mnist-learning-fix: multi-stage Dockerfiles are not supported; use a prebuilt image"
+      },
+      {
+        "task": "postgres-csv-clean",
+        "reason": "postgres-csv-clean: multi-service Compose networks/volumes/extensions are unsupported"
+      },
+      {
+        "task": "reshard-c4-data",
+        "reason": "reshard-c4-data: COPY --from (multi-stage) is not supported; use a prebuilt image"
+      },
+      {
+        "task": "security-celery-redis-rce",
+        "reason": "security-celery-redis-rce: multi-service Compose client supports only build and depends_on"
+      },
+      {
+        "task": "security-vulhub-minio",
+        "reason": "security-vulhub-minio: multi-service Compose client supports only build and depends_on"
+      },
+      {
+        "task": "shell-deobfuscation",
+        "reason": "shell-deobfuscation: COPY --from (multi-stage) is not supported; use a prebuilt image"
+      },
+      {
+        "task": "simple-sheets-put",
+        "reason": "simple-sheets-put: multi-service Compose client supports only build and depends_on"
+      },
+      {
+        "task": "simple-web-scraper",
+        "reason": "simple-web-scraper: multi-service Compose networks/volumes/extensions are unsupported"
+      },
+      {
+        "task": "slurm-simple-node-monitoring",
+        "reason": "slurm-simple-node-monitoring: multi-stage Dockerfiles are not supported; use a prebuilt image"
+      },
+      {
+        "task": "spring-messaging-vul",
+        "reason": "spring-messaging-vul: multi-service Compose client supports only build and depends_on"
+      },
+      {
+        "task": "sql-injection-attack",
+        "reason": "sql-injection-attack: multi-service Compose networks/volumes/extensions are unsupported"
+      },
+      {
+        "task": "tmux-advanced-workflow",
+        "reason": "tmux-advanced-workflow: no Dockerfile"
+      }
+    ],
+    "execution": {
+      "task": "simple-web-scraper",
+      "preserved_sha256": {
+        "task.yaml": "53348a2821fbebba13d94bfc20f61fa72277569d6375e6d8e86e75c6a5286b72",
+        "solution.sh": "710b7e89553dd9fedf0c548e8145e34d42e6040b6c551935564f5704c30fd904",
+        "tests/test_outputs.py": "94bb6ec65861bec8921676b3a92b0ca1a0872d823414fbad52efcfa8cc9cd7c7"
+      },
+      "before": "0/5 tests passed",
+      "oracle": "5/5 tests passed",
+      "removed_output": "1/5 tests passed",
+      "environment": "adapted prebuilt images; restricted Compose; network deny"
+    },
+    "preserved_sha256": {
+      "task.yaml": "53348a2821fbebba13d94bfc20f61fa72277569d6375e6d8e86e75c6a5286b72",
+      "solution.sh": "710b7e89553dd9fedf0c548e8145e34d42e6040b6c551935564f5704c30fd904",
+      "tests/test_outputs.py": "94bb6ec65861bec8921676b3a92b0ca1a0872d823414fbad52efcfa8cc9cd7c7"
+    }
+  }
+}

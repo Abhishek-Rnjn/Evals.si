@@ -24,6 +24,7 @@ from typing import Any
 
 from google.protobuf import json_format
 
+from evalsi.sandbox.client import ServiceSpec
 from evalsi.types import Content, Record
 from evalsi.v1alpha1 import run_pb2
 
@@ -86,6 +87,8 @@ class EnvironmentConfig:
     checker: CheckerConfig | None = None
     env: dict[str, str] = field(default_factory=dict)
     command_timeout_s: float = 120.0
+    services: list[ServiceSpec] = field(default_factory=list)
+    service_lifetime_s: float = 0.0
 
     def key(self) -> str:
         """Identifies environments that can share one setup snapshot."""
@@ -97,6 +100,8 @@ class EnvironmentConfig:
             "setup_allow_hosts": self.setup_allow_hosts,
             "sandbox": asdict(self.sandbox),
             "env": self.env,
+            "services": [asdict(s) for s in self.services],
+            "service_lifetime_s": self.service_lifetime_s,
         }
         return hashlib.sha256(json.dumps(built, sort_keys=True).encode()).hexdigest()[:16]
 
@@ -112,6 +117,8 @@ _ENV_FIELDS = {
     "checker",
     "env",
     "command_timeout",
+    "services",
+    "service_lifetime",
 }
 
 
@@ -183,7 +190,14 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
             validate_patterns(checker.protect)
         except ValueError as exc:
             raise TaskError(f"checker.protect: {exc}") from exc
+    try:
+        services = [ServiceSpec.from_dict(_camel_to_snake(s)) for s in data.get("services", [])]
+        service_lifetime = seconds(data.get("service_lifetime"), 0)
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise TaskError(f"invalid environment services: {exc}") from exc
     return EnvironmentConfig(
+        services=services,
+        service_lifetime_s=service_lifetime,
         image=str(data.get("image", "")),
         files={str(k): str(v) for k, v in (data.get("files") or {}).items()},
         setup=[str(c) for c in data.get("setup") or []],

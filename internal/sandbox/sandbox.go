@@ -35,6 +35,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -234,7 +235,15 @@ type Sandbox struct {
 	probes map[string]error
 	// warnings are what a verifier found wrong with a working rung.
 	warnings map[string]string
+	// ownsServicePods is set on the sandbox pool's server (OwnServicePods).
+	ownsServicePods atomic.Bool
 }
+
+// OwnServicePods marks this Sandbox as the pool's long-running server: its
+// first services sandbox deletes the service pods a previous server process
+// in the same pool pod left behind. One-shot commands never reap, so they
+// cannot delete a live server's pods.
+func (s *Sandbox) OwnServicePods() { s.ownsServicePods.Store(true) }
 
 var rungNames = []string{"firecracker", "bwrap", "landlock"}
 
@@ -439,6 +448,10 @@ func (s *Sandbox) pick(ctx context.Context, sp *Spec) (driver, error) {
 	want = max(want, s.min)
 	var reasons []string
 	for _, d := range s.drivers {
+		if len(sp.Services) > 0 && d.name() != "pod" {
+			reasons = append(reasons, d.name()+": services require the pod backend")
+			continue
+		}
 		if d.level() < want {
 			reasons = append(reasons, fmt.Sprintf("%s: level %s is below %s", d.name(), d.level(), want))
 			continue

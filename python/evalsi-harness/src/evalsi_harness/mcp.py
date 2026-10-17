@@ -180,10 +180,24 @@ class _HTTPTransport:
             raise MCPError(f"MCP server {self.url}: {type(exc).__name__}: {exc}") from exc
 
     async def aclose(self) -> None:
-        if self.session:
-            with contextlib.suppress(httpx.HTTPError):
-                await self.client.delete(self.url, headers={"Mcp-Session-Id": self.session})
-        await self.client.aclose()
+        try:
+            if self.session:
+                # Session termination is authenticated just like POST. Omitting
+                # the bearer/static headers leaks sessions on protected servers.
+                # It is best effort: a failing token refresh (a non-JSON token
+                # response) must not mask the task's own error or skip cleanup.
+                with contextlib.suppress(Exception):
+                    async with asyncio.timeout(5):
+                        for attempt in (1, 2):
+                            response = await self.client.delete(
+                                self.url, headers=await self._headers(), timeout=5.0
+                            )
+                            if response.status_code == 401 and self.oauth and attempt == 1:
+                                self.oauth.invalidate()
+                                continue
+                            break
+        finally:
+            await self.client.aclose()
 
 
 class _StdioTransport:

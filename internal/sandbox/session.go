@@ -54,8 +54,10 @@ type Spec struct {
 	// The working directory inside the sandbox; default /workspace. The
 	// landlock rung cannot remap paths, so there it is a host directory and
 	// EVALSI_WORKDIR tells commands where it is.
-	Workdir     string        `json:"workdir,omitempty"`
-	IdleTimeout time.Duration `json:"idle_timeout,omitempty"`
+	Workdir         string        `json:"workdir,omitempty"`
+	IdleTimeout     time.Duration `json:"idle_timeout,omitempty"`
+	Services        []ServiceSpec `json:"services,omitempty"`
+	ServiceLifetime time.Duration `json:"service_lifetime,omitempty"`
 }
 
 func (sp *Spec) defaults() {
@@ -73,6 +75,9 @@ func (sp *Spec) defaults() {
 // Validate checks a spec after defaults.
 func (sp *Spec) Validate() error {
 	sp.defaults()
+	if err := ValidateServices(sp.Services, sp.ServiceLifetime); err != nil {
+		return err
+	}
 	if _, err := ParseLevel(sp.MinIsolation); err != nil {
 		return err
 	}
