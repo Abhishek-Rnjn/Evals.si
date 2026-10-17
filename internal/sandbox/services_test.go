@@ -281,3 +281,101 @@ func TestServiceRejectsCrossNamespaceOwner(t *testing.T) {
 		t.Fatalf("invalid cross-namespace owner accepted: %v", err)
 	}
 }
+
+func TestServiceReadinessToleratesOneSlowProbe(t *testing.T) {
+	t.Setenv("POD_UID", "uid")
+	d := &podDriver{cfg: &PodConfig{Namespace: "ns", GuestImage: "guest"}}
+	s := &Spec{Services: []ServiceSpec{testService("db", 6379)}, ServiceLifetime: time.Hour}
+	init := d.manifest(s, "agent", "token", "")["spec"].(map[string]any)["initContainers"].([]map[string]any)
+	if got := init[1]["readinessProbe"].(map[string]any)["failureThreshold"]; got != 3 {
+		t.Fatalf("readiness failureThreshold %v: one missed probe would fail a command", got)
+	}
+}
+
+func TestServiceHealthRetriesAPIErrors(t *testing.T) {
+	calls := 0
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":{"phase":"Running","initContainerStatuses":[{"name":"svc-db","ready":true}]}}`))
+	}))
+	defer api.Close()
+	p := &podSandbox{pod: "p", d: &podDriver{cfg: &PodConfig{Namespace: "ns"}, kube: &kube{base: api.URL, hc: api.Client()}}}
+	p.sp = &Spec{Services: []ServiceSpec{testService("db", 6379)}}
+	// A cancelled caller must not turn a finished command into a runner failure.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := p.checkServices(ctx); err != nil || calls != 2 {
+		t.Fatalf("throttled status read failed the check: %v (%d calls)", err, calls)
+	}
+	if !p.recentlyHealthy() {
+		t.Fatal("healthy check not remembered for the next pre-check")
+	}
+}
+
+func TestServiceStartTimeoutCoversStartupProbes(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":{"phase":"Pending","initContainerStatuses":[{"name":"svc-db","ready":false}]}}`))
+	}))
+	defer api.Close()
+	d := &podDriver{cfg: &PodConfig{Namespace: "ns", StartTimeout: "10ms"}, kube: &kube{base: api.URL, hc: api.Client()}}
+	ctx, cancel := context.WithTimeout(t.Context(), 700*time.Millisecond)
+	defer cancel()
+	_, err := d.waitRunning(ctx, "p", []ServiceSpec{testService("db", 6379)})
+	if err == nil || strings.Contains(err.Error(), "did not start within") {
+		t.Fatalf("start timeout ignores the services' startup probes: %v", err)
+	}
+}
+
+func TestServiceLogErrorsKeepStatus(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/log") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":{"phase":"Running","initContainerStatuses":[{"name":"svc-db","ready":true}]}}`))
+	}))
+	defer api.Close()
+	p := &podSandbox{pod: "p", d: &podDriver{cfg: &PodConfig{Namespace: "ns"}, kube: &kube{base: api.URL, hc: api.Client()}}}
+	p.sp = &Spec{Services: []ServiceSpec{testService("db", 6379)}}
+	states, err := p.services(t.Context(), true)
+	if err != nil || len(states) != 1 || !states[0].Ready || !strings.HasPrefix(states[0].Logs, "logs unavailable") {
+		t.Fatalf("log failure lost service status: %+v %v", states, err)
+	}
+}
+
+func TestServiceReapingOnlyByPoolServer(t *testing.T) {
+	t.Setenv("POD_NAMESPACE", "ns")
+	t.Setenv("POD_NAME", "pool")
+	t.Setenv("POD_UID", "uid")
+	for _, owner := range []bool{false, true} {
+		listed := false
+		api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.URL.Query().Get("labelSelector") != "":
+				listed = true
+				_, _ = w.Write([]byte(`{"items":[]}`))
+			case r.Method == "POST":
+				_ = json.NewEncoder(w).Encode(map[string]any{"metadata": map[string]string{"name": "created"}})
+			case r.Method == "GET":
+				_, _ = w.Write([]byte(`{"status":{"phase":"Failed","reason":"test"}}`))
+			}
+		}))
+		sb := &Sandbox{}
+		if owner {
+			sb.OwnServicePods()
+		}
+		d := &podDriver{sb: sb, cfg: &PodConfig{Namespace: "ns", GuestImage: "guest", NetworkPolicyEnforced: true}, kube: &kube{base: api.URL, hc: api.Client()}, serviceInstance: "now"}
+		d.netVerified.Store(true)
+		sp := &Spec{Image: "agent", Services: []ServiceSpec{testService("db", 6379)}, ServiceLifetime: time.Hour}
+		_ = sp.Validate()
+		_, _ = d.open(t.Context(), sp, t.TempDir(), "")
+		api.Close()
+		if listed != owner {
+			t.Fatalf("owner=%t reaped=%t: only the pool server may reap service pods", owner, listed)
+		}
+	}
+}

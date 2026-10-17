@@ -259,7 +259,12 @@ func (s *Service) Stats(ctx context.Context, req *connect.Request[sandboxv1alpha
 	}
 	services, err := sess.Services(ctx, req.Msg.GetIncludeServiceLogs())
 	if err != nil {
-		return nil, toErr(err)
+		// Service status is one part of the stats: an API error (or a pod
+		// already past its deadline) must not lose the egress log and usage.
+		services = services[:0]
+		for _, sp := range sess.Spec.Services {
+			services = append(services, sandbox.ServiceStatus{Name: sp.Name, Reason: "status unavailable: " + err.Error()})
+		}
 	}
 	for _, st := range services {
 		out.Services = append(out.Services, &sandboxv1alpha1.ServiceStatus{Name: st.Name, Ready: st.Ready, Restarts: st.Restarts, Reason: st.Reason, Logs: st.Logs})

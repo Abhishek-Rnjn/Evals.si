@@ -34,8 +34,10 @@ func (d *podDriver) addServices(pod map[string]any, sp *Spec) {
 			"env": env, "restartPolicy": "Always",
 			"securityContext": map[string]any{"allowPrivilegeEscalation": false, "privileged": false, "capabilities": map[string]any{"drop": []string{"ALL"}}},
 			"resources":       map[string]any{"limits": limits, "requests": limits},
-			"startupProbe":    map[string]any{"tcpSocket": map[string]any{"port": s.Port}, "periodSeconds": 1, "failureThreshold": 300},
-			"readinessProbe":  map[string]any{"tcpSocket": map[string]any{"port": s.Port}, "periodSeconds": 1, "failureThreshold": 1},
+			"startupProbe":    map[string]any{"tcpSocket": map[string]any{"port": s.Port}, "periodSeconds": 1, "failureThreshold": serviceStartupSeconds},
+			// One slow probe under load is not an outage: every command is
+			// gated on readiness, so a single miss would fail the trial.
+			"readinessProbe": map[string]any{"tcpSocket": map[string]any{"port": s.Port}, "periodSeconds": 1, "failureThreshold": 3},
 		})
 	}
 	pod["initContainers"] = init
@@ -81,16 +83,44 @@ func (p *podSandbox) services(ctx context.Context, logs bool) ([]ServiceStatus, 
 	if logs {
 		for i := range states {
 			path := "/api/v1/namespaces/" + p.d.cfg.Namespace + "/pods/" + p.pod + "/log?container=svc-" + states[i].Name + "&tailLines=100&limitBytes=16384"
+			// Logs are diagnostics: a container with none yet is still a status.
 			if err := p.d.kube.do(ctx, http.MethodGet, path, nil, &states[i].Logs); err != nil {
-				return nil, fmt.Errorf("service logs %s: %w", states[i].Name, err)
+				states[i].Logs = "logs unavailable: " + err.Error()
 			}
 		}
 	}
 	return states, nil
 }
 
+// A service gets this long to pass its startup probe, and waitRunning allows
+// it on top of the pod's start timeout, since services start one by one.
+const serviceStartupSeconds = 300
+
+// serviceHealthTTL is how long a healthy check lets the next command skip
+// its pre-check. Restarts are sticky, so the post-check still sees a crash.
+const serviceHealthTTL = 5 * time.Second
+
+// checkServices reads service health, retrying the API read: one throttled
+// or failed request is not evidence that a service failed. It runs detached
+// from ctx so a caller cancelling after a command ended cannot turn the
+// result into a runner failure.
 func (p *podSandbox) checkServices(ctx context.Context) error {
-	states, err := p.services(ctx, false)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	var states []ServiceStatus
+	var err error
+	for attempt := range 3 {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return err
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+		if states, err = p.services(ctx, false); err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -99,17 +129,30 @@ func (p *podSandbox) checkServices(ctx context.Context) error {
 			return fmt.Errorf("service %s is unhealthy (ready=%t, restarts=%d, reason=%s)", s.Name, s.Ready, s.Restarts, s.Reason)
 		}
 	}
+	p.healthMu.Lock()
+	p.healthyAt = time.Now()
+	p.healthMu.Unlock()
 	return nil
+}
+
+func (p *podSandbox) recentlyHealthy() bool {
+	p.healthMu.Lock()
+	defer p.healthMu.Unlock()
+	return !p.healthyAt.IsZero() && time.Since(p.healthyAt) < serviceHealthTTL
 }
 
 // A failed/restarted service is infrastructure failure even if a command
 // reports a failed assertion. Never turn an unavailable database into a score.
+// The post-check always reads live status; only the pre-check, an early
+// refusal, may reuse a recent healthy result.
 func (p *podSandbox) exec(ctx context.Context, e *Exec, stdout, stderr io.Writer) *ExecResult {
 	failure := func(err error) *ExecResult {
 		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: err.Error()}
 	}
-	if err := p.checkServices(ctx); err != nil {
-		return failure(err)
+	if !p.recentlyHealthy() {
+		if err := p.checkServices(ctx); err != nil {
+			return failure(err)
+		}
 	}
 	result := p.guestConn.exec(ctx, e, stdout, stderr)
 	if result.Outcome != OutcomeRunnerFailure {
@@ -125,6 +168,8 @@ const serviceInstanceLabel = "evals.si/service-instance"
 
 // A restarted pool has lost all in-memory sessions. Reap only its own service
 // pods before allocating a new one; other replicas' trials are never touched.
+// Only the pool's server (Sandbox.OwnServicePods) reaps: a one-shot command
+// run in the same pod must not delete the live server's pods.
 func (d *podDriver) reapPreviousServices(ctx context.Context) error {
 	d.serviceMu.Lock()
 	defer d.serviceMu.Unlock()

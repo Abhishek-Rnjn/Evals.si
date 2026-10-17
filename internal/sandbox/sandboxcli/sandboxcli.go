@@ -60,6 +60,7 @@ func Main(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 	if args[0] == "serve" {
+		sb.OwnServicePods()
 		if addr, ok := strings.CutPrefix(*listen, "tcp://"); ok {
 			return serveTLS(ctx, sb, addr, auth.TLSConfig{CertFile: *tlsCert, KeyFile: *tlsKey, ClientCA: *clientCA, RequireClientCert: true}, allowed, stdout, stderr)
 		}

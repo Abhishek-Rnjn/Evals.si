@@ -63,7 +63,8 @@ async function startServer(name, extraConfig = '') {
 
 // problems collects what a user would see broken: script errors, console
 // errors, failed requests, and anything the Content-Security-Policy blocked.
-function watch(page) {
+// Await it before navigating: the CSP listener must be installed first.
+async function watch(page) {
   const problems = [];
   page.on('pageerror', error => problems.push(`pageerror: ${error.message}`));
   page.on('console', message => {
@@ -73,7 +74,7 @@ function watch(page) {
   page.on('response', response => {
     if (response.status() >= 400) problems.push(`HTTP ${response.status()}: ${response.url()}`);
   });
-  page.addInitScript(() => {
+  await page.addInitScript(() => {
     document.addEventListener('securitypolicyviolation', event => {
       console.error(`CSP blocked ${event.violatedDirective} ${event.blockedURI}`);
     });
@@ -111,7 +112,7 @@ test.after(async () => {
 test('the UI loads under its Content-Security-Policy and every section renders', async () => {
   const url = await startServer('open');
   const page = await browser.newPage();
-  const problems = watch(page);
+  const problems = await watch(page);
   await page.goto(`${url}/ui/`);
   await page.waitForSelector('#project option', { state: 'attached' });
   assert.match(await page.textContent('#whoami'), /anonymous|auth off/);
@@ -173,7 +174,7 @@ test('with authentication on, the UI asks for a credential and accepts only a va
     `      - {name: ui-test, key: "${hash}", roles: {"*": [owner]}}`,
   ].join('\n'));
   const page = await browser.newPage();
-  const problems = watch(page);
+  const problems = await watch(page);
   await page.goto(`${url}/ui/`);
   await page.waitForSelector('.signin');
   await checkAccessibility(page);
@@ -236,7 +237,7 @@ test('an annotator answers and skips items in the browser', async () => {
   });
 
   const page = await browser.newPage();
-  const problems = watch(page);
+  const problems = await watch(page);
   await page.goto(`${url}/ui/#/queues/helpfulness/annotate`);
   await page.waitForSelector('form.annotate');
   await checkAccessibility(page);
@@ -355,7 +356,7 @@ test('the UI signs in through the identity provider with PKCE', async () => {
     `  cli_login: {issuer: "${idp.issuer}", client_id: evalsi-cli, ui_client_id: evalsi-ui, scopes: [openid, email, offline_access]}`,
   ].join('\n'));
   const page = await browser.newPage();
-  const problems = watch(page);
+  const problems = await watch(page);
   await page.goto(`${url}/ui/#/policies`);
   await page.waitForSelector('#sso');
 

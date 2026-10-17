@@ -254,7 +254,14 @@ type podDriver struct {
 	serviceMu       sync.Mutex
 	serviceReaped   bool
 	serviceInstance string
+	// canaryMu serializes canary retries for services; canaryTried is the last.
+	canaryMu    sync.Mutex
+	canaryTried time.Time
 }
+
+// canaryRetryInterval spaces canary retries, so a canary that keeps failing
+// does not cost every services request an extra pod.
+const canaryRetryInterval = 30 * time.Second
 
 func newPodDriver(s *Sandbox) *podDriver {
 	d := &podDriver{sb: s, cfg: s.cfg.Pod, serviceInstance: randomToken()}
@@ -310,6 +317,26 @@ func (d *podDriver) verify(ctx context.Context, b backend) string {
 		return ""
 	}
 	return "NetworkPolicy is declared enforced but the canary could not run: " + firstLine(res.Error)
+}
+
+// retryCanary runs the canary again in a fresh pod when the probe's run could
+// not decide (a slow image pull, an API error), instead of refusing services
+// until the pool restarts.
+func (d *podDriver) retryCanary(ctx context.Context) {
+	d.canaryMu.Lock()
+	defer d.canaryMu.Unlock()
+	if d.netVerified.Load() || d.netLeak.Load() || d.kube == nil || os.Getenv("KUBERNETES_SERVICE_HOST") == "" || time.Since(d.canaryTried) < canaryRetryInterval {
+		return
+	}
+	d.canaryTried = time.Now()
+	sp := &Spec{}
+	sp.defaults()
+	b, err := d.open(ctx, sp, "", "")
+	if err != nil {
+		return
+	}
+	defer b.close()
+	d.verify(ctx, b)
 }
 
 func (d *podDriver) supports(sp *Spec) error {
@@ -483,6 +510,11 @@ func (d *podDriver) waitRunning(ctx context.Context, name string, services ...[]
 	if d.cfg.StartTimeout != "" {
 		timeout, _ = time.ParseDuration(d.cfg.StartTimeout)
 	}
+	if len(services) > 0 {
+		// Services start one after another, each within its startup probe;
+		// a service that never comes up is restarted, which fails sooner.
+		timeout += time.Duration(len(services[0])) * serviceStartupSeconds * time.Second
+	}
 	deadline := time.Now().Add(timeout)
 	path := "/api/v1/namespaces/" + d.cfg.Namespace + "/pods/" + name
 	for {
@@ -546,7 +578,10 @@ func (d *podDriver) open(ctx context.Context, sp *Spec, dir, from string) (backe
 		return nil, err
 	}
 	if len(sp.Services) > 0 && !d.netVerified.Load() {
-		return nil, errors.New("services require a successful NetworkPolicy canary check")
+		d.retryCanary(ctx)
+		if !d.netVerified.Load() {
+			return nil, errors.New("services require a successful NetworkPolicy canary check")
+		}
 	}
 	image := sp.Image
 	if image == "" {
@@ -555,7 +590,7 @@ func (d *podDriver) open(ctx context.Context, sp *Spec, dir, from string) (backe
 	if image == "" {
 		return nil, errors.New("the pod rung needs an image (or sandbox.pod.default_image)")
 	}
-	if len(sp.Services) > 0 {
+	if len(sp.Services) > 0 && d.sb != nil && d.sb.ownsServicePods.Load() {
 		if err := d.reapPreviousServices(ctx); err != nil {
 			return nil, err
 		}
@@ -642,6 +677,9 @@ type podSandbox struct {
 	d   *podDriver
 	pod string
 	iso Isolation
+
+	healthMu  sync.Mutex
+	healthyAt time.Time // the last time every service checked healthy
 }
 
 func (p *podSandbox) waitAgent(ctx context.Context) error {

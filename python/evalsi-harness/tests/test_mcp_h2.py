@@ -567,3 +567,28 @@ def test_http_session_close_releases_client_if_token_refresh_fails() -> None:
         assert transport.client.is_closed
 
     go(body())
+
+
+def test_closing_survives_a_failing_token_refresh() -> None:
+    """Session termination is best effort: an expired token whose refresh gets
+    a non-JSON answer (a proxy's HTML page) must not raise out of cleanup."""
+    import httpx
+
+    from evalsi_harness.mcp import _HTTPTransport
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/token":
+            return httpx.Response(200, text="<html>proxy</html>")
+        return httpx.Response(200)
+
+    async def body() -> None:
+        transport = _HTTPTransport(
+            "http://mcp.test/mcp", {}, 5.0, OAuth("http://mcp.test/token", "id", "secret")
+        )
+        await transport.client.aclose()
+        transport.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        transport.session = "session"
+        await transport.aclose()
+        assert transport.client.is_closed
+
+    go(body())

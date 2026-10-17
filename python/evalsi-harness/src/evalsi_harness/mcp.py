@@ -184,7 +184,9 @@ class _HTTPTransport:
             if self.session:
                 # Session termination is authenticated just like POST. Omitting
                 # the bearer/static headers leaks sessions on protected servers.
-                with contextlib.suppress(httpx.HTTPError, MCPError, TimeoutError):
+                # It is best effort: a failing token refresh (a non-JSON token
+                # response) must not mask the task's own error or skip cleanup.
+                with contextlib.suppress(Exception):
                     async with asyncio.timeout(5):
                         for attempt in (1, 2):
                             response = await self.client.delete(

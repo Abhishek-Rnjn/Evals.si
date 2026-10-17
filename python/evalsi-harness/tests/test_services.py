@@ -127,6 +127,20 @@ def test_multi_service_terminal_bench_import(tmp_path: Path) -> None:
     assert env["service_lifetime"] == "3600s"
 
 
+def test_terminal_bench_service_lifetime_outlasts_task_limits(tmp_path: Path) -> None:
+    task, doc = compose_fixture(tmp_path)
+    (task / "docker-compose.yaml").write_text(yaml.safe_dump(doc))
+    config = yaml.safe_load((task / "task.yaml").read_text())
+    config.update(max_agent_timeout_sec=3600, max_test_timeout_sec=600)
+    (task / "task.yaml").write_text(yaml.safe_dump(config))
+    [row] = load_terminal_bench(str(task))
+    assert row["metadata"]["environment"]["service_lifetime"] == "6000s"
+    config["max_agent_timeout_sec"] = 200000
+    (task / "task.yaml").write_text(yaml.safe_dump(config))
+    [row] = load_terminal_bench(str(task))
+    assert row["metadata"]["environment"]["service_lifetime"] == "86400s"
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [

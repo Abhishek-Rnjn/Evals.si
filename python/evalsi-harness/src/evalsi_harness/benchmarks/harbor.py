@@ -348,6 +348,15 @@ def _seconds(value: Any) -> str | None:
     return f"{float(value):g}s" if value else None
 
 
+def _service_lifetime(config: dict[str, Any]) -> str | None:
+    """Services are stopped at this hard deadline, so it must outlast the
+    agent's and the checker's limits, with room for setup and image pulls:
+    at least an hour, at most the 24 hours services allow."""
+    agent = float(config.get("max_agent_timeout_sec") or 0)
+    test = float(config.get("max_test_timeout_sec") or 180)
+    return _seconds(min(max(3600.0, agent + test + 1800), 86400.0))
+
+
 def _environment(
     *,
     build: Build | None,
@@ -578,7 +587,11 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
                 "ignored_dockerfile_instructions": build.ignored if build else [],
             },
             "environment": {
-                **({"services": services, "service_lifetime": "3600s"} if services else {}),
+                **(
+                    {"services": services, "service_lifetime": _service_lifetime(config)}
+                    if services
+                    else {}
+                ),
                 **_environment(
                     build=build,
                     image=image,
