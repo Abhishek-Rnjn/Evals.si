@@ -1,5 +1,5 @@
 # Optional live verification tools; not application runtime dependencies.
-mcp==1.26.0
+mcp==1.30.0
 Authlib==1.6.5
 Flask==3.1.2
 transformers==4.57.1
