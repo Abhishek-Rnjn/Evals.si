@@ -1,7 +1,7 @@
 # Leftovers verification, 2026-10-17
 
 The 50 current item rows in `docs/LEFTOVERS.md` were audited on PR #85,
-starting at `b342df8`. Thirteen rows have bounded executable evidence in this PR;
+starting at `b342df8`. Nineteen rows have bounded executable evidence in this PR;
 the table below records the requirement remaining for every row. The previous
 42-row total was stale. A passing bounded check does not close unimplemented
 features or certify production operation.
@@ -9,6 +9,31 @@ features or certify production operation.
 [Machine-readable inventory and results](LEFTOVERS-2026-10-17.json) include all
 50 rows, runtime capabilities and the individual check reports. No CI result
 was used as a completion gate for this work.
+
+## Combined EKS checkpoint
+
+PR #85 also incorporates `verify/eks-leftovers@42d8127`, including its five
+runtime fixes, regression tests and [first EKS record](EKS-2026-10-17.md)
+plus [harness/checkpoint/recovery follow-up](EKS-HARNESS-2026-10-17.md).
+Those measurements were made in a separate EKS environment before this merge,
+excluding multi-service PR #85 behavior; this local kind record does not claim
+to have reproduced EKS/GPU/provider checks. The follow-up's 49 starting rows
+exclude the host-network admission row already moved to its verified section;
+this inventory retains all 50 original rows with stable IDs.
+
+Completed evidence includes real GPU inference and checkpoint watcher/PVC/LoRA,
+live Anthropic/GPU harness profiles, signed thinking, four context strategies,
+process interruption/resume, pinned Claude CLI/MCP, ten live framework exports,
+six judge controls and stock user-namespaced bubblewrap on EKS. Direct harness
+prompt-cache reuse controls **failed**; Qwen code-mode also failed. Neither is
+converted to a pass. Trainer-backed verl/OpenRLHF and OpenEnv/verifiers checks
+remain pending in the published checkpoint while the separate GPU run continues.
+
+Four rows now pass their bounded verification requirement and fifteen have
+partial evidence. These counts describe this combined inventory, not nineteen
+closed engineering tasks or production certification. The runtime capabilities
+below describe this local workspace only; EKS had an L40S and supplied model
+credentials. No EKS resource was accessed or modified during this merge.
 
 ## Environment and scope
 
@@ -28,8 +53,11 @@ The service-pool API used mutual TLS.
 This nested environment required the existing kind node's native containerd
 snapshotter, proxy CA and local image importer. The larger verification image
 was flattened before importing because native snapshots copy filesystem layers.
-Its application code came from `b342df8`; Go code did not change in this audit.
+Its application code came from `b342df8`; these local infrastructure checks predate
+the imported EKS Go fixes.
 The subsequent MCP/probe fixes were tested directly in the host Python checkout.
+The checked-in replay Dockerfile also built successfully and passed a nonroot
+binary/import smoke check; that final image was not redeployed for these checks.
 An initial image attempt also exposed fixture file-mode and HOME mistakes;
 executable modes and the worker HOME were corrected before recording successes.
 These were verification setup issues. The standalone root product Dockerfile
@@ -66,7 +94,8 @@ The real SWE-bench image manifest for
 `swebench/sweb.eval.x86_64.sympy_1776_sympy-20590:latest` was readable and contained
 1,088,521,647 compressed layer bytes. The multi-GB image and writable/native
 copies were not run within the remaining disk budget of this populated 32-GB
-workspace. The public dataset filter endpoint also returned HTTP 500. No
+workspace at that measurement. The local cluster was removed after the recorded
+infrastructure checks to recover space for combined-source regression tests. The public dataset filter endpoint also returned HTTP 500. No
 execution result is claimed for a real SWE-bench task.
 
 ## Bugs fixed
@@ -83,8 +112,12 @@ execution result is claimed for a real SWE-bench task.
   browser had delivered it. It now awaits that exact security event before
   checking for unrelated errors; CSP enforcement stays enabled.
 
-The new SDK/harness regressions and the complete Python suite passed:
-**913 passed, 3 existing skips**. The existing fork deprecation warning remains.
+Before the EKS merge, the new SDK/harness regressions and complete Python
+suite passed: **913 passed, 3 existing skips**. After merging the completed EKS
+checkpoint, the entire locked development suite passed **924 tests**, with the
+same **3 existing skips**, in 80.82 seconds. The two opt-in EKS test modules
+also collected together with **30 skips**, as expected without live settings;
+that local collection is not a rerun of the separate EKS evidence. The existing fork deprecation warning remains.
 Ruff/format passed, and mypy was run with the repository's locked development
 set rather than the optional live-tool dependencies. Browser npm audit found
 zero vulnerabilities. No tests were disabled.
@@ -198,19 +231,19 @@ Changing mesh labels alone does not clear a pool process's cached probe result.
 | ID | Item | Result / remaining requirement |
 | --- | --- | --- |
 | L01 | Stock Firecracker | **blocked hardware:** No /dev/kvm; no stock-image microVM claim. |
-| L02 | User-namespaced bwrap pools | **known limit:** A real hostUsers:false pod failed before starting because containerd could not map a container UID to a host ID. Root-container bwrap passed separately. |
+| L02 | User-namespaced bwrap pools | **checked passed:** Stock source chart with hostUsers:false passed mTLS/full-enforcement probe, good/bad execution and eight H4 controls on EKS AL2023/containerd. Nested kind UID-mapping preflight failed; AKS/idmap host limits remain. |
 | L03 | Calico with Istio ambient | **checked partial:** Reproduced canary leakage and partial isolation; unsafe service allocation refused. Explicit pool and trial mesh opt-out passed real isolation checks. |
-| L04 | EKS overlay webhooks / hostNetwork | **checked partial:** Chart hostNetwork option ran on kind; invalid request rejected by reachable webhook. AWS control-plane topology not exercised. |
+| L04 | EKS overlay webhooks / hostNetwork | **checked passed:** Actual chart hostNetwork admission passed on EKS with invalid-gate rejection, unavailable-webhook fail-closed and recovery controls; local kind chart admission also passed. Overlay pod routing is not certified. |
 | L05 | STRICT mTLS webhooks | **checked passed:** Real Istio sidecar operator under mesh-wide STRICT: valid request blocked without exception, admitted after chart policy restored; invalid request rejected. |
 | L06 | PR #12 cloud/mesh recheck | **checked partial:** New local Istio admission and sandbox controls exercised relevant paths; AKS/KVM/waypoint-specific fixes remain open. |
 | L07 | Trace sources / M3 | **blocked credentials:** No Databricks, SageMaker or LangSmith/provider credentials. New cluster push-redaction check covers NATS, PostgreSQL and API, not those pull providers. |
 | L08 | Reference demos | **blocked credentials:** Deep-research and Terminal-Bench 2 require real model/judge access; existing small-repo evidence is retained. |
-| L09 | Frontier models / H1 | **blocked credentials:** No OpenAI/Anthropic model secret binding; scripted responses cannot verify live provider schemas. |
-| L10 | Long-horizon agents / H2 | **checked partial:** Published ByT5 tokenizer exercised all four strategies; published MCP SDK/Authlib and actual worker SIGKILL/resume passed. Model quality and real long-document tasks remain open. |
+| L09 | Frontier models / H1 | **checked partial:** EKS live Anthropic tools/streaming, signed thinking and exact cassette replay passed. Direct prompt-cache reads failed in both modes; native Responses and thinking-plus-tool roundtrip remain open. |
+| L10 | Long-horizon agents / H2 | **checked partial:** Published ByT5 tokenizer exercised four strategies; real MCP SDK/Authlib OAuth/elicitation and local SIGKILL/resume passed. EKS live four-strategy checker/replay and fresh-pod process resume passed; 300-step/context-quality and external-side-effect idempotency remain open. |
 | L11 | Persistent shell processes | **implementation required:** A persistent interactive shell is not built; per-trial sidecars do not implement it. |
-| L12 | CLI agents / H3 | **blocked credentials:** Real model-backed CLI trajectories require provider access; no fixture substituted for them. |
+| L12 | CLI agents / H3 | **checked partial:** EKS pinned Claude Code 2.1.296, live GPU/Anthropic profiles and fresh-pod replay passed. Qwen code-mode failed. Other CLIs, ACP and transfer experiments remain open; the GitHub live workflow is separate. |
 | L13 | Environments / H4 | **checked partial:** Honest/tampering/restore/symlink/interjection checks passed on real pod and bwrap pools. Browser/desktop importers and clean-snapshot checker are not built. |
-| L14 | Framework mapping profiles | **blocked credentials:** Real framework/model streaming, errors and handoffs require model access. |
+| L14 | Framework mapping profiles | **checked partial:** All ten pinned live framework recorder configurations passed mapping contracts in EKS. Native Claude cached-input total fixed. Missing source usage/answers remain absent; native Responses, retries and multi-agent coverage remain open. |
 | L15 | 10k concurrent agent trials | **blocked scale:** One 3-CPU node is insufficient. The PR records 48 trials at concurrency four, not 10k certification. |
 | L16 | Real SWE-bench Verified images | **blocked scale:** Public sympy__sympy-20590 image manifest inspected (1,088,521,647 compressed layer bytes). A multi-GB image plus Docker/native copies exceeds the safe spare-disk budget of this 32-GB workspace; dataset filter endpoint also returned HTTP 500. No real-task execution claimed. |
 | L17 | Unprivileged cgroup limits | **known limit:** /sys/fs/cgroup is not writable; this runtime cannot certify delegated cgroup limits. |
@@ -232,7 +265,7 @@ Changing mesh labels alone does not clear a pool process's cached probe result.
 | L33 | Per-caller rate limits | **implementation required:** Only existing size/audit/JWKS limits exist; throttling unit/defaults are not designed or built. |
 | L34 | Versioned reversible migrations | **checked partial:** Published v0.1.0 server and matching worker read 16 results and an archived summary from a PR-schema database copy. Migration table/down steps and N/N-1 concurrent writers remain unimplemented/unverified. |
 | L35 | Restore and PITR | **checked partial:** Quiesced PostgreSQL/dataset backup restored into empty namespace/database/bucket; authenticated old run and 16-record rerun passed. Disposable WAL recovery is recorded separately; managed/off-site recovery and production RPO/RTO remain open. |
-| L36 | Judge prompt injection | **blocked credentials:** No judge model key; string-fence tests do not establish model robustness. |
+| L36 | Judge prompt injection | **checked partial:** Six live EKS/Anthropic positive, wrong-answer and injection controls passed explicit thresholds. Broader deployed-judge coverage and human-labelled calibration remain open. |
 | L37 | UI accessibility | **checked passed:** axe-core 4.10.3 WCAG 2 A/AA and 2.1 A/AA scans, light/dark main sections, sign-in, annotation, and keyboard navigation passed in actual Chromium. Automated coverage is not a complete manual accessibility audit. |
 | L38 | Independent penetration test | **blocked external:** An independent tester/security assessment is unavailable; self-tests cannot replace that requirement. |
 | L39 | Second maintainer | **blocked external:** Requires an actual willing person and repository access; no owner is invented. |
@@ -240,10 +273,10 @@ Changing mesh labels alone does not clear a pool process's cached probe result.
 | L41 | tau2 native LiteLLM user | **known limit:** Current judge-driven user is intentional; no native LiteLLM-user implementation is claimed. |
 | L42 | Terminal-Bench unsupported subset | **checked partial:** The PR already audited 241 tasks, imported 219, and ran an adapted original task with positive/negative controls. Full Compose and multi-stage builds remain unsupported. |
 | L43 | FrontierCode / CursorBench | **blocked access:** Publicly verifiable task format/private task data is unavailable. |
-| L44 | verl / OpenRLHF training | **blocked hardware:** No GPU/inference engine. Existing reward contract tests do not establish a training step. |
+| L44 | verl / OpenRLHF training | **pending verification:** GPU training work is ongoing separately on verify/eks-leftovers. Its published checkpoint records inference, not actual verl/OpenRLHF training steps; no training completion claimed here. |
 | L45 | Reward throughput at target scale | **blocked scale:** Target assumes 256 warm microVMs; no KVM or appropriately sized pool here. |
-| L46 | Operator checkpoint serving | **checked partial:** Real controller created Deployment/Service, ownership, readiness endpoint, Recreate strategy and scale-to-zero status using an HTTP fixture. Real GPU/vLLM inference remains open. |
+| L46 | Operator checkpoint serving | **checked partial:** EKS actual L40S/vLLM model identity, inference, API-key rollout/deletion and source CLI watcher over two PVC checkpoints passed. Read-only controls, LoRA load/infer/unload and error cleanup passed; wrong-model launch and one-shot exit status fixed. Fixed image release and training quality remain separate. |
 | L47 | Checkpoint serving strategy | **decision required:** Compatible serving of arbitrary state dictionaries/Lightning checkpoints needs a serving-strategy choice. |
 | L48 | Environment-spec expansion/training | **implementation required:** Published OpenEnv/verifiers integration evidence remains; other adapters/shared setup/trainers are not implemented or need an actual training workload. |
-| L49 | Coding-agent MCP CI | **blocked credentials:** No ANTHROPIC_API_KEY binding; real Claude Code invocation cannot be substituted with a scripted model. |
+| L49 | Coding-agent MCP CI | **checked partial:** Actual EKS Claude CLI invoked source MCP over stdio; independent artifact checks confirmed mean 2/3 and failed gate. GitHub mcp-agent secret/first CI run, other coding products and external remote OAuth remain separate. |
 | L50 | Wasm I/O / Azure ML / SQL limits | **known limit:** Wasm I/O is deliberately absent, Azure ML lacks the required V3 trace API, and arbitrary server SQL is not planned. |

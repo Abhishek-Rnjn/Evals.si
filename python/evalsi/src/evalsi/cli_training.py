@@ -49,7 +49,9 @@ def add_training_commands(sub: Any) -> None:
         "--settle", type=float, default=30.0, help="seconds a checkpoint must be unchanged"
     )
     wa.add_argument("--cache-dir", default="", help="where remote checkpoints are downloaded")
-    wa.add_argument("--once", action="store_true", help="scan once and exit")
+    wa.add_argument(
+        "--once", action="store_true", help="scan once; exit 1 on errors or 3 on failed gates"
+    )
     _common(wa, serving=True)
     wa.set_defaults(func=_cmd_watch)
 
@@ -161,9 +163,10 @@ def _cmd_watch(args: argparse.Namespace) -> int:
 
     evaluator = _evaluator(args)
     cache = args.cache_dir or f"{args.log_dir}/{args.training_run}/downloads"
+    exit_code = 0
     if args.base and evaluator.get(BASE) is None:
         print(f"evaluating the base model {args.base}", file=sys.stderr)
-        _report(evaluator.evaluate_base(args.base))
+        exit_code = _report(evaluator.evaluate_base(args.base))
     done = {r.step for r in evaluator.history() if not r.error}
     mlflow_model = (
         args.location.removeprefix("mlflow:") if args.location.startswith("mlflow:") else ""
@@ -186,7 +189,9 @@ def _cmd_watch(args: argparse.Namespace) -> int:
             else:
                 path = localize(checkpoint, cache)
             result = evaluator.evaluate(path, checkpoint.step)
-            _report(result)
+            code = _report(result)
+            if not exit_code or code == 1:
+                exit_code = code
             done.add(str(checkpoint.step))
             if args.stop_file and result.regressed:
                 Path(args.stop_file).write_text(
@@ -199,7 +204,7 @@ def _cmd_watch(args: argparse.Namespace) -> int:
                 )
                 print(f"step {result.step} regressed; wrote {args.stop_file}", file=sys.stderr)
         if args.once:
-            return 0
+            return exit_code
         time.sleep(args.interval)
 
 

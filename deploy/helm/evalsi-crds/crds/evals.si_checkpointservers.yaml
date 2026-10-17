@@ -72,7 +72,7 @@ spec:
                   /checkpoints.
                 type: string
               command:
-                description: Replaces the image's entrypoint.
+                description: Replaces the serving command; default ["vllm", "serve"].
                 items:
                   type: string
                 type: array
@@ -235,9 +235,8 @@ spec:
                   type: object
                 type: array
               image:
-                description: |-
-                  The vLLM image; its entrypoint must take `vllm serve` arguments (as
-                  vllm/vllm-openai does) unless command says otherwise.
+                description: The vLLM image; must provide `vllm serve` unless command
+                  says otherwise.
                 minLength: 1
                 type: string
               lora:

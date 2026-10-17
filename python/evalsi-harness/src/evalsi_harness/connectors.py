@@ -636,8 +636,8 @@ class CLIConnector:
             # The agent reported its run: its steps are the trajectory, and the
             # raw event stream is not repeated as the answer.
             if parsed.wrong_format and not parsed.steps:
-                # Not a run the checker should grade: the spec names the wrong format.
-                raise TaskError(f"cli agent: {parsed.error}")
+                # A failed process may exit before it emits any structured events.
+                raise TaskError(f"cli agent: {error or parsed.error}")
             output, steps, usage = parsed.answer, parsed.steps, parsed.usage
             error = error or parsed.error
         steps.append(

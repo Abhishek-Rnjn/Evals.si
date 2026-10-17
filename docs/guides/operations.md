@@ -172,6 +172,10 @@ fixture; do not use that layout as the production archive destination.
 
 ## Reference cluster values (D11)
 
+Clusters without a default StorageClass must select one explicitly for every
+bundled persistent component, including `devPostgres.storageClassName`.
+The trial PostgreSQL is still a single instance, not an HA/PITR deployment.
+
 The chart includes `values-kind.yaml`, `values-eks.yaml`, `values-gke.yaml`,
 `values-aks.yaml` and `values-openshift.yaml`. The cloud files are starting
 points, not certified cluster installs: create the PostgreSQL DSN and object

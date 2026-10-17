@@ -16,17 +16,18 @@
   },
   "item_count": 50,
   "status_counts": {
-    "blocked_hardware": 3,
-    "known_limit": 9,
-    "checked_partial": 11,
-    "checked_passed": 2,
-    "blocked_credentials": 8,
+    "blocked_hardware": 2,
+    "checked_passed": 4,
+    "checked_partial": 15,
+    "blocked_credentials": 3,
     "implementation_required": 7,
     "blocked_scale": 3,
+    "known_limit": 8,
     "decision_required": 3,
     "previously_verified": 1,
     "blocked_external": 2,
-    "blocked_access": 1
+    "blocked_access": 1,
+    "pending_verification": 1
   },
   "items": [
     {
@@ -42,8 +43,9 @@
       "section": "Verified only with stand-ins (needs real infrastructure)",
       "item": "User-namespaced bubblewrap pools (`mode: bwrap`, `hostUsers: false`)",
       "title": "User-namespaced bwrap pools",
-      "status": "known_limit",
-      "evidence_or_blocker": "A real hostUsers:false, capabilities-dropped pod failed before starting: containerd could not map container ID 2073755648 to a host ID. Root-container bwrap passed separately; this does not certify user-namespaced pools."
+      "status": "checked_passed",
+      "evidence_or_blocker": "Stock source chart with hostUsers:false passed mTLS/full-enforcement probe, good/bad execution and eight H4 controls on EKS AL2023/containerd. Nested kind UID-mapping preflight failed; AKS/idmap host limits remain.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L03",
@@ -58,8 +60,9 @@
       "section": "Verified only with stand-ins (needs real infrastructure)",
       "item": "Admission webhooks on EKS with Calico's overlay",
       "title": "EKS overlay webhooks / hostNetwork",
-      "status": "checked_partial",
-      "evidence_or_blocker": "Chart hostNetwork option ran on kind; invalid request rejected by reachable webhook. AWS control-plane topology not exercised."
+      "status": "checked_passed",
+      "evidence_or_blocker": "Actual chart hostNetwork admission passed on EKS with invalid-gate rejection, unavailable-webhook fail-closed and recovery controls; local kind chart admission also passed. Overlay pod routing is not certified.",
+      "additional_evidence": "EKS-2026-10-17.md"
     },
     {
       "id": "L05",
@@ -98,8 +101,9 @@
       "section": "Verified only with stand-ins (needs real infrastructure)",
       "item": "Frontier-model handling in the built-in agent (H1)",
       "title": "Frontier models / H1",
-      "status": "blocked_credentials",
-      "evidence_or_blocker": "No OpenAI/Anthropic model secret binding; scripted responses cannot verify live provider schemas."
+      "status": "checked_partial",
+      "evidence_or_blocker": "EKS live Anthropic tools/streaming, signed thinking and exact cassette replay passed. Direct prompt-cache reads failed in both modes; native Responses and thinking-plus-tool roundtrip remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L10",
@@ -107,7 +111,8 @@
       "item": "Long-horizon agents (H2)",
       "title": "Long-horizon agents / H2",
       "status": "checked_partial",
-      "evidence_or_blocker": "Published ByT5 tokenizer exercised all four strategies; published MCP SDK/Authlib and actual worker SIGKILL/resume passed. Model quality and real long-document tasks remain open."
+      "evidence_or_blocker": "Published ByT5 tokenizer exercised four strategies; real MCP SDK/Authlib OAuth/elicitation and local SIGKILL/resume passed. EKS live four-strategy checker/replay and fresh-pod process resume passed; 300-step/context-quality and external-side-effect idempotency remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L11",
@@ -122,8 +127,9 @@
       "section": "Verified only with stand-ins (needs real infrastructure)",
       "item": "Agents under test (H3), in progress",
       "title": "CLI agents / H3",
-      "status": "blocked_credentials",
-      "evidence_or_blocker": "Real model-backed CLI trajectories require provider access; no fixture substituted for them."
+      "status": "checked_partial",
+      "evidence_or_blocker": "EKS pinned Claude Code 2.1.296, live GPU/Anthropic profiles and fresh-pod replay passed. Qwen code-mode failed. Other CLIs, ACP and transfer experiments remain open; the GitHub live workflow is separate.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L13",
@@ -138,8 +144,9 @@
       "section": "Verified only with stand-ins (needs real infrastructure)",
       "item": "Agent framework mapping profiles",
       "title": "Framework mapping profiles",
-      "status": "blocked_credentials",
-      "evidence_or_blocker": "Real framework/model streaming, errors and handoffs require model access."
+      "status": "checked_partial",
+      "evidence_or_blocker": "All ten pinned live framework recorder configurations passed mapping contracts in EKS. Native Claude cached-input total fixed. Missing source usage/answers remain absent; native Responses, retries and multi-agent coverage remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L15",
@@ -314,8 +321,9 @@
       "section": "Deferred features",
       "item": "Judge robustness against injected text (review 2026-10-16)",
       "title": "Judge prompt injection",
-      "status": "blocked_credentials",
-      "evidence_or_blocker": "No judge model key; string-fence tests do not establish model robustness."
+      "status": "checked_partial",
+      "evidence_or_blocker": "Six live EKS/Anthropic positive, wrong-answer and injection controls passed explicit thresholds. Broader deployed-judge coverage and human-labelled calibration remain open.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L37",
@@ -378,8 +386,9 @@
       "section": "Phase 5: fine-tuning and RL",
       "item": "verl and OpenRLHF inside a training run",
       "title": "verl / OpenRLHF training",
-      "status": "blocked_hardware",
-      "evidence_or_blocker": "No GPU/inference engine. Existing reward contract tests do not establish a training step."
+      "status": "pending_verification",
+      "evidence_or_blocker": "GPU training work is ongoing separately on verify/eks-leftovers. Its published checkpoint records inference, not actual verl/OpenRLHF training steps; no training completion claimed here.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L45",
@@ -395,7 +404,8 @@
       "item": "Operator-managed checkpoint serving",
       "title": "Operator checkpoint serving",
       "status": "checked_partial",
-      "evidence_or_blocker": "Real controller created Deployment/Service, ownership, readiness endpoint, Recreate strategy and scale-to-zero status using an HTTP fixture. Real GPU/vLLM inference remains open."
+      "evidence_or_blocker": "EKS actual L40S/vLLM model identity, inference, API-key rollout/deletion and source CLI watcher over two PVC checkpoints passed. Read-only controls, LoRA load/infer/unload and error cleanup passed; wrong-model launch and one-shot exit status fixed. Fixed image release and training quality remain separate.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L47",
@@ -418,8 +428,9 @@
       "section": "Phase 6: MCP, classic ML and ecosystem",
       "item": "A coding agent product over MCP in CI",
       "title": "Coding-agent MCP CI",
-      "status": "blocked_credentials",
-      "evidence_or_blocker": "No ANTHROPIC_API_KEY binding; real Claude Code invocation cannot be substituted with a scripted model."
+      "status": "checked_partial",
+      "evidence_or_blocker": "Actual EKS Claude CLI invoked source MCP over stdio; independent artifact checks confirmed mean 2/3 and failed gate. GitHub mcp-agent secret/first CI run, other coding products and external remote OAuth remain separate.",
+      "additional_evidence": "EKS-HARNESS-2026-10-17.md"
     },
     {
       "id": "L50",
@@ -719,5 +730,14 @@
     "probe_warning_regressions": 1,
     "mypy": "passed with locked development dependencies",
     "ruff": "passed"
+  },
+  "additional_verification": {
+    "branch": "verify/eks-leftovers",
+    "revision": "42d812704e87ee0ec9a2fcfcba68a2dad5b59e40",
+    "records": [
+      "EKS-2026-10-17.md",
+      "EKS-HARNESS-2026-10-17.md"
+    ],
+    "provenance": "Completed EKS checkpoint imported into PR #85; measurements were made separately, excluding multi-service changes. GPU training remains ongoing, not certified by this checkpoint."
   }
 }

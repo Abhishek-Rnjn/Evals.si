@@ -4,6 +4,18 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Fixed
+
+- **Trial PostgreSQL can select a StorageClass.** `devPostgres.storageClassName` now reaches the database PVC, allowing installation on clusters without a default StorageClass. An empty value retains the existing default-class behavior.
+
+- **One-shot checkpoint watches propagate evaluation failures.** `evalsi checkpoints watch --once` now exits 1 when an attempted base/checkpoint evaluation errors, or 3 on failed gates/regressions, rather than always returning success. Errors take precedence over gate failures; continuous watching and stop-file behavior are unchanged.
+
+- **Native Claude Code traces count their full input tokens.** The ingest profile now includes cache-read and cache-creation tokens, preserves explicit canonical totals without double counting, and fills missing input/output counters independently. Real EKS traces exposed a total of six uncached tokens being mistaken for the complete prompt usage.
+
+- **CLI-agent startup and timeout diagnostics survive structured-output parsing.** When a CLI exits or times out before emitting recognizable events, the harness reports its bounded process error instead of incorrectly suggesting an output-format mismatch.
+
+- **Checkpoint servers load the requested model in the stock vLLM image.** The operator now explicitly runs `vllm serve` by default, while preserving `spec.command` overrides. The stock v0.11.0 image's API-server entrypoint accepted the positional model as `model_tag` but loaded its default model instead.
+
 ### Added
 
 - Live leftovers verification scripts and a complete 50-row inventory, including

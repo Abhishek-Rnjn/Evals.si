@@ -200,6 +200,12 @@ For each checkpoint it applies a `CheckpointServer`, waits for `Ready`, evaluate
 
 **Stopping training from the watcher.** `--stop-file PATH` writes PATH when a checkpoint regresses. `evalsi_callback(None, stop_file=PATH)` in the trainer stops at the next step, and any other training loop can check the file the same way.
 
+**One-shot exit status.** `watch --once` still attempts every discovered
+checkpoint. It exits 1 if any evaluation attempted by this invocation
+(including `--base`) errors, otherwise 3 if any fails its gates or regresses,
+otherwise 0. An error takes precedence over a gate failure. Continuous
+watching keeps scanning and reporting failures instead of exiting.
+
 **Where results live.**
 
 - Embedded: under `--log-dir/<training-run>`, one JSON file per step with per-record values for pairing.

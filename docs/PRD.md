@@ -154,7 +154,10 @@ The [leftovers audit](verification/LEFTOVERS-2026-10-17.md) adds real pod/bubble
 checker/interjection checks, worker SIGKILL/resume, MCP/tokenizer interoperability,
 mesh controls, recovery drills, pipeline races, redaction and browser accessibility;
 its 50-row inventory keeps remaining implementation, model, hardware and scale
-requirements explicit.
+requirements explicit. The completed `verify/eks-leftovers@42d8127` checkpoint is
+also included: live EKS/model checks and five runtime fixes are recorded in the
+[EKS follow-up](verification/EKS-HARNESS-2026-10-17.md). Its separate GPU training
+work remains in progress; inference evidence does not establish training.
 
 ## Goals, non-goals and success metrics
 

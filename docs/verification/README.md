@@ -8,6 +8,8 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 | [FINAL-RESULTS.md](FINAL-RESULTS.md) | One table of every exit criterion across the three clusters |
 | [PART-C.md](PART-C.md) | M4/M5 requested subset, native dsh integration, review fixes and final-phase verification limits |
 | [EKS-2026-10-12.md](EKS-2026-10-12.md) | Detailed bounded EKS evidence and methods: two fixes, live KEDA/NATS, sandbox/pool controls, real MLflow redaction/write-back, recovery, Playwright UI/annotation, real Operator/Alertmanager firing/delivery/resolution, isolated admission workaround, real agentgateway LLM/MCP, second-release coexistence and mounted Python/Wasm; no M4 certification |
+| [EKS-2026-10-17.md](EKS-2026-10-17.md) | Live chart host-network admission; GPU checkpoint model-selection fix, inference/auth/rollout/deletion; ambient failure and non-mesh sandbox canary controls; owned resources cleaned up |
+| [EKS-HARNESS-2026-10-17.md](EKS-HARNESS-2026-10-17.md) | Harness-first continuation: real pod/bwrap controls, live models/thinking/context/replay, SIGKILL/resume, CLI/MCP, ten framework mappings, in-cluster watcher/PVC/LoRA, PostgreSQL/S3 restore and five total fixes across both passes; full leftover inventory, validation and pending GPU-training priority. Cache reuse remains a failing control |
 
 The run used commit `c5a1de9` on 2026-10-09, on three clusters:
 
@@ -544,3 +546,8 @@ results, unavailable access/hardware/scale, unimplemented features and known
 limits. These local checks do not certify production scale, external models or
 cloud providers. The historical redaction section above now has additional
 cluster push-path evidence; its other limitations still apply.
+
+PR #85 integrates the completed EKS checkpoint at `42d8127` alongside the local
+leftovers audit. The combined inventory retains 50 stable item IDs: four bounded
+verification passes and fifteen partial results. EKS/GPU measurements retain
+their separate provenance; ongoing trainer checks are not marked passed.

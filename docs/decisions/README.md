@@ -28,7 +28,7 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0022](0022-server-side-slicing.md) | Cross-run slices are computed on the server (`SliceRuns`), in Go over each run's stored results; arbitrary SQL stays on the client | Accepted, implemented |
 | [0023](0023-run-archiving.md) | Archiving keeps a run's summary and drops its records, outputs and results; `runs.archive_after` does it automatically, and automatic deletes and archives are audited | Accepted, implemented |
 | [0024](0024-platform-wheels.md) | `evalsi` ships Linux platform wheels that bundle `evalsid` and `bwrap`; `EVALSID`, then the bundle, then `PATH` | Accepted, implemented |
-| [0025](0025-operator-checkpoint-serving.md) | A `CheckpointServer` resource has the operator run vLLM for a checkpoint; the watcher creates and deletes one per checkpoint through `kubectl` | Accepted, implemented; not yet run on a GPU cluster |
+| [0025](0025-operator-checkpoint-serving.md) | A `CheckpointServer` resource has the operator run vLLM for a checkpoint; the watcher creates and deletes one per checkpoint through `kubectl` | Accepted, implemented; bounded EKS GPU serving verified, full watcher/PVC/LoRA flow remains |
 | [0026](0026-enterprise-audit-and-delegation.md) | Enterprise-grade audit (strict mode, read auditing, hash chain, guaranteed export, initiator/executor fields) and a delegation-ready identity model; token exchange stays a later, explicit option | Proposed; not built |
 
 | [0027](0027-multi-service-environments.md) | Per-trial pod-native services, dependency readiness, private networking, bounded lifetime and a restricted Compose importer | Accepted, implemented |
