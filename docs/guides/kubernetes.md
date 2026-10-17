@@ -258,7 +258,19 @@ The **pod rung** creates one pod per sandbox from the task's image. `evalsi-gues
 
 Both fail the rung's probe, and the error names the way out: run the pool with `mode: privileged` (bubblewrap in a privileged pod, which needs a namespace that allows it), or use the pod rung (`ladder: [pod]`), which needs neither. `evalsid sandbox probe` shows the reason.
 
-The pod rung's network isolation has two layers: the pool's logging egress proxy, and a NetworkPolicy that admits only the pool. `networkPolicyEnforced` declares that the CNI enforces the policy, which makes isolation report `full`. Evals.si does not trust the declaration: when the probe runs, a canary pod tries to connect to the Kubernetes API, which the policy forbids. If the connection gets through, the probe prints a `warning`, and sandboxes report `partial` with the reason in their isolation notes. This was seen on Calico with Istio ambient (the policy did not stop a labelled pod's egress); the cause there is not established, and a mesh that redirects a pod's traffic through its own proxy is the suspect. On such a cluster, rely on the egress proxy only, or use `mode: firecracker`.
+The pod rung's network isolation has two layers: the pool's logging egress proxy, and a NetworkPolicy that admits only the pool. `networkPolicyEnforced` declares that the CNI enforces the policy, which makes isolation report `full`. Evals.si does not trust the declaration: when the probe runs, a canary pod tries to connect to the Kubernetes API, which the policy forbids. If the connection gets through, the probe prints a `warning`, and sandboxes report `partial` with the reason in their isolation notes. This was seen on Calico with Istio ambient (the policy did not stop a labelled pod's egress); the cause there is not established, and a mesh that redirects a pod's traffic through its own proxy is the suspect. The [2026-10-17 kind/Istio check](../verification/LEFTOVERS-2026-10-17.md)
+reproduced this leak: isolation became partial and multi-service allocation was
+refused. An explicit ambient opt-out on **both the pool and its sandbox pods**
+then passed the canary and cross-trial denial controls. Use a dedicated pool
+namespace outside ambient interception, or set `istio.io/dataplane-mode: none`
+on both pod templates. `sandbox.pool.pod.labels` configures trial labels; it
+does not label the built-in pool Deployment. The standalone sandboxd chart also
+exposes its pool `podLabels`; a built-in pool needs its template managed through
+your manifest/post-renderer if the application namespace is ambient. Recreate
+the pool after changing the network profile so its probe result is refreshed.
+This verifies an explicit opt-out, not ambient NetworkPolicy enforcement.
+Single-sandbox tasks can still use partial proxy-only isolation; multi-service
+tasks require a passing canary.
 
 `mode: firecracker` needs `firecracker.defaultImage`, the image a microVM boots when a spec names none (sandboxd boots it at start to check the rung); the evalsi image carries the `firecracker` binary and `mkfs.ext4`. A SandboxClass's `firecracker` takes the same `defaultImage`.
 

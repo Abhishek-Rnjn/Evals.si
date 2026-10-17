@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- Live leftovers verification scripts and a complete 50-row inventory, including
+  backup/restore and WAL recovery, pipeline concurrency, mesh controls, actual
+  sandbox harness checks and published MCP/tokenizer interoperability. The web
+  UI browser tests now include automated WCAG checks and keyboard navigation.
+- Sandbox SDK probes expose backend warnings, including a leaking declared
+  NetworkPolicy. MCP session termination now authenticates, refreshes once on
+  401 and bounds cleanup. The browser CSP test waits for its expected event.
+
 - Agent environments can declare per-trial services on the pod backend, with
   dependency readiness, CPU/memory limits, private service names and a required
   lifetime. Failed or restarted services produce infrastructure errors. The

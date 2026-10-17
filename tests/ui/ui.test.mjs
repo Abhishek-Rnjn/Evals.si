@@ -17,6 +17,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import axe from 'axe-core';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const workerCommand = (process.env.EVALSI_UI_WORKER ?? 'python -m evalsi').split(' ');
@@ -80,6 +81,18 @@ function watch(page) {
   return problems;
 }
 
+async function checkAccessibility(page) {
+  await page.evaluate(axe.source);
+  const violations = await page.evaluate(async () => {
+    const result = await window.axe.run(document, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+    return result.violations.map(v => ({ id: v.id, impact: v.impact,
+      nodes: v.nodes.map(n => ({ target: n.target, summary: n.failureSummary })) }));
+  });
+  assert.deepEqual(violations, [], `accessibility: ${page.url()}`);
+}
+
 test.before(async () => {
   if (!evalsid) {
     evalsid = path.join(scratch, 'evalsid');
@@ -105,6 +118,7 @@ test('the UI loads under its Content-Security-Policy and every section renders',
   assert.equal(await page.locator('#signout').isHidden(), true, 'no sign-out when auth is off');
 
   // The inline-script protection holds: a script the page did not ship does not run.
+  const blocked = page.waitForEvent('console', { predicate: m => m.text().includes('CSP blocked script-src-elem inline') });
   const injected = await page.evaluate(() => {
     const script = document.createElement('script');
     script.textContent = 'window.__ran = true';
@@ -112,6 +126,7 @@ test('the UI loads under its Content-Security-Policy and every section renders',
     return window.__ran === true;
   });
   assert.equal(injected, false, 'an inline script ran despite the CSP');
+  await blocked;
   problems.length = 0; // that attempt is expected to be blocked
 
   const sections = {
@@ -134,6 +149,7 @@ test('the UI loads under its Content-Security-Policy and every section renders',
       .then(handle => handle.jsonValue())
       .catch(() => page.textContent('#main'));
     assert.match(seen, heading, `section ${section}`);
+    await checkAccessibility(page);
   }
 
   // The catalog lists the built-in evaluators and its filter narrows them.
@@ -160,6 +176,7 @@ test('with authentication on, the UI asks for a credential and accepts only a va
   const problems = watch(page);
   await page.goto(`${url}/ui/`);
   await page.waitForSelector('.signin');
+  await checkAccessibility(page);
   assert.equal(await page.locator('#whoami').textContent(), '');
 
   const fillAndSubmit = async value => {
@@ -222,6 +239,7 @@ test('an annotator answers and skips items in the browser', async () => {
   const problems = watch(page);
   await page.goto(`${url}/ui/#/queues/helpfulness/annotate`);
   await page.waitForSelector('form.annotate');
+  await checkAccessibility(page);
   assert.match(await page.textContent('#main'), /Judge the reply, not the tone\./);
   // Content is text, never markup.
   assert.match(await page.textContent('#main'), /<b>4<\/b>/);
@@ -391,5 +409,29 @@ test('the UI signs in through the identity provider with PKCE', async () => {
   assert.equal(await page.locator('input[aria-label="API key or token"]').isVisible(), true);
   const unexpected = problems.filter(problem => !/40[13]|Unauthorized|Forbidden/i.test(problem));
   assert.deepEqual(unexpected, []);
+  await page.close();
+});
+
+test('keyboard navigation and both palettes pass automated WCAG checks', async () => {
+  const url = await startServer('keyboard-accessibility');
+  const page = await browser.newPage();
+  await page.goto(`${url}/ui/`);
+  await page.waitForSelector('#project option', { state: 'attached' });
+  await page.keyboard.press('Tab');
+  assert.equal(await page.locator(':focus').getAttribute('class'), 'brand');
+  for (const section of ['runs', 'compare', 'policies', 'queues', 'guardrails', 'catalog']) {
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator(':focus').getAttribute('data-section'), section);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => !document.getElementById('main').textContent.includes('Loading'));
+    assert.equal(new URL(page.url()).hash, `#/${section}`);
+    await checkAccessibility(page);
+  }
+  await page.emulateMedia({ colorScheme: 'dark' });
+  for (const section of ['runs', 'compare', 'policies', 'queues', 'guardrails', 'catalog']) {
+    await page.click(`#nav a[data-section="${section}"]`);
+    await page.waitForFunction(() => !document.getElementById('main').textContent.includes('Loading'));
+    await checkAccessibility(page);
+  }
   await page.close();
 });

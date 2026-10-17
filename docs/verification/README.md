@@ -528,3 +528,19 @@ crash errors, an adapted Terminal-Bench-format fixture, destroy and startup
 failure cleanup. See [the run record](MULTI-SERVICE-2026-10-17.md) for methods,
 environment adjustments, automated coverage and limits. The standalone CI
 bootstrap path and production-scale behavior are not certified by this run.
+
+## Leftovers audit and live checks (2026-10-17)
+
+All 50 current leftovers rows now have a result or remaining requirement. The
+[new verification record](LEFTOVERS-2026-10-17.md) covers real pod/bubblewrap
+protected-file/interjection checks, worker SIGKILL/resume, a published tokenizer
+and MCP SDK, host-network and STRICT mTLS webhooks, ambient leak detection and
+explicit opt-out, PostgreSQL/MinIO pipeline races, logical restore and WAL PITR,
+a previous-reader check, checkpoint-controller reconciliation, live push
+redaction through NATS/PostgreSQL/API, and Chromium accessibility.
+
+The [JSON record](LEFTOVERS-2026-10-17.json) separates bounded passes, partial
+results, unavailable access/hardware/scale, unimplemented features and known
+limits. These local checks do not certify production scale, external models or
+cloud providers. The historical redaction section above now has additional
+cluster push-path evidence; its other limitations still apply.

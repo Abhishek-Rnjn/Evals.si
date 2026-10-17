@@ -414,6 +414,7 @@ class SandboxClient:
                 "level": _LEVEL.get(r.level, "none"),
                 "available": r.available,
                 "reason": r.reason,
+                "warning": r.warning,
             }
             for r in resp.rungs
         ]

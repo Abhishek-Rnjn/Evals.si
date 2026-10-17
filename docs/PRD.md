@@ -150,6 +150,11 @@ groups, full Compose compatibility and browser environments remain open. A pinne
 upstream audit still imports 219/241 tasks; adapted-task execution and bounded
 lifecycle/load evidence are recorded
 [separately](verification/README.md#multi-service-environments-2026-10-17).
+The [leftovers audit](verification/LEFTOVERS-2026-10-17.md) adds real pod/bubblewrap
+checker/interjection checks, worker SIGKILL/resume, MCP/tokenizer interoperability,
+mesh controls, recovery drills, pipeline races, redaction and browser accessibility;
+its 50-row inventory keeps remaining implementation, model, hardware and scale
+requirements explicit.
 
 ## Goals, non-goals and success metrics
 

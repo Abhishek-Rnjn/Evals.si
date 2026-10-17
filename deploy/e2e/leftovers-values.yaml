@@ -1,0 +1,49 @@
+# Disposable verification fixture. The database/store are single-node.
+fullnameOverride: leftovers
+image:
+  repository: evalsi-leftovers
+  tag: test
+  pullPolicy: Never
+server:
+  replicas: 2
+  tls: false
+  config:
+    sources:
+      allow_hosts:
+      - leftovers-dev-minio.evalsi-leftovers.svc
+devPostgres:
+  enabled: true
+  image: postgres:17-alpine
+  storage: 1Gi
+devMinio:
+  enabled: true
+  storage: 1Gi
+storage:
+  s3:
+    bucket: evalsi
+workers:
+  pools:
+    cpu:
+      replicas: 1
+      concurrency: 2
+    judge:
+      replicas: 0
+    harness:
+      replicas: 0
+    sandbox:
+      replicas: 0
+  env:
+  - name: HOME
+    value: /var/lib/evalsi
+sandbox:
+  pool:
+    enabled: true
+    ladder:
+    - pod
+    pod:
+      networkPolicyEnforced: true
+operator:
+  hostNetwork: true
+  metricsPort: 18081
+  healthPort: 18082
+  webhookPort: 19443
