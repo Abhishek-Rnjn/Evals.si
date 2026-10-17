@@ -154,7 +154,7 @@ These were verified only with stand-ins before the [verification run](verificati
 |------|----------------|
 | BFCL memory and web-search categories (multi-turn now runs) | §23 Phase 3 deviations |
 | τ-bench: tau2's own LiteLLM user. Evals.si's simulated user speaks through the run's judge; in telecom it follows tau2's user prompt and calls its tools through structured output rather than native tool calls. | §23 Phase 3 deviations |
-| Multi-service/multi-stage Terminal-Bench coverage: the pod backend and a restricted Compose importer now support adapted multi-service tasks; the original 22 of 241 rejected upstream tasks have not been re-audited, and multi-stage builds remain unsupported | §23 Phase 3 deviations |
+| Multi-service/multi-stage Terminal-Bench coverage: the pod backend and a restricted Compose importer now support adapted multi-service tasks; the pinned upstream re-audit still imports 219/241 (12 original Compose tasks and 10 other tasks refused); an adapted upstream task is exercised separately, and multi-stage builds remain unsupported | §23 Phase 3 deviations |
 | FrontierCode (task format not public in a verifiable form); CursorBench (tasks are private) | §23 Phase 3 deviations |
 
 ## Phase 5: fine-tuning and RL

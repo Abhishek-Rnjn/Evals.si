@@ -12,7 +12,12 @@ All notable changes to this project are recorded here. The format follows [Keep 
   sandbox SDK exposes status and optional bounded logs. Requires native
   Kubernetes sidecars and a passing NetworkPolicy canary.
 - A restricted multi-service Terminal-Bench 1 Compose importer, an API/Redis
-  example, and a model-free kind/Calico lifecycle check. See decision 0027.
+  example, and model-free kind/Calico checks for lifecycle faults, admission and
+  concurrent trials. A pinned upstream import audit and adapted task replay are
+  included. See decision 0027.
+- Fixed sandbox admission racing past `max_sandboxes` during concurrent creation
+  or restore. Pending startup now holds a slot; shutdown cancels and joins it,
+  and cancelled results are closed before registration.
 
 - **Agent provenance and handoff checks.** The agent pack adds deterministic `citation-grounding` over explicit evidence citations and `handoff-correctness` over source/transfer/target links. Evidence-state runs export versioned snapshots; built-in delegation, Claude CLI child events and explicit A2A parent-task metadata emit handoff steps. Step attributes survive JSON exports. An opt-in `cli_agent_e2e` workflow exercises a real Claude CLI on the kind pod rung when a model key is supplied; offline tests cover its spec and artifact verifier, while live verification remains pending.
 

@@ -51,11 +51,19 @@ multi-service Compose subset is:
 To run the standalone Kubernetes lifecycle check locally:
 
 ```sh
-deploy/e2e/services-kind.sh
+deploy/e2e/services-kind.sh --load-trials 48 --report /tmp/service-results.json
 ```
 
 It creates a named kind cluster with Calico, builds a small pool image, runs
 positive and negative grading, checks fresh database state and denied
-cross-trial connections, stops Redis, and checks startup-failure cleanup. The
-cluster remains available for inspection. CI runs it on main and manual
-workflow dispatches.
+cross-trial connections, stops Redis, and checks startup-failure cleanup. It also
+cancels startup/setup, times deadline expiry, kills an SDK worker and the pool
+process, checks restart cleanup, bursts requests above the pool cap, and runs
+concurrent API/Redis trials. Fault injection only targets its named local kind
+cluster. Use `--cases basic`, `--cases lifecycle` or `--cases load` to select cases;
+the default runs all three with 24 load trials at concurrency four. The cluster
+remains available for inspection. CI runs it on main and manual dispatches.
+
+The [verification record](../../docs/verification/MULTI-SERVICE-2026-10-17.md)
+contains measured results, limitations and commands for replaying an adapted
+upstream Terminal-Bench task with its original oracle and five tests.

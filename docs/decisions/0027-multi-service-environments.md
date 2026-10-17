@@ -69,6 +69,11 @@ restarts, the deadline stops service execution; Kubernetes owner garbage
 collection removes the objects when the pool pod is deleted. An API outage can
 delay deletion. Worker loss uses the existing idle-session reaper.
 
+The pool's `max_sandboxes` counts both live sessions and creations still starting,
+including snapshot restores. Admission reserves a slot atomically; cancellation
+and failed startup release it. Manager shutdown rejects new work, cancels and
+joins pending creation, then destroys registered sessions.
+
 `Stats.services` returns readiness, restart counts and a reason. Logs are
 explicitly requested with `include_service_logs`, capped at 100 lines and 16 KiB
 per service; the pool requires `get pods/log`. They are not copied into scored

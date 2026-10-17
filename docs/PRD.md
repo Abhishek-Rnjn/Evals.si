@@ -146,8 +146,9 @@ per trial and reports service crashes/restarts as infrastructure errors.
 A restricted Terminal-Bench 1 Compose importer and an API/Redis fixture are
 built ([decision 0027](decisions/0027-multi-service-environments.md),
 [example](../examples/multi-service/README.md)). Bubblewrap/Firecracker service
-groups, full Compose compatibility, browser environments and the original
-upstream benchmark coverage count remain open. Verification is recorded
+groups, full Compose compatibility and browser environments remain open. A pinned
+upstream audit still imports 219/241 tasks; adapted-task execution and bounded
+lifecycle/load evidence are recorded
 [separately](verification/README.md#multi-service-environments-2026-10-17).
 
 ## Goals, non-goals and success metrics

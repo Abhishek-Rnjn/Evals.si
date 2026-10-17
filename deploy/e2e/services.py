@@ -6,6 +6,7 @@ Needs EVALSI_SANDBOX_ADDR, mutual TLS paths and kubectl. Uses no model keys.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -33,7 +34,17 @@ NS = os.environ.get("EVALSI_SERVICES_NAMESPACE", "evalsi-services")
 
 def pods() -> list[dict[str, Any]]:
     result = subprocess.check_output(
-        ["kubectl", "get", "pods", "-n", NS, "-l", "evals.si/service-owner", "-o", "json"]
+        [
+            "kubectl",
+            "get",
+            "pods",
+            "-n",
+            NS,
+            "-l",
+            "evals.si/service-owner",
+            "-o",
+            "json",
+        ]
     )
     return json.loads(result)["items"]
 
@@ -49,8 +60,10 @@ async def check_cross_trial_isolation(first: TaskEnvironment) -> None:
             [
                 "python",
                 "-c",
-                "import socket; s=socket.socket(); s.settimeout(2); "
-                f"assert s.connect_ex(({other_ip!r},{port})) != 0",
+                (
+                    "import socket; s=socket.socket(); s.settimeout(2); "
+                    f"assert s.connect_ex(({other_ip!r},{port})) != 0"
+                ),
             ]
         )
         assert denied.ok, (port, denied)
@@ -98,14 +111,14 @@ async def check_trials(pool: EnvironmentPool, config: EnvironmentConfig, task: T
         assert not fresh.error, fresh
         await check_cross_trial_isolation(first)
         await check_service_crash(first, task)
-    print(
-        "PASS: readiness, API/database grading, fresh state, trial isolation, crash errors"
-    )
+    print("PASS: readiness, API/database grading, fresh state, trial isolation, crash errors")
 
 
 async def check_terminal_bench(pool: EnvironmentPool) -> None:
     [row] = load_terminal_bench(
-        str(ROOT / "examples/multi-service/terminal-bench"), oracle="true", network="deny"
+        str(ROOT / "examples/multi-service/terminal-bench"),
+        oracle="true",
+        network="deny",
     )
     record = Record(id=row["id"], input=Content(text=row["input"]), metadata=row["metadata"])
     task = Task.build(run_pb2.RunSpec(), record)
@@ -142,6 +155,15 @@ async def check_failed_startup(pool: EnvironmentPool, config: EnvironmentConfig)
 
 
 async def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--cases", default="basic,lifecycle,load")
+    parser.add_argument("--load-trials", type=int, default=24)
+    parser.add_argument("--report", type=Path)
+    args = parser.parse_args()
+    cases = set(args.cases.split(","))
+    if cases - {"basic", "lifecycle", "load"} or args.load_trials < 1:
+        parser.error("use basic,lifecycle,load and a positive load trial count")
+    report: dict[str, Any] = {}
     spec = ParseDict(
         yaml.safe_load((ROOT / "examples/multi-service/run.yaml").read_text())["spec"],
         run_pb2.RunSpec(),
@@ -153,11 +175,31 @@ async def main() -> None:
     async with SandboxClient(os.environ["EVALSI_SANDBOX_ADDR"]) as client:
         pool = EnvironmentPool(client)
         try:
-            await check_trials(pool, config, task)
-            await check_terminal_bench(pool)
-            await check_failed_startup(pool, config)
+            if "basic" in cases:
+                await check_trials(pool, config, task)
+                await check_terminal_bench(pool)
+                await check_failed_startup(pool, config)
+            from services_lifecycle import (
+                check_capacity_and_load,
+                check_creation_cancellation,
+                check_deadline,
+                check_pool_restart,
+                check_setup_cancellation,
+                check_worker_loss,
+            )
+
+            if "lifecycle" in cases:
+                await check_creation_cancellation(client, config)
+                await check_setup_cancellation(client, config)
+                report.update(await check_deadline(client, config))
+                report.update(await check_worker_loss(client, config))
+                await check_pool_restart(client, config)
+            if "load" in cases:
+                report["load"] = await check_capacity_and_load(client, config, args.load_trials)
         finally:
             await pool.aclose()
+    if args.report:
+        args.report.write_text(json.dumps(report, indent=2) + "\n")
 
 
 if __name__ == "__main__":

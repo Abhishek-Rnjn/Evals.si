@@ -2,6 +2,9 @@
 
 Bounded verification of decision [0027](../decisions/0027-multi-service-environments.md)
 on the `codex/multi-service-environments` branch, based on `9718395`.
+The follow-up includes fixes and live verification beyond initial PR head
+`4ee52b8`. [Machine-readable results](MULTI-SERVICE-2026-10-17.json) record the
+runtime, measured values, upstream revision, refusals and preserved file hashes.
 
 ## Live pod check
 
@@ -71,16 +74,127 @@ The current focused service, operator and Helm tests passed with the race
 detector, and `go vet -p 1 ./...` passed. No tests were disabled to obtain these
 results. Final commands/results are also listed in the pull request.
 
+## Follow-up: live faults and admission bug
+
+The expanded `services.py` runner also completed real fault injection against the
+updated pool, without waiting for CI:
+
+- Cancelled an RPC while its service was unready: its pending pod disappeared
+  and a replacement sandbox started successfully.
+- Cancelled environment acquisition while setup was sleeping: the complete
+  service pod disappeared.
+- Set a 25-second service lifetime and ran `sleep 120`: kubelet reported
+  `DeadlineExceeded`, every regular/init container terminated, and execution
+  returned an infrastructure error after 27.2 seconds including creation.
+- Killed an actual SDK worker with SIGKILL while its sandbox command was running:
+  its 3-second idle lease and the normal 10-second reaper reclaimed the pod in
+  10.0 seconds. This checks SDK-worker loss, not run-manager worker adoption.
+- Killed the pool's actual container process with SIGKILL, preserving the pool
+  pod UID. After its container restarted, the first service allocation deleted
+  the previous process's pod; a new sandbox executed successfully and the old
+  session ID returned `NOT_FOUND`.
+
+The capacity experiment found a product bug: with `max_sandboxes: 4`, eight
+simultaneous creations all succeeded and left eight service pods. Admission
+previously counted registered sessions, excluding creations still starting.
+The manager now reserves a slot under its mutex through startup and atomically
+registers the result. Create and Restore share this path. Failed/cancelled opens
+release their slots; cancelled backend results are closed. Shutdown rejects new
+work, cancels and joins pending opens, and is safe to call repeatedly.
+
+The new deterministic regressions failed against the previous manager (eight
+opens admitted at a limit of two, pending creation surviving shutdown, repeated
+Close panicking). They pass with the fix, including 100 repetitions under the
+race detector. The corrected live burst accepted exactly four of 16 requests,
+rejected the remaining 12 with the capacity error, and created only four pods.
+
+## Bounded concurrent load
+
+After the capacity burst, 48 API/Redis trials completed at concurrency four in
+165.448 seconds. Each acquired fresh services, wrote a trial-specific value to
+Redis, read it through the HTTP service, destroyed the sandbox, and waited for
+its pod to disappear before freeing its client-side concurrency slot. The maximum
+observed live service-pod count at acquisition was four. No service pods remained.
+
+| Measurement | p50 | p95 |
+| --- | ---: | ---: |
+| Trial, including startup and pod deletion | 13.372 s | 16.299 s |
+| Execution writing Redis and checking the API | 0.402 s | 0.891 s |
+
+These measurements came from a shared, single-node local test cluster with
+images preloaded. They establish bounded functional behavior, not production
+throughput or latency guarantees.
+
+## Upstream task coverage
+
+`services_upstream.py` audits a clean checkout of
+`laude-institute/terminal-bench` at
+`d28711d0da2675d0bb1d56de45ae5df6082438a3`. All 241 task directories were
+present, including files referenced by COPY. The importer accepts 219 and
+refuses 22: all 12 original multi-service Compose tasks plus ten tasks with
+unsupported/missing Dockerfiles or multi-stage/heredoc builds. Import acceptance
+does not establish successful execution. The exact refusals are in the JSON
+record beside this document.
+
+The replay explicitly adapts `simple-web-scraper` to prebuilt client/server
+images and the restricted Compose subset. It copies `task.yaml`, `solution.sh`
+and `tests/test_outputs.py` byte-for-byte and records their SHA-256 hashes.
+The server Python file is also copied unchanged. The adaptation replaces the
+upstream framework's Compose builds, dynamic image/container names, log mounts,
+custom network, published port and HTTP healthcheck with an explicit server
+image/argv and TCP readiness on port 8000. It uses `python:3.13-slim` instead of
+the framework client image, preinstalls the original requests/BeautifulSoup/pandas
+versions, and replaces the network-installing test launcher with a preinstalled
+venv containing the original pytest 8.4.1/pandas 2.3.2 checker dependencies.
+Runtime network is denied except for private service communication.
+
+The unchanged five upstream tests produced **0/5** before the solution,
+**5/5** after running the unchanged reference solution, and **1/5** after
+removing the output CSV. Both negative controls were ordinary failed grades,
+with no infrastructure error. The sandbox was destroyed after replay.
+
+To reproduce after starting the service pool and exporting its sandbox address
+and mutual TLS paths:
+
+```sh
+git clone --filter=blob:none --sparse https://github.com/laude-institute/terminal-bench /tmp/terminal-bench
+git -C /tmp/terminal-bench checkout d28711d0da2675d0bb1d56de45ae5df6082438a3
+git -C /tmp/terminal-bench sparse-checkout set original-tasks
+python/.venv/bin/python deploy/e2e/services_upstream.py \
+  --upstream-root /tmp/terminal-bench --work-dir /tmp/upstream-services --prepare
+docker build -t evalsi-upstream-client:test /tmp/upstream-services/client
+docker build -t evalsi-upstream-server:test /tmp/upstream-services/server
+kind load docker-image --name evalsi-services evalsi-upstream-client:test evalsi-upstream-server:test
+python/.venv/bin/python deploy/e2e/services_upstream.py \
+  --upstream-root /tmp/terminal-bench --work-dir /tmp/upstream-services
+```
+
+An intercepting HTTPS proxy may require passing its CA as a BuildKit secret:
+`--secret id=proxy_ca,src=/path/to/ca.pem`. The secret is used only during package
+installation. This workspace additionally used the node's local/native importer
+as described above.
+
+## Follow-up automated checks
+
+- The complete current sandbox race-test binary passed in the separate
+  privileged container; capability-dependent platform tests retained their
+  existing skips. The new admission tests require no host sandbox and all ran.
+- Sandbox RPC, run management, source and server/worker e2e packages passed with
+  `go test -p 1 -race`; `go vet -p 1 ./...` passed.
+- Python Ruff, formatting and mypy passed again. The suite rerun had 903 passes,
+  three skips and seven fixture setup errors because this workspace resolves
+  `go` to an unrelated `/usr/bin/go`. Selecting the real toolchain and freshly
+  built server made the entire affected module pass (eight tests). Together,
+  all 910 distinct tests passed; no tests were disabled. The initial branch
+  verification above also recorded a clean full-suite run.
+- The new e2e scripts passed Ruff/format using `python/pyproject.toml`; the shell
+  runner passed `bash -n`. CI was not used as a completion gate for this follow-up.
+
 ## Limits
 
-This is one local node with scripted agents and no model calls. It does not
-certify production scale, other CNIs/meshes, AKS/EKS, Kubernetes 1.29, or a real
-upstream Terminal-Bench suite. The fixture proves the adapted format, not a
-revised count of supported upstream tasks.
-
-Pool process restart reconciliation and setup-cancellation cleanup have focused
-automated tests, not a live process-kill experiment. The kubelet hard deadline
-is rendered and unit-tested; expiry of a long-running trial was not timed in
-this live check. Bubblewrap/Firecracker multi-service groups and service
-snapshots are unsupported. Checker isolation remains the existing same-sandbox
-behavior.
+This is one local three-CPU node with scripted agents and no model calls. It
+does not certify production scale, other CNIs/meshes, AKS/EKS, Kubernetes 1.29,
+or execution of an untouched upstream Terminal-Bench suite. The adapted task
+and the import audit are separate evidence. Bubblewrap/Firecracker multi-service
+groups and service snapshots remain unsupported. Checker isolation remains the
+existing same-sandbox behavior.

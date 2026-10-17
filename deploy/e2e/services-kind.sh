@@ -2,6 +2,9 @@
 # An independent, model-free service lifecycle check with real NetworkPolicy.
 # Needs Docker, Go, kind, kubectl, curl, openssl and uv. Creates only its named local cluster.
 set -euo pipefail
+# Lifecycle fault injection is restricted to this machine's Docker daemon.
+unset DOCKER_HOST DOCKER_CONTEXT DOCKER_TLS DOCKER_TLS_VERIFY DOCKER_CERT_PATH
+export DOCKER_HOST=unix:///var/run/docker.sock
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cluster="${SERVICES_CLUSTER:-evalsi-services}"
 work="$(mktemp -d)"
@@ -79,8 +82,9 @@ for _ in $(seq 1 30); do
 done
 grep -q 'Forwarding from' "$work/forward.log"
 (cd python && uv sync --locked --all-packages)
+EVALSI_SERVICES_KIND_CLUSTER="$cluster" \
 EVALSI_SANDBOX_ADDR=tls://localhost:17443 \
 EVALSI_SANDBOX_TLS_CA="$work/ca.crt" \
 EVALSI_SANDBOX_TLS_CERT="$work/client.crt" \
 EVALSI_SANDBOX_TLS_KEY="$work/client.key" \
-  python/.venv/bin/python deploy/e2e/services.py
+  python/.venv/bin/python deploy/e2e/services.py "$@"

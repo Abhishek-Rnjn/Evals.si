@@ -41,6 +41,7 @@ data:
   evalsi.yaml: |
     sandbox:
       ladder: [pod]
+      max_sandboxes: 4
       pod:
         namespace: evalsi-services
         guest_image: evalsi-services:test
@@ -75,6 +76,7 @@ spec:
       valueFrom: {fieldRef: {fieldPath: metadata.uid}}
     readinessProbe:
       tcpSocket: {port: 7443}
+      periodSeconds: 1
     volumeMounts:
     - {name: config, mountPath: /etc/evalsi, readOnly: true}
     - {name: tls, mountPath: /etc/tls, readOnly: true}
