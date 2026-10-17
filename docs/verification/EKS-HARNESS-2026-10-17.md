@@ -8,11 +8,12 @@ identities are deliberately omitted.
 
 ## Checkpoint before GPU training
 
-This record captures the completed work before prioritizing the remaining
-GPU training checks. **Actual verl/OpenRLHF training steps and trainer-backed
-OpenEnv/verifiers runs are still pending.** No GPU is currently allocated to
-an inference server. The checkpoint helpers and their model PVC are retained
-for that next phase; removing the GPU node now would block it.
+This section captures checkpoint commit `42d8127`, before prioritizing the
+remaining GPU training checks. At that checkpoint actual trainer steps were
+pending. The [subsequent GPU record](EKS-GPU-2026-10-17.md) now verifies a
+native verl 0.9.1 step and an OpenRLHF 0.9.0 compatibility control, with real
+reward calls and changed weights. Current OpenRLHF 0.11.2 and trainer-backed
+OpenEnv/verifiers remain unverified; not every GPU-dependent check is complete.
 
 Five confirmed product bugs were fixed on `verify/eks-leftovers`:
 
@@ -209,7 +210,7 @@ not verified in this follow-up, not an environmental impossibility.
 | 40 | Native tau2 user | Existing structured-output/judge adapter is not tau2's native LiteLLM user |
 | 41 | Multi-service Terminal-Bench | Excluded PR #85 scope |
 | 42 | FrontierCode/CursorBench | Private or unverifiable unpublished datasets |
-| 43 | verl/OpenRLHF training | Pending real training images/steps; reward adapters alone do not certify it |
+| 43 | verl/OpenRLHF training | Native verl 0.9.1 and OpenRLHF 0.9.0 one-step GPU updates passed real reward/gradient/changed-weight checks; current OpenRLHF 0.11.2 remains unverified after the user cancelled its slow native dependency build |
 | 44 | 4,096-rollout reward scale | Requires 256 warm microVMs/sized KVM pool |
 | 45 | Checkpoint watcher/PVC/LoRA | Actual in-cluster source controller and CLI watcher, two full-model PVC checkpoints, read-only controls, synthetic LoRA lifecycle and exception cleanup passed; fixed image release remains separate |
 | 46 | Generic PyTorch/Lightning serving | Serving-contract/product decision, not implemented |

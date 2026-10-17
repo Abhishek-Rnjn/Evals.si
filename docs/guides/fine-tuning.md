@@ -298,3 +298,11 @@ Nothing is evaluated again: the server (`RunService.ImportRun`, `POST /v1alpha1/
   - No training runs: that needs GPUs and an inference engine. The generation engine is a stand-in, and OpenRLHF is installed without its GPU dependencies (flash-attn, deepspeed).
 - **The e2e suite** scores the same code rollouts in-process and through the Reward Service, on the real sandbox, and checks that they agree.
 - **The load test** measures the Reward Service on a GRPO step's worth of rollouts.
+- **Opt-in EKS GPU verification** ran a native verl 0.9.1 step and an
+  OpenRLHF **0.9.0** compatibility control with actual model generations,
+  Evals.si rewards, nonzero gradients and changed checkpoint weights.
+  See the [exact versions, commands and limitations](../verification/EKS-GPU-2026-10-17.md).
+  OpenRLHF 0.11.2's full native training stack is not certified by the CPU
+  adapter tests or that older control. Its pinned vLLM/CUTLASS stack requires
+  protobuf <7, while the SDK requires >=7.35; run the SDK HTTP reward server
+  in a separate environment rather than forcing incompatible dependencies.
