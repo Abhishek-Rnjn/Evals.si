@@ -1,0 +1,15 @@
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata:
+  name: support-clickhouse
+  labels: {evals.si/project: studio}
+spec:
+  connector: clickhouse
+  endpoint: https://clickhouse.example.com:8443
+  locations: [observability.otel_traces]
+  credentials: {env: CLICKHOUSE_SOURCE_CREDENTIAL}
+  backfill: {since: 720h}
+  poll: {interval: 15s, maxRecordsPerSecond: 100}
+  maxTraceDuration: 1h
+  policies: [agent-health]
+  writeBack: {enabled: true}

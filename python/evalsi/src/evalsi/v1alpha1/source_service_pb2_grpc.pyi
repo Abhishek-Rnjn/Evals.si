@@ -28,7 +28,7 @@ GRPC_VERSION: str
 
 class SourceServiceStub:
     """SourceService manages trace sources: stores that already hold an agent's
-    traces (MLflow, Phoenix, Langfuse, LangSmith) which Evals.si reads, scores
+    traces (MLflow, Phoenix, Langfuse, LangSmith, ClickHouse) which Evals.si reads, scores
     with the project's online policies, and writes the scores back to. See
     docs/decisions/0016-trace-source-connectors.md.
 
@@ -59,7 +59,7 @@ class SourceServiceStub:
 @_typing.type_check_only
 class SourceServiceAsyncStub(SourceServiceStub):
     """SourceService manages trace sources: stores that already hold an agent's
-    traces (MLflow, Phoenix, Langfuse, LangSmith) which Evals.si reads, scores
+    traces (MLflow, Phoenix, Langfuse, LangSmith, ClickHouse) which Evals.si reads, scores
     with the project's online policies, and writes the scores back to. See
     docs/decisions/0016-trace-source-connectors.md.
 
@@ -86,7 +86,7 @@ class SourceServiceAsyncStub(SourceServiceStub):
 
 class SourceServiceServicer(metaclass=_abc_1.ABCMeta):
     """SourceService manages trace sources: stores that already hold an agent's
-    traces (MLflow, Phoenix, Langfuse, LangSmith) which Evals.si reads, scores
+    traces (MLflow, Phoenix, Langfuse, LangSmith, ClickHouse) which Evals.si reads, scores
     with the project's online policies, and writes the scores back to. See
     docs/decisions/0016-trace-source-connectors.md.
 

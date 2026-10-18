@@ -24,6 +24,14 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **ClickHouse trace source.** Pull completed traces from the OpenTelemetry
+  Collector `clickhouseexporter` Map schema, score them with online policies,
+  and write typed feedback to a companion table. Includes setup SQL and a
+  source example. ClickHouse 25.8.33.6 passed bounded live connector and real
+  Python-worker checks. Query current scores with `FINAL`; Cloud/TLS,
+  distributed tables, custom schemas and production-scale backfills remain
+  unverified. See decision 0028 and the trace sources guide.
+
 - Live leftovers verification scripts and a complete 50-row inventory, including
   backup/restore and WAL recovery, pipeline concurrency, mesh controls, actual
   sandbox harness checks and published MCP/tokenizer interoperability. The web

@@ -1,6 +1,6 @@
-# Trace sources: score traces you already keep in MLflow, Phoenix, Langfuse or LangSmith
+# Trace sources: score traces you already keep in MLflow, Phoenix, Langfuse, LangSmith or ClickHouse
 
-If your agents already send traces to MLflow, Arize Phoenix, Langfuse or LangSmith, Evals.si can read them from there. A **trace source** pulls the store's traces, scores them with your [online policies](end-to-end.md), and writes the scores back to the same traces, so they show up in the UI your team already uses. Nothing changes on the agents' side: no second exporter, and history from before Evals.si was installed can be read too.
+If your agents already send traces to MLflow, Arize Phoenix, Langfuse, LangSmith or a Collector ClickHouse trace table, Evals.si can read them from there. A **trace source** pulls the store's traces, scores them with your [online policies](end-to-end.md), and writes the scores back to that store. ClickHouse scores are queryable in a companion table; tracing applications need their own query or integration to display them. Nothing changes on the agents' side: no second exporter, and history from before Evals.si was installed can be read too.
 
 A pulled trace is an ordinary trace of the source's project. It is stored, shown in the web UI with its trajectory, graded by every policy that selects it, and labelled `source: <name>` so a policy can select it.
 
@@ -10,6 +10,7 @@ A pulled trace is an ordinary trace of the source's project. It is stored, shown
 | Arize Phoenix | `GET /v1/projects/{project}/traces`, spans by trace ID | Trace annotations with an `identifier`, which Phoenix upserts | Phoenix 20.20.0 |
 | Langfuse | `GET /api/public/v2/observations` (the real-time read path) | Scores, replaced under the same ID | Self-hosted 4.56.0: [Compose and in-cluster verification](../verification/README.md#langfuse-live-recheck-2026-10-10) |
 | LangSmith (cloud or self-hosted) | `POST /runs/query`: root runs list the traces, a trace's runs are its spans | Feedback on the trace's root run, updated in place (`PATCH /feedback/{id}`) when a score changes | Built from the pinned `langsmith` 0.4.37 client and tested against fixtures in its shapes; not live-verified |
+| ClickHouse | Collector `clickhouseexporter` Map trace table, over HTTP(S) | Typed rows in `<trace table>_evalsi_scores`; `FINAL` reads return the current score | ClickHouse 25.8.33.6 with the pinned Collector contrib v0.162.0 table schema; [bounded live verification](../verification/CLICKHOUSE-SOURCE.md) |
 | Databricks MLflow experiments | V3 search and trace metadata; signed HTTPS artifact download | V3 feedback assessments | Contract-tested against pinned MLflow 3.17.0 source; not live-verified |
 | Databricks Unity Catalog schemas | V4 `search-long-running`, polled; spans with the V4 `batchGet` | V4 feedback assessments on the SQL warehouse | Built from pinned MLflow 3.17.0 source and tested against derived fixtures; not live-verified |
 | SageMaker managed MLflow (tracking server or app) | The open-source calls, signed with AWS Signature Version 4 | The open-source assessments | Built from the pinned `sagemaker-mlflow` 0.5.0 source and tested against botocore signatures; not live-verified, and whether the managed server serves the MLflow 3 trace API is unconfirmed |
@@ -71,6 +72,77 @@ spec:
 A trace is its root run and the runs under it. Run types become span kinds (`llm`, `chain`, `tool`, `retriever`, `embedding`), and inputs and outputs are read as LangChain writes them: `{"input": "..."}` and `{"output": "..."}` are unwrapped to their text, messages and generations are read as chat messages. Token counts come from `llm` runs only, as a chain's are the sum of its children's. The model is the run's `ls_model_name` metadata, else its invocation's `model`. A run's metadata are span attributes named `langsmith.metadata.<key>`; a root run's `session_id`, `thread_id` or `conversation_id` metadata is the trajectory's session, as in LangSmith's threads.
 
 Scores are written as feedback on the root run, keyed by the metric, with `feedback_source.type` `model` for a judge's score and `api` otherwise, and the policy and evaluator in its metadata. Numbers and booleans (as 1 or 0) are the feedback's `score`, labels its `value`, and the rationale its `comment`. A changed score updates the same feedback, comment included (a score with no rationale clears it). Feedback deleted in LangSmith is created again when its score next changes; an unchanged score is not sent again.
+
+### ClickHouse
+
+Use `connector: clickhouse`, the ClickHouse **HTTP** URL (often port 8123, or
+HTTPS 8443) as `endpoint`, and exactly one `database.table` as `locations`.
+Identifiers use letters, digits and underscores and start with a letter or
+underscore. The supported input is the Collector contrib `clickhouseexporter`
+default **Map** trace schema (`otel_traces` by default), pinned to v0.162.0 in
+tests. Table names can differ; the columns must match that schema. Evals.si's
+own ClickHouse storage tables and the exporter's experimental JSON schema
+are different formats.
+
+The credential is `username:password`, with the first colon separating the
+username; additional colons belong to the password. It is sent as HTTP Basic
+auth. Omit `credentials` only when the server's default account is appropriate.
+Never place credentials or SQL in the endpoint URL. Private/plain-HTTP hosts
+need `sources.allow_hosts`, and named credentials need the usual project/host
+grant, including when supplied through a mounted Secret.
+
+```yaml
+apiVersion: evals.si/v1alpha1
+kind: TraceSource
+metadata: {name: support-clickhouse, labels: {evals.si/project: studio}}
+spec:
+  connector: clickhouse
+  endpoint: https://clickhouse.example.com:8443
+  locations: [observability.otel_traces]
+  credentials: {env: CLICKHOUSE_SOURCE_CREDENTIAL}
+  backfill: {since: 720h}
+  poll: {interval: 15s}
+  maxTraceDuration: 1h
+  policies: [agent-health]
+  writeBack: {enabled: true}
+```
+
+Before enabling write-back, create the companion score table with
+[clickhouse-scores.sql](../../examples/sources/clickhouse-scores.sql), executed
+in the trace table's database. Rename its table prefix when the input table is
+not named `otel_traces`. The connector never creates or alters tables. Its
+account needs `SELECT` on `observability.otel_traces` and `INSERT` on
+`observability.otel_traces_evalsi_scores`; write-back can be disabled for a
+read-only account. Give score viewers `SELECT` separately. A
+[complete source example](../../examples/sources/clickhouse.yaml) is included.
+
+A trace becomes eligible when its ended root span is exported. Children
+without a root are withheld, and do not appear in the deferred count. Set
+`maxTraceDuration` to cover the longest run plus export delay; roots or late
+children arriving outside that lookback can be missed. Attributes, status,
+events, links and timestamps are retained; the existing ingest profiles read
+OpenInference, OTel GenAI and related conventions. The Map schema has already
+stringified attribute values. Identical span rows are deduplicated; conflicting
+rows and traces with more than 10,000 span rows are errors, not partial scores.
+
+Scores retain policy, evaluator, metric, rationale and judge provenance.
+Numbers use `Score`, booleans use `Passed` and `Score` (1/0), and labels use
+`Value`. A changed value replaces all typed fields and the rationale.
+`ReplacingMergeTree(Version)` keeps the latest row per trace/policy/metric;
+retries may leave physical rows until merging. **Query with `FINAL`** (or an
+equivalent latest-version aggregation):
+
+```sql
+SELECT TraceId, Policy, Metric, Score, Passed, Value, Rationale
+FROM observability.otel_traces_evalsi_scores FINAL;
+```
+
+The connector uses bound SQL values, waits for query completion, honors
+429/503 `Retry-After`, and bounds response bytes, execution time and query
+memory. Large backfills still need appropriate ClickHouse indexing, quotas
+and sizing. Custom schemas, ClickHouse Cloud/TLS, distributed/replicated
+tables and tracing-UI score display are not certified by the local check.
+See [decision 0028](../decisions/0028-clickhouse-trace-source.md).
 
 ## Scheduled batch reports
 
@@ -189,7 +261,7 @@ The server makes the requests, from where it runs. So a project admin cannot poi
       - {env: "file:mlflow-token/token", projects: [studio]}
   ```
 
-  A file is read again at each use, so a rotated Secret takes effect without a restart. On Kubernetes, list the Secret in `sources.secrets` and the chart mounts it where `file:` names look (`sources.dir`). MLflow takes the value as a bearer token (a Databricks service principal's OAuth secret with `auth.databricks.client_id`; a JSON object of AWS keys for SageMaker), Phoenix as its API key (bearer), Langfuse as `<public key>:<secret key>`, LangSmith as its API key (`x-api-key`).
+  A file is read again at each use, so a rotated Secret takes effect without a restart. On Kubernetes, list the Secret in `sources.secrets` and the chart mounts it where `file:` names look (`sources.dir`). MLflow takes the value as a bearer token (a Databricks service principal's OAuth secret with `auth.databricks.client_id`; a JSON object of AWS keys for SageMaker), Phoenix as its API key (bearer), Langfuse as `<public key>:<secret key>`, LangSmith as its API key (`x-api-key`), and ClickHouse as `username:password` (HTTP Basic).
 
 Creating and changing sources needs `sources.write`, which only the `admin` role holds: a source makes the server read another system and write to it. `sources.read` lets admins list them and see their status.
 
@@ -220,7 +292,7 @@ evalsi source apply -f studio-mlflow.yaml --server $URL
 kubectl apply -f studio-mlflow.yaml                                  # with the operator
 ```
 
-`locations` is a list of MLflow experiments (names or IDs), one Phoenix project, at most one Langfuse environment, or LangSmith tracing projects (names or IDs). The same file works with `kubectl apply`: the operator applies it through the API, `kubectl apply` is refused for anything the API would refuse (an unlisted host, an ungranted credential), and `kubectl get tracesources` shows phase, pulled and scored counts and the watermark. Only namespace admins may create TraceSources (the `admin` role), not editors. A source and the policies it names can be applied together (one `kubectl apply`, or a GitOps sync): a policy the API does not have yet is not a refusal, so the source is admitted with a warning and syncs as soon as its policy does. With `evalsi source apply` and the API, a policy that does not exist is `NotFound`.
+`locations` is a list of MLflow experiments (names or IDs), one Phoenix project, at most one Langfuse environment, LangSmith tracing projects (names or IDs), or one ClickHouse `database.table`. The same file works with `kubectl apply`: the operator applies it through the API, `kubectl apply` is refused for anything the API would refuse (an unlisted host, an ungranted credential), and `kubectl get tracesources` shows phase, pulled and scored counts and the watermark. Only namespace admins may create TraceSources (the `admin` role), not editors. A source and the policies it names can be applied together (one `kubectl apply`, or a GitOps sync): a policy the API does not have yet is not a refusal, so the source is admitted with a warning and syncs as soon as its policy does. With `evalsi source apply` and the API, a policy that does not exist is `NotFound`.
 
 A policy for the pulled traces selects on their labels:
 
@@ -305,4 +377,4 @@ On Kubernetes, `networkPolicy.egress.enabled` adds an egress NetworkPolicy for t
 - Databricks table-prefix locations and experiment names, ambient AWS credentials for SageMaker, and an Azure ML variant (the server has no trace API to read).
 - Langfuse Cloud, TLS deployments, production persistence and arm64 images. Self-hosted 4.56.0 score replacement, Secret/Service pulls and enforced evalsid egress passed the recorded in-cluster check.
 - LangSmith against a live deployment: the connector follows the `langsmith` 0.4.37 client's requests, and the `filter` window on `runs/query` and a `409` for feedback created twice are the assumptions most worth checking first.
-- ClickHouse, Tempo and Kafka sources (milestone M5).
+- Tempo, Kafka and S3 sources (milestone M5).

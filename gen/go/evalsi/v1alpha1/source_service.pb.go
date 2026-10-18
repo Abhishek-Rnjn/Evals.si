@@ -84,7 +84,7 @@ type TraceSource struct {
 	// Lowercase letters, digits, '.', '_' or '-'.
 	Name    string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Project string `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
-	// "mlflow", "phoenix", "langfuse" or "langsmith".
+	// "mlflow", "phoenix", "langfuse", "langsmith" or "clickhouse".
 	Connector string `protobuf:"bytes,3,opt,name=connector,proto3" json:"connector,omitempty"`
 	// How the store is reached. MLflow: "oss" (the default), "databricks" or
 	// "sagemaker". "azureml" is a known name that is refused: its MLflow
@@ -93,7 +93,8 @@ type TraceSource struct {
 	// The store's base URL, for example http://mlflow.studio:5000.
 	Endpoint string `protobuf:"bytes,5,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
 	// Where to read: MLflow experiment IDs, a Phoenix project, a Langfuse
-	// environment, LangSmith tracing projects (names or IDs).
+	// environment, LangSmith tracing projects (names or IDs), or one ClickHouse
+	// database.table in the Collector clickhouseexporter's Map trace schema.
 	Locations   []string           `protobuf:"bytes,6,rep,name=locations,proto3" json:"locations,omitempty"`
 	Credentials *SourceCredentials `protobuf:"bytes,7,opt,name=credentials,proto3" json:"credentials,omitempty"`
 	Auth        *SourceAuth        `protobuf:"bytes,8,opt,name=auth,proto3" json:"auth,omitempty"`
