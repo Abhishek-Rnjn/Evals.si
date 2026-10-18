@@ -27,6 +27,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- `evalsi canary create` writes separate high-entropy training and probe files; `builtin/contamination-canary` scores exact private-suffix recall.
+
 - Seeded `prompt-injection` tool faults append bounded untrusted payloads; `builtin/injection-followed` reports explicit final-answer attack markers.
 
 - `evalsi determinism results.json` reports observed within-record score stability and a conservative independent-trial recommendation.

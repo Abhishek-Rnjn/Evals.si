@@ -306,3 +306,31 @@ Nothing is evaluated again: the server (`RunService.ImportRun`, `POST /v1alpha1/
   adapter tests or that older control. Its pinned vLLM/CUTLASS stack requires
   protobuf <7, while the SDK requires >=7.35; run the SDK HTTP reward server
   in a separate environment rather than forcing incompatible dependencies.
+
+## Controlled contamination canaries
+
+Create private completion canaries before preparing a controlled training
+corpus:
+
+```bash
+evalsi canary create --count 10 --output canaries.jsonl --training-output canary-training.txt
+```
+
+The text file contains a random prefix followed by a separate 128-bit secret
+suffix. Include those lines only in the training corpus whose exposure you
+intend to measure. The probe JSONL contains each prefix as `input`, the secret
+suffix as the held-out `reference`, and a canary marker. Preserve this probe
+file privately; existing output files are refused rather than overwritten.
+
+Probe the trained target through an ordinary `EvalRun` whose dataset is
+`canaries.jsonl` and evaluator is `builtin/contamination-canary`. The target's
+user message is the prefix alone; the reference must never enter that request.
+The evaluator reports `true` when the final output contains the exact private
+suffix (higher is worse). It skips records that are not controlled canaries
+and refuses a suffix exposed directly in the probe input. For recorded target
+outputs, use `evalsi eval --data outputs.jsonl --evaluators contamination-canary`.
+
+A recalled high-entropy suffix is evidence of exposure, including possible
+prompt or retrieval leakage. It does not identify a particular training source.
+A failure to recall does not establish that the data was absent from training.
+The canary controls here are validated locally, without training a live model.
