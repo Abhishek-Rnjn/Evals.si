@@ -32,8 +32,10 @@ from 0.4.x; this compatibility constraint is also used by the existing adapter.
 ## What is measured
 
 - **Batch runner:** full native input conversion, evaluation, result collection
-  and score extraction. Each tool uses its batch API, concurrency one, with
-  progress displays disabled. LangSmith and Braintrust require an identity
+  and score extraction. Each tool uses its batch API and concurrency one;
+  displays are disabled where the public API exposes that control. Braintrust
+  `Eval` retains its progress/summary bookkeeping, captured through pipes.
+  LangSmith and Braintrust require an identity
   task over precomputed outputs; Evals.si, DeepEval and Ragas accept those
   outputs directly. Evals.si computes its normal manifest and intervals;
   DeepEval retains its normal local test-run bookkeeping. Features and their
