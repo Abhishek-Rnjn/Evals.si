@@ -1,0 +1,384 @@
+{
+  "source_commit": "c975420b4c1a46e9ef051df94f7e5fb2b26a7f3a",
+  "scope": "Observed local SDK behavior, not a universal metric-quality ranking.",
+  "results": [
+    {
+      "tool": "evalsi",
+      "version": "0.2.0.dev0",
+      "cases": [
+        {
+          "name": "equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "wrong",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "case",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "leading-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "trailing-newline",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "internal-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-output",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-normalization",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        }
+      ]
+    },
+    {
+      "tool": "deepeval",
+      "version": "4.3.1",
+      "cases": [
+        {
+          "name": "equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "wrong",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "case",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "leading-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": false
+        },
+        {
+          "name": "trailing-newline",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": false
+        },
+        {
+          "name": "internal-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-equal",
+          "strict_expected": 1.0,
+          "status": "rejected",
+          "exception": "MissingTestCaseParamsError"
+        },
+        {
+          "name": "empty-output",
+          "strict_expected": 0.0,
+          "status": "rejected",
+          "exception": "MissingTestCaseParamsError"
+        },
+        {
+          "name": "unicode-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-normalization",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        }
+      ]
+    },
+    {
+      "tool": "ragas",
+      "version": "0.4.3",
+      "cases": [
+        {
+          "name": "equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "wrong",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "case",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "leading-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "trailing-newline",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "internal-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-output",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-normalization",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        }
+      ]
+    },
+    {
+      "tool": "langsmith",
+      "version": "0.14.11",
+      "cases": [
+        {
+          "name": "equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "wrong",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "case",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "leading-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "trailing-newline",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "internal-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-output",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-normalization",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        }
+      ]
+    },
+    {
+      "tool": "braintrust",
+      "version": "0.46.1",
+      "cases": [
+        {
+          "name": "equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "wrong",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "case",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "leading-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "trailing-newline",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "internal-space",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "empty-output",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-equal",
+          "strict_expected": 1.0,
+          "status": "scored",
+          "score": 1.0,
+          "agrees_with_strict": true
+        },
+        {
+          "name": "unicode-normalization",
+          "strict_expected": 0.0,
+          "status": "scored",
+          "score": 0.0,
+          "agrees_with_strict": true
+        }
+      ]
+    }
+  ]
+}

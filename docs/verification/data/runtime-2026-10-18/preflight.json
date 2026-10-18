@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "measured_at": "2026-10-18T12:38:32Z",
+  "platform": {
+    "system": "Linux",
+    "architecture": "x86_64",
+    "python": "3.12.14",
+    "logical_cpus": 3
+  },
+  "checks": {
+    "kvm": {
+      "ready": false,
+      "reason": "FileNotFoundError: No such file or directory"
+    },
+    "firecracker_binary": {
+      "ready": false,
+      "reason": "firecracker is not installed"
+    },
+    "bubblewrap": {
+      "ready": true,
+      "exit_code": 0,
+      "detail": ""
+    },
+    "docker": {
+      "ready": true,
+      "exit_code": 0,
+      "detail": "28.4.0 linux x86_64"
+    },
+    "gpu": {
+      "ready": false,
+      "reason": "nvidia-smi is not installed"
+    },
+    "go": {
+      "ready": true,
+      "exit_code": 0,
+      "detail": "go version go1.26.9 linux/amd64"
+    },
+    "helm": {
+      "ready": false,
+      "reason": "helm is not installed"
+    },
+    "kubectl": {
+      "ready": false
+    },
+    "cgroup_delegation": {
+      "ready": false,
+      "scope": "writable mount only; enforcement needs a real child cgroup"
+    }
+  },
+  "configured_variables": {
+    "LANGSMITH_API_KEY": false,
+    "BRAINTRUST_API_KEY": false,
+    "EVALSI_TEST_LANGSMITH_CREDENTIAL": false,
+    "EVALSI_JUDGE_MODEL": false
+  },
+  "scope": "Prerequisites only. A ready prerequisite is not a passing product verification.",
+  "unmet_requirements": []
+}

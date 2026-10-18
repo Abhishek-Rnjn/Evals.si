@@ -58,14 +58,9 @@ def phoenix(args):
         }
     )
     path = (
-        "/v1/projects/"
-        + urllib.parse.quote(args.project, safe="")
-        + "/trace_annotations?"
-        + query
+        "/v1/projects/" + urllib.parse.quote(args.project, safe="") + "/trace_annotations?" + query
     )
-    with urllib.request.urlopen(
-        args.endpoint.rstrip("/") + path, timeout=15
-    ) as response:
+    with urllib.request.urlopen(args.endpoint.rstrip("/") + path, timeout=15) as response:
         rows = json.load(response)["data"]
     if len(rows) != 1 or rows[0]["result"]["score"] != 0:
         raise ValueError("Phoenix did not persist exactly one latest score of zero")

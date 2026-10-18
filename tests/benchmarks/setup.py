@@ -25,9 +25,7 @@ def main():
     mapping = {"evalsi": str(ROOT / "python/.venv/bin/python")}
     for tool in TOOLS[1:]:
         environment = directory / tool
-        subprocess.run(
-            ["uv", "venv", "--python", args.python, str(environment)], check=True
-        )
+        subprocess.run(["uv", "venv", "--python", args.python, str(environment)], check=True)
         interpreter = environment / "bin/python"
         subprocess.run(
             [

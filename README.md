@@ -362,7 +362,7 @@ What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md)
 
 [Runtime verification](docs/verification/RUNTIME-VERIFICATION-2026-10-18.md)
 tracks real KVM and other remaining prerequisites. The
-[competitor benchmark methods](tests/benchmarks/README.md) compare deterministic
+[competitor benchmark results](docs/verification/COMPETITOR-BENCHMARKS-2026-10-18.md) compare deterministic
 local evaluation overhead, with separate limits for hosted platforms.
 
 ## Documentation

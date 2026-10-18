@@ -34,13 +34,11 @@ def test_invalid_results_cannot_become_fast_benchmark_samples(failure):
         scores[0] = (scores[0][0], float("nan"))
     else:
         scores.append(("unknown", 1.0))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"missing results|incorrect, duplicate"):
         benchmark.validate(rows, scores)
 
 
 def test_result_order_does_not_change_correctness_digest():
     rows = benchmark.corpus(12)
     scores = [(r["id"], float(r["output"] == r["reference"])) for r in rows]
-    assert benchmark.validate(rows, scores) == benchmark.validate(
-        rows, list(reversed(scores))
-    )
+    assert benchmark.validate(rows, scores) == benchmark.validate(rows, list(reversed(scores)))

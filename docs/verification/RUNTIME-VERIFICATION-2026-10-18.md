@@ -35,7 +35,7 @@ hardware evidence, and no local SDK result becomes a hosted-service claim.
 | Check | Observed result |
 | --- | --- |
 | Real-KVM prerequisite and explicit opt-in | Device absent; opt-in fails at `/dev/kvm`. No hardware pass. |
-| Source sandbox suite in disposable Debian container, `go test -race` | Passed in 35.798 s. Real bwrap file/network/ptrace/timeout/memory/snapshot controls passed. Fake Firecracker and fake Kubernetes tests remain contract coverage. |
+| Source sandbox suite in disposable Debian container, `go test -race` | Passed in 35.699 s. Real bwrap file/network/ptrace/timeout/memory/snapshot controls passed. Fake Firecracker and fake Kubernetes tests remain contract coverage. |
 | Container skips | Real KVM opt-in, absent Landlock and undelegated cgroup controls skipped. No unprivileged-pod or KVM certification. |
 | Phoenix 20.20.0 live connector | OTLP seed, List/Fetch/mapping and two feedback writes passed with race detection. Stable annotation ID, exactly one persisted latest score of zero, independently read back. |
 | MLflow 3.17.0 live connector | Real SDK trace seed, List/Fetch and replacement feedback passed with race detection. Independently read exactly one latest score of zero. |
@@ -49,6 +49,13 @@ synthetic data, then were stopped before timing. Their live checks exercise the
 source connector, not the entire policy/worker loop or provider UI. Hosted free
 allowances are described by the vendors, but this workspace has no associated
 account/API key; free pricing does not supply an authenticated test workspace.
+
+The [sandbox summary](data/runtime-2026-10-18/sandbox.json) and
+[full test events](data/runtime-2026-10-18/sandbox.jsonl) retain every pass and
+skip. [Trace-store read-back](data/runtime-2026-10-18/trace-stores.json) and
+[preflight](data/runtime-2026-10-18/preflight.json) contain the bounded local
+results. The [competitor report](COMPETITOR-BENCHMARKS-2026-10-18.md) records
+112 timed trials separately from these functional checks.
 
 ## Complete remaining-check disposition
 

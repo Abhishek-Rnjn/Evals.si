@@ -27,9 +27,7 @@ def kvm_probe(device: str = "/dev/kvm") -> dict[str, Any]:
             version = fcntl.ioctl(fd, 0xAE00, 0)  # KVM_GET_API_VERSION
             if version != 12:
                 return {"ready": False, "reason": f"unsupported KVM API {version}"}
-            vm = fcntl.ioctl(
-                fd, 0xAE01, 0
-            )  # KVM_CREATE_VM: prove access, not just presence
+            vm = fcntl.ioctl(fd, 0xAE01, 0)  # KVM_CREATE_VM: prove access, not just presence
             os.close(vm)
             return {"ready": True, "api_version": version, "vm_created": True}
         finally:
@@ -38,9 +36,7 @@ def kvm_probe(device: str = "/dev/kvm") -> dict[str, Any]:
         return {"ready": False, "reason": f"{type(exc).__name__}: {exc.strerror}"}
 
 
-def command_probe(
-    argv: list[str], *, timeout: int = 15, env: Any = None
-) -> dict[str, Any]:
+def command_probe(argv: list[str], *, timeout: int = 15, env: Any = None) -> dict[str, Any]:
     if shutil.which(argv[0]) is None:
         return {"ready": False, "reason": f"{argv[0]} is not installed"}
     try:
@@ -71,9 +67,7 @@ def inspect() -> dict[str, Any]:
     checks = {
         "kvm": kvm_probe(),
         "firecracker_binary": command_probe(["firecracker", "--version"]),
-        "bubblewrap": command_probe(
-            ["bwrap", "--unshare-all", "--ro-bind", "/", "/", "/bin/true"]
-        ),
+        "bubblewrap": command_probe(["bwrap", "--unshare-all", "--ro-bind", "/", "/", "/bin/true"]),
         "docker": command_probe(
             [
                 "docker",
@@ -84,9 +78,7 @@ def inspect() -> dict[str, Any]:
             ],
             env=docker_env,
         ),
-        "gpu": command_probe(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]
-        ),
+        "gpu": command_probe(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]),
         "go": command_probe(["go", "version"]),
         "helm": command_probe(["helm", "version", "--short"]),
         "kubectl": {"ready": shutil.which("kubectl") is not None},

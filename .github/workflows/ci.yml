@@ -160,8 +160,8 @@ jobs:
           EVALSI_REQUIRE_EVALSID: "1"
       - name: Verification prerequisites and benchmark correctness controls
         run: |
-          uv run --no-sync ruff check ../tests/verification ../tests/benchmarks
-          uv run --no-sync ruff format --check ../tests/verification ../tests/benchmarks
+          uv run --no-sync ruff check --config pyproject.toml ../tests/verification ../tests/benchmarks
+          uv run --no-sync ruff format --check --config pyproject.toml ../tests/verification ../tests/benchmarks
           uv run --no-sync pytest -q ../tests/verification ../tests/benchmarks/test_evaluation.py
       - name: CLI smoke test
         run: uv run --no-sync evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match

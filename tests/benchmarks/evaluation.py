@@ -26,9 +26,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def digest(value) -> str:
     return hashlib.sha256(
-        json.dumps(
-            value, sort_keys=True, ensure_ascii=False, separators=(",", ":")
-        ).encode()
+        json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
     ).hexdigest()
 
 
@@ -74,9 +72,7 @@ def validate(rows, scores) -> str:
             raise ValueError(f"incorrect, duplicate, or unexpected result for {key}")
         actual[key] = score
     if actual.keys() != expected.keys():
-        raise ValueError(
-            f"missing results: expected {len(expected)}, got {len(actual)}"
-        )
+        raise ValueError(f"missing results: expected {len(expected)}, got {len(actual)}")
     return digest(sorted(actual.items()))
 
 
@@ -125,8 +121,12 @@ def worker(args) -> int:
 
     if args.tier == "batch":
         run_batch = batch_runner(args.tool, 1)
-        run = lambda: run_batch(rows)
-        warmup = lambda: run_batch(corpus(12))
+
+        def run():
+            return run_batch(rows)
+
+        def warmup():
+            return run_batch(corpus(12))
     else:
         run = metric_runner(args.tool, rows)
         warmup = metric_runner(args.tool, corpus(12))
@@ -140,9 +140,7 @@ def worker(args) -> int:
     cpu_seconds = time.process_time() - cpu_before
     correctness = validate(rows, scores)
     if network_attempts:
-        raise ValueError(
-            f"local SDK attempted network access {len(network_attempts)} times"
-        )
+        raise ValueError(f"local SDK attempted network access {len(network_attempts)} times")
     result = {
         "tool": args.tool,
         "python": platform.python_version(),
@@ -188,9 +186,7 @@ def summarize(samples):
                 "median_records_per_second": statistics.median(
                     s["records_per_second"] for s in group
                 ),
-                "median_peak_rss_kib": statistics.median(
-                    s["peak_rss_kib"] for s in group
-                ),
+                "median_peak_rss_kib": statistics.median(s["peak_rss_kib"] for s in group),
             }
         )
     return summaries
@@ -208,13 +204,9 @@ def orchestrate(args) -> int:
     ]
     random.Random(args.seed).shuffle(jobs)
     samples, failures = [], []
-    commit = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
-    ).strip()
+    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     dirty = bool(
-        subprocess.check_output(
-            ["git", "status", "--porcelain"], cwd=ROOT, text=True
-        ).strip()
+        subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip()
     )
     report = {
         "schema_version": 1,
@@ -228,7 +220,11 @@ def orchestrate(args) -> int:
             "python": platform.python_version(),
             "logical_cpus": os.cpu_count(),
         },
-        "scope": "Local, serial exact-match SDK/metric overhead on nonempty strings without leading/trailing whitespace. No hosted, judge-quality, sandbox, or production-scale comparison.",
+        "scope": (
+            "Local, serial exact-match SDK/metric overhead on nonempty strings without "
+            "leading/trailing whitespace. No hosted, judge-quality, sandbox, or "
+            "production-scale comparison."
+        ),
         "samples": samples,
         "failures": failures,
     }
@@ -267,7 +263,8 @@ def orchestrate(args) -> int:
                 sample.update(trial=trial, process_seconds=time.perf_counter() - before)
                 samples.append(sample)
                 print(
-                    f"{position}/{len(jobs)} {tier} {tool} n={records}: {sample['records_per_second']:.1f} records/s",
+                    f"{position}/{len(jobs)} {tier} {tool} n={records}: "
+                    f"{sample['records_per_second']:.1f} records/s",
                     flush=True,
                 )
             except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
@@ -287,9 +284,7 @@ def orchestrate(args) -> int:
     for records in args.sizes:
         for field in ("dataset_sha256", "scores_sha256"):
             if len({s[field] for s in samples if s["records"] == records}) > 1:
-                failures.append(
-                    {"records": records, "error": f"cross-tool {field} mismatch"}
-                )
+                failures.append({"records": records, "error": f"cross-tool {field} mismatch"})
     if len({s["python"] for s in samples}) > 1:
         failures.append({"error": "tools used different Python versions"})
     args.out.write_text(json.dumps(report, indent=2) + "\n")

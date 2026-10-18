@@ -19,9 +19,7 @@ def batch_runner(tool: str, concurrency: int):
                 concurrency=concurrency,
                 cache=False,
             )
-            if result.errors() or any(
-                r.outcome != evalsi.Outcome.SCORED for r in result.results
-            ):
+            if result.errors() or any(r.outcome != evalsi.Outcome.SCORED for r in result.results):
                 raise ValueError("Evals.si returned errors/skips")
             return [(r.record_id, float(r.scores[0].passed)) for r in result.results]
 
@@ -50,9 +48,7 @@ def batch_runner(tool: str, concurrency: int):
                 [ExactMatchMetric()],
                 async_config=AsyncConfig(run_async=False, max_concurrent=concurrency),
                 cache_config=CacheConfig(write_cache=False, use_cache=False),
-                error_config=ErrorConfig(
-                    ignore_errors=False, skip_on_missing_params=False
-                ),
+                error_config=ErrorConfig(ignore_errors=False, skip_on_missing_params=False),
                 display_config=DisplayConfig(
                     show_indicator=False, print_results=False, inspect_after_run=False
                 ),
@@ -160,9 +156,7 @@ def batch_runner(tool: str, concurrency: int):
             )
             if any(r.error for r in result.results):
                 raise ValueError("Braintrust returned evaluation errors")
-            return [
-                (r.input["id"], float(r.scores["exact_match"])) for r in result.results
-            ]
+            return [(r.input["id"], float(r.scores["exact_match"])) for r in result.results]
 
     else:
         raise ValueError(f"unsupported batch tool: {tool}")
@@ -185,27 +179,20 @@ def metric_runner(tool: str, rows: list[dict[str, str]]):
         ]
 
         def run():
-            return [
-                (r.id, float(exact_match.fn(r, normalize=False).passed)) for r in inputs
-            ]
+            return [(r.id, float(exact_match.fn(r, normalize=False).passed)) for r in inputs]
 
     elif tool == "deepeval":
         from deepeval.metrics import ExactMatchMetric
         from deepeval.test_case import LLMTestCase
 
         inputs = [
-            LLMTestCase(
-                input=r["id"], actual_output=r["output"], expected_output=r["reference"]
-            )
+            LLMTestCase(input=r["id"], actual_output=r["output"], expected_output=r["reference"])
             for r in rows
         ]
         metric = ExactMatchMetric()
 
         def run():
-            return [
-                (r.input, float(metric.measure(r, _show_indicator=False)))
-                for r in inputs
-            ]
+            return [(r.input, float(metric.measure(r, _show_indicator=False))) for r in inputs]
 
     elif tool == "ragas":
         from ragas.metrics.collections import ExactMatch
@@ -216,11 +203,7 @@ def metric_runner(tool: str, rows: list[dict[str, str]]):
             return [
                 (
                     r["id"],
-                    float(
-                        metric.score(
-                            response=r["output"], reference=r["reference"]
-                        ).value
-                    ),
+                    float(metric.score(response=r["output"], reference=r["reference"]).value),
                 )
                 for r in rows
             ]

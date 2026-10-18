@@ -18,6 +18,10 @@ python tests/benchmarks/evaluation.py \
   --interpreters /tmp/evalsi-bench-envs/interpreters.json \
   --sizes 256 2048 --repetitions 7 --out /tmp/benchmark.json
 python/.venv/bin/python -m pytest tests/benchmarks/test_evaluation.py
+
+# Optional standalone plot, using the same JSON:
+uv run --no-project --with matplotlib==3.10.7 python tests/benchmarks/plot.py \
+  /tmp/benchmark.json --out /tmp/benchmark.svg
 ```
 
 The setup and dependency downloads need network access. **Measurements disable
