@@ -12,7 +12,7 @@ dist:
   name: evalsi-collector
   description: OpenTelemetry Collector for Evals.si
   output_path: ./_build
-  version: 0.2.0
+  version: 0.3.0
 
 receivers:
   - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.162.0
