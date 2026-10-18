@@ -415,6 +415,8 @@ For the Kubernetes pieces:
 
 The sandbox tests need bubblewrap and unprivileged user namespaces. On Ubuntu 24.04, also run `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0`.
 
+Controlled robustness checks include seeded prompt-injection tool faults, private completion canaries (`evalsi canary create`), and observed trial score diagnostics (`evalsi determinism`). Their scope and follow-ups are recorded in the [implementation review](docs/verification/STACK-101.md).
+
 ## Contributing
 
 Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) says where things live, what to run before you push and the conventions to follow. Please read the [Code of Conduct](CODE_OF_CONDUCT.md). Report security problems privately: see [SECURITY.md](SECURITY.md). [SUPPORT.md](SUPPORT.md) covers getting help, stability and what has been verified. Changes are listed in the [CHANGELOG](CHANGELOG.md).

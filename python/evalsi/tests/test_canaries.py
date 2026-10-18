@@ -30,6 +30,19 @@ def test_canaries_keep_secrets_out_of_inputs_and_probe_recall() -> None:
             score(contamination_canary, record)
 
 
+def test_registered_canary_evaluator_aggregates_recall_controls() -> None:
+    from evalsi import evaluate
+
+    records = make_canaries(2)
+    records[0].output = records[0].reference
+    records[1].output = Content(text="unknown completion")
+    result = evaluate(records, ["contamination-canary"])
+    metric = result.metric("contamination-canary")
+    assert metric.n == 2
+    assert metric.mean == 0.5
+    assert metric.errors == 0
+
+
 def test_canary_cli_writes_separate_probe_and_training_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

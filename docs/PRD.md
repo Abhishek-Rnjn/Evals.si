@@ -441,3 +441,7 @@ Releases follow semantic versioning; until 1.0 a minor version may change the `v
 - [x] Packaging: an independent chart plus an integration guide.
 - [ ] Access to the agent harness repo for the real-cluster test and trace fixtures (planned for that test).
 - [ ] Kafka and log sources: built-in connectors, or collector recipes only for v1?
+
+## Reliability and robustness implementation review
+
+[PR 101 review](verification/STACK-101.md): archive quota release, durable accepted online work, opt-in webhook destination guard, seeded injection controls, controlled contamination canaries and trial score diagnostics are implemented with local tests. Audit strict/read coverage, Tempo, ambient credentials, event/CLI interjections, pass@k exclusion, A2A push and additional training telemetry remain follow-ups. Hosted-provider and training outcomes are not established by these local controls.

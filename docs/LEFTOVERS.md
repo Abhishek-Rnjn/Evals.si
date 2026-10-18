@@ -220,3 +220,7 @@ These were verified only with stand-ins before the [verification run](verificati
 |------|-------|----------------|
 | A coding agent product over MCP in CI | Actual EKS Claude CLI invoked source MCP over stdio; independent artifact checks confirmed mean 2/3 and failed gate. GitHub mcp-agent secret/first CI run, other coding products and external remote OAuth remain separate. See [EKS checkpoint](verification/EKS-HARNESS-2026-10-17.md) and [combined inventory](verification/LEFTOVERS-2026-10-17.md). | §23 Phase 6 limits, [MCP guide](guides/mcp.md#tested-with-a-real-coding-agent) |
 | Wasm evaluators with a judge or the sandbox; an Azure ML trace source (its MLflow server has no V3 trace API); server-side SQL over runs (see below) | Wasm modules have no I/O by design; such evaluators stay Python plugins or images. | Decision 0014 |
+
+## Thirteen-item implementation review
+
+See [PR 101 implementation review](verification/STACK-101.md) for the completed reliability and robustness subset and explicit follow-ups. The new controls do not expand earlier live-model or cloud-provider verification claims.
