@@ -18,6 +18,14 @@ CREATE TABLE IF NOT EXISTS watch_trace_heads (
  start_ns INTEGER NOT NULL, projection_hash TEXT NOT NULL DEFAULT '', published INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(project,trace_id)
 );
+CREATE TABLE IF NOT EXISTS watch_publications (
+ project TEXT NOT NULL, trace_id TEXT NOT NULL, revision INTEGER NOT NULL, start_ns INTEGER NOT NULL,
+ PRIMARY KEY(project,trace_id,revision)
+);
+CREATE TABLE IF NOT EXISTS watch_score_references (
+ project TEXT NOT NULL, trace_id TEXT NOT NULL, record_hash TEXT NOT NULL, start_ns INTEGER NOT NULL,
+ PRIMARY KEY(project,trace_id,record_hash)
+);
 `
 
 type WatchPending struct {

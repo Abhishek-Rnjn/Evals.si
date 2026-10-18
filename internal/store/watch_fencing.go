@@ -218,8 +218,25 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 		return nil, err
 	}
 	if _, external := s.traces.(*clickhouse); external && len(writes) > 0 {
-		_ = tx.Rollback()
-		ctx, tx, err = s.beginVersionedWatchWrite(ctx, len(items))
+		// Commit intents before sending an external request: a timed-out
+		// INSERT can outlive both this transaction and a superseding head.
+		for _, h := range heads {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO watch_publications(project,trace_id,revision,start_ns) VALUES(?,?,?,?) ON CONFLICT(project,trace_id,revision) DO NOTHING`, h.Project, h.TraceID, h.Revision, h.StartNS); err != nil {
+				return nil, err
+			}
+		}
+		end, err := nextWatchClock(ctx, tx, len(items))
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, watchVersionKey{}, watchReservation{Start: end - int64(len(items)) + 1, End: end})
+		tx, err = s.beginReservedWatchWrite(ctx)
+		if errors.Is(err, errWatchReservationStale) {
+			ctx, tx, err = s.beginVersionedWatchWrite(ctx, len(items))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -247,6 +264,9 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 		}
 		for _, h := range heads {
 			if _, err := tx.ExecContext(ctx, `UPDATE watch_trace_heads SET published=1,projection_hash=? WHERE project=? AND trace_id=? AND revision=? AND deleted=0`, scoreBinding(h.Hash, h.ScoreRevision), h.Project, h.TraceID, h.Revision); err != nil {
+				return nil, err
+			}
+			if _, err := tx.ExecContext(ctx, `DELETE FROM watch_publications WHERE project=? AND trace_id=? AND revision=?`, h.Project, h.TraceID, h.Revision); err != nil {
 				return nil, err
 			}
 		}
@@ -284,6 +304,13 @@ func (s *Store) PutWatchResults(ctx context.Context, lease PolicyLease, item Wat
 	}
 	if headErr != nil && !isNoRows(headErr) {
 		return headErr
+	}
+	var start int64
+	if err := tx.QueryRowContext(ctx, `SELECT start_ns FROM watch_pending WHERE project=? AND trace_id=? AND stream=? AND payload=?`, item.Project, item.TraceID, item.Stream, item.Payload).Scan(&start); err != nil {
+		return err
+	}
+	if err := retainWatchScore(ctx, tx, item.Project, item.TraceID, binding, start); err != nil {
+		return err
 	}
 	ctx = context.WithValue(ctx, watchScoreBindingKey{}, binding)
 	if _, ok := s.traces.(*sqlTraces); ok {

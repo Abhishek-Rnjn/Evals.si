@@ -446,6 +446,10 @@ identical replay preserves valid scores.
 
 SQL projections share the metadata transaction. ClickHouse uses committed,
 monotonically increasing replacement versions and compact retention tombstones.
+Publication intents commit before external writes and survive a superseding
+acceptance, so retention can fence a timed-out request even after its queue row
+is replaced. Score references preserve results needed by unexpired input
+generations; retention removes the references and payloads when they expire.
 A delayed INSERT cannot restore an expired trace or expose its scores, even if
 it completes after retention. A deliberate new backfill is a new acceptance;
 it does not revive expired scores. Startup migrates the trace-result keys and

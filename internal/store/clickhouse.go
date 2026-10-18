@@ -449,13 +449,25 @@ func (c *clickhouse) traceResultsQuery(ctx context.Context, project, traceID str
 // DeleteTracesBefore removes traces that started before t, and their
 // results, with lightweight deletes. The count is of distinct traces.
 func (c *clickhouse) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
-	return c.retainTraces(ctx, t, nil)
+	return c.retainTraces(ctx, t, nil, watchScoreRetention{})
+}
+
+type watchScoreRetention struct{ Keep, Expire [][3]string }
+
+func scoreRetentionParam(params chParams, prefix string, keys [][3]string) string {
+	var projects, ids, bindings []string
+	for _, key := range keys {
+		projects, ids, bindings = append(projects, key[0]), append(ids, key[1]), append(bindings, key[2])
+	}
+	params[prefix+"_projects"], params[prefix+"_ids"], params[prefix+"_bindings"] = chArray(projects), chArray(ids), chArray(bindings)
+	return "has(arrayZip({" + prefix + "_projects:Array(String)},{" + prefix + "_ids:Array(String)},{" + prefix + "_bindings:Array(String)}),(project,trace_id,record_hash))"
 }
 
 // Tombstones also cover accepted records whose timed-out INSERT has not
 // completed. FINAL keeps a tombstone ahead of any lower-version late delivery.
-func (c *clickhouse) retainTraces(ctx context.Context, t time.Time, pending []watchHead) (int64, error) {
+func (c *clickhouse) retainTraces(ctx context.Context, t time.Time, pending []watchHead, scores watchScoreRetention) (int64, error) {
 	params := chParams{"before": strconv.FormatInt(t.UnixNano(), 10)}
+	keep, expire := scoreRetentionParam(params, "keep", scores.Keep), scoreRetentionParam(params, "expire", scores.Expire)
 	keys := map[[2]string]watchHead{}
 	var projects, ids []string
 	for _, h := range pending {
@@ -514,7 +526,7 @@ func (c *clickhouse) retainTraces(ctx context.Context, t time.Time, pending []wa
 	}
 	// Removing old result payloads is safe: a late result remains hidden by the
 	// tombstone join, even if it arrives after this physical cleanup.
-	if err := c.exec(ctx, `DELETE FROM trace_results WHERE (project,trace_id) IN (SELECT project,trace_id FROM traces FINAL WHERE deleted=1 AND start_ns<{before:Int64})`, params, nil); err != nil {
+	if err := c.exec(ctx, `DELETE FROM trace_results WHERE ((project,trace_id) IN (SELECT project,trace_id FROM traces FINAL WHERE deleted=1 AND start_ns<{before:Int64}) OR `+expire+`) AND NOT `+keep, params, nil); err != nil {
 		return 0, err
 	}
 	return n, nil

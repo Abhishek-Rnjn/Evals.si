@@ -1,11 +1,76 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
+
+type publicationTimeoutTransport struct {
+	base  http.RoundTripper
+	query string
+	body  []byte
+}
+
+func (r *publicationTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	query := req.URL.Query().Get("query")
+	if r.query == "" && strings.HasPrefix(query, "INSERT INTO traces ") {
+		r.query = query
+		var err error
+		r.body, err = io.ReadAll(req.Body)
+		_ = req.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		return nil, context.DeadlineExceeded
+	}
+	return r.base.RoundTrip(req)
+}
+
+func TestRetentionFencesSupersededTimedOutPublication(t *testing.T) {
+	for _, sameStream := range []bool{false, true} {
+		t.Run(map[bool]string{false: "independent streams", true: "same stream"}[sameStream], func(t *testing.T) {
+			st, c := reviewClickHouse(t)
+			ctx := t.Context()
+			cutoff := time.Now()
+			old := revisionTrace("old", "expired", cutoff.Add(-time.Hour))
+			acceptRevision(t, st, old)
+			transport := &publicationTimeoutTransport{base: http.DefaultTransport}
+			c.client.Transport = transport
+			if _, err := st.PutWatchTraces(ctx, PolicyLease{}, []WatchTraceWrite{old}); !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("expected uncertain publication: %v", err)
+			}
+			newer := revisionTrace("new", "unexpired", cutoff.Add(time.Hour))
+			if sameStream {
+				newer.Pending.Stream = old.Pending.Stream
+			}
+			acceptRevision(t, st, newer)
+			// The metadata wrapper has no in-memory history of the old attempt.
+			restarted := newStore(st.db)
+			restarted.UseTraces(c)
+			if _, err := restarted.DeleteTracesBefore(ctx, cutoff); err != nil {
+				t.Fatal(err)
+			}
+			if err := c.exec(ctx, transport.query, nil, bytes.NewReader(transport.body)); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := st.GetTrace(ctx, "p", "revision"); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("superseded late publication escaped retention: %v", err)
+			}
+			publishRevision(t, restarted, newer)
+			_, record, err := st.GetTrace(ctx, "p", "revision")
+			if err != nil || record.GetOutput().GetText() != "unexpired" {
+				t.Fatalf("fence blocked surviving work: %v %v", record, err)
+			}
+		})
+	}
+}
 
 func reviewClickHouse(t *testing.T) (*Store, *clickhouse) {
 	t.Helper()

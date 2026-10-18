@@ -437,3 +437,53 @@ func TestSQLRetentionRemovesUnpublishedHistoricalScores(t *testing.T) {
 		})
 	}
 }
+
+func TestRetentionPreservesScoresSharedWithUnexpiredWork(t *testing.T) {
+	for backend, traces := range traceBackends(t) {
+		t.Run(backend, func(t *testing.T) {
+			st := open(t)
+			if backend == "clickhouse" {
+				st.UseTraces(traces)
+			}
+			ctx := t.Context()
+			cutoff := time.Now()
+			expired := revisionTrace("expired", "expired input", cutoff.Add(-time.Hour))
+			acceptRevision(t, st, expired)
+			publishRevision(t, st, expired)
+			a := revisionTrace("a", "live input", cutoff.Add(time.Hour))
+			b := revisionTrace("b", "live input", a.Trace.Summary.GetStartTime().AsTime())
+			b.Trace.Summary.Service = "new summary"
+			b.Pending.SnapshotHash = SnapshotHash(b.Trace.Summary, b.Trace.Record)
+			acceptRevision(t, st, a)
+			acceptRevision(t, st, b)
+			publishRevision(t, st, a)
+			if err := st.PutWatchResults(ctx, PolicyLease{}, a.Pending, "independent", revisionScores(1)); err != nil {
+				t.Fatal(err)
+			}
+			if err := st.AckWatchPending(ctx, PolicyLease{}, a.Pending); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.DeleteTracesBefore(ctx, cutoff); err != nil {
+				t.Fatal(err)
+			}
+			publishRevision(t, st, b)
+			assertCurrentRevisionScore(t, st, 1)
+			// A newer unexpired input must not keep this older generation's
+			// payload alive after its own referenced trace time expires.
+			newer := revisionTrace("next", "next input", cutoff.Add(3*time.Hour))
+			acceptRevision(t, st, newer)
+			publishRevision(t, st, newer)
+			if _, err := st.DeleteTracesBefore(ctx, cutoff.Add(2*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
+			if backend == "clickhouse" {
+				assertClickHousePayloadCount(t, traces.(*clickhouse), "trace_results", 0)
+			} else {
+				var n int
+				if err := st.db.QueryRowContext(ctx, `SELECT count(*) FROM trace_results`).Scan(&n); err != nil || n != 0 {
+					t.Fatalf("expired score reference left payload: %d %v", n, err)
+				}
+			}
+		})
+	}
+}

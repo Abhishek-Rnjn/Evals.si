@@ -166,7 +166,8 @@ func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, err
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT project,trace_id,start_ns FROM watch_trace_heads WHERE start_ns<? AND deleted=0`, t.UnixNano())
+	rows, err := tx.QueryContext(ctx, `SELECT project,trace_id,start_ns FROM watch_trace_heads WHERE start_ns<? AND deleted=0
+		UNION SELECT project,trace_id,start_ns FROM watch_publications WHERE start_ns<?`, t.UnixNano(), t.UnixNano())
 	if err != nil {
 		return 0, err
 	}
@@ -194,7 +195,32 @@ func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, err
 	}
 	var n int64
 	if ch, ok := s.traces.(*clickhouse); ok {
-		n, err = ch.retainTraces(ctx, t, heads)
+		rows, lookupErr := tx.QueryContext(ctx, `SELECT project,trace_id,record_hash,start_ns FROM watch_score_references`)
+		if lookupErr != nil {
+			return 0, lookupErr
+		}
+		var scores watchScoreRetention
+		for rows.Next() {
+			var key [3]string
+			var start int64
+			if err := rows.Scan(&key[0], &key[1], &key[2], &start); err != nil {
+				_ = rows.Close()
+				return 0, err
+			}
+			if start >= t.UnixNano() {
+				scores.Keep = append(scores.Keep, key)
+			} else {
+				scores.Expire = append(scores.Expire, key)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		if err := rows.Close(); err != nil {
+			return 0, err
+		}
+		n, err = ch.retainTraces(ctx, t, heads, scores)
 	} else if _, ok := s.traces.(*sqlTraces); ok {
 		n, err = deleteSQLTracesBefore(ctx, tx, t)
 	} else {
@@ -202,6 +228,11 @@ func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, err
 	}
 	if err != nil {
 		return n, err
+	}
+	for _, table := range []string{"watch_publications", "watch_score_references"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE start_ns<?`, t.UnixNano()); err != nil {
+			return n, err
+		}
 	}
 	return n, tx.Commit()
 }

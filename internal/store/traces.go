@@ -247,12 +247,13 @@ func (s *sqlTraces) DeleteTracesBefore(ctx context.Context, t time.Time) (int64,
 func deleteSQLTracesBefore(ctx context.Context, q querier, t time.Time) (int64, error) {
 	// Historical streams may have scores before any projection exists. Clean
 	// expired tombstoned heads too, but preserve an unexpired visible trace.
-	if _, err := q.ExecContext(ctx, `DELETE FROM trace_results WHERE (project, trace_id) IN (
+	if _, err := q.ExecContext(ctx, `DELETE FROM trace_results WHERE ((project, trace_id) IN (
 		SELECT project, trace_id FROM traces WHERE start_ns < ?
 		UNION
 		SELECT h.project, h.trace_id FROM watch_trace_heads h WHERE h.deleted=1 AND h.start_ns < ?
 		AND NOT EXISTS (SELECT 1 FROM traces t WHERE t.project=h.project AND t.trace_id=h.trace_id AND t.start_ns >= ?)
-	)`, t.UnixNano(), t.UnixNano(), t.UnixNano()); err != nil {
+	) OR (project,trace_id,record_hash) IN (SELECT project,trace_id,record_hash FROM watch_score_references WHERE start_ns<?))
+	AND NOT EXISTS (SELECT 1 FROM watch_score_references r WHERE r.project=trace_results.project AND r.trace_id=trace_results.trace_id AND r.record_hash=trace_results.record_hash AND r.start_ns>=?)`, t.UnixNano(), t.UnixNano(), t.UnixNano(), t.UnixNano(), t.UnixNano()); err != nil {
 		return 0, err
 	}
 	res, err := q.ExecContext(ctx, `DELETE FROM traces WHERE start_ns < ?`, t.UnixNano())
