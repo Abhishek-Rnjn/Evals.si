@@ -69,9 +69,9 @@ func (s *Store) UsageOn(ctx context.Context, project, day string) (Usage, error)
 	return u, err
 }
 
-// CountRuns is the number of stored runs in a project.
+// CountRuns is the number of unarchived runs charged to a project's quota.
 func (s *Store) CountRuns(ctx context.Context, project string) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE project = ?`, project).Scan(&n)
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM runs WHERE project = ? AND archived = ''`, project).Scan(&n)
 	return n, err
 }

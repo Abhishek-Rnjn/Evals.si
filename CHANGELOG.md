@@ -4,6 +4,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+- Archived runs release `max_stored_runs` quota, including archives in existing databases.
+
 ### Fixed
 
 - Private service names bypass the sandbox's external egress proxy in both

@@ -16,7 +16,7 @@ Retention ([decision 0020](0020-pipeline-retries-and-scheduled-runs.md)) deletes
 
 ## Consequences
 
-- An archived run still counts toward `max_stored_runs`: the quota counts rows, and counting only whole runs would need a column and a migration for databases that already exist. Delete archived runs to free it, or set retention.
+- An archived run does not count toward `max_stored_runs`. Archiving releases its quota while preserving the summary. An indexed SQL marker is updated in the archive transaction; startup backfills existing archives from their protobuf summaries.
 - The janitor reads every run older than `archive_after` that has not been deleted, each hour, to find the ones not yet archived. With no retention the set only grows; the read is of run summaries, not results.
 - Anything that reads results or compares an archived run fails with a clear message: `evalsi analyze` skips archived runs when listing and refuses one named with `--run`, `evalsi report --server` shows the summary only, and `evalsi compare`, the flywheel commands and a checkpoint regression gate against an archived base-model run answer `FailedPrecondition`. Label runs you compare against `evalsi.keep: "true"`, or set `archive_after` longer than they are needed.
 - Not built: per-label retention rules (only the `evalsi.keep` exemption), and an "unarchive". Data already delivered to sinks and promoted datasets are untouched.
