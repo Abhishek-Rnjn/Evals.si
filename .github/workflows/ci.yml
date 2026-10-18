@@ -65,7 +65,9 @@ jobs:
         options: --health-cmd "pg_isready -U evalsi" --health-interval 2s --health-retries 30
       clickhouse:
         image: clickhouse/clickhouse-server:25.8
-        env: {CLICKHOUSE_USER: evalsi, CLICKHOUSE_PASSWORD: evalsi}
+        # Connector tests create a temporary account to prove SELECT/INSERT
+        # grants suffice at runtime. Only this disposable test admin needs DDL.
+        env: {CLICKHOUSE_USER: evalsi, CLICKHOUSE_PASSWORD: evalsi, CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"}
         ports: ["8123:8123"]
         options: --health-cmd "clickhouse-client --user evalsi --password evalsi -q 'SELECT 1'" --health-interval 2s --health-retries 30
       minio:
