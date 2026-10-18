@@ -73,6 +73,43 @@ A trace is its root run and the runs under it. Run types become span kinds (`llm
 
 Scores are written as feedback on the root run, keyed by the metric, with `feedback_source.type` `model` for a judge's score and `api` otherwise, and the policy and evaluator in its metadata. Numbers and booleans (as 1 or 0) are the feedback's `score`, labels its `value`, and the rationale its `comment`. A changed score updates the same feedback, comment included (a score with no rationale clears it). Feedback deleted in LangSmith is created again when its score next changes; an unchanged score is not sent again.
 
+#### Verify your LangSmith deployment
+
+The opt-in check creates a disposable `evalsi-verification-<UUID>` project,
+seeds synthetic traces without calling a model, starts a local `evalsid` and
+the real Python worker, and checks:
+
+- project-name lookup and historical traces crossing a listing window;
+- an unfinished trace being deferred, then scored after completion;
+- `tool-errors` feedback read back from LangSmith, with repeated polls deduplicated;
+- input, output and trajectory in Evals.si's trace API;
+- feedback updates clearing the old comment, replay after a lost local receipt,
+  and recreation after deletion, all retaining the same feedback ID.
+
+From a checkout, with Go and uv installed:
+
+```sh
+cd python && uv sync --locked --all-packages && cd ..
+# Supply EVALSI_TEST_LANGSMITH_CREDENTIAL through your secret manager or environment:
+# an API key, or <workspace ID>:<API key>. Never commit it.
+EVALSI_TEST_LANGSMITH_URL=https://api.smith.langchain.com \
+EVALSI_E2E_WORKER="$PWD/python/.venv/bin/python -m evalsi" \
+  go test -race ./tests/e2e -run '^TestLiveTraceSourceLangSmith$' -count=1 -v -timeout 6m
+```
+
+Use the EU or self-hosted API URL when appropriate. The key needs permission
+to create and delete projects, create/read/update runs, and read/write/delete feedback. The
+check deletes its project and contents during cleanup, including after a test
+failure. An interrupted process can leave that disposable project behind;
+cleanup failures report its name.
+
+For GitHub Actions, set the repository secret
+`EVALSI_TEST_LANGSMITH_CREDENTIAL`, then run **LangSmith live verification**
+with the desired API endpoint. This workflow only runs on manual dispatch.
+Ordinary e2e CI runs `TestTraceSourceLangSmith` through the same checks against
+a derived fixture; that pass does not establish compatibility with a live
+LangSmith. See the [verification notes](../verification/LANGSMITH.md).
+
 ### ClickHouse
 
 Use `connector: clickhouse`, the ClickHouse **HTTP** URL (often port 8123, or
@@ -376,5 +413,5 @@ On Kubernetes, `networkPolicy.egress.enabled` adds an egress NetworkPolicy for t
 - Live verification of Databricks (experiments and Unity Catalog), OAuth token acquisition and SageMaker. These are built from the pinned client source and tested against derived fixtures; a real workspace or tracking server can still differ. The V4 filter and ordering syntax for Unity Catalog, and whether a SageMaker server serves the MLflow 3 trace API, are the two assumptions most worth checking first.
 - Databricks table-prefix locations and experiment names, ambient AWS credentials for SageMaker, and an Azure ML variant (the server has no trace API to read).
 - Langfuse Cloud, TLS deployments, production persistence and arm64 images. Self-hosted 4.56.0 score replacement, Secret/Service pulls and enforced evalsid egress passed the recorded in-cluster check.
-- LangSmith against a live deployment: the connector follows the `langsmith` 0.4.37 client's requests, and the `filter` window on `runs/query` and a `409` for feedback created twice are the assumptions most worth checking first.
+- LangSmith against a live deployment: the connector follows the `langsmith` 0.4.37 client's requests. An [opt-in end-to-end check](#verify-your-langsmith-deployment) now exercises the window filter and feedback replay assumption, but a live run still needs credentials. Provider UI visibility, production-scale backfill and lag are not covered by that bounded check.
 - Tempo, Kafka and S3 sources (milestone M5).

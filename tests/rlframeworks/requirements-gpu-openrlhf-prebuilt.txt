@@ -1,0 +1,10 @@
+# Separate compatibility control, NOT the current 0.11.2 certification.
+# Use vllm/vllm-openai:v0.11.0 (Python 3.12, Torch 2.8/CUDA 12.8).
+# The official checksum-pinned wheel avoids a long local CUDA build.
+openrlhf[vllm]==0.9.0
+torch==2.8.0
+transformers==4.57.0
+flash-attn @ https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3%2Bcu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl#sha256=f25da18657a87fc83dc1bfb8b7751b82246e9db355510226b674fd437c34b5fb
+pytest==9.1.1
+opentelemetry-exporter-otlp==1.45.1
+protobuf==6.33.6

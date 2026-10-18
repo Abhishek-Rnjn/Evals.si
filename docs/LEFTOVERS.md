@@ -2,6 +2,28 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
+## EKS verification paused, 2026-10-18
+
+The user is deleting the cluster for now. Live checks are paused, not
+complete. The [committed handoff](verification/EKS-PAUSED-2026-10-18.md)
+records every original inventory row, the GPU-first resume order, exact
+unfinished CPU checks, infrastructure/access blockers and reconstruction
+requirements. Historical resource-state statements in the run reports
+describe the last observation, not a claim that the cluster still exists.
+
+Completed work is in `42d8127` and `cc70404` on `verify/eks-leftovers`.
+Native verl 0.9.1 and OpenRLHF **0.9.0** GPU updates passed; current
+OpenRLHF 0.11.2 and trainer-backed OpenEnv/verifiers remain unverified.
+The original EKS concurrent-create probe did not finish reconciliation and
+its subsequent direct S3-import call was never reached. Separate kind
+verification now covers PostgreSQL create/delete races, MinIO upload/hash,
+automated browser accessibility, STRICT-mTLS admission and disposable WAL
+recovery; see the [combined inventory](verification/LEFTOVERS-2026-10-17.md).
+AWS S3, external mesh/provider cases, manual accessibility and production
+recovery/scale remain. PR #85's implementation is now in `main`, but was
+excluded from this EKS exercise. Cluster-only weights/PVCs are not saved by
+a Git commit; preserve them separately if needed.
+
 ## Milestones
 
 The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milestones-and-phased-rollout). Where they stand on 2026-10-13:
@@ -12,7 +34,7 @@ The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milesto
 | M2 agent harness online | Nov to Dec 2026 | In progress: a default policy and a gated deploy built on the demo and run by the kind e2e job; sign-off on the real agent harness needs its repository |
 | M3 Pull connectors | Nov 2026 to Jan 2027 | Partly done: MLflow, Phoenix and Langfuse verified; Databricks and SageMaker not run live; a 30-day backfill and the pull lag are now measured (locally and in the kind e2e job), not yet at production scale |
 | M4 Real-infra hardening | Jan to Feb 2027 | Not certified: bounded EKS checks passed; load, full upgrade and mesh enforcement remain |
-| M5 More sources, SDK | Jan to Mar 2027 | SDK parts done; LangSmith source built and fixture-tested, not live-verified; ClickHouse Collector Map source built and bounded-live-tested ([method](verification/CLICKHOUSE-SOURCE.md)); ClickHouse Cloud/TLS/distributed/scale checks and Tempo/Kafka/S3 sources remain |
+| M5 More sources, SDK | Jan to Mar 2027 | SDK parts done; LangSmith source built, with server/worker fixture coverage and an opt-in live check ([method](verification/LANGSMITH.md)); live verification still needs credentials; ClickHouse Collector Map source built and bounded-live-tested ([method](verification/CLICKHOUSE-SOURCE.md)); ClickHouse Cloud/TLS/distributed/scale checks and Tempo/Kafka/S3 sources remain |
 | GA with agent harness | 26 March 2027 | Not started |
 
 The plan for strengthening the agent harness through M2 and GA is in [HARNESS-ROADMAP.md](HARNESS-ROADMAP.md).
@@ -23,10 +45,12 @@ The completed checkpoint from `verify/eks-leftovers@42d8127` is now included
 in PR #85. See the [EKS run](verification/EKS-2026-10-17.md) and
 [harness/checkpoint follow-up](verification/EKS-HARNESS-2026-10-17.md) for
 live GPU/model, checkpoint PVC/LoRA, framework, judge and stock bwrap evidence.
-The separate GPU training run is still in progress; no training result is
-inferred from inference. Direct harness prompt-cache reuse controls failed.
+The [subsequent GPU run](verification/EKS-GPU-2026-10-17.md) verified actual
+native verl 0.9.1 and OpenRLHF 0.9.0 updates, not just inference. Current
+OpenRLHF 0.11.2 and trainer-backed environment checks remain unverified.
+Direct harness prompt-cache reuse controls failed.
 
-Last updated: 2026-10-17 (all 50 item rows audited; live verification, recovery drills and remaining requirements in [the new record](verification/LEFTOVERS-2026-10-17.md)); before that 2026-10-16 (production-readiness review: judge prompt fences and dependency scanning fixed, seven rows added, three extended; see the review note below); before that 2026-10-13 (v0.2.0 released and verified; the two buildable rows built: verl and OpenRLHF reward paths and Claude Code over MCP in CI; backfill and lag measured; E6 imports); before that 2026-10-12 (bounded EKS verification, [report](verification/EKS-2026-10-12.md); server-side slicing, run archiving, environment specs, platform wheels, operator checkpoint serving and a hosted Wasm plugin built; the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
+Last updated: 2026-10-18 (cluster-deletion pause, complete remaining-check handoff and native GPU training evidence, reconciled with main's separate kind results); before that 2026-10-17 (all 50 item rows audited; live verification, recovery drills and remaining requirements in [the combined record](verification/LEFTOVERS-2026-10-17.md)); before that 2026-10-16 (production-readiness review: judge prompt fences and dependency scanning fixed, seven rows added, three extended; see the review note below); before that 2026-10-13 (v0.2.0 released and verified; the two buildable rows built: verl and OpenRLHF reward paths and Claude Code over MCP in CI; backfill and lag measured; E6 imports); before that 2026-10-12 (bounded EKS verification, [report](verification/EKS-2026-10-12.md); server-side slicing, run archiving, environment specs, platform wheels, operator checkpoint serving and a hosted Wasm plugin built; the rest of server-side analytics closed as not planned; v0.1.0 released and its signatures verified; the two rows that waited on the tag are closed); before that 2026-10-11 (triage of every row, after the Part C review fixes; annotation claims, the UI browser test and per-release pool isolation); before that 2026-10-10 (trace sources) and 2026-10-09, after the [end-to-end verification](verification/README.md) on kind, AKS and an Istio ambient cluster with KVM.
 
 Trace redaction on push and pull is built and regression-tested. A new kind
 push check found the synthetic credential absent from retained NATS bytes,
@@ -63,7 +87,7 @@ stale 42-row count; a partial result is not a production sign-off.
 | Bounded verification passed | 4 |
 | Partial verification | 15 |
 | Credentials, external/private access, hardware or scale required | 11 |
-| Separate GPU training verification in progress | 1 |
+| GPU training partial; current-stack verification paused | 1 |
 | Implementation required | 7 |
 | Product decision required | 3 |
 | Existing known limit | 8 |
@@ -175,7 +199,7 @@ These were verified only with stand-ins before the [verification run](verificati
 
 | Item | Notes | Where recorded |
 |------|-------|----------------|
-| verl and OpenRLHF inside a training run | GPU training work is ongoing separately on verify/eks-leftovers. Its published checkpoint records inference, not actual verl/OpenRLHF training steps; no training completion claimed here. See [EKS checkpoint](verification/EKS-HARNESS-2026-10-17.md) and [combined inventory](verification/LEFTOVERS-2026-10-17.md). | §23 Phase 5 limits, [fine-tuning guide](guides/fine-tuning.md#testing) |
+| verl and OpenRLHF inside a training run | CPU CI tests the real reward managers/executor, not training. EKS now verified a native verl 0.9.1 GPU step and an **OpenRLHF 0.9.0** compatibility control: real completions/rewards, nonzero gradients and changed saved weights with zero weight decay. Current OpenRLHF 0.11.2 is **not certified**: its pinned vLLM/CUTLASS protobuf constraint requires a separate SDK reward process, and the user cancelled its long FlashAttention source build. The older control used its official pinned engine and checksum-verified prebuilt wheel, with HTTP rewards. No learning-quality or training-scale claim. | §23 Phase 5 limits, [GPU evidence](verification/EKS-GPU-2026-10-17.md), [fine-tuning guide](guides/fine-tuning.md#testing) |
 | Reward throughput at the §12 scale | Measured on one 4-vCPU host with bubblewrap; the §12 figure (4,096 rollouts in about 16 s) assumes 256 warm microVMs. Needs a sandbox pool sized for it, and Firecracker warm pools on KVM. | §23 Phase 5 status |
 | Operator-managed checkpoint serving | EKS actual L40S/vLLM model identity, inference, API-key rollout/deletion and source CLI watcher over two PVC checkpoints passed. Read-only controls, LoRA load/infer/unload and error cleanup passed; wrong-model launch and one-shot exit status fixed. Fixed image release and training quality remain separate. See [EKS checkpoint](verification/EKS-HARNESS-2026-10-17.md) and [combined inventory](verification/LEFTOVERS-2026-10-17.md). | Decision 0013 |
 | Checkpoint model serving | Plain PyTorch and Lightning save/evaluate hooks pass real CPU tests in separate environments. State dictionaries still need a compatible serving strategy; Lightning `.ckpt` files are not directly vLLM models. | [Part C](verification/PART-C.md), §12 |
@@ -187,4 +211,3 @@ These were verified only with stand-ins before the [verification run](verificati
 |------|-------|----------------|
 | A coding agent product over MCP in CI | Actual EKS Claude CLI invoked source MCP over stdio; independent artifact checks confirmed mean 2/3 and failed gate. GitHub mcp-agent secret/first CI run, other coding products and external remote OAuth remain separate. See [EKS checkpoint](verification/EKS-HARNESS-2026-10-17.md) and [combined inventory](verification/LEFTOVERS-2026-10-17.md). | §23 Phase 6 limits, [MCP guide](guides/mcp.md#tested-with-a-real-coding-agent) |
 | Wasm evaluators with a judge or the sandbox; an Azure ML trace source (its MLflow server has no V3 trace API); server-side SQL over runs (see below) | Wasm modules have no I/O by design; such evaluators stay Python plugins or images. | Decision 0014 |
-

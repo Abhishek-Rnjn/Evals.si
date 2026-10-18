@@ -4,13 +4,16 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [EKS-PAUSED-2026-10-18.md](EKS-PAUSED-2026-10-18.md) | Cluster-deletion handoff: disposition of all 49 starting rows, exact unfinished checks, GPU-first resume order, environment reconstruction and evidence/storage caveats; live verification paused |
 | [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md) | The full run: setup, every exit criterion with its evidence, product bugs F1–F6, doc differences D1–D15 and environment problems R1–R2 |
 | [FINAL-RESULTS.md](FINAL-RESULTS.md) | One table of every exit criterion across the three clusters |
 | [PART-C.md](PART-C.md) | M4/M5 requested subset, native dsh integration, review fixes and final-phase verification limits |
 | [CLICKHOUSE-SOURCE.md](CLICKHOUSE-SOURCE.md) | ClickHouse Collector Map trace source: bounded live connector and server/Python-worker checks on 25.8.33.6, plus compatibility and scale limits |
+| [LANGSMITH.md](LANGSMITH.md) | LangSmith server/worker fixture method and opt-in disposable-project live check; live verification pending credentials |
 | [EKS-2026-10-12.md](EKS-2026-10-12.md) | Detailed bounded EKS evidence and methods: two fixes, live KEDA/NATS, sandbox/pool controls, real MLflow redaction/write-back, recovery, Playwright UI/annotation, real Operator/Alertmanager firing/delivery/resolution, isolated admission workaround, real agentgateway LLM/MCP, second-release coexistence and mounted Python/Wasm; no M4 certification |
 | [EKS-2026-10-17.md](EKS-2026-10-17.md) | Live chart host-network admission; GPU checkpoint model-selection fix, inference/auth/rollout/deletion; ambient failure and non-mesh sandbox canary controls; owned resources cleaned up |
 | [EKS-HARNESS-2026-10-17.md](EKS-HARNESS-2026-10-17.md) | Harness-first continuation: real pod/bwrap controls, live models/thinking/context/replay, SIGKILL/resume, CLI/MCP, ten framework mappings, in-cluster watcher/PVC/LoRA, PostgreSQL/S3 restore and five total fixes across both passes; full leftover inventory, validation and pending GPU-training priority. Cache reuse remains a failing control |
+| [EKS-GPU-2026-10-17.md](EKS-GPU-2026-10-17.md) | Native verl 0.9.1 and OpenRLHF 0.9.0 one-step GPU updates, exact reward/gradient/changed-weight evidence and reusable versions/commands; current OpenRLHF 0.11.2 and environment-trainer checks remain unverified |
 
 The run used commit `c5a1de9` on 2026-10-09, on three clusters:
 
