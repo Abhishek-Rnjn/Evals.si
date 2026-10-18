@@ -432,12 +432,24 @@ A deleted source no longer requires a runner: its accepted work finishes local
 evaluation without write-back to that source. An existing source with write-back
 enabled still waits for its runner; lookup failures are retried.
 
-Leadership loss cancels in-flight evaluation. Trace writes, score writes and
-acknowledgments also check the database lease and exact pending revision under
-a metadata write lock shared with ingestion, lease changes and retention. The
-lock covers persistence only, not worker calls. SQL trace changes use the same
-transaction; ClickHouse writes reserve monotonically increasing replacement
-versions in metadata, including across request failures and replica clock skew.
+Leadership loss cancels in-flight evaluation. Every lease acquisition has an
+immutable epoch, including reacquisition by the same process. Trace writes,
+score writes and acknowledgments check that captured epoch and the exact
+pending acceptance under a metadata write lock shared with ingestion, lease
+changes and retention. Worker calls run outside the lock.
+
+Publication order is tracked per trace across sources. Recovery publishes the
+newest accepted revision once; older streams keep independent evaluation work
+without replacing the current trace. Scores are bound to the published record
+revision, so a changed output never inherits a previous output's scores. An
+identical replay preserves valid scores.
+
+SQL projections share the metadata transaction. ClickHouse uses committed,
+monotonically increasing replacement versions and compact retention tombstones.
+A delayed INSERT cannot restore an expired trace or expose its scores, even if
+it completes after retention. A deliberate new backfill is a new acceptance;
+it does not revive expired scores. Startup migrates the trace-result keys and
+ClickHouse sorting key; stop old writers before upgrading.
 
 Delivery is at least once: a crash between a worker call and its acknowledgment
 can repeat evaluation and external callbacks. Pending work predating this

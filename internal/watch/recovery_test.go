@@ -247,10 +247,11 @@ func TestStepDownCancelsInFlightEvaluationAndRetainsWork(t *testing.T) {
 func TestNewLeaderFencesWorkerThatMissedStepDown(t *testing.T) {
 	h := newHarness(t)
 	ctx := t.Context()
-	h.e.opts.LeaseOwner = "old"
-	if ok, err := h.st.AcquireLease(ctx, store.PolicyEngineLease, "old", time.Minute); err != nil || !ok {
+	oldLease, ok, err := h.st.AcquirePolicyLease(ctx, "old", time.Minute)
+	if err != nil || !ok {
 		t.Fatalf("old lease: %v %v", ok, err)
 	}
+	h.e.SetPolicyLease(oldLease)
 	if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "quality", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -276,11 +277,12 @@ func TestNewLeaderFencesWorkerThatMissedStepDown(t *testing.T) {
 	if err := h.st.ReleaseLease(ctx, store.PolicyEngineLease, "old"); err != nil {
 		t.Fatal(err)
 	}
-	if ok, err := h.st.AcquireLease(ctx, store.PolicyEngineLease, "new", time.Minute); err != nil || !ok {
+	newLease, ok, err := h.st.AcquirePolicyLease(ctx, "new", time.Minute)
+	if err != nil || !ok {
 		t.Fatalf("new lease: %v %v", ok, err)
 	}
 	opts := h.e.opts
-	opts.LeaseOwner = "new"
+	opts.Lease = newLease
 	newer, err := New(ctx, h.st, h.e.eval, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -348,5 +350,91 @@ func TestDeletedSourceRecoveryStoresEvaluatesAndAcknowledgesAcceptedTrace(t *tes
 	}
 	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
 		t.Fatalf("deleted source stranded accepted work: %v %v", pending, err)
+	}
+}
+
+func TestBlockedOlderStreamDoesNotRepublishAfterNewerStreamFinishes(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "quality", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.PutPolicy(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "blocked", Project: DefaultProject, Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("missing/evaluator")}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	makeTrace := func(source, output string) ingest.Trace {
+		tr := trace(10, "studio", output, false)
+		tr.Adjust = func(_ *evalsiv1alpha1.Record, info *ingest.TraceInfo) {
+			info.Labels = map[string]string{"source": source}
+		}
+		return tr
+	}
+	if err := h.e.IngestBatchContext(ctx, []ingest.Trace{makeTrace("old", "old bad")}, []string{"blocked"}); err != nil {
+		t.Fatal(err)
+	}
+	old := <-h.e.queue
+	if err := h.e.IngestBatchContext(ctx, []ingest.Trace{makeTrace("new", "new good")}, []string{"quality"}); err != nil {
+		t.Fatal(err)
+	}
+	h.e.process(ctx, []item{<-h.e.queue})
+	for i := 0; i < 3; i++ {
+		h.e.process(ctx, []item{old})
+	}
+	_, record, err := h.st.GetTrace(ctx, DefaultProject, old.record.GetId())
+	if err != nil || record.GetOutput().GetText() != "new good" {
+		t.Fatalf("blocked stream replaced new record: %v %v", record, err)
+	}
+	results, err := h.st.TraceResults(ctx, DefaultProject, old.record.GetId())
+	if err != nil || len(results) != 1 || results[0].GetResults()[0].GetScores()[0].GetNumber() != 1 {
+		t.Fatalf("new score changed: %v %v", results, err)
+	}
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 1 {
+		t.Fatalf("blocked stream was lost: %v %v", pending, err)
+	}
+}
+
+func TestIdenticalAcceptancesCannotReuseAnOldAcknowledgment(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	tr := trace(11, "studio", "same", false)
+	h.e.Ingest(tr)
+	old := <-h.e.queue
+	h.e.Ingest(tr)
+	newer := <-h.e.queue
+	if string(old.payload) == string(newer.payload) {
+		t.Fatal("distinct acceptances reused a pending identity")
+	}
+	h.e.process(ctx, []item{old})
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 1 {
+		t.Fatalf("old acceptance acknowledged new work: %v %v", pending, err)
+	}
+	h.e.process(ctx, []item{newer})
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
+		t.Fatalf("new acceptance did not finish: %v %v", pending, err)
+	}
+}
+
+func TestNewEpochOfSameOwnerCancelsCapturedProcessingTerm(t *testing.T) {
+	h := newHarness(t)
+	first := store.PolicyLease{Owner: "same-process", Epoch: 1}
+	h.e.SetPolicyLease(first)
+	old, captured, cancel := h.e.processingContext(t.Context())
+	defer cancel()
+	h.e.SetPolicyLease(store.PolicyLease{Owner: first.Owner, Epoch: 3})
+	select {
+	case <-old.Done():
+	case <-time.After(3 * time.Second):
+		t.Fatal("same-owner epoch change left old processing active")
+	}
+	if captured != first {
+		t.Fatalf("processing did not capture immutable lease: %v", captured)
+	}
+	_, current, done := h.e.processingContext(t.Context())
+	defer done()
+	if current.Epoch != 3 {
+		t.Fatalf("new term not installed: %v", current)
 	}
 }

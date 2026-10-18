@@ -26,63 +26,59 @@ func TestWatchWritesFenceLeaseRevisionAndRetention(t *testing.T) {
 			old := WatchPending{Project: "p", TraceID: "trace", Payload: []byte("old"), StartNS: sum.GetStartTime().AsTime().UnixNano()}
 			newer := old
 			newer.Payload = []byte("new")
-			write := func(p WatchPending, owner string) ([]bool, error) {
+			write := func(p WatchPending, owner PolicyLease) ([]bool, error) {
 				return st.PutWatchTraces(ctx, owner, []WatchTraceWrite{{Pending: p, Trace: TraceWrite{Summary: sum, Record: record}}})
 			}
 			results := []*evalsiv1alpha1.EvaluationResult{{Evaluator: "quality", Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}}
 			if err := st.PutWatchPending(ctx, []WatchPending{old}); err != nil {
 				t.Fatal(err)
 			}
-			if ok, err := st.AcquireLease(ctx, PolicyEngineLease, "a", time.Minute); err != nil || !ok {
-				t.Fatalf("lease: %v %v", ok, err)
-			}
-			if ok, err := write(old, "a"); err != nil || len(ok) != 1 || !ok[0] {
+			a := testPolicyLease(t, st, "a")
+			if ok, err := write(old, a); err != nil || len(ok) != 1 || !ok[0] {
 				t.Fatalf("current write refused: %v %v", ok, err)
 			}
 			if err := st.ReleaseLease(ctx, PolicyEngineLease, "a"); err != nil {
 				t.Fatal(err)
 			}
-			if ok, err := st.AcquireLease(ctx, PolicyEngineLease, "b", time.Minute); err != nil || !ok {
-				t.Fatalf("takeover: %v %v", ok, err)
-			}
+			b := testPolicyLease(t, st, "b")
 			// Keep the very same pending payload: only the lease check can reject a.
-			if _, err := write(old, "a"); !errors.Is(err, ErrWatchStale) {
+			if _, err := write(old, a); !errors.Is(err, ErrWatchStale) {
 				t.Fatalf("stale leader stored trace: %v", err)
 			}
-			if err := st.PutWatchResults(ctx, "a", old, "quality", results); !errors.Is(err, ErrWatchStale) {
+			if err := st.PutWatchResults(ctx, a, old, "quality", results); !errors.Is(err, ErrWatchStale) {
 				t.Fatalf("stale leader stored score: %v", err)
 			}
-			if err := st.AckWatchPending(ctx, "a", old); !errors.Is(err, ErrWatchStale) {
+			if err := st.AckWatchPending(ctx, a, old); !errors.Is(err, ErrWatchStale) {
 				t.Fatalf("stale leader acknowledged work: %v", err)
 			}
 			if err := st.PutWatchPending(ctx, []WatchPending{newer}); err != nil {
 				t.Fatal(err)
 			}
-			if ok, err := write(old, "b"); err != nil || ok[0] {
+			if ok, err := write(old, b); err != nil || ok[0] {
 				t.Fatalf("obsolete revision stored trace: %v %v", ok, err)
 			}
-			if err := st.PutWatchResults(ctx, "b", old, "quality", results); !errors.Is(err, ErrWatchStale) {
+			if err := st.PutWatchResults(ctx, b, old, "quality", results); !errors.Is(err, ErrWatchStale) {
 				t.Fatalf("obsolete revision stored score: %v", err)
 			}
-			if err := st.AckWatchPending(ctx, "b", old); err != nil {
+			if err := st.AckWatchPending(ctx, b, old); err != nil {
 				t.Fatal(err)
 			}
 			if ok, err := st.WatchPendingMatches(ctx, newer); err != nil || !ok {
 				t.Fatalf("new revision acknowledged: %v %v", ok, err)
 			}
-			if ok, err := write(newer, "b"); err != nil || !ok[0] {
+			if ok, err := write(newer, b); err != nil || !ok[0] {
 				t.Fatalf("new revision refused: %v %v", ok, err)
 			}
-			if err := st.PutWatchResults(ctx, "b", newer, "quality", results); err != nil {
+			if err := st.PutWatchResults(ctx, b, newer, "quality", results); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := st.DeleteTracesBefore(ctx, time.Now()); err != nil {
 				t.Fatal(err)
 			}
-			if ok, err := write(newer, "b"); err != nil || ok[0] {
+			if ok, err := write(newer, b); err != nil || ok[0] {
 				t.Fatalf("retained trace resurrected: %v %v", ok, err)
 			}
-			if err := st.PutWatchResults(ctx, "b", newer, "quality", results); !errors.Is(err, ErrWatchStale) {
+			if err := st.PutWatchResults(ctx, b, newer, "quality", results); !errors.Is(err, ErrWatchStale) {
 				t.Fatalf("retained score resurrected: %v", err)
 			}
 			if _, _, err := st.GetTrace(ctx, "p", "trace"); !errors.Is(err, ErrNotFound) {
@@ -95,7 +91,7 @@ func TestWatchWritesFenceLeaseRevisionAndRetention(t *testing.T) {
 			if err := st.PutWatchPending(ctx, []WatchPending{newer}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := write(newer, "b"); !errors.Is(err, ErrWatchStale) {
+			if _, err := write(newer, b); !errors.Is(err, ErrWatchStale) {
 				t.Fatalf("expired leader stored trace: %v", err)
 			}
 		})
@@ -141,13 +137,13 @@ func TestClickHouseWatchVersionsSurviveRollbackAndClockSkew(t *testing.T) {
 		t.Fatal(err)
 	}
 	results := []*evalsiv1alpha1.EvaluationResult{{Evaluator: "quality"}}
-	if err := st.PutWatchResults(t.Context(), "", pending, "quality", results); err == nil {
+	if err := st.PutWatchResults(t.Context(), PolicyLease{}, pending, "quality", results); err == nil {
 		t.Fatal("fixture did not fail the first write")
 	}
 	mu.Lock()
 	fail = false
 	mu.Unlock()
-	if err := st.PutWatchResults(t.Context(), "", pending, "quality", results); err != nil {
+	if err := st.PutWatchResults(t.Context(), PolicyLease{}, pending, "quality", results); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
@@ -179,9 +175,7 @@ func TestLeaseChangesWaitForInFlightExternalTraceCommit(t *testing.T) {
 	unblock := func() { once.Do(func() { close(backend.release) }) }
 	defer unblock()
 	ctx := t.Context()
-	if ok, err := st.AcquireLease(ctx, PolicyEngineLease, "a", time.Minute); err != nil || !ok {
-		t.Fatalf("lease: %v %v", ok, err)
-	}
+	a := testPolicyLease(t, st, "a")
 	sum, record := trace("p", "trace", "studio", time.Now())
 	p := WatchPending{Project: "p", TraceID: "trace", Payload: []byte("current")}
 	if err := st.PutWatchPending(ctx, []WatchPending{p}); err != nil {
@@ -189,7 +183,7 @@ func TestLeaseChangesWaitForInFlightExternalTraceCommit(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := st.PutWatchTraces(ctx, "a", []WatchTraceWrite{{Pending: p, Trace: TraceWrite{Summary: sum, Record: record}}})
+		_, err := st.PutWatchTraces(ctx, a, []WatchTraceWrite{{Pending: p, Trace: TraceWrite{Summary: sum, Record: record}}})
 		done <- err
 	}()
 	select {
@@ -261,4 +255,13 @@ func TestClickHouseFencedVersionsRejectLateOldDelivery(t *testing.T) {
 	if err != nil || len(scores) != 1 || scores[0].GetResults()[0].GetScores()[0].GetNumber() != 1 {
 		t.Fatalf("late old INSERT replaced scores: %v %v", scores, err)
 	}
+}
+
+func testPolicyLease(t *testing.T, st *Store, owner string) PolicyLease {
+	t.Helper()
+	lease, ok, err := st.AcquirePolicyLease(t.Context(), owner, time.Minute)
+	if err != nil || !ok {
+		t.Fatalf("policy lease: %v %v", ok, err)
+	}
+	return lease
 }

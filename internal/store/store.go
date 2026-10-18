@@ -65,14 +65,15 @@ CREATE TABLE IF NOT EXISTS traces (
   start_ns INTEGER NOT NULL,
   summary BLOB NOT NULL,
   record BLOB NOT NULL,
+  record_hash TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (project, trace_id)
 );
 CREATE INDEX IF NOT EXISTS traces_by_service ON traces (service, start_ns DESC);
 CREATE INDEX IF NOT EXISTS traces_by_start ON traces (start_ns DESC);
 CREATE INDEX IF NOT EXISTS traces_by_id ON traces (trace_id);
 CREATE TABLE IF NOT EXISTS trace_results (
-  project TEXT NOT NULL, trace_id TEXT NOT NULL, policy TEXT NOT NULL, evaluator TEXT NOT NULL, result BLOB NOT NULL,
-  PRIMARY KEY (project, trace_id, policy, evaluator)
+  project TEXT NOT NULL, trace_id TEXT NOT NULL, policy TEXT NOT NULL, evaluator TEXT NOT NULL, record_hash TEXT NOT NULL DEFAULT '', result BLOB NOT NULL,
+  PRIMARY KEY (project, trace_id, policy, evaluator, record_hash)
 );
 CREATE TABLE IF NOT EXISTS policies (
   name TEXT PRIMARY KEY, project TEXT NOT NULL, policy BLOB NOT NULL

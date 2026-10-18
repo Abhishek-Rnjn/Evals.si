@@ -201,12 +201,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	if err != nil {
 		return err
 	}
-	var policyLeaseOwner string
-	if cl != nil {
-		policyLeaseOwner = cl.Owner()
-	}
 	watcher, err = watch.New(ctx, st, svc, watch.Options{
-		LeaseOwner:  policyLeaseOwner,
 		Redactor:    redactor,
 		DatasetsDir: cfg.DatasetsDir, Objects: objects, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
 		Changed: func() {

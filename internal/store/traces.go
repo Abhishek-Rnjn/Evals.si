@@ -16,13 +16,11 @@ import (
 
 // PutTrace stores (or replaces, when late spans re-assemble it) a trace in
 // its project (summary.Project).
-const putTraceSQL = `INSERT INTO traces (project, trace_id, service, start_ns, summary, record) VALUES (?, ?, ?, ?, ?, ?)
-	ON CONFLICT (project, trace_id) DO UPDATE SET service = excluded.service, start_ns = excluded.start_ns, summary = excluded.summary, record = excluded.record`
+const putTraceSQL = `INSERT INTO traces (project, trace_id, service, start_ns, summary, record, record_hash) VALUES (?, ?, ?, ?, ?, ?, ?)
+	ON CONFLICT (project, trace_id) DO UPDATE SET service = excluded.service, start_ns = excluded.start_ns, summary = excluded.summary, record = excluded.record, record_hash=excluded.record_hash`
 
 func (s *sqlTraces) PutTrace(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) error {
-	_, err := s.db.ExecContext(ctx, putTraceSQL,
-		summary.GetProject(), summary.GetTraceId(), summary.GetService(), summary.GetStartTime().AsTime().UnixNano(), marshal(summary), marshal(record))
-	return err
+	return s.PutTraces(ctx, []TraceWrite{{Summary: summary, Record: record}})
 }
 
 func (s *sqlTraces) PutTraces(ctx context.Context, traces []TraceWrite) error {
@@ -39,9 +37,27 @@ func (s *sqlTraces) PutTraces(ctx context.Context, traces []TraceWrite) error {
 
 func putSQLTraces(ctx context.Context, q querier, traces []TraceWrite) error {
 	for _, t := range traces {
+		var old []byte
+		var oldHash string
+		target := traceProjection(ctx, t.Summary, t.Record)
+		err := q.QueryRowContext(ctx, `SELECT record,record_hash FROM traces WHERE project=? AND trace_id=?`, t.Summary.GetProject(), t.Summary.GetTraceId()).Scan(&old, &oldHash)
+		if err != nil && !isNoRows(err) {
+			return err
+		}
+		if err == nil && oldHash != target {
+			record := &evalsiv1alpha1.Record{}
+			if err := proto.Unmarshal(old, record); err != nil {
+				return err
+			}
+			if proto.Equal(record, t.Record) {
+				if _, err := q.ExecContext(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,record_hash,result,tenant_id) SELECT project,trace_id,policy,evaluator,?,result,tenant_id FROM trace_results WHERE project=? AND trace_id=? AND record_hash=? ON CONFLICT(project,trace_id,policy,evaluator,record_hash) DO NOTHING`, target, t.Summary.GetProject(), t.Summary.GetTraceId(), oldHash); err != nil {
+					return err
+				}
+			}
+		}
 		if _, err := q.ExecContext(ctx, putTraceSQL,
 			t.Summary.GetProject(), t.Summary.GetTraceId(), t.Summary.GetService(), t.Summary.GetStartTime().AsTime().UnixNano(),
-			marshal(t.Summary), marshal(t.Record)); err != nil {
+			marshal(t.Summary), marshal(t.Record), target); err != nil {
 			return err
 		}
 	}
@@ -68,7 +84,7 @@ func (s *sqlTraces) ListTraces(ctx context.Context, f TraceFilter, pageSize int,
 	args = append(args, f.Service, f.Service, pageSize+1, offset)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT t.project, t.summary,
-		       (SELECT COUNT(*) FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id)
+		       (SELECT COUNT(*) FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id AND r.record_hash = t.record_hash)
 		FROM traces t WHERE `+where+` AND (? = '' OR t.service = ?)
 		ORDER BY t.start_ns DESC, t.trace_id LIMIT ? OFFSET ?`, args...)
 	if err != nil {
@@ -116,21 +132,27 @@ func (s *sqlTraces) TraceProjects(ctx context.Context, traceID string) ([]string
 }
 
 // GetTrace returns a stored trace's summary and record.
-func (s *sqlTraces) GetTrace(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error) {
+func (s *sqlTraces) GetTrace(ctx context.Context, project, id string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error) {
+	sum, record, _, err := s.getTraceRevision(ctx, project, id)
+	return sum, record, err
+}
+
+func (s *sqlTraces) getTraceRevision(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, string, error) {
 	var sumBlob, recBlob []byte
-	err := s.db.QueryRowContext(ctx, `SELECT summary, record FROM traces WHERE project = ? AND trace_id = ?`, project, traceID).Scan(&sumBlob, &recBlob)
+	var binding string
+	err := s.db.QueryRowContext(ctx, `SELECT summary, record,record_hash FROM traces WHERE project = ? AND trace_id = ?`, project, traceID).Scan(&sumBlob, &recBlob, &binding)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil, ErrNotFound
+		return nil, nil, "", ErrNotFound
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	sum, rec := &evalsiv1alpha1.TraceSummary{}, &evalsiv1alpha1.Record{}
 	if err := proto.Unmarshal(sumBlob, sum); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	sum.Project = project
-	return sum, rec, proto.Unmarshal(recBlob, rec)
+	return sum, rec, binding, proto.Unmarshal(recBlob, rec)
 }
 
 // PutTraceResults stores a policy's results for a trace.
@@ -147,11 +169,21 @@ func (s *sqlTraces) PutTraceResults(ctx context.Context, project, traceID, polic
 }
 
 func putSQLTraceResults(ctx context.Context, q querier, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
+	hash, ok := ctx.Value(watchScoreBindingKey{}).(string)
+	if !ok {
+		err := q.QueryRowContext(ctx, `SELECT record_hash FROM traces WHERE project=? AND trace_id=?`, project, traceID).Scan(&hash)
+		if isNoRows(err) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+	}
 	for _, r := range results {
 		if _, err := q.ExecContext(ctx,
-			`INSERT INTO trace_results (project, trace_id, policy, evaluator, result) VALUES (?, ?, ?, ?, ?)
-			 ON CONFLICT (project, trace_id, policy, evaluator) DO UPDATE SET result = excluded.result`,
-			project, traceID, policy, r.GetEvaluator(), marshal(r)); err != nil {
+			`INSERT INTO trace_results (project, trace_id, policy, evaluator, record_hash, result) VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT (project, trace_id, policy, evaluator, record_hash) DO UPDATE SET result = excluded.result`,
+			project, traceID, policy, r.GetEvaluator(), hash, marshal(r)); err != nil {
 			return err
 		}
 	}
@@ -159,8 +191,22 @@ func putSQLTraceResults(ctx context.Context, q querier, project, traceID, policy
 }
 
 // TraceResults returns results for a trace grouped by policy, policies sorted.
-func (s *sqlTraces) TraceResults(ctx context.Context, project, traceID string) ([]*evalsiv1alpha1.PolicyResults, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT policy, result FROM trace_results WHERE project = ? AND trace_id = ? ORDER BY policy, evaluator`, project, traceID)
+func (s *sqlTraces) TraceResults(ctx context.Context, project, id string) ([]*evalsiv1alpha1.PolicyResults, error) {
+	return s.traceResultsQuery(ctx, project, id, nil)
+}
+func (s *sqlTraces) traceResultsAt(ctx context.Context, project, id, binding string) ([]*evalsiv1alpha1.PolicyResults, error) {
+	return s.traceResultsQuery(ctx, project, id, &binding)
+}
+
+func (s *sqlTraces) traceResultsQuery(ctx context.Context, project, traceID string, binding *string) ([]*evalsiv1alpha1.PolicyResults, error) {
+	query := `SELECT r.policy,r.result FROM trace_results r JOIN traces t ON r.project=t.project AND r.trace_id=t.trace_id AND r.record_hash=t.record_hash WHERE r.project=? AND r.trace_id=? ORDER BY r.policy,r.evaluator`
+	args := []any{project, traceID}
+	if binding != nil {
+		query = `SELECT policy,result FROM trace_results WHERE project=? AND trace_id=? AND record_hash=? ORDER BY policy,evaluator`
+		args = append(args, *binding)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+
 	if err != nil {
 		return nil, err
 	}
@@ -281,19 +327,20 @@ func (s *sqlTraces) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrac
 		since = q.Since.UnixNano()
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT t.trace_id, t.summary, t.record FROM traces t
+		SELECT t.trace_id, t.summary, t.record,t.record_hash FROM traces t
 		WHERE t.project = ? AND (? = '' OR t.service = ?) AND t.start_ns >= ?
-		  AND (? = '' OR EXISTS (SELECT 1 FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id AND r.policy = ?))
+		  AND (? = '' OR EXISTS (SELECT 1 FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id AND r.record_hash = t.record_hash AND r.policy = ?))
 		ORDER BY t.start_ns DESC, t.trace_id LIMIT ?`,
 		q.Project, q.Service, q.Service, since, q.Policy, q.Policy, limit)
 	if err != nil {
 		return nil, err
 	}
 	var out []StoredTrace
+	var bindings []string
 	for rows.Next() {
-		var id string
+		var id, binding string
 		var sumBlob, recBlob []byte
-		if err := rows.Scan(&id, &sumBlob, &recBlob); err != nil {
+		if err := rows.Scan(&id, &sumBlob, &recBlob, &binding); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -308,6 +355,7 @@ func (s *sqlTraces) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrac
 		}
 		st.Summary.Project = q.Project
 		out = append(out, st)
+		bindings = append(bindings, binding)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -317,7 +365,7 @@ func (s *sqlTraces) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrac
 		return out, nil
 	}
 	for i := range out {
-		groups, err := s.TraceResults(ctx, q.Project, out[i].Summary.GetTraceId())
+		groups, err := s.traceResultsAt(ctx, q.Project, out[i].Summary.GetTraceId(), bindings[i])
 		if err != nil {
 			return nil, err
 		}
@@ -413,20 +461,21 @@ func (s *sqlTraces) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTra
 		after, c.StartNS, c.StartNS, c.TraceID, c.TraceID, c.Project,
 		q.Policy, q.Policy, q.Evaluator, q.Evaluator, limit)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT t.project, t.summary FROM traces t
+		SELECT t.project, t.summary,t.record_hash FROM traces t
 		WHERE `+where+` AND (? = '' OR t.trace_id = ?) AND (? = '' OR t.service = ?) AND t.start_ns >= ?
 		  AND (? = 0 OR t.start_ns < ? OR (t.start_ns = ? AND (t.trace_id > ? OR (t.trace_id = ? AND t.project > ?))))
-		  AND EXISTS (SELECT 1 FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id
+		  AND EXISTS (SELECT 1 FROM trace_results r WHERE r.project = t.project AND r.trace_id = t.trace_id AND r.record_hash = t.record_hash
 		              AND (? = '' OR r.policy = ?) AND (? = '' OR r.evaluator = ?))
 		ORDER BY t.start_ns DESC, t.trace_id, t.project LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
 	var out []ScoredTrace
+	var bindings []string
 	for rows.Next() {
-		var project string
+		var project, binding string
 		var blob []byte
-		if err := rows.Scan(&project, &blob); err != nil {
+		if err := rows.Scan(&project, &blob, &binding); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -437,13 +486,14 @@ func (s *sqlTraces) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTra
 		}
 		sum.Project = project
 		out = append(out, ScoredTrace{Summary: sum})
+		bindings = append(bindings, binding)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	for i := range out {
-		groups, err := s.TraceResults(ctx, out[i].Summary.GetProject(), out[i].Summary.GetTraceId())
+		groups, err := s.traceResultsAt(ctx, out[i].Summary.GetProject(), out[i].Summary.GetTraceId(), bindings[i])
 		if err != nil {
 			return nil, err
 		}

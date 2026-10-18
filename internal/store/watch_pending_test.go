@@ -17,7 +17,7 @@ func TestPendingAcknowledgmentCannotDeleteNewerTrace(t *testing.T) {
 	if err := st.PutWatchPending(ctx, []WatchPending{newer}); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.AckWatchPending(ctx, "", old); err != nil {
+	if err := st.AckWatchPending(ctx, PolicyLease{}, old); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []WatchPending{newer, other} {
@@ -62,7 +62,7 @@ func TestPendingStreamsPaginateAndAcknowledgeIndependently(t *testing.T) {
 			t.Fatalf("bad stream page: %v %v", rows, err)
 		}
 		cursor = rows[0]
-		if err := st.AckWatchPending(ctx, "", cursor); err != nil {
+		if err := st.AckWatchPending(ctx, PolicyLease{}, cursor); err != nil {
 			t.Fatal(err)
 		}
 	}

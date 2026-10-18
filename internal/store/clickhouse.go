@@ -113,6 +113,10 @@ func OpenClickHouse(ctx context.Context, cfg ClickHouseConfig, password string) 
 		// Reserved for a tenant boundary above projects (decision 0004).
 		`ALTER TABLE ` + db + `.traces ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT ''`,
 		`ALTER TABLE ` + db + `.trace_results ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT ''`,
+		`ALTER TABLE ` + db + `.traces ADD COLUMN IF NOT EXISTS record_hash String, ADD COLUMN IF NOT EXISTS deleted UInt8`,
+		`ALTER TABLE ` + db + `.trace_results ADD COLUMN IF NOT EXISTS record_hash String, MODIFY ORDER BY (project,trace_id,policy,evaluator,record_hash)`,
+		`CREATE OR REPLACE VIEW ` + db + `.trace_current AS SELECT * FROM ` + db + `.traces FINAL WHERE deleted=0`,
+		`CREATE OR REPLACE VIEW ` + db + `.trace_results_current AS SELECT r.* FROM ` + db + `.trace_results AS r FINAL INNER JOIN ` + db + `.trace_current t ON r.project=t.project AND r.trace_id=t.trace_id AND r.record_hash=t.record_hash`,
 	} {
 		if err := c.exec(ctx, stmt, nil, nil); err != nil {
 			return nil, err
@@ -143,6 +147,7 @@ func (c *clickhouse) do(ctx context.Context, query string, params chParams, body
 	}
 	q.Set("output_format_json_quote_64bit_integers", "0")
 	q.Set("date_time_input_format", "best_effort")
+	q.Set("do_not_merge_across_partitions_select_final", "0")
 	for k, v := range params {
 		q.Set("param_"+k, v)
 	}
@@ -225,6 +230,9 @@ func (c *clickhouse) PutTraces(ctx context.Context, traces []TraceWrite) error {
 	if len(traces) == 0 {
 		return nil
 	}
+	if err := c.copyLegacyTraceScores(ctx, traces); err != nil {
+		return err
+	}
 	var body bytes.Buffer
 	enc := json.NewEncoder(&body)
 	version := traceWriteVersion(ctx)
@@ -233,12 +241,12 @@ func (c *clickhouse) PutTraces(ctx context.Context, traces []TraceWrite) error {
 			"project": t.Summary.GetProject(), "trace_id": t.Summary.GetTraceId(), "service": t.Summary.GetService(),
 			"start_ns": t.Summary.GetStartTime().AsTime().UnixNano(), "summary": b64(t.Summary), "record": b64(t.Record),
 			// Later traces in a batch win over earlier ones with the same id.
-			"version": version + int64(i),
+			"version": version + int64(i), "record_hash": traceProjection(ctx, t.Summary, t.Record), "deleted": 0,
 		})
 	}
-	return c.exec(ctx, `INSERT INTO traces (project, trace_id, service, start_ns, summary, record, version) SELECT project, trace_id, service, start_ns,
-		base64Decode(summary), base64Decode(record), version
-		FROM input('project String, trace_id String, service String, start_ns Int64, summary String, record String, version Int64')
+	return c.exec(ctx, `INSERT INTO traces (project, trace_id, service, start_ns, summary, record, version, record_hash, deleted) SELECT project, trace_id, service, start_ns,
+		base64Decode(summary), base64Decode(record), version, record_hash, deleted
+		FROM input('project String, trace_id String, service String, start_ns Int64, summary String, record String, version Int64, record_hash String, deleted UInt8')
 		FORMAT JSONEachRow`, nil, &body)
 }
 
@@ -262,13 +270,15 @@ func (c *clickhouse) ListTraces(ctx context.Context, f TraceFilter, pageSize int
 	where := projectsWhere("project", f.Projects, params)
 	var out []*evalsiv1alpha1.TraceSummary
 	ids := map[[2]string]*evalsiv1alpha1.TraceSummary{}
-	err := c.query(ctx, `SELECT project, trace_id, base64Encode(summary) AS summary FROM traces FINAL
+	bindings := map[[2]string]string{}
+	err := c.query(ctx, `SELECT project, trace_id, base64Encode(summary) AS summary,record_hash FROM trace_current
 		WHERE `+where+` AND ({service:String} = '' OR service = {service:String})
 		ORDER BY start_ns DESC, trace_id LIMIT {limit:UInt64} OFFSET {offset:UInt64}`, params, func(line []byte) error {
 		var row struct {
 			Project string `json:"project"`
 			TraceID string `json:"trace_id"`
 			Summary string `json:"summary"`
+			Hash    string `json:"record_hash"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
@@ -278,8 +288,10 @@ func (c *clickhouse) ListTraces(ctx context.Context, f TraceFilter, pageSize int
 			return err
 		}
 		sum.Project = row.Project
+		sum.Results = 0
 		out = append(out, sum)
 		ids[[2]string{row.Project, row.TraceID}] = sum
+		bindings[[2]string{row.Project, row.TraceID}] = row.Hash
 		return nil
 	})
 	if err != nil {
@@ -297,18 +309,19 @@ func (c *clickhouse) ListTraces(ctx context.Context, f TraceFilter, pageSize int
 		projects = append(projects, s.GetProject())
 		traceIDs = append(traceIDs, s.GetTraceId())
 	}
-	err = c.query(ctx, `SELECT project, trace_id, count() AS n FROM trace_results FINAL
+	err = c.query(ctx, `SELECT project, trace_id, record_hash,count() AS n FROM trace_results FINAL
 		WHERE has({projects:Array(String)}, project) AND has({ids:Array(String)}, trace_id)
-		GROUP BY project, trace_id`, chParams{"projects": chArray(projects), "ids": chArray(traceIDs)}, func(line []byte) error {
+		GROUP BY project, trace_id,record_hash`, chParams{"projects": chArray(projects), "ids": chArray(traceIDs)}, func(line []byte) error {
 		var row struct {
 			Project string `json:"project"`
 			TraceID string `json:"trace_id"`
 			N       int32  `json:"n"`
+			Hash    string `json:"record_hash"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
 		}
-		if s := ids[[2]string{row.Project, row.TraceID}]; s != nil {
+		if s := ids[[2]string{row.Project, row.TraceID}]; s != nil && bindings[[2]string{row.Project, row.TraceID}] == row.Hash {
 			s.Results = row.N
 		}
 		return nil
@@ -318,7 +331,7 @@ func (c *clickhouse) ListTraces(ctx context.Context, f TraceFilter, pageSize int
 
 func (c *clickhouse) TraceProjects(ctx context.Context, traceID string) ([]string, error) {
 	var out []string
-	err := c.query(ctx, `SELECT DISTINCT project FROM traces FINAL WHERE trace_id = {id:String} ORDER BY project`,
+	err := c.query(ctx, `SELECT DISTINCT project FROM trace_current WHERE trace_id = {id:String} ORDER BY project`,
 		chParams{"id": traceID}, func(line []byte) error {
 			var row struct {
 				Project string `json:"project"`
@@ -332,19 +345,27 @@ func (c *clickhouse) TraceProjects(ctx context.Context, traceID string) ([]strin
 	return out, err
 }
 
-func (c *clickhouse) GetTrace(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error) {
+func (c *clickhouse) GetTrace(ctx context.Context, project, id string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, error) {
+	sum, record, _, err := c.getTraceRevision(ctx, project, id)
+	return sum, record, err
+}
+
+func (c *clickhouse) getTraceRevision(ctx context.Context, project, traceID string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, string, error) {
 	var sum *evalsiv1alpha1.TraceSummary
+	var binding string
 	var rec *evalsiv1alpha1.Record
-	err := c.query(ctx, `SELECT base64Encode(summary) AS summary, base64Encode(record) AS record FROM traces FINAL
+	err := c.query(ctx, `SELECT base64Encode(summary) AS summary, base64Encode(record) AS record,record_hash FROM trace_current
 		WHERE project = {project:String} AND trace_id = {id:String} LIMIT 1`,
 		chParams{"project": project, "id": traceID}, func(line []byte) error {
 			var row struct {
 				Summary string `json:"summary"`
 				Record  string `json:"record"`
+				Hash    string `json:"record_hash"`
 			}
 			if err := json.Unmarshal(line, &row); err != nil {
 				return err
 			}
+			binding = row.Hash
 			sum, rec = &evalsiv1alpha1.TraceSummary{}, &evalsiv1alpha1.Record{}
 			if err := unb64(row.Summary, sum); err != nil {
 				return err
@@ -352,81 +373,128 @@ func (c *clickhouse) GetTrace(ctx context.Context, project, traceID string) (*ev
 			return unb64(row.Record, rec)
 		})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if sum == nil {
-		return nil, nil, ErrNotFound
+		return nil, nil, "", ErrNotFound
 	}
 	sum.Project = project
-	return sum, rec, nil
+	return sum, rec, binding, nil
 }
 
 func (c *clickhouse) PutTraceResults(ctx context.Context, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
 	if len(results) == 0 {
 		return nil
 	}
+	hash, ok := ctx.Value(watchScoreBindingKey{}).(string)
+	if !ok {
+		var err error
+		hash, err = c.currentRecordHash(ctx, project, traceID)
+		if err != nil {
+			return err
+		}
+	}
 	var body bytes.Buffer
 	version := traceWriteVersion(ctx)
 	for _, r := range results {
 		row, _ := json.Marshal(map[string]any{
 			"project": project, "trace_id": traceID, "policy": policy, "evaluator": r.GetEvaluator(),
-			"result": b64(r), "version": version,
+			"result": b64(r), "version": version, "record_hash": hash,
 		})
 		body.Write(row)
 		body.WriteByte('\n')
 	}
-	return c.exec(ctx, `INSERT INTO trace_results (project, trace_id, policy, evaluator, result, version) SELECT project, trace_id, policy, evaluator, base64Decode(result), version
-		FROM input('project String, trace_id String, policy String, evaluator String, result String, version Int64')
+	return c.exec(ctx, `INSERT INTO trace_results (project, trace_id, policy, evaluator, result, version, record_hash) SELECT project, trace_id, policy, evaluator, base64Decode(result), version, record_hash
+		FROM input('project String, trace_id String, policy String, evaluator String, result String, version Int64, record_hash String')
 		FORMAT JSONEachRow`, nil, &body)
 }
 
-func (c *clickhouse) TraceResults(ctx context.Context, project, traceID string) ([]*evalsiv1alpha1.PolicyResults, error) {
+func (c *clickhouse) TraceResults(ctx context.Context, project, id string) ([]*evalsiv1alpha1.PolicyResults, error) {
+	return c.traceResultsQuery(ctx, project, id, nil)
+}
+func (c *clickhouse) traceResultsAt(ctx context.Context, project, id, binding string) ([]*evalsiv1alpha1.PolicyResults, error) {
+	return c.traceResultsQuery(ctx, project, id, &binding)
+}
+
+func (c *clickhouse) traceResultsQuery(ctx context.Context, project, traceID string, binding *string) ([]*evalsiv1alpha1.PolicyResults, error) {
 	var out []*evalsiv1alpha1.PolicyResults
-	err := c.query(ctx, `SELECT policy, base64Encode(result) AS result FROM trace_results FINAL
-		WHERE project = {project:String} AND trace_id = {id:String} ORDER BY policy, evaluator`,
-		chParams{"project": project, "id": traceID}, func(line []byte) error {
-			var row struct {
-				Policy string `json:"policy"`
-				Result string `json:"result"`
-			}
-			if err := json.Unmarshal(line, &row); err != nil {
-				return err
-			}
-			r := &evalsiv1alpha1.EvaluationResult{}
-			if err := unb64(row.Result, r); err != nil {
-				return err
-			}
-			if len(out) == 0 || out[len(out)-1].GetPolicy() != row.Policy {
-				out = append(out, &evalsiv1alpha1.PolicyResults{Policy: row.Policy})
-			}
-			last := out[len(out)-1]
-			last.Results = append(last.Results, r)
-			return nil
-		})
+	query := `SELECT policy,base64Encode(result) AS result FROM trace_results_current WHERE project={project:String} AND trace_id={id:String} ORDER BY policy,evaluator`
+	params := chParams{"project": project, "id": traceID}
+	if binding != nil {
+		query = `SELECT policy,base64Encode(result) AS result FROM trace_results FINAL WHERE project={project:String} AND trace_id={id:String} AND record_hash={binding:String} ORDER BY policy,evaluator`
+		params["binding"] = *binding
+	}
+	err := c.query(ctx, query, params, func(line []byte) error {
+		var row struct {
+			Policy string `json:"policy"`
+			Result string `json:"result"`
+		}
+		if err := json.Unmarshal(line, &row); err != nil {
+			return err
+		}
+		r := &evalsiv1alpha1.EvaluationResult{}
+		if err := unb64(row.Result, r); err != nil {
+			return err
+		}
+		if len(out) == 0 || out[len(out)-1].GetPolicy() != row.Policy {
+			out = append(out, &evalsiv1alpha1.PolicyResults{Policy: row.Policy})
+		}
+		last := out[len(out)-1]
+		last.Results = append(last.Results, r)
+		return nil
+	})
 	return out, err
 }
 
 // DeleteTracesBefore removes traces that started before t, and their
 // results, with lightweight deletes. The count is of distinct traces.
 func (c *clickhouse) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
+	return c.retainTraces(ctx, t, nil)
+}
+
+// Tombstones also cover accepted records whose timed-out INSERT has not
+// completed. FINAL keeps a tombstone ahead of any lower-version late delivery.
+func (c *clickhouse) retainTraces(ctx context.Context, t time.Time, pending []watchHead) (int64, error) {
 	params := chParams{"before": strconv.FormatInt(t.UnixNano(), 10)}
+	keys := map[[2]string]watchHead{}
+	for _, h := range pending {
+		keys[[2]string{h.Project, h.TraceID}] = h
+	}
 	var n int64
-	err := c.query(ctx, `SELECT count() AS n FROM traces FINAL WHERE start_ns < {before:Int64}`, params, func(line []byte) error {
+	err := c.query(ctx, `SELECT project,trace_id,start_ns FROM trace_current WHERE start_ns<{before:Int64}`, params, func(line []byte) error {
 		var row struct {
-			N int64 `json:"n"`
+			Project string `json:"project"`
+			TraceID string `json:"trace_id"`
+			StartNS int64  `json:"start_ns"`
 		}
-		err := json.Unmarshal(line, &row)
-		n = row.N
-		return err
+		if err := json.Unmarshal(line, &row); err != nil {
+			return err
+		}
+		n++
+		keys[[2]string{row.Project, row.TraceID}] = watchHead{Project: row.Project, TraceID: row.TraceID, StartNS: row.StartNS}
+		return nil
 	})
-	if err != nil || n == 0 {
+	if err != nil {
 		return 0, err
 	}
-	if err := c.exec(ctx, `DELETE FROM trace_results WHERE (project, trace_id) IN
-		(SELECT project, trace_id FROM traces WHERE start_ns < {before:Int64})`, params, nil); err != nil {
+	if len(keys) == 0 {
+		return n, nil
+	}
+	var body bytes.Buffer
+	enc := json.NewEncoder(&body)
+	version := traceWriteVersion(ctx)
+	for _, h := range keys {
+		_ = enc.Encode(map[string]any{"project": h.Project, "trace_id": h.TraceID, "service": "", "start_ns": h.StartNS, "summary": "", "record": "", "record_hash": "", "version": version, "deleted": 1})
+	}
+	if err := c.exec(ctx, `INSERT INTO traces(project,trace_id,service,start_ns,summary,record,version,record_hash,deleted) SELECT project,trace_id,service,start_ns,base64Decode(summary),base64Decode(record),version,record_hash,deleted FROM input('project String,trace_id String,service String,start_ns Int64,summary String,record String,version Int64,record_hash String,deleted UInt8') FORMAT JSONEachRow`, nil, &body); err != nil {
 		return 0, err
 	}
-	return n, c.exec(ctx, `DELETE FROM traces WHERE start_ns < {before:Int64}`, params, nil)
+	// Removing old result payloads is safe: a late result remains hidden by the
+	// tombstone join, even if it arrives after this physical cleanup.
+	if err := c.exec(ctx, `DELETE FROM trace_results WHERE (project,trace_id) IN (SELECT project,trace_id FROM traces FINAL WHERE deleted=1 AND start_ns<{before:Int64})`, params, nil); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 func (c *clickhouse) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrace, error) {
@@ -443,15 +511,17 @@ func (c *clickhouse) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTra
 		"since": strconv.FormatInt(since, 10), "limit": strconv.Itoa(limit),
 	}
 	var out []StoredTrace
-	err := c.query(ctx, `SELECT base64Encode(summary) AS summary, base64Encode(record) AS record FROM traces FINAL
+	var bindings []string
+	err := c.query(ctx, `SELECT base64Encode(summary) AS summary, base64Encode(record) AS record,record_hash FROM trace_current
 		WHERE project = {project:String} AND ({service:String} = '' OR service = {service:String})
 		  AND start_ns >= {since:Int64}
-		  AND ({policy:String} = '' OR trace_id IN (SELECT trace_id FROM trace_results FINAL
+		  AND ({policy:String} = '' OR trace_id IN (SELECT trace_id FROM trace_results_current
 		       WHERE project = {project:String} AND policy = {policy:String}))
 		ORDER BY start_ns DESC, trace_id LIMIT {limit:UInt64}`, params, func(line []byte) error {
 		var row struct {
 			Summary string `json:"summary"`
 			Record  string `json:"record"`
+			Hash    string `json:"record_hash"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
@@ -465,13 +535,14 @@ func (c *clickhouse) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTra
 		}
 		st.Summary.Project = q.Project
 		out = append(out, st)
+		bindings = append(bindings, row.Hash)
 		return nil
 	})
 	if err != nil || q.Policy == "" {
 		return out, err
 	}
 	for i := range out {
-		groups, err := c.TraceResults(ctx, q.Project, out[i].Summary.GetTraceId())
+		groups, err := c.traceResultsAt(ctx, q.Project, out[i].Summary.GetTraceId(), bindings[i])
 		if err != nil {
 			return nil, err
 		}
@@ -494,18 +565,20 @@ func (c *clickhouse) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTr
 	}
 	where := projectsWhere("project", q.Projects, params)
 	var out []ScoredTrace
-	err := c.query(ctx, `SELECT project, base64Encode(summary) AS summary FROM traces FINAL
+	bindings := map[[2]string]string{}
+	err := c.query(ctx, `SELECT project, base64Encode(summary) AS summary,record_hash FROM trace_current
 		WHERE `+where+` AND ({id:String} = '' OR trace_id = {id:String})
 		  AND ({service:String} = '' OR service = {service:String}) AND start_ns >= {since:Int64}
 		  AND ({after:UInt8} = 0 OR start_ns < {cs:Int64} OR (start_ns = {cs:Int64}
 		       AND (trace_id > {ct:String} OR (trace_id = {ct:String} AND project > {cp:String}))))
-		  AND (project, trace_id) IN (SELECT project, trace_id FROM trace_results FINAL
+		  AND (project, trace_id) IN (SELECT project, trace_id FROM trace_results_current
 		       WHERE `+where+` AND ({policy:String} = '' OR policy = {policy:String})
 		         AND ({evaluator:String} = '' OR evaluator = {evaluator:String}))
 		ORDER BY start_ns DESC, trace_id, project LIMIT {limit:UInt64}`, params, func(line []byte) error {
 		var row struct {
 			Project string `json:"project"`
 			Summary string `json:"summary"`
+			Hash    string `json:"record_hash"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
@@ -516,6 +589,7 @@ func (c *clickhouse) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTr
 		}
 		sum.Project = row.Project
 		out = append(out, ScoredTrace{Summary: sum})
+		bindings[[2]string{row.Project, sum.GetTraceId()}] = row.Hash
 		return nil
 	})
 	if err != nil || len(out) == 0 {
@@ -529,7 +603,7 @@ func (c *clickhouse) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTr
 		traceIDs = append(traceIDs, st.Summary.GetTraceId())
 		groups[[2]string{st.Summary.GetProject(), st.Summary.GetTraceId()}] = nil
 	}
-	err = c.query(ctx, `SELECT project, trace_id, policy, base64Encode(result) AS result FROM trace_results FINAL
+	err = c.query(ctx, `SELECT project, trace_id, policy, base64Encode(result) AS result,record_hash FROM trace_results FINAL
 		WHERE has({projects:Array(String)}, project) AND has({ids:Array(String)}, trace_id)
 		ORDER BY project, trace_id, policy, evaluator`, chParams{"projects": chArray(projects), "ids": chArray(traceIDs)}, func(line []byte) error {
 		var row struct {
@@ -537,13 +611,14 @@ func (c *clickhouse) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTr
 			TraceID string `json:"trace_id"`
 			Policy  string `json:"policy"`
 			Result  string `json:"result"`
+			Hash    string `json:"record_hash"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
 		}
 		key := [2]string{row.Project, row.TraceID}
 		gs, ok := groups[key]
-		if !ok {
+		if !ok || bindings[key] != row.Hash {
 			return nil // another project's trace with the same id
 		}
 		r := &evalsiv1alpha1.EvaluationResult{}
@@ -565,4 +640,77 @@ func (c *clickhouse) ScoredTraces(ctx context.Context, q ScoreQuery) ([]ScoredTr
 		out[i].Policies, out[i].Summary.Results = selectResults(groups[key], q.Policy, q.Evaluator)
 	}
 	return out, nil
+}
+
+func (c *clickhouse) currentRecordHash(ctx context.Context, project, id string) (string, error) {
+	var hash string
+	found := false
+	err := c.query(ctx, `SELECT record_hash FROM trace_current WHERE project={project:String} AND trace_id={id:String} LIMIT 1`, chParams{"project": project, "id": id}, func(line []byte) error {
+		var row struct {
+			Hash string `json:"record_hash"`
+		}
+		if err := json.Unmarshal(line, &row); err != nil {
+			return err
+		}
+		hash = row.Hash
+		found = true
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", ErrNotFound
+	}
+	return hash, nil
+}
+
+// Preserve scores on an unchanged legacy record when assigning its first hash.
+func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWrite) error {
+	var projects, ids []string
+	byKey := map[[2]string]TraceWrite{}
+	for _, t := range traces {
+		projects = append(projects, t.Summary.GetProject())
+		ids = append(ids, t.Summary.GetTraceId())
+		byKey[[2]string{t.Summary.GetProject(), t.Summary.GetTraceId()}] = t
+	}
+	type legacyCopy struct {
+		Trace   TraceWrite
+		OldHash string
+	}
+	var unchanged []legacyCopy
+	err := c.query(ctx, `SELECT project,trace_id,record_hash,base64Encode(record) AS record FROM trace_current WHERE has({projects:Array(String)},project) AND has({ids:Array(String)},trace_id)`, chParams{"projects": chArray(projects), "ids": chArray(ids)}, func(line []byte) error {
+		var row struct {
+			Project string `json:"project"`
+			TraceID string `json:"trace_id"`
+			Record  string `json:"record"`
+			Hash    string `json:"record_hash"`
+		}
+		if err := json.Unmarshal(line, &row); err != nil {
+			return err
+		}
+		t, ok := byKey[[2]string{row.Project, row.TraceID}]
+		if !ok {
+			return nil
+		}
+		record := &evalsiv1alpha1.Record{}
+		if err := unb64(row.Record, record); err != nil {
+			return err
+		}
+		if row.Hash != traceProjection(ctx, t.Summary, t.Record) && proto.Equal(record, t.Record) {
+			unchanged = append(unchanged, legacyCopy{Trace: t, OldHash: row.Hash})
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, copy := range unchanged {
+		t := copy.Trace
+		params := chParams{"project": t.Summary.GetProject(), "id": t.Summary.GetTraceId(), "hash": traceProjection(ctx, t.Summary, t.Record), "old_hash": copy.OldHash, "version": strconv.FormatInt(traceWriteVersion(ctx), 10)}
+		if err := c.exec(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,record_hash,result,version) SELECT project,trace_id,policy,evaluator,{hash:String},result,{version:Int64} FROM trace_results_current WHERE project={project:String} AND trace_id={id:String} AND record_hash={old_hash:String}`, params, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }

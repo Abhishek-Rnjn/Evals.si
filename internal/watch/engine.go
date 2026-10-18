@@ -3,6 +3,7 @@ package watch
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,7 +55,7 @@ type Options struct {
 	// Defers replay until a pulled trace can hand results to its source runner.
 	ResultsReady func(ctx context.Context, info ingest.TraceInfo) bool
 	// Nonempty in a cluster: every durable write must hold the policy-engine lease.
-	LeaseOwner string
+	Lease store.PolicyLease
 	// Called when a policy's alert starts or stops firing, with the body its
 	// own alert webhook receives (for the WebhookService's alert events).
 	OnAlert func(project, policy string, firing bool, body []byte)
@@ -101,6 +102,7 @@ type Engine struct {
 	leaderMu    sync.Mutex
 	leaderCtx   context.Context
 	stopLeader  context.CancelFunc
+	leaderLease store.PolicyLease
 	// Set on a replica that is not the elected policy engine.
 	follower atomic.Bool
 	// Used only by Run's recovery loop; failed work must not starve later rows.
@@ -142,6 +144,7 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 		policies: map[string]*policyState{}, unavailable: map[string]string{},
 	}
 	e.leaderCtx, e.stopLeader = context.WithCancel(context.Background())
+	e.leaderLease = opts.Lease
 	stored, err := st.Policies(ctx)
 	if err != nil {
 		return nil, err
@@ -186,7 +189,20 @@ func (e *Engine) SetLeader(leader bool) {
 	}
 }
 
-func (e *Engine) processingContext(parent context.Context) (context.Context, context.CancelFunc) {
+// SetPolicyLease starts a new processing term even when the process owner
+// stayed the same across a missed A -> B -> A lease cycle.
+func (e *Engine) SetPolicyLease(lease store.PolicyLease) {
+	e.leaderMu.Lock()
+	defer e.leaderMu.Unlock()
+	if e.follower.Load() || e.leaderLease != lease {
+		e.stopLeader()
+		e.leaderCtx, e.stopLeader = context.WithCancel(context.Background())
+		e.leaderLease = lease
+		e.follower.Store(false)
+	}
+}
+
+func (e *Engine) processingContext(parent context.Context) (context.Context, store.PolicyLease, context.CancelFunc) {
 	e.leaderMu.Lock()
 	defer e.leaderMu.Unlock()
 	ctx, cancel := context.WithCancel(parent)
@@ -194,7 +210,7 @@ func (e *Engine) processingContext(parent context.Context) (context.Context, con
 	if e.follower.Load() || e.leaderCtx.Err() != nil {
 		cancel()
 	}
-	return ctx, func() { stop(); cancel() }
+	return ctx, e.leaderLease, func() { stop(); cancel() }
 }
 
 // Reload re-reads policies from the store (another replica changed them).
@@ -321,11 +337,15 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 	}
 	pending := make([]store.WatchPending, 0, len(items))
 	for i := range items {
-		record, err := proto.Marshal(items[i].record)
+		record, err := (proto.MarshalOptions{Deterministic: true}).Marshal(items[i].record)
 		if err != nil {
 			return err
 		}
-		payload, err := encodePending(pendingPayload{Record: record, Info: items[i].info, Only: items[i].only, Stream: items[i].stream})
+		var acceptance [16]byte
+		if _, err := rand.Read(acceptance[:]); err != nil {
+			return err
+		}
+		payload, err := encodePending(pendingPayload{Acceptance: acceptance, Record: record, Info: items[i].info, Only: items[i].only, Stream: items[i].stream})
 		if err != nil {
 			return err
 		}
@@ -478,7 +498,7 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 	}
 	e.processing.Lock()
 	defer e.processing.Unlock()
-	ctx, cancel := e.processingContext(ctx)
+	ctx, lease, cancel := e.processingContext(ctx)
 	defer cancel()
 	if ctx.Err() != nil {
 		return
@@ -489,7 +509,7 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 	}
 	// Visibility does not depend on policy compilation or source readiness.
 	// The store checks the lease and exact pending revision under its write lock.
-	stored, err := e.store.PutWatchTraces(ctx, e.opts.LeaseOwner, writes)
+	stored, err := e.store.PutWatchTraces(ctx, lease, writes)
 	if err != nil {
 		if !errors.Is(err, store.ErrWatchStale) && ctx.Err() == nil {
 			e.StoreErrors.Add(int64(len(writes)))
@@ -508,20 +528,20 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 	}
 	complete := true
 	for _, st := range e.snapshot() {
-		if !e.processPolicy(ctx, st, current) {
+		if !e.processPolicy(ctx, lease, st, current) {
 			complete = false
 		}
 	}
 	if complete && ctx.Err() == nil {
 		for _, it := range current {
-			if err := e.store.AckWatchPending(ctx, e.opts.LeaseOwner, it.pending()); err != nil && ctx.Err() == nil {
+			if err := e.store.AckWatchPending(ctx, lease, it.pending()); err != nil && ctx.Err() == nil {
 				e.log.Error("acknowledging online trace", "err", err)
 			}
 		}
 	}
 }
 
-func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []item) bool {
+func (e *Engine) processPolicy(ctx context.Context, lease store.PolicyLease, st *policyState, batch []item) bool {
 	complete := true
 	c := st.c
 	type candidate struct {
@@ -594,7 +614,7 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 			continue
 		}
 		evaluated++
-		if err := e.store.PutWatchResults(ctx, e.opts.LeaseOwner, cand.pending(), c.policy.GetName(), cand.results); err != nil {
+		if err := e.store.PutWatchResults(ctx, lease, cand.pending(), c.policy.GetName(), cand.results); err != nil {
 			if errors.Is(err, store.ErrWatchStale) || ctx.Err() != nil {
 				return false
 			}

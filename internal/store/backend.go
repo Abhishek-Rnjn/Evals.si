@@ -129,6 +129,26 @@ func (s *Store) GetTrace(ctx context.Context, project, traceID string) (*evalsiv
 	return s.traces.GetTrace(ctx, project, traceID)
 }
 
+type revisionTraceReader interface {
+	getTraceRevision(context.Context, string, string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, string, error)
+	traceResultsAt(context.Context, string, string, string) ([]*evalsiv1alpha1.PolicyResults, error)
+}
+
+// GetTraceWithResults pins results to the record returned by the first read,
+// even if publication advances while assembling the response.
+func (s *Store) GetTraceWithResults(ctx context.Context, project, id string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, []*evalsiv1alpha1.PolicyResults, error) {
+	reader, ok := s.traces.(revisionTraceReader)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("trace backend does not support revision-bound reads")
+	}
+	summary, record, binding, err := reader.getTraceRevision(ctx, project, id)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	results, err := reader.traceResultsAt(ctx, project, id, binding)
+	return summary, record, results, err
+}
+
 // PutTraceResults stores a policy's results for a trace.
 func (s *Store) PutTraceResults(ctx context.Context, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
 	return s.traces.PutTraceResults(ctx, project, traceID, policy, results)
@@ -141,18 +161,41 @@ func (s *Store) TraceResults(ctx context.Context, project, traceID string) ([]*e
 
 // DeleteTracesBefore removes traces (and their results) that started before t.
 func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
-	tx, err := s.beginWatchWrite(ctx)
+	ctx, tx, err := s.beginVersionedWatchWrite(ctx, 1)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// Remove work before deleting the trace view under the same write fence;
-	// recovery that loaded a row earlier can no longer restore a retained copy.
-	if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE start_ns < ?`, t.UnixNano()); err != nil {
+	rows, err := tx.QueryContext(ctx, `SELECT project,trace_id,start_ns FROM watch_trace_heads WHERE start_ns<? AND deleted=0`, t.UnixNano())
+	if err != nil {
+		return 0, err
+	}
+	var heads []watchHead
+	for rows.Next() {
+		var h watchHead
+		if err := rows.Scan(&h.Project, &h.TraceID, &h.StartNS); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		heads = append(heads, h)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE start_ns<?`, t.UnixNano()); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE watch_trace_heads SET deleted=1,published=0 WHERE start_ns<?`, t.UnixNano()); err != nil {
 		return 0, err
 	}
 	var n int64
-	if _, ok := s.traces.(*sqlTraces); ok {
+	if ch, ok := s.traces.(*clickhouse); ok {
+		n, err = ch.retainTraces(ctx, t, heads)
+	} else if _, ok := s.traces.(*sqlTraces); ok {
 		n, err = deleteSQLTracesBefore(ctx, tx, t)
 	} else {
 		n, err = s.traces.DeleteTracesBefore(ctx, t)
