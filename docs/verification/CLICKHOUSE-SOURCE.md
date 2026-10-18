@@ -27,6 +27,7 @@ aa2836fcb333ed589d5c2144e15bd9166258bf7add456b3a89ebad574a7a2503
 | Check | Result |
 | --- | --- |
 | Actual Map schema, HTTP auth and typed query parameters | Passed |
+| Trace fetch uses the Collector's `idx_trace_id` bloom filter | Passed via `EXPLAIN indexes=1`; regression check fails with `lower(TraceId)` in the predicate |
 | Rootless children withheld until a completed root arrives | Passed |
 | Traces whose root predates `Since` excluded even when their children do not | Passed |
 | Equal-start keyset pages | Passed |

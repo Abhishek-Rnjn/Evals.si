@@ -141,7 +141,7 @@ func TestFetchedCollectorSpansBecomeARecord(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(row)
 		}
 	})
-	traces, err := c.Fetch(t.Context(), []source.Info{{ID: traceID}})
+	traces, err := c.Fetch(t.Context(), []source.Info{{ID: strings.ToUpper(traceID)}})
 	if err != nil || len(traces) != 1 {
 		t.Fatalf("fetch: %v, %v", traces, err)
 	}
@@ -347,6 +347,12 @@ func TestAgainstLiveClickHouse(t *testing.T) {
 		t.Fatalf("rootless trace listed: %v, %v", listed, err)
 	}
 	insert(rows[:1])
+	// Check the actual fetch query against the pinned Collector schema: wrapping
+	// TraceId in lower() disables its bloom-filter index and scans retained data.
+	plan := mustQuery("EXPLAIN indexes=1 "+c.fetchQuery(), url.Values{"trace": {traceID}}, nil)
+	if !strings.Contains(string(plan), "idx_trace_id") {
+		t.Fatalf("fetch does not use the trace-ID skipping index: %s", plan)
+	}
 	listed, err = c.List(ctx, source.ListRequest{Since: epoch, Limit: 1})
 	if err != nil || len(listed.Infos) != 1 || listed.Next == "" {
 		t.Fatalf("list: %v, %v", listed, err)

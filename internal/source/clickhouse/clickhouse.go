@@ -232,6 +232,13 @@ const spanColumns = `lower(TraceId) AS TraceID, lower(SpanId) AS SpanID, lower(P
 	Links.TraceId AS LinkTraceIDs, Links.SpanId AS LinkSpanIDs,
 	Links.TraceState AS LinkStates, Links.Attributes AS LinkAttributes`
 
+func (c *connector) fetchQuery() string {
+	// Collector IDs are lowercase. Keep the indexed column bare so its bloom
+	// filter can skip unrelated data instead of scanning every retained trace.
+	return `SELECT ` + spanColumns + ` FROM ` + c.table + `
+		WHERE TraceId = {trace:String} ORDER BY Timestamp, SpanId LIMIT ` + strconv.Itoa(maxSpansPerTrace+1) + ` FORMAT JSONEachRow`
+}
+
 // Fetch bounds each full trace, refusing oversized or conflicting spans rather
 // than scoring a truncated trajectory. Equal duplicate rows are harmless.
 func (c *connector) Fetch(ctx context.Context, infos []source.Info) ([]ingest.Trace, error) {
@@ -240,8 +247,8 @@ func (c *connector) Fetch(ctx context.Context, infos []source.Info) ([]ingest.Tr
 		if !validID(info.ID, 16) {
 			return nil, fmt.Errorf("clickhouse: invalid trace ID")
 		}
-		raw, err := c.query(ctx, `SELECT `+spanColumns+` FROM `+c.table+`
-			WHERE lower(TraceId) = {trace:String} ORDER BY Timestamp, SpanId LIMIT `+strconv.Itoa(maxSpansPerTrace+1)+` FORMAT JSONEachRow`, url.Values{"trace": {info.ID}}, nil)
+		id := strings.ToLower(info.ID)
+		raw, err := c.query(ctx, c.fetchQuery(), url.Values{"trace": {id}}, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -255,7 +262,7 @@ func (c *connector) Fetch(ctx context.Context, infos []source.Info) ([]ingest.Tr
 		if len(rows) > maxSpansPerTrace {
 			return nil, fmt.Errorf("clickhouse: trace exceeds %d span rows", maxSpansPerTrace)
 		}
-		trace, err := toTrace(info.ID, rows)
+		trace, err := toTrace(id, rows)
 		if err != nil {
 			return nil, err
 		}
