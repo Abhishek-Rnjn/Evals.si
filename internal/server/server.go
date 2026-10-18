@@ -215,15 +215,17 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 			}
 			return cl.Stats(name)
 		},
-		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
+		ResultsReady: func(info ingest.TraceInfo) bool { return sourceMgr != nil && sourceMgr.ResultsReady(info) },
+		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
+			if sourceMgr == nil || !sourceMgr.OnResults(policy, rec, info, results) {
+				return fmt.Errorf("source result handoff not ready")
+			}
 			exports.Trace(&sinks.Trace{
 				TraceID: rec.GetId(), RootSpanID: rootSpan(rec), Service: info.Service,
 				Policy: policy, Results: results, Time: time.Now(),
 			})
-			if sourceMgr != nil {
-				sourceMgr.OnResults(policy, rec, info, results)
-			}
 			hooks.TraceScored(watch.Summary(rec, info), policy, results)
+			return nil
 		},
 		OnAlert: hooks.AlertChanged,
 	})

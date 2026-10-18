@@ -43,7 +43,7 @@ func TestRedactionBeforeStorageEvaluationSinksAndLogs(t *testing.T) {
 				}
 			}
 			sunk := false
-			h.e.opts.OnResults = func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
+			h.e.opts.OnResults = func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
 				sunk = true
 				raw, err := protojson.Marshal(record)
 				if err != nil {
@@ -51,6 +51,7 @@ func TestRedactionBeforeStorageEvaluationSinksAndLogs(t *testing.T) {
 				}
 				assertSafe(raw)
 				assertSafe([]byte(info.Service))
+				return nil
 			}
 			input := trace(1, "private-sentinel", `{"password":"raw-password","message":"person@example.invalid private-sentinel"}`, false)
 			if mode == "pull" {
@@ -64,6 +65,11 @@ func TestRedactionBeforeStorageEvaluationSinksAndLogs(t *testing.T) {
 			} else if err := h.e.IngestBatchContext(t.Context(), []ingest.Trace{input}, nil); err != nil {
 				t.Fatal(err)
 			}
+			queued := <-h.e.queue
+			if strings.Contains(queued.record.GetOutput().GetText(), "raw-password") {
+				t.Fatal("worker input was not redacted")
+			}
+			h.e.process(t.Context(), []item{queued})
 			summary, record, err := h.st.GetTrace(t.Context(), DefaultProject, input.TraceID)
 			if err != nil {
 				t.Fatal(err)
@@ -75,11 +81,6 @@ func TestRedactionBeforeStorageEvaluationSinksAndLogs(t *testing.T) {
 				}
 				assertSafe(raw)
 			}
-			queued := <-h.e.queue
-			if strings.Contains(queued.record.GetOutput().GetText(), "raw-password") {
-				t.Fatal("worker input was not redacted")
-			}
-			h.e.process(t.Context(), []item{queued})
 			if !sunk {
 				t.Fatal("sink callback did not run")
 			}

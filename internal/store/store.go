@@ -113,6 +113,9 @@ func Open(path string) (*Store, error) {
 	if err == nil {
 		err = migrateArchivedRuns(context.Background(), tx, sqliteDialect)
 		if err == nil {
+			err = migrateWatchPending(context.Background(), tx, sqliteDialect)
+		}
+		if err == nil {
 			err = tx.Commit()
 		} else {
 			_ = tx.Rollback()

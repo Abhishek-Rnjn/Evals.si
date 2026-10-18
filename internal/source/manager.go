@@ -220,23 +220,36 @@ func phaseOf(st store.SourceState) evalsiv1alpha1.SourcePhase {
 	return evalsiv1alpha1.SourcePhase_SOURCE_PHASE_UNSPECIFIED
 }
 
+// ResultsReady prevents startup recovery from racing the source runner map.
+// Raw push traces are ready even if they happen to carry a source label.
+func (m *Manager) ResultsReady(info ingest.TraceInfo) bool {
+	name := info.Labels[LabelSource]
+	traceID, _ := info.Resource[AttrSourceTraceID].(string)
+	if name == "" || traceID == "" {
+		return true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.runners[key{info.Project, name}] != nil
+}
+
 // OnResults receives each evaluated trace's results (the engine's OnResults
 // hook) and queues the scores of a pulled trace for write-back. It never
 // blocks.
-func (m *Manager) OnResults(policy string, _ *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
+func (m *Manager) OnResults(policy string, _ *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) bool {
 	name := info.Labels[LabelSource]
-	if name == "" {
-		return
+	traceID, _ := info.Resource[AttrSourceTraceID].(string)
+	if name == "" || traceID == "" {
+		return true
 	}
 	m.mu.Lock()
 	r := m.runners[key{info.Project, name}]
 	m.mu.Unlock()
-	if r == nil || !r.src.GetWriteBack().GetEnabled() {
-		return
+	if r == nil {
+		return false
 	}
-	traceID, _ := info.Resource[AttrSourceTraceID].(string)
-	if traceID == "" {
-		return
+	if !r.src.GetWriteBack().GetEnabled() {
+		return true
 	}
 	for _, res := range results {
 		if res.GetOutcome() != evalsiv1alpha1.Outcome_OUTCOME_SCORED {
@@ -256,9 +269,11 @@ func (m *Manager) OnResults(policy string, _ *evalsiv1alpha1.Record, info ingest
 			case r.scores <- s:
 			default:
 				m.ScoresDropped.Add(1)
+				return false
 			}
 		}
 	}
+	return true
 }
 
 // metricName is the name the sinks and the policy statistics give a score.

@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -77,5 +78,118 @@ func TestRecoveryRunsOnlyOnLeader(t *testing.T) {
 	h.e.recoverPending(t.Context())
 	if pending, err := h.st.ListWatchPending(t.Context(), 10); err != nil || len(pending) != 0 {
 		t.Fatalf("leader did not recover: %v, %v", pending, err)
+	}
+}
+
+func TestRecoveryKeepsIndependentSourcePolicyStreams(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	for _, name := range []string{"first", "second"} {
+		if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: name, Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/deep")}}}); err != nil {
+			t.Fatal(err)
+		}
+		tr := trace(3, "studio", "good", false)
+		tr.Adjust = func(_ *evalsiv1alpha1.Record, info *ingest.TraceInfo) {
+			info.Labels = map[string]string{"source": name}
+		}
+		if err := h.e.IngestBatchContext(ctx, []ingest.Trace{tr}, []string{name}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending, err := h.st.ListWatchPending(ctx, 10)
+	if err != nil || len(pending) != 2 {
+		t.Fatalf("independent jobs lost: %d, %v", len(pending), err)
+	}
+	h.e.recoverPending(ctx)
+	results, err := h.st.TraceResults(ctx, DefaultProject, trace(3, "studio", "good", false).TraceID)
+	if err != nil || len(results) != 2 {
+		t.Fatalf("source policies not both scored: %v, %v", results, err)
+	}
+}
+
+func TestStaleQueuedProducerCannotOverwriteScoredRevision(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "quality", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}); err != nil {
+		t.Fatal(err)
+	}
+	h.e.Ingest(trace(4, "studio", "old bad", false))
+	old := <-h.e.queue
+	h.e.Ingest(trace(4, "studio", "new good", false))
+	newest := <-h.e.queue
+	h.e.process(ctx, []item{newest})
+	h.e.process(ctx, []item{old})
+	_, record, err := h.st.GetTrace(ctx, DefaultProject, newest.record.GetId())
+	if err != nil || record.GetOutput().GetText() != "new good" {
+		t.Fatalf("stale producer overwrote scored trace: %v, %v", record, err)
+	}
+	results, err := h.st.TraceResults(ctx, DefaultProject, newest.record.GetId())
+	if err != nil || len(results) != 1 || results[0].GetResults()[0].GetScores()[0].GetNumber() != 1 {
+		t.Fatalf("scores do not match current trace: %v, %v", results, err)
+	}
+}
+
+func TestRecoveryWaitsForResultHandoff(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "deep", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/deep")}}}); err != nil {
+		t.Fatal(err)
+	}
+	ready := false
+	h.e.opts.ResultsReady = func(ingest.TraceInfo) bool { return ready }
+	h.e.Ingest(trace(5, "studio", "good", false))
+	h.e.recoverPending(ctx)
+	if h.worker.deepCalls != 0 {
+		t.Fatal("evaluated before source runner was ready")
+	}
+	ready = true
+	h.e.opts.OnResults = func(string, *evalsiv1alpha1.Record, ingest.TraceInfo, []*evalsiv1alpha1.EvaluationResult) error {
+		return fmt.Errorf("runner stopped")
+	}
+	h.e.recoverPending(ctx)
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 1 {
+		t.Fatalf("failed handoff acknowledged: %v %v", pending, err)
+	}
+	h.e.opts.OnResults = nil
+	h.e.recoverPending(ctx)
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
+		t.Fatalf("ready work not acknowledged: %v %v", pending, err)
+	}
+}
+
+func TestUnavailablePolicyKeepsAcceptedWorkUntilRestoredOrDeleted(t *testing.T) {
+	for _, restore := range []bool{true, false} {
+		t.Run(fmt.Sprint(restore), func(t *testing.T) {
+			h := newHarness(t)
+			ctx := t.Context()
+			policy := &evalsiv1alpha1.OnlineEvalPolicy{Name: "temporarily-unavailable", Project: DefaultProject, Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("missing/evaluator")}}}
+			if err := h.st.PutPolicy(ctx, policy); err != nil {
+				t.Fatal(err)
+			}
+			h.e.Ingest(trace(6, "studio", "good", false))
+			restarted, err := New(ctx, h.st, h.e.eval, h.e.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			restarted.recoverPending(ctx)
+			if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 1 {
+				t.Fatalf("unavailable policy lost work: %v %v", pending, err)
+			}
+			if restore {
+				policy.Stages[0].Evaluators = refs("test/deep")
+				if err := restarted.Apply(ctx, policy); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := restarted.Delete(ctx, policy.GetName()); err != nil {
+				t.Fatal(err)
+			}
+			restarted.recoverPending(ctx)
+			if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
+				t.Fatalf("restored/deleted policy blocked work: %v %v", pending, err)
+			}
+			if restore && h.worker.deepCalls != 1 {
+				t.Fatal("restored policy did not run")
+			}
+		})
 	}
 }

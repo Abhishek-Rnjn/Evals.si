@@ -663,3 +663,31 @@ func TestDeleteDuringACycleLeavesNoState(t *testing.T) {
 		t.Fatal("seen traces written after the delete")
 	}
 }
+
+func TestResultsWaitForRunnerAndReportFullWritebackQueue(t *testing.T) {
+	h := newHarness(t, func(s *evalsiv1alpha1.TraceSource) { s.WriteBack = &evalsiv1alpha1.WriteBack{Enabled: true} })
+	info := ingest.TraceInfo{Project: "p", Labels: map[string]string{LabelSource: "studio"}, Resource: ingest.Attrs{AttrSourceTraceID: "tr-a"}}
+	results := []*evalsiv1alpha1.EvaluationResult{{Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED, Scores: []*evalsiv1alpha1.Score{{Value: &evalsiv1alpha1.Score_Number{Number: 1}}}}}
+	if h.m.ResultsReady(info) || h.m.OnResults("p", nil, info, results) {
+		t.Fatal("missing runner accepted replay results")
+	}
+	h.m.mu.Lock()
+	h.m.runners[key{"p", "studio"}] = h.r
+	h.m.mu.Unlock()
+	if !h.m.ResultsReady(info) {
+		t.Fatal("registered runner was not ready")
+	}
+	if !h.m.OnResults("p", nil, info, results) {
+		t.Fatal("ready runner rejected result")
+	}
+	for len(h.r.scores) < cap(h.r.scores) {
+		h.r.scores <- Score{}
+	}
+	if h.m.OnResults("p", nil, info, results) {
+		t.Fatal("full queue reported successful handoff")
+	}
+	raw := ingest.TraceInfo{Project: "p", Labels: map[string]string{LabelSource: "arbitrary"}}
+	if !h.m.ResultsReady(raw) || !h.m.OnResults("p", nil, raw, results) {
+		t.Fatal("push trace was mistaken for source work")
+	}
+}

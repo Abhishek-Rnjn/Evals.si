@@ -43,14 +43,16 @@ type Options struct {
 	BatchSize int
 	// How long the dispatcher waits to fill a batch.
 	FlushInterval time.Duration
-	// Traces waiting for evaluation; more are dropped and counted.
+	// In-memory wakeups waiting for evaluation; overflow is recovered from SQL.
 	QueueSize int
 	Logger    *slog.Logger
 	Redactor  *ingest.Redactor
 	// Client for alert webhooks.
 	HTTPClient *http.Client
 	// Called with each evaluated trace's results (for sinks); must not block.
-	OnResults func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult)
+	OnResults func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error
+	// Defers replay until a pulled trace can hand results to its source runner.
+	ResultsReady func(info ingest.TraceInfo) bool
 	// Called when a policy's alert starts or stops firing, with the body its
 	// own alert webhook receives (for the WebhookService's alert events).
 	OnAlert func(project, policy string, firing bool, body []byte)
@@ -61,6 +63,7 @@ type item struct {
 	info   ingest.TraceInfo
 	// When set, only these policies score the trace (a trace source's list).
 	only    []string
+	stream  string
 	payload []byte
 }
 
@@ -89,8 +92,10 @@ type Engine struct {
 	writerGone bool
 	now        func() time.Time
 
-	mu       sync.Mutex
-	policies map[string]*policyState
+	mu          sync.Mutex
+	policies    map[string]*policyState
+	unavailable map[string]string
+	processing  sync.Mutex
 	// Set on a replica that is not the elected policy engine.
 	follower atomic.Bool
 	// Used only by Run's recovery loop; failed work must not starve later rows.
@@ -101,8 +106,8 @@ type Engine struct {
 	StoreErrors    atomic.Int64
 }
 
-// New loads stored policies. Policies that no longer compile (for example an
-// evaluator was uninstalled) are logged and skipped.
+// New loads stored policies. Policies that no longer compile are logged and
+// retain accepted work until restored, disabled or intentionally deleted.
 func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Options) (*Engine, error) {
 	if opts.BatchSize <= 0 {
 		opts.BatchSize = 32
@@ -129,7 +134,7 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 	e := &Engine{
 		store: st, eval: eval, opts: opts, log: opts.Logger,
 		queue: make(chan item, opts.QueueSize), writes: make(chan ingest.Trace, opts.QueueSize), now: time.Now,
-		policies: map[string]*policyState{},
+		policies: map[string]*policyState{}, unavailable: map[string]string{},
 	}
 	stored, err := st.Policies(ctx)
 	if err != nil {
@@ -142,6 +147,9 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 		c, err := compile(ctx, p, eval)
 		if err != nil {
 			e.log.Error("skipping stored policy", "policy", p.GetName(), "err", err)
+			if !p.GetDisabled() {
+				e.unavailable[p.GetName()] = p.GetProject()
+			}
 			continue
 		}
 		e.policies[p.GetName()] = newState(c)
@@ -180,6 +188,7 @@ func (e *Engine) reload(ctx context.Context, force bool) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	next := map[string]*policyState{}
+	unavailable := map[string]string{}
 	for _, p := range stored {
 		if p.GetProject() == "" {
 			p.Project = DefaultProject
@@ -192,6 +201,9 @@ func (e *Engine) reload(ctx context.Context, force bool) error {
 		c, err := compile(ctx, p, e.eval)
 		if err != nil {
 			e.log.Error("skipping stored policy", "policy", p.GetName(), "err", err)
+			if !p.GetDisabled() {
+				unavailable[p.GetName()] = p.GetProject()
+			}
 			continue
 		}
 		st := newState(c)
@@ -201,6 +213,7 @@ func (e *Engine) reload(ctx context.Context, force bool) error {
 		next[p.GetName()] = st
 	}
 	e.policies = next
+	e.unavailable = unavailable
 	return nil
 }
 
@@ -244,19 +257,18 @@ func (e *Engine) Apply(ctx context.Context, p *evalsiv1alpha1.OnlineEvalPolicy) 
 		st.seen, st.matched, st.sampled, st.evaluated, st.promoted, st.errored = old.seen, old.matched, old.sampled, old.evaluated, old.promoted, old.errored
 	}
 	e.policies[p.GetName()] = st
+	delete(e.unavailable, p.GetName())
 	if e.opts.Changed != nil {
 		e.opts.Changed()
 	}
 	return nil
 }
 
-// Ingest stores an assembled trace and queues it for policy evaluation.
+// Ingest durably queues an assembled trace for storage and policy evaluation.
 func (e *Engine) Ingest(t ingest.Trace) { e.IngestBatch([]ingest.Trace{t}) }
 
-// IngestBatch stores traces in one write, then queues them for policy
-// evaluation, so a trace's scores never arrive before the trace. It is for
-// live streams: a store failure is logged and counted, and a trace is dropped
-// when the evaluation queue is full.
+// IngestBatch persists pending work, then wakes the dispatcher, which stores
+// each trace before its scores. A full in-memory queue defers work to recovery.
 func (e *Engine) IngestBatch(traces []ingest.Trace) {
 	_ = e.ingest(context.Background(), traces, nil, false)
 }
@@ -271,7 +283,6 @@ func (e *Engine) IngestBatchContext(ctx context.Context, traces []ingest.Trace, 
 }
 
 func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []string, durable bool) error {
-	writes := make([]store.TraceWrite, 0, len(traces))
 	items := make([]item, 0, len(traces))
 	for _, t := range traces {
 		t = e.opts.Redactor.Trace(t)
@@ -279,8 +290,7 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 		if info.Project == "" {
 			info.Project = DefaultProject
 		}
-		writes = append(writes, store.TraceWrite{Summary: Summary(record, info), Record: record})
-		items = append(items, item{record: record, info: info, only: only})
+		items = append(items, item{record: record, info: info, only: slices.Clone(only), stream: workStream(info, only)})
 	}
 	pending := make([]store.WatchPending, 0, len(items))
 	for i := range items {
@@ -288,7 +298,7 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 		if err != nil {
 			return err
 		}
-		payload, err := encodePending(pendingPayload{Record: record, Info: items[i].info, Only: only})
+		payload, err := encodePending(pendingPayload{Record: record, Info: items[i].info, Only: items[i].only, Stream: items[i].stream})
 		if err != nil {
 			return err
 		}
@@ -301,13 +311,6 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 		return err
 	}
 	e.TracesIngested.Add(int64(len(traces)))
-	if err := e.store.PutTraces(ctx, writes); err != nil {
-		e.StoreErrors.Add(int64(len(writes)))
-		e.log.Error("storing traces", "traces", len(writes), "err", err)
-		if durable {
-			return fmt.Errorf("storing traces: %w", err)
-		}
-	}
 	for _, it := range items {
 		if !durable {
 			select {
@@ -443,11 +446,16 @@ func numeric(s *evalsiv1alpha1.Score) (float64, bool) {
 }
 
 func (e *Engine) process(ctx context.Context, batch []item) {
+	e.processing.Lock()
+	defer e.processing.Unlock()
 	if e.follower.Load() {
 		return
 	}
 	var current []item
 	for _, it := range batch {
+		if !e.policiesReady(it) || (e.opts.ResultsReady != nil && !e.opts.ResultsReady(it.info)) {
+			continue
+		}
 		if it.payload != nil {
 			matches, err := e.store.WatchPendingMatches(ctx, it.pending())
 			if err != nil || !matches {
@@ -459,8 +467,8 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 	if len(current) == 0 {
 		return
 	}
-	// Recovery and ingestion may overlap. Re-store the version being scored so
-	// a later queued revision restores the trace after an earlier replay write.
+	// Only the elected dispatcher writes traces. Producers persist pending work
+	// without touching the trace view, so a delayed producer cannot overwrite it.
 	var writes []store.TraceWrite
 	for _, it := range current {
 		if it.payload != nil {
@@ -568,7 +576,10 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 			continue
 		}
 		if e.opts.OnResults != nil {
-			e.opts.OnResults(c.policy.GetName(), cand.record, cand.info, cand.results)
+			if err := e.opts.OnResults(c.policy.GetName(), cand.record, cand.info, cand.results); err != nil {
+				complete = false
+				e.log.Warn("online result handoff failed", "policy", c.policy.GetName(), "err", err)
+			}
 		}
 		if c.promote != nil && eval(c.promote, activation(cand.info, cand.scores)) {
 			if err := e.promoteRecord(c.policy.GetProject(), c.policy.GetPromote().GetDataset(), cand.record, cand.scores); err != nil {
@@ -778,6 +789,7 @@ func (e *Engine) Delete(ctx context.Context, name string) error {
 	}
 	e.mu.Lock()
 	delete(e.policies, name)
+	delete(e.unavailable, name)
 	e.mu.Unlock()
 	if e.opts.Changed != nil {
 		e.opts.Changed()
@@ -798,4 +810,17 @@ func Summary(record *evalsiv1alpha1.Record, info ingest.TraceInfo) *evalsiv1alph
 		summary.StartTime = steps[0].GetStartTime()
 	}
 	return summary
+}
+
+// An unavailable evaluator/grant is retryable; an intentionally deleted or
+// disabled policy is absent from this map and no longer blocks accepted work.
+func (e *Engine) policiesReady(it item) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for name, project := range e.unavailable {
+		if project == it.info.Project && (len(it.only) == 0 || slices.Contains(it.only, name)) {
+			return false
+		}
+	}
+	return true
 }
