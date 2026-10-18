@@ -473,3 +473,20 @@ spec, requirements, inspection and the supported Terminal-Bench Compose subset.
 This requires Kubernetes native sidecars and an enforced NetworkPolicy whose
 canary passes; other sandbox backends reject service tasks. The checker still
 runs in the agent's sandbox, as it does for existing task environments.
+
+## Report score stability and plan trials
+
+Save a repeated-trial run with `evalsi run -f run.yaml --output results.json`,
+then run `evalsi determinism results.json --margin 0.05 --confidence 0.95`.
+The JSON report compares scores only within the same record, evaluator and
+metric. It reports observed pair agreement and within-record variance, gives
+each record equal weight, and distinguishes single-trial records, errors and
+skips. Identical scores do not prove identical generated outputs or a
+fundamentally deterministic model.
+
+The trial recommendation uses Hoeffding's bound for independent observations
+in [0, 1] of one fixed case. At margin 0.05 and confidence 0.95 it recommends
+738 trials. It does not use zero observed variance to claim that one trial is
+enough, and it is not a power calculation for a model comparison. Correlated
+trials, arbitrary unbounded metrics and multiple-comparison guarantees need
+a separate analysis.
