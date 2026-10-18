@@ -127,8 +127,12 @@ func (s *Store) bindLegacyWatch(ctx context.Context, tx *txn, item WatchTraceWri
 		}
 	}
 	if h.Hash == hash && !h.Deleted {
-		revision = h.Revision
 		scoreRevision = h.ScoreRevision
+		// Equal evaluator input can share scores while an older summary must
+		// remain historical. Only an equal (or unknown) snapshot may publish.
+		if h.SnapshotHash == "" || h.SnapshotHash == SnapshotHash(item.Trace.Summary, item.Trace.Record) {
+			revision = h.Revision
+		}
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE watch_pending SET revision=?,score_revision=?,record_hash=? WHERE project=? AND trace_id=? AND stream=? AND payload=?`, revision, scoreRevision, hash, item.Pending.Project, item.Pending.TraceID, item.Pending.Stream, item.Pending.Payload)
 	return revision, scoreRevision, hash, err

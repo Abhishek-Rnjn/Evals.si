@@ -347,3 +347,93 @@ func TestSummaryOnlyRevisionPublishesMetadataAndPreservesScores(t *testing.T) {
 		})
 	}
 }
+
+func TestLegacyRecoveryCannotPublishOverNewerSummary(t *testing.T) {
+	for backend, traces := range traceBackends(t) {
+		t.Run(backend, func(t *testing.T) {
+			st := open(t)
+			if backend == "clickhouse" {
+				st.UseTraces(traces)
+			}
+			ctx := t.Context()
+			old := revisionTrace("legacy", "same input", time.Now())
+			// Simulate a pending row created before revision/snapshot columns existed.
+			if _, err := st.db.ExecContext(ctx, `INSERT INTO watch_pending(project,trace_id,stream,payload,start_ns) VALUES(?,?,?,?,?)`, old.Pending.Project, old.Pending.TraceID, old.Pending.Stream, old.Pending.Payload, old.Pending.StartNS); err != nil {
+				t.Fatal(err)
+			}
+			newer := revisionTrace("new", "same input", old.Trace.Summary.GetStartTime().AsTime())
+			newer.Trace.Summary.Service = "new service"
+			newer.Pending.SnapshotHash = SnapshotHash(newer.Trace.Summary, newer.Trace.Record)
+			acceptRevision(t, st, newer)
+			publishRevision(t, st, old)
+			if err := st.PutWatchResults(ctx, PolicyLease{}, old.Pending, "quality", revisionScores(1)); err != nil {
+				t.Fatal(err)
+			}
+			publishRevision(t, st, newer)
+			summary, _, err := st.GetTrace(ctx, "p", "revision")
+			if err != nil || summary.GetService() != "new service" {
+				t.Fatalf("legacy recovery displaced newer summary: %v %v", summary, err)
+			}
+			assertCurrentRevisionScore(t, st, 1)
+		})
+	}
+}
+
+func TestSQLRetentionRemovesUnpublishedHistoricalScores(t *testing.T) {
+	for _, visible := range []bool{false, true} {
+		t.Run(map[bool]string{false: "no projection", true: "unexpired projection"}[visible], func(t *testing.T) {
+			st := open(t)
+			ctx := t.Context()
+			cutoff := time.Now()
+			old := revisionTrace("old", "old input", cutoff.Add(-time.Hour))
+			newer := revisionTrace("new", "new input", old.Trace.Summary.GetStartTime().AsTime())
+			acceptRevision(t, st, old)
+			acceptRevision(t, st, newer)
+			publishRevision(t, st, old) // Historical evaluation creates no trace row.
+			if err := st.PutWatchResults(ctx, PolicyLease{}, old.Pending, "quality", revisionScores(0)); err != nil {
+				t.Fatal(err)
+			}
+			if visible {
+				live := revisionTrace("live", "live input", cutoff.Add(time.Hour))
+				if err := st.PutTrace(ctx, live.Trace.Summary, live.Trace.Record); err != nil {
+					t.Fatal(err)
+				}
+				if err := st.PutTraceResults(ctx, "p", "revision", "quality", revisionScores(1)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for pass := 0; pass < 2; pass++ {
+				if _, err := st.DeleteTracesBefore(ctx, cutoff); err != nil {
+					t.Fatal(err)
+				}
+				if visible {
+					assertCurrentRevisionScore(t, st, 1)
+				} else {
+					var count int
+					if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM trace_results`).Scan(&count); err != nil || count != 0 {
+						t.Fatalf("retention left historical score payloads: %d %v", count, err)
+					}
+				}
+				if pass == 0 && st.db.d == postgresDialect {
+					var before, after string
+					if err := st.db.QueryRowContext(ctx, `SELECT xmin::text FROM watch_trace_heads WHERE project='p' AND trace_id='revision'`).Scan(&before); err != nil {
+						t.Fatal(err)
+					}
+					if _, err := st.DeleteTracesBefore(ctx, cutoff); err != nil {
+						t.Fatal(err)
+					}
+					if err := st.db.QueryRowContext(ctx, `SELECT xmin::text FROM watch_trace_heads WHERE project='p' AND trace_id='revision'`).Scan(&after); err != nil || before != after {
+						t.Fatalf("repeat retention rewrote a tombstone: %s -> %s, %v", before, after, err)
+					}
+				}
+				if pass == 0 && !visible {
+					// Also collect payloads stranded by an earlier retention pass
+					// that already tombstoned the head but omitted orphan scores.
+					if _, err := st.db.ExecContext(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,record_hash,result) VALUES(?,?,?,?,?,?)`, "p", "revision", "quality", "quality", "historical", marshal(revisionScores(0)[0])); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		})
+	}
+}

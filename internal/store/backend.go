@@ -189,7 +189,7 @@ func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, err
 	if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE start_ns<?`, t.UnixNano()); err != nil {
 		return 0, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE watch_trace_heads SET deleted=1,published=0 WHERE start_ns<?`, t.UnixNano()); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE watch_trace_heads SET deleted=1,published=0 WHERE start_ns<? AND deleted=0`, t.UnixNano()); err != nil {
 		return 0, err
 	}
 	var n int64
