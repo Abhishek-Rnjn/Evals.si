@@ -19,6 +19,8 @@ func TestRevisionMigrationPreservesLegacyScoresAndIsIdempotent(t *testing.T) {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, statement := range []string{
+		`DROP INDEX watch_score_dirty`,
+		`ALTER TABLE watch_score_references DROP COLUMN dirty`,
 		`DROP TABLE trace_results`,
 		`CREATE TABLE trace_results(project TEXT NOT NULL,trace_id TEXT NOT NULL,policy TEXT NOT NULL,evaluator TEXT NOT NULL,result BLOB NOT NULL,tenant_id TEXT NOT NULL DEFAULT '',PRIMARY KEY(project,trace_id,policy,evaluator))`,
 		`UPDATE traces SET record_hash=''`,

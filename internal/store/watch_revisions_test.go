@@ -460,6 +460,19 @@ func TestRetentionPreservesScoresSharedWithUnexpiredWork(t *testing.T) {
 			if err := st.PutWatchResults(ctx, PolicyLease{}, a.Pending, "independent", revisionScores(1)); err != nil {
 				t.Fatal(err)
 			}
+			var late context.Context
+			if backend == "clickhouse" {
+				var err error
+				late, err = st.watchVersionContext(ctx, 1)
+				if err != nil {
+					t.Fatal(err)
+				}
+				h, err := getWatchHead(ctx, st.db, "p", "revision")
+				if err != nil {
+					t.Fatal(err)
+				}
+				late = context.WithValue(late, watchScoreBindingKey{}, scoreBinding(h.Hash, h.ScoreRevision))
+			}
 			if err := st.AckWatchPending(ctx, PolicyLease{}, a.Pending); err != nil {
 				t.Fatal(err)
 			}
@@ -477,6 +490,15 @@ func TestRetentionPreservesScoresSharedWithUnexpiredWork(t *testing.T) {
 				t.Fatal(err)
 			}
 			if backend == "clickhouse" {
+				assertClickHousePayloadCount(t, traces.(*clickhouse), "trace_results", 0)
+				// The expired metadata reference is gone, and a newer projection
+				// remains live. Its old in-flight result must still be collectible.
+				if err := traces.PutTraceResults(late, "p", "revision", "independent", revisionScores(0)); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := st.DeleteTracesBefore(ctx, cutoff.Add(2*time.Hour)); err != nil {
+					t.Fatal(err)
+				}
 				assertClickHousePayloadCount(t, traces.(*clickhouse), "trace_results", 0)
 			} else {
 				var n int

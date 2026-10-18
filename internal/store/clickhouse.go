@@ -110,6 +110,12 @@ func OpenClickHouse(ctx context.Context, cfg ClickHouseConfig, password string) 
 			result String CODEC(ZSTD), version Int64
 		) ENGINE = ReplacingMergeTree(version)
 		ORDER BY (project, trace_id, policy, evaluator)`,
+		`CREATE TABLE IF NOT EXISTS ` + db + `.trace_score_references (
+ project String,trace_id String,record_hash String,start_ns Int64
+ ) ENGINE = ReplacingMergeTree(start_ns) ORDER BY(project,trace_id,record_hash)`,
+		`CREATE TABLE IF NOT EXISTS ` + db + `.trace_retention_requests (
+ project String,trace_id String,start_ns Int64,version Int64
+ ) ENGINE = ReplacingMergeTree(version) ORDER BY(project,trace_id)`,
 		// Reserved for a tenant boundary above projects (decision 0004).
 		`ALTER TABLE ` + db + `.traces ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT ''`,
 		`ALTER TABLE ` + db + `.trace_results ADD COLUMN IF NOT EXISTS tenant_id String DEFAULT ''`,
@@ -449,87 +455,7 @@ func (c *clickhouse) traceResultsQuery(ctx context.Context, project, traceID str
 // DeleteTracesBefore removes traces that started before t, and their
 // results, with lightweight deletes. The count is of distinct traces.
 func (c *clickhouse) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
-	return c.retainTraces(ctx, t, nil, watchScoreRetention{})
-}
-
-type watchScoreRetention struct{ Keep, Expire [][3]string }
-
-func scoreRetentionParam(params chParams, prefix string, keys [][3]string) string {
-	var projects, ids, bindings []string
-	for _, key := range keys {
-		projects, ids, bindings = append(projects, key[0]), append(ids, key[1]), append(bindings, key[2])
-	}
-	params[prefix+"_projects"], params[prefix+"_ids"], params[prefix+"_bindings"] = chArray(projects), chArray(ids), chArray(bindings)
-	return "has(arrayZip({" + prefix + "_projects:Array(String)},{" + prefix + "_ids:Array(String)},{" + prefix + "_bindings:Array(String)}),(project,trace_id,record_hash))"
-}
-
-// Tombstones also cover accepted records whose timed-out INSERT has not
-// completed. FINAL keeps a tombstone ahead of any lower-version late delivery.
-func (c *clickhouse) retainTraces(ctx context.Context, t time.Time, pending []watchHead, scores watchScoreRetention) (int64, error) {
-	params := chParams{"before": strconv.FormatInt(t.UnixNano(), 10)}
-	keep, expire := scoreRetentionParam(params, "keep", scores.Keep), scoreRetentionParam(params, "expire", scores.Expire)
-	keys := map[[2]string]watchHead{}
-	var projects, ids []string
-	for _, h := range pending {
-		keys[[2]string{h.Project, h.TraceID}] = h
-		projects = append(projects, h.Project)
-		ids = append(ids, h.TraceID)
-	}
-	params["projects"], params["ids"] = chArray(projects), chArray(ids)
-	var body bytes.Buffer
-	enc := json.NewEncoder(&body)
-	version := traceWriteVersion(ctx)
-	var n int64
-	err := c.query(ctx, `SELECT project,trace_id,start_ns,service,base64Encode(summary) AS summary,base64Encode(record) AS record,record_hash FROM trace_current
-		WHERE start_ns<{before:Int64} OR (has({projects:Array(String)},project) AND has({ids:Array(String)},trace_id))`, params, func(line []byte) error {
-		var row struct {
-			Project string `json:"project"`
-			TraceID string `json:"trace_id"`
-			StartNS int64  `json:"start_ns"`
-			Service string `json:"service"`
-			Summary string `json:"summary"`
-			Record  string `json:"record"`
-			Hash    string `json:"record_hash"`
-		}
-		if err := json.Unmarshal(line, &row); err != nil {
-			return err
-		}
-		key := [2]string{row.Project, row.TraceID}
-		if row.StartNS < t.UnixNano() {
-			n++
-			keys[key] = watchHead{Project: row.Project, TraceID: row.TraceID, StartNS: row.StartNS}
-		} else if _, exists := keys[key]; exists {
-			// An expired acceptance can coexist with an unexpired projection.
-			// Promote the live row above delayed expired INSERTs instead of
-			// hiding it with a tombstone. Keep its score binding unchanged.
-			delete(keys, key)
-			_ = enc.Encode(map[string]any{"project": row.Project, "trace_id": row.TraceID, "service": row.Service, "start_ns": row.StartNS, "summary": row.Summary, "record": row.Record, "record_hash": row.Hash, "version": version, "deleted": 0})
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	for _, h := range keys {
-		_ = enc.Encode(map[string]any{"project": h.Project, "trace_id": h.TraceID, "service": "", "start_ns": h.StartNS, "summary": "", "record": "", "record_hash": "", "version": version, "deleted": 1})
-	}
-	if body.Len() > 0 {
-		if err := c.exec(ctx, `INSERT INTO traces(project,trace_id,service,start_ns,summary,record,version,record_hash,deleted) SELECT project,trace_id,service,start_ns,base64Decode(summary),base64Decode(record),version,record_hash,deleted FROM input('project String,trace_id String,service String,start_ns Int64,summary String,record String,version Int64,record_hash String,deleted UInt8') FORMAT JSONEachRow`, nil, &body); err != nil {
-			return 0, err
-		}
-	}
-	// ReplacingMergeTree never merges across physical monthly partitions.
-	// Keep tombstones, but reclaim expired record payloads on every pass,
-	// including requests that finished after an earlier cleanup.
-	if err := c.exec(ctx, `DELETE FROM traces WHERE deleted=0 AND (start_ns<{before:Int64} OR (project,trace_id) IN (SELECT project,trace_id FROM traces FINAL WHERE deleted=1 AND start_ns<{before:Int64}))`, params, nil); err != nil {
-		return 0, err
-	}
-	// Removing old result payloads is safe: a late result remains hidden by the
-	// tombstone join, even if it arrives after this physical cleanup.
-	if err := c.exec(ctx, `DELETE FROM trace_results WHERE ((project,trace_id) IN (SELECT project,trace_id FROM traces FINAL WHERE deleted=1 AND start_ns<{before:Int64}) OR `+expire+`) AND NOT `+keep, params, nil); err != nil {
-		return 0, err
-	}
-	return n, nil
+	return c.retainTraces(ctx, t, nil)
 }
 
 func (c *clickhouse) QueryTraces(ctx context.Context, q TraceQuery) ([]StoredTrace, error) {
@@ -732,7 +658,11 @@ func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWr
 		if err := unb64(row.Record, record); err != nil {
 			return err
 		}
-		if row.Hash != traceProjection(ctx, t.Summary, t.Record) && proto.Equal(record, t.Record) {
+		target, input := traceProjection(ctx, t.Summary, t.Record), RecordHash(record)
+		// Copy only when entering/leaving a legacy unversioned binding.
+		// A new watch generation after retention must never inherit scores
+		// from the expired generation if its old projection is still visible.
+		if row.Hash != target && (row.Hash == "" || row.Hash == input || target == input) && proto.Equal(record, t.Record) {
 			unchanged = append(unchanged, legacyCopy{Trace: t, OldHash: row.Hash})
 		}
 		return nil

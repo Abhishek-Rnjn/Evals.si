@@ -49,7 +49,8 @@ func putSQLTraces(ctx context.Context, q querier, traces []TraceWrite) error {
 			if err := proto.Unmarshal(old, record); err != nil {
 				return err
 			}
-			if proto.Equal(record, t.Record) {
+			input := RecordHash(record)
+			if (oldHash == "" || oldHash == input || target == input) && proto.Equal(record, t.Record) {
 				if _, err := q.ExecContext(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,record_hash,result,tenant_id) SELECT project,trace_id,policy,evaluator,?,result,tenant_id FROM trace_results WHERE project=? AND trace_id=? AND record_hash=? ON CONFLICT(project,trace_id,policy,evaluator,record_hash) DO NOTHING`, target, t.Summary.GetProject(), t.Summary.GetTraceId(), oldHash); err != nil {
 					return err
 				}

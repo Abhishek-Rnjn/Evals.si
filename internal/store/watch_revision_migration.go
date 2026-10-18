@@ -3,6 +3,25 @@ package store
 import "context"
 
 func migrateWatchState(ctx context.Context, q querier, d dialect) error {
+	dirty, err := hasWatchColumn(ctx, q, d, "watch_score_references", "dirty")
+	if err != nil {
+		return err
+	}
+	if !dirty {
+		if _, err := q.ExecContext(ctx, d.ddl(`ALTER TABLE watch_score_references ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1`)); err != nil {
+			return err
+		}
+	}
+	for _, statement := range []string{
+		`CREATE INDEX IF NOT EXISTS watch_score_dirty ON watch_score_references(dirty,project,trace_id,record_hash)`,
+		`CREATE INDEX IF NOT EXISTS watch_head_expiry ON watch_trace_heads(deleted,start_ns)`,
+		`CREATE INDEX IF NOT EXISTS watch_publication_expiry ON watch_publications(start_ns)`,
+		`CREATE INDEX IF NOT EXISTS watch_score_expiry ON watch_score_references(start_ns)`,
+	} {
+		if _, err := q.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
 	for _, col := range []struct{ table, column string }{{"leases", "epoch"}, {"watch_pending", "revision"}, {"watch_pending", "score_revision"}, {"watch_trace_heads", "score_revision"}} {
 		exists, err := hasWatchColumn(ctx, q, d, col.table, col.column)
 		if err != nil {

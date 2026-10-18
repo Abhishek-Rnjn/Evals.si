@@ -450,6 +450,10 @@ Publication intents commit before external writes and survive a superseding
 acceptance, so retention can fence a timed-out request even after its queue row
 is replaced. Score references preserve results needed by unexpired input
 generations; retention removes the references and payloads when they expire.
+ClickHouse keeps compact per-binding expiry rows to collect delayed scores even
+after metadata references expire. Changed references and retention keys transfer
+in bounded request bodies. Retention commits its retirement decision before
+external tombstones, so a partial cleanup failure remains recoverable.
 A delayed INSERT cannot restore an expired trace or expose its scores, even if
 it completes after retention. A deliberate new backfill is a new acceptance;
 it does not revive expired scores. Startup migrates the trace-result keys and

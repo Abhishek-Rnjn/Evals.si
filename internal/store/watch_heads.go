@@ -64,7 +64,7 @@ func acceptWatchHead(ctx context.Context, q querier, item WatchPending) (watchHe
 }
 
 func retainWatchScore(ctx context.Context, q querier, project, id, binding string, start int64) error {
-	_, err := q.ExecContext(ctx, `INSERT INTO watch_score_references(project,trace_id,record_hash,start_ns) VALUES(?,?,?,?) ON CONFLICT(project,trace_id,record_hash) DO UPDATE SET start_ns=CASE WHEN excluded.start_ns>watch_score_references.start_ns THEN excluded.start_ns ELSE watch_score_references.start_ns END`, project, id, binding, start)
+	_, err := q.ExecContext(ctx, `INSERT INTO watch_score_references(project,trace_id,record_hash,start_ns) VALUES(?,?,?,?) ON CONFLICT(project,trace_id,record_hash) DO UPDATE SET start_ns=CASE WHEN excluded.start_ns>watch_score_references.start_ns THEN excluded.start_ns ELSE watch_score_references.start_ns END,dirty=CASE WHEN excluded.start_ns>watch_score_references.start_ns THEN 1 ELSE watch_score_references.dirty END`, project, id, binding, start)
 	return err
 }
 

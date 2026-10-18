@@ -5,12 +5,131 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 )
+
+type retentionTestTransport struct {
+	base                     http.RoundTripper
+	failPrefix               string
+	maxURI, maxBatch, staged int
+}
+
+func (r *retentionTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if n := len(req.URL.RequestURI()); n > r.maxURI {
+		r.maxURI = n
+	}
+	if r.maxURI > 4096 {
+		return nil, fmt.Errorf("retention URI exceeds fixture limit: %d", r.maxURI)
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	_ = req.Body.Close()
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	query := req.URL.Query().Get("query")
+	if query == "" {
+		query = string(body)
+	}
+	if strings.HasPrefix(query, "INSERT INTO trace_score_references") {
+		n := bytes.Count(body, []byte{'\n'})
+		r.staged += n
+		r.maxBatch = max(r.maxBatch, n)
+	}
+	if r.failPrefix != "" && strings.HasPrefix(query, r.failPrefix) {
+		r.failPrefix = ""
+		return nil, errors.New("fixture: cleanup failed after tombstone")
+	}
+	return r.base.RoundTrip(req)
+}
+
+func TestClickHouseRetentionStagesBoundedCompleteReferences(t *testing.T) {
+	st, c := reviewClickHouse(t)
+	ctx := t.Context()
+	cutoff := time.Now()
+	expired := revisionTrace("expired", "old", cutoff.Add(-time.Hour))
+	acceptRevision(t, st, expired)
+	publishRevision(t, st, expired)
+	a := revisionTrace("a", "live", cutoff.Add(time.Hour))
+	b := revisionTrace("b", "live", a.Trace.Summary.GetStartTime().AsTime())
+	b.Trace.Summary.Service = "new summary"
+	b.Pending.SnapshotHash = SnapshotHash(b.Trace.Summary, b.Trace.Record)
+	acceptRevision(t, st, a)
+	acceptRevision(t, st, b)
+	publishRevision(t, st, a)
+	if err := st.PutWatchResults(ctx, PolicyLease{}, a.Pending, "independent", revisionScores(1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.AckWatchPending(ctx, PolicyLease{}, a.Pending); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := st.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	// These sort ahead of the real protected binding, placing it after several
+	// transfer batches. None has a result or an expiring trace.
+	for i := 0; i < 1600; i++ {
+		if err := retainWatchScore(ctx, tx, "a", fmt.Sprintf("unscored-%04d", i), strings.Repeat("b", 64), cutoff.Add(time.Hour).UnixNano()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	transport := &retentionTestTransport{base: http.DefaultTransport}
+	c.client.Transport = transport
+	if _, err := st.DeleteTracesBefore(ctx, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	publishRevision(t, st, b)
+	assertCurrentRevisionScore(t, st, 1)
+	if transport.staged < 1600 || transport.maxBatch > retentionBatchSize {
+		t.Fatalf("unbounded or incomplete staging: %+v", transport)
+	}
+	staged := transport.staged
+	if _, err := st.DeleteTracesBefore(ctx, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	if transport.staged != staged {
+		t.Fatalf("unchanged reference population restaged: %d -> %d", staged, transport.staged)
+	}
+}
+
+func TestClickHouseRetentionPartialFailureAllowsIdenticalReacceptance(t *testing.T) {
+	for _, phase := range []string{"INSERT INTO trace_retention_requests", "DELETE FROM traces "} {
+		t.Run(phase, func(t *testing.T) {
+			st, c := reviewClickHouse(t)
+			ctx := t.Context()
+			cutoff := time.Now()
+			w := revisionTrace("ready", "same input", cutoff.Add(-time.Hour))
+			acceptRevision(t, st, w)
+			publishRevision(t, st, w)
+			if err := st.PutWatchResults(ctx, PolicyLease{}, w.Pending, "quality", revisionScores(0)); err != nil {
+				t.Fatal(err)
+			}
+			c.client.Transport = &retentionTestTransport{base: http.DefaultTransport, failPrefix: phase}
+			if _, err := st.DeleteTracesBefore(ctx, cutoff); err == nil {
+				t.Fatal("expected partial cleanup failure")
+			}
+			w.Pending.Payload = []byte("identical reacceptance after partial retention")
+			acceptRevision(t, st, w)
+			publishRevision(t, st, w)
+			if _, _, err := st.GetTrace(ctx, "p", "revision"); err != nil {
+				t.Fatalf("accepted trace stayed hidden after partial retention: %v", err)
+			}
+			if results, err := st.TraceResults(ctx, "p", "revision"); err != nil || len(results) != 0 {
+				t.Fatalf("reacceptance revived expired scores: %v %v", results, err)
+			}
+		})
+	}
+}
 
 type publicationTimeoutTransport struct {
 	base  http.RoundTripper
