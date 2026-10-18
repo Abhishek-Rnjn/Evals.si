@@ -26,8 +26,12 @@ live Anthropic/GPU harness profiles, signed thinking, four context strategies,
 process interruption/resume, pinned Claude CLI/MCP, ten live framework exports,
 six judge controls and stock user-namespaced bubblewrap on EKS. Direct harness
 prompt-cache reuse controls **failed**; Qwen code-mode also failed. Neither is
-converted to a pass. Trainer-backed verl/OpenRLHF and OpenEnv/verifiers checks
-remain pending in the published checkpoint while the separate GPU run continues.
+converted to a pass. At that checkpoint trainer-backed checks were pending.
+The [subsequent GPU record](EKS-GPU-2026-10-17.md) now verifies native verl
+0.9.1 and OpenRLHF 0.9.0 updates; current OpenRLHF 0.11.2 and trainer-backed
+OpenEnv/verifiers remain unverified. The inventory below is the original
+50-row checkpoint; see the [cluster-pause handoff](EKS-PAUSED-2026-10-18.md)
+for the subsequent GPU results and remaining work.
 
 Four rows now pass their bounded verification requirement and fifteen have
 partial evidence. These counts describe this combined inventory, not nineteen
