@@ -60,7 +60,8 @@ type item struct {
 	record *evalsiv1alpha1.Record
 	info   ingest.TraceInfo
 	// When set, only these policies score the trace (a trace source's list).
-	only []string
+	only    []string
+	payload []byte
 }
 
 type point struct {
@@ -92,6 +93,8 @@ type Engine struct {
 	policies map[string]*policyState
 	// Set on a replica that is not the elected policy engine.
 	follower atomic.Bool
+	// Used only by Run's recovery loop; failed work must not starve later rows.
+	recoveryCursor store.WatchPending
 
 	TracesIngested atomic.Int64
 	TracesDropped  atomic.Int64
@@ -279,6 +282,24 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 		writes = append(writes, store.TraceWrite{Summary: Summary(record, info), Record: record})
 		items = append(items, item{record: record, info: info, only: only})
 	}
+	pending := make([]store.WatchPending, 0, len(items))
+	for i := range items {
+		record, err := proto.Marshal(items[i].record)
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(pendingPayload{Record: record, Info: items[i].info, Only: only})
+		if err != nil {
+			return err
+		}
+		items[i].payload = payload
+		pending = append(pending, items[i].pending())
+	}
+	if err := e.store.PutWatchPending(ctx, pending); err != nil {
+		e.StoreErrors.Add(int64(len(items)))
+		e.log.Error("persisting online evaluation queue", "err", err)
+		return err
+	}
 	e.TracesIngested.Add(int64(len(traces)))
 	if err := e.store.PutTraces(ctx, writes); err != nil {
 		e.StoreErrors.Add(int64(len(writes)))
@@ -373,10 +394,16 @@ func (e *Engine) Run(ctx context.Context) {
 			batch = nil
 		}
 	}
+	e.recoverPending(ctx)
+	recovery := time.NewTicker(time.Second)
+	defer recovery.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-recovery.C:
+			flush()
+			e.recoverPending(ctx)
 		case it := <-e.queue:
 			batch = append(batch, it)
 			if len(batch) >= e.opts.BatchSize {
@@ -416,12 +443,56 @@ func numeric(s *evalsiv1alpha1.Score) (float64, bool) {
 }
 
 func (e *Engine) process(ctx context.Context, batch []item) {
+	if e.follower.Load() {
+		return
+	}
+	var current []item
+	for _, it := range batch {
+		if it.payload != nil {
+			matches, err := e.store.WatchPendingMatches(ctx, it.pending())
+			if err != nil || !matches {
+				continue
+			}
+		}
+		current = append(current, it)
+	}
+	if len(current) == 0 {
+		return
+	}
+	// Recovery and ingestion may overlap. Re-store the version being scored so
+	// a later queued revision restores the trace after an earlier replay write.
+	var writes []store.TraceWrite
+	for _, it := range current {
+		if it.payload != nil {
+			writes = append(writes, store.TraceWrite{Summary: Summary(it.record, it.info), Record: it.record})
+		}
+	}
+	if len(writes) > 0 {
+		if err := e.store.PutTraces(ctx, writes); err != nil {
+			e.StoreErrors.Add(int64(len(writes)))
+			e.log.Error("storing online traces before evaluation", "err", err)
+			return
+		}
+	}
+	complete := true
 	for _, st := range e.snapshot() {
-		e.processPolicy(ctx, st, batch)
+		if !e.processPolicy(ctx, st, current) {
+			complete = false
+		}
+	}
+	if complete && ctx.Err() == nil {
+		for _, it := range current {
+			if it.payload != nil {
+				if err := e.store.AckWatchPending(ctx, it.pending()); err != nil {
+					e.log.Error("acknowledging online trace", "err", err)
+				}
+			}
+		}
 	}
 }
 
-func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []item) {
+func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []item) bool {
+	complete := true
 	c := st.c
 	type candidate struct {
 		item
@@ -466,6 +537,7 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 		if err != nil {
 			errored += int64(len(todo))
 			e.log.Warn("online evaluation failed", "policy", c.policy.GetName(), "err", err)
+			complete = false
 			break // later stages depend on this one's scores
 		}
 		// RunRecords orders results by record, then instance.
@@ -492,6 +564,8 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 		if err := e.store.PutTraceResults(ctx, cand.info.Project, cand.record.GetId(), c.policy.GetName(), cand.results); err != nil {
 			e.StoreErrors.Add(1)
 			e.log.Error("storing trace results", "trace", cand.record.GetId(), "err", err)
+			complete = false
+			continue
 		}
 		if e.opts.OnResults != nil {
 			e.opts.OnResults(c.policy.GetName(), cand.record, cand.info, cand.results)
@@ -523,6 +597,7 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 	for _, ev := range fired {
 		e.notify(ev)
 	}
+	return complete && ctx.Err() == nil
 }
 
 // metricName mirrors evaluation.MetricKey for an evaluator instance by name.

@@ -4,9 +4,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
-- Archived runs release `max_stored_runs` quota, including archives in existing databases.
-
 ### Fixed
+
+- Archived runs release `max_stored_runs` quota, including archives in existing databases.
+- Accepted online evaluation work survives restarts in a durable queue, preserving source policy selection and redaction.
 
 - Private service names bypass the sandbox's external egress proxy in both
   `NO_PROXY` and `no_proxy`, preserving caller exclusions. HTTP sidecars remain

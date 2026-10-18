@@ -415,3 +415,18 @@ On Kubernetes, `networkPolicy.egress.enabled` adds an egress NetworkPolicy for t
 - Langfuse Cloud, TLS deployments, production persistence and arm64 images. Self-hosted 4.56.0 score replacement, Secret/Service pulls and enforced evalsid egress passed the recorded in-cluster check.
 - LangSmith against a live deployment: the connector follows the `langsmith` 0.4.37 client's requests. An [opt-in end-to-end check](#verify-your-langsmith-deployment) now exercises the window filter and feedback replay assumption, but a live run still needs credentials. Provider UI visibility, production-scale backfill and lag are not covered by that bounded check.
 - Tempo, Kafka and S3 sources (milestone M5).
+
+## Recovery of accepted online work
+
+Online traces accepted after this version are written to a durable metadata
+queue before they can advance a source watermark. The queue retains the
+redacted record, selector attributes and the source's selected policies.
+The elected policy engine retries pending work in bounded batches after a
+restart and while running. Acknowledgments cannot remove a newer revision of
+the same trace. This works with SQLite or PostgreSQL metadata and with a
+separate ClickHouse trace store. Trace retention removes pending copies too.
+
+Delivery is at least once: a crash between a worker call and its acknowledgment
+can repeat evaluation and external callbacks. Pending work predating this
+version has no durable queue entry; re-run the source's backfill for those
+traces. Existing unscored traces are not silently assigned new policies.
