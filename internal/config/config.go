@@ -119,6 +119,10 @@ type Rewards struct {
 // Webhooks tunes delivery of the events projects subscribe to through the
 // WebhookService.
 type Webhooks struct {
+	// Opt in to the same endpoint and DNS guard used for trace sources.
+	SSRFGuard bool `json:"ssrf_guard,omitempty"`
+	// Explicit exceptions for trusted internal webhook receivers.
+	AllowHosts []string `json:"allow_hosts,omitempty"`
 	// Attempts per delivery before it is marked failed (default 6, spread
 	// over about 80 minutes).
 	MaxAttempts int `json:"max_attempts,omitempty"`

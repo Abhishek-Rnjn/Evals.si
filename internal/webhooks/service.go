@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
@@ -15,6 +16,7 @@ import (
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evals.si/internal/source"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
 
@@ -73,6 +75,9 @@ func (s *Service) ApplyWebhook(ctx context.Context, req *connect.Request[evalsiv
 	if err := validate(w); err != nil {
 		return nil, err
 	}
+	if err := s.checkEndpoint(w.GetUrl()); err != nil {
+		return nil, invalid("%s", err)
+	}
 	// Events are kept sorted and unique so applying the same webhook twice is a no-op.
 	slices.Sort(w.Events)
 	w.Events = slices.Compact(w.Events)
@@ -101,6 +106,16 @@ func (s *Service) ApplyWebhook(ctx context.Context, req *connect.Request[evalsiv
 		out.Secret = w.GetSecret()
 	}
 	return connect.NewResponse(&evalsiv1alpha1.ApplyWebhookResponse{Webhook: out}), nil
+}
+
+func (s *Service) checkEndpoint(endpoint string) error {
+	if !s.opts.SSRFGuard {
+		return nil
+	}
+	if err := source.CheckEndpoint(endpoint, s.opts.AllowHosts); err != nil {
+		return errors.New(strings.NewReplacer("source.endpoint", "webhook.url", "sources.allow_hosts", "webhooks.allow_hosts").Replace(err.Error()))
+	}
+	return nil
 }
 
 // ListWebhooks lists a project's webhooks, without their secrets.

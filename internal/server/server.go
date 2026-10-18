@@ -164,6 +164,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	auditor := authz.NewAuditor(st, exports.Audit, log)
 	creds.OnDenied(func(ctx context.Context, d credentials.Denial) { auditDenial(ctx, auditor, d) })
 	hooks := webhooks.New(st, webhooks.Options{
+		SSRFGuard: cfg.Webhooks.SSRFGuard, AllowHosts: cfg.Webhooks.AllowHosts,
 		Logger: log, MaxAttempts: cfg.Webhooks.MaxAttempts,
 		Timeout: optDuration(cfg.Webhooks.Timeout), Retention: optDuration(cfg.Webhooks.Retention),
 	})
