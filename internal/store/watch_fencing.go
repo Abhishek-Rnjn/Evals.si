@@ -147,7 +147,10 @@ func (s *Store) publishedWatchTraces(ctx context.Context, items []WatchTraceWrit
 		if revision == head && !published && !deleted {
 			return nil, false, nil
 		}
-		eligible[i] = !deleted
+		// Retention removes expired pending rows. Any surviving acceptance
+		// still has independent evaluation work, even if a newer, expired
+		// stream left the publication head tombstoned.
+		eligible[i] = true
 	}
 	return eligible, true, nil
 }

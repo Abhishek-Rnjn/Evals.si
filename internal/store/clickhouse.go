@@ -457,36 +457,59 @@ func (c *clickhouse) DeleteTracesBefore(ctx context.Context, t time.Time) (int64
 func (c *clickhouse) retainTraces(ctx context.Context, t time.Time, pending []watchHead) (int64, error) {
 	params := chParams{"before": strconv.FormatInt(t.UnixNano(), 10)}
 	keys := map[[2]string]watchHead{}
+	var projects, ids []string
 	for _, h := range pending {
 		keys[[2]string{h.Project, h.TraceID}] = h
+		projects = append(projects, h.Project)
+		ids = append(ids, h.TraceID)
 	}
+	params["projects"], params["ids"] = chArray(projects), chArray(ids)
+	var body bytes.Buffer
+	enc := json.NewEncoder(&body)
+	version := traceWriteVersion(ctx)
 	var n int64
-	err := c.query(ctx, `SELECT project,trace_id,start_ns FROM trace_current WHERE start_ns<{before:Int64}`, params, func(line []byte) error {
+	err := c.query(ctx, `SELECT project,trace_id,start_ns,service,base64Encode(summary) AS summary,base64Encode(record) AS record,record_hash FROM trace_current
+		WHERE start_ns<{before:Int64} OR (has({projects:Array(String)},project) AND has({ids:Array(String)},trace_id))`, params, func(line []byte) error {
 		var row struct {
 			Project string `json:"project"`
 			TraceID string `json:"trace_id"`
 			StartNS int64  `json:"start_ns"`
+			Service string `json:"service"`
+			Summary string `json:"summary"`
+			Record  string `json:"record"`
+			Hash    string `json:"record_hash"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
 		}
-		n++
-		keys[[2]string{row.Project, row.TraceID}] = watchHead{Project: row.Project, TraceID: row.TraceID, StartNS: row.StartNS}
+		key := [2]string{row.Project, row.TraceID}
+		if row.StartNS < t.UnixNano() {
+			n++
+			keys[key] = watchHead{Project: row.Project, TraceID: row.TraceID, StartNS: row.StartNS}
+		} else if _, exists := keys[key]; exists {
+			// An expired acceptance can coexist with an unexpired projection.
+			// Promote the live row above delayed expired INSERTs instead of
+			// hiding it with a tombstone. Keep its score binding unchanged.
+			delete(keys, key)
+			_ = enc.Encode(map[string]any{"project": row.Project, "trace_id": row.TraceID, "service": row.Service, "start_ns": row.StartNS, "summary": row.Summary, "record": row.Record, "record_hash": row.Hash, "version": version, "deleted": 0})
+		}
 		return nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	if len(keys) == 0 {
-		return n, nil
-	}
-	var body bytes.Buffer
-	enc := json.NewEncoder(&body)
-	version := traceWriteVersion(ctx)
 	for _, h := range keys {
 		_ = enc.Encode(map[string]any{"project": h.Project, "trace_id": h.TraceID, "service": "", "start_ns": h.StartNS, "summary": "", "record": "", "record_hash": "", "version": version, "deleted": 1})
 	}
-	if err := c.exec(ctx, `INSERT INTO traces(project,trace_id,service,start_ns,summary,record,version,record_hash,deleted) SELECT project,trace_id,service,start_ns,base64Decode(summary),base64Decode(record),version,record_hash,deleted FROM input('project String,trace_id String,service String,start_ns Int64,summary String,record String,version Int64,record_hash String,deleted UInt8') FORMAT JSONEachRow`, nil, &body); err != nil {
+	if body.Len() > 0 {
+		if err := c.exec(ctx, `INSERT INTO traces(project,trace_id,service,start_ns,summary,record,version,record_hash,deleted) SELECT project,trace_id,service,start_ns,base64Decode(summary),base64Decode(record),version,record_hash,deleted FROM input('project String,trace_id String,service String,start_ns Int64,summary String,record String,version Int64,record_hash String,deleted UInt8') FORMAT JSONEachRow`, nil, &body); err != nil {
+			return 0, err
+		}
+	}
+	// ReplacingMergeTree never merges across physical monthly partitions.
+	// Keep tombstones, but reclaim expired record payloads on every pass,
+	// including requests that finished after an earlier cleanup.
+	if err := c.exec(ctx, `DELETE FROM traces WHERE deleted=0 AND (start_ns<{before:Int64} OR (project,trace_id) IN (SELECT project,trace_id FROM traces FINAL WHERE deleted=1 AND start_ns<{before:Int64}))`, params, nil); err != nil {
 		return 0, err
 	}
 	// Removing old result payloads is safe: a late result remains hidden by the
@@ -707,8 +730,13 @@ func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWr
 	}
 	for _, copy := range unchanged {
 		t := copy.Trace
-		params := chParams{"project": t.Summary.GetProject(), "id": t.Summary.GetTraceId(), "hash": traceProjection(ctx, t.Summary, t.Record), "old_hash": copy.OldHash, "version": strconv.FormatInt(traceWriteVersion(ctx), 10)}
-		if err := c.exec(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,record_hash,result,version) SELECT project,trace_id,policy,evaluator,{hash:String},result,{version:Int64} FROM trace_results_current WHERE project={project:String} AND trace_id={id:String} AND record_hash={old_hash:String}`, params, nil); err != nil {
+		params := chParams{"project": t.Summary.GetProject(), "id": t.Summary.GetTraceId(), "hash": traceProjection(ctx, t.Summary, t.Record), "old_hash": copy.OldHash}
+		// Migration fills only missing keys, like SQL's ON CONFLICT DO NOTHING.
+		// Version zero also keeps copies below fresh reserved evaluations whose
+		// INSERT may still be completing after its client timed out.
+		if err := c.exec(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,record_hash,result,version) SELECT project,trace_id,policy,evaluator,{hash:String},result,0 FROM trace_results_current
+			WHERE project={project:String} AND trace_id={id:String} AND record_hash={old_hash:String}
+			AND (policy,evaluator) NOT IN (SELECT policy,evaluator FROM trace_results FINAL WHERE project={project:String} AND trace_id={id:String} AND record_hash={hash:String})`, params, nil); err != nil {
 			return err
 		}
 	}
