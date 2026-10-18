@@ -288,7 +288,7 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 		if err != nil {
 			return err
 		}
-		payload, err := json.Marshal(pendingPayload{Record: record, Info: items[i].info, Only: only})
+		payload, err := encodePending(pendingPayload{Record: record, Info: items[i].info, Only: only})
 		if err != nil {
 			return err
 		}

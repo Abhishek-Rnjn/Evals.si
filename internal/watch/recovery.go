@@ -1,8 +1,9 @@
 package watch
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/gob"
 
 	"google.golang.org/protobuf/proto"
 
@@ -15,6 +16,25 @@ type pendingPayload struct {
 	Record []byte
 	Info   ingest.TraceInfo
 	Only   []string
+}
+
+func init() {
+	// OTLP attributes can contain nested maps and arrays. Gob keeps int64 and
+	// float64 distinct, including integers beyond JSON's exact double range.
+	gob.Register(map[string]any{})
+	gob.Register([]any{})
+	gob.Register(ingest.Attrs{})
+	gob.Register([]string{})
+}
+
+func encodePending(p pendingPayload) ([]byte, error) {
+	var b bytes.Buffer
+	err := gob.NewEncoder(&b).Encode(p)
+	return b.Bytes(), err
+}
+
+func decodePending(blob []byte, p *pendingPayload) error {
+	return gob.NewDecoder(bytes.NewReader(blob)).Decode(p)
 }
 
 func (it item) pending() store.WatchPending {
@@ -41,7 +61,7 @@ func (e *Engine) recoverPending(ctx context.Context) {
 	for _, row := range rows {
 		var p pendingPayload
 		record := &evalsiv1alpha1.Record{}
-		if err := json.Unmarshal(row.Payload, &p); err != nil {
+		if err := decodePending(row.Payload, &p); err != nil {
 			e.log.Error("decoding pending online trace", "trace", row.TraceID, "err", err)
 			continue
 		}

@@ -2,11 +2,30 @@ package watch
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 )
+
+func TestRecoveryPreservesSelectorAttributeTypes(t *testing.T) {
+	info := ingest.TraceInfo{Project: "p", Attributes: ingest.Attrs{
+		"large": int64(9007199254740993), "double": float64(1),
+		"nested": map[string]any{"values": []any{int64(3), true, "text"}},
+	}}
+	blob, err := encodePending(pendingPayload{Info: info, Only: []string{"selected"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored pendingPayload
+	if err := decodePending(blob, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(info, restored.Info) {
+		t.Fatalf("selector attributes changed: %#v", restored.Info)
+	}
+}
 
 func TestRestartRecoversStoredTraceAndKeepsPolicyRestriction(t *testing.T) {
 	h := newHarness(t)
