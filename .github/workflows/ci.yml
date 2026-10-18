@@ -14,6 +14,10 @@ on:
         description: Run a live Claude CLI on the kind pod sandbox (requires ANTHROPIC_API_KEY)
         type: boolean
         default: false
+      cpu_only:
+        description: Skip the provider-backed MCP check; still run CPU training and kind verification
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -154,6 +158,11 @@ jobs:
       - run: uv run --no-sync pytest -q
         env:
           EVALSI_REQUIRE_EVALSID: "1"
+      - name: Verification prerequisites and benchmark correctness controls
+        run: |
+          uv run --no-sync ruff check --config pyproject.toml ../tests/verification ../tests/benchmarks
+          uv run --no-sync ruff format --check --config pyproject.toml ../tests/verification ../tests/benchmarks
+          uv run --no-sync pytest -q ../tests/verification ../tests/benchmarks/test_evaluation.py
       - name: CLI smoke test
         run: uv run --no-sync evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match
       - name: The RAG example gate fails on a bad citation and passes once it is fixed
@@ -442,7 +451,7 @@ jobs:
     # results file and the reported score (tests/mcp-agent/run.sh). It calls a
     # model, so it runs on main and on demand, and only when the repository has
     # an ANTHROPIC_API_KEY secret; without one it says so and passes.
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && !inputs.cpu_only
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -542,7 +551,7 @@ jobs:
           df -h /
       - uses: actions/checkout@v7
       - name: Validate live CLI opt-in
-        if: inputs.cli_agent_e2e
+        if: inputs.cli_agent_e2e && !inputs.cpu_only
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: 'test -n "$ANTHROPIC_API_KEY" || { echo "::error::cli_agent_e2e requires ANTHROPIC_API_KEY"; exit 1; }'
@@ -559,12 +568,12 @@ jobs:
         working-directory: python
       - name: Kubernetes end-to-end
         env:
-          RUN_CLI_AGENT_E2E: ${{ inputs.cli_agent_e2e && '1' || '0' }}
+          RUN_CLI_AGENT_E2E: ${{ inputs.cli_agent_e2e && !inputs.cpu_only && '1' || '0' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           EVALSI_CLI_AGENT_ARTIFACTS: ${{ runner.temp }}/cli-agent-e2e
         run: deploy/e2e/kind-e2e.sh
       - name: Live CLI results
-        if: always() && inputs.cli_agent_e2e
+        if: always() && inputs.cli_agent_e2e && !inputs.cpu_only
         uses: actions/upload-artifact@v7
         with:
           name: cli-agent-e2e

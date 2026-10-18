@@ -1,0 +1,43 @@
+name: Real Firecracker KVM verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel:
+        description: Absolute path to a compatible vmlinux on the KVM runner
+        required: true
+        type: string
+      image:
+        description: OCI image pinned with @sha256 (must contain sh, cat, sleep and true)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  firecracker:
+    # This job requires real hardware. Ordinary GitHub-hosted CI must not
+    # substitute fakefc, an emulated device, or an unconfined sandbox.
+    runs-on: [self-hosted, linux, x64, kvm]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Verify KVM API and VM creation
+        run: python3 tests/verification/preflight.py --require kvm firecracker_binary --out preflight.json
+      - name: Boot, isolate, consume a warm VM, snapshot, restore and time out
+        env:
+          EVALSI_TEST_FIRECRACKER: "1"
+          EVALSI_FIRECRACKER_KERNEL: ${{ inputs.kernel }}
+          EVALSI_FIRECRACKER_IMAGE: ${{ inputs.image }}
+        run: go test -race -json ./internal/sandbox -run '^TestFirecrackerRealKVM$' -count=1 -timeout 7m > firecracker.json
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: firecracker-kvm-evidence
+          path: |
+            preflight.json
+            firecracker.json

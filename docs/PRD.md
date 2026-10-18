@@ -190,6 +190,11 @@ work remains in progress; inference evidence does not establish training.
 
 Measured so far (2026-10-13, [record](verification/README.md#agent-harness-gate-and-trace-source-measurement-2026-10-13)), none at production scale: pull lag p95 15 s against the 2-minute target, with a 30-day MLflow backfill of 300 traces in 6 s (kind e2e job, `scripts/measure-trace-source.py`); every deploy of the demo workflow runs a gate, and a regressed release is blocked (kind e2e job); push and embed parity (`Client.evaluate()` against in-process) is tested in CI. Install-to-first-score time, online scoring delay and scale have not been measured.
 
+The [runtime verification follow-up](verification/RUNTIME-VERIFICATION-2026-10-18.md)
+tracks hardware and access prerequisites separately from functional passes.
+[Deterministic competitor benchmarks](../tests/benchmarks/README.md) measure
+local SDK/metric overhead; they do not establish these hosted or scale SLOs.
+
 ## Personas and user journeys
 
 | Persona | Wants | Touches |

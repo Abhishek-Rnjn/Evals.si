@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -203,11 +204,32 @@ func TestAgainstALiveServer(t *testing.T) {
 		t.Fatalf("an empty record from a real trace: %v", rec)
 	}
 	id := res.Infos[0].ID
+	var remoteID string
 	for _, v := range []float64{1, 0} {
 		w, err := c.WriteBack(ctx, []source.Score{{TraceID: id, Policy: "live-test", Metric: "live-test", Value: v}}, nil)
 		if err != nil || len(w) != 1 {
 			t.Fatalf("write back: %v %v", w, err)
 		}
+		if w[0].RemoteID == "" || (remoteID != "" && remoteID != w[0].RemoteID) {
+			t.Fatalf("replacement changed annotation identity: %v", w)
+		}
+		remoteID = w[0].RemoteID
+	}
+	var persisted struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Result struct {
+				Score *float64 `json:"score"`
+			} `json:"result"`
+		} `json:"data"`
+	}
+	conn := c.(*connector)
+	if err := conn.call(ctx, http.MethodGet, conn.projectPath("/trace_annotations"),
+		url.Values{"trace_ids": {id}, "identifier": {"evalsi/live-test"}, "include_annotation_names": {"live-test"}}, nil, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if len(persisted.Data) != 1 || persisted.Data[0].ID != remoteID || persisted.Data[0].Result.Score == nil || *persisted.Data[0].Result.Score != 0 {
+		t.Fatalf("latest annotation was not persisted exactly once: %+v", persisted)
 	}
 }
 

@@ -1,0 +1,22 @@
+{
+  "source_commit": "c975420b4c1a46e9ef051df94f7e5fb2b26a7f3a",
+  "scope": "Free local server connector checks; no hosted performance measurement",
+  "stores": [
+    {
+      "store": "phoenix",
+      "persisted_rows": 1,
+      "latest_score": 0,
+      "passed": true,
+      "version": "20.20.0",
+      "live_connector_race_test": "passed"
+    },
+    {
+      "store": "mlflow",
+      "persisted_rows": 1,
+      "latest_score": 0,
+      "passed": true,
+      "version": "3.17.0",
+      "live_connector_race_test": "passed"
+    }
+  ]
+}

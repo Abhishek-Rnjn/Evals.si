@@ -24,6 +24,12 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Runtime verification and reproducible competitor benchmarks.** A strict
+  opt-in real-KVM Firecracker test and manual workflow, hardware preflight,
+  free local trace-store persistence checks, and isolated deterministic
+  comparisons against DeepEval, Ragas, LangSmith SDK and Braintrust SDK.
+  Missing hardware and hosted credentials remain explicit blockers.
+
 - **ClickHouse trace source.** Pull completed traces from the OpenTelemetry
   Collector `clickhouseexporter` Map schema, score them with online policies,
   and write typed feedback to a companion table. Includes setup SQL and a
