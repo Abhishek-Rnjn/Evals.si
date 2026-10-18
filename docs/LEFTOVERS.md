@@ -2,6 +2,13 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
+The [runtime follow-up](verification/RUNTIME-VERIFICATION-2026-10-18.md)
+retains all 50 original inventory IDs, adds a real-KVM test/workflow with no
+simulated fallback, and rechecks free local MLflow/Phoenix score persistence.
+KVM, GPU and target-cluster certification remain blocked here. Reproducible
+[competitor benchmarks](../tests/benchmarks/README.md) distinguish local SDK
+overhead from hosted performance; they do not close production scale targets.
+
 ## EKS verification paused, 2026-10-18
 
 The user is deleting the cluster for now. Live checks are paused, not
