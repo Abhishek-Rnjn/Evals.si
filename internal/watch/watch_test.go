@@ -345,6 +345,7 @@ func TestTraceRetention(t *testing.T) {
 	h := newHarness(t)
 	h.e.Ingest(trace(1, "s", "x", false))
 	h.e.Ingest(trace(9, "s", "x", false))
+	h.e.process(t.Context(), []item{<-h.e.queue, <-h.e.queue})
 	n, err := h.st.DeleteTracesBefore(context.Background(), time.Date(2026, 10, 5, 12, 0, 5, 0, time.UTC))
 	if err != nil || n != 1 {
 		t.Fatalf("deleted %d, %v", n, err)

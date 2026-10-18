@@ -625,13 +625,18 @@ class ToolFault(_message.Message):
     TOOL_FIELD_NUMBER: _builtins.int
     KIND_FIELD_NUMBER: _builtins.int
     RATE_FIELD_NUMBER: _builtins.int
+    PAYLOAD_FIELD_NUMBER: _builtins.int
     tool: _builtins.str
     """Tool name, or "*" for every tool."""
     kind: _builtins.str
-    """"timeout", "error" or "malformed"."""
+    """"timeout", "error", "malformed" or "prompt-injection"."""
     rate: _builtins.float
     """Probability per call, 0 to 1. Faults are seeded per task and trial, so
     a rerun injects the same faults.
+    """
+    payload: _builtins.str
+    """Untrusted text appended to a successful tool result for prompt-injection
+    trials. Required for that kind; at most 4000 UTF-8 bytes.
     """
     def __init__(
         self,
@@ -639,8 +644,9 @@ class ToolFault(_message.Message):
         tool: _builtins.str = ...,
         kind: _builtins.str = ...,
         rate: _builtins.float = ...,
+        payload: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["kind", b"kind", "rate", b"rate", "tool", b"tool"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["kind", b"kind", "payload", b"payload", "rate", b"rate", "tool", b"tool"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ToolFault: _TypeAlias = ToolFault  # noqa: Y015

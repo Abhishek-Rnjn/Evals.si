@@ -2,7 +2,7 @@
 # Builds an air-gapped bundle on a connected machine: every image the charts
 # use, the charts, and (with --with-cli) wheels for the evalsi CLI.
 #
-#   deploy/airgap/bundle.sh --tag 0.2.0 --out evalsi-bundle
+#   deploy/airgap/bundle.sh --tag 0.3.0 --out evalsi-bundle
 #   tar czf evalsi-bundle.tgz evalsi-bundle      # carry it across
 #
 # Needs Docker and helm (and uv for --with-cli). Docker 28+ scopes inspect and
@@ -51,6 +51,7 @@ if supports_platform save; then save_platform=(--platform "$platform"); fi
   echo "note: this Docker lacks --platform for inspect or save (Docker 28+ has it); using the plain commands for $platform" >&2
 
 mkdir -p "$out/charts"
+out="$(cd "$out" && pwd)"
 : > "$out/images.txt"
 for img in "${images[@]}"; do
   # A locally built image (no registry to pull from) is used as is.
@@ -70,6 +71,7 @@ cp "$root/deploy/airgap/install.sh" "$out/"
 cp "$root/deploy/helm/evalsi/values-namespaced.yaml" "$out/charts/"
 
 if $with_cli; then
+  mkdir -p "$out/wheels"
   (cd "$root/python" && uv build --all-packages --wheel -o "$out/wheels" >/dev/null)
   uv export --project "$root/python" --frozen --no-dev --no-emit-workspace --all-packages \
     --extra anthropic --extra jsonschema --no-hashes -o "$out/wheels/requirements.txt" >/dev/null

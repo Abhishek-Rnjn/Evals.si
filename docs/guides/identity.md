@@ -341,6 +341,20 @@ Every hop can run over mutual TLS with certificates from your CA (cert-manager, 
 ## 7. Audit, metrics, external authorization
 
 - **Audit.** Mutating calls and every denied call are written to the audit log, with the deciding rule or role. When a role would grant the action but its condition fails, the reason names that role and condition. Refused grants (privilege escalation on a key, role or binding) are logged as `access.manage`, and rejected credentials as `auth.authenticate` with principal `anonymous`, at most 10 a second; `evalsi_unauthenticated_total` on `/metrics` counts all of them. Read it with `evalsi auth audit [--denied]`; it is kept for `audit.retention` (default 90 days). Export it to your log pipeline with an OTel sink and `audit: true`.
+- **Rate limits.** Each caller (an API key, a user, or an anonymous source address) gets a token bucket per class of traffic, per replica, while authentication is enabled. A caller past its rate gets `ResourceExhausted` (gRPC, Connect) or HTTP 429 (REST, OTLP/HTTP, guardrail webhook), with `Retry-After` in seconds; a stream counts as one call. `evalsi_rate_limited_total{class}` counts refusals. The defaults are generous, to stop a leaked or runaway credential rather than real load; tighten them for keys you hand out, or lift them for a busy collector ([decision 0029](../decisions/0029-per-caller-rate-limits.md)):
+
+  ```yaml
+  rate_limits:
+    api: {per_second: 500, burst: 1000}           # RPCs and REST (defaults shown)
+    ingest: {per_second: 2000, burst: 4000}       # OTLP exports
+    guardrails: {per_second: 2000, burst: 4000}   # agentgateway guardrail checks
+    principals:                                   # by principal ID; other classes keep the default
+      key:partner: {api: {per_second: 5, burst: 20}}
+      key:otel: {ingest: {per_second: 0}}         # 0: no limit
+    # disabled: true
+  ```
+
+  Set `per_second` and `burst` together: a field left out keeps its default.
 - **Metrics.** `/metrics` on the main port needs `metrics.read` (owners). Or serve it unauthenticated on a loopback listener with `metrics: {listen: 127.0.0.1:9464}`.
 - **External authorization.** A central policy engine can decide too:
 

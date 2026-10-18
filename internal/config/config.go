@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"regexp"
 	"slices"
@@ -118,6 +119,10 @@ type Rewards struct {
 // Webhooks tunes delivery of the events projects subscribe to through the
 // WebhookService.
 type Webhooks struct {
+	// Opt in to the same endpoint and DNS guard used for trace sources.
+	SSRFGuard bool `json:"ssrf_guard,omitempty"`
+	// Explicit exceptions for trusted internal webhook receivers.
+	AllowHosts []string `json:"allow_hosts,omitempty"`
 	// Attempts per delivery before it is marked failed (default 6, spread
 	// over about 80 minutes).
 	MaxAttempts int `json:"max_attempts,omitempty"`
@@ -140,6 +145,70 @@ type Sources struct {
 	AllowHosts []string `json:"allow_hosts,omitempty"`
 	// The most traces per second a source pulls when it sets no cap (default 200).
 	MaxRecordsPerSecond int `json:"max_records_per_second,omitempty"`
+}
+
+// RateLimits throttle each caller, per evalsid replica: an API key, a user,
+// or, where authentication is optional, an anonymous source address. Each
+// class of traffic has its own token bucket, and a stream counts as one call.
+// They apply only while authentication is enabled.
+type RateLimits struct {
+	Disabled bool `json:"disabled,omitempty"`
+	// RPCs and REST calls other than ingest and guardrail checks.
+	API Rate `json:"api"`
+	// OTLP trace exports, over gRPC and HTTP.
+	Ingest Rate `json:"ingest"`
+	// Guardrail checks (the agentgateway webhook and ExtMcp).
+	Guardrails Rate `json:"guardrails"`
+	// Overrides by principal ID (key:<name> or user:<provider>/<subject>);
+	// a class left out keeps the default.
+	Principals map[string]RateOverride `json:"principals,omitempty"`
+}
+
+// Rate is a token bucket: per_second refills it, burst is its size.
+// per_second 0 lifts the limit.
+type Rate struct {
+	PerSecond float64 `json:"per_second"`
+	Burst     int     `json:"burst"`
+}
+
+// RateOverride replaces some classes' rates for one principal.
+type RateOverride struct {
+	API        *Rate `json:"api,omitempty"`
+	Ingest     *Rate `json:"ingest,omitempty"`
+	Guardrails *Rate `json:"guardrails,omitempty"`
+}
+
+func (r Rate) validate(name string) error {
+	switch {
+	case math.IsNaN(r.PerSecond) || math.IsInf(r.PerSecond, 0) || r.PerSecond < 0:
+		return fmt.Errorf("%s.per_second must be a number, 0 or more", name)
+	case r.PerSecond > 0 && r.Burst < 1:
+		return fmt.Errorf("%s.burst must be at least 1", name)
+	}
+	return nil
+}
+
+func (l RateLimits) validate() []error {
+	var errs []error
+	check := func(name string, r *Rate) {
+		if r != nil {
+			if err := r.validate(name); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	check("rate_limits.api", &l.API)
+	check("rate_limits.ingest", &l.Ingest)
+	check("rate_limits.guardrails", &l.Guardrails)
+	for id, o := range l.Principals {
+		if !strings.HasPrefix(id, "key:") && !strings.HasPrefix(id, "user:") {
+			errs = append(errs, fmt.Errorf("rate_limits.principals: %q is not a principal ID (key:<name> or user:<provider>/<subject>)", id))
+		}
+		check("rate_limits.principals."+id+".api", o.API)
+		check("rate_limits.principals."+id+".ingest", o.Ingest)
+		check("rate_limits.principals."+id+".guardrails", o.Guardrails)
+	}
+	return errs
 }
 
 // Quotas limit what each project may use (§17 "Tenancy"). Zero means
@@ -335,6 +404,8 @@ type Config struct {
 	// Worker variables that requests may name (api_key_env, headers_env,
 	// env_from, evaluator params ending in _env), granted per project.
 	Credentials credentials.Config `json:"credentials"`
+	// Per-caller request limits, per replica; on while authentication is.
+	RateLimits RateLimits `json:"rate_limits"`
 
 	// Reload reads the configuration again from where it came from (set by
 	// LoadWith for a file); nil when there is nothing to reload.
@@ -429,6 +500,12 @@ func Default() Config {
 		Runs:     Runs{MaxConcurrent: 4},
 		OTLP:     OTLP{Grace: "2s", MaxTraces: 10000},
 		Traces:   Traces{Retention: "168h"},
+		// Generous: they stop a leaked or runaway credential, not real load.
+		RateLimits: RateLimits{
+			API:        Rate{PerSecond: 500, Burst: 1000},
+			Ingest:     Rate{PerSecond: 2000, Burst: 4000},
+			Guardrails: Rate{PerSecond: 2000, Burst: 4000},
+		},
 	}
 }
 
@@ -631,6 +708,7 @@ func (c Config) Validate() error {
 	if c.Evaluate.BatchSize < 1 || c.Evaluate.Parallelism < 1 || c.Evaluate.MaxRecords < 1 {
 		errs = append(errs, errors.New("evaluate.batch_size, parallelism and max_records must be positive"))
 	}
+	errs = append(errs, c.RateLimits.validate()...)
 	quotasValid := c.Quotas.Default.valid()
 	for _, l := range c.Quotas.Projects {
 		quotasValid = quotasValid && l.valid()

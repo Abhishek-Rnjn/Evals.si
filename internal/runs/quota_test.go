@@ -177,6 +177,21 @@ func TestQuotaStoredRuns(t *testing.T) {
 	}
 }
 
+func TestArchivingAllowsAnotherRunAtQuota(t *testing.T) {
+	h := quotaHarness(t, config.Quotas{Default: config.QuotaLimits{MaxStoredRuns: 1}}, nil)
+	spec := &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy"), Evaluators: refs("exact-match")}
+	run := h.wait(t, mustCreate(t, h, spec).GetId())
+	if _, err := h.tryCreate("p", spec); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("full quota: %v", err)
+	}
+	if _, err := archive(h, run.GetId()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.tryCreate("p", spec); err != nil {
+		t.Fatalf("archive did not release quota: %v", err)
+	}
+}
+
 func TestQuotaConcurrentRuns(t *testing.T) {
 	h := quotaHarness(t, config.Quotas{Default: config.QuotaLimits{MaxConcurrentRuns: 1}}, nil)
 	slow := func() *evalsiv1alpha1.RunSpec {

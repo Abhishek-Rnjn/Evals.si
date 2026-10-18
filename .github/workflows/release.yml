@@ -342,6 +342,7 @@ jobs:
           v="${{ needs.version.outputs.version }}"
           export EVALSI_IMAGE_REPOSITORY="ghcr.io/${{ needs.version.outputs.owner }}/evalsi"
           [ "$PUBLISH" = true ] || export PULL=0
+          scripts/set-python-version.sh "$v"
           deploy/airgap/bundle.sh --tag "$v" --out "evalsi-bundle-$v" --with-cli
           tar czf "evalsi-bundle-$v-linux-amd64.tgz" "evalsi-bundle-$v"
       - uses: actions/upload-artifact@v5

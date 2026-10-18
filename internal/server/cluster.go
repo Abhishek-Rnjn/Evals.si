@@ -185,11 +185,11 @@ func leadPolicyEngine(ctx context.Context, st *store.Store, cl *cluster.Cluster,
 				stopStats = func() {}
 			}
 			stepDown = func() {
+				watcher.SetLeader(false)
 				cancel()
 				<-done
 				<-sourcesDone
 				stopStats()
-				watcher.SetLeader(false)
 			}
 		case !ok && stepDown != nil:
 			log.Warn("lost the policy engine lease; stepping down", "owner", owner)

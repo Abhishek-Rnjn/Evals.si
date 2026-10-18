@@ -125,3 +125,25 @@ webhooks:
 | `webhooks.write` | apply, delete and test webhooks (audited) | admin and up |
 
 A webhook makes the server send run results, and with `trace.scored` the summaries and scores of live traces, to a URL, and the server dials it from where it runs, so only admins get these permissions by default. On Kubernetes that means a webhook can reach in-cluster services by name: restrict who holds `webhooks.write`, and use egress NetworkPolicy if the server must not reach some of them. Rules can match `resource.webhook.name` and `resource.labels`.
+
+## Optional destination guard
+
+Set `webhooks.ssrf_guard: true` to require HTTPS public endpoints and reject
+private, loopback, link-local and metadata destinations, including names that
+resolve to those addresses. Each delivery is checked, so enabling the guard
+also protects previously stored webhooks. DNS answers are checked again at
+connection time and the transport dials a checked address. Redirects remain
+refused. When an operator configures an HTTP proxy, that proxy remains part of
+the trusted network boundary.
+
+For trusted internal receivers, list exact hosts or `*.domain` patterns under
+`webhooks.allow_hosts`. An exception permits HTTP and internal addresses for
+that host. The default is `ssrf_guard: false`, preserving existing installations.
+The option applies to WebhookService subscriptions, not policy alert URLs or
+third-party connector callbacks.
+
+```yaml
+webhooks:
+  ssrf_guard: true
+  allow_hosts: ["receiver.monitoring.svc.cluster.local"]
+```

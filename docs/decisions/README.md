@@ -33,5 +33,6 @@ Short records of decisions that shape the code. Each one says what was decided, 
 
 | [0027](0027-multi-service-environments.md) | Per-trial pod-native services, dependency readiness, private networking, bounded lifetime and a restricted Compose importer | Accepted, implemented |
 | [0028](0028-clickhouse-trace-source.md) | ClickHouse trace source for Collector Map tables and companion score write-back | Accepted, implemented |
+| [0029](0029-per-caller-rate-limits.md) | Per-caller token buckets for API, ingest and guardrail traffic, with protocol-native refusals | Accepted, implemented |
 
 To add one, copy the shape of an existing record, take the next number, and link it here.

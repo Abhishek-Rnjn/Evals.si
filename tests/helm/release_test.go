@@ -364,8 +364,10 @@ func TestAirgapBundlePlatform(t *testing.T) {
 	for _, test := range []struct {
 		name, platform, failure string
 		oldDocker               bool
+		relativeCLI             bool
 	}{
 		{name: "default", platform: "linux/amd64"},
+		{name: "relative CLI output", platform: "linux/amd64", relativeCLI: true},
 		{name: "arm64", platform: "linux/arm64"},
 		{name: "missing platform", platform: "linux/arm64", failure: "inspect"},
 		{name: "export failure", platform: "linux/arm64", failure: "save"},
@@ -382,6 +384,16 @@ func TestAirgapBundlePlatform(t *testing.T) {
 			mock := `#!/bin/sh
 command="${0##*/}"
 printf '%s %s\n' "$command" "$*" >> "$CALLS"
+if [ "$command" = uv ]; then
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = -o ]; then
+      case "$2" in /*) ;; *) echo "relative uv output: $2" >&2; exit 1 ;; esac
+      if [ -d "$2" ]; then : > "$2/fixture.whl"; else : > "$2"; fi
+      break
+    fi
+    shift
+  done
+fi
 if [ "$command" = docker ]; then
   case " $* " in
     *" --help "*)
@@ -405,7 +417,7 @@ if [ "$command" = docker ]; then
   fi
 fi
 `
-			for _, name := range []string{"docker", "helm", "kind", "kubectl"} {
+			for _, name := range []string{"docker", "helm", "kind", "kubectl", "uv", "python3"} {
 				if err := os.WriteFile(filepath.Join(dir, name), []byte(mock), 0o700); err != nil {
 					t.Fatal(err)
 				}
@@ -415,7 +427,16 @@ fi
 			if test.name != "default" {
 				args = append(args, "--platform", test.platform)
 			}
-			out, err := exec.Command("bash", args...).CombinedOutput()
+			command := exec.Command("bash", args...)
+			if test.relativeCLI {
+				script, err := filepath.Abs(args[0])
+				if err != nil {
+					t.Fatal(err)
+				}
+				command = exec.Command("bash", script, "--tag", "0.3.0", "--out", "bundle", "--with-cli")
+				command.Dir = dir
+			}
+			out, err := command.CombinedOutput()
 			if test.failure != "" {
 				if err == nil {
 					t.Fatalf("bundle accepted %s: %s", test.failure, out)
@@ -446,6 +467,11 @@ fi
 				"docker load --platform " + test.platform + " -q -i " + bundle + "/images.tar",
 				"docker save --platform " + test.platform + " airgap.invalid/",
 				"kind load image-archive " + bundle + "/.kind-images.tar --name test",
+			}
+			if test.relativeCLI {
+				if _, err := os.Stat(filepath.Join(bundle, "wheels", "fixture.whl")); err != nil {
+					t.Fatalf("CLI wheel missing from relative bundle: %v", err)
+				}
 			}
 			if test.oldDocker {
 				wants = []string{

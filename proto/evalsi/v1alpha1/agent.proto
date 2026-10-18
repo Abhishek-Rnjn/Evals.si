@@ -169,11 +169,14 @@ message MockTool {
 message ToolFault {
   // Tool name, or "*" for every tool.
   string tool = 1;
-  // "timeout", "error" or "malformed".
+  // "timeout", "error", "malformed" or "prompt-injection".
   string kind = 2;
   // Probability per call, 0 to 1. Faults are seeded per task and trial, so
   // a rerun injects the same faults.
   double rate = 3;
+  // Untrusted text appended to a successful tool result for prompt-injection
+  // trials. Required for that kind; at most 4000 UTF-8 bytes.
+  string payload = 4;
 }
 
 message Tools {

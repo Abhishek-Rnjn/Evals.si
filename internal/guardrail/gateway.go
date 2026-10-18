@@ -67,6 +67,9 @@ func (s *Service) Webhook(authorize func(r *http.Request, project, name string) 
 			return
 		}
 		if err := authorize(r, proj, name); err != nil {
+			if ce := (*connect.Error)(nil); errors.As(err, &ce) && ce.Meta().Get("Retry-After") != "" {
+				w.Header().Set("Retry-After", ce.Meta().Get("Retry-After"))
+			}
 			http.Error(w, err.Error(), httpStatus(err))
 			return
 		}
@@ -163,6 +166,8 @@ func httpStatus(err error) int {
 			return http.StatusNotFound
 		case connect.CodeInvalidArgument, connect.CodeFailedPrecondition:
 			return http.StatusBadRequest
+		case connect.CodeResourceExhausted:
+			return http.StatusTooManyRequests
 		}
 	}
 	return http.StatusInternalServerError

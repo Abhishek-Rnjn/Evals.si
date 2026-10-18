@@ -128,6 +128,7 @@ var tenantTables = []string{"projects", "api_keys", "roles", "bindings", "audit"
 type querier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
 // addedColumns are columns added to tables after their first release; each

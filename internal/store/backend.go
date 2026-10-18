@@ -61,13 +61,21 @@ func OpenPostgres(ctx context.Context, dsn string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, c.d.ddl(schema+authSchema+leaseSchema+quotaSchema+sandboxSchema+rewardCacheSchema+annotationSchema+guardrailSchema+webhookSchema+sourceSchema+idempotencySchema)); err != nil {
+	if _, err := tx.ExecContext(ctx, c.d.ddl(schema+authSchema+leaseSchema+quotaSchema+sandboxSchema+rewardCacheSchema+annotationSchema+guardrailSchema+webhookSchema+sourceSchema+idempotencySchema+watchPendingSchema)); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
 	if err := addTenantColumns(ctx, tx, postgresDialect); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrating: %w", err)
+	}
+	if err := migrateArchivedRuns(ctx, tx, postgresDialect); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: migrating archived runs: %w", err)
+	}
+	if err := migrateWatchPending(ctx, tx, postgresDialect); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: migrating pending work: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		_ = db.Close()
@@ -133,7 +141,12 @@ func (s *Store) TraceResults(ctx context.Context, project, traceID string) ([]*e
 
 // DeleteTracesBefore removes traces (and their results) that started before t.
 func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
-	return s.traces.DeleteTracesBefore(ctx, t)
+	n, err := s.traces.DeleteTracesBefore(ctx, t)
+	if err != nil {
+		return n, err
+	}
+	_, err = s.db.ExecContext(ctx, `DELETE FROM watch_pending WHERE start_ns < ?`, t.UnixNano())
+	return n, err
 }
 
 // QueryTraces returns the traces a query selects.

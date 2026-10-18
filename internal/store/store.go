@@ -101,13 +101,29 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrating: %w", err)
 	}
-	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + sandboxSchema + rewardCacheSchema + annotationSchema + guardrailSchema + webhookSchema + sourceSchema + idempotencySchema); err != nil {
+	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + sandboxSchema + rewardCacheSchema + annotationSchema + guardrailSchema + webhookSchema + sourceSchema + idempotencySchema + watchPendingSchema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}
 	if err := addTenantColumns(context.Background(), db, sqliteDialect); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrating: %w", err)
+	}
+	tx, err := db.Begin()
+	if err == nil {
+		err = migrateArchivedRuns(context.Background(), tx, sqliteDialect)
+		if err == nil {
+			err = migrateWatchPending(context.Background(), tx, sqliteDialect)
+		}
+		if err == nil {
+			err = tx.Commit()
+		} else {
+			_ = tx.Rollback()
+		}
+	}
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: migrating archived runs: %w", err)
 	}
 	return newStore(&conn{db: db, d: sqliteDialect}), nil
 }
@@ -173,8 +189,8 @@ func (s *Store) CreateRun(ctx context.Context, run *evalsiv1alpha1.Run, records 
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO runs (id, project, created_at, run) VALUES (?, ?, ?, ?)`,
-		run.GetId(), run.GetProject(), run.GetCreatedAt().AsTime().UnixNano(), marshal(run)); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO runs (id, project, created_at, run, archived) VALUES (?, ?, ?, ?, ?)`,
+		run.GetId(), run.GetProject(), run.GetCreatedAt().AsTime().UnixNano(), marshal(run), archiveMarker(run)); err != nil {
 		return err
 	}
 	stmt, err := tx.PrepareContext(ctx, `INSERT INTO run_records (run_id, idx, record) VALUES (?, ?, ?)`)
@@ -192,7 +208,7 @@ func (s *Store) CreateRun(ctx context.Context, run *evalsiv1alpha1.Run, records 
 
 // UpdateRun replaces a run's state.
 func (s *Store) UpdateRun(ctx context.Context, run *evalsiv1alpha1.Run) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE runs SET run = ? WHERE id = ?`, marshal(run), run.GetId())
+	res, err := s.db.ExecContext(ctx, `UPDATE runs SET run = ?, archived = ? WHERE id = ?`, marshal(run), archiveMarker(run), run.GetId())
 	if err != nil {
 		return err
 	}
@@ -289,7 +305,7 @@ func (s *Store) ArchiveRun(ctx context.Context, id string, at time.Time) (*evals
 	}
 	run.ArchivedAt = timestamppb.New(at)
 	// The row changes only if the run is as read and no replica holds its lease.
-	result, err := tx.ExecContext(ctx, `UPDATE runs SET run = ? WHERE id = ? AND run = ?
+	result, err := tx.ExecContext(ctx, `UPDATE runs SET run = ?, archived = '1' WHERE id = ? AND run = ?
 		AND NOT EXISTS (SELECT 1 FROM leases WHERE name = ? AND expires_ns >= ?)`,
 		marshal(run), id, blob, "run:"+id, time.Now().UnixNano())
 	if err != nil {

@@ -4,7 +4,20 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.3.0] - Unreleased
+
+### Upgrade notes
+
+- Upgrade the server, Python SDK and harness together, and refresh the EvalRun CRD before using prompt-injection fault payloads. Mixed-version rolling upgrades remain unverified.
+- Stop old metadata writers before upgrading. Startup automatically backfills archived-run quota markers and creates the durable online-evaluation queue. Previously accepted work that predates the queue requires an explicit source backfill.
+- Accepted online work is queued durably; the dispatcher stores traces before their scores. Source streams keep independent policy selections. Replay is at least once and can repeat evaluator calls after a crash; unavailable policies or source runners defer acknowledgement. Source write-back delivery after an in-memory handoff retains its existing semantics.
+- Authenticated deployments now apply generous per-caller rate limits by default. Configure `rate_limits` for workloads requiring different limits. The webhook SSRF guard remains opt-in.
+
+
 ### Fixed
+
+- Archived runs release `max_stored_runs` quota, including archives in existing databases.
+- Accepted online evaluation work survives restarts in a durable queue, preserving source policy selection and redaction.
 
 - Private service names bypass the sandbox's external egress proxy in both
   `NO_PROXY` and `no_proxy`, preserving caller exclusions. HTTP sidecars remain
@@ -24,6 +37,15 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- `evalsi canary create` writes separate high-entropy training and probe files; `builtin/contamination-canary` scores exact private-suffix recall.
+
+- Seeded `prompt-injection` tool faults append bounded untrusted payloads; `builtin/injection-followed` reports explicit final-answer attack markers.
+
+- `evalsi determinism results.json` reports observed within-record score stability and a conservative independent-trial recommendation.
+
+- Optional `webhooks.ssrf_guard` checks saved endpoints and delivery destinations, with explicit `webhooks.allow_hosts` exceptions.
+
+- **Per-caller rate limits.** While authentication is enabled, each API key, user or anonymous source address gets a token bucket per class of traffic (`api`, `ingest`, `guardrails`), per replica. A caller past its rate gets `ResourceExhausted` (gRPC, Connect) or HTTP 429 (REST, OTLP/HTTP, guardrail webhook) with `Retry-After`. The defaults are generous (500 API calls a second, 2000 exports or guardrail checks, with bursts of twice that) and `rate_limits.principals` tightens or lifts them per key; `rate_limits.disabled` turns them off. `evalsi_rate_limited_total` counts refusals ([decision 0029](docs/decisions/0029-per-caller-rate-limits.md)).
 - **Runtime verification and reproducible competitor benchmarks.** A strict
   opt-in real-KVM Firecracker test and manual workflow, hardware preflight,
   free local trace-store persistence checks, and isolated deterministic
@@ -193,6 +215,7 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.
 
-[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.1.0

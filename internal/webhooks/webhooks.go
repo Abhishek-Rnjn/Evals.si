@@ -32,6 +32,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/source"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/version"
 )
@@ -68,7 +69,11 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$`)
 
 // Options tune the service; zero values take the defaults.
 type Options struct {
-	Logger *slog.Logger
+	// SSRFGuard refuses internal destinations unless listed in AllowHosts.
+	// When enabled, the guarded standard transport replaces Client's transport.
+	SSRFGuard  bool
+	AllowHosts []string
+	Logger     *slog.Logger
 	// Client sends deliveries; its redirects are never followed.
 	Client      *http.Client
 	MaxAttempts int
@@ -127,6 +132,9 @@ func New(st *store.Store, opts Options) *Service {
 		opts.Client = &http.Client{}
 	}
 	client := *opts.Client
+	if opts.SSRFGuard {
+		client.Transport = source.NewGuard(opts.AllowHosts).Client(opts.Timeout).Transport
+	}
 	client.Timeout = opts.Timeout
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	opts.Client = &client
@@ -452,6 +460,9 @@ func (s *Service) dispatch(ctx context.Context) {
 
 // send posts one signed delivery and reports the status (0: no answer).
 func (s *Service) send(ctx context.Context, w *evalsiv1alpha1.Webhook, id, event string, body []byte) (int, error) {
+	if err := s.checkEndpoint(w.GetUrl()); err != nil {
+		return 0, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.GetUrl(), bytes.NewReader(body))
 	if err != nil {
 		return 0, err

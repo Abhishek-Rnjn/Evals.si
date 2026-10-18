@@ -557,3 +557,7 @@ PR #85 integrates the completed EKS checkpoint at `42d8127` alongside the local
 leftovers audit. The combined inventory retains 50 stable item IDs: four bounded
 verification passes and fifteen partial results. EKS/GPU measurements retain
 their separate provenance; ongoing trainer checks are not marked passed.
+
+## PR 101 implementation review
+
+[The thirteen-item implementation review](STACK-101.md) records the six implemented items, their bounded validation scope and seven follow-ups.

@@ -164,6 +164,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	auditor := authz.NewAuditor(st, exports.Audit, log)
 	creds.OnDenied(func(ctx context.Context, d credentials.Denial) { auditDenial(ctx, auditor, d) })
 	hooks := webhooks.New(st, webhooks.Options{
+		SSRFGuard: cfg.Webhooks.SSRFGuard, AllowHosts: cfg.Webhooks.AllowHosts,
 		Logger: log, MaxAttempts: cfg.Webhooks.MaxAttempts,
 		Timeout: optDuration(cfg.Webhooks.Timeout), Retention: optDuration(cfg.Webhooks.Retention),
 	})
@@ -214,15 +215,17 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 			}
 			return cl.Stats(name)
 		},
-		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) {
+		ResultsReady: func(info ingest.TraceInfo) bool { return sourceMgr != nil && sourceMgr.ResultsReady(info) },
+		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
+			if sourceMgr == nil || !sourceMgr.OnResults(policy, rec, info, results) {
+				return fmt.Errorf("source result handoff not ready")
+			}
 			exports.Trace(&sinks.Trace{
 				TraceID: rec.GetId(), RootSpanID: rootSpan(rec), Service: info.Service,
 				Policy: policy, Results: results, Time: time.Now(),
 			})
-			if sourceMgr != nil {
-				sourceMgr.OnResults(policy, rec, info, results)
-			}
 			hooks.TraceScored(watch.Summary(rec, info), policy, results)
+			return nil
 		},
 		OnAlert: hooks.AlertChanged,
 	})
@@ -318,6 +321,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		go func() { defer wg.Done(); reconcileAuthz(bg, engine, log) }()
 	}
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, svc.EffectiveJudge, log)
+	g.limits = newLimiter(cfg, log)
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
 	if cfg.Rewards.SharedCache {
 		rewardSvc.UseSharedCache(st, log)
@@ -560,7 +564,7 @@ func registerOTLP(mux *http.ServeMux, d deps) {
 func otlpHandler(d deps) http.Handler {
 	mux := http.NewServeMux()
 	registerOTLP(mux, d)
-	return d.authn.Middleware(boundRejected(mux))
+	return d.authn.Middleware(boundRejected(d.gate.limits.middleware(mux)))
 }
 
 // Handler routes every service behind authentication and the gate.
@@ -668,7 +672,7 @@ func Handler(d deps) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(doc)
 	})
-	root := d.authn.Middleware(boundRejected(mux))
+	root := d.authn.Middleware(boundRejected(d.gate.limits.middleware(mux)))
 	if !d.mcp.Disabled {
 		mcp.New(d.mcp, root, d.gate.authorizeTool, d.authn.Issuers, log).Register(mux)
 	}
