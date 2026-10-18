@@ -371,7 +371,17 @@ def contamination_canary(record: Record) -> Score:
     if record.reference is None or not record.reference.as_text().strip():
         raise SkipRecord("no private canary suffix")
     secret = record.reference.as_text()
-    if record.input is not None and secret in record.input.as_text():
+
+    def exposed(value: object) -> bool:
+        if isinstance(value, str):
+            return secret in value
+        if isinstance(value, dict):
+            return any(exposed(k) or exposed(v) for k, v in value.items())
+        if isinstance(value, list):
+            return any(exposed(v) for v in value)
+        return False
+
+    if record.input is not None and exposed(record.input.to_dict()):
         raise ValueError("canary suffix is exposed in the probe input")
     return Score(passed=secret in _output_text(record))
 

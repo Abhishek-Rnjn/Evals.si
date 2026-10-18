@@ -74,3 +74,21 @@ def test_canary_cli_writes_separate_probe_and_training_files(
 def test_canary_count_is_bounded(count: int) -> None:
     with pytest.raises(ValueError, match="count"):
         make_canaries(count)
+
+
+@pytest.mark.parametrize("role", ["system", "user", "assistant", "tool"])
+def test_canary_rejects_secret_in_earlier_chat_message(role: str) -> None:
+    from evalsi.types import Message
+
+    record = make_canaries(1)[0]
+    assert record.reference is not None
+    record.input = Content(
+        messages=[
+            Message(role=role, content=record.reference.as_text()),
+            Message(role="user", content="Complete this prefix"),
+            Message(role="assistant", content="unknown"),
+        ]
+    )
+    record.output = record.reference
+    with pytest.raises(ValueError, match="exposed"):
+        score(contamination_canary, record)

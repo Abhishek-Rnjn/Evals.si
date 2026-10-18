@@ -36,6 +36,7 @@ def determinism_report(
         lambda: defaultdict(dict)
     )
     outcomes: Counter[str] = Counter()
+    structured_skipped = 0
     for row in rows:
         if not isinstance(row, Mapping):
             raise ValueError("each result must be an object")
@@ -49,10 +50,15 @@ def determinism_report(
         record_id = str(row.get("record_id", ""))
         evaluator = str(row.get("evaluator", ""))
         for score in row.get("scores", []):
-            fields = [key for key in ("passed", "number", "label") if key in score]
+            fields = [key for key in ("passed", "number", "label", "structured") if key in score]
             if len(fields) != 1:
-                raise ValueError("each score must have one passed, number or label value")
+                raise ValueError(
+                    "each score must have one passed, number, label or structured value"
+                )
             field = fields[0]
+            if field == "structured":
+                structured_skipped += 1
+                continue
             value = score[field]
             if field == "number":
                 if (
@@ -97,6 +103,7 @@ def determinism_report(
     return {
         "outcomes": dict(sorted(outcomes.items())),
         "metrics": metrics,
+        "structured_scores_skipped": structured_skipped,
         "trial_recommendation": {
             "method": "hoeffding",
             "trials": count,

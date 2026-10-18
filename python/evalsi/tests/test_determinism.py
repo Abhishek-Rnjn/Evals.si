@@ -73,3 +73,14 @@ def test_determinism_cli_reads_real_artifact_shape(
     report = json.loads(capsys.readouterr().out)
     assert report["metrics"][0]["mean_pair_agreement"] == 0
     assert report["trial_recommendation"]["trials"] == 185
+
+
+def test_structured_scores_are_counted_and_skipped() -> None:
+    result = row("one", 0, True)
+    result["scores"].append({"name": "detail", "structured": {"answer": [1, 2]}})
+    report = determinism_report({"results": [result, row("one", 1, False)]})
+    assert report["structured_scores_skipped"] == 1
+    assert report["metrics"][0]["mean_pair_agreement"] == 0
+    result["scores"][1]["passed"] = True
+    with pytest.raises(ValueError, match="one passed"):
+        determinism_report({"results": [result]})
