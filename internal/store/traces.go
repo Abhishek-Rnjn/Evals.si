@@ -39,22 +39,29 @@ func putSQLTraces(ctx context.Context, q querier, traces []TraceWrite) error {
 	for _, t := range traces {
 		var old []byte
 		var oldHash string
+		var oldStart int64
 		target := traceProjection(ctx, t.Summary, t.Record)
-		err := q.QueryRowContext(ctx, `SELECT record,record_hash FROM traces WHERE project=? AND trace_id=?`, t.Summary.GetProject(), t.Summary.GetTraceId()).Scan(&old, &oldHash)
+		err := q.QueryRowContext(ctx, `SELECT record,record_hash,start_ns FROM traces WHERE project=? AND trace_id=?`, t.Summary.GetProject(), t.Summary.GetTraceId()).Scan(&old, &oldHash, &oldStart)
 		if err != nil && !isNoRows(err) {
 			return err
 		}
 		if err == nil && oldHash != target {
+			if err := retainWatchScore(ctx, q, t.Summary.GetProject(), t.Summary.GetTraceId(), oldHash, oldStart); err != nil {
+				return err
+			}
 			record := &evalsiv1alpha1.Record{}
 			if err := proto.Unmarshal(old, record); err != nil {
 				return err
 			}
 			input := RecordHash(record)
-			if (oldHash == "" || oldHash == input || target == input) && proto.Equal(record, t.Record) {
+			if legacyCopyAllowed(ctx, t.Summary.GetProject(), t.Summary.GetTraceId(), oldHash, oldStart) && (oldHash == "" || oldHash == input || target == input) && proto.Equal(record, t.Record) {
 				if _, err := q.ExecContext(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,record_hash,result,tenant_id) SELECT project,trace_id,policy,evaluator,?,result,tenant_id FROM trace_results WHERE project=? AND trace_id=? AND record_hash=? ON CONFLICT(project,trace_id,policy,evaluator,record_hash) DO NOTHING`, target, t.Summary.GetProject(), t.Summary.GetTraceId(), oldHash); err != nil {
 					return err
 				}
 			}
+		}
+		if err := retainWatchScore(ctx, q, t.Summary.GetProject(), t.Summary.GetTraceId(), target, t.Summary.GetStartTime().AsTime().UnixNano()); err != nil {
+			return err
 		}
 		if _, err := q.ExecContext(ctx, putTraceSQL,
 			t.Summary.GetProject(), t.Summary.GetTraceId(), t.Summary.GetService(), t.Summary.GetStartTime().AsTime().UnixNano(),

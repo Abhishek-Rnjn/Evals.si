@@ -36,9 +36,10 @@ func (s *Store) prepareClickHouseRetention(ctx context.Context, t time.Time) err
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO watch_publications(project,trace_id,revision,start_ns)
- SELECT project,trace_id,0,start_ns FROM watch_trace_heads WHERE start_ns<? AND deleted=0
- ON CONFLICT(project,trace_id,revision) DO UPDATE SET start_ns=CASE WHEN excluded.start_ns<watch_publications.start_ns THEN excluded.start_ns ELSE watch_publications.start_ns END`, t.UnixNano()); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO watch_publications(project,trace_id,revision,start_ns,retired_before_ns)
+ SELECT project,trace_id,0,start_ns,? FROM watch_trace_heads WHERE start_ns<? AND deleted=0
+ ON CONFLICT(project,trace_id,revision) DO UPDATE SET start_ns=CASE WHEN excluded.start_ns<watch_publications.start_ns THEN excluded.start_ns ELSE watch_publications.start_ns END,
+ retired_before_ns=CASE WHEN excluded.retired_before_ns>watch_publications.retired_before_ns THEN excluded.retired_before_ns ELSE watch_publications.retired_before_ns END`, t.UnixNano(), t.UnixNano()); err != nil {
 		return err
 	}
 	if err := expireWatchMetadata(ctx, tx, t); err != nil {

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS watch_trace_heads (
  PRIMARY KEY(project,trace_id)
 );
 CREATE TABLE IF NOT EXISTS watch_publications (
- project TEXT NOT NULL, trace_id TEXT NOT NULL, revision INTEGER NOT NULL, start_ns INTEGER NOT NULL,
+ project TEXT NOT NULL, trace_id TEXT NOT NULL, revision INTEGER NOT NULL, start_ns INTEGER NOT NULL, retired_before_ns INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(project,trace_id,revision)
 );
 CREATE TABLE IF NOT EXISTS watch_score_references (

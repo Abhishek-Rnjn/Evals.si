@@ -454,6 +454,9 @@ ClickHouse keeps compact per-binding expiry rows to collect delayed scores even
 after metadata references expire. Changed references and retention keys transfer
 in bounded request bodies. Retention commits its retirement decision before
 external tombstones, so a partial cleanup failure remains recoverable.
+Legacy score copying checks the committed retirement cutoff and surviving score
+references. Replacing a projection records its outgoing binding's expiry before
+discarding the old trace time, including unchanged-input migrations.
 A delayed INSERT cannot restore an expired trace or expose its scores, even if
 it completes after retention. A deliberate new backfill is a new acceptance;
 it does not revive expired scores. Startup migrates the trace-result keys and

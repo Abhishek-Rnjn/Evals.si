@@ -22,7 +22,7 @@ func migrateWatchState(ctx context.Context, q querier, d dialect) error {
 			return err
 		}
 	}
-	for _, col := range []struct{ table, column string }{{"leases", "epoch"}, {"watch_pending", "revision"}, {"watch_pending", "score_revision"}, {"watch_trace_heads", "score_revision"}} {
+	for _, col := range []struct{ table, column string }{{"leases", "epoch"}, {"watch_pending", "revision"}, {"watch_pending", "score_revision"}, {"watch_trace_heads", "score_revision"}, {"watch_publications", "retired_before_ns"}} {
 		exists, err := hasWatchColumn(ctx, q, d, col.table, col.column)
 		if err != nil {
 			return err

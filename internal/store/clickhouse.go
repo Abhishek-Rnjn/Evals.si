@@ -640,12 +640,17 @@ func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWr
 		OldHash string
 	}
 	var unchanged []legacyCopy
-	err := c.query(ctx, `SELECT project,trace_id,record_hash,base64Encode(record) AS record FROM trace_current WHERE has({projects:Array(String)},project) AND has({ids:Array(String)},trace_id)`, chParams{"projects": chArray(projects), "ids": chArray(ids)}, func(line []byte) error {
+	var references []map[string]any
+	for _, t := range traces {
+		references = append(references, map[string]any{"project": t.Summary.GetProject(), "trace_id": t.Summary.GetTraceId(), "record_hash": traceProjection(ctx, t.Summary, t.Record), "start_ns": t.Summary.GetStartTime().AsTime().UnixNano()})
+	}
+	err := c.query(ctx, `SELECT project,trace_id,record_hash,start_ns,base64Encode(record) AS record FROM trace_current WHERE has({projects:Array(String)},project) AND has({ids:Array(String)},trace_id)`, chParams{"projects": chArray(projects), "ids": chArray(ids)}, func(line []byte) error {
 		var row struct {
 			Project string `json:"project"`
 			TraceID string `json:"trace_id"`
 			Record  string `json:"record"`
 			Hash    string `json:"record_hash"`
+			Start   int64  `json:"start_ns"`
 		}
 		if err := json.Unmarshal(line, &row); err != nil {
 			return err
@@ -654,6 +659,9 @@ func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWr
 		if !ok {
 			return nil
 		}
+		// Preserve the outgoing binding's expiry before overwriting its
+		// projection, even when different input means no scores are copied.
+		references = append(references, map[string]any{"project": row.Project, "trace_id": row.TraceID, "record_hash": row.Hash, "start_ns": row.Start})
 		record := &evalsiv1alpha1.Record{}
 		if err := unb64(row.Record, record); err != nil {
 			return err
@@ -662,13 +670,23 @@ func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWr
 		// Copy only when entering/leaving a legacy unversioned binding.
 		// A new watch generation after retention must never inherit scores
 		// from the expired generation if its old projection is still visible.
-		if row.Hash != target && (row.Hash == "" || row.Hash == input || target == input) && proto.Equal(record, t.Record) {
+		if legacyCopyAllowed(ctx, row.Project, row.TraceID, row.Hash, row.Start) && row.Hash != target && (row.Hash == "" || row.Hash == input || target == input) && proto.Equal(record, t.Record) {
 			unchanged = append(unchanged, legacyCopy{Trace: t, OldHash: row.Hash})
 		}
 		return nil
 	})
 	if err != nil {
 		return err
+	}
+	for offset := 0; offset < len(references); offset += retentionBatchSize {
+		var body bytes.Buffer
+		enc := json.NewEncoder(&body)
+		for _, ref := range references[offset:min(offset+retentionBatchSize, len(references))] {
+			_ = enc.Encode(ref)
+		}
+		if err := c.exec(ctx, `INSERT INTO trace_score_references FORMAT JSONEachRow`, nil, &body); err != nil {
+			return err
+		}
 	}
 	for _, copy := range unchanged {
 		t := copy.Trace

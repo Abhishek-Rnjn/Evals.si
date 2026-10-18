@@ -103,31 +103,43 @@ func TestClickHouseRetentionStagesBoundedCompleteReferences(t *testing.T) {
 }
 
 func TestClickHouseRetentionPartialFailureAllowsIdenticalReacceptance(t *testing.T) {
-	for _, phase := range []string{"INSERT INTO trace_retention_requests", "DELETE FROM traces "} {
-		t.Run(phase, func(t *testing.T) {
-			st, c := reviewClickHouse(t)
-			ctx := t.Context()
-			cutoff := time.Now()
-			w := revisionTrace("ready", "same input", cutoff.Add(-time.Hour))
-			acceptRevision(t, st, w)
-			publishRevision(t, st, w)
-			if err := st.PutWatchResults(ctx, PolicyLease{}, w.Pending, "quality", revisionScores(0)); err != nil {
-				t.Fatal(err)
-			}
-			c.client.Transport = &retentionTestTransport{base: http.DefaultTransport, failPrefix: phase}
-			if _, err := st.DeleteTracesBefore(ctx, cutoff); err == nil {
-				t.Fatal("expected partial cleanup failure")
-			}
-			w.Pending.Payload = []byte("identical reacceptance after partial retention")
-			acceptRevision(t, st, w)
-			publishRevision(t, st, w)
-			if _, _, err := st.GetTrace(ctx, "p", "revision"); err != nil {
-				t.Fatalf("accepted trace stayed hidden after partial retention: %v", err)
-			}
-			if results, err := st.TraceResults(ctx, "p", "revision"); err != nil || len(results) != 0 {
-				t.Fatalf("reacceptance revived expired scores: %v %v", results, err)
-			}
-		})
+	for _, legacy := range []bool{false, true} {
+		for _, phase := range []string{"INSERT INTO trace_retention_requests", "DELETE FROM traces "} {
+			t.Run(fmt.Sprintf("legacy=%t/%s", legacy, phase), func(t *testing.T) {
+				st, c := reviewClickHouse(t)
+				ctx := t.Context()
+				cutoff := time.Now()
+				w := revisionTrace("ready", "same input", cutoff.Add(-time.Hour))
+				acceptRevision(t, st, w)
+				if legacy {
+					params := chParams{"summary": b64(w.Trace.Summary), "record": b64(w.Trace.Record), "score": b64(revisionScores(0)[0]), "start": fmt.Sprint(w.Pending.StartNS)}
+					if err := c.exec(ctx, `INSERT INTO traces(project,trace_id,service,start_ns,summary,record,version) SELECT 'p','revision','studio',{start:Int64},base64Decode({summary:String}),base64Decode({record:String}),1`, params, nil); err != nil {
+						t.Fatal(err)
+					}
+					if err := c.exec(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,result,version) SELECT 'p','revision','quality','quality',base64Decode({score:String}),1`, params, nil); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					publishRevision(t, st, w)
+					if err := st.PutWatchResults(ctx, PolicyLease{}, w.Pending, "quality", revisionScores(0)); err != nil {
+						t.Fatal(err)
+					}
+				}
+				c.client.Transport = &retentionTestTransport{base: http.DefaultTransport, failPrefix: phase}
+				if _, err := st.DeleteTracesBefore(ctx, cutoff); err == nil {
+					t.Fatal("expected partial cleanup failure")
+				}
+				w.Pending.Payload = []byte("identical reacceptance after partial retention")
+				acceptRevision(t, st, w)
+				publishRevision(t, st, w)
+				if _, _, err := st.GetTrace(ctx, "p", "revision"); err != nil {
+					t.Fatalf("accepted trace stayed hidden after partial retention: %v", err)
+				}
+				if results, err := st.TraceResults(ctx, "p", "revision"); err != nil || len(results) != 0 {
+					t.Fatalf("reacceptance revived expired scores: %v %v", results, err)
+				}
+			})
+		}
 	}
 }
 

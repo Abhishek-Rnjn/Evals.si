@@ -250,10 +250,42 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 	}
 	if len(writes) > 0 {
 		projections := map[[2]string]string{}
+		retiredBefore := map[[2]string]int64{}
+		liveLegacyRefs := map[[3]string]int64{}
 		for _, h := range heads {
-			projections[[2]string{h.Project, h.TraceID}] = scoreBinding(h.Hash, h.ScoreRevision)
+			key := [2]string{h.Project, h.TraceID}
+			projections[key] = scoreBinding(h.Hash, h.ScoreRevision)
+			var retired int64
+			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(retired_before_ns),0) FROM watch_publications WHERE project=? AND trace_id=? AND revision=0`, h.Project, h.TraceID).Scan(&retired); err != nil {
+				return nil, err
+			}
+			retiredBefore[key] = retired
+			if retired > 0 {
+				rows, err := tx.QueryContext(ctx, `SELECT record_hash,start_ns FROM watch_score_references WHERE project=? AND trace_id=? AND start_ns>=?`, h.Project, h.TraceID, retired)
+				if err != nil {
+					return nil, err
+				}
+				for rows.Next() {
+					var hash string
+					var start int64
+					if err := rows.Scan(&hash, &start); err != nil {
+						_ = rows.Close()
+						return nil, err
+					}
+					liveLegacyRefs[[3]string{h.Project, h.TraceID, hash}] = start
+				}
+				if err := rows.Err(); err != nil {
+					_ = rows.Close()
+					return nil, err
+				}
+				if err := rows.Close(); err != nil {
+					return nil, err
+				}
+			}
 		}
 		ctx = context.WithValue(ctx, watchProjectionKey{}, projections)
+		ctx = context.WithValue(ctx, watchNoLegacyCopyKey{}, retiredBefore)
+		ctx = context.WithValue(ctx, watchLiveLegacyRefsKey{}, liveLegacyRefs)
 		if _, ok := s.traces.(*sqlTraces); ok {
 			err = putSQLTraces(ctx, tx, writes)
 		} else {
@@ -337,6 +369,16 @@ func RecordHash(record *evalsiv1alpha1.Record) string {
 }
 
 type watchProjectionKey struct{}
+type watchNoLegacyCopyKey struct{}
+type watchLiveLegacyRefsKey struct{}
+
+func legacyCopyAllowed(ctx context.Context, project, id, hash string, start int64) bool {
+	cutoffs, _ := ctx.Value(watchNoLegacyCopyKey{}).(map[[2]string]int64)
+	cutoff := cutoffs[[2]string{project, id}]
+	refs, _ := ctx.Value(watchLiveLegacyRefsKey{}).(map[[3]string]int64)
+	start = max(start, refs[[3]string{project, id, hash}])
+	return cutoff == 0 || start >= cutoff
+}
 
 func scoreBinding(hash string, revision int64) string {
 	sum := sha256.Sum256([]byte(hash + ":" + strconv.FormatInt(revision, 10)))
