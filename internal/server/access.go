@@ -81,6 +81,8 @@ type gate struct {
 	// scanner cannot flood the audit log; the rest are only counted.
 	unauthAudit *rate.Limiter
 	unauthTotal atomic.Int64
+	// limits refuses callers past their rate (ratelimit.go); nil limits nothing.
+	limits *limiter
 }
 
 func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, judgeOf authz.JudgeOf, log *slog.Logger) *gate {
@@ -747,6 +749,9 @@ func (g *gate) authenticate(ctx context.Context, procedure, protocol, source str
 		}
 		return ctx, nil, unauthenticated(res.Err, protocol)
 	}
+	if err := limitedFrom(ctx); err != nil {
+		return ctx, nil, err
+	}
 	header = header.Clone()
 	header.Set("X-Request-Id", requestID(header))
 	chk := &authz.Checker{
@@ -1021,6 +1026,11 @@ func (g *gate) authorizeTool(r *http.Request, tool string, listing bool) error {
 func (g *gate) guardHTTP(action string, filtered bool, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, chk, err := g.authenticate(r.Context(), r.Method+" "+r.URL.Path, "http", r.RemoteAddr, r.Header)
+		if ce := (*connect.Error)(nil); errors.As(err, &ce) && ce.Code() == connect.CodeResourceExhausted {
+			w.Header().Set("Retry-After", ce.Meta().Get("Retry-After"))
+			http.Error(w, ce.Message(), http.StatusTooManyRequests)
+			return
+		}
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="evalsi"`)
 			http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -1076,4 +1086,5 @@ func (g *gate) assignTrace(ctx context.Context, res ingest.Attrs) (string, map[s
 func (g *gate) WriteMetrics(w io.Writer) {
 	const name = "evalsi_unauthenticated_total"
 	fmt.Fprintf(w, "# HELP %s Calls rejected for a missing or invalid credential.\n# TYPE %s counter\n%s %d\n", name, name, name, g.unauthTotal.Load())
+	g.limits.writeMetrics(w)
 }

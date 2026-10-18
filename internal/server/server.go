@@ -318,6 +318,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		go func() { defer wg.Done(); reconcileAuthz(bg, engine, log) }()
 	}
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, svc.EffectiveJudge, log)
+	g.limits = newLimiter(cfg, log)
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
 	if cfg.Rewards.SharedCache {
 		rewardSvc.UseSharedCache(st, log)
@@ -560,7 +561,7 @@ func registerOTLP(mux *http.ServeMux, d deps) {
 func otlpHandler(d deps) http.Handler {
 	mux := http.NewServeMux()
 	registerOTLP(mux, d)
-	return d.authn.Middleware(boundRejected(mux))
+	return d.authn.Middleware(boundRejected(d.gate.limits.middleware(mux)))
 }
 
 // Handler routes every service behind authentication and the gate.
@@ -668,7 +669,7 @@ func Handler(d deps) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(doc)
 	})
-	root := d.authn.Middleware(boundRejected(mux))
+	root := d.authn.Middleware(boundRejected(d.gate.limits.middleware(mux)))
 	if !d.mcp.Disabled {
 		mcp.New(d.mcp, root, d.gate.authorizeTool, d.authn.Issuers, log).Register(mux)
 	}

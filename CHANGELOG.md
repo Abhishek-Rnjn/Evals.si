@@ -24,6 +24,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Per-caller rate limits.** While authentication is enabled, each API key, user or anonymous source address gets a token bucket per class of traffic (`api`, `ingest`, `guardrails`), per replica. A caller past its rate gets `ResourceExhausted` (gRPC, Connect) or HTTP 429 (REST, OTLP/HTTP, guardrail webhook) with `Retry-After`. The defaults are generous (500 API calls a second, 2000 exports or guardrail checks, with bursts of twice that) and `rate_limits.principals` tightens or lifts them per key; `rate_limits.disabled` turns them off. `evalsi_rate_limited_total` counts refusals ([decision 0029](docs/decisions/0029-per-caller-rate-limits.md)).
 - **ClickHouse trace source.** Pull completed traces from the OpenTelemetry
   Collector `clickhouseexporter` Map schema, score them with online policies,
   and write typed feedback to a companion table. Includes setup SQL and a

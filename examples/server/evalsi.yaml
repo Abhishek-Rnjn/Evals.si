@@ -143,6 +143,16 @@ rewards:
   max_inflight: 65536     # across calls; further calls wait (back-pressure)
   cache_size: 1048576     # component scores kept in memory
 
+# Per-caller rate limits, per replica, while authentication is enabled
+# (defaults shown). A caller past its rate gets ResourceExhausted or HTTP 429
+# with Retry-After. per_second 0 lifts a limit.
+# rate_limits:
+#   api: {per_second: 500, burst: 1000}
+#   ingest: {per_second: 2000, burst: 4000}
+#   guardrails: {per_second: 2000, burst: 4000}
+#   principals:
+#     key:partner: {api: {per_second: 5, burst: 20}}
+
 # Per-project quotas; 0 or unset means unlimited. `projects` overrides the
 # default field by field.
 quotas:
