@@ -360,6 +360,11 @@ What is verified, in short:
 
 What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md), sorted by what each item needs next. Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).
 
+[Runtime verification](docs/verification/RUNTIME-VERIFICATION-2026-10-18.md)
+tracks real KVM and other remaining prerequisites. The
+[competitor benchmark methods](tests/benchmarks/README.md) compare deterministic
+local evaluation overhead, with separate limits for hosted platforms.
+
 ## Documentation
 
 | Start here | Guides | Reference |

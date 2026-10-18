@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [RUNTIME-VERIFICATION-2026-10-18.md](RUNTIME-VERIFICATION-2026-10-18.md) | All 50 remaining-check dispositions, actual hardware/access blockers, strict opt-in real-KVM test, and free local trace-store verification |
 | [EKS-PAUSED-2026-10-18.md](EKS-PAUSED-2026-10-18.md) | Cluster-deletion handoff: disposition of all 49 starting rows, exact unfinished checks, GPU-first resume order, environment reconstruction and evidence/storage caveats; live verification paused |
 | [VERIFICATION-REPORT.md](VERIFICATION-REPORT.md) | The full run: setup, every exit criterion with its evidence, product bugs F1–F6, doc differences D1–D15 and environment problems R1–R2 |
 | [FINAL-RESULTS.md](FINAL-RESULTS.md) | One table of every exit criterion across the three clusters |
