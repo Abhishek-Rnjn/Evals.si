@@ -31,14 +31,21 @@ func (s *sqlTraces) PutTraces(ctx context.Context, traces []TraceWrite) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := putSQLTraces(ctx, tx, traces); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func putSQLTraces(ctx context.Context, q querier, traces []TraceWrite) error {
 	for _, t := range traces {
-		if _, err := tx.ExecContext(ctx, putTraceSQL,
+		if _, err := q.ExecContext(ctx, putTraceSQL,
 			t.Summary.GetProject(), t.Summary.GetTraceId(), t.Summary.GetService(), t.Summary.GetStartTime().AsTime().UnixNano(),
 			marshal(t.Summary), marshal(t.Record)); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // TraceFilter selects traces.
@@ -133,15 +140,22 @@ func (s *sqlTraces) PutTraceResults(ctx context.Context, project, traceID, polic
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := putSQLTraceResults(ctx, tx, project, traceID, policy, results); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func putSQLTraceResults(ctx context.Context, q querier, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
 	for _, r := range results {
-		if _, err := tx.ExecContext(ctx,
+		if _, err := q.ExecContext(ctx,
 			`INSERT INTO trace_results (project, trace_id, policy, evaluator, result) VALUES (?, ?, ?, ?, ?)
 			 ON CONFLICT (project, trace_id, policy, evaluator) DO UPDATE SET result = excluded.result`,
 			project, traceID, policy, r.GetEvaluator(), marshal(r)); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // TraceResults returns results for a trace grouped by policy, policies sorted.
@@ -177,15 +191,22 @@ func (s *sqlTraces) DeleteTracesBefore(ctx context.Context, t time.Time) (int64,
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM trace_results WHERE (project, trace_id) IN (SELECT project, trace_id FROM traces WHERE start_ns < ?)`, t.UnixNano()); err != nil {
+	n, err := deleteSQLTracesBefore(ctx, tx, t)
+	if err != nil {
+		return n, err
+	}
+	return n, tx.Commit()
+}
+
+func deleteSQLTracesBefore(ctx context.Context, q querier, t time.Time) (int64, error) {
+	if _, err := q.ExecContext(ctx, `DELETE FROM trace_results WHERE (project, trace_id) IN (SELECT project, trace_id FROM traces WHERE start_ns < ?)`, t.UnixNano()); err != nil {
 		return 0, err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM traces WHERE start_ns < ?`, t.UnixNano())
+	res, err := q.ExecContext(ctx, `DELETE FROM traces WHERE start_ns < ?`, t.UnixNano())
 	if err != nil {
 		return 0, err
 	}
-	n, _ := res.RowsAffected()
-	return n, tx.Commit()
+	return res.RowsAffected()
 }
 
 // PutPolicy creates or replaces a policy.

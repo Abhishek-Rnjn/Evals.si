@@ -141,12 +141,26 @@ func (s *Store) TraceResults(ctx context.Context, project, traceID string) ([]*e
 
 // DeleteTracesBefore removes traces (and their results) that started before t.
 func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
-	n, err := s.traces.DeleteTracesBefore(ctx, t)
+	tx, err := s.beginWatchWrite(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Remove work before deleting the trace view under the same write fence;
+	// recovery that loaded a row earlier can no longer restore a retained copy.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE start_ns < ?`, t.UnixNano()); err != nil {
+		return 0, err
+	}
+	var n int64
+	if _, ok := s.traces.(*sqlTraces); ok {
+		n, err = deleteSQLTracesBefore(ctx, tx, t)
+	} else {
+		n, err = s.traces.DeleteTracesBefore(ctx, t)
+	}
 	if err != nil {
 		return n, err
 	}
-	_, err = s.db.ExecContext(ctx, `DELETE FROM watch_pending WHERE start_ns < ?`, t.UnixNano())
-	return n, err
+	return n, tx.Commit()
 }
 
 // QueryTraces returns the traces a query selects.

@@ -201,7 +201,12 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	if err != nil {
 		return err
 	}
+	var policyLeaseOwner string
+	if cl != nil {
+		policyLeaseOwner = cl.Owner()
+	}
 	watcher, err = watch.New(ctx, st, svc, watch.Options{
+		LeaseOwner:  policyLeaseOwner,
 		Redactor:    redactor,
 		DatasetsDir: cfg.DatasetsDir, Objects: objects, BatchSize: cfg.Evaluate.BatchSize, Logger: log,
 		Changed: func() {
@@ -215,9 +220,11 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 			}
 			return cl.Stats(name)
 		},
-		ResultsReady: func(info ingest.TraceInfo) bool { return sourceMgr != nil && sourceMgr.ResultsReady(info) },
-		OnResults: func(policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
-			if sourceMgr == nil || !sourceMgr.OnResults(policy, rec, info, results) {
+		ResultsReady: func(ctx context.Context, info ingest.TraceInfo) bool {
+			return sourceMgr != nil && sourceMgr.ResultsReady(ctx, info)
+		},
+		OnResults: func(ctx context.Context, policy string, rec *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
+			if sourceMgr == nil || !sourceMgr.OnResults(ctx, policy, rec, info, results) {
 				return fmt.Errorf("source result handoff not ready")
 			}
 			exports.Trace(&sinks.Trace{

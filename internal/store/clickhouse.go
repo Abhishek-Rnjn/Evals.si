@@ -227,7 +227,7 @@ func (c *clickhouse) PutTraces(ctx context.Context, traces []TraceWrite) error {
 	}
 	var body bytes.Buffer
 	enc := json.NewEncoder(&body)
-	version := time.Now().UnixNano()
+	version := traceWriteVersion(ctx)
 	for i, t := range traces {
 		_ = enc.Encode(map[string]any{
 			"project": t.Summary.GetProject(), "trace_id": t.Summary.GetTraceId(), "service": t.Summary.GetService(),
@@ -366,7 +366,7 @@ func (c *clickhouse) PutTraceResults(ctx context.Context, project, traceID, poli
 		return nil
 	}
 	var body bytes.Buffer
-	version := time.Now().UnixNano()
+	version := traceWriteVersion(ctx)
 	for _, r := range results {
 		row, _ := json.Marshal(map[string]any{
 			"project": project, "trace_id": traceID, "policy": policy, "evaluator": r.GetEvaluator(),

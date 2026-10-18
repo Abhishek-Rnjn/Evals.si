@@ -43,7 +43,7 @@ func TestRedactionBeforeStorageEvaluationSinksAndLogs(t *testing.T) {
 				}
 			}
 			sunk := false
-			h.e.opts.OnResults = func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
+			h.e.opts.OnResults = func(_ context.Context, policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
 				sunk = true
 				raw, err := protojson.Marshal(record)
 				if err != nil {

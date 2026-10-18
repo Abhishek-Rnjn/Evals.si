@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS watch_pending (
   project TEXT NOT NULL, trace_id TEXT NOT NULL, stream TEXT NOT NULL DEFAULT '', payload BLOB NOT NULL, start_ns INTEGER NOT NULL,
   PRIMARY KEY (project, trace_id, stream)
 );
+CREATE TABLE IF NOT EXISTS watch_write_lock (
+  id INTEGER PRIMARY KEY, version INTEGER NOT NULL
+);
+INSERT INTO watch_write_lock (id, version) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
 `
 
 type WatchPending struct {
@@ -18,7 +22,7 @@ type WatchPending struct {
 }
 
 func (s *Store) PutWatchPending(ctx context.Context, items []WatchPending) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWatchWrite(ctx)
 	if err != nil {
 		return err
 	}
@@ -55,15 +59,30 @@ func (s *Store) ListWatchPending(ctx context.Context, limit int, after ...WatchP
 }
 
 func (s *Store) WatchPendingMatches(ctx context.Context, item WatchPending) (bool, error) {
+	return watchPendingMatches(ctx, s.db, item)
+}
+
+func watchPendingMatches(ctx context.Context, q querier, item WatchPending) (bool, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload).Scan(&n)
+	err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload).Scan(&n)
 	return n == 1, err
 }
 
-// A newer revision of the same trace must survive an older evaluation's ack.
-func (s *Store) AckWatchPending(ctx context.Context, item WatchPending) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload)
-	return err
+// A newer revision of the same stream must survive an older evaluation's ack.
+// A nonempty owner also fences against the policy-engine lease.
+func (s *Store) AckWatchPending(ctx context.Context, owner string, item WatchPending) error {
+	tx, err := s.beginWatchWrite(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := checkWatchLease(ctx, tx, owner); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Upgrade pending work written by earlier development builds without losing it.

@@ -146,7 +146,7 @@ func validPool(p string) bool {
 // statistics; the others only forward spans. A replica that stalls past the
 // lease loses it and steps down; traces it held in its assembler are lost.
 func leadPolicyEngine(ctx context.Context, st *store.Store, cl *cluster.Cluster, assembler *ingest.Assembler, watcher *watch.Engine, sources *source.Manager, log *slog.Logger) {
-	const name, ttl = "policy-engine", 15 * time.Second
+	const name, ttl = store.PolicyEngineLease, 15 * time.Second
 	owner := cl.Owner()
 	var stepDown func()
 	defer func() {

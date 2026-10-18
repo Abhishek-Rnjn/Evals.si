@@ -49,10 +49,12 @@ type Options struct {
 	Redactor  *ingest.Redactor
 	// Client for alert webhooks.
 	HTTPClient *http.Client
-	// Called with each evaluated trace's results (for sinks); must not block.
-	OnResults func(policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error
+	// Called for a short result handoff; respect ctx and do not wait for remote delivery.
+	OnResults func(ctx context.Context, policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error
 	// Defers replay until a pulled trace can hand results to its source runner.
-	ResultsReady func(info ingest.TraceInfo) bool
+	ResultsReady func(ctx context.Context, info ingest.TraceInfo) bool
+	// Nonempty in a cluster: every durable write must hold the policy-engine lease.
+	LeaseOwner string
 	// Called when a policy's alert starts or stops firing, with the body its
 	// own alert webhook receives (for the WebhookService's alert events).
 	OnAlert func(project, policy string, firing bool, body []byte)
@@ -96,6 +98,9 @@ type Engine struct {
 	policies    map[string]*policyState
 	unavailable map[string]string
 	processing  sync.Mutex
+	leaderMu    sync.Mutex
+	leaderCtx   context.Context
+	stopLeader  context.CancelFunc
 	// Set on a replica that is not the elected policy engine.
 	follower atomic.Bool
 	// Used only by Run's recovery loop; failed work must not starve later rows.
@@ -136,6 +141,7 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 		queue: make(chan item, opts.QueueSize), writes: make(chan ingest.Trace, opts.QueueSize), now: time.Now,
 		policies: map[string]*policyState{}, unavailable: map[string]string{},
 	}
+	e.leaderCtx, e.stopLeader = context.WithCancel(context.Background())
 	stored, err := st.Policies(ctx)
 	if err != nil {
 		return nil, err
@@ -168,7 +174,28 @@ func newState(c *compiled) *policyState {
 // SetLeader marks this replica as the elected policy engine (in a cluster;
 // a single replica always is). Only the leader receives traces, so only its
 // statistics count.
-func (e *Engine) SetLeader(leader bool) { e.follower.Store(!leader) }
+func (e *Engine) SetLeader(leader bool) {
+	e.leaderMu.Lock()
+	defer e.leaderMu.Unlock()
+	if !leader {
+		e.follower.Store(true)
+		e.stopLeader()
+	} else if e.follower.Load() {
+		e.leaderCtx, e.stopLeader = context.WithCancel(context.Background())
+		e.follower.Store(false)
+	}
+}
+
+func (e *Engine) processingContext(parent context.Context) (context.Context, context.CancelFunc) {
+	e.leaderMu.Lock()
+	defer e.leaderMu.Unlock()
+	ctx, cancel := context.WithCancel(parent)
+	stop := context.AfterFunc(e.leaderCtx, cancel)
+	if e.follower.Load() || e.leaderCtx.Err() != nil {
+		cancel()
+	}
+	return ctx, func() { stop(); cancel() }
+}
 
 // Reload re-reads policies from the store (another replica changed them).
 // Unchanged policies keep their state; changed ones keep their counters.
@@ -446,41 +473,38 @@ func numeric(s *evalsiv1alpha1.Score) (float64, bool) {
 }
 
 func (e *Engine) process(ctx context.Context, batch []item) {
+	if len(batch) == 0 {
+		return
+	}
 	e.processing.Lock()
 	defer e.processing.Unlock()
-	if e.follower.Load() {
+	ctx, cancel := e.processingContext(ctx)
+	defer cancel()
+	if ctx.Err() != nil {
+		return
+	}
+	writes := make([]store.WatchTraceWrite, len(batch))
+	for i, it := range batch {
+		writes[i] = store.WatchTraceWrite{Pending: it.pending(), Trace: store.TraceWrite{Summary: Summary(it.record, it.info), Record: it.record}}
+	}
+	// Visibility does not depend on policy compilation or source readiness.
+	// The store checks the lease and exact pending revision under its write lock.
+	stored, err := e.store.PutWatchTraces(ctx, e.opts.LeaseOwner, writes)
+	if err != nil {
+		if !errors.Is(err, store.ErrWatchStale) && ctx.Err() == nil {
+			e.StoreErrors.Add(int64(len(writes)))
+			e.log.Error("storing accepted online traces", "err", err)
+		}
 		return
 	}
 	var current []item
-	for _, it := range batch {
-		if !e.policiesReady(it) || (e.opts.ResultsReady != nil && !e.opts.ResultsReady(it.info)) {
-			continue
+	for i, it := range batch {
+		if stored[i] && e.policiesReady(it) && (e.opts.ResultsReady == nil || e.opts.ResultsReady(ctx, it.info)) {
+			current = append(current, it)
 		}
-		if it.payload != nil {
-			matches, err := e.store.WatchPendingMatches(ctx, it.pending())
-			if err != nil || !matches {
-				continue
-			}
-		}
-		current = append(current, it)
 	}
-	if len(current) == 0 {
+	if len(current) == 0 || ctx.Err() != nil {
 		return
-	}
-	// Only the elected dispatcher writes traces. Producers persist pending work
-	// without touching the trace view, so a delayed producer cannot overwrite it.
-	var writes []store.TraceWrite
-	for _, it := range current {
-		if it.payload != nil {
-			writes = append(writes, store.TraceWrite{Summary: Summary(it.record, it.info), Record: it.record})
-		}
-	}
-	if len(writes) > 0 {
-		if err := e.store.PutTraces(ctx, writes); err != nil {
-			e.StoreErrors.Add(int64(len(writes)))
-			e.log.Error("storing online traces before evaluation", "err", err)
-			return
-		}
 	}
 	complete := true
 	for _, st := range e.snapshot() {
@@ -490,10 +514,8 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 	}
 	if complete && ctx.Err() == nil {
 		for _, it := range current {
-			if it.payload != nil {
-				if err := e.store.AckWatchPending(ctx, it.pending()); err != nil {
-					e.log.Error("acknowledging online trace", "err", err)
-				}
+			if err := e.store.AckWatchPending(ctx, e.opts.LeaseOwner, it.pending()); err != nil && ctx.Err() == nil {
+				e.log.Error("acknowledging online trace", "err", err)
 			}
 		}
 	}
@@ -562,6 +584,9 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 			}
 		}
 	}
+	if ctx.Err() != nil {
+		return false
+	}
 	now := e.now()
 	var evaluated, promoted int64
 	for _, cand := range sampled {
@@ -569,14 +594,17 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 			continue
 		}
 		evaluated++
-		if err := e.store.PutTraceResults(ctx, cand.info.Project, cand.record.GetId(), c.policy.GetName(), cand.results); err != nil {
+		if err := e.store.PutWatchResults(ctx, e.opts.LeaseOwner, cand.pending(), c.policy.GetName(), cand.results); err != nil {
+			if errors.Is(err, store.ErrWatchStale) || ctx.Err() != nil {
+				return false
+			}
 			e.StoreErrors.Add(1)
 			e.log.Error("storing trace results", "trace", cand.record.GetId(), "err", err)
 			complete = false
 			continue
 		}
 		if e.opts.OnResults != nil {
-			if err := e.opts.OnResults(c.policy.GetName(), cand.record, cand.info, cand.results); err != nil {
+			if err := e.opts.OnResults(ctx, c.policy.GetName(), cand.record, cand.info, cand.results); err != nil {
 				complete = false
 				e.log.Warn("online result handoff failed", "policy", c.policy.GetName(), "err", err)
 			}
@@ -588,6 +616,9 @@ func (e *Engine) processPolicy(ctx context.Context, st *policyState, batch []ite
 				promoted++
 			}
 		}
+	}
+	if ctx.Err() != nil {
+		return false
 	}
 	var fired []alertEvent
 	e.mu.Lock()

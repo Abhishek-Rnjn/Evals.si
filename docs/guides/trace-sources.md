@@ -426,6 +426,19 @@ restart and while running. Acknowledgments cannot remove a newer revision of
 the same trace. This works with SQLite or PostgreSQL metadata and with a
 separate ClickHouse trace store. Trace retention removes pending copies too.
 
+Accepted traces become queryable before evaluation readiness is checked. An
+unavailable policy retains its pending work without hiding the redacted trace.
+A deleted source no longer requires a runner: its accepted work finishes local
+evaluation without write-back to that source. An existing source with write-back
+enabled still waits for its runner; lookup failures are retried.
+
+Leadership loss cancels in-flight evaluation. Trace writes, score writes and
+acknowledgments also check the database lease and exact pending revision under
+a metadata write lock shared with ingestion, lease changes and retention. The
+lock covers persistence only, not worker calls. SQL trace changes use the same
+transaction; ClickHouse writes reserve monotonically increasing replacement
+versions in metadata, including across request failures and replica clock skew.
+
 Delivery is at least once: a crash between a worker call and its acknowledgment
 can repeat evaluation and external callbacks. Pending work predating this
 version has no durable queue entry; re-run the source's backfill for those

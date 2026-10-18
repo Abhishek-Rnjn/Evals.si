@@ -3,8 +3,13 @@ package watch
 import (
 	"context"
 	"fmt"
+	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/internal/source"
+	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
@@ -136,14 +141,17 @@ func TestRecoveryWaitsForResultHandoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	ready := false
-	h.e.opts.ResultsReady = func(ingest.TraceInfo) bool { return ready }
+	h.e.opts.ResultsReady = func(context.Context, ingest.TraceInfo) bool { return ready }
 	h.e.Ingest(trace(5, "studio", "good", false))
 	h.e.recoverPending(ctx)
+	if _, _, err := h.st.GetTrace(ctx, DefaultProject, trace(5, "studio", "good", false).TraceID); err != nil {
+		t.Fatalf("source readiness hid accepted trace: %v", err)
+	}
 	if h.worker.deepCalls != 0 {
 		t.Fatal("evaluated before source runner was ready")
 	}
 	ready = true
-	h.e.opts.OnResults = func(string, *evalsiv1alpha1.Record, ingest.TraceInfo, []*evalsiv1alpha1.EvaluationResult) error {
+	h.e.opts.OnResults = func(context.Context, string, *evalsiv1alpha1.Record, ingest.TraceInfo, []*evalsiv1alpha1.EvaluationResult) error {
 		return fmt.Errorf("runner stopped")
 	}
 	h.e.recoverPending(ctx)
@@ -172,6 +180,9 @@ func TestUnavailablePolicyKeepsAcceptedWorkUntilRestoredOrDeleted(t *testing.T) 
 				t.Fatal(err)
 			}
 			restarted.recoverPending(ctx)
+			if _, _, err := h.st.GetTrace(ctx, DefaultProject, trace(6, "studio", "good", false).TraceID); err != nil {
+				t.Fatalf("unavailable policy hid accepted trace: %v", err)
+			}
 			if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 1 {
 				t.Fatalf("unavailable policy lost work: %v %v", pending, err)
 			}
@@ -191,5 +202,151 @@ func TestUnavailablePolicyKeepsAcceptedWorkUntilRestoredOrDeleted(t *testing.T) 
 				t.Fatal("restored policy did not run")
 			}
 		})
+	}
+}
+
+func TestStepDownCancelsInFlightEvaluationAndRetainsWork(t *testing.T) {
+	h := newHarness(t)
+	if err := h.e.Apply(t.Context(), &evalsiv1alpha1.OnlineEvalPolicy{Name: "quality", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}); err != nil {
+		t.Fatal(err)
+	}
+	entered, cancelled := make(chan struct{}), make(chan struct{})
+	h.worker.beforeEvaluate = func(ctx context.Context, _ *pluginv1alpha1.EvaluateRequest) {
+		close(entered)
+		<-ctx.Done()
+		close(cancelled) // Deliberately return a valid response despite cancellation.
+	}
+	tr := trace(7, "studio", "old bad", false)
+	h.e.Ingest(tr)
+	done := make(chan struct{})
+	go func() { defer close(done); h.e.process(t.Context(), []item{<-h.e.queue}) }()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("worker did not start")
+	}
+	h.e.SetLeader(false)
+	select {
+	case <-cancelled:
+	case <-time.After(3 * time.Second):
+		t.Fatal("step-down did not cancel worker context")
+	}
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("cancelled processing did not finish")
+	}
+	if results, err := h.st.TraceResults(t.Context(), DefaultProject, tr.TraceID); err != nil || len(results) != 0 {
+		t.Fatalf("cancelled evaluation committed: %v %v", results, err)
+	}
+	if pending, err := h.st.ListWatchPending(t.Context(), 10); err != nil || len(pending) != 1 {
+		t.Fatalf("step-down lost work: %v %v", pending, err)
+	}
+}
+
+func TestNewLeaderFencesWorkerThatMissedStepDown(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	h.e.opts.LeaseOwner = "old"
+	if ok, err := h.st.AcquireLease(ctx, store.PolicyEngineLease, "old", time.Minute); err != nil || !ok {
+		t.Fatalf("old lease: %v %v", ok, err)
+	}
+	if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "quality", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}); err != nil {
+		t.Fatal(err)
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	defer unblock()
+	h.worker.beforeEvaluate = func(_ context.Context, req *pluginv1alpha1.EvaluateRequest) {
+		if req.GetRecords()[0].GetOutput().GetText() == "old bad" {
+			close(entered)
+			<-release
+		}
+	}
+	h.e.Ingest(trace(8, "studio", "old bad", false))
+	oldDone := make(chan struct{})
+	go func() { defer close(oldDone); h.e.process(ctx, []item{<-h.e.queue}) }()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("old evaluation did not start")
+	}
+	// The old replica never observes step-down; only the database fence can stop it.
+	if err := h.st.ReleaseLease(ctx, store.PolicyEngineLease, "old"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := h.st.AcquireLease(ctx, store.PolicyEngineLease, "new", time.Minute); err != nil || !ok {
+		t.Fatalf("new lease: %v %v", ok, err)
+	}
+	opts := h.e.opts
+	opts.LeaseOwner = "new"
+	newer, err := New(ctx, h.st, h.e.eval, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newer.Ingest(trace(8, "studio", "new good", false))
+	newer.process(ctx, []item{<-newer.queue})
+	unblock()
+	select {
+	case <-oldDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("old evaluation did not finish")
+	}
+	id := trace(8, "studio", "", false).TraceID
+	_, record, err := h.st.GetTrace(ctx, DefaultProject, id)
+	if err != nil || record.GetOutput().GetText() != "new good" {
+		t.Fatalf("stale leader replaced trace: %v %v", record, err)
+	}
+	results, err := h.st.TraceResults(ctx, DefaultProject, id)
+	if err != nil || len(results) != 1 || results[0].GetResults()[0].GetScores()[0].GetNumber() != 1 {
+		t.Fatalf("stale leader replaced score: %v %v", results, err)
+	}
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
+		t.Fatalf("new leader left work pending: %v %v", pending, err)
+	}
+}
+
+func TestDeletedSourceRecoveryStoresEvaluatesAndAcknowledgesAcceptedTrace(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "quality", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.PutSource(ctx, &evalsiv1alpha1.TraceSource{Project: DefaultProject, Name: "studio", WriteBack: &evalsiv1alpha1.WriteBack{Enabled: true}}); err != nil {
+		t.Fatal(err)
+	}
+	manager := source.New(h.st, h.e, source.Options{})
+	h.e.opts.ResultsReady = manager.ResultsReady
+	h.e.opts.OnResults = func(ctx context.Context, policy string, record *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) error {
+		if !manager.OnResults(ctx, policy, record, info, results) {
+			return fmt.Errorf("source not ready")
+		}
+		return nil
+	}
+	tr := trace(9, "studio", "good", false)
+	tr.Adjust = func(_ *evalsiv1alpha1.Record, info *ingest.TraceInfo) {
+		info.Labels = map[string]string{source.LabelSource: "studio"}
+		info.Resource = ingest.Attrs{source.AttrSourceTraceID: "remote"}
+	}
+	if err := h.e.IngestBatchContext(ctx, []ingest.Trace{tr}, []string{"quality"}); err != nil {
+		t.Fatal(err)
+	}
+	h.e.recoverPending(ctx)
+	if _, _, err := h.st.GetTrace(ctx, DefaultProject, tr.TraceID); err != nil {
+		t.Fatalf("startup readiness hid trace: %v", err)
+	}
+	if results, err := h.st.TraceResults(ctx, DefaultProject, tr.TraceID); err != nil || len(results) != 0 {
+		t.Fatalf("evaluated before source runner: %v %v", results, err)
+	}
+	if err := h.st.DeleteSource(ctx, DefaultProject, "studio"); err != nil {
+		t.Fatal(err)
+	}
+	h.e.recoverPending(ctx)
+	if results, err := h.st.TraceResults(ctx, DefaultProject, tr.TraceID); err != nil || len(results) != 1 {
+		t.Fatalf("deleted source lost accepted evaluation: %v %v", results, err)
+	}
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
+		t.Fatalf("deleted source stranded accepted work: %v %v", pending, err)
 	}
 }
