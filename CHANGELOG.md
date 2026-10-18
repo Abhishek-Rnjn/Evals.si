@@ -27,6 +27,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- Seeded `prompt-injection` tool faults append bounded untrusted payloads; `builtin/injection-followed` reports explicit final-answer attack markers.
+
 - `evalsi determinism results.json` reports observed within-record score stability and a conservative independent-trial recommendation.
 
 - Optional `webhooks.ssrf_guard` checks saved endpoints and delivery destinations, with explicit `webhooks.allow_hosts` exceptions.

@@ -1063,11 +1063,14 @@ type ToolFault struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Tool name, or "*" for every tool.
 	Tool string `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
-	// "timeout", "error" or "malformed".
+	// "timeout", "error", "malformed" or "prompt-injection".
 	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Probability per call, 0 to 1. Faults are seeded per task and trial, so
 	// a rerun injects the same faults.
-	Rate          float64 `protobuf:"fixed64,3,opt,name=rate,proto3" json:"rate,omitempty"`
+	Rate float64 `protobuf:"fixed64,3,opt,name=rate,proto3" json:"rate,omitempty"`
+	// Untrusted text appended to a successful tool result for prompt-injection
+	// trials. Required for that kind; at most 4000 UTF-8 bytes.
+	Payload       string `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1121,6 +1124,13 @@ func (x *ToolFault) GetRate() float64 {
 		return x.Rate
 	}
 	return 0
+}
+
+func (x *ToolFault) GetPayload() string {
+	if x != nil {
+		return x.Payload
+	}
+	return ""
 }
 
 type Tools struct {
@@ -2539,11 +2549,12 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tresponses\x18\x05 \x03(\v2(.evalsi.v1alpha1.MockTool.ResponsesEntryR\tresponses\x1a<\n" +
 	"\x0eResponsesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"G\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"a\n" +
 	"\tToolFault\x12\x12\n" +
 	"\x04tool\x18\x01 \x01(\tR\x04tool\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04rate\x18\x03 \x01(\x01R\x04rate\"\xdf\x01\n" +
+	"\x04rate\x18\x03 \x01(\x01R\x04rate\x12\x18\n" +
+	"\apayload\x18\x04 \x01(\tR\apayload\"\xdf\x01\n" +
 	"\x05Tools\x12\x1d\n" +
 	"\asandbox\x18\x01 \x01(\bH\x00R\asandbox\x88\x01\x01\x12,\n" +
 	"\x03mcp\x18\x02 \x03(\v2\x1a.evalsi.v1alpha1.MCPServerR\x03mcp\x12/\n" +

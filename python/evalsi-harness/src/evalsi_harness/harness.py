@@ -562,7 +562,7 @@ class BuiltinHarness:
                 )
             )
         if cfg.faults:
-            faults = [Fault(f.tool, f.kind, f.rate) for f in cfg.faults]
+            faults = [Fault(f.tool, f.kind, f.rate, f.payload) for f in cfg.faults]
             seed = f"{live.task.id}:{live.task.trial}"
             tools = [FaultyTool(t, faults, seed) for t in tools]
         return tools

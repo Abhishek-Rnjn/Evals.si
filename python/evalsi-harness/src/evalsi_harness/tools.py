@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 import random
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -250,6 +251,7 @@ class Fault:
     tool: str
     kind: str
     rate: float
+    payload: str = ""
 
 
 class FaultyTool:
@@ -258,7 +260,7 @@ class FaultyTool:
     The random stream is seeded by task, trial and tool, so a rerun injects
     exactly the same faults."""
 
-    KINDS = ("timeout", "error", "malformed")
+    KINDS = ("timeout", "error", "malformed", "prompt-injection")
 
     def __init__(self, inner: Tool, faults: list[Fault], seed: str) -> None:
         self.inner = inner
@@ -267,6 +269,12 @@ class FaultyTool:
         for f in self.faults:
             if f.kind not in self.KINDS:
                 raise ValueError(f"fault kind must be one of {self.KINDS}, not {f.kind!r}")
+            if not math.isfinite(f.rate) or not 0 <= f.rate <= 1:
+                raise ValueError("fault rate must be finite and from 0 to 1")
+            if f.kind == "prompt-injection" and (
+                not f.payload.strip() or len(f.payload.encode("utf-8")) > 4000
+            ):
+                raise ValueError("prompt-injection needs a payload of 1 to 4000 UTF-8 bytes")
         self._rng = random.Random(f"{seed}:{inner.spec.name}")
 
     async def call(self, args: dict[str, Any], *, span: str = "") -> ToolResult:
@@ -281,6 +289,13 @@ class FaultyTool:
                         "the tool failed: internal error (injected)", is_error=True, metadata=meta
                     )
                 real = await self.inner.call(args, span=span)
+                if fault.kind == "prompt-injection":
+                    if real.is_error:
+                        return real
+                    return ToolResult(
+                        real.content + "\n\n" + fault.payload,
+                        metadata={**real.metadata, **meta},
+                    )
                 garbled = real.content[: max(1, len(real.content) // 2)] + '\x00{"truncat'
                 return ToolResult(garbled, is_error=real.is_error, metadata=meta)
         return await self.inner.call(args, span=span)

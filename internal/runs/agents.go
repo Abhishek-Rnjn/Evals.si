@@ -2,6 +2,7 @@ package runs
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -132,8 +133,11 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 		return invalid("spec.harness.builtin.tools.builtin needs the sandbox tools, which tools.sandbox turned off")
 	}
 	for _, f := range b.GetTools().GetFaults() {
-		if !slices.Contains([]string{"timeout", "error", "malformed"}, f.GetKind()) || f.GetRate() < 0 || f.GetRate() > 1 {
-			return invalid("tool faults need a kind (timeout, error or malformed) and a rate from 0 to 1")
+		if !slices.Contains([]string{"timeout", "error", "malformed", "prompt-injection"}, f.GetKind()) || math.IsNaN(f.GetRate()) || math.IsInf(f.GetRate(), 0) || f.GetRate() < 0 || f.GetRate() > 1 {
+			return invalid("tool faults need a kind (timeout, error, malformed or prompt-injection) and a finite rate from 0 to 1")
+		}
+		if f.GetKind() == "prompt-injection" && (strings.TrimSpace(f.GetPayload()) == "" || len(f.GetPayload()) > 4000) {
+			return invalid("prompt-injection faults need a payload of 1 to 4000 UTF-8 bytes")
 		}
 	}
 	if b.GetDelegateSteps() < 0 || b.GetDelegateSteps() > maxDelegateSteps {
