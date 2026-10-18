@@ -4,6 +4,16 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.3.0] - Unreleased
+
+### Upgrade notes
+
+- Upgrade the server, Python SDK and harness together, and refresh the EvalRun CRD before using prompt-injection fault payloads. Mixed-version rolling upgrades remain unverified.
+- Stop old metadata writers before upgrading. Startup automatically backfills archived-run quota markers and creates the durable online-evaluation queue. Previously accepted work that predates the queue requires an explicit source backfill.
+- Accepted online work is queued durably; the dispatcher stores traces before their scores. Source streams keep independent policy selections. Replay is at least once and can repeat evaluator calls after a crash; unavailable policies or source runners defer acknowledgement. Source write-back delivery after an in-memory handoff retains its existing semantics.
+- Authenticated deployments now apply generous per-caller rate limits by default. Configure `rate_limits` for workloads requiring different limits. The webhook SSRF guard remains opt-in.
+
+
 ### Fixed
 
 - Archived runs release `max_stored_runs` quota, including archives in existing databases.
@@ -205,6 +215,7 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.
 
-[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.1.0
