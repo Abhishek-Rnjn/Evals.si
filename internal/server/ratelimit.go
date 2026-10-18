@@ -32,8 +32,9 @@ const (
 
 var rateClasses = []string{classAPI, classIngest, classGuardrails}
 
-// bucketIdle is how long an unused bucket is kept. A caller back after
-// longer starts with a full bucket, which is what an idle bucket holds.
+// bucketIdle is how long an unused bucket is kept at least. It is dropped
+// only once it has also refilled, so a caller back later starts with the
+// full bucket it would have had anyway, however slow its rate.
 const bucketIdle = 10 * time.Minute
 
 // limiter keeps a token bucket per caller and class (config.RateLimits). The
@@ -99,7 +100,7 @@ func (l *limiter) take(class, caller string) (time.Duration, bool) {
 	defer l.mu.Unlock()
 	if now.Sub(l.swept) >= time.Minute {
 		for k, b := range l.buckets {
-			if now.Sub(b.seen) >= bucketIdle {
+			if now.Sub(b.seen) >= bucketIdle && b.lim.TokensAt(now) >= float64(b.lim.Burst()) {
 				delete(l.buckets, k)
 			}
 		}

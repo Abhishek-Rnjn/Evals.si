@@ -102,6 +102,22 @@ func TestLimiterForgetsIdleCallers(t *testing.T) {
 	}
 }
 
+// A slow bucket idle past bucketIdle but not yet refilled is kept, or a
+// caller could reset it by waiting just past the idle time.
+func TestLimiterKeepsIdleBucketsUntilRefilled(t *testing.T) {
+	l, clock := testLimiter(t, config.RateLimits{API: config.Rate{PerSecond: 0.001, Burst: 1}})
+	l.take(classAPI, "key:slow")
+	*clock = clock.Add(bucketIdle + time.Minute)
+	if _, ok := l.take(classAPI, "key:slow"); ok {
+		t.Fatal("an idle but unrefilled bucket was reset")
+	}
+	*clock = clock.Add(1000 * time.Second)
+	l.take(classAPI, "key:other") // sweeps
+	if _, kept := l.buckets[bucketKey{classAPI, "key:slow"}]; kept {
+		t.Fatal("a refilled idle bucket was kept")
+	}
+}
+
 func TestLimiterOffWithoutAuthentication(t *testing.T) {
 	cfg := config.Default()
 	if newLimiter(cfg, slog.New(slog.DiscardHandler)) != nil {

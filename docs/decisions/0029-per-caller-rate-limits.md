@@ -55,8 +55,9 @@ spends, not how fast one credential calls.
   limit would need the store or the cluster on every request, which the
   ingest path cannot afford.
 - Anonymous callers behind one proxy share its address's buckets.
-- Buckets live in memory and are forgotten after 10 minutes unused, so a
-  caller back after that starts with a full bucket, as an idle one would.
+- Buckets live in memory and are forgotten once unused for 10 minutes and
+  refilled, so a caller back later starts with the full bucket it would have
+  had anyway; a slow rate cannot be reset by waiting just past the idle time.
 - The settings are read at start, not on configuration reload.
 - Clients see a new error. The Python client raises it as `ServerError`
   with code `resource_exhausted` and does not retry; callers that retry
