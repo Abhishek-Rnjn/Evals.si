@@ -1,0 +1,36 @@
+name: LangSmith live verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: LangSmith API URL (the check creates and deletes a disposable project)
+        required: true
+        default: https://api.smith.langchain.com
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  langsmith:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - run: cd python && uv sync --locked --all-packages
+      - name: Verify LangSmith pull, scoring and feedback
+        env:
+          EVALSI_TEST_LANGSMITH_URL: ${{ inputs.endpoint }}
+          EVALSI_TEST_LANGSMITH_CREDENTIAL: ${{ secrets.EVALSI_TEST_LANGSMITH_CREDENTIAL }}
+          GOPROXY: https://proxy.golang.org|direct
+        run: |
+          test -n "$EVALSI_TEST_LANGSMITH_CREDENTIAL" || { echo 'Set the EVALSI_TEST_LANGSMITH_CREDENTIAL repository secret first.'; exit 1; }
+          EVALSI_E2E_WORKER="$PWD/python/.venv/bin/python -m evalsi" \
+            go test -race ./tests/e2e -run '^TestLiveTraceSourceLangSmith$' -count=1 -v -timeout 6m
