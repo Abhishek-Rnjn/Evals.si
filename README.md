@@ -17,7 +17,8 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 [Quickstart](#quickstart) ·
 [Guides](#documentation) ·
 [Examples](examples/) ·
-[Roadmap](docs/LEFTOVERS.md)
+[Product roadmap](docs/PRODUCT-ROADMAP.md) ·
+[Technical status](docs/LEFTOVERS.md)
 
 </div>
 
@@ -74,6 +75,8 @@ citation-accuracy  2  0.500  [0.095, 0.905]        0       0
 ```
 
 The second answer cites passage `[4]`, but only two passages were retrieved. Add a judge and the `faithfulness`, `answer-relevance`, `context-precision` and `context-recall` metrics tell you whether retrieval or generation is at fault ([guide](docs/guides/evaluate-rag.md)).
+
+For the unreleased setup commands and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
 
 Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
 
@@ -359,6 +362,8 @@ What is verified, in short:
 - **Air-gapped bundles:** one platform per bundle (amd64 by default, `--platform linux/arm64` for arm64); see the [Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs).
 
 What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md), sorted by what each item needs next. Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).
+
+The proposed [product roadmap](docs/PRODUCT-ROADMAP.md) tracks future work for production-agent and enterprise AI teams, with priorities, dependencies and acceptance criteria. The [product strategy](docs/PRODUCT-STRATEGY.md) records the competitive research and adoption plan.
 
 [Runtime verification](docs/verification/RUNTIME-VERIFICATION-2026-10-18.md)
 tracks real KVM and other remaining prerequisites. The

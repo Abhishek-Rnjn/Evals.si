@@ -176,6 +176,44 @@ jobs:
           uv run --no-sync evalsi run -f ../examples/rag/fixed.yaml
           rm ../examples/rag/fixed.jsonl ../examples/rag/fixed.yaml
 
+  onboarding:
+    # Test the action with published packages and a starter from this checkout.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      UV_PYTHON: '3.12'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Generate starter and lint action adapter
+        working-directory: python
+        run: |
+          uv sync --locked --all-packages
+          uv run --no-sync ruff check --config pyproject.toml ../.github/actions/evalsi/run.py
+          uv run --no-sync ruff format --check --config pyproject.toml ../.github/actions/evalsi/run.py
+          uv run --no-sync evalsi init ../.evalsi-action-smoke
+      - name: Published packages pass the working control
+        uses: ./
+        with:
+          spec: run.yaml
+          working-directory: .evalsi-action-smoke
+      - name: Published packages reject the negative control
+        id: negative
+        continue-on-error: true
+        uses: ./
+        with:
+          spec: regressed.yaml
+          working-directory: .evalsi-action-smoke
+          install: 'false'
+      - name: Assert gate failure was propagated
+        if: always()
+        env:
+          OUTCOME: ${{ steps.negative.outcome }}
+          EXIT_CODE: ${{ steps.negative.outputs.exit-code }}
+        run: |
+          test "$OUTCOME" = failure
+          test "$EXIT_CODE" = 3
+
   adapters:
     # Each framework adapter has its own pinned environment, so upstream
     # dependency conflicts never reach the SDK or each other. Contract tests run

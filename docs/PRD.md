@@ -2,6 +2,11 @@
 
 Status: draft · 2026-10-09, status updated 2026-10-13 (after PRs #54 and #56) · Abhishek Ranjan
 
+For proposed priorities serving production-agent and enterprise AI/platform teams,
+see the [product roadmap](PRODUCT-ROADMAP.md) and [strategy](PRODUCT-STRATEGY.md).
+Their work IDs and acceptance criteria supplement this technical PRD; the dated
+implementation and verification statements below retain their original scope.
+
 ## Summary
 
 Evals.si becomes an evaluation microservice that customers install in their own Kubernetes cluster and call on demand. It works with any agent loop and any OpenTelemetry trace store; the agent harness is the first integration, and the first cut supports the most popular frameworks and stores. Customers get any evaluation (LLM, RAG, agent, classic ML, RL) through three doors:
