@@ -150,7 +150,45 @@ from evalsi_harness.envspecs.verifiers import load_environment
 vf_env = load_environment([(record, spec)])      # a verifiers StatefulToolEnv
 ```
 
-Both give the model `bash`, `read_file`, `write_file` and `submit`, and reward the checker's score when the episode ends. In OpenEnv the reward is `None` until then; in verifiers a checker that cannot run raises an `InfraError` that ends the rollout with `state["error"]` set, rather than scoring 0. They are written against `openenv-core` 0.3 and `verifiers` 0.3 and tested against those installs in CI (`tests/envspecs`), including a full verifiers rollout against a scripted chat server. Each verifiers rollout owns its `TaskEnv` and so pays the environment's setup itself; OpenEnv's HTTP `/reset` and `/step` endpoints are stateless by design, so use its WebSocket session.
+Both give the model `bash`, `read_file`, `write_file` and `submit`, and reward the checker's score when the episode ends. In OpenEnv the reward is `None` until then; in verifiers a checker that cannot run raises an `InfraError` that ends the rollout with `state["error"]` set, rather than scoring 0. They are written against `openenv-core` 0.3 and `verifiers` 0.3 and tested against those installs in CI (`tests/envspecs`), including a full verifiers rollout against a scripted chat server. With `client=` given, verifiers rollouts share one environment pool, so setup runs once per environment; without it each rollout connects and pays setup itself. OpenEnv's HTTP `/reset` and `/step` endpoints are stateless by design, so use its WebSocket session.
+
+#### As a Gymnasium or NeMo Gym environment
+
+```python
+from evalsi_harness.envspecs.gymnasium import TaskGymEnv
+env = TaskGymEnv([(record, spec)])               # a gymnasium.Env (gymnasium==1.4.0)
+obs, info = env.reset(seed=0)
+obs, reward, terminated, truncated, info = env.step(
+    {"tool": "bash", "arguments": '{"command": "pytest -q"}'})
+
+from evalsi_harness.envspecs.nemogym import TaskResourcesServer, dataset_row
+row = dataset_row(record, spec)                  # a NeMo Gym dataset row (nemo-gym==0.7.0, Python 3.13+)
+```
+
+`submit` ends a Gymnasium episode as `terminated`, the step limit as `truncated`; the checker grades both. `TaskResourcesServer` is a NeMo Gym `GymnasiumServer` (`/reset`, `/step`) for use with its `gymnasium_agent`: each function call in a response is one step. A checker that cannot run raises in both (`InfrastructureError`, a failed request) because a reward of 0 would train on an infrastructure failure. Both are tested against the real packages in CI, with a test client for NeMo Gym's endpoints; neither has driven a trainer.
+
+#### Step-level rewards
+
+`TaskEnv(process_rewards=[...])` returns each step's reward in `StepResult.process_reward`, separate from the checker's outcome `reward`. `EvaluatorReward("builtin/loop-detection")` scores the trajectory so far with any record-scope evaluator (by default the change in its score, so a step that does not move it earns 0; `mode="level"` pays the score itself; lower-is-better metrics count negatively), and `ToolErrorPenalty(0.1)` takes a fixed amount off a failed call. A score that cannot be computed is `None`, never 0, and `info["process_errors"]` names evaluator errors. A judge-backed evaluator makes one judge call per step. Whether shaped rewards help training is not something this repository measures.
+
+#### Rollouts, with tokens
+
+```python
+from evalsi.targets import TargetConfig
+from evalsi_harness.models import create_model
+from evalsi_harness.rollout import RolloutPool
+
+model = create_model(TargetConfig(connector="openai-compatible", model="m",
+                                  base_url="http://vllm:8000/v1", token_trace=True))
+pool = RolloutPool(model, sandbox_client, concurrency=16)
+trajectories = await pool.run([(record, spec)] * 8)       # eight rollouts, one setup
+t = trajectories[0]
+t.reward, t.process_reward, t.turns[0].tokens             # outcome, shaped, token IDs and log-probs
+pool.stop()                                               # pause the running ones at a turn boundary
+paused = await pool.run(resume=paused_trajectories)       # ...and continue them later
+```
+
+`token_trace=True` asks a vLLM server for each turn's prompt token IDs, generated token IDs and log-probabilities (`return_token_ids`, `return_tokens_as_token_ids`, `logprobs`), so a trainer need not re-tokenize. What the server did not return is named in `TokenTrace.missing` and `Trajectory.tokens_complete` is false; a turn served by a fallback model has no tokens at all. It is set from code, not from a run spec, and it was written against vLLM's documented fields and tested against a fake server: SGLang's fields were not checked and there has been no live vLLM run. Pausing keeps a snapshot of each episode's sandbox, so it needs a rung that snapshots (bubblewrap, Firecracker); on the pod rung a stopped rollout is `cancelled` and cannot be resumed. Cancelling the `run` destroys every sandbox.
 
 ## Evaluating checkpoints
 
