@@ -494,6 +494,19 @@ enough, and it is not a power calculation for a model comparison. Correlated
 trials, arbitrary unbounded metrics and multiple-comparison guarantees need
 a separate analysis.
 
+**From the variance you saw.** The report also has `variance_aware_recommendation`,
+and `evalsi run` prints a `trials:` line and writes `trial_advice` to `--output`
+whenever `trials` is above 1. It pools each task's variance across its trials, takes
+an upper confidence bound on it (chi-square, one-sided) and gives the trials per task
+for a margin of 0.05, 0.1 and 0.2 on a task's mean score. Few trials give a wide bound,
+so a short run cannot promise precision it does not have. When nothing varied, a
+pass/fail metric gets the worst case (variance 1/4: 385 trials at ±0.05, 97 at ±0.1)
+and the report says why; a numeric metric that never varied gets no recommendation.
+This is a report. It changes neither the default `trials` nor any gate, and it speaks
+to one task's mean, not to the interval across tasks. The `pass^k` metric already
+appears next to `pass@k` in any run with `trials` above 1. The advice is computed by
+the local `evalsi run`; for a server run, download the results and run `evalsi determinism`.
+
 ## Prompt-injection controls
 
 Use `tools.faults` with `kind: prompt-injection`, a probability `rate` and a

@@ -84,3 +84,106 @@ def test_structured_scores_are_counted_and_skipped() -> None:
     result["scores"][1]["passed"] = True
     with pytest.raises(ValueError, match="one passed"):
         determinism_report({"results": [result]})
+
+
+# --- trials from the variance observed per task ---------------------------------------
+
+
+def numeric_row(record: str, trial: int, value: float) -> dict[str, Any]:
+    return {
+        "record_id": record,
+        "trial": trial,
+        "evaluator": "score",
+        "outcome": "scored",
+        "scores": [{"number": value}],
+    }
+
+
+def test_the_chi_square_quantile_matches_reference_values() -> None:
+    from evalsi.determinism import _chi2_lower
+
+    # Standard 5% points of the chi-square distribution.
+    table = {1: 0.003932, 2: 0.102587, 3: 0.351846, 5: 1.145476, 10: 3.940299, 100: 77.9295}
+    for df, expected in table.items():
+        assert _chi2_lower(0.05, df) == pytest.approx(expected, rel=1e-4)
+    assert _chi2_lower(0.5, 4) == pytest.approx(3.356694, rel=1e-5)
+
+
+def test_trials_for_margin_is_the_normal_sample_size() -> None:
+    from evalsi.determinism import trials_for_margin
+
+    assert trials_for_margin(0.25, 0.05, 0.95) == 385
+    assert trials_for_margin(0.25, 0.10, 0.95) == 97
+    assert trials_for_margin(0.0, 0.10, 0.95) == 1  # never fewer than one
+
+
+def flaky_pass_fail(tasks: int, trials: int, fails: int) -> dict[str, Any]:
+    rows = []
+    for t in range(tasks):
+        for k in range(trials):
+            rows.append(row(f"task{t}", k, k >= fails))  # `fails` failures then passes
+    return {"results": rows}
+
+
+def test_the_bound_is_above_the_estimate_and_never_beyond_a_coin_flip() -> None:
+    from evalsi.determinism import trial_advice
+
+    advice = trial_advice(flaky_pass_fail(tasks=20, trials=4, fails=1))
+    (m,) = advice["metrics"]
+    assert m["tasks_with_repeats"] == 20
+    assert m["degrees_of_freedom"] == 60
+    assert m["observed_variance"] == pytest.approx(0.25)  # 1 of 4 failed: s^2 = 0.25
+    assert m["observed_variance"] <= m["variance_bound"] <= 0.25
+    # More margin, fewer trials.
+    needed = m["trials_for_margin"]
+    assert needed["0.05"] > needed["0.1"] > needed["0.2"] >= 1
+
+
+def test_few_trials_give_a_wider_bound_than_many_with_the_same_estimate() -> None:
+    from evalsi.determinism import trial_advice
+
+    def numeric(tasks: int) -> dict[str, Any]:
+        # Each task: two trials, 0.0 and 0.4, so the pooled variance is exactly 0.08.
+        rows = []
+        for t in range(tasks):
+            rows += [numeric_row(f"t{t}", 0, 0.0), numeric_row(f"t{t}", 1, 0.4)]
+        return {"results": rows}
+
+    few = trial_advice(numeric(3))["metrics"][0]
+    many = trial_advice(numeric(60))["metrics"][0]
+    assert few["observed_variance"] == pytest.approx(many["observed_variance"])
+    assert few["variance_bound"] > many["variance_bound"] > few["observed_variance"]
+
+
+def test_no_variation_is_not_evidence_of_none() -> None:
+    from evalsi.determinism import trial_advice
+
+    # Every task passed in every trial.
+    (passfail,) = trial_advice(flaky_pass_fail(tasks=10, trials=3, fails=0))["metrics"]
+    assert passfail["observed_variance"] == 0
+    assert passfail["variance_bound"] == 0.25
+    assert "worst case" in passfail["basis"]
+    assert passfail["trials_for_margin"]["0.05"] == 385
+    # A numeric metric that never varied gets no recommendation at all.
+    data = {"results": [numeric_row(f"t{i}", k, 0.5) for i in range(5) for k in range(3)]}
+    (numeric,) = trial_advice(data)["metrics"]
+    assert numeric["variance_bound"] is None
+    assert numeric["trials_for_margin"] == {}
+
+
+def test_tasks_with_a_single_trial_give_no_advice_and_bad_inputs_are_refused() -> None:
+    from evalsi.determinism import trial_advice
+
+    assert trial_advice({"results": [row("a", 0, True), row("b", 0, False)]})["metrics"] == []
+    with pytest.raises(ValueError, match="margin"):
+        trial_advice(flaky_pass_fail(2, 3, 1), margins=(0.0,))
+    with pytest.raises(ValueError, match="confidence"):
+        trial_advice(flaky_pass_fail(2, 3, 1), confidence=1.0)
+
+
+def test_the_determinism_report_carries_the_variance_aware_advice() -> None:
+    report = determinism_report(flaky_pass_fail(tasks=5, trials=3, fails=1))
+    advice = report["variance_aware_recommendation"]
+    assert advice["metrics"][0]["metric"] == report["metrics"][0]["metric"]
+    # The fixed conservative count is still there, unchanged.
+    assert report["trial_recommendation"]["method"] == "hoeffding"
