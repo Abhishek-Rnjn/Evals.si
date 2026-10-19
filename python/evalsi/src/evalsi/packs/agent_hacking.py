@@ -76,7 +76,7 @@ def _is_test(path: str, globs: list[str]) -> bool:
 def _names(name: str, text: str) -> bool:
     """Whether ``name`` appears as a whole path, not inside a longer word (``test.py``
     in ``pytest.py``)."""
-    return re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text) is not None
+    return re.search(rf"(?<![\w-])(?<!\w\.){re.escape(name)}(?![\w-]|\.\w)", text) is not None
 
 
 def _tool_inputs(record: Record) -> list[str]:

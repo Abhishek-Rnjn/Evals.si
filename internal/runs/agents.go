@@ -179,6 +179,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 	if err := validateProtect(env.GetChecker()); err != nil {
 		return err
 	}
+	if env.GetChecker().GetIsolation() == "clean" && len(env.GetServices()) > 0 {
+		return invalid("spec.environment.checker.isolation clean does not support services")
+	}
 	if p := env.GetChecker().GetParser(); strings.Contains(p, ":") && !strings.HasPrefix(p, "junit:") {
 		if err := m.trustPython(p, "spec.environment.checker.parser"); err != nil {
 			return err
@@ -379,6 +382,12 @@ func validateProtect(c *evalsiv1alpha1.Checker) error {
 	return validateIsolation(c)
 }
 
+// blanketPattern reports a pattern made only of stars, slashes and dots (**, **/**,
+// ***, */*, *.*): it selects every file, so it would copy a shim as readily as a solution.
+func blanketPattern(p string) bool {
+	return strings.Trim(strings.NewReplacer("/", "", ".", "").Replace(p), "*") == ""
+}
+
 func relativePattern(p string) bool {
 	return p != "" && len(p) <= 120 && !strings.HasPrefix(p, "/") && !slices.Contains(strings.Split(p, "/"), "..")
 }
@@ -408,7 +417,7 @@ func validateIsolation(c *evalsiv1alpha1.Checker) error {
 		if !relativePattern(p) {
 			return invalid("%s.outputs: %q must be a relative pattern of at most 120 characters, without ..", f, p)
 		}
-		if t := strings.Trim(p, "/."); t == "" || t == "*" || t == "**" || t == "**/*" {
+		if blanketPattern(p) {
 			return invalid("%s.outputs: %q would copy everything; name the files or directories a solution may change", f, p)
 		}
 		if slices.Contains(c.GetProtect(), p) {

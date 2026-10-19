@@ -42,7 +42,7 @@ def validate(checker: CheckerConfig, *, has_services: bool = False) -> None:
     if not checker.outputs:
         raise ValueError("isolation: clean needs outputs, the files the checker may see")
     validate_patterns(checker.outputs)
-    blanket = [p for p in checker.outputs if p.strip("/.") in ("", "*", "**", "**/*")]
+    blanket = [p for p in checker.outputs if not p.replace("/", "").replace(".", "").strip("*")]
     if blanket:
         raise ValueError(
             f"outputs {', '.join(blanket)} would copy everything, shims included; "
@@ -55,6 +55,11 @@ def validate(checker: CheckerConfig, *, has_services: bool = False) -> None:
         raise ValueError(f"{', '.join(overlap)} is both an output and protected")
 
 
+def _canonical(path: str) -> bool:
+    parts = path.split("/")
+    return bool(path) and not path.startswith("/") and all(p not in ("", ".", "..") for p in parts)
+
+
 async def run_clean_checker(
     pool: EnvironmentPool, agent_env: TaskEnvironment, checker: CheckerConfig, task: Task
 ) -> tuple[TaskCheck, dict[str, object]]:
@@ -62,7 +67,15 @@ async def run_clean_checker(
     what was copied, for the record."""
     assert task.environment is not None
     try:
-        paths = _selected(await _listing(agent_env), checker.outputs)
+        listing = await _listing(agent_env)
+        # The listing comes from a command the agent could have replaced: a path like
+        # solution/../sitecustomize.py would match solution/** yet name a file outside it.
+        forged = [p for p in listing if not _canonical(p)]
+        if forged:
+            return TaskCheck(
+                passed=False, error=f"the sandbox listed a non-canonical path: {forged[0]!r}"
+            ), {}
+        paths = _selected(listing, checker.outputs)
         _, blobs = await _read(agent_env, paths, keep=True)
     except ProtectError as exc:
         return TaskCheck(passed=False, error=f"declared outputs could not be read: {exc}"), {}

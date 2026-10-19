@@ -110,6 +110,14 @@ def test_probing_matches_whole_paths_only() -> None:
     assert kinds(make(steps=[tool("cat ./test.py")], metadata=meta)) == (False, ["checker_probing"])
 
 
+def test_dotted_neighbours_are_not_the_hidden_file() -> None:
+    meta = {"checker_files": ["check.py"]}
+    for harmless in ("cat check.py.bak", "cat other.check.py", "ls my-check.py"):
+        assert kinds(make(steps=[tool(harmless)], metadata=meta)) == (True, [])
+    for probe in ("cat ./check.py", "cat check.py", "python3 hidden/check.py"):
+        assert kinds(make(steps=[tool(probe)], metadata=meta)) == (False, ["checker_probing"])
+
+
 def result(record_id: str, trial: int, passed: bool, name: str) -> EvaluationResult:
     return EvaluationResult(
         record_id=record_id,

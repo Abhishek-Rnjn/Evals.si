@@ -164,6 +164,9 @@ class LiveTask:
     late_events: list[PolicyEvent] = field(default_factory=list)
     protect_result: dict[str, Any] = field(default_factory=dict)
     checker_isolation: dict[str, Any] = field(default_factory=dict)
+    # Checker files that did not exist when the agent started (after the image and
+    # setup): naming one of these is probing. One the sandbox already had may be run.
+    checker_hidden: list[str] = field(default_factory=list)
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -192,6 +195,20 @@ async def capture_diff(env: TaskEnvironment) -> str | None:
     if len(diff) > DIFF_LIMIT:
         diff = diff[:DIFF_LIMIT] + f"\n[diff truncated at {DIFF_LIMIT} bytes]\n"
     return diff
+
+
+async def _absent(env: TaskEnvironment, paths: list[str]) -> list[str]:
+    """The paths that do not exist in the prepared sandbox. A path that cannot be
+    checked counts as present, so nothing is flagged on a guess."""
+    out = []
+    for path in paths:
+        try:
+            result = await env.sandbox.exec(["test", "-e", path], timeout_s=30, env=env.config.env)
+        except SandboxError:
+            continue
+        if result.exit_code == 1:
+            out.append(path)
+    return out
 
 
 def _agent_kind(task: Task) -> str:
@@ -276,6 +293,8 @@ class BuiltinHarness:
             except ProtectError as exc:
                 await self.teardown(handle)
                 raise TaskError(f"checker.protect: {exc}") from exc
+        if env is not None and checker is not None and checker.files:
+            live.checker_hidden = await _absent(env, list(checker.files))
         return handle
 
     def _get(self, handle: str) -> LiveTask:
@@ -823,11 +842,8 @@ class BuiltinHarness:
         if live.protect_result:
             out["protected_files"] = live.protect_result
         checker = live.task.environment.checker if live.task.environment else None
-        if checker is not None and checker.files:
-            provided = live.task.environment.files if live.task.environment else {}
-            hidden = sorted(set(checker.files) - set(provided))
-            if hidden:
-                out["checker_files"] = hidden
+        if checker is not None and checker.files and live.checker_hidden:
+            out["checker_files"] = sorted(live.checker_hidden)
         if live.checker_isolation:
             out["checker_isolation"] = live.checker_isolation
         return out

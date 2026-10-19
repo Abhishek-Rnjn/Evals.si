@@ -738,6 +738,19 @@ func TestAgentRunValidation(t *testing.T) {
 		"blanket output": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"**"}}
 		},
+		"equivalent blanket output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"solution/**", "**/**"}}
+		},
+		"star-dot-star output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"*.*"}}
+		},
+		"triple star output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"***"}}
+		},
+		"clean isolation with services": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"a.py"}}
+			s.Environment.Services = []*evalsiv1alpha1.EnvironmentService{{Name: "db", Image: "postgres"}}
+		},
 		"output also protected": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"a.py"}, Protect: []string{"a.py"}}
 		},

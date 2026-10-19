@@ -86,6 +86,9 @@ def test_missing_outputs_grade_the_untouched_setup(sandboxes: LocalSandboxClient
         ({**CLEAN, "outputs": ["../x"]}, "relative to the workdir"),
         ({**CLEAN, "protect": ["calc.py"]}, "both an output and protected"),
         ({**CLEAN, "outputs": ["**"]}, "would copy everything"),
+        ({**CLEAN, "outputs": ["calc.py", "**/**"]}, "would copy everything"),
+        ({**CLEAN, "outputs": ["***"]}, "would copy everything"),
+        ({**CLEAN, "outputs": ["*.*"]}, "would copy everything"),
     ],
 )
 def test_bad_configuration_is_refused(
@@ -119,3 +122,42 @@ def test_the_gym_grades_a_clean_environment_too() -> None:
 
     assert asyncio.run(episode()) == 1.0  # shared: the shim fools the checker
     assert asyncio.run(episode(**CLEAN)) == 0.0  # clean: it never reaches it
+
+
+def test_a_forged_listing_cannot_widen_the_outputs(
+    sandboxes: LocalSandboxClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An agent that replaced find could make the listing name a path outside solution/.
+    from evalsi_harness import isolate
+
+    async def forged(env: Any) -> list[str]:
+        return ["solution/a.py", "solution/../sitecustomize.py"]
+
+    monkeypatch.setattr(isolate, "_listing", forged)
+    out = run(spec_for(SHIM, isolation="clean", outputs=["solution/**"]), record("x"), sandboxes)
+    # A check that cannot run is an error, never a pass or a failed task.
+    assert out.record is None
+    assert "non-canonical" in out.error
+
+
+@pytest.mark.parametrize("path", ["/etc/passwd", "a//b", "./a", "a/./b", "a/../b", ""])
+def test_only_canonical_listed_paths_are_trusted(path: str) -> None:
+    from evalsi_harness.isolate import _canonical
+
+    assert not _canonical(path)
+    assert _canonical("solution/a.py")
+
+
+def test_only_checker_files_absent_from_the_prepared_sandbox_are_hidden(
+    sandboxes: LocalSandboxClient,
+) -> None:
+    rec = run(
+        spec_for(
+            "true",
+            files={"tests/test_calc.py": "assert True\n", "hidden/check.py": "assert True\n"},
+        ),
+        record("x"),
+        sandboxes,
+    ).record
+    assert rec is not None
+    assert rec.metadata["checker_files"] == ["hidden/check.py"]
