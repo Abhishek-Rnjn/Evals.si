@@ -411,6 +411,8 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 
 Releases follow semantic versioning; until 1.0 a minor version may change the `v1alpha1` API. v0.1.0 (2026-10-12) closed M1. v0.2.0 (2026-10-13) is a minor release: it adds the `CheckpointServer` CRD, the `ImportRun`, `SliceRuns` and `ArchiveRun` RPCs, platform wheels and the M2 agent harness pieces (see the [changelog](../CHANGELOG.md)); it was signed, published to GHCR and PyPI and verified ([record](verification/README.md#v020-release-record-2026-10-13)). Fixes for a released version alone would be a patch from a release branch. [RELEASING](RELEASING.md) has the procedure.
 
+The latest release is [v0.3.0](https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.3.0), covering archived-run quota recovery, durable accepted online work, stale-dispatcher fencing, optional webhook SSRF checks, and robustness diagnostics. Its [changelog](../CHANGELOG.md#030---2026-10-19) includes the upgrade requirements.
+
 **Exit criteria per milestone**
 
 1. **M1 Release, SDK client** (D1, D2, D4, E2, P4): signed `v0.1.0` chart and images published; `Client.evaluate()` returns scores identical to in-process; webhooks fire on run finish.
