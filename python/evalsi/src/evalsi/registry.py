@@ -45,6 +45,7 @@ def _builtin_packs() -> list[Pack]:
         ml_monitoring,
         rag,
         rl,
+        rubric,
         safety,
         text,
     )
@@ -52,6 +53,7 @@ def _builtin_packs() -> list[Pack]:
     return [
         core.PACK,
         judge.PACK,
+        rubric.PACK,
         text.PACK,
         rag.PACK,
         safety.PACK,
