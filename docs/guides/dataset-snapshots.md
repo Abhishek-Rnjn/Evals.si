@@ -67,6 +67,12 @@ stored server results. That key is reserved; source records containing it are
 rejected. Other source fields are preserved in the bundle and processed by the
 normal record loader. The source path is not stored. No timestamp is inserted,
 so identical source bytes and options reproduce the same snapshot digest.
+Snapshot datasets reject `dataset.mapping.metadata` values other than `metadata`,
+so field mapping cannot replace the verified identity. Other field mappings remain
+available. Loaded objects use canonical key order, including nested structured
+inputs and object-valued tool-call arguments; reordering JSON keys cannot change
+evaluated text under the same pin. Record, message and tool-call array order, and
+arguments supplied as strings, are preserved.
 
 ## Review changes by ID
 

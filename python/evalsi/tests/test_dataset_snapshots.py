@@ -110,6 +110,120 @@ def test_pinned_run_and_replacement_fail_before_target_execution(
     assert main(["run", "-f", str(path)]) == 1
 
 
+@pytest.mark.parametrize(
+    "attributes",
+    [{"team": "support"}, {IDENTITY_KEY: {"sha256": "0" * 64, "provenance": {"fake": True}}}],
+    ids=["ordinary-metadata", "conflicting-identity"],
+)
+def test_snapshot_metadata_remapping_is_rejected_locally_and_by_worker(
+    tmp_path: Path, attributes: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from test_worker import with_worker
+
+    from evalsi.plugin.v1alpha1 import evaluator_plugin_pb2 as pb
+    from evalsi.registry import default_registry
+    from evalsi.v1alpha1 import run_pb2
+    from evalsi.worker import EvaluatorPlugin
+
+    dest = tmp_path / "snapshot.json"
+    saved = snapshot(
+        source(
+            tmp_path / "source.jsonl",
+            [{"id": "one", "question": "hello", "attributes": attributes}],
+        ),
+        dest,
+    )
+    uri = f"snapshot://{dest}?sha256={saved.sha256}"
+    mapping = {"metadata": "attributes"}
+    with pytest.raises(DatasetError, match="metadata remapping"):
+        load_records(uri, mapping=mapping)
+    # Other mappings and an explicit identity mapping still preserve the verified identity.
+    record = load_records(uri, mapping={"input": "question", "metadata": "metadata"})[0]
+    assert record.input is not None
+    assert record.input.as_text() == "hello"
+    assert record.metadata[IDENTITY_KEY]["sha256"] == saved.sha256
+
+    spec = tmp_path / "run.yaml"
+    spec.write_text(
+        yaml.safe_dump(
+            {
+                "apiVersion": "evals.si/v1alpha1",
+                "kind": "EvalRun",
+                "spec": {
+                    "dataset": {"uri": uri, "mapping": mapping},
+                    "evaluators": [{"ref": "exact-match"}],
+                },
+            }
+        )
+    )
+    output = tmp_path / "result.json"
+    assert main(["run", "-f", str(spec), "--output", str(output)]) == 1
+    assert "metadata remapping" in capsys.readouterr().err
+    assert not output.exists()
+
+    async def call(stub: Any) -> list[Any]:
+        source = run_pb2.DatasetSource(uri=uri, mapping=mapping)
+        return [chunk async for chunk in stub.LoadDataset(pb.LoadDatasetRequest(source=source))]
+
+    with pytest.raises(grpc.aio.AioRpcError, match="metadata remapping") as info:
+        with_worker(EvaluatorPlugin(default_registry()), call, tmp_path)
+    assert info.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+
+
+def test_reordered_nested_keys_keep_pinned_execution_inputs_identical(tmp_path: Path) -> None:
+    rows: list[dict[str, Any]] = [
+        {"id": "structured", "input": {"z": [{"y": 2, "a": 1}], "a": {"z": 3, "b": 4}}},
+        {
+            "id": "chat",
+            "input": [
+                {"role": "user", "content": "use the tool"},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {"name": "first", "arguments": {"z": {"y": 2, "a": 1}, "a": [2, 1]}},
+                        {"name": "second", "arguments": '{"z":2,"a":1}'},
+                    ],
+                },
+            ],
+        },
+    ]
+    dest = tmp_path / "snapshot.json"
+    saved = snapshot(source(tmp_path / "source.jsonl", rows), dest)
+    uri = f"snapshot://{dest}?sha256={saved.sha256}"
+    before = load_records(uri)
+    assert [r.to_dict() for r in load_records(saved.records)] == [
+        {k: v for k, v in r.to_dict().items() if k != "metadata"} for r in before
+    ]
+
+    def reverse_keys(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: reverse_keys(value[key]) for key in reversed(value)}
+        if isinstance(value, list):
+            return [reverse_keys(item) for item in value]
+        return value
+
+    dest.write_text(json.dumps(reverse_keys(json.loads(dest.read_text())), indent=4))
+    assert read_snapshot(dest, expected=saved.sha256).sha256 == saved.sha256
+    after = load_records(uri)
+    assert [r.id for r in after] == ["structured", "chat"]
+    assert [r.to_dict() for r in before] == [r.to_dict() for r in after]
+    assert before[0].input is not None
+    assert after[0].input is not None
+    assert (
+        before[0].input.as_text()
+        == after[0].input.as_text()
+        == '{"a":{"b":4,"z":3},"z":[{"a":1,"y":2}]}'
+    )
+    assert after[1].input is not None
+    assert after[1].input.messages is not None
+    messages = after[1].input.messages
+    assert [m.role for m in messages] == ["user", "assistant"]
+    calls = messages[1].tool_calls
+    assert [c.name for c in calls] == ["first", "second"]
+    assert calls[0].arguments == '{"a": [2, 1], "z": {"a": 1, "y": 2}}'
+    assert calls[1].arguments == '{"z":2,"a":1}'
+
+
 @pytest.mark.parametrize("existing", ["file", "directory", "symlink"])
 def test_snapshot_never_overwrites_existing_path(tmp_path: Path, existing: str) -> None:
     src, dest = source(tmp_path / "source.jsonl"), tmp_path / "snapshot.json"

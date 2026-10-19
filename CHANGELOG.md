@@ -25,6 +25,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
+- Snapshot loading rejects metadata remapping that could replace its verified identity and canonicalizes nested object keys before evaluation, keeping structured input and tool-call argument text stable under the same approved pin.
 - CI baseline validation now compares the complete checker configuration and validates each run against its dataset, trials and evaluator coverage. Shared skips, errors, duplicate rows and omitted scores cannot masquerade as complete paired evidence.
 - Doctor honors `EVALSI_SANDBOX_CONFIG`, requires namespaced-or-stronger isolation for agent readiness and surfaces sanitized sandbox enforcement warnings without printing private probe details.
 

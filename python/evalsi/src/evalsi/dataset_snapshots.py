@@ -148,10 +148,14 @@ def read_snapshot(path: str | Path, *, expected: str | None = None) -> Snapshot:
         raise DatasetError("invalid snapshot envelope")
     _validate_records(document["records"])
     _validate_manifest(document["manifest"], len(document["records"]))
-    digest = _hash({"manifest": document["manifest"], "records": document["records"]})
+    canonical = _canonical({"manifest": document["manifest"], "records": document["records"]})
+    digest = hashlib.sha256(canonical).hexdigest()
     if document["sha256"] != digest or (expected is not None and digest != expected):
         raise DatasetError("dataset snapshot SHA-256 mismatch; restore the approved snapshot")
-    return Snapshot(document["manifest"], document["records"], digest)
+    # Execution must use the same object-key order covered by the canonical digest.
+    # Content and tool-call conversion can serialize nested objects into strings.
+    normalized = _decode(canonical)
+    return Snapshot(normalized["manifest"], normalized["records"], digest)
 
 
 def create_snapshot(
@@ -173,6 +177,7 @@ def create_snapshot(
     else:
         raise DatasetError("snapshot source must be a local .json or .jsonl file")
     _validate_records(rows)
+    rows = _decode(_canonical(rows))
     manifest = {
         "schema": SCHEMA,
         "name": name,

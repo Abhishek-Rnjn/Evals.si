@@ -54,3 +54,22 @@ and verified that missing input coverage takes precedence over a known ID overla
 Ruff, strict mypy, the website build and local link checks passed. This feature
 does not provide semantic deduplication, training-exposure detection or enforced
 central split governance; its report and CI policy are documented in the guide.
+
+## Review fixes
+
+Both PR #111 findings have regression coverage. Snapshot URIs reject metadata
+remapping, including a mapped object with a forged `evalsi.dataset` identity;
+ordinary field mappings remain supported. Local runs and real gRPC workers reject
+the invalid mapping before returning results. Snapshot creation and reads return
+canonical object-key order, so nested structured inputs and object-valued chat
+tool-call arguments evaluate identically after key reordering under the same pin.
+Array order and string-valued arguments are preserved.
+
+All **119** selected snapshot, overlap, generic dataset, local run, runner, worker
+and real-server tests passed, including **37** snapshot/overlap cases. The three
+new regression cases also failed against an isolated copy of the previous code.
+Ruff lint/format, strict mypy (**277 source files**), the **81-page** website build
+and local links passed. The complete GitHub checks passed for the preceding
+`cdd9a76` revision; the review-fix commit starts a fresh CI run. These focused
+checks do not replace the full-suite history and cloud-host sandbox limitation
+recorded in the PR description.
