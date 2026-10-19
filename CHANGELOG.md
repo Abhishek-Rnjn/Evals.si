@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- `scripts/probe-cli-proxy.py` runs a command with the proxy variables the sandbox sets pointed at a logging listener and prints the hosts it asked for, to check that a CLI agent honours the egress allowlist. Codex 0.163.0 and OpenCode 1.19.3 do, and both need more hosts than a one-host allowlist (see the Harness² guide).
+
 - **`builtin/evidence-stage-audit`.** A deterministic funnel for agents that read evidence: required passages retrieved, then held by active evidence the answer cites, then the expected answer present. Each stage is scored only when the one before passed, so its mean is conditional. Needs `evidence_state` and a `{evidence, answer}` reference. The judge-based audit is not built.
 
 - **Variance-aware trial recommendation.** With `trials` above 1, `evalsi run` prints how many trials per task the observed within-task variance supports (an upper confidence bound, the worst case for a pass/fail metric that never varied) and writes `trial_advice` to `--output`; `evalsi determinism` carries it too. A report only: default trials and gates are unchanged. Server runs get it through `evalsi determinism` on their results.

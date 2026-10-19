@@ -1,5 +1,7 @@
 # UNVERIFIED: written from Harness²'s Codex launcher flags and this repo's run-spec
-# schema. It has not been run against a live Codex CLI or model.
+# schema. It has not been run against a live Codex CLI or model. Measured only that
+# Codex 0.163.0 honours the proxy variables (scripts/probe-cli-proxy.py); it also
+# contacts chatgpt.com, github.com and api.github.com, which this allowlist denies.
 #
 # The Codex CLI (`codex exec --json`) as a bring-your-own CLI agent inside the
 # task's sandbox, with the strongest network policy the sandbox supports: a
