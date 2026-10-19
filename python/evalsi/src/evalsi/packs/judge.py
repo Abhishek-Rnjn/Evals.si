@@ -78,6 +78,11 @@ _FENCE_TAGS = (
     "goal",
     "conversation",
     "your_tools",
+    "reads",
+    "evidence_bank",
+    "required_evidence",
+    "expected_answer",
+    "final_answer",
 )
 # A model can read near-misses as closing tags too: whitespace or invisible
 # characters around the slash (`</ response>`, `<\u200b/response>`) and full-width brackets.
