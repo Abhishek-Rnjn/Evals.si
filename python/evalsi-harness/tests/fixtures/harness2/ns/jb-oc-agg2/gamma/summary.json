@@ -1,0 +1,45 @@
+{
+ "task_id": "gamma",
+ "base": [
+  {
+   "label": "base1",
+   "run_dir": "/original/machine/gamma/base1",
+   "run_id": "jb-oc-agg2/gamma/base1"
+  },
+  {
+   "label": "base2",
+   "run_dir": "/original/machine/gamma/base2",
+   "run_id": "jb-oc-agg2/gamma/base2"
+  }
+ ],
+ "arms": {
+  "agg": {
+   "ok": true
+  }
+ },
+ "selections": {
+  "agg": {
+   "task_id": "gamma",
+   "k": 2,
+   "chosen_id": "A",
+   "chosen_label": "agg1",
+   "chosen_run_id": "jb-oc-agg2/gamma/agg1",
+   "chosen_is_base": false,
+   "why": "",
+   "id_map": {},
+   "dropped": [],
+   "n_candidates": 2,
+   "ok": true,
+   "fallback": false,
+   "error": "",
+   "usd": 0.5,
+   "experience": {},
+   "trivial": false,
+   "evidence": "deliverable",
+   "chosen_run_dir": "/original/machine/gamma/agg1",
+   "harness_fingerprint": "",
+   "arm": "agg"
+  }
+ },
+ "errors": []
+}
