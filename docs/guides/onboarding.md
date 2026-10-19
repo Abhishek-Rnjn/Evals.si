@@ -147,3 +147,6 @@ This is an initial slice of PROD-01/PROD-02/GTM-02 in the
 [product roadmap](../PRODUCT-ROADMAP.md), not a claim of enterprise qualification,
 signed evidence, immutable dataset governance or completed customer onboarding.
 The [CI guide](gate-an-agent-in-ci.md) explains the underlying gate workflow.
+
+For the next dataset-lifecycle slice, [create and pin a dataset snapshot](dataset-snapshots.md)
+and review its item-level diff before accepting a new test-set version.

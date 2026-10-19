@@ -77,6 +77,7 @@ citation-accuracy  2  0.500  [0.095, 0.905]        0       0
 The second answer cites passage `[4]`, but only two passages were retrieved. Add a judge and the `faithfulness`, `answer-relevance`, `context-precision` and `context-recall` metrics tell you whether retrieval or generation is at fault ([guide](docs/guides/evaluate-rag.md)).
 
 For the unreleased setup commands and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
+For unreleased dataset version review and digest-pinned runs, see [dataset snapshots](docs/guides/dataset-snapshots.md).
 
 Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
 

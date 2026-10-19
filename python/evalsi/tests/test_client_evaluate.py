@@ -47,7 +47,12 @@ def _skip(reason: str) -> None:
 
 
 @pytest.fixture(scope="module")
-def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+def server_datasets(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp("server-datasets")
+
+
+@pytest.fixture(scope="module")
+def server(tmp_path_factory: pytest.TempPathFactory, server_datasets: Path) -> Iterator[str]:
     work = tmp_path_factory.mktemp("evalsid")
     binary = os.environ.get("EVALSI_E2E_EVALSID", "")
     if not binary:
@@ -67,13 +72,12 @@ def server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     config = work / "evalsi.yaml"
-    (work / "datasets").mkdir()
     config.write_text(
         json.dumps(
             {
                 "listen": f"127.0.0.1:{port}",
                 "data_dir": str(work / "data"),
-                "datasets_dir": str(work / "datasets"),
+                "datasets_dir": str(server_datasets),
                 "worker": {"command": [sys.executable, "-m", "evalsi"], "no_cache": True},
             }
         )
@@ -177,6 +181,58 @@ def test_upload_retry_run_and_delete(server: str, tmp_path: Path) -> None:
         client.delete_run(first["id"])
         with pytest.raises(ServerError, match="not_found"):
             client.get_run(first["id"])
+
+
+def test_snapshot_run_verifies_pin_and_confines_the_importer(
+    server: str,
+    server_datasets: Path,
+    tmp_path: Path,
+) -> None:
+    from evalsi.dataset_snapshots import IDENTITY_KEY, create_snapshot
+
+    source = tmp_path / "snapshot-source.jsonl"
+    source.write_text(
+        json.dumps(
+            {
+                "id": "one",
+                "output": "Paris",
+                "reference": "Paris",
+                "provenance": {"trace_id": "approved-fixture"},
+            }
+        )
+        + "\n"
+    )
+    folder = server_datasets / "uploaded/default/support"
+    folder.mkdir(parents=True)
+    artifact = folder / "v1.snapshot.json"
+    snapshot = create_snapshot(source, artifact, name="support", version="v1", owner="test-team")
+    relative = artifact.relative_to(server_datasets).as_posix()
+    spec = {
+        "dataset": {"uri": f"snapshot://{relative}?sha256={snapshot.sha256}"},
+        "evaluators": [{"ref": "exact-match"}],
+        "gates": [{"metric": "exact-match", "min": 1}],
+    }
+    with Client(server) as client:
+        created = client.create_run(spec, project="default")
+        for _ in client.watch_run(created["id"]):
+            pass
+        assert client.get_run(created["id"])["status"] == "RUN_STATUS_SUCCEEDED"
+        page = client.list_run_results(created["id"])
+        identity = page["records"][0]["metadata"][IDENTITY_KEY]
+        assert identity["sha256"] == snapshot.sha256
+        assert identity["provenance"]["trace_id"] == "approved-fixture"
+        # A valid artifact outside datasets_dir still cannot bypass path confinement.
+        outside = server_datasets.parent / "outside-snapshot.json"
+        shutil.copyfile(artifact, outside)
+        escaped = {
+            **spec,
+            "dataset": {"uri": f"snapshot://../{outside.name}?sha256={snapshot.sha256}"},
+        }
+        with pytest.raises(ServerError, match=r"outside|inside"):
+            client.create_run(escaped, project="default")
+        artifact.write_text(artifact.read_text().replace(snapshot.sha256, "0" * 64))
+        with pytest.raises(ServerError, match="SHA-256 mismatch"):
+            client.create_run(spec, project="default")
 
 
 def test_evaluate_options_match_in_process(server: str) -> None:

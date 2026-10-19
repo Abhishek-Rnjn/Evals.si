@@ -6,13 +6,16 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- `evalsi dataset overlap` checks independently pinned tuning/held-out snapshots for shared IDs and exact normalized inputs, including renamed cases. Its opt-in CI policy exits 3 on overlap and 1 on incomplete input coverage; reports omit raw payloads and group duplicate inputs without a Cartesian expansion. Includes reproducible clean and deliberately overlapping split controls.
+- `evalsi dataset snapshot`, `inspect`, `verify` and `diff` create and review portable named datasets with explicit record IDs, owners, held-out/tuning labels and provenance. The `snapshot://` importer requires an approved SHA-256 pin before local or worker execution; publication is atomic and never overwrites an existing path. This is an initial dataset-lifecycle slice, not a central registry or approval service.
 - `scripts/probe-cli-proxy.py` runs a command with the proxy variables the sandbox sets pointed at a logging listener and prints the hosts it asked for, to check that a CLI agent honours the egress allowlist. Codex 0.163.0 and OpenCode 1.19.3 do, and both need more hosts than a one-host allowlist (see the Harness² guide).
 
-- **`builtin/evidence-stage-audit`.** A deterministic funnel for agents that read evidence: required passages retrieved, then held by active evidence the answer cites, then the expected answer present. Each stage is scored only when the one before passed, so its mean is conditional. Needs `evidence_state` and a `{evidence, answer}` reference. 
+- **`builtin/evidence-stage-audit`.** A deterministic funnel for agents that read evidence: required passages retrieved, then held by active evidence the answer cites, then the expected answer present. Each stage is scored only when the one before passed, so its mean is conditional. Needs `evidence_state` and a `{evidence, answer}` reference.
 - **`builtin/evidence-stage-judge`.** The same funnel graded by a judge in one call: it reads paraphrase and needs only the expected answer (or `{evidence, answer}`) as the reference. Metrics `judged-evidence-retrieved`, `judged-evidence-kept-and-used`, `judged-answer-from-evidence`, each scored only if the one before passed in the judge's verdict. Tested with a scripted judge only; it is uncalibrated against human labels, and the score metadata flags a clipped transcript.
 
 - **`builtin/rubric-grade`.** A judge grades the final answer against the rubric a `lab://` or `jobbench://` task carries in `metadata.grading.rubric` (a list, or `{"rubrics": [{criterion, weight}]}`) and scores the weighted share of criteria met in one judge call. It sees the answer text only, not files left in the workspace, so it is a stand-in for the benchmarks' graders, and it is uncalibrated against human labels. A record with no rubric is skipped; a rubric of an unknown shape or a judge that misses a criterion is an error.
 - **Variance-aware trial recommendation.** With `trials` above 1, `evalsi run` prints how many trials per task the observed within-task variance supports (the largest per-task variance bound: exact binomial for pass/fail, chi-square for numeric) and writes `trial_advice` to `--output`; `evalsi determinism` carries it too. A report only: default trials and gates are unchanged. Server runs get it through `evalsi determinism` on their results.
+
 
 - **Clean checker isolation.** `checker.isolation: clean` with `checker.outputs` runs the checker in a fresh sandbox of the same environment that receives only the agent's declared output files, so edited tests, shims on `PATH` and installed packages cannot reach the grader. New `Checker.isolation` and `Checker.outputs` proto fields; the server validates them.
 - **`builtin/trial-tampering` reward-hacking signals.** Flags edited tests or protected files, the expected answer added as a literal to non-test code, and tool calls naming hidden checker files. A CLI agent with no trajectory reader is scored on its diff; a record with neither is skipped. With `summary.exclude_flagged_trials`, trials it flags are not credited by `pass@k` and `pass^k` (off by default; local and server summaries agree). The harness now records `metadata.checker_files`.
@@ -23,6 +26,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
+- Snapshot loading rejects metadata remapping that could replace its verified identity and canonicalizes nested object keys before evaluation, keeping structured input and tool-call argument text stable under the same approved pin.
 - CI baseline validation now compares the complete checker configuration and validates each run against its dataset, trials and evaluator coverage. Shared skips, errors, duplicate rows and omitted scores cannot masquerade as complete paired evidence.
 - Doctor honors `EVALSI_SANDBOX_CONFIG`, requires namespaced-or-stronger isolation for agent readiness and surfaces sanitized sandbox enforcement warnings without printing private probe details.
 

@@ -1,0 +1,15 @@
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: support-refunds-v2
+spec:
+  dataset:
+    uri: snapshot://support-v2.evalsi.json?sha256=2999ec2b57a0c179b974feeb8d1d669a358567d430d77378ff517f494b755a16
+  evaluators:
+  - ref: exact-match
+  gates:
+  - metric: exact-match
+    min: 1
+  - metric: exact-match
+    stat: GATE_STAT_ERROR_RATE
+    max: 0

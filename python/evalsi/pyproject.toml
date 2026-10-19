@@ -60,6 +60,9 @@ finetune = "evalsi.packs.finetune:PACK"
 ml-classic = "evalsi.packs.ml_classic:PACK"
 ml-monitoring = "evalsi.packs.ml_monitoring:PACK"
 
+[project.entry-points."evalsi.importers"]
+snapshot = "evalsi.dataset_snapshots:import_snapshot"
+
 [project.urls]
 Homepage = "https://evalsi.dev/"
 Documentation = "https://evalsi.dev/"

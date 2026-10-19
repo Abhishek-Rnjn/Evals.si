@@ -55,6 +55,13 @@ def load_records(
     unknown = set(mapping or {}) - set(RECORD_FIELDS)
     if unknown:
         raise DatasetError(f"mapping has unknown record fields {sorted(unknown)}")
+    if (
+        isinstance(source, str)
+        and source.startswith("snapshot://")
+        and mapping
+        and mapping.get("metadata", "metadata") != "metadata"
+    ):
+        raise DatasetError("snapshot datasets do not support metadata remapping")
     rows: Iterable[Mapping[str, Any] | Record]
     if isinstance(source, str) and source.startswith("hf://"):
         rows = _hf_rows(source)
