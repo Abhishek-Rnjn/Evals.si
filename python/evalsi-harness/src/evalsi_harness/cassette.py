@@ -34,6 +34,7 @@ from evalsi_harness.models import (
     Message,
     ModelError,
     ModelTurn,
+    TokenTrace,
     ToolCallRequest,
     ToolSpec,
 )
@@ -67,6 +68,7 @@ def _turn_to_dict(turn: ModelTurn) -> dict[str, Any]:
         **({"reasoning_tokens": turn.reasoning_tokens} if turn.reasoning_tokens else {}),
         **({"model": turn.model} if turn.model else {}),
         **({"switched_from": turn.switched_from} if turn.switched_from else {}),
+        **({"tokens": turn.tokens.to_dict()} if turn.tokens is not None else {}),
     }
 
 
@@ -82,6 +84,7 @@ def _turn_from_dict(data: dict[str, Any]) -> ModelTurn:
         reasoning_tokens=data.get("reasoning_tokens", 0),
         model=data.get("model", ""),
         switched_from=data.get("switched_from", ""),
+        tokens=TokenTrace.from_dict(data["tokens"]) if data.get("tokens") else None,
     )
 
 
