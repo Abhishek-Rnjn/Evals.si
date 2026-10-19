@@ -21,7 +21,7 @@ A judge failure is never a zero anywhere in this chain: an ungraded Harness² ru
 ## Licensing and contamination
 
 - **WorkBuddy-Bench** is under a custom Tencent license with a territorial limitation. Read it before downloading. Evals.si ships none of its data, instructions or tests, and the fixtures here are invented. The loaders read a directory you downloaded under that license.
-- **JobBench** rubrics (`RUBRICS.json`) are public online. They are a contamination risk for any agent with web access. `jobbench://` copies only `task_folder/` into the sandbox, never the rubric or the `expected/`, `reference/` and `eval_result/` folders; it keeps the rubric in the record's metadata for your judge. Keep that metadata and your dataset files away from the agent, and add `contamination-fetch` to the run's evaluators.
+- **JobBench** rubrics (`RUBRICS.json`) are public online. They are a contamination risk for any agent with web access. `jobbench://` copies only `task_folder/` into the sandbox, never the rubric or the `expected/`, `reference/` and `eval_result/` folders; it keeps the rubric in the record's metadata, where `builtin/rubric-grade` reads it: a judge grades the agent's final answer text against each criterion and scores the weighted share met. It does not see files the agent left in the workspace and is uncalibrated, so treat it as a stand-in for the benchmark's own grader. Keep that metadata and your dataset files away from the agent, and add `contamination-fetch` to the run's evaluators.
 - **LAB** needs Pandoc and Poppler in the image to read its documents; WorkBuddy-Bench needs Docker for its own runner. Neither is provided here: use `image=` to name an image you built.
 
 ## Importing tasks
