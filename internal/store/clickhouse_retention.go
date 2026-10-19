@@ -188,7 +188,9 @@ func (c *clickhouse) retainTraces(ctx context.Context, t time.Time, pending []wa
 	}
 	var writes []map[string]any
 	var n int64
-	err := c.query(ctx, `SELECT project,trace_id,start_ns,service,base64Encode(summary) AS summary,base64Encode(record) AS record,record_hash FROM trace_current
+	err := c.query(ctx, `SELECT project,trace_id,start_ns,service,
+ if(start_ns>={before:Int64},base64Encode(summary),'') AS summary,
+ if(start_ns>={before:Int64},base64Encode(record),'') AS record,record_hash FROM trace_current
  WHERE start_ns<{before:Int64} OR (project,trace_id) IN (SELECT project,trace_id FROM trace_retention_requests FINAL WHERE version={version:Int64})`, params, func(line []byte) error {
 		var row struct {
 			Project string `json:"project"`

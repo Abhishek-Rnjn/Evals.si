@@ -17,6 +17,18 @@ type retentionTestTransport struct {
 	base                     http.RoundTripper
 	failPrefix               string
 	maxURI, maxBatch, staged int
+	downloaded               int64
+}
+
+type retentionCountingBody struct {
+	io.ReadCloser
+	bytes *int64
+}
+
+func (r *retentionCountingBody) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	*r.bytes += int64(n)
+	return n, err
 }
 
 func (r *retentionTestTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -45,7 +57,54 @@ func (r *retentionTestTransport) RoundTrip(req *http.Request) (*http.Response, e
 		r.failPrefix = ""
 		return nil, errors.New("fixture: cleanup failed after tombstone")
 	}
-	return r.base.RoundTrip(req)
+	response, err := r.base.RoundTrip(req)
+	if err == nil {
+		response.Body = &retentionCountingBody{ReadCloser: response.Body, bytes: &r.downloaded}
+	}
+	return response, err
+}
+
+func TestClickHouseRetentionDoesNotDownloadExpiredPayloads(t *testing.T) {
+	st, c := reviewClickHouse(t)
+	ctx := t.Context()
+	cutoff := time.Now()
+	w := revisionTrace("expired", strings.Repeat("expired payload", 100000), cutoff.Add(-time.Hour))
+	acceptRevision(t, st, w)
+	publishRevision(t, st, w)
+	transport := &retentionTestTransport{base: http.DefaultTransport}
+	c.client.Transport = transport
+	if _, err := st.DeleteTracesBefore(ctx, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	if transport.downloaded > 64<<10 {
+		t.Fatalf("retention downloaded expired record payload: %d bytes", transport.downloaded)
+	}
+	if _, _, err := st.GetTrace(ctx, "p", "revision"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expired projection survived: %v", err)
+	}
+}
+
+func TestLegacyAdoptionPreservesUnexpiredVisibleScores(t *testing.T) {
+	st, c := reviewClickHouse(t)
+	ctx := t.Context()
+	cutoff := time.Now()
+	live := revisionTrace("visible", "same input", cutoff.Add(time.Hour))
+	params := chParams{"summary": b64(live.Trace.Summary), "record": b64(live.Trace.Record), "score": b64(revisionScores(1)[0]), "start": fmt.Sprint(live.Pending.StartNS)}
+	if err := c.exec(ctx, `INSERT INTO traces(project,trace_id,service,start_ns,summary,record,version) SELECT 'p','revision','studio',{start:Int64},base64Decode({summary:String}),base64Decode({record:String}),1`, params, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.exec(ctx, `INSERT INTO trace_results(project,trace_id,policy,evaluator,result,version) SELECT 'p','revision','quality','quality',base64Decode({score:String}),1`, params, nil); err != nil {
+		t.Fatal(err)
+	}
+	old := revisionTrace("legacy", "same input", cutoff.Add(-time.Hour))
+	if _, err := st.db.ExecContext(ctx, `INSERT INTO watch_pending(project,trace_id,stream,payload,start_ns) VALUES(?,?,?,?,?)`, old.Pending.Project, old.Pending.TraceID, old.Pending.Stream, old.Pending.Payload, old.Pending.StartNS); err != nil {
+		t.Fatal(err)
+	}
+	publishRevision(t, st, old)
+	if _, err := st.DeleteTracesBefore(ctx, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	assertCurrentRevisionScore(t, st, 1)
 }
 
 func TestClickHouseRetentionStagesBoundedCompleteReferences(t *testing.T) {
@@ -144,14 +203,19 @@ func TestClickHouseRetentionPartialFailureAllowsIdenticalReacceptance(t *testing
 }
 
 type publicationTimeoutTransport struct {
-	base  http.RoundTripper
-	query string
-	body  []byte
+	base   http.RoundTripper
+	prefix string
+	query  string
+	body   []byte
 }
 
 func (r *publicationTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	query := req.URL.Query().Get("query")
-	if r.query == "" && strings.HasPrefix(query, "INSERT INTO traces ") {
+	prefix := r.prefix
+	if prefix == "" {
+		prefix = "INSERT INTO traces "
+	}
+	if r.query == "" && strings.HasPrefix(query, prefix) {
 		r.query = query
 		var err error
 		r.body, err = io.ReadAll(req.Body)
@@ -162,6 +226,42 @@ func (r *publicationTimeoutTransport) RoundTrip(req *http.Request) (*http.Respon
 		return nil, context.DeadlineExceeded
 	}
 	return r.base.RoundTrip(req)
+}
+
+func TestLegacyAdoptionRetainsExpiryAcrossResultTimeout(t *testing.T) {
+	st, c := reviewClickHouse(t)
+	ctx := t.Context()
+	cutoff := time.Now()
+	old := revisionTrace("legacy", "old input", cutoff.Add(-time.Hour))
+	if _, err := st.db.ExecContext(ctx, `INSERT INTO watch_pending(project,trace_id,stream,payload,start_ns) VALUES(?,?,?,?,?)`, old.Pending.Project, old.Pending.TraceID, old.Pending.Stream, old.Pending.Payload, old.Pending.StartNS); err != nil {
+		t.Fatal(err)
+	}
+	live := revisionTrace("live", "live input", cutoff.Add(time.Hour))
+	acceptRevision(t, st, live)
+	publishRevision(t, st, live)
+	publishRevision(t, st, old) // Historical legacy work cannot publish over live input.
+	transport := &publicationTimeoutTransport{base: http.DefaultTransport, prefix: "INSERT INTO trace_results "}
+	c.client.Transport = transport
+	if err := st.PutWatchResults(ctx, PolicyLease{}, old.Pending, "quality", revisionScores(0)); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected uncertain result write: %v", err)
+	}
+	restarted := newStore(st.db)
+	restarted.UseTraces(c)
+	if _, err := restarted.DeleteTracesBefore(ctx, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.exec(ctx, transport.query, nil, bytes.NewReader(transport.body)); err != nil {
+		t.Fatal(err)
+	}
+	assertClickHousePayloadCount(t, c, "trace_results", 1)
+	if _, err := restarted.DeleteTracesBefore(ctx, cutoff); err != nil {
+		t.Fatal(err)
+	}
+	assertClickHousePayloadCount(t, c, "trace_results", 0)
+	_, record, err := st.GetTrace(ctx, "p", "revision")
+	if err != nil || record.GetOutput().GetText() != "live input" {
+		t.Fatalf("cleanup damaged live projection: %v %v", record, err)
+	}
 }
 
 func TestRetentionFencesSupersededTimedOutPublication(t *testing.T) {

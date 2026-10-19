@@ -142,6 +142,26 @@ func (s *Store) bindLegacyWatch(ctx context.Context, tx *txn, item WatchTraceWri
 			revision = h.Revision
 		}
 	}
+	// Adoption commits before any evaluator/result request. A remote result
+	// INSERT may outlive its timeout and rollback; its expiry must not depend
+	// on that result transaction or on this legacy row remaining pending.
+	var start int64
+	if err := tx.QueryRowContext(ctx, `SELECT start_ns FROM watch_pending WHERE project=? AND trace_id=? AND stream=? AND payload=?`, item.Pending.Project, item.Pending.TraceID, item.Pending.Stream, item.Pending.Payload).Scan(&start); err != nil {
+		return 0, 0, "", err
+	}
+	if h.Hash == hash && h.ScoreRevision == scoreRevision && !h.Deleted {
+		// The same generation may already have a newer, unexpired visible
+		// projection. Adopting an older stream must not shorten its lifetime.
+		start = max(start, h.StartNS)
+	}
+	if err := retainWatchScore(ctx, tx, item.Pending.Project, item.Pending.TraceID, scoreBinding(hash, scoreRevision), start); err != nil {
+		return 0, 0, "", err
+	}
+	if h.Hash == hash && h.ScoreRevision == scoreRevision {
+		if err := retainWatchScore(ctx, tx, item.Pending.Project, item.Pending.TraceID, h.ProjectionHash, start); err != nil {
+			return 0, 0, "", err
+		}
+	}
 	_, err = tx.ExecContext(ctx, `UPDATE watch_pending SET revision=?,score_revision=?,record_hash=? WHERE project=? AND trace_id=? AND stream=? AND payload=?`, revision, scoreRevision, hash, item.Pending.Project, item.Pending.TraceID, item.Pending.Stream, item.Pending.Payload)
 	return revision, scoreRevision, hash, err
 }
