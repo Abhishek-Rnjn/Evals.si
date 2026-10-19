@@ -1,1 +1,1 @@
-print('synthetic')
+print("synthetic")

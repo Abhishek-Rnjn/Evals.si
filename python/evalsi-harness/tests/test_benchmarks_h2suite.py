@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -30,8 +31,8 @@ from evalsi_harness.formats import FORMATS
 SECRET = "SYNTHETIC-RUBRIC-MARKER-7f3a"
 
 
-def env_of(row: dict) -> dict:
-    env: dict = row["metadata"]["environment"]
+def env_of(row: dict[str, Any]) -> dict[str, Any]:
+    env: dict[str, Any] = row["metadata"]["environment"]
     return env
 
 
@@ -106,7 +107,6 @@ def test_grading_a_score_json() -> None:
         bad = grade_harbor(out(0, "score.json", text), "", 0, None)
         assert not bad.passed
         assert bad.error
-        assert bad.score != 0.0 or bad.error
     # Harbor's own reward files still grade as before.
     assert grade_harbor(out(0, "reward.txt", "1"), "", 0, None).passed
 
@@ -146,7 +146,7 @@ def test_lab_tasks_are_discovered_and_carry_the_rubric_only_in_metadata(tmp_path
     row = rows[0]
     assert "Summarise the synthetic data room." in row["input"]
     assert "`memo.docx` — A short memo" in row["input"]
-    assert "`notes.md`\n" in row["input"] + "\n"
+    assert "- `notes.md`\n" in row["input"] + "\n"
     assert SECRET not in row["input"]
     env = env_of(row)
     assert SECRET not in json.dumps(env)
@@ -177,12 +177,14 @@ def test_lab_options_and_errors(tmp_path: Path) -> None:
     assert area["id"] == "banking-finance/task-two"
     with pytest.raises(TaskFormatError, match="no tasks"):
         load_lab(str(tasks), tasks="nope")
-    with pytest.raises(TaskFormatError, match="no task.json"):
-        load_lab(str(tmp_path / "tasks" / "banking-finance" / "task-two" / "x"), tasks="")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(TaskFormatError, match=r"no task\.json"):
+        load_lab(str(empty))
     with pytest.raises(TaskFormatError, match="network must be"):
         load_lab(str(tasks), network="host")
     (tasks / "banking-finance" / "task-two" / "task.json").write_text('{"criteria": []}')
-    with pytest.raises(TaskFormatError, match="banking-finance/task-two: task.json has no"):
+    with pytest.raises(TaskFormatError, match=r"banking-finance/task-two: task\.json has no"):
         load_lab(str(tasks))
 
 
@@ -237,7 +239,7 @@ def test_jobbench_rubric_is_optional_and_can_be_left_out(tmp_path: Path) -> None
     assert skipped["metadata"]["grading"]["rubric"] is None
     root = jb_tree(tmp_path / "c")
     (root / "accountant" / "task1" / "RUBRICS.json").write_text("{torn")
-    with pytest.raises(TaskFormatError, match="accountant/task1: RUBRICS.json is not valid"):
+    with pytest.raises(TaskFormatError, match=r"accountant/task1: RUBRICS\.json is not valid"):
         load_jobbench(str(root))
     # One task directory, with its parent as the occupation.
     [one] = load_jobbench(str(root / "accountant" / "task1"), rubric="false")

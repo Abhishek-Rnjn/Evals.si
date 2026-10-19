@@ -66,6 +66,10 @@ ClickHouse coverage retain their previous evidence; this does not certify every
 trace path or historical data. See [the live record](verification/LEFTOVERS-2026-10-17.md)
 and [decision 0019](decisions/0019-trace-redaction.md).
 
+## Harness² interop (H7, 2026-10-19)
+
+Built from a read of the Harness² source and tested on synthetic fixtures; nothing has run against a recorded Harness² run, a live model or a real WorkBuddy-Bench, LAB or JobBench task. Open: the Propose–Probe–Compose spike (a go or no-go from live runs); the `runs/` layout and `score.json` verifier fields checked against a pinned release; an OpenCode trajectory reader; reading executor telemetry live; per-skill and per-subagent ablation; judge-graded rubrics for LAB and JobBench; a human-labelled check of the judge before `calibrate` results are trusted; whether the Codex and OpenCode CLIs honour `HTTPS_PROXY` under the egress allowlist; the false-positive rates of `harness-edit-weakened-guardrail` and `contamination-fetch` on real harness edits and trajectories. Details are in [HARNESS-ROADMAP.md](HARNESS-ROADMAP.md#tracking) and [the guide](guides/harness2.md).
+
 ## Production-readiness review (2026-10-16)
 
 A review against a generic checklist for software that serves paying customers. Evals.si is self-hosted, so the billing, SOC 2/HIPAA/PCI, account-system (SAML, SCIM, MFA, password reset, impersonation), status-page, CDN, email-deliverability and consumer-UX items do not apply: the operator's identity provider and platform own them. They become relevant only if someone runs Evals.si as a hosted service.

@@ -17,7 +17,7 @@ const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2s
 const guides = [
   "agent-runs", "gate-an-agent-in-ci", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-harness",
-  "agent-frameworks", "operations", "end-to-end", "deepeval",
+  "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2",
 ];
 const examples = [
   "quickstart", "runs", "agent-gate", "rag", "agents", "watch", "sources", "guardrails", "annotation",
