@@ -230,3 +230,13 @@ def test_component_of_maps_the_eight_components() -> None:
     }
     assert {p: component_of(p) for p in cases} == cases
     assert component_of("notes.txt") is None
+
+
+def test_seq_mode_trees_are_read_from_the_sibling_namespace() -> None:
+    imp = import_namespace(FIXTURE)
+    seq = [e for e in imp.executions if e.kind == "chosen" and e.mode == "seq"]
+    assert seq
+    trees = {e.task_id: e.tree for e in seq}
+    assert trees["alpha/one"] is not None
+    assert trees["alpha/one"].path == "alpha__one/harnesses/c1"
+    assert trees["alpha/one"].sha256

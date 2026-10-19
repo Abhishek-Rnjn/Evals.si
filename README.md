@@ -84,7 +84,7 @@ Agents come first, because that is where evaluation is hardest. RAG and training
 ### Agents
 
 Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. A hidden checker grades the end state, and evaluators score tool calls, trajectories, loops, step budgets, policy violations and the diff. Trials give pass@k and pass^k, and gates fail the build when an agent gets worse. In production, score traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK.
-[Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) · [Evaluate a RAG pipeline](docs/guides/evaluate-rag.md) · [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Multi-service tasks](examples/multi-service/README.md)
+[Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) · [Evaluate a RAG pipeline](docs/guides/evaluate-rag.md) · [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Multi-service tasks](examples/multi-service/README.md) · [Harness² runs](docs/guides/harness2.md)
 
 ### RAG
 

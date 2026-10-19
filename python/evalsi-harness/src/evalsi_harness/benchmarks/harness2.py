@@ -280,6 +280,18 @@ def _base_executions(ns: NamespaceData) -> list[Execution]:
     return out
 
 
+def _mode_root(root: Path, mode: str) -> Path:
+    """The namespace directory that holds ``mode``'s harness trees.
+
+    ``root`` is the summary namespace (``<bench>-<sub>-agg<k>[-s<seed>][-tag]``);
+    another mode's trees are in the sibling with that mode's token.
+    """
+    if not mode or mode == "agg" or not re.fullmatch(r"[a-z]+", mode):
+        return root
+    name = re.sub(r"-agg(\d+)", rf"-{mode}\1", root.name, count=1)
+    return root if name == root.name else root.with_name(name)
+
+
 def _chosen_executions(ns: NamespaceData, notes: list[str]) -> list[Execution]:
     sels: dict[tuple[str, str, int | None], SelectionRow] = {
         (s.task_id, s.mode, s.k): s for s in ns.selections
@@ -303,7 +315,13 @@ def _chosen_executions(ns: NamespaceData, notes: list[str]) -> list[Execution]:
         tree = None
         dirname = ns.task_dirs.get(task_id)
         if dirname and _LABEL.fullmatch(label):
-            tree = read_tree(ns.root, ns.root / dirname / "harnesses" / label, notes)
+            # Harness² writes a mode's harness trees under that mode's own
+            # namespace (``…-seq2``), beside the ``…-agg2`` one that holds
+            # summary.json (core/schedule.py, run_task and _resume).
+            root = _mode_root(ns.root, mode)
+            tree = read_tree(root, root / dirname / "harnesses" / label, notes)
+            if tree is None and root != ns.root:
+                tree = read_tree(ns.root, ns.root / dirname / "harnesses" / label, notes)
         out.append(
             Execution(
                 task_id=task_id,
