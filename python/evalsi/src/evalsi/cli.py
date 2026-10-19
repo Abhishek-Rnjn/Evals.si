@@ -249,6 +249,12 @@ def _add_harness_tools(sub: Any) -> None:
     plan.add_argument("base", help="the base harness directory")
     plan.add_argument("adopted", help="the adopted harness directory")
     plan.add_argument("--out", required=True, help="directory for the variants and manifest.json")
+    plan.add_argument(
+        "--by",
+        choices=["component", "unit"],
+        default="component",
+        help="one variant per component (default) or per skill, sub-agent, script and plugin",
+    )
     plan.set_defaults(func=_cmd_ablate_plan)
     attr = ab_sub.add_parser(
         "attribute", help="per-component effect (full minus revert) from results files"
@@ -265,6 +271,17 @@ def _add_harness_tools(sub: Any) -> None:
     )
     attr.add_argument("--confidence", type=float, default=0.95)
     attr.add_argument("--format", choices=["table", "json"], default="table")
+    attr.add_argument(
+        "--harm",
+        action="store_true",
+        help="also list, per component, the tasks the edit helped and the tasks it hurt",
+    )
+    attr.add_argument(
+        "--min-effect",
+        type=float,
+        default=0.0,
+        help="with --harm: a per-task difference this small or smaller counts as unchanged",
+    )
     attr.set_defaults(func=_cmd_ablate_attribute)
 
 
@@ -1118,7 +1135,7 @@ def _cmd_ablate_plan(args: argparse.Namespace) -> int:
     from evalsi import ablation
 
     try:
-        manifest = ablation.plan_dirs(args.base, args.adopted, args.out)
+        manifest = ablation.plan_dirs(args.base, args.adopted, args.out, args.by)
     except ablation.AblationError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -1140,16 +1157,28 @@ def _cmd_ablate_attribute(args: argparse.Namespace) -> int:
             if not sep or not component or not path:
                 raise ablation.AblationError(f"--variant wants COMPONENT=FILE, got {item!r}")
             variants[component] = load(path)
+        full = load(args.full)
         attributions = ablation.attribute(
-            load(args.base), load(args.full), variants, args.metric, level=args.confidence
+            load(args.base), full, variants, args.metric, level=args.confidence
+        )
+        harms = (
+            ablation.harm_check(full, variants, args.metric, min_effect=args.min_effect)
+            if args.harm
+            else None
         )
     except (OSError, json.JSONDecodeError, ablation.AblationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.format == "json":
-        print(json.dumps([a.to_dict() for a in attributions], indent=2))
+        rows: Any = [a.to_dict() for a in attributions]
+        if harms is not None:
+            rows = {"attribution": rows, "harm": [h.to_dict() for h in harms]}
+        print(json.dumps(rows, indent=2))
     else:
         print(ablation.attribution_table(attributions))
+        if harms is not None:
+            print()
+            print(ablation.harm_table(harms))
     return 0
 
 

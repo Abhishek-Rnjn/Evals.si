@@ -33,7 +33,10 @@ interleaving should use a prebuilt image (``image=`` or ``docker_image``).
 Options (query string): ``tasks`` (comma-separated names), ``image``
 (override), ``workdir`` (default: the task's, the Dockerfile's last
 ``WORKDIR``, else /app), ``network`` (``allow`` or ``deny``; default: the
-task's, ``allow`` unless it says no-network), ``oracle=true`` (adds the
+task's, ``allow`` unless it says no-network), ``git=true`` (makes the workdir a git
+repository whose one commit is the task as it starts, so the agent's changes are recorded
+as a diff that ``trial-tampering`` can read; needs git in the image, and does nothing in a
+workdir that already is a repository), ``oracle=true`` (adds the
 reference solution under /solution; an agent that runs
 ``bash /solution/solve.sh``, or ``solution.sh`` for Terminal-Bench 1,
 validates the setup), ``reward`` (``harbor``, the default, or ``score.json``).
@@ -365,6 +368,20 @@ def _service_lifetime(config: dict[str, Any]) -> str | None:
     return _seconds(min(max(3600.0, agent + test + 1800), 86400.0))
 
 
+# Makes the workdir a git repository whose single commit is the task as it starts, so the
+# agent's changes show up as a diff (``trial-tampering`` and code review read it). Left alone
+# when the workdir already is a repository. Needs git in the image.
+GIT_BASELINE = (
+    "git rev-parse --is-inside-work-tree >/dev/null 2>&1 || "
+    "(git init -q && git config user.email evalsi@example.invalid && "
+    "git config user.name evalsi && git add -A && git commit -q --allow-empty -m base)"
+)
+
+
+def _flag(value: str | None) -> bool:
+    return (value or "").lower() in ("1", "true", "yes")
+
+
 def _environment(
     *,
     build: Build | None,
@@ -376,6 +393,7 @@ def _environment(
     executable: list[str],
     checker: dict[str, Any],
     setup_timeout: Any,
+    git: bool = False,
 ) -> dict[str, Any]:
     setup = list(build.setup) if build else []
     all_files = {**(build.files if build else {}), **files}
@@ -384,6 +402,11 @@ def _environment(
         setup.insert(0, "chmod +x " + " ".join(shlex.quote(f) for f in exec_files))
     if decode := decode_command(all_files):
         setup.insert(0, decode)
+    # Setup that needs the network (package installs) widens the setup network; the git
+    # baseline does not, so it must not turn a restricted task's setup into one that does.
+    needs_network = bool(setup)
+    if git:
+        setup.append(GIT_BASELINE)
     checker = {**checker, "command": _with_decode(checker["command"], checker["files"])}
     environment: dict[str, Any] = {
         "image": image,
@@ -394,7 +417,7 @@ def _environment(
         "checker": checker,
         "command_timeout": "10m",
     }
-    if setup:
+    if needs_network:
         # Package installs in RUN steps need the network even when the
         # agent runs without it.
         environment["setup_network"] = "allow"
@@ -538,6 +561,7 @@ def _harbor_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
                 executable=executable,
                 checker=checker,
                 setup_timeout=env_cfg.get("build_timeout_sec"),
+                git=_flag(options.get("git")),
             ),
         },
     }
@@ -632,6 +656,7 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
                     executable=[],
                     checker=checker,
                     setup_timeout=None,
+                    git=_flag(options.get("git")),
                 ),
             },
         },

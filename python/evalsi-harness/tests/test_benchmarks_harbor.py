@@ -182,3 +182,94 @@ SKIPPED tests/test_outputs.py::test_three
     ok = report.replace("FAILED tests/test_outputs.py::test_two - AssertionError: x - y", "")
     assert grade_pytest(out(ok, 0, None), "", 0, None).passed
     assert not grade_pytest(out("collected 0 items", 4, None), "", 0, None).passed
+
+
+def test_git_option_adds_a_baseline_commit_to_the_setup(tmp_path: Path) -> None:
+    from evalsi_harness.benchmarks.harbor import GIT_BASELINE
+
+    fixtures.write(tmp_path)
+    [plain] = load_harbor(str(tmp_path / "harbor"))
+    assert GIT_BASELINE not in env_of(plain)["setup"]
+    for value in ("true", "1", "yes"):
+        [row] = load_harbor(str(tmp_path / "harbor"), git=value)
+        assert env_of(row)["setup"][-1] == GIT_BASELINE  # after the image's own setup
+        assert env_of(row)["setup_network"] == "allow"
+    [off] = load_harbor(str(tmp_path / "harbor"), git="false")
+    assert GIT_BASELINE not in env_of(off)["setup"]
+    [tb] = load_terminal_bench(str(tmp_path / "terminal-bench"), git="true")
+    assert env_of(tb)["setup"][-1] == GIT_BASELINE
+    [tb_plain] = load_terminal_bench(str(tmp_path / "terminal-bench"))
+    assert GIT_BASELINE not in env_of(tb_plain)["setup"]
+
+
+def test_the_baseline_command_makes_the_agents_changes_a_diff(tmp_path: Path) -> None:
+    """Run the real command in a real directory, then change a file the way an agent would."""
+    import shutil
+    import subprocess
+
+    from evalsi_harness.benchmarks.harbor import GIT_BASELINE
+
+    if shutil.which("git") is None:
+        pytest.skip("needs git")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "calc.py").write_text("def add(a, b):\n    return a - b\n")
+
+    def sh(command: str) -> str:
+        done = subprocess.run(
+            ["sh", "-c", command], cwd=work, capture_output=True, text=True, check=True
+        )
+        return done.stdout
+
+    sh(GIT_BASELINE)
+    assert sh("git log --format=%s").strip() == "base"
+    assert sh("git status --porcelain") == ""  # the task as it starts is clean
+    (work / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+    assert "+    return a + b" in sh("git diff --no-color")
+    # Run again, or in a workdir that already is a repository: nothing changes.
+    sh(GIT_BASELINE)
+    assert sh("git rev-list --count HEAD").strip() == "1"
+
+
+def test_the_git_baseline_does_not_widen_the_setup_network() -> None:
+    """A prebuilt task with no setup of its own stays without setup_network: a pod refuses a
+    wider setup network than the task's, and the baseline needs no network."""
+    from evalsi_harness.benchmarks.harbor import GIT_BASELINE, _environment
+
+    def build(git: bool) -> dict[str, Any]:
+        return _environment(
+            build=None,
+            image="img:1",
+            workdir="/app",
+            network="deny",
+            env={},
+            files={},
+            executable=[],
+            checker={"command": ["true"], "files": {}},
+            setup_timeout=None,
+            git=git,
+        )
+
+    plain, with_git = build(False), build(True)
+    assert plain["setup"] == []
+    assert "setup_network" not in plain
+    assert with_git["setup"] == [GIT_BASELINE]
+    assert "setup_network" not in with_git  # the baseline needs no network
+    # Setup that does need the network (a RUN step) still gets it, with or without the baseline.
+    from evalsi_harness.benchmarks.harbor import Build
+
+    installs = Build(setup=["pip install x"])
+    for git in (False, True):
+        env = _environment(
+            build=installs,
+            image="img:1",
+            workdir="/app",
+            network="deny",
+            env={},
+            files={},
+            executable=[],
+            checker={"command": ["true"], "files": {}},
+            setup_timeout=None,
+            git=git,
+        )
+        assert env["setup_network"] == "allow"

@@ -200,3 +200,218 @@ def test_the_cli_plans_and_attributes(tmp_path: Path, capsys: pytest.CaptureFixt
     assert rows[0]["effect"] == 0.0
     assert rows[0]["status"] == "no measurable effect"
     assert main([*argv[:-2], "--variant", "bad"]) == 2
+
+
+# --- per skill, sub-agent and script ----------------------------------------------
+
+UNIT_BASE = {"systemprompt.md": "p\n", "scripts/a.py": "1\n", "plugin/p.ts": "1\n"}
+UNIT_ADOPTED = {
+    **UNIT_BASE,
+    "skills/fmt/SKILL.md": "fmt\n",
+    "skills/fmt/scripts/run.sh": "echo\n",
+    "skills/lint/SKILL.md": "lint\n",
+    "sub_agents/coder/AGENT.md": "coder\n",
+    "scripts/a.py": "2\n",
+    "plugin/p.ts": "2\n",
+}
+
+
+def test_units_split_skills_subagents_scripts_and_plugins() -> None:
+    cases = {
+        "systemprompt.md": "c1",
+        "skills/fmt/SKILL.md": "c6:fmt",
+        "skills/fmt/scripts/run.sh": "c6:fmt",
+        "sub_agents/coder/AGENT.md": "c5:coder",
+        "scripts/a.py": "c7:scripts/a.py",
+        "plugin/p.ts": "c8:plugin/p.ts",
+        "notes.txt": "other",
+        "skills/README.md": "other",
+    }
+    for rel, unit in cases.items():
+        assert ablation.unit_of(rel) == unit, rel
+    with pytest.raises(ablation.AblationError, match="granularity"):
+        ablation.group_of("systemprompt.md", "file")
+
+
+def test_unit_planning_reverts_one_skill_and_keeps_the_rest() -> None:
+    base = {k: v.encode() for k, v in UNIT_BASE.items()}
+    adopted = {k: v.encode() for k, v in UNIT_ADOPTED.items()}
+    edits = ablation.plan(base, adopted, "unit")
+    assert [e.component for e in edits] == [
+        "c5:coder",
+        "c6:fmt",
+        "c6:lint",
+        "c7:scripts/a.py",
+        "c8:plugin/p.ts",
+    ]
+    assert edits[1].files == ["skills/fmt/SKILL.md", "skills/fmt/scripts/run.sh"]
+    assert edits[1].name == "skills: fmt"
+    # Component granularity still lumps the two skills.
+    assert [e.component for e in ablation.plan(base, adopted)] == ["c5", "c6", "c7", "c8"]
+    variant = ablation.revert_variant(base, adopted, "c6:fmt", "unit")
+    assert "skills/fmt/SKILL.md" not in variant  # reverted: the base has no such skill
+    assert variant["skills/lint/SKILL.md"] == b"lint\n"  # another skill stays adopted
+    assert variant["scripts/a.py"] == b"2\n"
+
+
+def test_unit_variants_get_safe_distinct_directories(tmp_path: Path) -> None:
+    base = write(tmp_path / "base", UNIT_BASE)
+    adopted = write(tmp_path / "adopted", UNIT_ADOPTED)
+    manifest = ablation.plan_dirs(base, adopted, tmp_path / "out", "unit")
+    assert manifest["granularity"] == "unit"
+    dirs = [c["variant_dir"] for c in manifest["components"]]
+    assert len(set(dirs)) == len(dirs) == 5
+    for d in dirs:
+        assert "/" not in d
+        assert (tmp_path / "out" / d).is_dir()
+    by_unit = {c["component"]: c["variant_dir"] for c in manifest["components"]}
+    assert not (tmp_path / "out" / by_unit["c6:fmt"] / "skills" / "fmt").exists()
+    assert (tmp_path / "out" / by_unit["c6:fmt"] / "skills" / "lint" / "SKILL.md").exists()
+
+
+def test_a_unit_is_attributed_like_a_component() -> None:
+    base = run([0.0] * 8)
+    full = run([1.0, 1, 1, 0, 1, 1, 0, 1])
+    rows = {
+        r.component: r
+        for r in ablation.attribute(base, full, {"c6:fmt": run([0.0, 1, 0, 0, 1, 0, 0, 0])}, M)
+    }
+    assert rows["c6:fmt"].name == "skills: fmt"
+    assert rows["c6:fmt"].status == ablation.EFFECT
+
+
+# --- cross-task harm ---------------------------------------------------------------
+
+
+def test_an_edit_that_helps_some_tasks_and_hurts_others_is_flagged_mixed() -> None:
+    full = run([1.0, 1, 1, 1, 0, 0, 1, 1])
+    # Reverting c1 loses t0..t2 (the edit helped them) and gains t4, t5 (the edit hurt them).
+    revert_c1 = run([0.0, 0, 0, 1, 1, 1, 1, 1])
+    revert_c2 = run([1.0, 1, 1, 1, 0, 0, 1, 1])  # a no-op edit
+    harms = {
+        h.component: h for h in ablation.harm_check(full, {"c1": revert_c1, "c2": revert_c2}, M)
+    }
+    assert [t.record for t in harms["c1"].helped] == ["t0", "t1", "t2"]
+    assert [t.record for t in harms["c1"].hurt] == ["t4", "t5"]
+    assert harms["c1"].unchanged == 3
+    assert harms["c1"].mixed
+    assert not harms["c2"].mixed
+    assert harms["c2"].unchanged == 8
+    # The average hides it: the edit's net effect on this metric is only +1/8.
+    net = sum(t.effect for t in harms["c1"].helped + harms["c1"].hurt) / 8
+    assert net == pytest.approx(1 / 8)
+
+
+def test_harm_follows_the_metric_direction_and_min_effect() -> None:
+    def lower(scores: list[float]) -> dict[str, Any]:
+        data = run(scores)
+        data["summaries"][0]["higher_is_better"] = False
+        return data
+
+    # Lower is better: full scores 0 where the revert scores 1 (helped t0), and 1 where
+    # the revert scores 0 (hurt t1).
+    harms = ablation.harm_check(lower([0.0, 1.0]), {"c1": lower([1.0, 0.0])}, M)
+    assert [t.record for t in harms[0].helped] == ["t0"]
+    assert [t.record for t in harms[0].hurt] == ["t1"]
+    assert harms[0].hurt[0].effect == -1.0  # a positive number is always an improvement
+    quiet = ablation.harm_check(run([0.55, 0.5]), {"c1": run([0.5, 0.5])}, M, min_effect=0.1)
+    assert quiet[0].helped == []
+    assert quiet[0].unchanged == 2
+    with pytest.raises(ablation.AblationError, match="min_effect"):
+        ablation.harm_check(run([1.0]), {"c1": run([1.0])}, M, min_effect=-1)
+    other = results("h@1", [0.0] * 8, tokens=1, steps=1, dataset="f" * 64)
+    with pytest.raises(ablation.AblationError, match="same dataset"):
+        ablation.harm_check(run([0.0] * 8), {"c1": other}, M)
+
+
+def test_trials_of_one_record_are_averaged() -> None:
+    def trials(values: list[float]) -> dict[str, Any]:
+        data = run([0.0])
+        data["results"] = [
+            {
+                "record_id": "t0",
+                "evaluator": "task-success",
+                "outcome": "scored",
+                "trial": k,
+                "scores": [{"name": "task-success", "number": v}],
+            }
+            for k, v in enumerate(values)
+        ]
+        return data
+
+    harms = ablation.harm_check(trials([1.0, 1.0, 0.0, 0.0]), {"c1": trials([0.0] * 4)}, M)
+    assert harms[0].helped[0].effect == pytest.approx(0.5)
+
+
+def test_the_cli_plans_by_unit_and_prints_the_harm_table(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = write(tmp_path / "base", UNIT_BASE)
+    adopted = write(tmp_path / "adopted", UNIT_ADOPTED)
+    argv = ["ablate", "plan", str(base), str(adopted), "--out", str(tmp_path / "o"), "--by", "unit"]
+    assert main(argv) == 0
+    assert '"c6:fmt"' in capsys.readouterr().out
+    files = {}
+    for name, scores in (
+        ("base", [0.0] * 8),
+        ("full", [1.0, 1, 1, 1, 0, 0, 1, 1]),
+        ("c1", [0.0, 0, 0, 1, 1, 1, 1, 1]),
+    ):
+        files[name] = tmp_path / f"{name}.json"
+        files[name].write_text(json.dumps(run(scores)))
+    argv = ["ablate", "attribute", "--metric", M, "--base", str(files["base"]), "--full"]
+    argv += [str(files["full"]), "--variant", f"c6:fmt={files['c1']}", "--harm"]
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+    assert "mixed: helps some, hurts others" in out
+    assert "sign p" in out
+    assert "t4 (-1.00)" in out
+    assert main([*argv, "--format", "json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["harm"][0]["mixed"] is True
+    assert data["attribution"][0]["component"] == "c6:fmt"
+    # Without --harm the output is the plain attribution list, as before.
+    plain = [a for a in argv if a != "--harm"]
+    assert main([*plain, "--format", "json"]) == 0
+    assert isinstance(json.loads(capsys.readouterr().out), list)
+
+
+def test_the_sign_test_is_exact_and_says_little_with_few_tasks() -> None:
+    def harm(helped: int, hurt: int) -> ablation.Harm:
+        return ablation.Harm(
+            "c1",
+            "systemprompt",
+            helped=[ablation.TaskEffect(f"h{i}", 1.0) for i in range(helped)],
+            hurt=[ablation.TaskEffect(f"x{i}", -1.0) for i in range(hurt)],
+        )
+
+    assert harm(0, 0).sign_p is None
+    assert harm(1, 1).sign_p == 1.0  # an even split
+    assert harm(5, 0).sign_p == pytest.approx(0.0625)  # 2 * (1/32): even 5 for 0 is not p < 0.05
+    assert harm(6, 0).sign_p == pytest.approx(0.03125)
+    assert harm(8, 2).sign_p == pytest.approx(2 * (1 + 10 + 45) / 1024)
+    assert harm(2, 8).sign_p == harm(8, 2).sign_p  # direction does not matter, only the split
+    assert harm(3, 3).to_dict()["sign_p"] == 1.0
+
+
+def test_a_harm_check_that_compared_nothing_says_insufficient_data(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    full = run([1.0, 1])
+    elsewhere = run([0.0, 0])
+    elsewhere["results"] = []  # a variant with no scored records at all
+    (harm,) = ablation.harm_check(full, {"c1": elsewhere}, M)
+    assert harm.compared == 0
+    assert harm.to_dict()["compared"] == 0
+    assert ablation.INSUFFICIENT in ablation.harm_table([harm])
+    assert "ok" not in ablation.harm_table([harm]).splitlines()[1].split()
+    # A variant that shares tasks is compared, and a clean one still reads "ok".
+    (clean,) = ablation.harm_check(full, {"c1": run([1.0, 1])}, M)
+    assert clean.compared == 2
+    assert "ok" in ablation.harm_table([clean]).splitlines()[1].split()
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -0.1])
+def test_min_effect_must_be_finite_and_not_negative(bad: float) -> None:
+    with pytest.raises(ablation.AblationError, match="min_effect"):
+        ablation.harm_check(run([1.0]), {"c1": run([0.0])}, M, min_effect=bad)
