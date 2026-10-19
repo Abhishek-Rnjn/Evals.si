@@ -233,3 +233,31 @@ def test_process_reward_state_is_per_episode_and_survives_a_resume() -> None:
             await env.delete_snapshot(saved)
 
     run(go())
+
+
+def test_actions_from_a_policy_fail_with_a_reason_instead_of_crashing() -> None:
+    from evalsi_harness.gym import action_from, episode_tools
+
+    assert action_from("bash", '{"command": "ls"}').arguments == {"command": "ls"}
+    assert action_from("bash", {"command": "ls"}).arguments == {"command": "ls"}
+    assert action_from("submit", "").arguments == {}
+    assert "not valid JSON" in action_from("bash", "{oops").error
+    assert "JSON object" in action_from("bash", "[1]").error
+    assert "tool name" in action_from(None).error
+    assert [t["name"] for t in episode_tools()] == ["bash", "read_file", "write_file", "submit"]
+    assert "/workspace" in episode_tools()[0]["description"]
+
+
+def test_a_failed_action_costs_a_step_and_reports_the_reason() -> None:
+    from evalsi_harness.gym import action_from
+
+    async def go() -> None:
+        async with TaskEnv(LocalSandboxClient(), max_steps=2) as env:
+            await env.reset(record(), spec_of({"environment": ENVIRONMENT}))
+            step = await env.step(action_from("bash", "{oops"))
+            assert "not valid JSON" in step.observation
+            assert step.info["tool_error"] is True
+            assert env.steps == 1
+            assert (await env.step(action_from("bash", "[1]"))).done  # the step limit
+
+    run(go())

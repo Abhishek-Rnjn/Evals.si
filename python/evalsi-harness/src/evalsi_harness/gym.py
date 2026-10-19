@@ -37,7 +37,8 @@ import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 from evalsi.sandbox.client import SnapshotsUnsupported, connect
 from evalsi.types import Content, Record, Step
@@ -46,7 +47,7 @@ from evalsi_harness.checker import run_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.isolate import run_clean_checker
 from evalsi_harness.process import ProcessContext, ProcessReward
-from evalsi_harness.task import Task, TaskError
+from evalsi_harness.task import SandboxPolicy, Task, TaskError
 from evalsi_harness.tools import Tool, sandbox_tools
 
 
@@ -56,6 +57,53 @@ class Action:
 
     tool: str
     arguments: dict[str, Any] = field(default_factory=dict)
+    # An action the caller could not form (arguments that are not JSON): it
+    # costs a step and is a failed tool call with this message, not a crash.
+    error: str = ""
+
+
+def tool_schemas(tools: Sequence[Tool]) -> list[dict[str, Any]]:
+    """The schemas of ``tools`` and of ``submit``, as chat models take them."""
+    specs = [
+        {
+            "name": t.spec.name,
+            "description": t.spec.description,
+            "input_schema": t.spec.input_schema,
+        }
+        for t in tools
+    ]
+    specs.append(
+        {
+            "name": "submit",
+            "description": "End the episode; the task's checker grades the result.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    )
+    return specs
+
+
+def episode_tools() -> list[dict[str, Any]]:
+    """The schemas of every task episode's actions, before any episode exists."""
+    # The tool objects read only the working directory (for their descriptions)
+    # before they are called; this is the default one.
+    stand_in = SimpleNamespace(workdir=SandboxPolicy().workdir)
+    return tool_schemas(sandbox_tools(cast(Any, stand_in)))
+
+
+def action_from(tool: Any, arguments: Any = "{}") -> Action:
+    """An :class:`Action` from what a policy produced: a tool name and its
+    arguments as a JSON object, as text or already parsed. What cannot be
+    read becomes an action that fails with the reason (see ``Action.error``)."""
+    if not isinstance(tool, str) or not tool:
+        return Action("", error="an action needs a tool name")
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments or "{}")
+        except json.JSONDecodeError as exc:
+            return Action(tool, error=f"arguments are not valid JSON: {exc}")
+    if not isinstance(arguments, Mapping):
+        return Action(tool, error="arguments must be a JSON object")
+    return Action(tool, dict(arguments))
 
 
 @dataclass
@@ -126,22 +174,7 @@ class TaskEnv:
     @property
     def tools(self) -> list[dict[str, Any]]:
         """The actions' schemas, in the form chat models take tool definitions."""
-        specs = [
-            {
-                "name": t.spec.name,
-                "description": t.spec.description,
-                "input_schema": t.spec.input_schema,
-            }
-            for t in self._tools.values()
-        ]
-        specs.append(
-            {
-                "name": "submit",
-                "description": "End the episode; the task's checker grades the result.",
-                "input_schema": {"type": "object", "properties": {}},
-            }
-        )
-        return specs
+        return tool_schemas(list(self._tools.values()))
 
     async def _ensure_pool(self) -> EnvironmentPool:
         if self._pool is None:
@@ -248,7 +281,9 @@ class TaskEnv:
         if action.tool == "submit":
             return await self._finish("submitted")
         tool = self._tools.get(action.tool)
-        if tool is None:
+        if action.error:
+            observation, is_error = action.error, True
+        elif tool is None:
             observation = (
                 f"unknown tool {action.tool!r}; use one of {sorted(self._tools)} or submit"
             )
