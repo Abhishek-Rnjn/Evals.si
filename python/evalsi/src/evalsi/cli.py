@@ -117,9 +117,11 @@ def _parser() -> argparse.ArgumentParser:
 def _add_diagnostic_commands(sub: Any) -> None:
     from evalsi.cli_canaries import add_canary_commands
     from evalsi.cli_determinism import add_determinism_command
+    from evalsi.cli_doctor import add_doctor_command
 
     add_canary_commands(sub)
     add_determinism_command(sub)
+    add_doctor_command(sub)
 
 
 def _add_eval(sub: Any) -> None:

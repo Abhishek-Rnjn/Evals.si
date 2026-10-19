@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- `evalsi doctor` checks installed versions, worker dependencies and real sandbox availability. `--require server` and `--require agent` fail when the requested capabilities are missing; plain SDK scoring does not require a sandbox.
+
 ## [0.3.0] - 2026-10-19
 
 ### Upgrade notes
