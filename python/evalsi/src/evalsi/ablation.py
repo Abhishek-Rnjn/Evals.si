@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
@@ -404,9 +405,23 @@ class Harm:
         """The edit helps some tasks and hurts others, whatever its average."""
         return bool(self.helped) and bool(self.hurt)
 
+    @property
+    def sign_p(self) -> float | None:
+        """Two-sided exact sign test over the tasks that changed: how surprising a split of
+        this size between helped and hurt would be if the edit were as likely to hurt a
+        task as to help it. None when no task changed. It speaks to the direction of the
+        edit across tasks; it does not say that any one task's change is more than noise."""
+        n = len(self.helped) + len(self.hurt)
+        if n == 0:
+            return None
+        k = min(len(self.helped), len(self.hurt))
+        tail = sum(math.comb(n, i) for i in range(k + 1)) / 2**n
+        return float(min(1.0, 2 * tail))
+
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)
         out["mixed"] = self.mixed
+        out["sign_p"] = self.sign_p
         return out
 
 
@@ -429,8 +444,10 @@ def harm_check(
     metric's direction (a positive number is always an improvement). A component that
     helps some tasks and hurts others is ``mixed`` and worth a look even when its average
     effect is zero or positive. Only a difference larger than ``min_effect`` counts as help
-    or harm. This is descriptive: a handful of tasks cannot show that a single task's change
-    is more than noise, so read it as where to look, not as a verdict."""
+    or harm. ``Harm.sign_p`` adds an exact sign test across the tasks that changed. Neither
+    can show that a single task's change is more than noise, and a handful of tasks gives a
+    sign test almost no power (5 helped and 0 hurt is p = 0.0625), so read this as where to
+    look, not as a verdict."""
     if min_effect < 0:
         raise AblationError("min_effect must not be negative")
     datasets = {_dataset(d) for d in (full, *variants.values())} - {""}
@@ -461,11 +478,12 @@ def harm_check(
 
 
 def harm_table(rows: Sequence[Harm]) -> str:
-    head = ["component", "name", "helped", "hurt", "same", "verdict", "most hurt"]
+    head = ["component", "name", "helped", "hurt", "same", "sign p", "verdict", "most hurt"]
     lines = [head]
     for h in rows:
         worst = ", ".join(f"{t.record} ({t.effect:+.2f})" for t in h.hurt[:3]) or "-"
         verdict = "mixed: helps some, hurts others" if h.mixed else ("hurts" if h.hurt else "ok")
+        p = h.sign_p
         lines.append(
             [
                 h.component,
@@ -473,6 +491,7 @@ def harm_table(rows: Sequence[Harm]) -> str:
                 str(len(h.helped)),
                 str(len(h.hurt)),
                 str(h.unchanged),
+                "-" if p is None else f"{p:.3f}",
                 verdict,
                 worst,
             ]

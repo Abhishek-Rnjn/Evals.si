@@ -364,6 +364,7 @@ def test_the_cli_plans_by_unit_and_prints_the_harm_table(
     assert main(argv) == 0
     out = capsys.readouterr().out
     assert "mixed: helps some, hurts others" in out
+    assert "sign p" in out
     assert "t4 (-1.00)" in out
     assert main([*argv, "--format", "json"]) == 0
     data = json.loads(capsys.readouterr().out)
@@ -373,3 +374,21 @@ def test_the_cli_plans_by_unit_and_prints_the_harm_table(
     plain = [a for a in argv if a != "--harm"]
     assert main([*plain, "--format", "json"]) == 0
     assert isinstance(json.loads(capsys.readouterr().out), list)
+
+
+def test_the_sign_test_is_exact_and_says_little_with_few_tasks() -> None:
+    def harm(helped: int, hurt: int) -> ablation.Harm:
+        return ablation.Harm(
+            "c1",
+            "systemprompt",
+            helped=[ablation.TaskEffect(f"h{i}", 1.0) for i in range(helped)],
+            hurt=[ablation.TaskEffect(f"x{i}", -1.0) for i in range(hurt)],
+        )
+
+    assert harm(0, 0).sign_p is None
+    assert harm(1, 1).sign_p == 1.0  # an even split
+    assert harm(5, 0).sign_p == pytest.approx(0.0625)  # 2 * (1/32): even 5 for 0 is not p < 0.05
+    assert harm(6, 0).sign_p == pytest.approx(0.03125)
+    assert harm(8, 2).sign_p == pytest.approx(2 * (1 + 10 + 45) / 1024)
+    assert harm(2, 8).sign_p == harm(8, 2).sign_p  # direction does not matter, only the split
+    assert harm(3, 3).to_dict()["sign_p"] == 1.0
