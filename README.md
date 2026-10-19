@@ -17,7 +17,8 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 [Quickstart](#quickstart) ·
 [Guides](#documentation) ·
 [Examples](examples/) ·
-[Roadmap](docs/LEFTOVERS.md)
+[Product roadmap](docs/PRODUCT-ROADMAP.md) ·
+[Technical status](docs/LEFTOVERS.md)
 
 </div>
 
@@ -359,6 +360,8 @@ What is verified, in short:
 - **Air-gapped bundles:** one platform per bundle (amd64 by default, `--platform linux/arm64` for arm64); see the [Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs).
 
 What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md), sorted by what each item needs next. Maintainers: see the [release gates and publication procedure](docs/RELEASING.md).
+
+The proposed [product roadmap](docs/PRODUCT-ROADMAP.md) tracks future work for production-agent and enterprise AI teams, with priorities, dependencies and acceptance criteria. The [product strategy](docs/PRODUCT-STRATEGY.md) records the competitive research and adoption plan.
 
 [Runtime verification](docs/verification/RUNTIME-VERIFICATION-2026-10-18.md)
 tracks real KVM and other remaining prerequisites. The

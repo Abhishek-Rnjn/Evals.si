@@ -76,6 +76,8 @@ export default defineConfig({
         ] },
         { label: "Design", items: [
           { slug: "docs/architecture" },
+          { label: "Product roadmap", slug: "docs/product-roadmap" },
+          { label: "Product strategy", slug: "docs/product-strategy" },
           { slug: "docs/roadmap" },
           { label: "Decision records", slug: "docs/decisions", collapsed: true },
         ] },
