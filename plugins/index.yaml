@@ -20,6 +20,11 @@ plugins:
     tier: native
     kind: native
     description: Model-graded evaluators (rubric scoring with a configured judge model).
+  - name: rubric
+    version: bundled
+    tier: native
+    kind: native
+    description: Judge grading against the rubric a LAB or JobBench task carries.
   - name: text
     version: bundled
     tier: native
