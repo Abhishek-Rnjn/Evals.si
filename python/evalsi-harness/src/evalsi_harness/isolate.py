@@ -60,6 +60,26 @@ def _canonical(path: str) -> bool:
     return bool(path) and not path.startswith("/") and all(p not in ("", ".", "..") for p in parts)
 
 
+_LINKED = """for d in "$@"; do
+  if [ -L "$d" ]; then printf '%s' "$d"; exit 3; fi
+done
+exit 0"""
+
+
+async def _symlinked_ancestors(env: TaskEnvironment, paths: list[str]) -> str:
+    """The first directory above any of ``paths`` that is a symlink in ``env``, or ""."""
+    dirs: set[str] = set()
+    for path in paths:
+        parts = path.split("/")[:-1]
+        dirs.update("/".join(parts[: n + 1]) for n in range(len(parts)))
+    if not dirs:
+        return ""
+    result = await env.sandbox.exec(
+        ["sh", "-c", _LINKED, "sh", *sorted(dirs)], timeout_s=60, env=env.config.env
+    )
+    return result.stdout if result.exit_code == 3 else ""
+
+
 async def run_clean_checker(
     pool: EnvironmentPool, agent_env: TaskEnvironment, checker: CheckerConfig, task: Task
 ) -> tuple[TaskCheck, dict[str, object]]:
@@ -85,6 +105,14 @@ async def run_clean_checker(
     except Exception as exc:  # a TaskError or SandboxError: the check cannot run
         return TaskCheck(passed=False, error=f"clean checker sandbox: {exc}"), info
     try:
+        linked = await _symlinked_ancestors(fresh, list(blobs))
+        if linked:
+            # Setup left a link where a directory should be, and writing through it would
+            # put an output outside the declared paths (solution -> . with solution/x.py).
+            return (
+                TaskCheck(passed=False, error=f"an output path crosses a symlink: {linked}"),
+                info,
+            )
         if blobs:
             await fresh.sandbox.write_files(dict(blobs))
         return await run_checker(fresh, checker, task), info

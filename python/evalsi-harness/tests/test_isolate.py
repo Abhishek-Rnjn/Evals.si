@@ -161,3 +161,37 @@ def test_only_checker_files_absent_from_the_prepared_sandbox_are_hidden(
     ).record
     assert rec is not None
     assert rec.metadata["checker_files"] == ["hidden/check.py"]
+
+
+def test_an_output_cannot_be_written_through_a_setup_symlink(
+    sandboxes: LocalSandboxClient,
+) -> None:
+    # Setup leaves solution -> . ; the agent swaps it for a real directory holding a shim,
+    # so copying solution/sitecustomize.py into a fresh sandbox would follow the link.
+    spec = spec_of(
+        {
+            "target": {
+                "agent": {
+                    "cli": {
+                        "command": [
+                            "sh",
+                            "-c",
+                            f"rm solution; mkdir solution; {SHIM.replace('> ', '> solution/', 1)}",
+                        ]
+                    }
+                }
+            },
+            "environment": {
+                "files": FILES,
+                "setup": ["ln -s . solution"],
+                "checker": {
+                    "command": ["sh", "-c", "PYTHONPATH=. python3 tests/test_calc.py"],
+                    **CLEAN,
+                    "outputs": ["solution/**"],
+                },
+            },
+        }
+    )
+    out = run(spec, record("x"), sandboxes)
+    assert out.record is None
+    assert "crosses a symlink" in out.error

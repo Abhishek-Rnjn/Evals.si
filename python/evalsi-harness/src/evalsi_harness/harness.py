@@ -167,6 +167,7 @@ class LiveTask:
     # Checker files that did not exist when the agent started (after the image and
     # setup): naming one of these is probing. One the sandbox already had may be run.
     checker_hidden: list[str] = field(default_factory=list)
+    diff_baseline: str | None = None
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -293,6 +294,10 @@ class BuiltinHarness:
             except ProtectError as exc:
                 await self.teardown(handle)
                 raise TaskError(f"checker.protect: {exc}") from exc
+        if env is not None:
+            # What setup and the task's files changed against HEAD, so a trusted change
+            # to a tracked test is not counted as the agent's.
+            live.diff_baseline = await capture_diff(env)
         if env is not None and checker is not None and checker.files:
             live.checker_hidden = await _absent(env, list(checker.files))
         return handle
@@ -839,6 +844,8 @@ class BuiltinHarness:
         """Extra record metadata: the agent's diff, when the workdir is a git repository."""
         live = self._get(handle)
         out: dict[str, Any] = {"diff": live.diff} if live.diff is not None else {}
+        if live.diff_baseline:
+            out["diff_baseline"] = live.diff_baseline
         if live.protect_result:
             out["protected_files"] = live.protect_result
         checker = live.task.environment.checker if live.task.environment else None
