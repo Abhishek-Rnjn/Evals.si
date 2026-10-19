@@ -1,0 +1,293 @@
+"""Component ablation of an adopted harness (H7).
+
+A refinement tool such as Harness² edits a harness made of eight components.
+Given the base harness and an adopted one, this module plans one *revert
+variant* per edited component (the base's content for that component, the
+adopted content for everything else), and, once each variant has been run,
+attributes the gain per component: the effect of a component is the full
+adopted harness minus its revert variant, with the interval of the paired
+difference (``evalsi.compare``). An edit whose interval includes zero is
+reported as having no measurable effect. An edit that came along with the
+others but does nothing shows an effect of exactly zero.
+
+Everything here is offline and pure apart from reading and writing the harness
+directories. Nothing is run.
+
+The component map is the OpenCode surface of Harness²
+(``harness2/substrate/opencode.py`` ``OPENCODE_SURFACE`` and ``harness2/core/tree.py``,
+``is_allowed``), read from source and not run:
+
+- c1 ``systemprompt.md``, c2 ``guardrails.md``, c3 ``LongTermMEMORY.md`` and
+  c4 ``tool_descriptions/tool_guidance.md`` are the always-on files;
+- c5 ``sub_agents/<name>/AGENT.md`` (the stub says "c5: delegated subagents");
+- c6 ``skills/<name>/SKILL.md`` and ``skills/<name>/scripts/*`` (the stub says
+  "c6: reusable workflows");
+- c7 ``scripts/<name>.py`` ("c7: deterministic helpers");
+- c8 ``plugin/<name>.ts`` ("c8: OpenCode plugins").
+
+A path off that surface (Harness² ignores it when it reads a tree) is its own
+group, ``other``, so a stray edit is not lost; the README stubs are in it too.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+from evalsi.compare import compare_results
+
+Tree = dict[str, bytes]
+
+
+class AblationError(ValueError):
+    """An input that cannot be planned or attributed; never a zero effect."""
+
+
+COMPONENT_NAMES = {
+    "c1": "systemprompt",
+    "c2": "guardrails",
+    "c3": "memory",
+    "c4": "tool-guidance",
+    "c5": "sub-agents",
+    "c6": "skills",
+    "c7": "scripts",
+    "c8": "plugins",
+    "other": "off-surface files",
+}
+
+_ALWAYS_ON = {
+    "systemprompt.md": "c1",
+    "guardrails.md": "c2",
+    "LongTermMEMORY.md": "c3",
+    "tool_descriptions/tool_guidance.md": "c4",
+}
+_PREFIXES = (("sub_agents/", "c5"), ("skills/", "c6"), ("scripts/", "c7"), ("plugin/", "c8"))
+
+
+def component_of(rel: str) -> str:
+    """The component (``c1``..``c8``, or ``other``) a harness file belongs to."""
+    if rel in _ALWAYS_ON:
+        return _ALWAYS_ON[rel]
+    if rel.endswith("/README.md") and rel.startswith(tuple(p for p, _ in _PREFIXES)):
+        return "other"  # Harness² writes these stubs itself and drops them on read
+    for prefix, component in _PREFIXES:
+        if rel.startswith(prefix):
+            return component
+    return "other"
+
+
+def normalize_rel(rel: str) -> str:
+    """Reject paths that escape the harness (as Harness²'s ``normalize_rel`` does)."""
+    r = str(rel).strip().replace("\\", "/")
+    if not r or r.startswith("/") or ".." in r.split("/"):
+        raise AblationError(f"path escapes the harness: {rel!r}")
+    while r.startswith("./"):
+        r = r[2:]
+    return r.strip("/")
+
+
+def read_dir(path: str | os.PathLike[str]) -> Tree:
+    """``{relative path: bytes}`` for every file under a harness directory.
+    A symlink (file or directory) is refused, not followed."""
+    root = os.fspath(path)
+    if os.path.islink(root) or not os.path.isdir(root):
+        raise AblationError(f"{root}: not a harness directory")
+    tree: Tree = {}
+    for here, dirs, files in os.walk(root, followlinks=False):
+        for name in [*dirs, *files]:
+            full = os.path.join(here, name)
+            if os.path.islink(full):
+                raise AblationError(f"{full}: symlinks are not allowed in a harness")
+        dirs.sort()
+        for name in sorted(files):
+            full = os.path.join(here, name)
+            rel = normalize_rel(os.path.relpath(full, root))
+            if "__pycache__" in rel.split("/"):
+                continue
+            with open(full, "rb") as handle:
+                tree[rel] = handle.read()
+    return tree
+
+
+@dataclass
+class ComponentEdit:
+    component: str
+    name: str
+    added: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    modified: list[str] = field(default_factory=list)
+
+    @property
+    def files(self) -> list[str]:
+        return sorted([*self.added, *self.removed, *self.modified])
+
+    def to_dict(self) -> dict[str, Any]:
+        out = asdict(self)
+        out["files"] = self.files
+        return out
+
+
+def plan(base: Mapping[str, bytes], adopted: Mapping[str, bytes]) -> list[ComponentEdit]:
+    """One entry per component the adopted harness edits, in component order."""
+    for rel in [*base, *adopted]:
+        normalize_rel(rel)
+    edits: dict[str, ComponentEdit] = {}
+
+    def edit(rel: str) -> ComponentEdit:
+        comp = component_of(rel)
+        return edits.setdefault(comp, ComponentEdit(comp, COMPONENT_NAMES[comp]))
+
+    for rel in sorted(set(adopted) - set(base)):
+        edit(rel).added.append(rel)
+    for rel in sorted(set(base) - set(adopted)):
+        edit(rel).removed.append(rel)
+    for rel in sorted(set(base) & set(adopted)):
+        if base[rel] != adopted[rel]:
+            edit(rel).modified.append(rel)
+    return [edits[c] for c in COMPONENT_NAMES if c in edits]
+
+
+def revert_variant(base: Mapping[str, bytes], adopted: Mapping[str, bytes], component: str) -> Tree:
+    """The adopted harness with one component put back to the base's content."""
+    out: Tree = {rel: data for rel, data in adopted.items() if component_of(rel) != component}
+    out.update({rel: data for rel, data in base.items() if component_of(rel) == component})
+    return out
+
+
+def _write_tree(tree: Mapping[str, bytes], dest: str) -> None:
+    root = os.path.realpath(dest)
+    os.makedirs(root, exist_ok=True)
+    for rel, data in tree.items():
+        target = os.path.realpath(os.path.join(root, normalize_rel(rel)))
+        if os.path.commonpath([root, target]) != root:
+            raise AblationError(f"path escapes the output: {rel!r}")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "xb") as handle:
+            handle.write(data)
+
+
+def plan_dirs(
+    base_dir: str | os.PathLike[str],
+    adopted_dir: str | os.PathLike[str],
+    out_dir: str | os.PathLike[str],
+) -> dict[str, Any]:
+    """Write ``<out>/<component>/`` for each edited component and
+    ``<out>/manifest.json``; return the manifest."""
+    base, adopted = read_dir(base_dir), read_dir(adopted_dir)
+    out = os.fspath(out_dir)
+    if os.path.islink(out):
+        raise AblationError(f"{out}: the output directory is a symlink")
+    if os.path.isdir(out) and os.listdir(out):
+        raise AblationError(f"{out}: the output directory is not empty")
+    real_out = os.path.realpath(out)
+    for src in (base_dir, adopted_dir):
+        real = os.path.realpath(src)
+        if os.path.commonpath([real, real_out]) in (real, real_out):
+            raise AblationError(f"{out}: overlaps the harness directory {src}")
+    edits = plan(base, adopted)
+    variants = []
+    for e in edits:
+        _write_tree(revert_variant(base, adopted, e.component), os.path.join(out, e.component))
+        entry = e.to_dict()
+        entry["variant_dir"] = e.component
+        variants.append(entry)
+    manifest = {
+        "base": os.fspath(base_dir),
+        "adopted": os.fspath(adopted_dir),
+        "note": "each variant is the adopted harness with that component reverted to the base",
+        "components": variants,
+    }
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, "manifest.json"), "x", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2)
+        handle.write("\n")
+    return manifest
+
+
+# --- Attribution -------------------------------------------------------------
+
+EFFECT, HARMFUL = "effect", "harmful"
+NO_EFFECT = "no measurable effect"
+INSUFFICIENT = "insufficient data"
+
+
+@dataclass
+class Attribution:
+    component: str
+    name: str
+    status: str
+    effect: float | None = None
+    low: float | None = None
+    high: float | None = None
+    paired_n: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _dataset(data: Mapping[str, Any]) -> str:
+    manifest = data.get("manifest") or {}
+    return str(
+        ((manifest.get("dataset") or {}) if isinstance(manifest, Mapping) else {}).get("sha256")
+        or ""
+    )
+
+
+def _classify(
+    component: str,
+    reference: Mapping[str, Any],
+    full: Mapping[str, Any],
+    metric: str,
+    level: float,
+) -> Attribution:
+    name = COMPONENT_NAMES.get(component, component)
+    for c in compare_results(reference, full, level=level):
+        if c.metric != metric:
+            continue
+        if c.diff is None or c.diff_low is None or c.diff_high is None or c.paired_n < 2:
+            return Attribution(component, name, INSUFFICIENT, c.diff, paired_n=c.paired_n)
+        status = NO_EFFECT
+        if c.significant:
+            status = EFFECT if c.diff > 0 else HARMFUL
+        return Attribution(component, name, status, c.diff, c.diff_low, c.diff_high, c.paired_n)
+    return Attribution(component, name, INSUFFICIENT)
+
+
+def attribute(
+    base: Mapping[str, Any],
+    full: Mapping[str, Any],
+    variants: Mapping[str, Mapping[str, Any]],
+    metric: str,
+    *,
+    level: float = 0.95,
+) -> list[Attribution]:
+    """The effect of each component (the full adopted harness minus its revert
+    variant, paired by record and trial), then the total (full minus base) as
+    ``total``. The sign follows the metric: a positive effect means the edit
+    raised the metric. A component whose interval includes zero has "no
+    measurable effect", and with fewer than two pairs "insufficient data"; the
+    latter is not a claim of no effect. The results must be of one dataset."""
+    datasets = {_dataset(d) for d in (base, full, *variants.values())} - {""}
+    if len(datasets) > 1:
+        raise AblationError("the results files were not run on the same dataset")
+    out = [_classify(c, v, full, metric, level) for c, v in variants.items()]
+    total = _classify("total", base, full, metric, level)
+    total.name = "full adopted vs base"
+    out.append(total)
+    return out
+
+
+def attribution_table(rows: Sequence[Attribution]) -> str:
+    head = ["component", "name", "effect", "interval", "n", "verdict"]
+    lines = [head]
+    for r in rows:
+        effect = "-" if r.effect is None else f"{r.effect:+.3f}"
+        interval = "-" if r.low is None else f"[{r.low:+.3f}, {r.high:+.3f}]"
+        lines.append([r.component, r.name, effect, interval, str(r.paired_n), r.status])
+    widths = [max(len(r[i]) for r in lines) for i in range(len(head))]
+    return "\n".join(
+        "  ".join(cell.ljust(w) for cell, w in zip(r, widths, strict=True)).rstrip() for r in lines
+    )
