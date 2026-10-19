@@ -8,6 +8,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - `evalsi doctor` checks installed versions, worker dependencies and real sandbox availability. `--require server` and `--require agent` fail when the requested capabilities are missing; plain SDK scoring does not require a sandbox.
 - `evalsi init` creates offline recorded-output or sandboxed-agent starter projects, including a working example, a deliberately regressed control, error-rate gates and local report instructions. Existing directories are never overwritten.
+- A root composite GitHub Action runs gates with published 0.3.0, writes metrics and identity summaries, optionally compares compatible paired baselines and propagates failures. Raw results/log uploads are opt-in. Added an onboarding guide, website navigation and action positive/negative CI controls; roadmap acceptance criteria remain open beyond these initial slices.
 
 ## [0.3.0] - 2026-10-19
 

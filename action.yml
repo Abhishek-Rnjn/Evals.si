@@ -1,0 +1,82 @@
+name: Evals.si gate
+description: Run evaluation gates, publish a metrics summary, and optionally compare a baseline.
+branding:
+  icon: check-circle
+  color: purple
+inputs:
+  spec:
+    description: EvalRun YAML path, relative to working-directory.
+    required: true
+  working-directory:
+    description: Project directory, relative to the checkout (or absolute).
+    default: .
+  version:
+    description: Matching published evalsi and evalsi-harness version.
+    default: 0.3.0
+  python-version:
+    description: Python runtime for the evaluation.
+    default: '3.12'
+  install:
+    description: Install published packages; set false only with an existing compatible installation.
+    default: 'true'
+  baseline:
+    description: Optional results JSON path relative to working-directory; comparison is advisory.
+    default: ''
+  artifact-name:
+    description: Opt in to uploading raw results and process logs (may contain private data).
+    default: ''
+outputs:
+  exit-code:
+    description: 0 passed, 3 failed gates, 1 execution/configuration/comparison error.
+    value: ${{ steps.gate.outputs.exit-code }}
+  results:
+    description: Absolute path to results.json, if execution produced one.
+    value: ${{ steps.gate.outputs.results }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install matching packages
+      if: inputs.install == 'true'
+      shell: bash
+      env:
+        EVALSI_ACTION_VERSION: ${{ inputs.version }}
+      run: |
+        python - <<'PY'
+        import os, re, subprocess, sys
+        version = os.environ['EVALSI_ACTION_VERSION']
+        if not re.fullmatch(r'[0-9][A-Za-z0-9.!+_-]*', version):
+            sys.exit('version must be a package version, not a URL or requirement')
+        subprocess.run([sys.executable, '-m', 'pip', 'install',
+                        'evalsi[server]==' + version, 'evalsi-harness==' + version], check=True)
+        PY
+    - name: Run gate and write summary
+      id: gate
+      shell: bash
+      env:
+        EVALSI_ACTION_ROOT: ${{ github.action_path }}
+        EVALSI_ACTION_SPEC: ${{ inputs.spec }}
+        EVALSI_ACTION_DIRECTORY: ${{ inputs.working-directory }}
+        EVALSI_ACTION_BASELINE: ${{ inputs.baseline }}
+      run: python "$EVALSI_ACTION_ROOT/.github/actions/evalsi/run.py"
+    - name: Upload private run data only when requested
+      if: always() && inputs.artifact-name != '' && steps.gate.outputs.artifact-directory != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.gate.outputs.artifact-directory }}
+        retention-days: 7
+        if-no-files-found: error
+    - name: Propagate gate outcome
+      if: always()
+      shell: bash
+      env:
+        EVALSI_ACTION_EXIT_CODE: ${{ steps.gate.outputs.exit-code }}
+      run: |
+        python - <<'PY'
+        import os, sys
+        code = os.environ.get('EVALSI_ACTION_EXIT_CODE', '')
+        sys.exit(int(code) if code in ('0', '3') else 1)
+        PY

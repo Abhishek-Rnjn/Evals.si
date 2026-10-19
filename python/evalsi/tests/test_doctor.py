@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 from typing import Any
@@ -16,7 +17,7 @@ def test_sdk_install_does_not_require_optional_execution(
 ) -> None:
     monkeypatch.setattr(cli_doctor, "installed_version", lambda name: None)
     monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: None)
-    monkeypatch.setattr(cli_doctor.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
     monkeypatch.setenv("SOME_API_KEY", "must-not-appear")
     assert main(["doctor", "--format", "json"]) == 0
     report = capsys.readouterr().out
@@ -50,8 +51,8 @@ def test_agent_readiness_uses_actual_probe(
 
     monkeypatch.setattr(cli_doctor, "installed_version", lambda name: __version__)
     monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/release/evalsid")
-    monkeypatch.setattr(cli_doctor.importlib.util, "find_spec", lambda name: object())
-    monkeypatch.setattr(cli_doctor.subprocess, "run", run)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(subprocess, "run", run)
     assert main(["doctor", "--require", "agent", "--format", "json"]) == (0 if available else 1)
     assert json.loads(capsys.readouterr().out)["ready"] is available
     assert calls == [["/release/evalsid", "version"], ["/release/evalsid", "sandbox", "probe"]]
@@ -70,7 +71,7 @@ def test_failed_or_mismatched_executable_is_not_reported_ready(
         return subprocess.CompletedProcess(cmd, 0, output, "private error")
 
     monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/bad/evalsid")
-    monkeypatch.setattr(cli_doctor.subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "run", run)
     assert main(["doctor", "--require", "server", "--format", "json"]) == 1
     output = capsys.readouterr().out
     assert "private" not in output
@@ -88,7 +89,7 @@ def test_probe_failure_does_not_require_a_sandbox_for_scoring_server(
         )
 
     monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/release/evalsid")
-    monkeypatch.setattr(cli_doctor.importlib.util, "find_spec", lambda name: object())
-    monkeypatch.setattr(cli_doctor.subprocess, "run", run)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(subprocess, "run", run)
     assert not any(c.status == "error" for c in cli_doctor.diagnose("server"))
     assert any(c.name == "sandbox" and c.status == "error" for c in cli_doctor.diagnose("agent"))

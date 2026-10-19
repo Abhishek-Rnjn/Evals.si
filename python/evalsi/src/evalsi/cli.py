@@ -55,7 +55,6 @@ def _parser() -> argparse.ArgumentParser:
     _add_run(sub)
     _add_gate(sub)
     _add_policy(sub)
-    from evalsi.cli_init import add_init_command
     from evalsi.cli_analytics import add_analytics_commands
     from evalsi.cli_annotate import add_annotate_commands
     from evalsi.cli_auth import add_auth_commands
@@ -70,7 +69,6 @@ def _parser() -> argparse.ArgumentParser:
     from evalsi.cli_training import add_training_commands
 
     add_auth_commands(sub)
-    add_init_command(sub)
     add_flywheel_commands(sub)
     add_rewards_commands(sub)
     add_report_command(sub)
@@ -83,7 +81,7 @@ def _parser() -> argparse.ArgumentParser:
     add_trace_commands(sub)
     add_plugin_commands(sub)
     add_credentials_commands(sub)
-    _add_diagnostic_commands(sub)
+    _add_setup_and_diagnostic_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
     cat.add_argument("--format", choices=["table", "json"], default="table")
@@ -116,14 +114,16 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_diagnostic_commands(sub: Any) -> None:
+def _add_setup_and_diagnostic_commands(sub: Any) -> None:
     from evalsi.cli_canaries import add_canary_commands
     from evalsi.cli_determinism import add_determinism_command
     from evalsi.cli_doctor import add_doctor_command
+    from evalsi.cli_init import add_init_command
 
     add_canary_commands(sub)
     add_determinism_command(sub)
     add_doctor_command(sub)
+    add_init_command(sub)
 
 
 def _add_eval(sub: Any) -> None:

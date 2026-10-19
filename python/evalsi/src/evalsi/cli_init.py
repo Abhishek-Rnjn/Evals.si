@@ -54,7 +54,7 @@ def starter_files(template: str) -> dict[str, str]:
                 {"metric": "task-success", "stat": "GATE_STAT_ERROR_RATE", "max": 0.0},
             ],
         }
-    doc = {
+    doc: dict[str, Any] = {
         "apiVersion": "evals.si/v1alpha1",
         "kind": "EvalRun",
         "metadata": {"name": "starter-agent" if agent else "starter-recorded"},

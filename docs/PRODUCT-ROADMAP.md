@@ -14,7 +14,8 @@ existing agent framework, trace store and deployment environment.**
 
 ## Status, scope and tracking
 
-- Every item below is **proposed** and **unassigned**. An existing foundation is
+- Every item below remains **proposed** and **unassigned** unless scoped in the
+  implementation progress table. An existing foundation is
   not a claim that the proposed workflow or enterprise guarantee is shipped.
 - P0 means the recommended initial product/pilot scope; P1 follows validation;
   P2 is conditional on customer requirements. These are priorities, not release
@@ -30,6 +31,17 @@ existing agent framework, trace store and deployment environment.**
 - The [original thirteen-item implementation review](verification/STACK-101.md)
   separates shipped work from follow-ups. Do not advertise those follow-ups as
   completed features.
+
+### Implementation progress
+
+These are initial implementation slices, not completion of the acceptance
+criteria below. Package commands are unreleased until the next Python release.
+
+| Items | Implemented slice | Evidence | Remaining acceptance work |
+|---|---|---|---|
+| PROD-01 | `evalsi doctor` diagnoses requested capabilities; `evalsi init` creates recorded-output or agent starters with positive/negative controls. | [Setup guide](guides/onboarding.md), `python/evalsi/tests/test_doctor.py`, `python/evalsi/tests/test_init.py`. | Observe onboarding on customers' own agents; verify supported host/container paths and measure time to useful result. |
+| PROD-02 | Composite GitHub Action: one run, gate exit propagation, metrics/identity summary, conservative advisory baseline comparison, opt-in raw artifacts. | [Action](../action.yml), `python/evalsi/tests/test_ci_action.py`, the `onboarding` CI job checks published 0.3.0 with both controls. | Customer PR evidence for business failures/cost/latency, baseline provenance/governance, stronger reproduction evidence and release-policy integration. |
+| GTM-02 | Runnable synthetic examples and a website-imported setup/CI guide. | [Guide](guides/onboarding.md), template controls and action smoke checks. | Framework-specific customer walkthroughs, teammate usability and approved customer examples. |
 
 ## Application-team workflow
 
