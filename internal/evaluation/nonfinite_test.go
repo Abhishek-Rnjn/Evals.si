@@ -126,3 +126,47 @@ func TestPassAtKExcludesFlaggedTrialsOnRequest(t *testing.T) {
 		t.Errorf("excluding pass@2 = %v, want 0", got)
 	}
 }
+
+// A staged evaluator (evidence-stage-audit) emits a later stage only when the one before
+// passed. A declared output a record did not emit is neither an error nor a zero: the
+// stage's N is how many records reached it, and its mean is the rate among them.
+func TestSummarizeTreatsAnUnemittedDeclaredOutputAsNotReached(t *testing.T) {
+	stage := func(name string) *evalsiv1alpha1.MetricSpec {
+		return &evalsiv1alpha1.MetricSpec{Name: name, Type: evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED}
+	}
+	in := Instance{Name: "audit", Manifest: &evalsiv1alpha1.EvaluatorManifest{
+		Name:    "builtin/audit",
+		Outputs: []*evalsiv1alpha1.MetricSpec{stage("one"), stage("two"), stage("three")},
+	}}
+	passed := func(name string, ok bool) *evalsiv1alpha1.Score {
+		return &evalsiv1alpha1.Score{Name: name, Value: &evalsiv1alpha1.Score_Passed{Passed: ok}}
+	}
+	scored := func(id string, scores ...*evalsiv1alpha1.Score) *evalsiv1alpha1.EvaluationResult {
+		return &evalsiv1alpha1.EvaluationResult{
+			Evaluator: "audit", RecordId: id, Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED, Scores: scores,
+		}
+	}
+	res := []*evalsiv1alpha1.EvaluationResult{
+		scored("a", passed("one", false)),
+		scored("b", passed("one", true), passed("two", false)),
+		scored("c", passed("one", true), passed("two", true), passed("three", false)),
+		scored("d", passed("one", true), passed("two", true), passed("three", true)),
+	}
+	sums, err := Summarize([]Instance{in}, res, nil, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]*evalsiv1alpha1.MetricSummary{}
+	for _, s := range sums {
+		got[s.GetMetric()] = s
+	}
+	for name, want := range map[string]struct {
+		n    int64
+		mean float64
+	}{"audit.one": {4, 0.75}, "audit.two": {3, 2.0 / 3}, "audit.three": {2, 0.5}} {
+		s := got[name]
+		if s == nil || s.GetN() != want.n || math.Abs(s.GetMean()-want.mean) > 1e-12 || s.GetErrors() != 0 {
+			t.Errorf("%s = %v, want n=%d mean=%v", name, s, want.n, want.mean)
+		}
+	}
+}

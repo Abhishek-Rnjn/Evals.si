@@ -370,6 +370,33 @@ def test_cli_run_embedded_exit_codes(
     assert "x 3 trials" in out
     assert "gates:" in out
     assert json.loads((tmp_path / "out.json").read_text())["gates"]
+
+
+def test_cli_run_reports_a_variance_aware_trial_recommendation_only_with_trials(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("evalsi.run.create_target", lambda config: FakeTarget())
+    spec = json.loads(json.dumps(SPEC))
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps(spec))
+    out_file = tmp_path / "out.json"
+    main(["run", "-f", str(path), "--quiet", "--output", str(out_file)])
+    out = capsys.readouterr().out
+    # The fake target answers the same every trial, so nothing varies: the report says
+    # so with the worst case for pass/fail (few trials leave the bound there).
+    assert "trials: exact-match would need about" in out
+    assert "variance bound 0.250" in out
+    assert "trials is unchanged" in out
+    advice = json.loads(out_file.read_text())["trial_advice"]
+    assert advice["metrics"][0]["variance_bound"] == 0.25
+    assert advice["metrics"][0]["trials_for_margin"]["0.1"] == 97
+    # One trial gives nothing to estimate a variance from: no advice at all.
+    spec["spec"]["trials"] = 1
+    path.write_text(json.dumps(spec))
+    main(["run", "-f", str(path), "--quiet", "--output", str(out_file)])
+    assert "trials:" not in capsys.readouterr().out
+    assert "trial_advice" not in json.loads(out_file.read_text())
+
     spec["spec"]["gates"] = [{"metric": "exact-match", "max": 0.5}]  # the fake is always right
     path.write_text(json.dumps(spec))
     assert main(["run", "-f", str(path), "--quiet"]) == 3

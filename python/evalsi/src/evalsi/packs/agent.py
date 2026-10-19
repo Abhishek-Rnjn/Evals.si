@@ -22,6 +22,7 @@ from evalsi.judges import JudgeError
 from evalsi.mechanisms import CONTEXT_COUNTERS, called_tools, context_acted
 from evalsi.packs.agent_checks import citation_grounding, handoff_correctness
 from evalsi.packs.agent_hacking import trial_tampering
+from evalsi.packs.agent_stages import evidence_stage_audit, evidence_stage_judge
 from evalsi.packs.contamination import contamination_fetch
 from evalsi.packs.harness_edit import (
     edit_mechanism_ran,
@@ -572,6 +573,8 @@ PACK = Pack(
         tool_errors,
         mechanism_ran,
         citation_grounding,
+        evidence_stage_audit,
+        evidence_stage_judge,
         handoff_correctness,
         loop_detection,
         step_budget,

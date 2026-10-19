@@ -305,7 +305,9 @@ jobs:
         # A static evalsid, as released: it is also the in-sandbox egress forwarder.
         run: |
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
-          cd python && EVALSI_TEST_EVALSID="$RUNNER_TEMP/evalsid" uv run --no-sync pytest -q
+          # EVALSI_REQUIRE_SANDBOX makes the real-rung tests fail, not skip, when this
+          # runner lacks the bubblewrap or Landlock rung they pin.
+          cd python && EVALSI_REQUIRE_SANDBOX=1 EVALSI_TEST_EVALSID="$RUNNER_TEMP/evalsid" uv run --no-sync pytest -q
       - name: The agent-gate example passes, and a regressed agent fails its gate
         # examples/agent-gate backs the "Gate an agent in CI" guide: a stand-in
         # agent in a real sandbox, exit 0 when it fixes the tasks, 3 when not.
