@@ -220,36 +220,54 @@ func phaseOf(st store.SourceState) evalsiv1alpha1.SourcePhase {
 	return evalsiv1alpha1.SourcePhase_SOURCE_PHASE_UNSPECIFIED
 }
 
-// ResultsReady prevents startup recovery from racing the source runner map.
-// Raw push traces are ready even if they happen to carry a source label.
-func (m *Manager) ResultsReady(info ingest.TraceInfo) bool {
+// ResultsReady waits only when an existing source still needs a write-back
+// runner. Deleted sources leave accepted work to finish locally.
+func (m *Manager) ResultsReady(ctx context.Context, info ingest.TraceInfo) bool {
 	name := info.Labels[LabelSource]
 	traceID, _ := info.Resource[AttrSourceTraceID].(string)
 	if name == "" || traceID == "" {
+		return true
+	}
+	src, err := m.st.GetSource(ctx, info.Project, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	if !src.GetWriteBack().GetEnabled() {
 		return true
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.runners[key{info.Project, name}] != nil
+	r := m.runners[key{info.Project, name}]
+	return r != nil && proto.Equal(r.src, src)
 }
 
 // OnResults receives each evaluated trace's results (the engine's OnResults
 // hook) and queues the scores of a pulled trace for write-back. It never
-// blocks.
-func (m *Manager) OnResults(policy string, _ *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) bool {
+// blocks on the score queue. A failed source lookup or handoff requests retry.
+func (m *Manager) OnResults(ctx context.Context, policy string, _ *evalsiv1alpha1.Record, info ingest.TraceInfo, results []*evalsiv1alpha1.EvaluationResult) bool {
 	name := info.Labels[LabelSource]
 	traceID, _ := info.Resource[AttrSourceTraceID].(string)
 	if name == "" || traceID == "" {
 		return true
 	}
-	m.mu.Lock()
-	r := m.runners[key{info.Project, name}]
-	m.mu.Unlock()
-	if r == nil {
+	src, err := m.st.GetSource(ctx, info.Project, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return true
+	}
+	if err != nil {
 		return false
 	}
-	if !r.src.GetWriteBack().GetEnabled() {
+	if !src.GetWriteBack().GetEnabled() {
 		return true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r := m.runners[key{info.Project, name}]
+	if r == nil || !proto.Equal(r.src, src) {
+		return false
 	}
 	for _, res := range results {
 		if res.GetOutcome() != evalsiv1alpha1.Outcome_OUTCOME_SCORED {

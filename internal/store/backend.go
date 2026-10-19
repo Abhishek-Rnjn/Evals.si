@@ -129,6 +129,26 @@ func (s *Store) GetTrace(ctx context.Context, project, traceID string) (*evalsiv
 	return s.traces.GetTrace(ctx, project, traceID)
 }
 
+type revisionTraceReader interface {
+	getTraceRevision(context.Context, string, string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, string, error)
+	traceResultsAt(context.Context, string, string, string) ([]*evalsiv1alpha1.PolicyResults, error)
+}
+
+// GetTraceWithResults pins results to the record returned by the first read,
+// even if publication advances while assembling the response.
+func (s *Store) GetTraceWithResults(ctx context.Context, project, id string) (*evalsiv1alpha1.TraceSummary, *evalsiv1alpha1.Record, []*evalsiv1alpha1.PolicyResults, error) {
+	reader, ok := s.traces.(revisionTraceReader)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("trace backend does not support revision-bound reads")
+	}
+	summary, record, binding, err := reader.getTraceRevision(ctx, project, id)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	results, err := reader.traceResultsAt(ctx, project, id, binding)
+	return summary, record, results, err
+}
+
 // PutTraceResults stores a policy's results for a trace.
 func (s *Store) PutTraceResults(ctx context.Context, project, traceID, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
 	return s.traces.PutTraceResults(ctx, project, traceID, policy, results)
@@ -141,12 +161,30 @@ func (s *Store) TraceResults(ctx context.Context, project, traceID string) ([]*e
 
 // DeleteTracesBefore removes traces (and their results) that started before t.
 func (s *Store) DeleteTracesBefore(ctx context.Context, t time.Time) (int64, error) {
-	n, err := s.traces.DeleteTracesBefore(ctx, t)
+	if ch, ok := s.traces.(*clickhouse); ok {
+		return s.deleteClickHouseTracesBefore(ctx, t, ch)
+	}
+	tx, err := s.beginWatchWrite(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := expireWatchMetadata(ctx, tx, t); err != nil {
+		return 0, err
+	}
+	var n int64
+	if _, ok := s.traces.(*sqlTraces); ok {
+		n, err = deleteSQLTracesBefore(ctx, tx, t)
+	} else {
+		n, err = s.traces.DeleteTracesBefore(ctx, t)
+	}
 	if err != nil {
 		return n, err
 	}
-	_, err = s.db.ExecContext(ctx, `DELETE FROM watch_pending WHERE start_ns < ?`, t.UnixNano())
-	return n, err
+	if err := finishWatchRetention(ctx, tx, t); err != nil {
+		return n, err
+	}
+	return n, tx.Commit()
 }
 
 // QueryTraces returns the traces a query selects.

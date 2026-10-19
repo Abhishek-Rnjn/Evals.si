@@ -38,8 +38,9 @@ import (
 // fakeWorker: "test/quality" scores 1 for outputs containing "good" and 0.2
 // otherwise; "test/deep" always scores 0.1 and counts its calls.
 type fakeWorker struct {
-	mu        sync.Mutex
-	deepCalls int
+	mu             sync.Mutex
+	deepCalls      int
+	beforeEvaluate func(context.Context, *pluginv1alpha1.EvaluateRequest)
 }
 
 func (f *fakeWorker) Describe(context.Context) ([]*evalsiv1alpha1.EvaluatorManifest, error) {
@@ -59,7 +60,10 @@ func (f *fakeWorker) LoadDataset(context.Context, *pluginv1alpha1.LoadDatasetReq
 	return nil, fmt.Errorf("unused")
 }
 
-func (f *fakeWorker) Evaluate(_ context.Context, req *pluginv1alpha1.EvaluateRequest) (*pluginv1alpha1.EvaluateResponse, error) {
+func (f *fakeWorker) Evaluate(ctx context.Context, req *pluginv1alpha1.EvaluateRequest) (*pluginv1alpha1.EvaluateResponse, error) {
+	if f.beforeEvaluate != nil {
+		f.beforeEvaluate(ctx, req)
+	}
 	resp := &pluginv1alpha1.EvaluateResponse{}
 	for _, r := range req.GetRecords() {
 		v := 0.1

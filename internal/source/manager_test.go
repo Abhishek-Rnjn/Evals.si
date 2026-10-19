@@ -500,14 +500,14 @@ func TestWriteBackSendsChangedScoresOnce(t *testing.T) {
 		}
 		t.Fatalf("scores written never reached %d", n)
 	}
-	h.m.OnResults("quality", nil, tinfo, result(1))
+	h.m.OnResults(t.Context(), "quality", nil, tinfo, result(1))
 	wait(1)
 	if s := h.fs.written[0]; s.TraceID != "tr-a" || s.Metric != "task-success" || s.Value != 1.0 || s.Policy != "quality" {
 		t.Fatalf("written %+v", s)
 	}
 	// The same score again is not sent; a changed one is, with the ID the store gave.
-	h.m.OnResults("quality", nil, tinfo, result(1))
-	h.m.OnResults("quality", nil, tinfo, result(0))
+	h.m.OnResults(t.Context(), "quality", nil, tinfo, result(1))
+	h.m.OnResults(t.Context(), "quality", nil, tinfo, result(0))
 	wait(2)
 	time.Sleep(700 * time.Millisecond)
 	h.fs.mu.Lock()
@@ -520,14 +520,14 @@ func TestWriteBackSendsChangedScoresOnce(t *testing.T) {
 		t.Fatalf("an update did not carry the stored remote ID: %+v", last)
 	}
 	// Traces that are not from a source, or from one with write-back off, are ignored.
-	h.m.OnResults("quality", nil, ingest.TraceInfo{Project: "p"}, result(1))
+	h.m.OnResults(t.Context(), "quality", nil, ingest.TraceInfo{Project: "p"}, result(1))
 	if st, _ := h.st.SourceState(ctx, "p", "studio"); st.Scored != 2 {
 		t.Fatalf("scored %d", st.Scored)
 	}
 	h.fs.mu.Unlock()
 	// Another policy's score for the same metric is its own write, not a
 	// repeat of the first policy's, and does not reuse its remote ID.
-	h.m.OnResults("safety", nil, tinfo, result(0))
+	h.m.OnResults(t.Context(), "safety", nil, tinfo, result(0))
 	wait(3)
 	h.fs.mu.Lock()
 	if s := h.fs.written[2]; s.Policy != "safety" {
@@ -553,7 +553,7 @@ func TestFailedWriteBackRetriesItself(t *testing.T) {
 	defer h.r.stop()
 
 	tinfo := ingest.TraceInfo{Project: "p", Labels: map[string]string{LabelSource: "studio"}, Resource: ingest.Attrs{AttrSourceTraceID: "tr-a"}}
-	h.m.OnResults("quality", nil, tinfo, []*evalsiv1alpha1.EvaluationResult{{
+	h.m.OnResults(t.Context(), "quality", nil, tinfo, []*evalsiv1alpha1.EvaluationResult{{
 		Evaluator: "task-success", Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED,
 		Scores: []*evalsiv1alpha1.Score{{Name: "task-success", Value: &evalsiv1alpha1.Score_Number{Number: 1}}},
 	}})
@@ -668,26 +668,60 @@ func TestResultsWaitForRunnerAndReportFullWritebackQueue(t *testing.T) {
 	h := newHarness(t, func(s *evalsiv1alpha1.TraceSource) { s.WriteBack = &evalsiv1alpha1.WriteBack{Enabled: true} })
 	info := ingest.TraceInfo{Project: "p", Labels: map[string]string{LabelSource: "studio"}, Resource: ingest.Attrs{AttrSourceTraceID: "tr-a"}}
 	results := []*evalsiv1alpha1.EvaluationResult{{Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED, Scores: []*evalsiv1alpha1.Score{{Value: &evalsiv1alpha1.Score_Number{Number: 1}}}}}
-	if h.m.ResultsReady(info) || h.m.OnResults("p", nil, info, results) {
+	if h.m.ResultsReady(t.Context(), info) || h.m.OnResults(t.Context(), "p", nil, info, results) {
 		t.Fatal("missing runner accepted replay results")
 	}
 	h.m.mu.Lock()
 	h.m.runners[key{"p", "studio"}] = h.r
 	h.m.mu.Unlock()
-	if !h.m.ResultsReady(info) {
+	if !h.m.ResultsReady(t.Context(), info) {
 		t.Fatal("registered runner was not ready")
 	}
-	if !h.m.OnResults("p", nil, info, results) {
+	if !h.m.OnResults(t.Context(), "p", nil, info, results) {
 		t.Fatal("ready runner rejected result")
 	}
 	for len(h.r.scores) < cap(h.r.scores) {
 		h.r.scores <- Score{}
 	}
-	if h.m.OnResults("p", nil, info, results) {
+	if h.m.OnResults(t.Context(), "p", nil, info, results) {
 		t.Fatal("full queue reported successful handoff")
 	}
 	raw := ingest.TraceInfo{Project: "p", Labels: map[string]string{LabelSource: "arbitrary"}}
-	if !h.m.ResultsReady(raw) || !h.m.OnResults("p", nil, raw, results) {
+	if !h.m.ResultsReady(t.Context(), raw) || !h.m.OnResults(t.Context(), "p", nil, raw, results) {
 		t.Fatal("push trace was mistaken for source work")
+	}
+}
+
+func TestDeletedSourceFinishesAcceptedWorkWithoutWriteback(t *testing.T) {
+	h := newHarness(t, func(src *evalsiv1alpha1.TraceSource) { src.WriteBack = &evalsiv1alpha1.WriteBack{Enabled: true} })
+	info := ingest.TraceInfo{Project: "p", Labels: map[string]string{LabelSource: "studio"}, Resource: ingest.Attrs{AttrSourceTraceID: "accepted"}}
+	results := []*evalsiv1alpha1.EvaluationResult{{Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED, Scores: []*evalsiv1alpha1.Score{{Value: &evalsiv1alpha1.Score_Number{Number: 1}}}}}
+	// Before initial sync, an existing source must wait for its write-back runner.
+	if h.m.ResultsReady(t.Context(), info) {
+		t.Fatal("existing source skipped startup barrier")
+	}
+	h.m.mu.Lock()
+	h.m.runners[key{"p", "studio"}] = h.r
+	h.m.mu.Unlock()
+	if err := h.st.DeleteSource(t.Context(), "p", "studio"); err != nil {
+		t.Fatal(err)
+	}
+	// Even before sync removes the old runner, a deleted source gets no new scores.
+	if !h.m.ResultsReady(t.Context(), info) || !h.m.OnResults(t.Context(), "quality", nil, info, results) {
+		t.Fatal("deleted source stranded accepted work")
+	}
+	if len(h.r.scores) != 0 {
+		t.Fatal("deleted source received write-back")
+	}
+	h.m.mu.Lock()
+	delete(h.m.runners, key{"p", "studio"})
+	h.m.mu.Unlock()
+	if !h.m.ResultsReady(t.Context(), info) || !h.m.OnResults(t.Context(), "quality", nil, info, results) {
+		t.Fatal("runner removal stranded accepted work")
+	}
+	// A storage error must not be mistaken for an intentional deletion.
+	_ = h.st.Close()
+	if h.m.ResultsReady(t.Context(), info) || h.m.OnResults(t.Context(), "quality", nil, info, results) {
+		t.Fatal("failed source lookup acknowledged pending work")
 	}
 }

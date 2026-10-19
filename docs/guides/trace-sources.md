@@ -426,6 +426,42 @@ restart and while running. Acknowledgments cannot remove a newer revision of
 the same trace. This works with SQLite or PostgreSQL metadata and with a
 separate ClickHouse trace store. Trace retention removes pending copies too.
 
+Accepted traces become queryable before evaluation readiness is checked. An
+unavailable policy retains its pending work without hiding the redacted trace.
+A deleted source no longer requires a runner: its accepted work finishes local
+evaluation without write-back to that source. An existing source with write-back
+enabled still waits for its runner; lookup failures are retried.
+
+Leadership loss cancels in-flight evaluation. Every lease acquisition has an
+immutable epoch, including reacquisition by the same process. Trace writes,
+score writes and acknowledgments check that captured epoch and the exact
+pending acceptance under a metadata write lock shared with ingestion, lease
+changes and retention. Worker calls run outside the lock.
+
+Publication order is tracked per trace across sources. Recovery publishes the
+newest accepted revision once; older streams keep independent evaluation work
+without replacing the current trace. Scores are bound to the published record
+revision, so a changed output never inherits a previous output's scores. An
+identical replay preserves valid scores.
+
+SQL projections share the metadata transaction. ClickHouse uses committed,
+monotonically increasing replacement versions and compact retention tombstones.
+Publication intents commit before external writes and survive a superseding
+acceptance, so retention can fence a timed-out request even after its queue row
+is replaced. Score references preserve results needed by unexpired input
+generations; retention removes the references and payloads when they expire.
+ClickHouse keeps compact per-binding expiry rows to collect delayed scores even
+after metadata references expire. Changed references and retention keys transfer
+in bounded request bodies. Retention commits its retirement decision before
+external tombstones, so a partial cleanup failure remains recoverable.
+Legacy score copying checks the committed retirement cutoff and surviving score
+references. Replacing a projection records its outgoing binding's expiry before
+discarding the old trace time, including unchanged-input migrations.
+A delayed INSERT cannot restore an expired trace or expose its scores, even if
+it completes after retention. A deliberate new backfill is a new acceptance;
+it does not revive expired scores. Startup migrates the trace-result keys and
+ClickHouse sorting key; stop old writers before upgrading.
+
 Delivery is at least once: a crash between a worker call and its acknowledgment
 can repeat evaluation and external callbacks. Pending work predating this
 version has no durable queue entry; re-run the source's backfill for those

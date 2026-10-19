@@ -17,10 +17,11 @@ import (
 )
 
 type pendingPayload struct {
-	Record []byte
-	Info   ingest.TraceInfo
-	Only   []string
-	Stream string
+	Acceptance [16]byte
+	Record     []byte
+	Info       ingest.TraceInfo
+	Only       []string
+	Stream     string
 }
 
 func init() {
@@ -43,7 +44,7 @@ func decodePending(blob []byte, p *pendingPayload) error {
 }
 
 func (it item) pending() store.WatchPending {
-	return store.WatchPending{Project: it.info.Project, TraceID: it.record.GetId(), Stream: it.stream, Payload: it.payload, StartNS: Summary(it.record, it.info).GetStartTime().AsTime().UnixNano()}
+	return store.WatchPending{Project: it.info.Project, TraceID: it.record.GetId(), Stream: it.stream, Payload: it.payload, RecordHash: store.RecordHash(it.record), SnapshotHash: store.SnapshotHash(Summary(it.record, it.info), it.record), StartNS: Summary(it.record, it.info).GetStartTime().AsTime().UnixNano()}
 }
 
 // recoverPending replays bounded batches, only on the elected policy engine.

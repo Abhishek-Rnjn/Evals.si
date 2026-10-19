@@ -112,8 +112,9 @@ func (t Traces) GetTrace(ctx context.Context, req *connect.Request[evalsiv1alpha
 	}
 	var summary *evalsiv1alpha1.TraceSummary
 	var record *evalsiv1alpha1.Record
+	var results []*evalsiv1alpha1.PolicyResults
 	for _, project := range candidates {
-		sum, rec, err := t.Store.GetTrace(ctx, project, id)
+		sum, rec, policies, err := t.Store.GetTraceWithResults(ctx, project, id)
 		if errors.Is(err, store.ErrNotFound) {
 			continue
 		}
@@ -127,14 +128,10 @@ func (t Traces) GetTrace(ctx context.Context, req *connect.Request[evalsiv1alpha
 			return nil, connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("trace %q exists in projects %s and %s; set project", id, summary.GetProject(), project))
 		}
-		summary, record = sum, rec
+		summary, record, results = sum, rec, policies
 	}
 	if summary == nil {
 		return nil, notFound
-	}
-	results, err := t.Store.TraceResults(ctx, summary.GetProject(), record.GetId())
-	if err != nil {
-		return nil, err
 	}
 	return connect.NewResponse(&evalsiv1alpha1.GetTraceResponse{Record: record, Policies: results}), nil
 }
