@@ -56,6 +56,10 @@ class Cell:
     diff_low: float | None = None
     diff_high: float | None = None
     significant: bool = False
+    # How many (record, trial) pairs the difference rests on.
+    paired_n: int = 0
+    # True when the difference is significant and in the bad direction.
+    regressed: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -183,6 +187,8 @@ def build(
                 if c.metric == metric:
                     cell.diff, cell.diff_low, cell.diff_high = c.diff, c.diff_low, c.diff_high
                     cell.significant = c.significant
+                    cell.paired_n = c.paired_n
+                    cell.regressed = c.regressed
         cells.append(cell)
     return cells
 
@@ -322,3 +328,180 @@ def mechanisms(result: Mapping[str, Any]) -> list[Mechanism]:
 
         out.append(Mechanism(f"context:{strategy}", sum(acted(r) for r in records), n))
     return out
+
+
+# --- The regression gate (H7) ------------------------------------------------
+#
+# The gate reuses the paired difference and its interval from ``compare_results``
+# (no interval code of its own). A cell fails when the interval lies wholly on
+# the bad side of ``-max_regression``; it passes when the interval does not; and
+# when there is nothing to pair (no shared records, fewer than two pairs, an
+# interval that cannot be formed, a different dataset) the verdict is
+# ``insufficient``. Insufficient data is reported, never counted as a pass in the
+# text: it exits zero unless ``strict`` is set, which fails closed.
+
+PASS, FAIL, INSUFFICIENT, BASELINE = "pass", "fail", "insufficient", "baseline"
+
+
+@dataclass
+class Check:
+    name: str  # "vs-baseline", "held-out-vs-baseline" or "held-out-vs-tuned"
+    status: str
+    detail: str
+
+
+@dataclass
+class Verdict:
+    cell: str
+    status: str
+    checks: list[Check]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _higher_is_better(data: Mapping[str, Any], metric: str) -> bool:
+    summary: Mapping[str, Any] = next(
+        (s for s in data.get("summaries") or [] if s.get("metric") == metric), {}
+    )
+    return summary.get("higher_is_better", True) is not False
+
+
+def _vs(
+    name: str,
+    reference: tuple[str, Mapping[str, Any]],
+    candidate: Mapping[str, Any],
+    metric: str,
+    *,
+    max_regression: float,
+    level: float,
+) -> Check:
+    """Is the candidate's paired difference from the reference wholly worse than
+    the tolerance?"""
+    for c in compare_results(reference[1], candidate, level=level):
+        if c.metric != metric:
+            continue
+        if c.diff is None or c.diff_low is None or c.diff_high is None or c.paired_n < 2:
+            return Check(
+                name, INSUFFICIENT, f"only {c.paired_n} paired record(s) with {reference[0]}"
+            )
+        # Orient so that a negative number is always worse.
+        sign = 1.0 if _higher_is_better(candidate, metric) else -1.0
+        lo, hi = sorted((sign * c.diff_low, sign * c.diff_high))
+        text = f"{sign * c.diff:+.3f} [{lo:+.3f}, {hi:+.3f}] vs {reference[0]} (n={c.paired_n})"
+        if hi < -max_regression:
+            return Check(name, FAIL, f"worse by more than {max_regression:g}: {text}")
+        return Check(name, PASS, text)
+    return Check(name, INSUFFICIENT, f"no shared metric {metric!r} with {reference[0]}")
+
+
+def gate(
+    results: Sequence[tuple[str, Mapping[str, Any]]],
+    cells: Sequence[Cell],
+    metric: str,
+    *,
+    max_regression: float = 0.0,
+    level: float = 0.95,
+) -> list[Verdict]:
+    """A verdict per cell. The first cell names the baseline harness and model;
+    its first run on each dataset is a reference and gets the BASELINE verdict,
+    whatever its position. A candidate is checked against the baseline
+    run on its own dataset, wherever in the inputs that run is, and, when
+    ``build`` split the cells by ``tuned_on``, a held-out candidate is also checked
+    against the tuned cell of the same harness and model: it fails when its
+    interval lies wholly below the tuned one by more than ``max_regression`` (the
+    two sets of records differ, so this is a comparison of intervals, not a
+    paired one)."""
+    # `not (x >= 0)` also refuses NaN, which would make every comparison below false.
+    if not max_regression >= 0 or max_regression == float("inf"):
+        raise ValueError("max_regression must be a finite number, zero or positive")
+    verdicts: list[Verdict] = []
+    base_name = results[0][0]
+    base = cells[0]
+    # The first run of the baseline harness and model on each dataset is its reference;
+    # a later run of the same harness and model on that dataset is a candidate.
+    reference: set[int] = set()
+    seen: set[str] = set()
+    for j, c in enumerate(cells):
+        if c.harness == base.harness and c.model == base.model and c.dataset not in seen:
+            reference.add(j)
+            seen.add(c.dataset)
+
+    for i, (cell, (name, data)) in enumerate(zip(cells, results, strict=True)):
+        if i in reference:
+            verdicts.append(Verdict(name, BASELINE, []))
+            continue
+        checks: list[Check] = []
+        # The baseline harness on this cell's own dataset, from anywhere in the inputs.
+        refs = [
+            (n, d)
+            for j, (n, d) in enumerate(results)
+            if j in reference and cells[j].dataset == cell.dataset
+        ]
+        label = "held-out-vs-baseline" if cell.split == "held-out" else "vs-baseline"
+        if cell.n == 0 or cell.mean is None:
+            checks.append(Check(label, INSUFFICIENT, "the cell has no scored records"))
+        elif refs:
+            checks.append(
+                _vs(label, refs[0], data, metric, max_regression=max_regression, level=level)
+            )
+        else:
+            checks.append(
+                Check(label, INSUFFICIENT, f"{base_name} has no run on this cell's dataset")
+            )
+        if cell.split == "held-out":
+            tuned = [
+                c
+                for j, c in enumerate(cells)
+                if j != i
+                and c.split == "tuned"
+                and c.harness == cell.harness
+                and c.model == cell.model
+            ]
+            if not tuned:
+                checks.append(
+                    Check("held-out-vs-tuned", INSUFFICIENT, "no tuned cell of this harness")
+                )
+            elif cell.high is None or tuned[0].low is None or not cell.n or not tuned[0].n:
+                checks.append(Check("held-out-vs-tuned", INSUFFICIENT, "an interval is missing"))
+            else:
+                t = tuned[0]
+                text = (
+                    f"held-out [{_f(cell.low)}, {_f(cell.high)}] "
+                    f"vs tuned {t.name} [{_f(t.low)}, {_f(t.high)}]"
+                )
+                higher = _higher_is_better(data, metric)
+                worse = (
+                    cell.high < (t.low or 0) - max_regression
+                    if higher
+                    else (cell.low or 0) > (t.high or 0) + max_regression
+                )
+                checks.append(Check("held-out-vs-tuned", FAIL if worse else PASS, text))
+        statuses = {c.status for c in checks}
+        status = FAIL if FAIL in statuses else INSUFFICIENT if INSUFFICIENT in statuses else PASS
+        verdicts.append(Verdict(name, status, checks))
+    return verdicts
+
+
+def gate_failed(verdicts: Sequence[Verdict], *, strict: bool = False) -> bool:
+    """Whether the gate fails: any failing cell, or with ``strict`` any cell
+    with insufficient data too."""
+    bad = {FAIL, INSUFFICIENT} if strict else {FAIL}
+    return any(v.status in bad for v in verdicts)
+
+
+def gate_lines(verdicts: Sequence[Verdict], *, strict: bool = False) -> str:
+    lines = []
+    for v in verdicts:
+        lines.append(f"{v.cell}: {v.status.upper()}")
+        lines.extend(f"  {c.name}: {c.status} - {c.detail}" for c in v.checks)
+    outcome = "FAIL" if gate_failed(verdicts, strict=strict) else "PASS"
+    note = ""
+    if any(v.status == INSUFFICIENT for v in verdicts):
+        note = (
+            " (strict: insufficient data fails)"
+            if strict
+            else " (some cells had insufficient data)"
+        )
+    lines.append(f"gate: {outcome}{note}")
+    return "\n".join(lines)

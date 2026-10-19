@@ -1,0 +1,67 @@
+# UNVERIFIED: written from Harness²'s Codex launcher flags and this repo's run-spec
+# schema. It has not been run against a live Codex CLI or model.
+#
+# The Codex CLI (`codex exec --json`) as a bring-your-own CLI agent inside the
+# task's sandbox, with the strongest network policy the sandbox supports: a
+# per-host allowlist through the logging egress proxy. Harness² runs Codex with
+# `--dangerously-bypass-approvals-and-sandbox`; that is kept here because Codex's
+# own sandbox cannot be nested reliably, so THIS sandbox is the only boundary.
+# Do not run this spec with `network: allow` or on a host with no isolation floor.
+#
+# Fill in before running:
+#   - REPLACE_WITH_PINNED_VERSION: the Codex release you tested (npm i -g needs Node in the image).
+#   - the model and the model host in allow_hosts.
+#   - HARNESS2_CODEX_API_KEY on the worker (a credential grant for the project).
+#   - the dataset: a directory YOU downloaded (see docs/guides/harness2.md for licensing).
+#     `reward=score.json` reads WorkBuddy-Bench's verifier file (unconfirmed path).
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: harness2-codex-sandboxed
+spec:
+  target:
+    agent:
+      cli:
+        # {instruction} is replaced by the task's instruction. The working
+        # directory is the task's workdir, so no -C is needed.
+        # `env` sets HOME in the command: a Harbor task always supplies its own
+        # environment variables, which replace the spec's `environment.env`.
+        command:
+          - env
+          - HOME=/tmp/agent-home
+          - codex
+          - exec
+          - "{instruction}"
+          - --model
+          - REPLACE_WITH_MODEL
+          - --skip-git-repo-check
+          - --dangerously-bypass-approvals-and-sandbox
+          - --ephemeral
+          - --json
+        output_format: codex-json
+        install:
+          - npm install -g @openai/codex@REPLACE_WITH_PINNED_VERSION
+        env_from: {OPENAI_API_KEY: HARNESS2_CODEX_API_KEY}
+        # The only hosts the agent may reach. A refused host is recorded as an
+        # `egress_denied` policy event and scored by `policy-violations`.
+        allow_hosts: ["api.openai.com:443"]
+        timeout: 30m
+  dataset:
+    # network=deny matters: a Harbor task defaults to network allow, and that
+    # record-level setting would override the allowlist below.
+    uri: "harbor://./workbuddy-bench/wb-bench-code-v1.0/tasks?reward=score.json&network=deny&tasks=REPLACE_WITH_TASK"
+  environment:
+    # Only the install above needs the network beyond allow_hosts.
+    setup_network: allow
+    sandbox:
+      network: allowlist
+      allow_hosts: ["api.openai.com:443"]
+      min_isolation: namespaced   # refuse a weaker rung; stronger ones (Firecracker) are still preferred
+      memory_mb: 4096
+  evaluators:
+    - ref: task-success
+    - ref: policy-violations
+    - ref: tool-errors
+    - ref: loop-detection
+    - ref: agent-efficiency
+  trials: 1

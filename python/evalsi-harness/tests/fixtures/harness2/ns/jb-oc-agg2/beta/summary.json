@@ -1,0 +1,70 @@
+{
+ "task_id": "beta",
+ "base": [
+  {
+   "label": "base1",
+   "run_dir": "/original/machine/beta/base1",
+   "run_id": "jb-oc-agg2/beta/base1"
+  },
+  {
+   "label": "base2",
+   "run_dir": "/original/machine/beta/base2",
+   "run_id": "jb-oc-agg2/beta/base2"
+  }
+ ],
+ "modes": {
+  "agg": {
+   "ok": true
+  },
+  "seq": {
+   "ok": true
+  }
+ },
+ "selections": {
+  "agg": {
+   "task_id": "beta",
+   "mode": "agg",
+   "k": 2,
+   "chosen_id": "A",
+   "chosen_label": "agg1",
+   "chosen_run_id": "jb-oc-agg2/beta/agg1",
+   "chosen_is_base": false,
+   "why": "",
+   "id_map": {},
+   "dropped": [],
+   "n_candidates": 2,
+   "ok": true,
+   "fallback": false,
+   "error": "",
+   "usd": 0.5,
+   "experience": {},
+   "trivial": false,
+   "evidence": "deliverable",
+   "chosen_run_dir": "/original/machine/beta/agg1",
+   "harness_fingerprint": ""
+  },
+  "seq": {
+   "task_id": "beta",
+   "mode": "seq",
+   "k": 2,
+   "chosen_id": "A",
+   "chosen_label": "c2",
+   "chosen_run_id": "jb-oc-agg2/beta/c2",
+   "chosen_is_base": false,
+   "why": "",
+   "id_map": {},
+   "dropped": [],
+   "n_candidates": 2,
+   "ok": true,
+   "fallback": false,
+   "error": "",
+   "usd": 0.5,
+   "experience": {},
+   "trivial": false,
+   "evidence": "deliverable",
+   "chosen_run_dir": "/original/machine/beta/c2",
+   "harness_fingerprint": ""
+  }
+ },
+ "errors": []
+}

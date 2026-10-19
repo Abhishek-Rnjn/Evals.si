@@ -53,6 +53,7 @@ def _parser() -> argparse.ArgumentParser:
 
     _add_eval(sub)
     _add_run(sub)
+    _add_matrix(sub)
     _add_gate(sub)
     _add_policy(sub)
     from evalsi.cli_analytics import add_analytics_commands
@@ -190,6 +191,8 @@ def _add_run(sub: Any) -> None:
     add_credential_args(cmp)
     cmp.set_defaults(func=_cmd_compare)
 
+
+def _add_matrix(sub: Any) -> None:
     mx = sub.add_parser(
         "matrix",
         help="harness-by-model matrix over results files, with cost beside each score",
@@ -208,8 +211,83 @@ def _add_run(sub: Any) -> None:
         action="store_true",
         help="also show, per cell, which optional tools and context strategy ran in how many tasks",
     )
+    mx.add_argument(
+        "--gate",
+        action="store_true",
+        help="regression gate: exit 1 when a cell is significantly worse than the first cell "
+        "(the paired difference's interval lies wholly on the bad side) or, with --tuned-on, "
+        "a held-out cell is significantly worse than the baseline on held-out data or than "
+        "its tuned cell",
+    )
+    mx.add_argument(
+        "--max-regression",
+        type=float,
+        default=0.0,
+        help="with --gate: tolerated drop in the metric; a cell fails only when its whole "
+        "interval is worse than this (default 0)",
+    )
+    mx.add_argument(
+        "--gate-strict",
+        action="store_true",
+        help="with --gate: also exit 1 when a cell has insufficient data to decide "
+        "(by default it is reported, not failed)",
+    )
     mx.add_argument("--format", choices=["table", "json"], default="table")
     mx.set_defaults(func=_cmd_matrix)
+    _add_harness_tools(sub)
+
+
+def _add_harness_tools(sub: Any) -> None:
+    _add_harness2(sub)
+    ab = sub.add_parser(
+        "ablate", help="component ablation of an adopted harness (H7): plan reverts, attribute"
+    )
+    ab_sub = ab.add_subparsers(dest="action", required=True)
+    plan = ab_sub.add_parser(
+        "plan", help="write one revert variant per edited component of an adopted harness"
+    )
+    plan.add_argument("base", help="the base harness directory")
+    plan.add_argument("adopted", help="the adopted harness directory")
+    plan.add_argument("--out", required=True, help="directory for the variants and manifest.json")
+    plan.set_defaults(func=_cmd_ablate_plan)
+    attr = ab_sub.add_parser(
+        "attribute", help="per-component effect (full minus revert) from results files"
+    )
+    attr.add_argument("--metric", required=True)
+    attr.add_argument("--base", required=True, help="results file for the base harness")
+    attr.add_argument("--full", required=True, help="results file for the full adopted harness")
+    attr.add_argument(
+        "--variant",
+        action="append",
+        default=[],
+        metavar="COMPONENT=FILE",
+        help="results file for the variant with that component reverted (repeatable)",
+    )
+    attr.add_argument("--confidence", type=float, default=0.95)
+    attr.add_argument("--format", choices=["table", "json"], default="table")
+    attr.set_defaults(func=_cmd_ablate_attribute)
+
+
+def _add_harness2(sub: Any) -> None:
+    h2 = sub.add_parser(
+        "harness2", help="import and calibrate Harness² runs (H7; written from source, unverified)"
+    )
+    h2_sub = h2.add_subparsers(dest="action", required=True)
+    h2i = h2_sub.add_parser(
+        "import", help="write one results file per harness (base, each mode and k) for `matrix`"
+    )
+    h2i.add_argument("namespace", help="a Harness² namespace directory under runs/")
+    h2i.add_argument("--out", required=True, help="directory for the results files")
+    h2i.set_defaults(func=_cmd_harness2_import)
+    h2c = h2_sub.add_parser(
+        "calibrate", help="how often Harness²'s choice matches the candidate we score highest"
+    )
+    h2c.add_argument("namespace", help="a Harness² namespace directory under runs/")
+    h2c.add_argument("--results", help="an imported cell's results file scored by our evaluators")
+    h2c.add_argument("--metric", help="the metric to rank candidates by (with --results)")
+    h2c.add_argument("--confidence", type=float, default=0.95)
+    h2c.add_argument("--format", choices=["table", "json"], default="table")
+    h2c.set_defaults(func=_cmd_harness2_calibrate)
 
     delete = sub.add_parser("delete-run", help="delete a finished server run and its stored data")
     delete.add_argument("id")
@@ -915,16 +993,125 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    if (args.max_regression or args.gate_strict) and not args.gate:
+        print("error: --max-regression and --gate-strict need --gate", file=sys.stderr)
+        return 2
+    verdicts = []
+    if args.gate:
+        try:
+            verdicts = matrix.gate(loaded, cells, args.metric, max_regression=args.max_regression)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.format == "json":
         rows = [c.to_dict() for c in cells]
         if args.mechanisms:
             for row, (_, data) in zip(rows, loaded, strict=True):
                 row["mechanisms"] = [asdict(m) for m in matrix.mechanisms(data)]
+        for row, verdict in zip(rows, verdicts, strict=False):
+            row["gate"] = verdict.to_dict()
         print(json.dumps(rows, indent=2))
     else:
         print(matrix.table(cells))
         if args.mechanisms:
             print("\n" + matrix.mechanism_lines(loaded))
+        if verdicts:
+            print("\n" + matrix.gate_lines(verdicts, strict=args.gate_strict))
+    if verdicts and matrix.gate_failed(verdicts, strict=args.gate_strict):
+        print("error: the regression gate failed", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _cmd_harness2_import(args: argparse.Namespace) -> int:
+    try:
+        from evalsi_harness.benchmarks import harness2
+    except ImportError:
+        print("error: needs the agent harness: pip install evalsi-harness", file=sys.stderr)
+        return 2
+    try:
+        written = harness2.write_cells(harness2.import_namespace(args.namespace), args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    for path in written:
+        print(path)
+    return 0
+
+
+def _cmd_harness2_calibrate(args: argparse.Namespace) -> int:
+    from evalsi import harness2_calibration as cal
+
+    try:
+        ns = cal.read_namespace(args.namespace)
+        if args.results:
+            if not args.metric:
+                print("error: --results needs --metric", file=sys.stderr)
+                return 2
+            with open(args.results, encoding="utf-8") as handle:
+                results = json.load(handle)
+            scores = cal.load_candidate_scores(results, args.metric)
+            rows = cal.agreement_with_scores(
+                ns,
+                scores,
+                level=args.confidence,
+                higher_is_better=cal.metric_higher_is_better(results, args.metric),
+            )
+        else:
+            rows = cal.agreement_with_base(ns, level=args.confidence)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.format == "json":
+        print(json.dumps([r.to_dict() for r in rows], indent=2))
+        return 0
+    for r in rows:
+        if r.rate is None:
+            print(f"{r.cell}: no comparable tasks ({len(r.ungraded)} ungraded)")
+        else:
+            print(
+                f"{r.cell}: {r.agreed}/{r.compared} = {r.rate:.3f} "
+                f"[{r.low:.3f}, {r.high:.3f}], {len(r.ungraded)} ungraded"
+            )
+    return 0
+
+
+def _cmd_ablate_plan(args: argparse.Namespace) -> int:
+    from evalsi import ablation
+
+    try:
+        manifest = ablation.plan_dirs(args.base, args.adopted, args.out)
+    except ablation.AblationError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(manifest, indent=2))
+    return 0
+
+
+def _cmd_ablate_attribute(args: argparse.Namespace) -> int:
+    from evalsi import ablation
+
+    def load(path: str) -> Any:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+
+    try:
+        variants = {}
+        for item in args.variant:
+            component, sep, path = item.partition("=")
+            if not sep or not component or not path:
+                raise ablation.AblationError(f"--variant wants COMPONENT=FILE, got {item!r}")
+            variants[component] = load(path)
+        attributions = ablation.attribute(
+            load(args.base), load(args.full), variants, args.metric, level=args.confidence
+        )
+    except (OSError, json.JSONDecodeError, ablation.AblationError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.format == "json":
+        print(json.dumps([a.to_dict() for a in attributions], indent=2))
+    else:
+        print(ablation.attribution_table(attributions))
     return 0
 
 

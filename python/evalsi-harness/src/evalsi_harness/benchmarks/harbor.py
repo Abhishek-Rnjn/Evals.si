@@ -36,7 +36,15 @@ Options (query string): ``tasks`` (comma-separated names), ``image``
 task's, ``allow`` unless it says no-network), ``oracle=true`` (adds the
 reference solution under /solution; an agent that runs
 ``bash /solution/solve.sh``, or ``solution.sh`` for Terminal-Bench 1,
-validates the setup).
+validates the setup), ``reward`` (``harbor``, the default, or ``score.json``).
+
+``reward=score.json`` reads ``/logs/verifier/score.json`` first (then the
+Harbor reward files) and scores it the way Harness²'s WorkBuddy-Bench adapter
+does: the first usable of ``reward``, ``overall``, ``test_pass_rate`` (each
+within 0..1; an out-of-range value is skipped, not clamped), then
+``tests_passed / tests_total``. A file with none of them is a checker error,
+never a zero. That path and the field set come from reading Harness²'s
+adapter, not from a recorded WorkBuddy-Bench verifier run.
 """
 
 from __future__ import annotations
@@ -414,7 +422,15 @@ def _chmod(paths: list[str]) -> str:
     return f"chmod +x {' '.join(shlex.quote(p) for p in paths)}\n" if paths else ""
 
 
-def _checker_script(test: str, verifier_env: dict[str, str], extra: str = "") -> str:
+def _checker_script(
+    test: str, verifier_env: dict[str, str], extra: str = "", reward_files: tuple[str, ...] = ()
+) -> str:
+    names = reward_files or ("reward.json", "reward.txt")
+    reads = "\n".join(
+        f"{'if' if i == 0 else 'elif'} [ -f {LOGS}/{n} ]; "
+        f"then printf '{MARK} {n}\\n'; cat {LOGS}/{n}"
+        for i, n in enumerate(names)
+    )
     exports = "".join(f"export {k}={shlex.quote(v)}\n" for k, v in verifier_env.items())
     return f"""mkdir -p {LOGS} /logs/agent /logs/artifacts
 {exports}{extra}if command -v bash >/dev/null 2>&1; then run=bash; else run=sh; fi
@@ -422,8 +438,7 @@ $run {test} > {LOGS}/test-stdout.txt 2>&1
 code=$?
 tail -c 20000 {LOGS}/test-stdout.txt
 printf '\\n{MARK} exit %s\\n' "$code"
-if [ -f {LOGS}/reward.json ]; then printf '{MARK} reward.json\\n'; cat {LOGS}/reward.json
-elif [ -f {LOGS}/reward.txt ]; then printf '{MARK} reward.txt\\n'; cat {LOGS}/reward.txt
+{reads}
 fi
 """
 
@@ -440,7 +455,16 @@ def load_harbor(path: str, **options: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _reward_files(option: str | None) -> tuple[str, ...]:
+    if not option or option == "harbor":
+        return ()
+    if option == "score.json":
+        return ("score.json", "reward.json", "reward.txt")
+    raise TaskFormatError(f"reward must be harbor or score.json, not {option!r}")
+
+
 def _harbor_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
+    reward_files = _reward_files(options.get("reward"))
     config = tomllib.loads((d / "task.toml").read_text())
     if config.get("steps") or (d / "steps").is_dir():
         raise TaskFormatError("multi-step tasks are not supported")
@@ -479,7 +503,12 @@ def _harbor_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
         "command": [
             "sh",
             "-c",
-            _checker_script("/tests/test.sh", dict(verifier.get("env") or {}), _chmod(tests_exec)),
+            _checker_script(
+                "/tests/test.sh",
+                dict(verifier.get("env") or {}),
+                _chmod(tests_exec),
+                reward_files,
+            ),
         ],
         "files": tests,
         "timeout": _seconds(verifier.get("timeout_sec") or 600),
@@ -497,6 +526,7 @@ def _harbor_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
                 "metadata": config.get("metadata") or {},
                 "agent_timeout_sec": agent.get("timeout_sec"),
                 "ignored_dockerfile_instructions": build.ignored if build else [],
+                **({"reward": options["reward"]} if reward_files else {}),
             },
             "environment": _environment(
                 build=build,
@@ -617,7 +647,7 @@ def _sections(stdout: str) -> tuple[str, int | None, str, str]:
     code_text, _, rest = tail.partition("\n")
     code = int(code_text) if code_text.strip().lstrip("-").isdigit() else None
     kind, reward = "", ""
-    if rest.startswith(f"{MARK} reward."):
+    if rest.startswith((f"{MARK} reward.", f"{MARK} score.json")):
         header, _, reward = rest.partition("\n")
         kind = header.removeprefix(f"{MARK} ")
     return out, code, kind, reward
@@ -627,8 +657,55 @@ def _tail(text: str, limit: int = 2000) -> str:
     return text if len(text) <= limit else "..." + text[-limit:]
 
 
+def _unit(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if 0.0 <= number <= 1.0 else None
+
+
+def score_from_payload(payload: dict[str, Any]) -> float | None:
+    """A WorkBuddy-Bench ``score.json`` as one score in 0..1, with the
+    precedence of Harness²'s adapter (read from its source): ``reward``,
+    ``overall``, ``test_pass_rate``, then ``tests_passed / tests_total``.
+    Values outside 0..1 are skipped, not clamped; ``None`` means unscored."""
+    for key in ("reward", "overall", "test_pass_rate"):
+        score = _unit(payload.get(key))
+        if score is not None:
+            return score
+    try:
+        passed, total = int(payload.get("tests_passed")), int(payload.get("tests_total"))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, min(passed / total, 1.0)) if total > 0 else None
+
+
+def _grade_score_json(text: str, code: int, out: str) -> TaskCheck:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        return TaskCheck(passed=False, error=f"unreadable score.json: {exc}", details=_tail(out))
+    score = score_from_payload(payload) if isinstance(payload, dict) else None
+    if score is None:
+        return TaskCheck(
+            passed=False,
+            error=(
+                "score.json has no usable score "
+                "(reward, overall, test_pass_rate or tests_passed/tests_total)"
+            ),
+            details=_tail(text),
+        )
+    return TaskCheck(
+        passed=score >= 1.0,
+        score=score,
+        details=f"score {score:g} (score.json, tests exit {code})",
+    )
+
+
 def grade_harbor(stdout: str, stderr: str, exit_code: int, task: Any) -> TaskCheck:
-    """Harbor's reward files: reward.json first, then reward.txt."""
+    """Harbor's reward files: reward.json first, then reward.txt; with
+    ``reward=score.json``, WorkBuddy-Bench's ``score.json`` first."""
     out, code, kind, text = _sections(stdout)
     if code is None:
         return TaskCheck(
@@ -639,6 +716,8 @@ def grade_harbor(stdout: str, stderr: str, exit_code: int, task: Any) -> TaskChe
             passed=False,
             details=f"the tests wrote no reward file (exit {code})\n" + _tail(out),
         )
+    if kind == "score.json":
+        return _grade_score_json(text, code, out)
     try:
         if kind == "reward.json":
             data = json.loads(text)
@@ -704,6 +783,7 @@ __all__ = [
     "grade_pytest",
     "load_harbor",
     "load_terminal_bench",
+    "score_from_payload",
     "translate_dockerfile",
 ]
 

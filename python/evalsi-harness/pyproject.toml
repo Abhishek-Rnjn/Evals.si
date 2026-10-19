@@ -33,6 +33,8 @@ dependencies = [
 [project.entry-points."evalsi.importers"]
 harbor = "evalsi_harness.benchmarks.harbor:load_harbor"
 terminal-bench = "evalsi_harness.benchmarks.harbor:load_terminal_bench"
+lab = "evalsi_harness.benchmarks.lab:load_lab"
+jobbench = "evalsi_harness.benchmarks.jobbench:load_jobbench"
 
 [project.urls]
 Homepage = "https://evalsi.dev/"

@@ -1,0 +1,53 @@
+[
+ {
+  "task": "alpha/one",
+  "label": "base1",
+  "run_id": "jb-oc-agg2/alpha/one/base1",
+  "score": {
+   "n_passed": 4,
+   "n_criteria": 10
+  }
+ },
+ {
+  "task": "alpha/one",
+  "label": "base2",
+  "run_id": "jb-oc-agg2/alpha/one/base2",
+  "score": {
+   "n_passed": 6,
+   "n_criteria": 10
+  }
+ },
+ {
+  "task": "beta",
+  "label": "base1",
+  "run_id": "jb-oc-agg2/beta/base1",
+  "score": {
+   "n_passed": 2,
+   "n_criteria": 4
+  }
+ },
+ {
+  "task": "beta",
+  "label": "base2",
+  "run_id": "jb-oc-agg2/beta/base2",
+  "score": null
+ },
+ {
+  "task": "gamma",
+  "label": "base1",
+  "run_id": "jb-oc-agg2/gamma/base1",
+  "score": {
+   "n_passed": 1,
+   "n_criteria": 5
+  }
+ },
+ {
+  "task": "gamma",
+  "label": "base2",
+  "run_id": "jb-oc-agg2/gamma/base2",
+  "score": {
+   "n_passed": 2,
+   "n_criteria": 5
+  }
+ }
+]
