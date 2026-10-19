@@ -82,7 +82,7 @@ def _parser() -> argparse.ArgumentParser:
     add_trace_commands(sub)
     add_plugin_commands(sub)
     add_credentials_commands(sub)
-    _add_setup_and_diagnostic_commands(sub)
+    _add_product_commands(sub)
     cat = sub.add_parser("catalog", help="list installed evaluator packs and evaluators")
     cat.add_argument("--pack", help="only this pack")
     cat.add_argument("--format", choices=["table", "json"], default="table")
@@ -115,16 +115,18 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_setup_and_diagnostic_commands(sub: Any) -> None:
+def _add_product_commands(sub: Any) -> None:
     from evalsi.cli_canaries import add_canary_commands
     from evalsi.cli_determinism import add_determinism_command
     from evalsi.cli_doctor import add_doctor_command
+    from evalsi.cli_inbox import add_inbox_commands
     from evalsi.cli_init import add_init_command
 
     add_canary_commands(sub)
     add_determinism_command(sub)
     add_doctor_command(sub)
     add_init_command(sub)
+    add_inbox_commands(sub)
 
 
 def _add_eval(sub: Any) -> None:

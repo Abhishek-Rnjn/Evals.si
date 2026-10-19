@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- A project-scoped production failure inbox captures source trace revisions once, supports assignment and editable/redacted cases, records transactional revision history and approves explicit saved expectations. Adds browser trace/inbox workflows, a synchronous SDK and `evalsi inbox` commands, including approved-revision export directly to digest-pinned snapshots. Optimistic concurrency prevents lost edits; edits revoke approval, and exports recheck current state without replaying cached private responses. Includes a synthetic incident-to-CI demo with passing/failing controls.
+
 - `evalsi dataset overlap` checks independently pinned tuning/held-out snapshots for shared IDs and exact normalized inputs, including renamed cases. Its opt-in CI policy exits 3 on overlap and 1 on incomplete input coverage; reports omit raw payloads and group duplicate inputs without a Cartesian expansion. Includes reproducible clean and deliberately overlapping split controls.
 - `evalsi dataset snapshot`, `inspect`, `verify` and `diff` create and review portable named datasets with explicit record IDs, owners, held-out/tuning labels and provenance. The `snapshot://` importer requires an approved SHA-256 pin before local or worker execution; publication is atomic and never overwrites an existing path. This is an initial dataset-lifecycle slice, not a central registry or approval service.
 - `scripts/probe-cli-proxy.py` runs a command with the proxy variables the sandbox sets pointed at a logging listener and prints the hosts it asked for, to check that a CLI agent honours the egress allowlist. Codex 0.163.0 and OpenCode 1.19.3 do, and both need more hosts than a one-host allowlist (see the Harness² guide).
@@ -28,6 +30,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
+- Failure-case edits restore provenance from the captured trace and discard caller-supplied run/trace identities and isolation claims. Approval rejects empty row, tensor and media content, including tensors without data and media without a URI.
 - Snapshot loading rejects metadata remapping that could replace its verified identity and canonicalizes nested object keys before evaluation, keeping structured input and tool-call argument text stable under the same approved pin.
 - CI baseline validation now compares the complete checker configuration and validates each run against its dataset, trials and evaluator coverage. Shared skips, errors, duplicate rows and omitted scores cannot masquerade as complete paired evidence.
 - Doctor honors `EVALSI_SANDBOX_CONFIG`, requires namespaced-or-stronger isolation for agent readiness and surfaces sanitized sandbox enforcement warnings without printing private probe details.

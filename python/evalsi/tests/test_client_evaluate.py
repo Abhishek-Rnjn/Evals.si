@@ -287,3 +287,43 @@ def test_evaluate_needs_an_evaluator_the_server_has() -> None:
 
     with Client("http://unused") as client, pytest.raises(EvaluatorConfigError):
         client.evaluate(DATA, [local_only])  # type: ignore[list-item]
+
+
+def test_real_incident_review_snapshot_and_gate_controls(server: str, tmp_path: Path) -> None:
+    from evalsi.dataset_snapshots import IDENTITY_KEY, read_snapshot
+    from evalsi.datasets import load_records
+
+    root = ROOT
+    artifact = tmp_path / "approved.evalsi.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(root / "examples/failure-inbox/demo.py"),
+            "--server",
+            server,
+            "--output",
+            str(artifact),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["observed_gate_exit"] == 3
+    assert result["candidate_gate_exit"] == 0
+    assert result["synthetic"] is True
+    approved = read_snapshot(artifact, expected=result["snapshot_sha256"])
+    records = load_records(f"snapshot://{artifact}?sha256={approved.sha256}")
+    provenance = records[0].metadata[IDENTITY_KEY]["provenance"]["failure"]
+    assert provenance["case_id"] == result["case_id"]
+    assert provenance["revision"] == str(result["revision"])
+    assert provenance["reviewed_by"] == "anonymous"
+    assert "synthetic-private-217" not in artifact.read_text()
+    assert artifact.stat().st_mode & 0o777 == 0o600
+    with Client(server) as client:
+        failure = client.get_failure(result["case_id"])
+        assert failure["status"] == "FAILURE_STATUS_APPROVED"
+        assert len(client.failure_events(result["case_id"])["events"]) == 3
+        assert "record" not in client.list_failures(status="FAILURE_STATUS_APPROVED")["failures"][0]

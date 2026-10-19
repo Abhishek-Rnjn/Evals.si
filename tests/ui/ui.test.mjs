@@ -133,6 +133,7 @@ test('the UI loads under its Content-Security-Policy and every section renders',
   const sections = {
     runs: /Runs/i, compare: /Compare|baseline/i, policies: /Online policies|policies/i,
     queues: /Annotation|queues/i, guardrails: /Guardrails/i, catalog: /Evaluator catalog/i,
+    traces: /Production traces/i, inbox: /Failure inbox/i,
   };
   for (const [section, heading] of Object.entries(sections)) {
     await page.click(`#nav a[data-section="${section}"]`);
@@ -420,7 +421,7 @@ test('keyboard navigation and both palettes pass automated WCAG checks', async (
   await page.waitForSelector('#project option', { state: 'attached' });
   await page.keyboard.press('Tab');
   assert.equal(await page.locator(':focus').getAttribute('class'), 'brand');
-  for (const section of ['runs', 'compare', 'policies', 'queues', 'guardrails', 'catalog']) {
+  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'queues', 'guardrails', 'catalog']) {
     await page.keyboard.press('Tab');
     assert.equal(await page.locator(':focus').getAttribute('data-section'), section);
     await page.keyboard.press('Enter');
@@ -429,10 +430,71 @@ test('keyboard navigation and both palettes pass automated WCAG checks', async (
     await checkAccessibility(page);
   }
   await page.emulateMedia({ colorScheme: 'dark' });
-  for (const section of ['runs', 'compare', 'policies', 'queues', 'guardrails', 'catalog']) {
+  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'queues', 'guardrails', 'catalog']) {
     await page.click(`#nav a[data-section="${section}"]`);
     await page.waitForFunction(() => !document.getElementById('main').textContent.includes('Loading'));
     await checkAccessibility(page);
   }
+  await page.close();
+});
+
+test('a production incident is edited, reviewed and exported through the inbox', async () => {
+  const url = await startServer('failure-inbox');
+  const traceId = randomBytes(16).toString('hex');
+  const now = String(BigInt(Date.now()) * 1000000n);
+  const sent = await fetch(`${url}/v1/traces`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resourceSpans: [{
+      resource: { attributes: [{ key: 'service.name', value: { stringValue: 'support-agent' } }] },
+      scopeSpans: [{ spans: [{ traceId, spanId: randomBytes(8).toString('hex'), name: 'refund',
+        startTimeUnixNano: now, endTimeUnixNano: now,
+        attributes: [
+          { key: 'input.value', value: { stringValue: 'Refund a pending order' } },
+          { key: 'output.value', value: { stringValue: 'Refunded without approval' } },
+        ],
+      }] }],
+    }] }),
+  });
+  assert.equal(sent.status, 200);
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const trace = await fetch(`${url}/v1alpha1/traces/${traceId}?project=default`);
+    if (trace.ok) break;
+    assert.ok(attempt < 99, 'trace did not assemble');
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const page = await browser.newPage();
+  const problems = await watch(page);
+  await page.goto(`${url}/ui/#/traces/${traceId}`);
+  await page.getByLabel('Case title', { exact: true }).fill('<script>alert("incident")</script> Refund');
+  await page.getByLabel('What went wrong?', { exact: true }).fill('Refund requires approval');
+  await page.getByRole('button', { name: 'Capture for review', exact: true }).click();
+  await page.getByRole('heading', { name: 'Edit case', exact: true }).waitFor();
+  assert.equal(await page.locator('#main script').count(), 0, 'incident text was interpreted as HTML');
+  await page.getByLabel('Assignee', { exact: true }).fill('support-oncall');
+  await page.getByLabel('Expected behavior (text reference)', { exact: true }).fill('Ask for approval');
+  await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#main')?.textContent.includes('in review'));
+  await page.getByLabel('Review note', { exact: true }).fill('Confirmed expected behavior and data handling');
+  await page.getByRole('button', { name: 'Approve this revision', exact: true }).click();
+  const exported = page.getByRole('button', { name: 'Download approved case (JSONL)', exact: true });
+  await exported.waitFor();
+  await checkAccessibility(page);
+  const downloadPromise = page.waitForEvent('download');
+  await exported.click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const row = JSON.parse(Buffer.concat(chunks).toString());
+  assert.equal(row.reference.text, 'Ask for approval');
+  assert.equal(row.metadata['evalsi.failure'].revision, '3');
+  assert.equal(row.metadata['evalsi.failure'].trace_id, traceId);
+  assert.equal(await page.getByLabel('What went wrong?', { exact: true }).count(), 1, await page.textContent('#main'));
+  await page.getByLabel('What went wrong?', { exact: true }).fill('New finding needs another review');
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('#main')?.textContent.includes('New finding needs another review'));
+  await page.waitForFunction(() => !document.querySelector('#main')?.textContent.includes('Download approved case'));
+  assert.equal(await page.getByRole('button', { name: 'Approve this revision', exact: true }).isDisabled(), true);
+  assert.deepEqual(problems, []);
   await page.close();
 });

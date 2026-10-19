@@ -597,7 +597,131 @@
   }
 
   // ---- routing ----
+  // ---- production failure inbox ----
+  let fieldSequence = 0;
+  function field(label, node) {
+    const id = `inbox-field-${++fieldSequence}`;
+    node.id = id;
+    return el("div", { class: "inbox-field" }, el("label", { for: id }, label), node);
+  }
+  function notice(slot, err) {
+    slot.replaceChildren(el("p", { class: "error", role: "alert" }, String(err.message || err)));
+  }
+  function download(name, text) {
+    const url = URL.createObjectURL(new Blob([text], { type: "application/x-ndjson" }));
+    const link = el("a", { href: url, download: name });
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function viewTraces(cursor = "") {
+    const scope = project;
+    const response = await api("/v1alpha1/traces", { project: scope, page_token: cursor, page_size: 50 });
+    show(el("h1", {}, "Production traces"),
+      el("p", { class: "sub" }, "Inspect an incident, then capture it for human review. This does not replay tools or call an agent."),
+      table(["Trace", "Service", "Started", "Error"], (response.traces || []).map(t => [
+        el("a", { href: `#/traces/${encodeURIComponent(t.traceId)}` }, t.traceId), t.service, when(t.startTime), t.error ? "yes" : "no",
+      ])), response.nextPageToken ? el("button", { onclick: () => viewTraces(response.nextPageToken).catch(failed) }, "More traces") : null);
+  }
+  async function viewTrace(id) {
+    const scope = project;
+    const trace = await api(`/v1alpha1/traces/${encodeURIComponent(id)}`, { project: scope });
+    const title = el("input", { required: true, maxlength: 256 });
+    const reason = el("textarea", { required: true, maxlength: 4096, rows: 3 });
+    const slot = el("div");
+    const button = el("button", { type: "submit", class: "primary" }, "Capture for review");
+    const form = el("form", { onsubmit: async e => {
+      e.preventDefault(); button.disabled = true;
+      try {
+        const out = await post("/v1alpha1/failures", { project: scope, traceId: id, title: title.value, reason: reason.value });
+        window.location.hash = `#/inbox/${out.failure.id}`;
+      } catch (err) { notice(slot, err); } finally { button.disabled = false; }
+    } }, field("Case title", title), field("What went wrong?", reason), button, slot);
+    show(el("h1", {}, "Trace ", id),
+      el("h2", {}, "Captured record"), el("pre", { class: "content" }, JSON.stringify(trace.record || {}, null, 2)),
+      el("h2", {}, "Online evaluation"), el("pre", { class: "content" }, JSON.stringify(trace.policies || [], null, 2)),
+      el("h2", {}, "Create a failure case"), el("p", { class: "sub" }, "The inbox keeps an editable copy after trace retention. Review and remove sensitive fields before approval."), form);
+  }
+  async function viewInbox(cursor = "", selectedStatus = "") {
+    const scope = project;
+    const response = await api("/v1alpha1/failures", { project: scope, status: selectedStatus, page_token: cursor, page_size: 50 });
+    const filter = el("select", { "aria-label": "Case status", onchange: () => viewInbox("", filter.value).catch(failed) },
+      el("option", { value: "" }, "All statuses"), ...["OPEN", "IN_REVIEW", "APPROVED", "DISMISSED"].map(value =>
+        el("option", { value: `FAILURE_STATUS_${value}`, selected: selectedStatus === `FAILURE_STATUS_${value}` }, value.toLowerCase().replaceAll("_", " "))));
+    show(el("h1", {}, "Failure inbox"),
+      el("p", {}, el("a", { href: "#/traces", class: "text-link" }, "Capture a production trace"), " → edit and assign → review → approved regression case"), filter,
+      table(["Case", "Status", "Assignee", "Revision", "Source"], (response.failures || []).map(f => [
+        el("a", { href: `#/inbox/${f.id}` }, f.title), enumName(f.status, "FAILURE_STATUS_"), f.assignee || "unassigned", f.revision,
+        el("a", { href: `#/traces/${encodeURIComponent(f.source.traceId)}` }, short(f.source.traceId, 12)),
+      ])), response.nextPageToken ? el("button", { onclick: () => viewInbox(response.nextPageToken, selectedStatus).catch(failed) }, "More cases") : null);
+  }
+  async function viewFailure(id) {
+    const scope = project;
+    const { failure: f } = await api(`/v1alpha1/failures/${id}`, { project: scope });
+    const title = el("input", { value: f.title, required: true, maxlength: 256 });
+    const reason = el("textarea", { rows: 3, required: true, maxlength: 4096 }, f.reason);
+    const assignee = el("input", { value: f.assignee || "", maxlength: 256 });
+    const reference = el("textarea", { rows: 3 }, f.record?.reference?.text || "");
+    const record = el("textarea", { rows: 15, spellcheck: "false", class: "mono", "aria-label": "Editable record JSON" }, JSON.stringify(f.record || {}, null, 2));
+    const slot = el("div");
+    async function save(status) {
+      try {
+        const edited = JSON.parse(record.value);
+        if (reference.value !== (f.record?.reference?.text || "")) edited.reference = { text: reference.value };
+        await api(`/v1alpha1/failures/${id}`, {}, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+          project: scope, expectedRevision: f.revision, record: edited, title: title.value, reason: reason.value, assignee: assignee.value, status,
+        }) });
+        await viewFailure(id);
+      } catch (err) { notice(slot, err); }
+    }
+    const form = el("form", { onsubmit: e => { e.preventDefault(); save("FAILURE_STATUS_OPEN"); } },
+      field("Case title", title), field("What went wrong?", reason), field("Assignee", assignee),
+      field("Expected behavior (text reference)", reference),
+      el("p", { class: "sub" }, "Review the complete record for sensitive data. Use the record editor for structured references or to remove inputs, outputs, metadata and trajectory fields. Any saved edit clears approval."),
+      el("details", {}, el("summary", {}, "Edit complete record / redact fields"), record),
+      el("div", { class: "actions" }, el("button", { type: "submit" }, "Save draft"),
+        el("button", { type: "button", onclick: () => { if (form.reportValidity()) save("FAILURE_STATUS_IN_REVIEW"); } }, "Submit for review")), slot);
+    const note = el("textarea", { rows: 3, required: true, maxlength: 4096 });
+    const reviewSlot = el("div");
+    const reviewForm = el("form", { onsubmit: async e => {
+      e.preventDefault(); await review("FAILURE_STATUS_APPROVED");
+    } }, field("Review note", note), el("div", { class: "actions" },
+      el("button", { type: "submit", disabled: f.status !== "FAILURE_STATUS_IN_REVIEW" }, "Approve this revision"),
+      el("button", { type: "button", onclick: () => { if (reviewForm.reportValidity()) review("FAILURE_STATUS_DISMISSED"); } }, "Dismiss this revision")), reviewSlot);
+    async function review(decision) {
+      try {
+        await post(`/v1alpha1/failures/${id}:review`, { project: scope, expectedRevision: f.revision, decision, note: note.value });
+        await viewFailure(id);
+      } catch (err) { notice(reviewSlot, err); }
+    }
+    form.addEventListener("input", () => {
+      for (const button of reviewForm.querySelectorAll("button")) button.disabled = true;
+      reviewSlot.replaceChildren(el("p", { role: "status" }, "Save these edits before reviewing the case."));
+    });
+    const exportSlot = el("div");
+    const exportButton = f.status === "FAILURE_STATUS_APPROVED" ? el("button", { onclick: async () => {
+      try {
+        const out = await post("/v1alpha1/failures:export", { project: scope, selections: [{ id, revision: f.revision }] });
+        download(`failure-${id}-r${f.revision}.jsonl`, out.jsonl);
+      } catch (err) { notice(exportSlot, err); }
+    } }, "Download approved case (JSONL)") : null;
+    const history = el("div");
+    async function events(cursor = "") {
+      const out = await api(`/v1alpha1/failures/${id}/events`, { project: scope, page_token: cursor });
+      history.replaceChildren(table(["Revision", "Action", "Actor", "Status", "When"], (out.events || []).map(e => [e.revision, e.action, e.actor, enumName(e.status, "FAILURE_STATUS_"), when(e.time)])),
+        ...(out.nextPageToken ? [el("button", { onclick: () => events(out.nextPageToken).catch(err => notice(history, err)) }, "Older events")] : []));
+    }
+    show(el("h1", {}, f.title), kv([["Status", enumName(f.status, "FAILURE_STATUS_")], ["Revision", f.revision], ["Source", f.source.traceId], ["Source digest", f.sourceSha256], ["Reviewer", f.reviewedBy], ["Review note", f.reviewNote]]),
+      el("h2", {}, "Edit case"), form, el("h2", {}, "Review saved revision"),
+      el("p", { class: "sub" }, "Review applies to the saved revision shown above. Save your edits before reviewing."), reviewForm,
+      exportButton, exportSlot, el("h2", {}, "Review history"), history);
+    await events();
+  }
+
   const routes = [
+    [/^\/inbox\/([a-f0-9]{24})$/, viewFailure, "inbox"],
+    [/^\/inbox$/, () => viewInbox(), "inbox"],
+    [/^\/traces\/([^/]+)$/, viewTrace, "traces"],
+    [/^\/traces$/, () => viewTraces(), "traces"],
     [/^\/runs\/(.+)$/, viewRun, "runs"],
     [/^\/runs$/, viewRuns, "runs"],
     [/^\/compare$/, viewCompare, "compare"],
