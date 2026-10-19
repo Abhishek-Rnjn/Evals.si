@@ -229,3 +229,47 @@ def test_the_baseline_command_makes_the_agents_changes_a_diff(tmp_path: Path) ->
     # Run again, or in a workdir that already is a repository: nothing changes.
     sh(GIT_BASELINE)
     assert sh("git rev-list --count HEAD").strip() == "1"
+
+
+def test_the_git_baseline_does_not_widen_the_setup_network() -> None:
+    """A prebuilt task with no setup of its own stays without setup_network: a pod refuses a
+    wider setup network than the task's, and the baseline needs no network."""
+    from evalsi_harness.benchmarks.harbor import GIT_BASELINE, _environment
+
+    def build(git: bool) -> dict[str, Any]:
+        return _environment(
+            build=None,
+            image="img:1",
+            workdir="/app",
+            network="deny",
+            env={},
+            files={},
+            executable=[],
+            checker={"command": ["true"], "files": {}},
+            setup_timeout=None,
+            git=git,
+        )
+
+    plain, with_git = build(False), build(True)
+    assert plain["setup"] == []
+    assert "setup_network" not in plain
+    assert with_git["setup"] == [GIT_BASELINE]
+    assert "setup_network" not in with_git  # the baseline needs no network
+    # Setup that does need the network (a RUN step) still gets it, with or without the baseline.
+    from evalsi_harness.benchmarks.harbor import Build
+
+    installs = Build(setup=["pip install x"])
+    for git in (False, True):
+        env = _environment(
+            build=installs,
+            image="img:1",
+            workdir="/app",
+            network="deny",
+            env={},
+            files={},
+            executable=[],
+            checker={"command": ["true"], "files": {}},
+            setup_timeout=None,
+            git=git,
+        )
+        assert env["setup_network"] == "allow"

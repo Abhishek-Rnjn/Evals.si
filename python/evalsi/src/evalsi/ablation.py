@@ -401,6 +401,11 @@ class Harm:
     unchanged: int = 0
 
     @property
+    def compared(self) -> int:
+        """How many tasks the full harness and the variant could be compared on."""
+        return len(self.helped) + len(self.hurt) + self.unchanged
+
+    @property
     def mixed(self) -> bool:
         """The edit helps some tasks and hurts others, whatever its average."""
         return bool(self.helped) and bool(self.hurt)
@@ -422,6 +427,7 @@ class Harm:
         out = asdict(self)
         out["mixed"] = self.mixed
         out["sign_p"] = self.sign_p
+        out["compared"] = self.compared
         return out
 
 
@@ -448,8 +454,8 @@ def harm_check(
     can show that a single task's change is more than noise, and a handful of tasks gives a
     sign test almost no power (5 helped and 0 hurt is p = 0.0625), so read this as where to
     look, not as a verdict."""
-    if min_effect < 0:
-        raise AblationError("min_effect must not be negative")
+    if not math.isfinite(min_effect) or min_effect < 0:
+        raise AblationError("min_effect must be a finite number, not negative")
     datasets = {_dataset(d) for d in (full, *variants.values())} - {""}
     if len(datasets) > 1:
         raise AblationError("the results files were not run on the same dataset")
@@ -482,7 +488,12 @@ def harm_table(rows: Sequence[Harm]) -> str:
     lines = [head]
     for h in rows:
         worst = ", ".join(f"{t.record} ({t.effect:+.2f})" for t in h.hurt[:3]) or "-"
-        verdict = "mixed: helps some, hurts others" if h.mixed else ("hurts" if h.hurt else "ok")
+        if not h.compared:
+            verdict = INSUFFICIENT  # nothing was compared: that is missing evidence, not "ok"
+        elif h.mixed:
+            verdict = "mixed: helps some, hurts others"
+        else:
+            verdict = "hurts" if h.hurt else "ok"
         p = h.sign_p
         lines.append(
             [

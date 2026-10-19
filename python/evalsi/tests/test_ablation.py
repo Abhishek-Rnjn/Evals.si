@@ -392,3 +392,26 @@ def test_the_sign_test_is_exact_and_says_little_with_few_tasks() -> None:
     assert harm(8, 2).sign_p == pytest.approx(2 * (1 + 10 + 45) / 1024)
     assert harm(2, 8).sign_p == harm(8, 2).sign_p  # direction does not matter, only the split
     assert harm(3, 3).to_dict()["sign_p"] == 1.0
+
+
+def test_a_harm_check_that_compared_nothing_says_insufficient_data(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    full = run([1.0, 1])
+    elsewhere = run([0.0, 0])
+    elsewhere["results"] = []  # a variant with no scored records at all
+    (harm,) = ablation.harm_check(full, {"c1": elsewhere}, M)
+    assert harm.compared == 0
+    assert harm.to_dict()["compared"] == 0
+    assert ablation.INSUFFICIENT in ablation.harm_table([harm])
+    assert "ok" not in ablation.harm_table([harm]).splitlines()[1].split()
+    # A variant that shares tasks is compared, and a clean one still reads "ok".
+    (clean,) = ablation.harm_check(full, {"c1": run([1.0, 1])}, M)
+    assert clean.compared == 2
+    assert "ok" in ablation.harm_table([clean]).splitlines()[1].split()
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -0.1])
+def test_min_effect_must_be_finite_and_not_negative(bad: float) -> None:
+    with pytest.raises(ablation.AblationError, match="min_effect"):
+        ablation.harm_check(run([1.0]), {"c1": run([0.0])}, M, min_effect=bad)

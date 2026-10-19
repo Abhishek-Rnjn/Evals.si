@@ -402,6 +402,9 @@ def _environment(
         setup.insert(0, "chmod +x " + " ".join(shlex.quote(f) for f in exec_files))
     if decode := decode_command(all_files):
         setup.insert(0, decode)
+    # Setup that needs the network (package installs) widens the setup network; the git
+    # baseline does not, so it must not turn a restricted task's setup into one that does.
+    needs_network = bool(setup)
     if git:
         setup.append(GIT_BASELINE)
     checker = {**checker, "command": _with_decode(checker["command"], checker["files"])}
@@ -414,7 +417,7 @@ def _environment(
         "checker": checker,
         "command_timeout": "10m",
     }
-    if setup:
+    if needs_network:
         # Package installs in RUN steps need the network even when the
         # agent runs without it.
         environment["setup_network"] = "allow"
