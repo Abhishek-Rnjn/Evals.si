@@ -38,7 +38,8 @@ def test_episode_is_rewarded_by_the_checked_end_state() -> None:
         assert obs == "Mark the notes done."
         assert {t["name"] for t in info["tools"]} == {"bash", "read_file", "write_file", "submit"}
         obs, reward, terminated, truncated, info = env.step(bash("cat setup.log notes.txt"))
-        assert "ready" in obs and "draft" in obs
+        assert "ready" in obs
+        assert "draft" in obs
         assert (reward, terminated, truncated) == (0.0, False, False)
         env.step(
             {
@@ -72,17 +73,17 @@ def test_reaching_the_step_limit_truncates_and_still_grades() -> None:
 
 
 def test_a_bad_action_is_a_failed_call_not_a_crash() -> None:
-    env = TaskGymEnv(
-        [task()], client=LocalSandboxClient(), process_rewards=[ToolErrorPenalty(0.5)]
-    )
+    env = TaskGymEnv([task()], client=LocalSandboxClient(), process_rewards=[ToolErrorPenalty(0.5)])
     try:
         env.reset()
         obs, reward, *_ = env.step({"tool": "bash", "arguments": "{not json"})
         assert "not valid JSON" in obs
         assert reward == -0.5  # the penalty; the outcome reward is still 0
         obs, reward, _, _, info = env.step({"tool": "write_file", "arguments": "[1]"})
-        assert "JSON object" in obs and reward == -0.5
-        assert info["outcome_reward"] == 0.0 and info["process_reward"] == -0.5
+        assert "JSON object" in obs
+        assert reward == -0.5
+        assert info["outcome_reward"] == 0.0
+        assert info["process_reward"] == -0.5
     finally:
         env.close()
 

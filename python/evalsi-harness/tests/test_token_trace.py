@@ -231,3 +231,31 @@ def test_a_fallback_without_the_option_records_that_tokens_are_absent() -> None:
     turn = asyncio.run(model.complete([{"role": "user", "content": "go"}], []))
     assert turn.text == "from the fallback"
     assert turn.tokens is None
+
+
+def test_a_tool_call_turn_without_logprobs_names_its_gaps() -> None:
+    # Most rollout turns are only tool calls: empty text must not hide missing tokens.
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "c",
+                            "type": "function",
+                            "function": {"name": "bash", "arguments": "{}"},
+                        }
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 9},
+        "prompt_token_ids": [1, 2, 3],
+    }
+    turn = complete(
+        OpenAIChat(TARGET, transport_client(lambda r: httpx.Response(200, json=payload)))
+    )
+    assert turn.tokens is not None
+    assert set(turn.tokens.missing) == {"completion_token_ids", "logprobs"}

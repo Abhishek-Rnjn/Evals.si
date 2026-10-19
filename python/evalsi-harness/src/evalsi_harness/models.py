@@ -132,12 +132,20 @@ def token_trace(payload: dict[str, Any], choice: dict[str, Any]) -> TokenTrace:
         raise ModelError(
             f"the response has {len(logprobs)} log-probabilities for {len(completion)} tokens"
         )
+    usage = payload.get("usage") or {}
+    # A turn that generated anything (text, a tool call, or tokens the server counted)
+    # has completion tokens and log-probabilities to return.
+    generated = bool(
+        message.get("content")
+        or message.get("tool_calls")
+        or (usage.get("completion_tokens") or 0) > 0
+    )
     missing = []
     if prompt is None:
         missing.append("prompt_token_ids")
-    if not completion and message.get("content"):
+    if not completion and generated:
         missing.append("completion_token_ids")
-    if not logprobs and message.get("content"):
+    if not logprobs and generated:
         missing.append("logprobs")
     return TokenTrace(
         prompt_token_ids=_int_list(prompt, "prompt_token_ids") if prompt is not None else [],

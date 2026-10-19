@@ -20,6 +20,10 @@ The reset response sets ``supports_explicit_close`` and the server has a
 ``/close`` route, which the agent calls when a rollout fails part-way, so no
 sandbox outlives its episode.
 
+Sessions share setup only when a ``sandbox_client`` is given to the server;
+a server NeMo Gym starts from its own config has none, so each session
+connects on its own and pays setup itself.
+
 A checker that cannot run raises: NeMo Gym's step response has no unscored
 marker, and a reward of 0 would train on an infrastructure failure, so the
 request fails instead. Built against ``nemo-gym`` 0.7.0 (Python 3.13 or

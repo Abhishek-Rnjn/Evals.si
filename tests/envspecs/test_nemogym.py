@@ -12,11 +12,11 @@ pytest.importorskip("nemo_gym")
 
 from nemo_gym.base_resources_server import BaseResourcesServerConfig
 from nemo_gym.openai_utils import (
+    NeMoGymFunctionCallOutput,
     NeMoGymResponse,
     NeMoGymResponseCreateParamsNonStreaming,
     NeMoGymResponseFunctionToolCall,
 )
-from nemo_gym.openai_utils import NeMoGymFunctionCallOutput
 from nemo_gym.server_utils import ServerClient
 
 from conftest import task
@@ -85,7 +85,8 @@ async def test_an_episode_is_rewarded_by_the_checked_end_state() -> None:
     [out] = info["tool_outputs"]
     assert out["call_id"] == "c0"
     assert NeMoGymFunctionCallOutput(type="function_call_output", **out)
-    assert "ready" in json.loads(out["output"]) and "draft" in json.loads(out["output"])
+    assert "ready" in json.loads(out["output"])
+    assert "draft" in json.loads(out["output"])
     assert (reward, terminated, truncated) == (0.0, False, False)
     # Several calls in one response run in order; submit ends the episode.
     obs, reward, terminated, truncated, info = await env.step(
@@ -97,7 +98,8 @@ async def test_an_episode_is_rewarded_by_the_checked_end_state() -> None:
         "s1",
     )
     assert (reward, terminated, truncated) == (1.0, True, False)
-    assert info["outcome_reward"] == 1.0 and info["check"]["passed"] is True
+    assert info["outcome_reward"] == 1.0
+    assert info["check"]["passed"] is True
     await env.close_session("s1")
     assert "s1" not in env.session_state
 
@@ -106,7 +108,7 @@ async def test_an_episode_is_rewarded_by_the_checked_end_state() -> None:
 async def test_a_response_without_a_tool_call_costs_a_step_and_is_reminded() -> None:
     env = server(max_steps=1, process_rewards=[ToolErrorPenalty(0.5)])
     await env.reset(row(), session_id="s")
-    obs, reward, terminated, truncated, info = await env.step(response(), {}, "s")
+    _obs, reward, terminated, truncated, info = await env.step(response(), {}, "s")
     # The step limit ends it; the checker still grades (notes are not done: 0), less the penalty.
     assert (terminated, truncated, info["ended"]) == (False, True, "max_steps")
     assert reward == -0.5
@@ -195,9 +197,7 @@ async def test_the_real_gymnasium_agent_drives_an_episode() -> None:
 
     with TestClient(env.setup_webserver()) as http:
 
-        async def post(
-            server_name: str, url_path: str, json: Any, cookies: Any = None
-        ) -> Any:
+        async def post(server_name: str, url_path: str, json: Any, cookies: Any = None) -> Any:
             if server_name == "model":
                 model_inputs.append(json)
                 return FakeResponse(model_outputs.pop(0).model_dump())
@@ -224,8 +224,13 @@ async def test_the_real_gymnasium_agent_drives_an_episode() -> None:
 
     assert (result.reward, result.terminated, result.truncated) == (1.0, True, False)
     # The second model call saw the first call answered, not left dangling.
-    second = [item for item in model_inputs[1].input if getattr(item, "type", "") == "function_call_output"]
-    assert len(second) == 1 and "draft" in second[0].output
+    second = [
+        item
+        for item in model_inputs[1].input
+        if getattr(item, "type", "") == "function_call_output"
+    ]
+    assert len(second) == 1
+    assert "draft" in second[0].output
     # The task was in the input once, not added again as an observation.
     assert sum(1 for item in model_inputs[0].input if "Mark the notes done." in str(item)) == 1
     assert env.session_state == {}
