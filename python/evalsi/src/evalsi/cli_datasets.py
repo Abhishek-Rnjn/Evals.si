@@ -34,6 +34,18 @@ def add_snapshot_commands(commands: Any) -> None:
     diff.add_argument("--format", choices=["table", "json"], default="table")
     diff.add_argument("--fail-on-change", action="store_true", help="exit 3 on any identity change")
     diff.set_defaults(func=_cmd_diff)
+    overlap = commands.add_parser("overlap", help="check pinned tuning/held-out IDs and inputs")
+    overlap.add_argument("--tuning", required=True)
+    overlap.add_argument("--held-out", required=True)
+    overlap.add_argument("--tuning-sha256", required=True)
+    overlap.add_argument("--held-out-sha256", required=True)
+    overlap.add_argument("--format", choices=["table", "json"], default="table")
+    overlap.add_argument(
+        "--fail-on-overlap",
+        action="store_true",
+        help="exit 3 on overlap, or 1 on incomplete input coverage",
+    )
+    overlap.set_defaults(func=_cmd_overlap)
 
 
 def _cmd_snapshot(args: argparse.Namespace) -> int:
@@ -81,3 +93,41 @@ def _cmd_diff(args: argparse.Namespace) -> int:
         if len(items) > 20:
             print(f"... {len(items) - 20} more; --format json lists all changed IDs")
     return 3 if args.fail_on_change and diff["different"] else 0
+
+
+def _cmd_overlap(args: argparse.Namespace) -> int:
+    from evalsi.dataset_overlap import split_overlap
+
+    tuning = read_snapshot(args.tuning, expected=args.tuning_sha256)
+    held_out = read_snapshot(args.held_out, expected=args.held_out_sha256)
+    report = split_overlap(tuning, held_out)
+    report["policy"] = "fail-on-overlap" if args.fail_on_overlap else "report-only"
+    if args.format == "json":
+        print(json.dumps(report, indent=2))
+    else:
+        print(f"status: {report['status']} (exact inputs and record IDs only)")
+        print(f"policy: {report['policy']}")
+        for side in ("tuning", "held_out"):
+            identity = report[side]
+            print(f"{side}: {identity['name']}@{identity['version']} sha256={identity['sha256']}")
+        print(
+            f"shared IDs: {len(report['shared_ids'])}; "
+            f"shared input groups: {len(report['shared_inputs'])}"
+        )
+        for split, coverage in report["input_coverage"].items():
+            print(f"{split} input coverage: {coverage['compared']}/{coverage['total']}")
+        for rid in report["shared_ids"][:20]:
+            print(f"shared ID: {json.dumps(rid)}")
+        for group in report["shared_inputs"][:20]:
+            print(
+                f"input {group['input_sha256']}: "
+                f"tuning={json.dumps(group['tuning_ids'][:20])} "
+                f"held_out={json.dumps(group['held_out_ids'][:20])}"
+            )
+        print(
+            "Table IDs/groups are limited to 20; JSON lists all. "
+            "Missing/empty inputs make coverage incomplete; review before enforcing."
+        )
+    if args.fail_on_overlap and not report["complete"]:
+        return 1
+    return 3 if args.fail_on_overlap and report["overlap"] else 0

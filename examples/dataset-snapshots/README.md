@@ -41,3 +41,20 @@ records; use only approved data and an appropriate storage location.
 
 See the [dataset guide](../../docs/guides/dataset-snapshots.md) for verification,
 server operation, support limits and the remaining central-registry work.
+
+## Check held-out separation
+
+```bash
+bash examples/dataset-snapshots/check-splits.sh
+```
+
+This script pins both inputs. It first checks the distinct synthetic tuning set
+against `support-v1.evalsi.json`, which must exit 0. It then checks a deliberately
+overlapping tuning set whose duplicate case has a new ID; the exact input check
+must exit 3. The script itself exits 0 only when both controls behave correctly.
+No model calls are made. Missing/empty inputs cause strict checks to exit 1.
+
+The `tuning-*.evalsi.json` files reproduce from their corresponding source files
+with name `support-refunds-tuning`, version `v1` or `leaked`, owner
+`example-maintainers`, split `tuning` and tag `synthetic`. This is an exact
+duplicate diagnostic, not a proof about semantic contamination or model training.

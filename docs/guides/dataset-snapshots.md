@@ -92,6 +92,46 @@ version and a deliberately bad recorded refund decision caught by its gate.
 Changing the test set invalidates existing paired baselines; review the new
 dataset separately from candidate-agent improvements.
 
+## Check tuning versus held-out overlap
+
+Use `--split tuning` when snapshotting your tuning cases, then check them against
+an independently pinned held-out snapshot before tuning or selecting a release:
+
+```bash
+evalsi dataset overlap \
+  --tuning datasets/tuning-v1.evalsi.json --tuning-sha256 APPROVED_TUNING_DIGEST \
+  --held-out datasets/support-v1.evalsi.json --held-out-sha256 APPROVED_HELD_OUT_DIGEST \
+  --format json --fail-on-overlap
+```
+
+Both pins are required, and the split labels must match their stated roles.
+Shared record IDs are flagged even when their contents changed. Exact normalized
+inputs are also flagged across renamed IDs, changed answers/references and
+provenance. Text and its `{"text":...}` wrapper match; structured JSON is compared
+with canonical key order, and chat inputs include every message and tool call.
+Inputs are case/whitespace sensitive; outputs, references, context and metadata
+are excluded from this check. Repeated generic prompts across different contexts
+can therefore require human review. This is exact input overlap, not a judgment
+that two tasks have the same meaning.
+
+The report includes both snapshot identities, shared IDs, grouped input
+fingerprints and the IDs on each side, and explicit input coverage. Raw inputs,
+outputs, references and provenance values are omitted. Many identical inputs are
+grouped rather than expanded into a quadratic list of matching pairs. Table
+output limits groups and IDs to 20; JSON lists all. IDs and unsalted input hashes
+can reveal sensitive information and are not anonymization.
+
+Without `--fail-on-overlap` this is a report-only command. With that flag, complete
+coverage and no matches exits **0**; any overlap exits **3**; missing/empty input
+coverage exits **1**, including when a known overlap is also present. Integrity,
+format or role errors also exit 1. Missing inputs never become a clean negative
+CI result. The example's `check-splits.sh` verifies a clean split and a deliberately
+renamed duplicate caught by the policy.
+
+These checks cannot detect paraphrases, prove absence from model training, or
+prevent someone bypassing the command. Keep the pins and enforcement step in
+your reviewed CI configuration. Split labels alone remain descriptive.
+
 ## Server operation and limits
 
 For filesystem-backed server runs, an operator can place the complete bundle
@@ -117,8 +157,8 @@ changes, rather than making the filesystem immutable. A format-v1 envelope is
 self-contained and never follows a record's provenance references or fetches a
 remote source during snapshot creation/loading.
 
-Held-out/tuning is a purpose label, not enforcement against training leakage or
-proof that two versions have disjoint records. Name/version uniqueness is local
+Held-out/tuning is a purpose label; the opt-in overlap policy checks only shared
+IDs and exact inputs, not semantic leakage or training exposure. Name/version uniqueness is local
 to the selected output file, not globally governed. Signatures, approvals/history,
 shared ownership administration, retention/deletion and a central immutable-version
 registry remain open in the [product roadmap](../PRODUCT-ROADMAP.md).

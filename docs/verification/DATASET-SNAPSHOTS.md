@@ -33,3 +33,24 @@ There is no central registry, authenticated approval history, S3 snapshot-loader
 qualification, training-leakage enforcement, signature or filesystem immutability
 claim. Existing trusted specs, project permissions and filesystem operation
 remain responsible for approval and artifact handling.
+
+## Tuning/held-out overlap extension
+
+PR #111 additionally includes the pinned `dataset overlap` workflow, with
+**13 overlap tests** and **34 combined snapshot/overlap tests** passing. Controls
+cover shared IDs with changed contents, renamed exact inputs with changed labels,
+normalized chat/structured input wrappers, incomplete input coverage, external-pin
+mismatches, split-role validation, payload omission and grouped duplicate inputs.
+The full SDK/harness suite with this extension passed **1,187 tests**, with the
+same existing fork deprecation warning.
+
+The checked-in Bash example checks a disjoint tuning set (exit 0) and a renamed
+duplicate (exit 3). Snapshot generation independently reproduces all example pins.
+The command also reports when complete input coverage cannot be established;
+strict mode exits 1 instead of silently clearing those records.
+
+A fresh SDK-only wheel installation outside the checkout ran both split controls
+and verified that missing input coverage takes precedence over a known ID overlap.
+Ruff, strict mypy, the website build and local link checks passed. This feature
+does not provide semantic deduplication, training-exposure detection or enforced
+central split governance; its report and CI policy are documented in the guide.
