@@ -383,9 +383,9 @@ def test_cli_run_reports_a_variance_aware_trial_recommendation_only_with_trials(
     main(["run", "-f", str(path), "--quiet", "--output", str(out_file)])
     out = capsys.readouterr().out
     # The fake target answers the same every trial, so nothing varies: the report says
-    # so with the worst case for pass/fail, and changes nothing about the run.
+    # so with the worst case for pass/fail (few trials leave the bound there).
     assert "trials: exact-match would need about" in out
-    assert "worst case, nothing varied" in out
+    assert "variance bound 0.250" in out
     assert "trials is unchanged" in out
     advice = json.loads(out_file.read_text())["trial_advice"]
     assert advice["metrics"][0]["variance_bound"] == 0.25

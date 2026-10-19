@@ -169,3 +169,10 @@ def test_a_stage_nobody_reached_still_appears_with_no_data() -> None:
     assert by["evidence-retrieved"].mean == 0.0
     assert by["evidence-kept-and-used"].n == 0
     assert by["answer-from-evidence"].n == 0
+
+
+def test_an_ineligible_record_is_skipped_before_its_reference_is_checked() -> None:
+    rec = record(reference="not the evidence shape")
+    rec.metadata = {}  # no evidence_state: the audit does not apply
+    with pytest.raises(SkipRecord):
+        score(evidence_stage_audit, rec)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter, defaultdict
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from statistics import NormalDist, fmean, variance
 from typing import Any
 
@@ -132,8 +132,6 @@ def determinism_report(
 
 # --- trials from the variance observed per task -------------------------------------
 
-# A pass/fail score is Bernoulli, whose variance cannot exceed 1/4.
-BERNOULLI_MAX_VARIANCE = 0.25
 DEFAULT_MARGINS = (0.05, 0.10, 0.20)
 
 
@@ -195,6 +193,34 @@ def trials_for_margin(variance_bound: float, margin: float, confidence: float) -
     return max(1, math.ceil(z * z * variance_bound / (margin * margin)))
 
 
+def _binom_cdf(k: int, n: int, p: float) -> float:
+    """P(X <= k) for X ~ Binomial(n, p)."""
+    return sum(math.comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k + 1))
+
+
+def _bisect(f: Callable[[float], float], target: float) -> float:
+    """The p in [0, 1] where the decreasing f crosses target."""
+    lo, hi = 0.0, 1.0
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if f(mid) > target:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def bernoulli_variance_bound(passes: int, trials: int, confidence: float) -> float:
+    """The largest p(1-p) over the exact (Clopper-Pearson) interval for a task's pass
+    probability. It is valid for pass/fail scores at any trial count; with few trials the
+    interval takes in 1/2 and the bound is the worst case, 1/4."""
+    tail = (1 - confidence) / 2
+    lower = 0.0 if passes == 0 else _bisect(lambda p: _binom_cdf(passes - 1, trials, p), 1 - tail)
+    upper = 1.0 if passes == trials else _bisect(lambda p: _binom_cdf(passes, trials, p), tail)
+    nearest = min(max(0.5, lower), upper)  # the point of the interval closest to 1/2
+    return nearest * (1 - nearest)
+
+
 def trial_advice(
     data: Mapping[str, Any],
     *,
@@ -203,17 +229,16 @@ def trial_advice(
 ) -> dict[str, Any]:
     """How many trials per task the variance seen across trials supports.
 
-    The within-task variance is pooled over every task with at least two trials of a
-    metric, and an upper confidence bound on it (chi-square, one-sided at
-    ``confidence``) feeds ``n = z^2 * variance / margin^2``. Using the bound rather
-    than the estimate keeps a few trials from promising precision they do not have.
+    Each task with at least two trials of a metric gets an upper bound on its own
+    variance, and the metric's bound is the largest of them, so the advice covers the
+    noisiest task and not an average one. The bound is exact for a pass/fail score (the
+    largest p(1-p) over the Clopper-Pearson interval at ``confidence``; with few trials
+    that is the worst case 1/4, as it should be). For a numeric score it is the
+    chi-square upper bound, which assumes roughly normal scores and is not valid for
+    heavy-tailed ones. It feeds ``n = z^2 * variance / margin^2``.
 
-    No variation across trials is not evidence of none. A pass/fail metric where
-    every task came out the same in every trial is given the worst case for a
-    pass/fail score (variance 1/4) and is marked as such; a numeric metric with no
-    variation gets no recommendation. This only reports: it changes neither the
-    default number of trials nor any gate. Read it as a per-task estimate; the
-    interval across tasks has its own width.
+    A numeric metric with no variation anywhere gets no recommendation. This only
+    reports: it changes neither the default number of trials nor any gate.
     """
     for margin in margins:
         recommended_trials(margin=margin, confidence=confidence)  # validates both
@@ -221,41 +246,42 @@ def trial_advice(
     out = []
     for metric, records in sorted(cells.items()):
         repeated = [
-            [float(v) for v in trials.values()]
+            list(trials.values())
             for trials in records.values()
             if len(trials) >= 2 and all(isinstance(v, bool | float) for v in trials.values())
         ]
         if not repeated:
             continue
-        bernoulli = all(
-            isinstance(v, bool)
-            for trials in records.values()
-            for v in trials.values()
-            if len(trials) >= 2
-        )
-        df = sum(len(v) - 1 for v in repeated)
-        pooled = sum((len(v) - 1) * variance(v) for v in repeated) / df
+        bernoulli = all(isinstance(v, bool) for trials in repeated for v in trials)
+        floats = [[float(v) for v in trials] for trials in repeated]
+        df = sum(len(v) - 1 for v in floats)
+        pooled = sum((len(v) - 1) * variance(v) for v in floats) / df
         entry: dict[str, Any] = {
             "metric": metric,
-            "tasks_with_repeats": len(repeated),
+            "tasks_with_repeats": len(floats),
             "degrees_of_freedom": df,
             "observed_variance": pooled,
-            "trials_run_max": max(len(v) for v in repeated),
+            "trials_run_max": max(len(v) for v in floats),
         }
-        if pooled > 0:
-            bound = pooled * df / _chi2_lower(1 - confidence, df)
-            entry["variance_bound"] = min(bound, BERNOULLI_MAX_VARIANCE) if bernoulli else bound
-            entry["basis"] = "upper confidence bound on the observed within-task variance"
-        elif bernoulli:
-            entry["variance_bound"] = BERNOULLI_MAX_VARIANCE
+        bound: float | None
+        if bernoulli:
+            bound = max(bernoulli_variance_bound(int(sum(v)), len(v), confidence) for v in floats)
             entry["basis"] = (
-                "worst case for a pass/fail score: no task varied across trials, which "
-                "does not show the metric is deterministic"
+                "largest per-task variance bound for a pass/fail score (exact binomial "
+                "interval); few trials leave it at the worst case"
+            )
+        elif pooled > 0:
+            bound = max(
+                variance(v) * (len(v) - 1) / _chi2_lower(1 - confidence, len(v) - 1) for v in floats
+            )
+            entry["basis"] = (
+                "largest per-task chi-square upper bound on the variance; assumes roughly "
+                "normal scores"
             )
         else:
-            entry["variance_bound"] = None
+            bound = None
             entry["basis"] = "no variation observed in a numeric metric; no recommendation"
-        bound = entry["variance_bound"]
+        entry["variance_bound"] = bound
         entry["trials_for_margin"] = (
             {f"{m:g}": trials_for_margin(bound, m, confidence) for m in margins}
             if bound is not None
@@ -263,12 +289,12 @@ def trial_advice(
         )
         out.append(entry)
     return {
-        "method": "within-task variance upper bound",
+        "method": "largest per-task within-task variance bound",
         "confidence": confidence,
         "metrics": out,
         "note": (
-            "Trials per task so a task's mean score is within the margin, at the "
-            "confidence. A report, not a setting: the default trials and gates are "
-            "unchanged."
+            "Trials per task so that even the noisiest task's mean score is within the "
+            "margin, at the confidence. A report, not a setting: the default trials and "
+            "gates are unchanged."
         ),
     }

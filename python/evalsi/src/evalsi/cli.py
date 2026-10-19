@@ -772,15 +772,12 @@ def _trial_advice_line(advice: dict[str, Any], ran: int) -> str:
     """One line for the metric that needs the most trials at a margin of 0.1."""
     metrics = [m for m in advice["metrics"] if m["trials_for_margin"]]
     if not metrics:
-        return "trials: no metric varied across trials, so no recommendation (`evalsi determinism`)"
+        return "trials: no numeric metric varied, so no recommendation (`evalsi determinism`)"
     worst = max(metrics, key=lambda m: m["trials_for_margin"]["0.1"])
     needed = worst["trials_for_margin"]["0.1"]
-    basis = (
-        "worst case, nothing varied" if "worst case" in worst["basis"] else "variance upper bound"
-    )
     return (
-        f"trials: {worst['metric']} would need about {needed} per task for +/-0.1 on a "
-        f"task's mean ({basis} {worst['variance_bound']:.3f}; you ran {ran}). "
+        f"trials: {worst['metric']} would need about {needed} per task for +/-0.1 on the "
+        f"noisiest task's mean (variance bound {worst['variance_bound']:.3f}; you ran {ran}). "
         "A report only; trials is unchanged. See `evalsi determinism`."
     )
 
