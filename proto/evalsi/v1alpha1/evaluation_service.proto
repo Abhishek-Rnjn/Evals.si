@@ -36,6 +36,10 @@ message SummaryOptions {
   // Metadata key whose values group correlated records, for clustered standard errors.
   string cluster_by = 2;
   CiMethod ci_method = 3;
+  // With trials above 1, do not credit trials the trial-tampering evaluator
+  // flagged (a failed reward-hacking-clean score) in pass@k and pass^k. The base
+  // metrics still count them. Off by default.
+  bool exclude_flagged_trials = 4;
 }
 
 enum CiMethod {

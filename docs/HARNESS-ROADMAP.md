@@ -119,7 +119,7 @@ The goal is to cover the main agent task types: terminal, repository, web, deskt
 - **Long-document importers (after LongHarness).** Add OfficeQA Pro and AA-LCR importers for tasks over a document corpus that exceeds the context window. They give the H2 context strategies a long-horizon task that is not a coding task. OfficeQA Pro needs corpus hosting in the sandbox, which the multi-service item above provides.
 - **Mid-run user messages (after pi's steering queue).** The simulated user can interject while the agent works (a correction, a new constraint, a cancellation), timed by step or by event. Evaluators then score whether the agent took it into account.
 - **Stateful tool environments.** Add a database-backed tool environment for τ-bench-style domains, so the checker reads the final database state.
-- **Checker isolation.** Run the checker from a clean copy of the setup snapshot, with only the agent's declared outputs or its diff applied. A checker can still opt in to running in the agent's sandbox. Hash protected files, and record any change to them as a policy event.
+- **Checker isolation.** Run the checker from a clean copy of the setup snapshot, with only the agent's declared outputs or its diff applied. A checker can still opt in to running in the agent's sandbox. Hash protected files, and record any change to them as a policy event. *Built (unreleased): `checker.isolation: clean` with declared `outputs`; applying a diff is not built.*
 
 Exit criteria: a multi-service Terminal-Bench task and a WebArena-style fixture pass on the bubblewrap and pod rungs. A fixture agent that edits the tests is caught and fails.
 
@@ -128,7 +128,7 @@ Exit criteria: a multi-service Terminal-Bench task and a WebArena-style fixture 
 The goal is grades that are trustworthy.
 
 - **Prompt-injection faults.** Add a fault type that plants instructions in tool results, files or web pages, and an evaluator that scores whether the agent followed them.
-- **Reward-hacking signals.** Detect test tampering, hard-coded expected outputs and checker probing, and mark the trial so pass@k can exclude it.
+- **Reward-hacking signals.** Detect test tampering, hard-coded expected outputs and checker probing, and mark the trial so pass@k can exclude it. *Built (unreleased): `trial-tampering` with opt-in `summary.exclude_flagged_trials`; its false-positive rate on SWE-bench and Terminal-Bench honest runs is unmeasured.*
 - **Contamination canaries.** Put canary strings in imported tasks, and add a probe that checks whether a model reproduces them.
 - **Evidence-stage audit (after LongHarness).** An evaluator in the `agent` pack that splits each trajectory into three stages: was the required evidence retrieved, was it kept and used in the final decision, and was it converted into a correct answer. The last two rates are conditional on the stage before. It tells a team where an agent fails, not only that it fails. LongHarness's version uses an LLM judge, so ours must be checked against human labels before it is trusted, and it reports the judge's agreement.
 - **Citation grounding.** A check that every claim an agent submits cites a passage it actually read, and that the citation resolves to the current version of that evidence. It works on any BYO agent's trajectory, and a failed check is also a reward-hacking signal.

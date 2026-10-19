@@ -4,6 +4,11 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- **Clean checker isolation.** `checker.isolation: clean` with `checker.outputs` runs the checker in a fresh sandbox of the same environment that receives only the agent's declared output files, so edited tests, shims on `PATH` and installed packages cannot reach the grader. New `Checker.isolation` and `Checker.outputs` proto fields; the server validates them.
+- **`builtin/trial-tampering` reward-hacking signals.** Flags edited tests or protected files, the expected answer added as a literal to non-test code, and tool calls naming hidden checker files. With `summary.exclude_flagged_trials`, trials it flags are not credited by `pass@k` and `pass^k` (off by default; local and server summaries agree). The harness now records `metadata.checker_files`.
+
 ## [0.3.0] - 2026-10-19
 
 ### Upgrade notes

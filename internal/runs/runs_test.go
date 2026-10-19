@@ -723,6 +723,37 @@ func TestAgentRunValidation(t *testing.T) {
 		"unknown on_change": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Protect: []string{"tests/**"}, OnChange: "ignore"}
 		},
+		"clean isolation without outputs": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean"}
+		},
+		"outputs without clean isolation": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Outputs: []string{"a.py"}}
+		},
+		"unknown isolation": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "sealed", Outputs: []string{"a.py"}}
+		},
+		"output escaping the workdir": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"../x"}}
+		},
+		"blanket output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"**"}}
+		},
+		"equivalent blanket output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"solution/**", "**/**"}}
+		},
+		"star-dot-star output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"*.*"}}
+		},
+		"triple star output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"***"}}
+		},
+		"clean isolation with services": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"a.py"}}
+			s.Environment.Services = []*evalsiv1alpha1.EnvironmentService{{Name: "db", Image: "postgres"}}
+		},
+		"output also protected": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"a.py"}, Protect: []string{"a.py"}}
+		},
 		"interjection before the first step": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Interjections = []*evalsiv1alpha1.Interjection{{AtStep: 0, Message: "stop"}}
 		},

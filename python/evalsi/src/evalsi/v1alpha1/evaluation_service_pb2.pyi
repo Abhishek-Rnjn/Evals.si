@@ -103,19 +103,26 @@ class SummaryOptions(_message.Message):
     CONFIDENCE_LEVEL_FIELD_NUMBER: _builtins.int
     CLUSTER_BY_FIELD_NUMBER: _builtins.int
     CI_METHOD_FIELD_NUMBER: _builtins.int
+    EXCLUDE_FLAGGED_TRIALS_FIELD_NUMBER: _builtins.int
     confidence_level: _builtins.float
     """Defaults to 0.95."""
     cluster_by: _builtins.str
     """Metadata key whose values group correlated records, for clustered standard errors."""
     ci_method: Global___CiMethod.ValueType
+    exclude_flagged_trials: _builtins.bool
+    """With trials above 1, do not credit trials the trial-tampering evaluator
+    flagged (a failed reward-hacking-clean score) in pass@k and pass^k. The base
+    metrics still count them. Off by default.
+    """
     def __init__(
         self,
         *,
         confidence_level: _builtins.float = ...,
         cluster_by: _builtins.str = ...,
         ci_method: Global___CiMethod.ValueType = ...,
+        exclude_flagged_trials: _builtins.bool = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["ci_method", b"ci_method", "cluster_by", b"cluster_by", "confidence_level", b"confidence_level"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["ci_method", b"ci_method", "cluster_by", b"cluster_by", "confidence_level", b"confidence_level", "exclude_flagged_trials", b"exclude_flagged_trials"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___SummaryOptions: _TypeAlias = SummaryOptions  # noqa: Y015

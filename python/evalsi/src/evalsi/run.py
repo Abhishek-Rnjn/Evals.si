@@ -230,6 +230,7 @@ async def execute(
         cluster_by=spec.summary.cluster_by or None,
         ci_method=_CI[spec.summary.ci_method],
         trials=trials,
+        exclude_flagged=spec.summary.exclude_flagged_trials,
     )
     manifest = {
         "evalsi_version": __version__,

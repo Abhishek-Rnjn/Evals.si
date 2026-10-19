@@ -89,3 +89,40 @@ func TestPassAtKCountsErroredTrials(t *testing.T) {
 		t.Errorf("task-success = %v", s)
 	}
 }
+
+// A passed trial the trial-tampering evaluator flagged is not credited by
+// pass@k, but only when the run asks for it.
+func TestPassAtKExcludesFlaggedTrialsOnRequest(t *testing.T) {
+	check := Instance{Name: "task-success", Manifest: &evalsiv1alpha1.EvaluatorManifest{Name: "builtin/task-success"}}
+	hack := Instance{Name: "trial-tampering", Manifest: &evalsiv1alpha1.EvaluatorManifest{Name: "builtin/trial-tampering"}}
+	passed := func(name string, ok bool) []*evalsiv1alpha1.Score {
+		return []*evalsiv1alpha1.Score{{Name: name, Value: &evalsiv1alpha1.Score_Passed{Passed: ok}}}
+	}
+	var res []*evalsiv1alpha1.EvaluationResult
+	for trial := range 2 {
+		res = append(res,
+			&evalsiv1alpha1.EvaluationResult{Evaluator: "task-success", RecordId: "r", Trial: int32(trial), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED, Scores: passed("task-success", trial == 0)},
+			// The only passing trial (0) is flagged.
+			&evalsiv1alpha1.EvaluationResult{Evaluator: "trial-tampering", RecordId: "r", Trial: int32(trial), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED, Scores: passed("reward-hacking-clean", trial != 0)},
+		)
+	}
+	atK := func(opts *evalsiv1alpha1.SummaryOptions) float64 {
+		sums, err := Summarize([]Instance{check, hack}, res, []*evalsiv1alpha1.Record{{Id: "r"}}, opts, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, s := range sums {
+			if s.GetMetric() == "task-success.pass@2" {
+				return s.GetMean()
+			}
+		}
+		t.Fatal("no pass@2")
+		return -1
+	}
+	if got := atK(nil); got != 1 {
+		t.Errorf("default pass@2 = %v, want 1", got)
+	}
+	if got := atK(&evalsiv1alpha1.SummaryOptions{ExcludeFlaggedTrials: true}); got != 0 {
+		t.Errorf("excluding pass@2 = %v, want 0", got)
+	}
+}

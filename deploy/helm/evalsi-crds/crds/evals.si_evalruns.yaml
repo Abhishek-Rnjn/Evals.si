@@ -840,10 +840,16 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
+                      isolation:
+                        type: string
                       on_change:
                         type: string
                       onChange:
                         type: string
+                      outputs:
+                        items:
+                          type: string
+                        type: array
                       parser:
                         type: string
                       protect:
@@ -1315,6 +1321,10 @@ spec:
                     type: number
                   confidenceLevel:
                     type: number
+                  exclude_flagged_trials:
+                    type: boolean
+                  excludeFlaggedTrials:
+                    type: boolean
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               target:
