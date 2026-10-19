@@ -128,7 +128,7 @@ def test_pass_at_k_does_not_credit_a_flagged_trial() -> None:
     (hack,) = bind_evaluators(["trial-tampering"])
     records = [Record(id="r")]
 
-    def build(flag_trial: int | None, exclude: bool = True) -> dict[str, float]:
+    def build(flag_trial: int | None, exclude: bool = True) -> dict[str, float | None]:
         passes = [result("r", t, t == 0, "task-success") for t in range(2)]
         for r in passes:
             r.evaluator = check.name
