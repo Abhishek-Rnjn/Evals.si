@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import runpy
@@ -12,6 +13,8 @@ import pytest
 import yaml
 
 from evalsi.cli import main
+from evalsi.targets import Generation, TargetConfig
+from evalsi.types import Record, Usage
 
 ROOT = Path(__file__).resolve().parents[3]
 ADAPTER = ROOT / ".github/actions/evalsi/run.py"
@@ -88,6 +91,105 @@ def test_baseline_requires_same_contract_and_complete_pairs(
         assert "| 2 | 0 |" in summary
     else:
         assert "Action failed (exit 1)" in summary
+
+
+@pytest.fixture
+def comparison_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    class Target:
+        config = TargetConfig("openai-compatible", "scripted", base_url="http://unused")
+
+        async def generate(self, record: Record) -> Generation:
+            return Generation(output=record.reference, usage=Usage())
+
+        async def aclose(self) -> None:
+            pass
+
+    monkeypatch.setattr("evalsi.run.create_target", lambda config: Target())
+    project = tmp_path / "project"
+    assert main(["init", str(project)]) == 0
+    # Repeated trials also cover derived pass@k/pass^k and clustering.
+    path = project / "run.yaml"
+    spec = yaml.safe_load(path.read_text())
+    spec["spec"]["trials"] = 2
+    spec["spec"]["target"] = {
+        "connector": "openai-compatible",
+        "model": "scripted",
+        "base_url": "http://unused",
+        "api_key_env": "none",
+    }
+    path.write_text(yaml.safe_dump(spec))
+    output = tmp_path / "results.json"
+    assert main(["run", "-f", str(path), "--output", str(output)]) == 0
+    data: dict[str, Any] = json.loads(output.read_text())
+    return data
+
+
+@pytest.mark.parametrize(
+    "change", ["command", "files", "parser", "protect", "on_change", "timeout"]
+)
+def test_checker_grading_changes_cannot_be_compared(
+    comparison_data: dict[str, Any], change: str
+) -> None:
+    adapter = runpy.run_path(str(ADAPTER))
+    baseline = copy.deepcopy(comparison_data)
+    baseline["manifest"]["spec"]["environment"] = {
+        "files": {"agent.py": "original agent"},
+        "checker": {"command": ["check"], "files": {"test.py": "assert actual == expected"}},
+    }
+    candidate = copy.deepcopy(baseline)
+    candidate["manifest"]["spec"]["environment"]["checker"][change] = "changed grading"
+    with pytest.raises(ValueError, match="checker configuration"):
+        adapter["comparison"](baseline, candidate)
+    # Agent implementation and target changes remain valid comparison candidates.
+    candidate = copy.deepcopy(baseline)
+    candidate["manifest"]["spec"]["environment"]["files"]["agent.py"] = "new agent"
+    candidate["manifest"]["target"] = {"model": "candidate"}
+    assert "Baseline comparison" in "\n".join(adapter["comparison"](baseline, candidate))
+
+
+@pytest.mark.parametrize(
+    "missing", ["skipped", "error", "omitted", "trial", "record", "metric", "duplicate"]
+)
+def test_shared_incomplete_coverage_cannot_be_compared(
+    comparison_data: dict[str, Any], missing: str
+) -> None:
+    data = copy.deepcopy(comparison_data)
+    if missing in ("skipped", "error"):
+        data["results"][0]["outcome"] = missing
+        data["results"][0]["scores"] = []
+    elif missing == "omitted":
+        data["results"].pop(0)
+    elif missing == "record":
+        data["records"].pop(0)
+    elif missing == "trial":
+        data["results"][0]["trial"] = 9
+    elif missing == "duplicate":
+        data["results"][0] = copy.deepcopy(data["results"][1])
+    else:
+        # A scored row missing a numeric metric must not be silently paired away.
+        data["results"][0]["scores"] = []
+    adapter = runpy.run_path(str(ADAPTER))
+    with pytest.raises(ValueError, match=r"coverage|missing|incomplete"):
+        adapter["comparison"](data, copy.deepcopy(data))
+
+
+def test_optional_unproduced_metric_does_not_block_complete_coverage(
+    comparison_data: dict[str, Any],
+) -> None:
+    data = copy.deepcopy(comparison_data)
+    data["summaries"].append(
+        {
+            "metric": "exact-match.optional",
+            "evaluator": "exact-match",
+            "kind": "number",
+            "n": 0,
+            "mean": None,
+            "errors": 0,
+            "skipped": 0,
+        }
+    )
+    adapter = runpy.run_path(str(ADAPTER))
+    assert adapter["comparison"](data, copy.deepcopy(data))
 
 
 def test_configuration_error_cannot_pass(tmp_path: Path) -> None:

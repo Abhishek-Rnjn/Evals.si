@@ -6,6 +6,7 @@ import argparse
 import importlib.metadata
 import importlib.util
 import json
+import os
 import platform
 import re
 import subprocess
@@ -105,49 +106,72 @@ def diagnose(required: str) -> list[Check]:
             needs_server,
         )
         return checks
-    try:
-        match = re.fullmatch(r"evalsid (\S+) \(api evalsi\.v1alpha1\)", version.stdout.strip())
-        if version.returncode != 0 or match is None:
-            missing(
-                "server",
-                "evalsid did not return a recognized version",
-                "Check EVALSID and reinstall the matching platform wheel.",
-                needs_server,
-            )
-            return checks
-        if match[1] != __version__:
-            missing(
-                "server",
-                f"evalsid {match[1]}; SDK is {__version__}",
-                "Use matching SDK, harness and server versions.",
-                needs_server,
-            )
-        else:
-            checks.append(Check("server", "ok", f"evalsid {match[1]}"))
-    except ValueError:
-        missing("server", "invalid version output", "Reinstall the matching server.", needs_server)
+    match = re.fullmatch(r"evalsid (\S+) \(api evalsi\.v1alpha1\)", version.stdout.strip())
+    if version.returncode != 0 or match is None:
+        missing(
+            "server",
+            "evalsid did not return a recognized version",
+            "Check EVALSID and reinstall the matching platform wheel.",
+            needs_server,
+        )
         return checks
+    if match[1] != __version__:
+        missing(
+            "server",
+            f"evalsid {match[1]}; SDK is {__version__}",
+            "Use matching SDK, harness and server versions.",
+            needs_server,
+        )
+    else:
+        checks.append(Check("server", "ok", f"evalsid {match[1]}"))
     try:
+        probe_command = [binary, "sandbox", "probe"]
+        if config := os.environ.get("EVALSI_SANDBOX_CONFIG"):
+            probe_command += ["--config", config]
         probe = subprocess.run(
-            [binary, "sandbox", "probe"], capture_output=True, text=True, timeout=15, check=False
+            probe_command, capture_output=True, text=True, timeout=15, check=False
         )
         rungs = json.loads(probe.stdout)
         if probe.returncode != 0 or not isinstance(rungs, list):
             raise ValueError("invalid probe")
         available = [
-            str(r["driver"])
+            r
             for r in rungs
-            if isinstance(r, dict) and r.get("available") is True and r.get("driver")
+            if isinstance(r, dict)
+            and r.get("available") is True
+            and r.get("driver")
+            and (not needs_agent or r.get("level") in ("namespaced", "kernel", "vm"))
         ]
         if available:
-            checks.append(Check("sandbox", "ok", ", ".join(available)))
+            # Use known backend names only; probe text may contain private addresses.
+            drivers = [
+                r["driver"]
+                if r["driver"] in ("bwrap", "landlock", "pod", "firecracker")
+                else "configured backend"
+                for r in available
+            ]
+            checks.append(Check("sandbox", "ok", ", ".join(drivers)))
         else:
             missing(
                 "sandbox",
-                "no sandbox backend is available",
+                "no namespaced-or-stronger sandbox backend is available"
+                if needs_agent
+                else "no sandbox backend is available",
                 "Use a Linux host/container with a supported sandbox. "
                 "No unconfined fallback is used.",
                 needs_agent,
+            )
+        if any(isinstance(r, dict) and r.get("warning") for r in rungs):
+            checks.append(
+                Check(
+                    "sandbox-enforcement",
+                    "warning",
+                    "A sandbox backend reported an enforcement warning; availability does not "
+                    "guarantee full isolation.",
+                    "Review evalsid sandbox probe with the same configuration "
+                    "in a private terminal; "
+                    "correct host/cluster enforcement before relying on its isolation guarantees.",
+                )
             )
     except (OSError, subprocess.TimeoutExpired, ValueError):
         missing(

@@ -24,8 +24,66 @@ def number(value: Any) -> str:
     return f"{value:.4g}" if isinstance(value, (int, float)) else "—"
 
 
+def complete_values(data: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """Require complete record-scoped evaluations before accepting paired evidence."""
+    from evalsi.compare import record_values
+    from evalsi.results import record_trial
+
+    manifest = data["manifest"]
+    count, trials = manifest["dataset"]["records"], manifest["trials"]
+    if type(count) is not int or type(trials) is not int or count < 1 or trials < 1:
+        raise ValueError("invalid expected record/trial counts")
+    records = data["records"]
+    if len(records) != count * trials:
+        raise ValueError("incomplete output records")
+    ids = {r["id"] for r in records}
+    if len(ids) != count or any(not isinstance(rid, str) or not rid for rid in ids):
+        raise ValueError("invalid dataset record identities")
+    expected = {(rid, trial) for rid in ids for trial in range(trials)}
+    if {(r["id"], record_trial(r)) for r in records} != expected:
+        raise ValueError("incomplete output record/trial coverage")
+    evaluators = {e["name"] for e in manifest["evaluators"]}
+    if not evaluators or len(evaluators) != len(manifest["evaluators"]):
+        raise ValueError("invalid evaluator identities")
+    rows = data["results"]
+    if len(rows) != len(expected) * len(evaluators):
+        raise ValueError("incomplete record-scoped evaluation coverage")
+    seen = set()
+    for row in rows:
+        key = (row["record_id"], row.get("trial", 0), row["evaluator"])
+        if (
+            key[:2] not in expected
+            or key[2] not in evaluators
+            or key in seen
+            or row["outcome"] != "scored"
+        ):
+            raise ValueError("missing, duplicate, skipped or errored evaluation")
+        seen.add(key)
+    values = record_values(data)
+    expected_keys = {f"{rid}#{trial}" for rid, trial in expected}
+    for metric in data["summaries"]:
+        name = metric["metric"]
+        if metric.get("errors", 0) or metric.get("skipped", 0):
+            raise ValueError("incomplete summary coverage")
+        if metric["kind"] not in ("number", "proportion"):
+            continue
+        if trials > 1 and any(
+            name.endswith(f".{suffix}{trials}") and name.rsplit(".", 1)[0] in values
+            for suffix in ("pass@", "pass^")
+        ):
+            if metric["n"] != count:
+                raise ValueError("incomplete aggregate metric coverage")
+            continue
+        # An optional metric absent from every record is inapplicable (e.g. task-score).
+        if metric["n"] == 0 and name not in values:
+            continue
+        if metric["n"] != len(expected) or set(values.get(name, {})) != expected_keys:
+            raise ValueError("incomplete numeric metric record/trial coverage")
+    return values
+
+
 def comparison(baseline: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
-    from evalsi.compare import compare_results, record_values
+    from evalsi.compare import compare_results
 
     a, b = baseline["manifest"], candidate["manifest"]
     for key in ("evalsi_version", "api_version", "evaluators", "judge", "trials"):
@@ -36,10 +94,14 @@ def comparison(baseline: dict[str, Any], candidate: dict[str, Any]) -> list[str]
         b.get("spec", {}).get("summary"),
     ):
         raise ValueError("baseline summary configuration differs")
+    if a.get("spec", {}).get("environment", {}).get("checker") != (
+        b.get("spec", {}).get("environment", {}).get("checker")
+    ):
+        raise ValueError("baseline checker configuration differs")
     digest = a["dataset"].get("sha256")
     if not digest or digest != b["dataset"].get("sha256"):
         raise ValueError("baseline dataset identity differs")
-    av, bv = record_values(baseline), record_values(candidate)
+    av, bv = complete_values(baseline), complete_values(candidate)
     if not av or set(av) != set(bv) or any(not av[k] or av[k].keys() != bv[k].keys() for k in av):
         raise ValueError("baseline scored record/trial coverage differs")
     lines = [

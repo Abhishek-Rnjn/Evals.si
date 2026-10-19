@@ -61,7 +61,13 @@ a remote cluster or guarantee that every task can run.
 Plain `doctor` requires only SDK scoring and reports missing optional capabilities
 as warnings. `--require server` requires a matching executable and worker
 dependencies. `--require agent` also requires the matching harness and an available
-sandbox driver. Required failures exit 1. Probes have bounded timeouts, make no
+sandbox driver at `namespaced` isolation or stronger. A Landlock-only (`confined`)
+host cannot run the starter and fails agent readiness. Doctor passes
+`EVALSI_SANDBOX_CONFIG` to the probe just as local agent execution does.
+Enforcement warnings are shown with a generic remedy, keeping raw probe text
+(which may contain private addresses) out of the report. A warning does not
+change backend availability or establish full isolation.
+Required failures exit 1. Probes have bounded timeouts, make no
 provider API calls and do not print credentials or raw subprocess errors.
 
 ## Maintained GitHub Action
@@ -116,8 +122,15 @@ action too. `install: 'false'` uses an existing compatible Python installation.
 Set `baseline: baseline.json`, relative to `working-directory`, to compare with
 previously approved results supplied by your own trusted checkout/artifact step.
 Run both sides with the same package version. The action checks matching dataset
-hashes, evaluator identities/parameters, judge and summary configuration, trial
-count, SDK/API versions and complete scored record/trial coverage. Target/agent
+hashes, evaluator identities/parameters, judge and summary configuration, the
+complete environment checker configuration (including hidden files), trial
+count, SDK/API versions and complete record/trial coverage. Each run must cover
+every declared dataset record, trial and configured record-scoped evaluator;
+shared skips, errors, missing rows and duplicates are rejected. Numeric metrics
+that are produced must cover every record/trial; wholly unproduced optional
+metrics are excluded from that requirement. Dataset-scoped evaluators and
+partially populated numeric metrics are outside this conservative baseline
+comparison contract. Target/agent
 changes are allowed. A mismatched, malformed or incomplete baseline fails the
 action with exit 1. Dataset hashes include recorded outputs; editing them therefore
 requires a new baseline. Live agent candidates can change while retaining the

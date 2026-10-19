@@ -31,3 +31,22 @@ Scope: initial PROD-01/PROD-02/GTM-02 slices in the
 No package release, merge, customer-data pilot, remote-cluster qualification,
 macOS/Windows execution qualification or enterprise guarantee is included.
 The [setup guide](../guides/onboarding.md) records runtime and privacy limits.
+
+## PR #107 review hardening
+
+The five initial review findings now have regression coverage:
+
+- Baseline contracts compare every checker field, including hidden grading files.
+  Agent implementation/target changes remain allowed.
+- Each run independently proves its dataset record/trial/evaluator coverage;
+  shared skips/errors, missing rows/scores and duplicates are rejected. Tests use
+  two scripted target trials and retain aggregate pass@k/pass^k summaries.
+  An unproduced optional metric does not block otherwise complete evidence.
+- Doctor passes `EVALSI_SANDBOX_CONFIG` to the probe, rejects confined-only agent
+  readiness and displays sanitized enforcement warnings with a remedy.
+
+The targeted setup/action suite passed **45 tests**. Strict mypy and Ruff checks
+passed. A real matching binary reported readiness with the default bubblewrap
+backend, then exited 1 with a configuration selecting unavailable Firecracker
+alone. The updated baseline adapter also passed against independently installed
+published 0.3.0 packages and a real agent result without optional `task-score`.

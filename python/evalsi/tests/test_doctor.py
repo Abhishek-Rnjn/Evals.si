@@ -45,7 +45,7 @@ def test_agent_readiness_uses_actual_probe(
         output = (
             f"evalsid {__version__} (api evalsi.v1alpha1)\n"
             if cmd[-1] == "version"
-            else json.dumps([{"driver": "bwrap", "available": available}])
+            else json.dumps([{"driver": "bwrap", "level": "namespaced", "available": available}])
         )
         return subprocess.CompletedProcess(cmd, 0, output, "")
 
@@ -93,3 +93,74 @@ def test_probe_failure_does_not_require_a_sandbox_for_scoring_server(
     monkeypatch.setattr(subprocess, "run", run)
     assert not any(c.status == "error" for c in cli_doctor.diagnose("server"))
     assert any(c.name == "sandbox" and c.status == "error" for c in cli_doctor.diagnose("agent"))
+
+
+@pytest.mark.parametrize("level", ["confined", "namespaced", "kernel", "vm", "unknown"])
+def test_agent_requires_namespaced_isolation_and_honors_config(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], level: str
+) -> None:
+    config = "/private config/sandbox.yaml"
+    calls: list[list[str]] = []
+
+    def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(cmd)
+        output = (
+            f"evalsid {__version__} (api evalsi.v1alpha1)"
+            if cmd[-1] == "version"
+            else json.dumps(
+                [
+                    {
+                        "driver": "landlock" if level == "confined" else "bwrap",
+                        "level": level,
+                        "available": True,
+                    }
+                ]
+            )
+        )
+        return subprocess.CompletedProcess(cmd, 0, output, "")
+
+    monkeypatch.setenv("EVALSI_SANDBOX_CONFIG", config)
+    monkeypatch.setattr(cli_doctor, "installed_version", lambda name: __version__)
+    monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/release/evalsid")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(subprocess, "run", run)
+    expected = level in ("namespaced", "kernel", "vm")
+    assert main(["doctor", "--require", "agent", "--format", "json"]) == (0 if expected else 1)
+    report = json.loads(capsys.readouterr().out)
+    assert report["ready"] is expected
+    assert calls[-1] == ["/release/evalsid", "sandbox", "probe", "--config", config]
+    # SDK scoring can still use the installation when only confined isolation exists.
+    assert main(["doctor", "--format", "json"]) == 0
+
+
+def test_available_backend_enforcement_warning_is_sanitized(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        output = (
+            f"evalsid {__version__} (api evalsi.v1alpha1)"
+            if cmd[-1] == "version"
+            else json.dumps(
+                [
+                    {
+                        "driver": "pod",
+                        "level": "namespaced",
+                        "available": True,
+                        "warning": "NetworkPolicy canary leaked to private-host:1234 token-849",
+                    }
+                ]
+            )
+        )
+        return subprocess.CompletedProcess(cmd, 0, output, "")
+
+    monkeypatch.setattr(cli_doctor, "installed_version", lambda name: __version__)
+    monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/release/evalsid")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(subprocess, "run", run)
+    for fmt in ("json", "table"):
+        assert main(["doctor", "--require", "agent", "--format", fmt]) == 0
+        output = capsys.readouterr().out
+        assert "enforcement warning" in output
+        assert "host/cluster enforcement" in output
+        assert "private-host" not in output
+        assert "token-849" not in output
