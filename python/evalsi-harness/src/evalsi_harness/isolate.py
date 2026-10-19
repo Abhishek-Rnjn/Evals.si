@@ -14,8 +14,8 @@ Everything the agent did outside its declared outputs is left behind: edits to
 other files, installed packages, shims, deleted files. Symlinks are not
 followed and never copied. A copied file loses its execute bit (``write_files`` takes
 one mode per call), so a checker should run outputs through an interpreter. A pattern both in
-``outputs`` and in ``protect`` is rejected when the task is read, because the two promises conflict. Services are
-not supported with clean checking (their state is never snapshotted), and the
+``outputs`` and in ``protect`` is rejected when the task is read, because the two
+promises conflict. Services are not supported with clean checking (their state is never snapshotted), and the
 check fails closed when the outputs cannot be read in full.
 """
 
