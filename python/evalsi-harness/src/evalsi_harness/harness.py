@@ -34,6 +34,7 @@ from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, con
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.hooks import Hooks, load_hooks
+from evalsi_harness.isolate import run_clean_checker
 from evalsi_harness.loop import DEFAULT_SYSTEM, AgentLoop, LoopConfig
 from evalsi_harness.mcp import (
     MCPClient,
@@ -162,6 +163,7 @@ class LiveTask:
     protect: Baseline | None = None
     late_events: list[PolicyEvent] = field(default_factory=list)
     protect_result: dict[str, Any] = field(default_factory=dict)
+    checker_isolation: dict[str, Any] = field(default_factory=dict)
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -767,6 +769,12 @@ class BuiltinHarness:
             verdict = await self._protected(live)
             if verdict is not None:
                 return verdict
+        if env_config.checker.isolation == "clean":
+            check, info = await run_clean_checker(
+                await self._environments(), live.env, env_config.checker, live.task
+            )
+            live.checker_isolation = info
+            return check
         return await run_checker(live.env, env_config.checker, live.task)
 
     async def _protected(self, live: LiveTask) -> TaskCheck | None:
@@ -814,6 +822,11 @@ class BuiltinHarness:
         out: dict[str, Any] = {"diff": live.diff} if live.diff is not None else {}
         if live.protect_result:
             out["protected_files"] = live.protect_result
+        checker = live.task.environment.checker if live.task.environment else None
+        if checker is not None and checker.files:
+            out["checker_files"] = sorted(checker.files)
+        if live.checker_isolation:
+            out["checker_isolation"] = live.checker_isolation
         return out
 
     async def teardown(self, handle: str) -> None:

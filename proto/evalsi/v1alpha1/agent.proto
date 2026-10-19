@@ -386,6 +386,14 @@ message Checker {
   // checker; "restore" writes the originals back and removes new files, then
   // runs the checker.
   string on_change = 6;
+  // Where the checker runs: "shared" (default) in the sandbox the agent used;
+  // "clean" in a fresh sandbox of the same environment that receives only the
+  // files under outputs. The agent's other changes (installed packages, shims,
+  // edited tests) never reach the checker.
+  string isolation = 7;
+  // With isolation "clean": glob patterns, relative to the workdir, of the
+  // agent's declared outputs, the only files copied into the clean sandbox.
+  repeated string outputs = 8;
 }
 
 // Environment is where a task runs. Spec-level values apply to every record;

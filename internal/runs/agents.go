@@ -372,8 +372,44 @@ func validateProtect(c *evalsiv1alpha1.Checker) error {
 		return invalid("%s.protect can hold at most %d patterns", f, maxProtect)
 	}
 	for _, p := range c.GetProtect() {
-		if p == "" || len(p) > 120 || strings.HasPrefix(p, "/") || slices.Contains(strings.Split(p, "/"), "..") {
+		if !relativePattern(p) {
 			return invalid("%s.protect: %q must be a relative pattern of at most 120 characters, without ..", f, p)
+		}
+	}
+	return validateIsolation(c)
+}
+
+func relativePattern(p string) bool {
+	return p != "" && len(p) <= 120 && !strings.HasPrefix(p, "/") && !slices.Contains(strings.Split(p, "/"), "..")
+}
+
+// validateIsolation checks checker.isolation and checker.outputs: a clean
+// checker needs the declared outputs it may see, and a shared one takes none.
+func validateIsolation(c *evalsiv1alpha1.Checker) error {
+	const f = "spec.environment.checker"
+	outputs := c.GetOutputs()
+	switch c.GetIsolation() {
+	case "", "shared":
+		if len(outputs) > 0 {
+			return invalid("%s.outputs applies only with isolation clean", f)
+		}
+		return nil
+	case "clean":
+	default:
+		return invalid("%s.isolation must be shared or clean", f)
+	}
+	if len(outputs) == 0 {
+		return invalid("%s.isolation clean needs outputs", f)
+	}
+	if len(outputs) > maxProtect {
+		return invalid("%s.outputs can hold at most %d patterns", f, maxProtect)
+	}
+	for _, p := range outputs {
+		if !relativePattern(p) {
+			return invalid("%s.outputs: %q must be a relative pattern of at most 120 characters, without ..", f, p)
+		}
+		if slices.Contains(c.GetProtect(), p) {
+			return invalid("%s.outputs: %q is also protected", f, p)
 		}
 	}
 	return nil
