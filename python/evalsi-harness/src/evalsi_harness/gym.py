@@ -34,16 +34,18 @@ the others it raises ``SnapshotsUnsupported`` rather than pretend.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from evalsi.sandbox.client import SnapshotsUnsupported, connect
-from evalsi.types import Record
+from evalsi.types import Content, Record, Step
 from evalsi.v1alpha1 import run_pb2
 from evalsi_harness.checker import run_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.isolate import run_clean_checker
+from evalsi_harness.process import ProcessContext, ProcessReward
 from evalsi_harness.task import Task, TaskError
 from evalsi_harness.tools import Tool, sandbox_tools
 
@@ -62,6 +64,10 @@ class StepResult:
     reward: float | None
     done: bool
     info: dict[str, Any] = field(default_factory=dict)
+    # The sum of the environment's process rewards for this step (``reward`` is
+    # still the checker's outcome alone); None when there are none, or any of
+    # them could not be computed (see ``info["process_errors"]``).
+    process_reward: float | None = None
 
 
 @dataclass
@@ -74,6 +80,9 @@ class EpisodeSnapshot:
     record: Record
     spec: run_pb2.RunSpec
     steps: int
+    trajectory: list[Step] = field(default_factory=list)
+    # Process-reward state (the last score of each), so deltas continue.
+    memory: dict[int, Any] = field(default_factory=dict)
 
 
 class TaskEnv:
@@ -89,10 +98,14 @@ class TaskEnv:
         *,
         max_steps: int = 30,
         pool: EnvironmentPool | None = None,
+        process_rewards: Sequence[ProcessReward] = (),
     ) -> None:
         if max_steps < 1:
             raise ValueError("max_steps must be at least 1")
         self.max_steps = max_steps
+        self.process_rewards = list(process_rewards)
+        self.trajectory: list[Step] = []
+        self._memory: dict[int, Any] = {}
         self._client = client
         self._owned: Any = None
         self._pool = pool
@@ -151,6 +164,7 @@ class TaskEnv:
         self._env, self._task = env, task
         self._record, self._spec = record, spec
         self._tools = {t.spec.name: t for t in sandbox_tools(env)}
+        self.trajectory, self._memory = [], {}
 
     async def reset(
         self, record: Record | Mapping[str, Any], spec: run_pb2.RunSpec | None = None
@@ -186,7 +200,14 @@ class TaskEnv:
             raise SnapshotsUnsupported(
                 f"this rung cannot snapshot a running episode, so it cannot be resumed: {exc}"
             ) from exc
-        return EpisodeSnapshot(snapshot_id, self._record, self._spec, self.steps)
+        return EpisodeSnapshot(
+            snapshot_id,
+            self._record,
+            self._spec,
+            self.steps,
+            list(self.trajectory),
+            dict(self._memory),
+        )
 
     async def restore(self, saved: EpisodeSnapshot) -> str:
         """Continue a saved episode in a new sandbox restored from it, with
@@ -203,6 +224,7 @@ class TaskEnv:
                 saved.spec,
             )
             self.steps = saved.steps
+            self.trajectory, self._memory = list(saved.trajectory), dict(saved.memory)
             return task.instruction
         except asyncio.CancelledError:
             await self._end_episode()
@@ -234,12 +256,52 @@ class TaskEnv:
         else:
             result = await tool.call(dict(action.arguments), span=f"step-{self.steps}")
             observation, is_error = result.content, result.is_error
+        self.trajectory.append(
+            Step(
+                type="tool",
+                name=action.tool,
+                input=Content(text=json.dumps(action.arguments, sort_keys=True)),
+                output=Content(text=observation),
+                error=observation[:500] if is_error else "",
+                span_id=f"step-{self.steps}",
+            )
+        )
+        process, errors = await self._process(action, observation, is_error)
         if self.steps >= self.max_steps:
             done = await self._finish("max_steps")
             done.observation = observation
             done.info["tool_error"] = is_error
+            done.process_reward = process
+            self._note_errors(done, errors)
             return done
-        return StepResult(observation, 0.0, False, {"tool_error": is_error})
+        step = StepResult(observation, 0.0, False, {"tool_error": is_error}, process)
+        self._note_errors(step, errors)
+        return step
+
+    async def _process(
+        self, action: Action, observation: str, is_error: bool
+    ) -> tuple[float | None, list[str]]:
+        if not self.process_rewards:
+            return None, []
+        assert self._record is not None
+        context = ProcessContext(
+            self._record,
+            list(self.trajectory),
+            action.tool,
+            observation,
+            is_error,
+            self._memory,
+        )
+        total: float | None = 0.0
+        for reward in self.process_rewards:
+            value = await reward(context)
+            total = None if value is None or total is None else total + value
+        return total, context.errors
+
+    @staticmethod
+    def _note_errors(step: StepResult, errors: list[str]) -> None:
+        if errors:
+            step.info["process_errors"] = errors
 
     async def _finish(self, reason: str) -> StepResult:
         env, task = self._env, self._task

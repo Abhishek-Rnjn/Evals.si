@@ -164,3 +164,72 @@ def test_resuming_needs_a_rung_that_snapshots() -> None:
                 await env.snapshot()
 
     run(go())
+
+
+def test_process_rewards_sit_beside_the_outcome_reward() -> None:
+    from evalsi_harness.process import EvaluatorReward, ProcessReward, ToolErrorPenalty
+
+    async def go() -> None:
+        rewards: list[ProcessReward] = [
+            ToolErrorPenalty(0.25),
+            EvaluatorReward("builtin/tool-errors", weight=1.0),
+        ]
+        async with TaskEnv(LocalSandboxClient(), process_rewards=rewards) as env:
+            await env.reset(record(), spec_of({"environment": ENVIRONMENT}))
+            ok = await env.step(Action("bash", {"command": "echo hi"}))
+            # No failure yet: the share of failed calls is still 0, and the outcome is untouched.
+            assert (ok.reward, ok.process_reward) == (0.0, 0.0)
+            bad = await env.step(Action("nope"))
+            # 1 of 2 calls failed: the penalty, and the share rose by 0.5 (lower is better).
+            assert bad.process_reward == pytest.approx(-0.25 - 0.5)
+            assert bad.reward == 0.0
+            again = await env.step(Action("bash", {"command": "echo hi"}))
+            # The share fell to 1/3, from 1/2: a small credit for recovering.
+            assert again.process_reward == pytest.approx(0.5 - 1 / 3)
+            assert [s.name for s in env.trajectory] == ["bash", "nope", "bash"]
+            final = await env.step(Action("submit"))
+            assert final.reward == 0.0
+            # Submitting is not a tool step: nothing is scored for it.
+            assert final.process_reward is None
+
+    run(go())
+
+
+def test_a_step_reward_that_cannot_be_computed_is_none_not_zero() -> None:
+    from evalsi_harness.process import EvaluatorReward
+
+    async def go() -> None:
+        # The task has no reference trajectory, so the evaluator skips every step.
+        reward = EvaluatorReward("builtin/trajectory-match")
+        async with TaskEnv(LocalSandboxClient(), process_rewards=[reward]) as env:
+            await env.reset(record(), spec_of({"environment": ENVIRONMENT}))
+            step = await env.step(Action("bash", {"command": "echo hi"}))
+            assert step.process_reward is None
+            assert step.reward == 0.0
+
+    run(go())
+
+
+def test_process_reward_state_is_per_episode_and_survives_a_resume() -> None:
+    from evalsi_harness.process import EvaluatorReward
+
+    async def go() -> None:
+        client = LocalSandboxClient()
+        reward = EvaluatorReward("builtin/tool-errors")
+        spec = spec_of({"environment": ENVIRONMENT})
+        async with TaskEnv(client, process_rewards=[reward]) as env:
+            await env.reset(record("x"), spec)
+            await env.step(Action("nope"))  # share 1.0
+            saved = await env.snapshot()
+            async with TaskEnv(client, process_rewards=[reward]) as other:
+                await other.restore(saved)
+                step = await other.step(Action("bash", {"command": "echo hi"}))
+                # 1 of 2 failed now: down from 1.0, so a credit of 0.5, not a fresh baseline.
+                assert step.process_reward == pytest.approx(0.5)
+                assert len(other.trajectory) == 2
+            await env.reset(record("y"), spec)
+            first = await env.step(Action("bash", {"command": "echo hi"}))
+            assert first.process_reward == 0.0
+            await env.delete_snapshot(saved)
+
+    run(go())
