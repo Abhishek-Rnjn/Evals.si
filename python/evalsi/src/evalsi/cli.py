@@ -994,7 +994,11 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
         return 2
     verdicts = []
     if args.gate:
-        verdicts = matrix.gate(loaded, cells, args.metric, max_regression=args.max_regression)
+        try:
+            verdicts = matrix.gate(loaded, cells, args.metric, max_regression=args.max_regression)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
     if args.format == "json":
         rows = [c.to_dict() for c in cells]
         if args.mechanisms:
@@ -1041,8 +1045,14 @@ def _cmd_harness2_calibrate(args: argparse.Namespace) -> int:
                 print("error: --results needs --metric", file=sys.stderr)
                 return 2
             with open(args.results, encoding="utf-8") as handle:
-                scores = cal.load_candidate_scores(json.load(handle), args.metric)
-            rows = cal.agreement_with_scores(ns, scores, level=args.confidence)
+                results = json.load(handle)
+            scores = cal.load_candidate_scores(results, args.metric)
+            rows = cal.agreement_with_scores(
+                ns,
+                scores,
+                level=args.confidence,
+                higher_is_better=cal.metric_higher_is_better(results, args.metric),
+            )
         else:
             rows = cal.agreement_with_base(ns, level=args.confidence)
     except (OSError, ValueError) as exc:

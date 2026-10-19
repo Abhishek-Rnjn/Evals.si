@@ -138,6 +138,46 @@ def test_a_harmful_edit_and_missing_data_are_reported_honestly() -> None:
         ablation.attribute(base, full, {"c1": other}, M)
 
 
+def test_a_lower_is_better_metric_flips_effect_and_harm() -> None:
+    def lower(scores: list[float]) -> dict[str, Any]:
+        data = run(scores)
+        data["summaries"][0]["higher_is_better"] = False
+        return data
+
+    base = lower([1.0] * 8)
+    # Lower is better: the full harness scores 0 where reverting c1 scores 1 (an
+    # improvement), and the full harness scores 1 where reverting c2 scores 0 (harm).
+    full_good = lower([0.0] * 8)
+    rows = {
+        r.component: r for r in ablation.attribute(base, full_good, {"c1": lower([1.0] * 8)}, M)
+    }
+    assert rows["c1"].status == ablation.EFFECT
+    assert rows["c1"].effect == -1.0  # the raw difference stays in the metric's units
+    full_bad = lower([1.0, 1, 1, 1, 1, 1, 1, 0])
+    rows = {r.component: r for r in ablation.attribute(base, full_bad, {"c2": lower([0.0] * 8)}, M)}
+    assert rows["c2"].status == ablation.HARMFUL
+
+
+@pytest.mark.skipif(os.name == "nt", reason="execute bits")
+def test_variants_keep_the_execute_bit_of_the_side_their_content_came_from(
+    tmp_path: Path,
+) -> None:
+    base = write(tmp_path / "base", {**BASE, "scripts/run.sh": "echo base\n"})
+    adopted = write(tmp_path / "adopted", {**ADOPTED, "scripts/run.sh": "echo adopted\n"})
+    helper = adopted / "scripts" / "helper.py"
+    for path in (base / "scripts" / "run.sh", adopted / "scripts" / "run.sh", helper):
+        path.chmod(0o755)
+    out = tmp_path / "plan"
+    ablation.plan_dirs(base, adopted, out)
+    # Reverting c7 restores the base's scripts: run.sh keeps its bit, helper.py (not
+    # executable in the base) does not.
+    assert os.access(out / "c7" / "scripts" / "run.sh", os.X_OK)
+    assert not os.access(out / "c7" / "scripts" / "helper.py", os.X_OK)
+    # Reverting c1 leaves the adopted scripts, so their bits are the adopted ones.
+    assert os.access(out / "c1" / "scripts" / "helper.py", os.X_OK)
+    assert not os.access(out / "c1" / "systemprompt.md", os.X_OK)
+
+
 def test_the_cli_plans_and_attributes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     base = write(tmp_path / "base", BASE)
     adopted = write(tmp_path / "adopted", ADOPTED)

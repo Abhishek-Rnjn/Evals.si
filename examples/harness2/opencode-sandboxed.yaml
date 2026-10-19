@@ -19,7 +19,16 @@ spec:
   target:
     agent:
       cli:
+        # `env` carries the CLI's own settings in the command. A Harbor task always
+        # supplies its own environment variables, which replace the spec's
+        # `environment.env` entirely, so settings put there would never arrive.
         command:
+          - env
+          - HOME=/tmp/agent-home
+          # The file-access fence from Harness²'s reference OpenCode environment:
+          # without it the session auto-rejects reads of its own working tree. The
+          # workdir must match the task's workdir (/app for Harbor tasks).
+          - 'OPENCODE_PERMISSION={"external_directory": {"*": "deny", "/app": "allow", "/app/**": "allow"}}'
           - opencode
           - run
           - "{instruction}"
@@ -32,15 +41,11 @@ spec:
         allow_hosts: ["api.anthropic.com:443"]
         timeout: 30m
   dataset:
-    uri: "harbor://./workbuddy-bench/wb-bench-code-v1.0/tasks?reward=score.json&tasks=REPLACE_WITH_TASK"
+    # network=deny matters: a Harbor task defaults to network allow, and that
+    # record-level setting would override the allowlist below.
+    uri: "harbor://./workbuddy-bench/wb-bench-code-v1.0/tasks?reward=score.json&network=deny&tasks=REPLACE_WITH_TASK"
   environment:
     setup_network: allow
-    env:
-      HOME: /tmp/agent-home
-      # The file-access fence from Harness²'s reference OpenCode environment:
-      # without it the session auto-rejects reads of its own working tree. The
-      # workdir must match the task's workdir (/app for Harbor tasks).
-      OPENCODE_PERMISSION: '{"external_directory": {"*": "deny", "/app": "allow", "/app/**": "allow"}}'
     sandbox:
       network: allowlist
       allow_hosts: ["api.anthropic.com:443"]

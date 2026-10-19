@@ -366,6 +366,15 @@ def _cell_name(mode: str, k: int | None) -> str:
     return f"{mode}{k if k is not None else ''}"
 
 
+def metric_higher_is_better(results: Mapping[str, Any], metric: str) -> bool:
+    """Whether a higher value of ``metric`` is better, from the results summary
+    (``higher_is_better``); higher is better when the summary does not say."""
+    for summary in results.get("summaries") or []:
+        if isinstance(summary, Mapping) and summary.get("metric") == metric:
+            return summary.get("higher_is_better", True) is not False
+    return True
+
+
 def load_candidate_scores(results: Mapping[str, Any], metric: str) -> dict[CandidateKey, float]:
     """Our score per candidate, from a results file (``evalsi run --output``).
 
@@ -399,9 +408,11 @@ def agreement_with_scores(
     scores: Mapping[CandidateKey, float],
     *,
     level: float = 0.95,
+    higher_is_better: bool = True,
 ) -> list[Agreement]:
     """Per (mode, k) cell, then pooled as ``all``: how often the chosen candidate
-    is among those we score highest.
+    is among those we score best. With ``higher_is_better=False`` (a metric such as
+    ``contamination-fetch``) the lowest score is best.
 
     Left out of the rate and listed under ``ungraded`` with a reason: a selection
     that did not complete, a chosen candidate we have no score for, fewer than two
@@ -410,6 +421,9 @@ def agreement_with_scores(
     absent from ``scores``, never zero. Tasks recur across cells, so the pooled
     interval is narrower than the evidence warrants; read the cells.
     """
+    if not higher_is_better:
+        # Rank on the negated score, so "best" is the maximum either way.
+        scores = {key: -value for key, value in scores.items()}
     cells: dict[str, Agreement] = {}
     pooled = Agreement("all")
     for sel in sorted(ns.selections, key=lambda s: (s.mode, s.k or 0, s.task_id)):

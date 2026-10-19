@@ -97,6 +97,24 @@ def test_unjudged_reference_runs_are_skipped_and_base_trials_follow_labels(ns: P
     assert s["mean"] == pytest.approx((0.4 + 0.6 + 0.5 + 0.2 + 0.4) / 5)
 
 
+def test_repeated_base_executions_of_a_task_are_one_cluster(ns: Path) -> None:
+    from evalsi.stats import clustered_interval
+
+    base = import_namespace(ns).cells()["base"]
+    s = _summary(base, FRACTION)
+    # alpha/one ran twice; the interval must treat it as one task, not two.
+    assert s["ci"]["method"] == "clustered-t"
+    rows = [r for r in base["results"] if r["evaluator"] == FRACTION and r.get("scores")]
+    expected = clustered_interval(
+        [r["scores"][0]["number"] for r in rows], [r["record_id"] for r in rows]
+    )
+    assert expected is not None
+    assert s["ci"]["low"] == pytest.approx(expected.low)
+    assert s["ci"]["high"] == pytest.approx(expected.high)
+    # A cell whose tasks are each run once keeps the ordinary interval.
+    assert _summary(import_namespace(ns).cells()["agg2"], FRACTION)["ci"]["method"] != "clustered-t"
+
+
 def test_matrix_pairs_the_refined_harness_with_base_by_task(ns: Path) -> None:
     cells = import_namespace(ns).cells()
     out = build([("base", cells["base"]), ("agg2", cells["agg2"])], FRACTION)

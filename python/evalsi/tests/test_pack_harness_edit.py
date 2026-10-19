@@ -268,6 +268,52 @@ def test_a_skill_read_by_path_and_a_task_delegation_count() -> None:
     assert run(edit_mechanism_ran, rec({"base": BASE, "edited": EDITED}, steps)).passed is True
 
 
+ONLY_SKILL = {**BASE, "skills/pdf/SKILL.md": "---\nname: pdf\n---\n"}
+ONLY_SCRIPT = {**BASE, "scripts/check.py": "print(1)\n"}
+
+
+def test_writing_a_skill_is_not_loading_it() -> None:
+    write = [tool("write_file", '{"path":"skills/pdf/SKILL.md","content":"x"}')]
+    assert run(edit_mechanism_ran, rec({"base": BASE, "edited": ONLY_SKILL}, write)).passed is False
+    edit = [tool("edit", "skills/pdf/SKILL.md")]
+    assert run(edit_mechanism_ran, rec({"base": BASE, "edited": ONLY_SKILL}, edit)).passed is False
+    read = [tool("read_file", '{"path":"skills/pdf/SKILL.md"}')]
+    assert run(edit_mechanism_ran, rec({"base": BASE, "edited": ONLY_SKILL}, read)).passed is True
+
+
+def test_mentioning_a_script_is_not_running_it() -> None:
+    for step in (
+        tool("read_file", "scripts/check.py"),
+        tool("write_file", "scripts/check.py"),
+        tool("bash", "cat scripts/check.py"),
+        tool("bash", "ls scripts/check.py"),
+        tool("bash", "echo scripts/check.py"),
+        tool("bash", "grep -n print scripts/check.py"),
+        tool("bash", '{"command":"head -5 scripts/check.py"}'),
+        tool("bash", "cat scripts/check.py; ls"),
+    ):
+        rec_ = rec({"base": BASE, "edited": ONLY_SCRIPT}, [step])
+        assert run(edit_mechanism_ran, rec_).passed is False, step.input
+
+
+def test_an_actual_invocation_is_credited() -> None:
+    for command in (
+        "python3 scripts/check.py --all",
+        "./scripts/check.py",
+        "cd repo && python scripts/check.py",
+        "cat in.txt | python scripts/check.py",
+        '{"command":"uv run scripts/check.py"}',
+        "FOO=1 bash scripts/check.py",
+    ):
+        rec_ = rec({"base": BASE, "edited": ONLY_SCRIPT}, [tool("bash", command)])
+        assert run(edit_mechanism_ran, rec_).passed is True, command
+    # A command-running tool under another name still counts; a file tool does not.
+    shell = rec(
+        {"base": BASE, "edited": ONLY_SCRIPT}, [tool("exec_command", "sh scripts/check.py")]
+    )
+    assert run(edit_mechanism_ran, shell).passed is True
+
+
 def test_mechanism_ran_skips() -> None:
     assert run(edit_mechanism_ran, rec({"base": BASE, "edited": EDITED})).skipped  # no trajectory
     assert run(

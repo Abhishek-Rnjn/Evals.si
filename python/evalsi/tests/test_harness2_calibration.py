@@ -92,6 +92,32 @@ def test_agreement_with_our_scores_by_hand() -> None:
     assert len(pooled.ungraded) == 2
 
 
+def test_a_lower_is_better_metric_ranks_the_lowest_score_best() -> None:
+    ns = read_namespace(FIXTURE)
+    higher = {a.cell: a for a in agreement_with_scores(ns, SCORES)}
+    lower = {a.cell: a for a in agreement_with_scores(ns, SCORES, higher_is_better=False)}
+    # alpha/one agg2 chose agg2 where agg1 scored higher: with the direction flipped,
+    # agg2 is the best (lowest) choice and the disagreement disappears.
+    assert higher["agg2"].disagreements == ["alpha/one agg2: chose agg2, best agg1"]
+    assert lower["agg2"].disagreements == ["beta agg2: chose agg1, best agg2"]  # and beta flips
+
+
+def test_the_metric_direction_comes_from_the_results_summary() -> None:
+    from evalsi.harness2_calibration import metric_higher_is_better
+
+    results = {
+        "summaries": [
+            {"metric": "contamination-fetch", "higher_is_better": False},
+            {"metric": "quality", "higher_is_better": True},
+            {"metric": "plain"},
+        ]
+    }
+    assert not metric_higher_is_better(results, "contamination-fetch")
+    assert metric_higher_is_better(results, "quality")
+    assert metric_higher_is_better(results, "plain")
+    assert metric_higher_is_better(results, "absent")
+
+
 def test_a_forced_choice_and_an_incomplete_selection_are_not_compared(tmp_path: Path) -> None:
     root = tmp_path / "ns"
     shutil.copytree(FIXTURE, root)

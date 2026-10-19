@@ -403,30 +403,40 @@ def gate(
     max_regression: float = 0.0,
     level: float = 0.95,
 ) -> list[Verdict]:
-    """A verdict per cell. The first cell is the baseline. A candidate is checked
-    against the baseline on its own dataset, and, when ``build`` split the cells
-    by ``tuned_on``, a held-out candidate is also checked against the tuned cell
-    of the same harness and model: it fails when its interval lies wholly below
-    the tuned one by more than ``max_regression`` (the two sets of records
-    differ, so this is a comparison of intervals, not a paired one)."""
-    if max_regression < 0:
-        raise ValueError("max_regression must be zero or positive")
+    """A verdict per cell. The first cell names the baseline harness and model;
+    its first run on each dataset is a reference and gets the BASELINE verdict,
+    whatever its position. A candidate is checked against the baseline
+    run on its own dataset, wherever in the inputs that run is, and, when
+    ``build`` split the cells by ``tuned_on``, a held-out candidate is also checked
+    against the tuned cell of the same harness and model: it fails when its
+    interval lies wholly below the tuned one by more than ``max_regression`` (the
+    two sets of records differ, so this is a comparison of intervals, not a
+    paired one)."""
+    # `not (x >= 0)` also refuses NaN, which would make every comparison below false.
+    if not max_regression >= 0 or max_regression == float("inf"):
+        raise ValueError("max_regression must be a finite number, zero or positive")
     verdicts: list[Verdict] = []
     base_name = results[0][0]
+    base = cells[0]
+    # The first run of the baseline harness and model on each dataset is its reference;
+    # a later run of the same harness and model on that dataset is a candidate.
+    reference: set[int] = set()
+    seen: set[str] = set()
+    for j, c in enumerate(cells):
+        if c.harness == base.harness and c.model == base.model and c.dataset not in seen:
+            reference.add(j)
+            seen.add(c.dataset)
+
     for i, (cell, (name, data)) in enumerate(zip(cells, results, strict=True)):
-        if i == 0:
+        if i in reference:
             verdicts.append(Verdict(name, BASELINE, []))
             continue
         checks: list[Check] = []
-        # The baseline harness on this cell's own dataset: the first cell, or a
-        # later cell of the same harness and model that ran the same data.
+        # The baseline harness on this cell's own dataset, from anywhere in the inputs.
         refs = [
             (n, d)
             for j, (n, d) in enumerate(results)
-            if j < i
-            and cells[j].harness == cells[0].harness
-            and cells[j].model == cells[0].model
-            and cells[j].dataset == cell.dataset
+            if j in reference and cells[j].dataset == cell.dataset
         ]
         label = "held-out-vs-baseline" if cell.split == "held-out" else "vs-baseline"
         if cell.n == 0 or cell.mean is None:
@@ -442,8 +452,11 @@ def gate(
         if cell.split == "held-out":
             tuned = [
                 c
-                for c in cells[:i]
-                if c.split == "tuned" and c.harness == cell.harness and c.model == cell.model
+                for j, c in enumerate(cells)
+                if j != i
+                and c.split == "tuned"
+                and c.harness == cell.harness
+                and c.model == cell.model
             ]
             if not tuned:
                 checks.append(

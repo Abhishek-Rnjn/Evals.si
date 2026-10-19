@@ -386,6 +386,7 @@ def results_for(
     records: list[dict[str, Any]] = []
     results: list[dict[str, Any]] = []
     values: dict[str, list[float]] = {m: [] for m in METRICS}
+    tasks: dict[str, list[str]] = {m: [] for m in METRICS}  # the task of each value
     counts = {m: {"skipped": 0, "errors": 0} for m in METRICS}
     used: set[tuple[str, int]] = set()
     for e in sorted(rows, key=lambda r: (r.task_id, r.label)):
@@ -414,11 +415,12 @@ def results_for(
                     value = 1.0 if e.n_passed == e.n_criteria else 0.0
                     res["scores"] = [{"name": metric, "passed": value == 1.0}]
                 values[metric].append(value)
+                tasks[metric].append(e.task_id)
             else:
                 res["reason"] = e.reason
                 counts[metric]["skipped" if e.outcome is Outcome.SKIPPED else "errors"] += 1
             results.append(res)
-    summaries = [_summary(m, values[m], counts[m]) for m in METRICS]
+    summaries = [_summary(m, values[m], counts[m], tasks[m]) for m in METRICS]
     return {
         "manifest": {
             "name": f"harness2:{namespace}:{name}",
@@ -432,7 +434,12 @@ def results_for(
     }
 
 
-def _summary(metric: str, vals: list[float], count: dict[str, int]) -> dict[str, Any]:
+def _summary(
+    metric: str, vals: list[float], count: dict[str, int], tasks: list[str]
+) -> dict[str, Any]:
+    """A metric's summary. A task run more than once (repeated base executions) is one
+    cluster, as in ``evalsi.results.summarize``, so repeating the same tasks does not
+    narrow the interval."""
     n = len(vals)
     mean = sum(vals) / n if n else None
     std = None
@@ -449,7 +456,8 @@ def _summary(metric: str, vals: list[float], count: dict[str, int]) -> dict[str,
         "errors": count["errors"],
         "higher_is_better": True,
     }
-    ci = interval(vals, proportion=metric == ALL_PASS)
+    repeated = len(set(tasks)) < len(tasks)
+    ci = interval(vals, proportion=metric == ALL_PASS, clusters=tasks if repeated else None)
     if ci is not None:
         if metric == FRACTION:
             ci = ci.clipped(0.0, 1.0)

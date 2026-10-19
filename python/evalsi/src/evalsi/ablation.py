@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -112,6 +112,20 @@ def read_dir(path: str | os.PathLike[str]) -> Tree:
     return tree
 
 
+def read_executables(path: str | os.PathLike[str]) -> set[str]:
+    """The relative paths under a harness directory that have an execute bit. The
+    content is read by :func:`read_dir`; the mode is kept apart so a variant can be
+    written with the permissions of the side its content came from."""
+    root = os.fspath(path)
+    out: set[str] = set()
+    for here, _dirs, files in os.walk(root, followlinks=False):
+        for name in files:
+            full = os.path.join(here, name)
+            if not os.path.islink(full) and os.stat(full).st_mode & 0o111:
+                out.add(normalize_rel(os.path.relpath(full, root)))
+    return out
+
+
 @dataclass
 class ComponentEdit:
     component: str
@@ -157,7 +171,16 @@ def revert_variant(base: Mapping[str, bytes], adopted: Mapping[str, bytes], comp
     return out
 
 
-def _write_tree(tree: Mapping[str, bytes], dest: str) -> None:
+def revert_executables(
+    base: set[str], adopted: set[str], base_tree: Mapping[str, bytes], component: str
+) -> set[str]:
+    """The execute bits of :func:`revert_variant`'s files: the base's for the reverted
+    component, the adopted harness's for the rest."""
+    keep = {rel for rel in adopted if component_of(rel) != component}
+    return keep | {rel for rel in base if rel in base_tree and component_of(rel) == component}
+
+
+def _write_tree(tree: Mapping[str, bytes], dest: str, executable: Collection[str] = ()) -> None:
     root = os.path.realpath(dest)
     os.makedirs(root, exist_ok=True)
     for rel, data in tree.items():
@@ -167,6 +190,8 @@ def _write_tree(tree: Mapping[str, bytes], dest: str) -> None:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         with open(target, "xb") as handle:
             handle.write(data)
+        if rel in executable:
+            os.chmod(target, os.stat(target).st_mode | 0o111)
 
 
 def plan_dirs(
@@ -177,6 +202,7 @@ def plan_dirs(
     """Write ``<out>/<component>/`` for each edited component and
     ``<out>/manifest.json``; return the manifest."""
     base, adopted = read_dir(base_dir), read_dir(adopted_dir)
+    base_x, adopted_x = read_executables(base_dir), read_executables(adopted_dir)
     out = os.fspath(out_dir)
     if os.path.islink(out):
         raise AblationError(f"{out}: the output directory is a symlink")
@@ -190,7 +216,11 @@ def plan_dirs(
     edits = plan(base, adopted)
     variants = []
     for e in edits:
-        _write_tree(revert_variant(base, adopted, e.component), os.path.join(out, e.component))
+        _write_tree(
+            revert_variant(base, adopted, e.component),
+            os.path.join(out, e.component),
+            revert_executables(base_x, adopted_x, base, e.component),
+        )
         entry = e.to_dict()
         entry["variant_dir"] = e.component
         variants.append(entry)
@@ -251,7 +281,8 @@ def _classify(
             return Attribution(component, name, INSUFFICIENT, c.diff, paired_n=c.paired_n)
         status = NO_EFFECT
         if c.significant:
-            status = EFFECT if c.diff > 0 else HARMFUL
+            # `regressed` follows the metric's direction; the effect stays in raw units.
+            status = HARMFUL if c.regressed else EFFECT
         return Attribution(component, name, status, c.diff, c.diff_low, c.diff_high, c.paired_n)
     return Attribution(component, name, INSUFFICIENT)
 

@@ -88,6 +88,9 @@ def tree(directory: Path, into: str) -> dict[str, str]:
     """Every file under ``directory`` as sandbox files at ``into/...`` (binary
     files base64-encoded, as the Harbor importer does). A symlink that leaves
     the directory is refused, so a task cannot pull in files from elsewhere."""
+    if directory.is_symlink():
+        # Resolving a linked directory would make wherever it points the trusted root.
+        raise TaskFormatError(f"{directory.name} is a symlink; it must be a directory in the task")
     root = directory.resolve()
     files: dict[str, str] = {}
     for f in sorted(p for p in directory.rglob("*") if p.is_file()):

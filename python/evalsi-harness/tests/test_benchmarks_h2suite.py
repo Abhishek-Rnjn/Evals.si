@@ -197,6 +197,20 @@ def test_a_document_link_that_leaves_the_task_is_refused(tmp_path: Path) -> None
         load_lab(str(tasks), tasks="antitrust-competition/*")
 
 
+def test_a_linked_documents_directory_is_refused_not_trusted(tmp_path: Path) -> None:
+    tasks = lab_tree(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "secret.txt").write_text("not part of the task")
+    task = tasks / "antitrust-competition" / "task-one"
+    for child in (task / "documents").iterdir():
+        child.unlink()
+    (task / "documents").rmdir()
+    (task / "documents").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(TaskFormatError, match="is a symlink"):
+        load_lab(str(tasks), tasks="antitrust-competition/*")
+
+
 # --- JobBench ---
 
 
@@ -230,6 +244,16 @@ def test_jobbench_copies_only_the_task_folder(tmp_path: Path) -> None:
     assert grading["method"] == "llm-judge"
     assert grading["rubric"]["rubrics"][0]["weight"] == 2
     assert row["metadata"]["jobbench"]["occupation"] == "accountant"
+
+
+def test_jobbench_refuses_a_linked_task_folder(tmp_path: Path) -> None:
+    root = jb_tree(tmp_path)
+    task = root / "accountant" / "task1"
+    moved = tmp_path / "moved"
+    (task / "task_folder").rename(moved)
+    (task / "task_folder").symlink_to(moved, target_is_directory=True)
+    with pytest.raises(TaskFormatError, match="is a symlink"):
+        load_jobbench(str(root))
 
 
 def test_jobbench_rubric_is_optional_and_can_be_left_out(tmp_path: Path) -> None:
@@ -269,6 +293,16 @@ def test_the_example_specs_load_and_use_an_allowlist(name: str) -> None:
     assert sandbox.network == "allowlist"
     assert list(sandbox.allow_hosts) == list(cli.allow_hosts)
     assert sandbox.min_isolation == "namespaced"
+    # A Harbor task defaults to network allow and overrides the allowlist unless the
+    # dataset URI says deny; and its own env replaces environment.env, so the CLI's
+    # settings travel in the command.
+    assert "network=deny" in run.spec.dataset.uri
+    assert not run.spec.environment.env
+    command = list(cli.command)
+    assert command[0] == "env"
+    assert "HOME=/tmp/agent-home" in command
+    if name.startswith("opencode"):
+        assert any(a.startswith("OPENCODE_PERMISSION=") for a in command)
 
 
 def test_the_codex_example_reads_codex_json() -> None:

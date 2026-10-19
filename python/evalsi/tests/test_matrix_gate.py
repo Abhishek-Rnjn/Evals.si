@@ -91,6 +91,43 @@ def test_held_out_worse_than_baseline_or_than_tuned_fails() -> None:
     assert lone[-1].status == "insufficient"
 
 
+def test_a_nan_or_infinite_tolerance_is_refused_not_a_silent_pass() -> None:
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite"):
+            verdicts(("base", BASE), ("worse", WORSE), max_regression=bad)
+
+
+def test_every_baseline_row_is_a_reference_and_strict_passes_complete_data() -> None:
+    hd = "e" * 64
+    base_held = results("base@1", [1.0] * 10, tokens=1, steps=1, dataset=hd)
+    tuned = results("cand@1", [1.0] * 12, tokens=1, steps=1)
+    held_ok = results("cand@1", [1.0] * 10, tokens=1, steps=1, dataset=hd)
+    v = verdicts(
+        ("base", BASE), ("base-held", base_held), ("tuned", tuned), ("held", held_ok),
+        tuned_on=["d" * 64],
+    )  # fmt: skip
+    assert [x.status for x in v] == ["baseline", "baseline", "pass", "pass"]
+    assert not matrix.gate_failed(v, strict=True)
+
+
+def test_references_are_found_wherever_they_are_in_the_inputs() -> None:
+    hd = "e" * 64
+    base_held = results("base@1", [1.0] * 10, tokens=1, steps=1, dataset=hd)
+    tuned = results("cand@1", [1.0] * 12, tokens=1, steps=1)
+    held_bad = results("cand@1", [0.0, 1, 0, 0, 1, 0, 0, 0, 1, 0], tokens=1, steps=1, dataset=hd)
+    # The held-out run comes before both its baseline and its tuned cell.
+    v = verdicts(
+        ("base", BASE), ("held", held_bad), ("base-held", base_held), ("tuned", tuned),
+        tuned_on=["d" * 64],
+    )  # fmt: skip
+    held = v[1]
+    assert held.status == "fail"
+    assert {c.name: c.status for c in held.checks} == {
+        "held-out-vs-baseline": "fail",
+        "held-out-vs-tuned": "fail",
+    }
+
+
 def test_the_cli_exits_nonzero_for_a_worse_harness_and_carries_the_verdict(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -111,3 +148,15 @@ def test_the_cli_exits_nonzero_for_a_worse_harness_and_carries_the_verdict(
     capsys.readouterr()
     assert main(["matrix", paths["base"], paths["worse"], "--metric", M, "--gate"]) == 1
     assert "gate: FAIL" in capsys.readouterr().out
+
+
+def test_the_cli_refuses_a_nan_tolerance(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "r.json"
+    path.write_text(json.dumps(BASE))
+    other = tmp_path / "w.json"
+    other.write_text(json.dumps(WORSE))
+    args = ["matrix", str(path), str(other), "--metric", M, "--gate", "--max-regression", "nan"]
+    assert main(args) == 2
+    assert "finite" in capsys.readouterr().err

@@ -25,12 +25,14 @@ are skipped, never scored as zero. The evaluators register in the ``agent`` pack
 from __future__ import annotations
 
 import fnmatch
+import json
 import re
+import shlex
 from collections.abc import Mapping
 from typing import Any
 
 from evalsi.evaluator import MetricSpec, Requirements, ScoreType, SkipRecord, evaluator
-from evalsi.types import Record, Score
+from evalsi.types import Record, Score, Step
 
 ALWAYS_ON = (
     ("systemprompt.md", "system-prompt"),
@@ -330,6 +332,64 @@ def added_mechanisms(base: Tree, edited: Tree) -> list[tuple[str, str, str]]:
     return out
 
 
+_READ_TOOLS = {"read", "read_file", "view", "cat", "open", "open_file"}
+# A tool that runs commands; a file tool (read, write, edit, view, patch) does not.
+_COMMAND_HINTS = ("bash", "shell", "exec", "command", "terminal")
+_FILE_HINTS = ("read", "write", "edit", "view", "patch", "cat")
+# Programs that look at, list, copy or print a file rather than run it.
+_INSPECTORS = {
+    "cat", "ls", "echo", "head", "tail", "less", "more", "grep", "egrep", "rg", "sed", "awk",
+    "wc", "file", "stat", "nl", "bat", "diff", "cmp", "cp", "mv", "rm", "chmod", "touch",
+    "tee", "printf", "test", "[", "type", "which", "find", "tree", "du", "sha256sum", "md5sum",
+    "git", "vim", "vi", "nano", "open",
+}  # fmt: skip
+_INTERPRETER = re.compile(
+    r"python[\d.]*|bash|sh|zsh|dash|node|deno|bun|ruby|perl|php|source|\.|uv|uvx|npx|tsx|ts-node"
+)
+_WRAPPERS = {"sudo", "time", "env", "nohup", "exec", "command", "stdbuf"}
+_COMMAND_KEYS = ("command", "cmd", "script", "input", "code")
+
+
+def _is_command_tool(tool: str) -> bool:
+    return any(h in tool for h in _COMMAND_HINTS) and not any(h in tool for h in _FILE_HINTS)
+
+
+def _command_text(step: Step) -> str:
+    """The shell text of a tool call: a ``command`` field of a JSON input, or the text."""
+    text = step.input.as_text() if step.input is not None else ""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text
+    if isinstance(data, Mapping):
+        found = [str(v) for k, v in data.items() if k in _COMMAND_KEYS and isinstance(v, str)]
+        return "\n".join(found) if found else text
+    return text
+
+
+def _invokes(name: str, path: str, command: str) -> bool:
+    """Whether some command in ``command`` runs the script: the script is the program
+    (``./scripts/check.py``) or an argument of an interpreter (``python scripts/check.py``).
+    ``cat``, ``ls``, ``echo`` and other inspectors only mention it."""
+
+    def is_script(token: str) -> bool:
+        return token in (path, name) or token.endswith(("/" + path, "/" + name))
+
+    for segment in re.split(r"[;&|\n]+", command):
+        try:
+            tokens = shlex.split(segment)
+        except ValueError:
+            tokens = segment.split()
+        while tokens and (tokens[0] in _WRAPPERS or re.fullmatch(r"\w+=\S*", tokens[0])):
+            tokens = tokens[1:]
+        if not tokens or tokens[0] in _INSPECTORS:
+            continue
+        program, args = tokens[0], tokens[1:]
+        if is_script(program) or (_INTERPRETER.fullmatch(program) and any(map(is_script, args))):
+            return True
+    return False
+
+
 def _ran(kind: str, name: str, path: str, record: Record) -> bool:
     assert record.trajectory is not None
     for step in record.trajectory.steps:
@@ -338,8 +398,11 @@ def _ran(kind: str, name: str, path: str, record: Record) -> bool:
         text = step.input.as_text() if step.input is not None else ""
         tool = step.name.lower()
         if kind == "skill":
+            # Loaded by a skill tool naming it, or by reading its SKILL.md; writing the
+            # file (authoring a skill) is not loading it.
             if step.type == "tool" and (
-                (tool in _SKILL_TOOLS and _name_in(name, text)) or path in text
+                (tool in _SKILL_TOOLS and _name_in(name, text))
+                or (tool in _READ_TOOLS and path in text)
             ):
                 return True
         elif kind == "subagent":
@@ -351,11 +414,9 @@ def _ran(kind: str, name: str, path: str, record: Record) -> bool:
                 return True
         elif (
             step.type == "tool"
-            and (path in text or _name_in(name, text))
-            and tool not in {"read", "view", "cat", "write", "edit"}
+            and _is_command_tool(tool)
+            and _invokes(name, path, _command_text(step))
         ):
-            # An invocation names the script in a command-running tool; reading or
-            # writing the file does not run it.
             return True
     return False
 
