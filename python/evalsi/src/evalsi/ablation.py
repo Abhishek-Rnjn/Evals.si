@@ -31,13 +31,14 @@ group, ``other``, so a stray edit is not lost; the README stubs are in it too.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from evalsi.compare import compare_results
+from evalsi.compare import compare_results, record_values
 
 Tree = dict[str, bytes]
 
@@ -77,6 +78,36 @@ def component_of(rel: str) -> str:
         if rel.startswith(prefix):
             return component
     return "other"
+
+
+GRANULARITIES = ("component", "unit")
+
+
+def unit_of(rel: str) -> str:
+    """The finest group a file reverts with: its component, and for the components that hold
+    several independent things, which one. ``c6:fmt`` is the skill ``skills/fmt/``, ``c5:coder``
+    the sub-agent ``sub_agents/coder/``, ``c7:scripts/x.py`` and ``c8:plugin/y.ts`` one file.
+    The always-on files and anything off the surface are their own unit."""
+    comp = component_of(rel)
+    parts = rel.split("/")
+    if comp in ("c5", "c6") and len(parts) >= 3:
+        return f"{comp}:{parts[1]}"
+    if comp in ("c7", "c8"):
+        return f"{comp}:{rel}"
+    return comp
+
+
+def group_of(rel: str, by: str) -> str:
+    if by not in GRANULARITIES:
+        raise AblationError(f"granularity must be one of {', '.join(GRANULARITIES)}")
+    return unit_of(rel) if by == "unit" else component_of(rel)
+
+
+def _group_name(group: str) -> str:
+    comp, sep, unit = group.partition(":")
+    return (
+        f"{COMPONENT_NAMES.get(comp, comp)}: {unit}" if sep else COMPONENT_NAMES.get(group, group)
+    )
 
 
 def normalize_rel(rel: str) -> str:
@@ -144,15 +175,18 @@ class ComponentEdit:
         return out
 
 
-def plan(base: Mapping[str, bytes], adopted: Mapping[str, bytes]) -> list[ComponentEdit]:
-    """One entry per component the adopted harness edits, in component order."""
+def plan(
+    base: Mapping[str, bytes], adopted: Mapping[str, bytes], by: str = "component"
+) -> list[ComponentEdit]:
+    """One entry per component (or, with ``by="unit"``, per skill, sub-agent, script or
+    plugin) the adopted harness edits, in component order."""
     for rel in [*base, *adopted]:
         normalize_rel(rel)
     edits: dict[str, ComponentEdit] = {}
 
     def edit(rel: str) -> ComponentEdit:
-        comp = component_of(rel)
-        return edits.setdefault(comp, ComponentEdit(comp, COMPONENT_NAMES[comp]))
+        group = group_of(rel, by)
+        return edits.setdefault(group, ComponentEdit(group, _group_name(group)))
 
     for rel in sorted(set(adopted) - set(base)):
         edit(rel).added.append(rel)
@@ -161,23 +195,33 @@ def plan(base: Mapping[str, bytes], adopted: Mapping[str, bytes]) -> list[Compon
     for rel in sorted(set(base) & set(adopted)):
         if base[rel] != adopted[rel]:
             edit(rel).modified.append(rel)
-    return [edits[c] for c in COMPONENT_NAMES if c in edits]
+    order = {c: i for i, c in enumerate(COMPONENT_NAMES)}
+    return sorted(edits.values(), key=lambda e: (order[e.component.split(":")[0]], e.component))
 
 
-def revert_variant(base: Mapping[str, bytes], adopted: Mapping[str, bytes], component: str) -> Tree:
-    """The adopted harness with one component put back to the base's content."""
-    out: Tree = {rel: data for rel, data in adopted.items() if component_of(rel) != component}
-    out.update({rel: data for rel, data in base.items() if component_of(rel) == component})
+def revert_variant(
+    base: Mapping[str, bytes],
+    adopted: Mapping[str, bytes],
+    component: str,
+    by: str = "component",
+) -> Tree:
+    """The adopted harness with one component (or unit) put back to the base's content."""
+    out: Tree = {rel: data for rel, data in adopted.items() if group_of(rel, by) != component}
+    out.update({rel: data for rel, data in base.items() if group_of(rel, by) == component})
     return out
 
 
 def revert_executables(
-    base: set[str], adopted: set[str], base_tree: Mapping[str, bytes], component: str
+    base: set[str],
+    adopted: set[str],
+    base_tree: Mapping[str, bytes],
+    component: str,
+    by: str = "component",
 ) -> set[str]:
     """The execute bits of :func:`revert_variant`'s files: the base's for the reverted
     component, the adopted harness's for the rest."""
-    keep = {rel for rel in adopted if component_of(rel) != component}
-    return keep | {rel for rel in base if rel in base_tree and component_of(rel) == component}
+    keep = {rel for rel in adopted if group_of(rel, by) != component}
+    return keep | {rel for rel in base if rel in base_tree and group_of(rel, by) == component}
 
 
 def _write_tree(tree: Mapping[str, bytes], dest: str, executable: Collection[str] = ()) -> None:
@@ -194,13 +238,22 @@ def _write_tree(tree: Mapping[str, bytes], dest: str, executable: Collection[str
             os.chmod(target, os.stat(target).st_mode | 0o111)
 
 
+def _variant_dir(group: str) -> str:
+    if ":" not in group:
+        return group
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in group)
+    return f"{safe[:40]}-{hashlib.sha1(group.encode()).hexdigest()[:8]}"
+
+
 def plan_dirs(
     base_dir: str | os.PathLike[str],
     adopted_dir: str | os.PathLike[str],
     out_dir: str | os.PathLike[str],
+    by: str = "component",
 ) -> dict[str, Any]:
-    """Write ``<out>/<component>/`` for each edited component and
-    ``<out>/manifest.json``; return the manifest."""
+    """Write ``<out>/<variant>/`` for each edited component (or unit) and
+    ``<out>/manifest.json``; return the manifest. A unit's directory is its id with the
+    characters that are not safe in a name replaced, plus a short hash so two never collide."""
     base, adopted = read_dir(base_dir), read_dir(adopted_dir)
     base_x, adopted_x = read_executables(base_dir), read_executables(adopted_dir)
     out = os.fspath(out_dir)
@@ -213,20 +266,22 @@ def plan_dirs(
         real = os.path.realpath(src)
         if os.path.commonpath([real, real_out]) in (real, real_out):
             raise AblationError(f"{out}: overlaps the harness directory {src}")
-    edits = plan(base, adopted)
+    edits = plan(base, adopted, by)
     variants = []
     for e in edits:
+        dirname = _variant_dir(e.component)
         _write_tree(
-            revert_variant(base, adopted, e.component),
-            os.path.join(out, e.component),
-            revert_executables(base_x, adopted_x, base, e.component),
+            revert_variant(base, adopted, e.component, by),
+            os.path.join(out, dirname),
+            revert_executables(base_x, adopted_x, base, e.component, by),
         )
         entry = e.to_dict()
-        entry["variant_dir"] = e.component
+        entry["variant_dir"] = dirname
         variants.append(entry)
     manifest = {
         "base": os.fspath(base_dir),
         "adopted": os.fspath(adopted_dir),
+        "granularity": by,
         "note": "each variant is the adopted harness with that component reverted to the base",
         "components": variants,
     }
@@ -273,7 +328,7 @@ def _classify(
     metric: str,
     level: float,
 ) -> Attribution:
-    name = COMPONENT_NAMES.get(component, component)
+    name = _group_name(component)
     for c in compare_results(reference, full, level=level):
         if c.metric != metric:
             continue
@@ -318,6 +373,110 @@ def attribution_table(rows: Sequence[Attribution]) -> str:
         effect = "-" if r.effect is None else f"{r.effect:+.3f}"
         interval = "-" if r.low is None else f"[{r.low:+.3f}, {r.high:+.3f}]"
         lines.append([r.component, r.name, effect, interval, str(r.paired_n), r.status])
+    widths = [max(len(r[i]) for r in lines) for i in range(len(head))]
+    return "\n".join(
+        "  ".join(cell.ljust(w) for cell, w in zip(r, widths, strict=True)).rstrip() for r in lines
+    )
+
+
+# --- Cross-task harm --------------------------------------------------------
+
+
+@dataclass
+class TaskEffect:
+    record: str
+    effect: float  # full adopted minus the revert variant, averaged over the record's trials
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class Harm:
+    component: str
+    name: str
+    helped: list[TaskEffect] = field(default_factory=list)
+    hurt: list[TaskEffect] = field(default_factory=list)
+    unchanged: int = 0
+
+    @property
+    def mixed(self) -> bool:
+        """The edit helps some tasks and hurts others, whatever its average."""
+        return bool(self.helped) and bool(self.hurt)
+
+    def to_dict(self) -> dict[str, Any]:
+        out = asdict(self)
+        out["mixed"] = self.mixed
+        return out
+
+
+def _higher_is_better(data: Mapping[str, Any], metric: str) -> bool:
+    for s in data.get("summaries") or []:
+        if s.get("metric") == metric:
+            return bool(s.get("higher_is_better", True) is not False)
+    return True
+
+
+def harm_check(
+    full: Mapping[str, Any],
+    variants: Mapping[str, Mapping[str, Any]],
+    metric: str,
+    *,
+    min_effect: float = 0.0,
+) -> list[Harm]:
+    """Per component, which tasks the edit helped and which it hurt: for each record the
+    full adopted harness minus the component's revert variant, averaged over trials, in the
+    metric's direction (a positive number is always an improvement). A component that
+    helps some tasks and hurts others is ``mixed`` and worth a look even when its average
+    effect is zero or positive. Only a difference larger than ``min_effect`` counts as help
+    or harm. This is descriptive: a handful of tasks cannot show that a single task's change
+    is more than noise, so read it as where to look, not as a verdict."""
+    if min_effect < 0:
+        raise AblationError("min_effect must not be negative")
+    datasets = {_dataset(d) for d in (full, *variants.values())} - {""}
+    if len(datasets) > 1:
+        raise AblationError("the results files were not run on the same dataset")
+    sign = 1.0 if _higher_is_better(full, metric) else -1.0
+    full_vals = record_values(full).get(metric, {})
+    out = []
+    for component, variant in variants.items():
+        base_vals = record_values(variant).get(metric, {})
+        per_record: dict[str, list[float]] = {}
+        for key in set(full_vals) & set(base_vals):
+            per_record.setdefault(key.rsplit("#", 1)[0], []).append(
+                sign * (full_vals[key] - base_vals[key])
+            )
+        harm = Harm(component, _group_name(component))
+        for rid in sorted(per_record):
+            effect = sum(per_record[rid]) / len(per_record[rid])
+            if effect > min_effect:
+                harm.helped.append(TaskEffect(rid, effect))
+            elif effect < -min_effect:
+                harm.hurt.append(TaskEffect(rid, effect))
+            else:
+                harm.unchanged += 1
+        harm.hurt.sort(key=lambda t: t.effect)
+        out.append(harm)
+    return out
+
+
+def harm_table(rows: Sequence[Harm]) -> str:
+    head = ["component", "name", "helped", "hurt", "same", "verdict", "most hurt"]
+    lines = [head]
+    for h in rows:
+        worst = ", ".join(f"{t.record} ({t.effect:+.2f})" for t in h.hurt[:3]) or "-"
+        verdict = "mixed: helps some, hurts others" if h.mixed else ("hurts" if h.hurt else "ok")
+        lines.append(
+            [
+                h.component,
+                h.name,
+                str(len(h.helped)),
+                str(len(h.hurt)),
+                str(h.unchanged),
+                verdict,
+                worst,
+            ]
+        )
     widths = [max(len(r[i]) for r in lines) for i in range(len(head))]
     return "\n".join(
         "  ".join(cell.ljust(w) for cell, w in zip(r, widths, strict=True)).rstrip() for r in lines
