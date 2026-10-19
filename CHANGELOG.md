@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Fixed
+
+- Accepted online traces remain queryable while a policy or source runner is unavailable. Deleting a source lets its accepted work finish locally without write-back. Leadership loss cancels evaluation; lease epochs and revision checks fence trace writes, scores and acknowledgments against stale dispatchers. Publication is ordered once across sources, scores follow their input revision, and ClickHouse retention tombstones suppress delayed inserts.
+
 ## [0.3.0] - Unreleased
 
 ### Upgrade notes

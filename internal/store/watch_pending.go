@@ -6,26 +6,50 @@ import "context"
 // ClickHouse. Keeping the redacted record here also recovers a failed trace write.
 const watchPendingSchema = `
 CREATE TABLE IF NOT EXISTS watch_pending (
-  project TEXT NOT NULL, trace_id TEXT NOT NULL, stream TEXT NOT NULL DEFAULT '', payload BLOB NOT NULL, start_ns INTEGER NOT NULL,
+  project TEXT NOT NULL, trace_id TEXT NOT NULL, stream TEXT NOT NULL DEFAULT '', payload BLOB NOT NULL, start_ns INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 0, score_revision INTEGER NOT NULL DEFAULT 0, record_hash TEXT NOT NULL DEFAULT '', snapshot_hash TEXT NOT NULL DEFAULT '',
   PRIMARY KEY (project, trace_id, stream)
+);
+CREATE TABLE IF NOT EXISTS watch_write_lock (
+  id INTEGER PRIMARY KEY, version INTEGER NOT NULL
+);
+INSERT INTO watch_write_lock (id, version) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
+CREATE TABLE IF NOT EXISTS watch_trace_heads (
+ project TEXT NOT NULL, trace_id TEXT NOT NULL, revision INTEGER NOT NULL, score_revision INTEGER NOT NULL DEFAULT 0, record_hash TEXT NOT NULL, snapshot_hash TEXT NOT NULL DEFAULT '',
+ start_ns INTEGER NOT NULL, projection_hash TEXT NOT NULL DEFAULT '', published INTEGER NOT NULL DEFAULT 0, deleted INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(project,trace_id)
+);
+CREATE TABLE IF NOT EXISTS watch_publications (
+ project TEXT NOT NULL, trace_id TEXT NOT NULL, revision INTEGER NOT NULL, start_ns INTEGER NOT NULL, retired_before_ns INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(project,trace_id,revision)
+);
+CREATE TABLE IF NOT EXISTS watch_score_references (
+ project TEXT NOT NULL, trace_id TEXT NOT NULL, record_hash TEXT NOT NULL, start_ns INTEGER NOT NULL, dirty INTEGER NOT NULL DEFAULT 1,
+ PRIMARY KEY(project,trace_id,record_hash)
 );
 `
 
 type WatchPending struct {
 	Project, TraceID, Stream string
+	RecordHash               string
+	SnapshotHash             string
+	Revision                 int64
+	ScoreRevision            int64
 	Payload                  []byte
 	StartNS                  int64
 }
 
 func (s *Store) PutWatchPending(ctx context.Context, items []WatchPending) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.beginWatchWrite(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 	for _, item := range items {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO watch_pending (project, trace_id, stream, payload, start_ns) VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT (project, trace_id, stream) DO UPDATE SET payload = excluded.payload, start_ns = excluded.start_ns`, item.Project, item.TraceID, item.Stream, item.Payload, item.StartNS); err != nil {
+		h, err := acceptWatchHead(ctx, tx, item)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO watch_pending(project,trace_id,stream,payload,start_ns,revision,record_hash,snapshot_hash,score_revision) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(project,trace_id,stream) DO UPDATE SET payload=excluded.payload,start_ns=excluded.start_ns,revision=excluded.revision,record_hash=excluded.record_hash,snapshot_hash=excluded.snapshot_hash,score_revision=excluded.score_revision`, item.Project, item.TraceID, item.Stream, item.Payload, item.StartNS, h.Revision, item.RecordHash, item.SnapshotHash, h.ScoreRevision); err != nil {
 			return err
 		}
 	}
@@ -37,7 +61,7 @@ func (s *Store) ListWatchPending(ctx context.Context, limit int, after ...WatchP
 	if len(after) > 0 {
 		cursor = after[0]
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT project, trace_id, stream, payload, start_ns FROM watch_pending
+	rows, err := s.db.QueryContext(ctx, `SELECT project, trace_id, stream, payload, start_ns, revision, record_hash,snapshot_hash,score_revision FROM watch_pending
 		WHERE project > ? OR (project = ? AND (trace_id > ? OR (trace_id = ? AND stream > ?))) ORDER BY project, trace_id, stream LIMIT ?`, cursor.Project, cursor.Project, cursor.TraceID, cursor.TraceID, cursor.Stream, limit)
 	if err != nil {
 		return nil, err
@@ -46,7 +70,7 @@ func (s *Store) ListWatchPending(ctx context.Context, limit int, after ...WatchP
 	var items []WatchPending
 	for rows.Next() {
 		var item WatchPending
-		if err := rows.Scan(&item.Project, &item.TraceID, &item.Stream, &item.Payload, &item.StartNS); err != nil {
+		if err := rows.Scan(&item.Project, &item.TraceID, &item.Stream, &item.Payload, &item.StartNS, &item.Revision, &item.RecordHash, &item.SnapshotHash, &item.ScoreRevision); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -55,20 +79,42 @@ func (s *Store) ListWatchPending(ctx context.Context, limit int, after ...WatchP
 }
 
 func (s *Store) WatchPendingMatches(ctx context.Context, item WatchPending) (bool, error) {
+	return watchPendingMatches(ctx, s.db, item)
+}
+
+func watchPendingMatches(ctx context.Context, q querier, item WatchPending) (bool, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload).Scan(&n)
+	err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload).Scan(&n)
 	return n == 1, err
 }
 
-// A newer revision of the same trace must survive an older evaluation's ack.
-func (s *Store) AckWatchPending(ctx context.Context, item WatchPending) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload)
-	return err
+// A newer revision of the same stream must survive an older evaluation's ack.
+// A nonempty owner also fences against the policy-engine lease.
+func (s *Store) AckWatchPending(ctx context.Context, lease PolicyLease, item WatchPending) error {
+	tx, err := s.beginWatchWrite(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := checkWatchLease(ctx, tx, lease); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Upgrade pending work written by earlier development builds without losing it.
 // Startup holds the metadata schema lock and invokes this inside a transaction.
 func migrateWatchPending(ctx context.Context, q querier, d dialect) error {
+	if err := migrateWatchPendingStreams(ctx, q, d); err != nil {
+		return err
+	}
+	return migrateWatchState(ctx, q, d)
+}
+
+func migrateWatchPendingStreams(ctx context.Context, q querier, d dialect) error {
 	var exists int
 	query := `SELECT COUNT(*) FROM pragma_table_info('watch_pending') WHERE name = 'stream'`
 	if d == postgresDialect {
