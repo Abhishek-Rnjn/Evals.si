@@ -230,7 +230,11 @@ def _add_matrix(sub: Any) -> None:
     )
     mx.add_argument("--format", choices=["table", "json"], default="table")
     mx.set_defaults(func=_cmd_matrix)
+    _add_harness_tools(sub)
 
+
+def _add_harness_tools(sub: Any) -> None:
+    _add_harness2(sub)
     ab = sub.add_parser(
         "ablate", help="component ablation of an adopted harness (H7): plan reverts, attribute"
     )
@@ -258,6 +262,28 @@ def _add_matrix(sub: Any) -> None:
     attr.add_argument("--confidence", type=float, default=0.95)
     attr.add_argument("--format", choices=["table", "json"], default="table")
     attr.set_defaults(func=_cmd_ablate_attribute)
+
+
+def _add_harness2(sub: Any) -> None:
+    h2 = sub.add_parser(
+        "harness2", help="import and calibrate Harness² runs (H7; written from source, unverified)"
+    )
+    h2_sub = h2.add_subparsers(dest="action", required=True)
+    h2i = h2_sub.add_parser(
+        "import", help="write one results file per harness (base, each mode and k) for `matrix`"
+    )
+    h2i.add_argument("namespace", help="a Harness² namespace directory under runs/")
+    h2i.add_argument("--out", required=True, help="directory for the results files")
+    h2i.set_defaults(func=_cmd_harness2_import)
+    h2c = h2_sub.add_parser(
+        "calibrate", help="how often Harness²'s choice matches the candidate we score highest"
+    )
+    h2c.add_argument("namespace", help="a Harness² namespace directory under runs/")
+    h2c.add_argument("--results", help="an imported cell's results file scored by our evaluators")
+    h2c.add_argument("--metric", help="the metric to rank candidates by (with --results)")
+    h2c.add_argument("--confidence", type=float, default=0.95)
+    h2c.add_argument("--format", choices=["table", "json"], default="table")
+    h2c.set_defaults(func=_cmd_harness2_calibrate)
 
     delete = sub.add_parser("delete-run", help="delete a finished server run and its stored data")
     delete.add_argument("id")
@@ -986,6 +1012,53 @@ def _cmd_matrix(args: argparse.Namespace) -> int:
     if verdicts and matrix.gate_failed(verdicts, strict=args.gate_strict):
         print("error: the regression gate failed", file=sys.stderr)
         return 1
+    return 0
+
+
+def _cmd_harness2_import(args: argparse.Namespace) -> int:
+    try:
+        from evalsi_harness.benchmarks import harness2
+    except ImportError:
+        print("error: needs the agent harness: pip install evalsi-harness", file=sys.stderr)
+        return 2
+    try:
+        written = harness2.write_cells(harness2.import_namespace(args.namespace), args.out)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    for path in written:
+        print(path)
+    return 0
+
+
+def _cmd_harness2_calibrate(args: argparse.Namespace) -> int:
+    from evalsi import harness2_calibration as cal
+
+    try:
+        ns = cal.read_namespace(args.namespace)
+        if args.results:
+            if not args.metric:
+                print("error: --results needs --metric", file=sys.stderr)
+                return 2
+            with open(args.results, encoding="utf-8") as handle:
+                scores = cal.load_candidate_scores(json.load(handle), args.metric)
+            rows = cal.agreement_with_scores(ns, scores, level=args.confidence)
+        else:
+            rows = cal.agreement_with_base(ns, level=args.confidence)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.format == "json":
+        print(json.dumps([r.to_dict() for r in rows], indent=2))
+        return 0
+    for r in rows:
+        if r.rate is None:
+            print(f"{r.cell}: no comparable tasks ({len(r.ungraded)} ungraded)")
+        else:
+            print(
+                f"{r.cell}: {r.agreed}/{r.compared} = {r.rate:.3f} "
+                f"[{r.low:.3f}, {r.high:.3f}], {len(r.ungraded)} ungraded"
+            )
     return 0
 
 

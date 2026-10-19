@@ -205,6 +205,42 @@ def _selection(task_id: str, mode_key: str, raw: Any) -> SelectionRow | None:
     )
 
 
+def _read_judged(root: Path, notes: list[str]) -> list[JudgedRow]:
+    raw_judged = _read_json(root, root / "judged.json", notes)
+    if not isinstance(raw_judged, list):
+        return []
+    by_key: dict[tuple[str, str, int | None], JudgedRow] = {}
+    for row in raw_judged:
+        if not isinstance(row, Mapping):
+            continue
+        chosen_is_base = row.get("chosen_is_base")
+        j = JudgedRow(
+            task_id=_text(row.get("task_id")),
+            mode=_mode(row),
+            k=_int(row.get("k")),
+            label=_text(row.get("label")),
+            run_id=_text(row.get("run_id")),
+            chosen_is_base=chosen_is_base if isinstance(chosen_is_base, bool) else None,
+            n_passed=_int(row.get("n_passed")),
+            n_criteria=_int(row.get("n_criteria")),
+            error=_text(row.get("error")),
+        )
+        # One row per (task, mode, k), as judge.py's merge keeps; the last wins.
+        by_key[(j.task_id, j.mode, j.k)] = j
+    return list(by_key.values())
+
+
+def _read_base_scores(root: Path, notes: list[str]) -> dict[tuple[str, str], Mapping[str, Any]]:
+    """``base_judged.json`` rows by (task, label)."""
+    raw = _read_json(root, root / "base_judged.json", notes)
+    rows = raw if isinstance(raw, list) else []
+    return {
+        (_text(row.get("task")), _text(row.get("label"))): row
+        for row in rows
+        if isinstance(row, Mapping)
+    }
+
+
 def read_namespace(ns_dir: str | Path) -> NamespaceData:
     """Read a Harness² namespace directory without writing to it.
 
@@ -222,12 +258,7 @@ def read_namespace(ns_dir: str | Path) -> NamespaceData:
     if isinstance(config, dict):
         data.config = config
 
-    base_scores: dict[tuple[str, str], Mapping[str, Any]] = {}
-    raw_base = _read_json(root, root / "base_judged.json", notes)
-    if isinstance(raw_base, list):
-        for row in raw_base:
-            if isinstance(row, Mapping):
-                base_scores[(_text(row.get("task")), _text(row.get("label")))] = row
+    base_scores = _read_base_scores(root, notes)
 
     base_seen: set[tuple[str, str]] = set()
     with os.scandir(root) as it:
@@ -284,27 +315,7 @@ def read_namespace(ns_dir: str | Path) -> NamespaceData:
     if not data.task_dirs:
         notes.append("no <task>/summary.json found")
 
-    raw_judged = _read_json(root, root / "judged.json", notes)
-    if isinstance(raw_judged, list):
-        by_key: dict[tuple[str, str, int | None], JudgedRow] = {}
-        for row in raw_judged:
-            if not isinstance(row, Mapping):
-                continue
-            chosen_is_base = row.get("chosen_is_base")
-            j = JudgedRow(
-                task_id=_text(row.get("task_id")),
-                mode=_mode(row),
-                k=_int(row.get("k")),
-                label=_text(row.get("label")),
-                run_id=_text(row.get("run_id")),
-                chosen_is_base=chosen_is_base if isinstance(chosen_is_base, bool) else None,
-                n_passed=_int(row.get("n_passed")),
-                n_criteria=_int(row.get("n_criteria")),
-                error=_text(row.get("error")),
-            )
-            # One row per (task, mode, k), as judge.py's merge keeps; the last wins.
-            by_key[(j.task_id, j.mode, j.k)] = j
-        data.judged = list(by_key.values())
+    data.judged = _read_judged(root, notes)
     return data
 
 
@@ -410,9 +421,7 @@ def agreement_with_scores(
             reason = "selection did not complete or names no chosen candidate"
         else:
             mine = {
-                key[3]: v
-                for key, v in scores.items()
-                if key[:3] == (sel.task_id, sel.mode, sel.k)
+                key[3]: v for key, v in scores.items() if key[:3] == (sel.task_id, sel.mode, sel.k)
             }
             if sel.chosen_label not in mine:
                 reason = "no score of ours for the chosen candidate"
