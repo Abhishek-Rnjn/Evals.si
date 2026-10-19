@@ -1153,6 +1153,8 @@ class Checker(_message.Message):
     PARSER_FIELD_NUMBER: _builtins.int
     PROTECT_FIELD_NUMBER: _builtins.int
     ON_CHANGE_FIELD_NUMBER: _builtins.int
+    ISOLATION_FIELD_NUMBER: _builtins.int
+    OUTPUTS_FIELD_NUMBER: _builtins.int
     parser: _builtins.str
     """How to read the result: "exit-code" (default); "json" (the last line of
     stdout is {"passed": bool, "score": number, "tests": {...}}); "junit:<path>";
@@ -1162,6 +1164,12 @@ class Checker(_message.Message):
     """What a change does: "fail" (default) fails the trial without running the
     checker; "restore" writes the originals back and removes new files, then
     runs the checker.
+    """
+    isolation: _builtins.str
+    """Where the checker runs: "shared" (default) in the sandbox the agent used;
+    "clean" in a fresh sandbox of the same environment that receives only the
+    files under outputs. The agent's other changes (installed packages, shims,
+    edited tests) never reach the checker.
     """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
@@ -1182,6 +1190,12 @@ class Checker(_message.Message):
         outside it needs sandbox.read_only_root.
         """
 
+    @_builtins.property
+    def outputs(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """With isolation "clean": glob patterns, relative to the workdir, of the
+        agent's declared outputs, the only files copied into the clean sandbox.
+        """
+
     def __init__(
         self,
         *,
@@ -1191,10 +1205,12 @@ class Checker(_message.Message):
         parser: _builtins.str = ...,
         protect: _abc.Iterable[_builtins.str] | None = ...,
         on_change: _builtins.str = ...,
+        isolation: _builtins.str = ...,
+        outputs: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "files", b"files", "on_change", b"on_change", "parser", b"parser", "protect", b"protect", "timeout", b"timeout"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "files", b"files", "isolation", b"isolation", "on_change", b"on_change", "outputs", b"outputs", "parser", b"parser", "protect", b"protect", "timeout", b"timeout"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Checker: _TypeAlias = Checker  # noqa: Y015

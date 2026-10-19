@@ -2118,7 +2118,15 @@ type Checker struct {
 	// What a change does: "fail" (default) fails the trial without running the
 	// checker; "restore" writes the originals back and removes new files, then
 	// runs the checker.
-	OnChange      string `protobuf:"bytes,6,opt,name=on_change,json=onChange,proto3" json:"on_change,omitempty"`
+	OnChange string `protobuf:"bytes,6,opt,name=on_change,json=onChange,proto3" json:"on_change,omitempty"`
+	// Where the checker runs: "shared" (default) in the sandbox the agent used;
+	// "clean" in a fresh sandbox of the same environment that receives only the
+	// files under outputs. The agent's other changes (installed packages, shims,
+	// edited tests) never reach the checker.
+	Isolation string `protobuf:"bytes,7,opt,name=isolation,proto3" json:"isolation,omitempty"`
+	// With isolation "clean": glob patterns, relative to the workdir, of the
+	// agent's declared outputs, the only files copied into the clean sandbox.
+	Outputs       []string `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2193,6 +2201,20 @@ func (x *Checker) GetOnChange() string {
 		return x.OnChange
 	}
 	return ""
+}
+
+func (x *Checker) GetIsolation() string {
+	if x != nil {
+		return x.Isolation
+	}
+	return ""
+}
+
+func (x *Checker) GetOutputs() []string {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
 }
 
 // Environment is where a task runs. Spec-level values apply to every record;
@@ -2631,14 +2653,16 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tmemory_mb\x18\x04 \x01(\x05R\bmemoryMb\x12\x1b\n" +
 	"\tmax_procs\x18\x05 \x01(\x05R\bmaxProcs\x12\x18\n" +
 	"\aworkdir\x18\x06 \x01(\tR\aworkdir\x12$\n" +
-	"\x0eread_only_root\x18\a \x01(\bR\freadOnlyRoot\"\x9c\x02\n" +
+	"\x0eread_only_root\x18\a \x01(\bR\freadOnlyRoot\"\xd4\x02\n" +
 	"\aChecker\x12\x18\n" +
 	"\acommand\x18\x01 \x03(\tR\acommand\x129\n" +
 	"\x05files\x18\x02 \x03(\v2#.evalsi.v1alpha1.Checker.FilesEntryR\x05files\x123\n" +
 	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x16\n" +
 	"\x06parser\x18\x04 \x01(\tR\x06parser\x12\x18\n" +
 	"\aprotect\x18\x05 \x03(\tR\aprotect\x12\x1b\n" +
-	"\ton_change\x18\x06 \x01(\tR\bonChange\x1a8\n" +
+	"\ton_change\x18\x06 \x01(\tR\bonChange\x12\x1c\n" +
+	"\tisolation\x18\a \x01(\tR\tisolation\x12\x18\n" +
+	"\aoutputs\x18\b \x03(\tR\aoutputs\x1a8\n" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

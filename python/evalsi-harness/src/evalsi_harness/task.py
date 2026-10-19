@@ -72,6 +72,10 @@ class CheckerConfig:
     # what to do when it does: "fail" or "restore" (see protect.py).
     protect: list[str] = field(default_factory=list)
     on_change: str = "fail"
+    # "shared" runs the checker in the agent's sandbox. "clean" runs it in a fresh
+    # one that receives only the files under ``outputs`` (see isolate.py).
+    isolation: str = "shared"
+    outputs: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -181,6 +185,8 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
             parser=str(raw_checker.get("parser") or "exit-code"),
             protect=[str(p) for p in raw_checker.get("protect") or []],
             on_change=str(raw_checker.get("on_change") or "fail"),
+            isolation=str(raw_checker.get("isolation") or "shared"),
+            outputs=[str(p) for p in raw_checker.get("outputs") or []],
         )
         from evalsi_harness.protect import MODES, validate_patterns
 
@@ -195,6 +201,13 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         service_lifetime = seconds(data.get("service_lifetime"), 0)
     except (TypeError, ValueError, AttributeError) as exc:
         raise TaskError(f"invalid environment services: {exc}") from exc
+    if checker is not None:
+        from evalsi_harness import isolate
+
+        try:
+            isolate.validate(checker, has_services=bool(services))
+        except ValueError as exc:
+            raise TaskError(f"checker: {exc}") from exc
     return EnvironmentConfig(
         services=services,
         service_lifetime_s=service_lifetime,

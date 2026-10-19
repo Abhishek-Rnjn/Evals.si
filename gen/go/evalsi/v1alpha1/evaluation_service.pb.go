@@ -205,10 +205,14 @@ type SummaryOptions struct {
 	// Defaults to 0.95.
 	ConfidenceLevel float64 `protobuf:"fixed64,1,opt,name=confidence_level,json=confidenceLevel,proto3" json:"confidence_level,omitempty"`
 	// Metadata key whose values group correlated records, for clustered standard errors.
-	ClusterBy     string   `protobuf:"bytes,2,opt,name=cluster_by,json=clusterBy,proto3" json:"cluster_by,omitempty"`
-	CiMethod      CiMethod `protobuf:"varint,3,opt,name=ci_method,json=ciMethod,proto3,enum=evalsi.v1alpha1.CiMethod" json:"ci_method,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ClusterBy string   `protobuf:"bytes,2,opt,name=cluster_by,json=clusterBy,proto3" json:"cluster_by,omitempty"`
+	CiMethod  CiMethod `protobuf:"varint,3,opt,name=ci_method,json=ciMethod,proto3,enum=evalsi.v1alpha1.CiMethod" json:"ci_method,omitempty"`
+	// With trials above 1, do not credit trials the trial-tampering evaluator
+	// flagged (a failed reward-hacking-clean score) in pass@k and pass^k. The base
+	// metrics still count them. Off by default.
+	ExcludeFlaggedTrials bool `protobuf:"varint,4,opt,name=exclude_flagged_trials,json=excludeFlaggedTrials,proto3" json:"exclude_flagged_trials,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *SummaryOptions) Reset() {
@@ -260,6 +264,13 @@ func (x *SummaryOptions) GetCiMethod() CiMethod {
 		return x.CiMethod
 	}
 	return CiMethod_CI_METHOD_UNSPECIFIED
+}
+
+func (x *SummaryOptions) GetExcludeFlaggedTrials() bool {
+	if x != nil {
+		return x.ExcludeFlaggedTrials
+	}
+	return false
 }
 
 type EvaluateStreamConfig struct {
@@ -553,12 +564,13 @@ const file_evalsi_v1alpha1_evaluation_service_proto_rawDesc = "" +
 	"\asummary\x18\x05 \x01(\v2\x1f.evalsi.v1alpha1.SummaryOptionsR\asummary\"\x8d\x01\n" +
 	"\x10EvaluateResponse\x12;\n" +
 	"\aresults\x18\x01 \x03(\v2!.evalsi.v1alpha1.EvaluationResultR\aresults\x12<\n" +
-	"\tsummaries\x18\x02 \x03(\v2\x1e.evalsi.v1alpha1.MetricSummaryR\tsummaries\"\x92\x01\n" +
+	"\tsummaries\x18\x02 \x03(\v2\x1e.evalsi.v1alpha1.MetricSummaryR\tsummaries\"\xc8\x01\n" +
 	"\x0eSummaryOptions\x12)\n" +
 	"\x10confidence_level\x18\x01 \x01(\x01R\x0fconfidenceLevel\x12\x1d\n" +
 	"\n" +
 	"cluster_by\x18\x02 \x01(\tR\tclusterBy\x126\n" +
-	"\tci_method\x18\x03 \x01(\x0e2\x19.evalsi.v1alpha1.CiMethodR\bciMethod\"\xc0\x01\n" +
+	"\tci_method\x18\x03 \x01(\x0e2\x19.evalsi.v1alpha1.CiMethodR\bciMethod\x124\n" +
+	"\x16exclude_flagged_trials\x18\x04 \x01(\bR\x14excludeFlaggedTrials\"\xc0\x01\n" +
 	"\x14EvaluateStreamConfig\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12=\n" +
 	"\n" +

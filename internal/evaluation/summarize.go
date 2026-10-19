@@ -28,6 +28,28 @@ func MetricKey(in Instance, scoreName string) string {
 type scored struct {
 	score    *evalsiv1alpha1.Score
 	recordID string
+	trial    int32
+}
+
+// hackingMetric is the score trial-tampering reports; one that failed flags its trial.
+const hackingMetric = "reward-hacking-clean"
+
+type trialKey struct {
+	record string
+	trial  int32
+}
+
+// flaggedTrials lists the (record, trial) pairs whose reward-hacking-clean score failed.
+func flaggedTrials(results []*evalsiv1alpha1.EvaluationResult) map[trialKey]bool {
+	out := map[trialKey]bool{}
+	for _, r := range results {
+		for _, sc := range r.GetScores() {
+			if p, ok := sc.GetValue().(*evalsiv1alpha1.Score_Passed); ok && sc.GetName() == hackingMetric && !p.Passed {
+				out[trialKey{r.GetRecordId(), r.GetTrial()}] = true
+			}
+		}
+	}
+	return out
 }
 
 func scoreType(spec *evalsiv1alpha1.MetricSpec, values []scored) evalsiv1alpha1.ScoreType {
@@ -104,6 +126,10 @@ func Summarize(insts []Instance, results []*evalsiv1alpha1.EvaluationResult, rec
 	if trials > 1 && clusterBy == "" {
 		clusterBy = RecordCluster
 	}
+	var flagged map[trialKey]bool
+	if opts.GetExcludeFlaggedTrials() {
+		flagged = flaggedTrials(results)
+	}
 	byID := make(map[string]*evalsiv1alpha1.Record, len(records))
 	for _, r := range records {
 		byID[r.GetId()] = r
@@ -144,7 +170,7 @@ func Summarize(insts []Instance, results []*evalsiv1alpha1.EvaluationResult, rec
 				if _, ok := values[key]; !ok {
 					order = append(order, key)
 				}
-				values[key] = append(values[key], scored{score: sc, recordID: r.GetRecordId()})
+				values[key] = append(values[key], scored{score: sc, recordID: r.GetRecordId(), trial: r.GetTrial()})
 			}
 		}
 		for _, key := range order {
@@ -156,7 +182,7 @@ func Summarize(insts []Instance, results []*evalsiv1alpha1.EvaluationResult, rec
 				sum.Skipped, sum.Errors = skipped, errored
 				out = append(out, sum)
 				if trials > 1 && sum.GetKind() == evalsiv1alpha1.MetricKind_METRIC_KIND_PROPORTION {
-					out = append(out, passAtK(key, in.Name, values[key], erroredIDs, trials, level)...)
+					out = append(out, passAtK(key, in.Name, values[key], erroredIDs, trials, level, flagged)...)
 				}
 			}
 		}
@@ -239,8 +265,9 @@ func summarizeMetric(key string, in Instance, spec *evalsiv1alpha1.MetricSpec, v
 // evaluator did); such a trial counts as not passed, so a record that passed
 // once and failed to run four times has pass^5 of 0, not 1. The errored
 // trials are already in these rows' values (N counts records), so they are
-// reported on the base metric, not again here.
-func passAtK(key, evaluator string, values []scored, errored []string, k int, level float64) []*evalsiv1alpha1.MetricSummary {
+// reported on the base metric, not again here. A passed trial in flagged is
+// not credited (SummaryOptions.exclude_flagged_trials).
+func passAtK(key, evaluator string, values []scored, errored []string, k int, level float64, flagged map[trialKey]bool) []*evalsiv1alpha1.MetricSummary {
 	var order []string
 	byRecord := map[string][]bool{}
 	add := func(id string, passed bool) {
@@ -251,7 +278,7 @@ func passAtK(key, evaluator string, values []scored, errored []string, k int, le
 	}
 	for _, v := range values {
 		if p, ok := v.score.GetValue().(*evalsiv1alpha1.Score_Passed); ok {
-			add(v.recordID, p.Passed)
+			add(v.recordID, p.Passed && !flagged[trialKey{v.recordID, v.trial}])
 		}
 	}
 	for _, id := range errored {

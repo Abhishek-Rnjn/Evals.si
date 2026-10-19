@@ -34,6 +34,7 @@ from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, con
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.hooks import Hooks, load_hooks
+from evalsi_harness.isolate import run_clean_checker
 from evalsi_harness.loop import DEFAULT_SYSTEM, AgentLoop, LoopConfig
 from evalsi_harness.mcp import (
     MCPClient,
@@ -162,6 +163,11 @@ class LiveTask:
     protect: Baseline | None = None
     late_events: list[PolicyEvent] = field(default_factory=list)
     protect_result: dict[str, Any] = field(default_factory=dict)
+    checker_isolation: dict[str, Any] = field(default_factory=dict)
+    # Checker files that did not exist when the agent started (after the image and
+    # setup): naming one of these is probing. One the sandbox already had may be run.
+    checker_hidden: list[str] = field(default_factory=list)
+    diff_baseline: str | None = None
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -190,6 +196,20 @@ async def capture_diff(env: TaskEnvironment) -> str | None:
     if len(diff) > DIFF_LIMIT:
         diff = diff[:DIFF_LIMIT] + f"\n[diff truncated at {DIFF_LIMIT} bytes]\n"
     return diff
+
+
+async def _absent(env: TaskEnvironment, paths: list[str]) -> list[str]:
+    """The paths that do not exist in the prepared sandbox. A path that cannot be
+    checked counts as present, so nothing is flagged on a guess."""
+    out = []
+    for path in paths:
+        try:
+            result = await env.sandbox.exec(["test", "-e", path], timeout_s=30, env=env.config.env)
+        except SandboxError:
+            continue
+        if result.exit_code == 1:
+            out.append(path)
+    return out
 
 
 def _agent_kind(task: Task) -> str:
@@ -274,6 +294,12 @@ class BuiltinHarness:
             except ProtectError as exc:
                 await self.teardown(handle)
                 raise TaskError(f"checker.protect: {exc}") from exc
+        if env is not None:
+            # What setup and the task's files changed against HEAD, so a trusted change
+            # to a tracked test is not counted as the agent's.
+            live.diff_baseline = await capture_diff(env)
+        if env is not None and checker is not None and checker.files:
+            live.checker_hidden = await _absent(env, list(checker.files))
         return handle
 
     def _get(self, handle: str) -> LiveTask:
@@ -767,6 +793,12 @@ class BuiltinHarness:
             verdict = await self._protected(live)
             if verdict is not None:
                 return verdict
+        if env_config.checker.isolation == "clean":
+            check, info = await run_clean_checker(
+                await self._environments(), live.env, env_config.checker, live.task
+            )
+            live.checker_isolation = info
+            return check
         return await run_checker(live.env, env_config.checker, live.task)
 
     async def _protected(self, live: LiveTask) -> TaskCheck | None:
@@ -812,8 +844,15 @@ class BuiltinHarness:
         """Extra record metadata: the agent's diff, when the workdir is a git repository."""
         live = self._get(handle)
         out: dict[str, Any] = {"diff": live.diff} if live.diff is not None else {}
+        if live.diff_baseline:
+            out["diff_baseline"] = live.diff_baseline
         if live.protect_result:
             out["protected_files"] = live.protect_result
+        checker = live.task.environment.checker if live.task.environment else None
+        if checker is not None and checker.files and live.checker_hidden:
+            out["checker_files"] = sorted(live.checker_hidden)
+        if live.checker_isolation:
+            out["checker_isolation"] = live.checker_isolation
         return out
 
     async def teardown(self, handle: str) -> None:

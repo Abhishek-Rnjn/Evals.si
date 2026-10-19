@@ -37,6 +37,7 @@ from evalsi.types import Record
 from evalsi.v1alpha1 import run_pb2
 from evalsi_harness.checker import run_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
+from evalsi_harness.isolate import run_clean_checker
 from evalsi_harness.task import Task, TaskError
 from evalsi_harness.tools import Tool, sandbox_tools
 
@@ -161,7 +162,11 @@ class TaskEnv:
         assert task is not None
         assert task.environment is not None
         assert task.environment.checker is not None
-        check = await run_checker(env, task.environment.checker, task)
+        checker = task.environment.checker
+        if checker.isolation == "clean":
+            check, _ = await run_clean_checker(await self._ensure_pool(), env, checker, task)
+        else:
+            check = await run_checker(env, checker, task)
         info: dict[str, Any] = {
             "check": check.to_dict(),
             "ended": reason,

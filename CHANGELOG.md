@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Clean checker isolation.** `checker.isolation: clean` with `checker.outputs` runs the checker in a fresh sandbox of the same environment that receives only the agent's declared output files, so edited tests, shims on `PATH` and installed packages cannot reach the grader. New `Checker.isolation` and `Checker.outputs` proto fields; the server validates them.
+- **`builtin/trial-tampering` reward-hacking signals.** Flags edited tests or protected files, the expected answer added as a literal to non-test code, and tool calls naming hidden checker files. With `summary.exclude_flagged_trials`, trials it flags are not credited by `pass@k` and `pass^k` (off by default; local and server summaries agree). The harness now records `metadata.checker_files`.
 - `evalsi doctor` checks installed versions, worker dependencies and real sandbox availability. `--require server` and `--require agent` fail when the requested capabilities are missing; plain SDK scoring does not require a sandbox.
 - `evalsi init` creates offline recorded-output or sandboxed-agent starter projects, including a working example, a deliberately regressed control, error-rate gates and local report instructions. Existing directories are never overwritten.
 - A root composite GitHub Action runs gates with published 0.3.0, writes metrics and identity summaries, optionally compares compatible paired baselines and propagates failures. Raw results/log uploads are opt-in. Added an onboarding guide, website navigation and action positive/negative CI controls; roadmap acceptance criteria remain open beyond these initial slices.
@@ -14,6 +16,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - CI baseline validation now compares the complete checker configuration and validates each run against its dataset, trials and evaluator coverage. Shared skips, errors, duplicate rows and omitted scores cannot masquerade as complete paired evidence.
 - Doctor honors `EVALSI_SANDBOX_CONFIG`, requires namespaced-or-stronger isolation for agent readiness and surfaces sanitized sandbox enforcement warnings without printing private probe details.
+
 
 ## [0.3.0] - 2026-10-19
 

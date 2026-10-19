@@ -99,14 +99,18 @@ def summarize(
     cluster_by: str | None = None,
     ci_method: str = "auto",
     trials: int = 1,
+    exclude_flagged: bool = False,
 ) -> list[MetricSummary]:
     """Summarize results per metric.
 
     With ``trials`` above 1 every record appears several times, so intervals
     cluster by record unless ``cluster_by`` says otherwise, and pass/fail
     metrics also get ``<metric>.pass@k`` (passed in at least one trial) and
-    ``<metric>.pass^k`` (passed in every trial).
+    ``<metric>.pass^k`` (passed in every trial). With ``exclude_flagged``, a trial
+    the ``trial-tampering`` evaluator flagged is not credited by either: it counts
+    as not passed. The base metrics still count it.
     """
+    flagged = flagged_trials(results) if exclude_flagged else set()
     if trials > 1 and not cluster_by:
         cluster_by = RECORD_CLUSTER
     by_id = {r.id: r for r in records}
@@ -124,10 +128,12 @@ def summarize(
         specs: dict[str, MetricSpec | None] = {
             metric_key(instance, o.name): o for o in instance.spec.outputs
         }
+        trial_of: dict[str, list[int]] = {}
         for result in mine:
             for score in result.scores:
                 key = metric_key(instance, score.name)
                 values.setdefault(key, []).append((score, result.record_id))
+                trial_of.setdefault(key, []).append(result.trial)
                 specs.setdefault(key, instance.spec.output(score.name))
         for key, scored in values.items():
             summary = _summarize_metric(
@@ -145,9 +151,31 @@ def summarize(
                 summaries.append(summary)
                 if trials > 1 and summary.kind == "proportion":
                     summaries.extend(
-                        _pass_at_k(key, instance.name, scored, errored_ids, k=trials, level=level)
+                        _pass_at_k(
+                            key,
+                            instance.name,
+                            scored,
+                            errored_ids,
+                            k=trials,
+                            level=level,
+                            flagged=flagged,
+                            trial_of=trial_of.get(key, []),
+                        )
                     )
     return summaries
+
+
+HACKING_METRIC = "reward-hacking-clean"
+
+
+def flagged_trials(results: Sequence[EvaluationResult]) -> set[tuple[str, int]]:
+    """The (record, trial) pairs the trial-tampering evaluator flagged."""
+    return {
+        (r.record_id, r.trial)
+        for r in results
+        for s in r.scores
+        if s.name == HACKING_METRIC and s.passed is False
+    }
 
 
 def _pass_at_k(
@@ -158,6 +186,8 @@ def _pass_at_k(
     *,
     k: int,
     level: float,
+    flagged: set[tuple[str, int]] | None = None,
+    trial_of: list[int] | None = None,
 ) -> list[MetricSummary]:
     """pass@k: passed in at least one trial; pass^k: passed in every trial.
 
@@ -167,9 +197,11 @@ def _pass_at_k(
     errors are reported on the base metric, not again here.
     """
     by_record: dict[str, list[bool]] = {}
-    for score, rid in scored:
+    for i, (score, rid) in enumerate(scored):
         if score.passed is not None:
-            by_record.setdefault(rid, []).append(score.passed)
+            trial = trial_of[i] if trial_of and i < len(trial_of) else 0
+            credited = score.passed and (rid, trial) not in (flagged or set())
+            by_record.setdefault(rid, []).append(credited)
     for rid in errored:
         by_record.setdefault(rid, []).append(False)
     out = []
