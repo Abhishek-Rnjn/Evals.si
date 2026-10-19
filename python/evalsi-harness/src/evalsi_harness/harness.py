@@ -824,7 +824,10 @@ class BuiltinHarness:
             out["protected_files"] = live.protect_result
         checker = live.task.environment.checker if live.task.environment else None
         if checker is not None and checker.files:
-            out["checker_files"] = sorted(checker.files)
+            provided = live.task.environment.files if live.task.environment else {}
+            hidden = sorted(set(checker.files) - set(provided))
+            if hidden:
+                out["checker_files"] = hidden
         if live.checker_isolation:
             out["checker_isolation"] = live.checker_isolation
         return out

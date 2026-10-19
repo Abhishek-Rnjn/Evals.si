@@ -735,6 +735,9 @@ func TestAgentRunValidation(t *testing.T) {
 		"output escaping the workdir": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"../x"}}
 		},
+		"blanket output": func(s *evalsiv1alpha1.RunSpec) {
+			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"**"}}
+		},
 		"output also protected": func(s *evalsiv1alpha1.RunSpec) {
 			s.Environment.Checker = &evalsiv1alpha1.Checker{Command: []string{"true"}, Isolation: "clean", Outputs: []string{"a.py"}, Protect: []string{"a.py"}}
 		},

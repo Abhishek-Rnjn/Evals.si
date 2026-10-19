@@ -99,16 +99,18 @@ def summarize(
     cluster_by: str | None = None,
     ci_method: str = "auto",
     trials: int = 1,
+    exclude_flagged: bool = False,
 ) -> list[MetricSummary]:
     """Summarize results per metric.
 
     With ``trials`` above 1 every record appears several times, so intervals
     cluster by record unless ``cluster_by`` says otherwise, and pass/fail
     metrics also get ``<metric>.pass@k`` (passed in at least one trial) and
-    ``<metric>.pass^k`` (passed in every trial). A trial the ``trial-tampering``
-    evaluator flagged is not credited by either: it counts as not passed.
+    ``<metric>.pass^k`` (passed in every trial). With ``exclude_flagged``, a trial
+    the ``trial-tampering`` evaluator flagged is not credited by either: it counts
+    as not passed. The base metrics still count it.
     """
-    flagged = flagged_trials(results)
+    flagged = flagged_trials(results) if exclude_flagged else set()
     if trials > 1 and not cluster_by:
         cluster_by = RECORD_CLUSTER
     by_id = {r.id: r for r in records}

@@ -1321,6 +1321,10 @@ spec:
                     type: number
                   confidenceLevel:
                     type: number
+                  exclude_flagged_trials:
+                    type: boolean
+                  excludeFlaggedTrials:
+                    type: boolean
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               target:

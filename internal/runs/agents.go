@@ -408,6 +408,9 @@ func validateIsolation(c *evalsiv1alpha1.Checker) error {
 		if !relativePattern(p) {
 			return invalid("%s.outputs: %q must be a relative pattern of at most 120 characters, without ..", f, p)
 		}
+		if t := strings.Trim(p, "/."); t == "" || t == "*" || t == "**" || t == "**/*" {
+			return invalid("%s.outputs: %q would copy everything; name the files or directories a solution may change", f, p)
+		}
 		if slices.Contains(c.GetProtect(), p) {
 			return invalid("%s.outputs: %q is also protected", f, p)
 		}

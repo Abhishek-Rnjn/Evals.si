@@ -12,8 +12,9 @@ installed packages. With ``checker.isolation: clean`` the harness instead:
 
 Everything the agent did outside its declared outputs is left behind: edits to
 other files, installed packages, shims, deleted files. Symlinks are not
-followed and never copied. A pattern both in ``outputs`` and in ``protect`` is
-rejected when the task is read, because the two promises conflict. Services are
+followed and never copied. A copied file loses its execute bit (``write_files`` takes
+one mode per call), so a checker should run outputs through an interpreter. A pattern both in
+``outputs`` and in ``protect`` is rejected when the task is read, because the two promises conflict. Services are
 not supported with clean checking (their state is never snapshotted), and the
 check fails closed when the outputs cannot be read in full.
 """
@@ -41,6 +42,12 @@ def validate(checker: CheckerConfig, *, has_services: bool = False) -> None:
     if not checker.outputs:
         raise ValueError("isolation: clean needs outputs, the files the checker may see")
     validate_patterns(checker.outputs)
+    blanket = [p for p in checker.outputs if p.strip("/.") in ("", "*", "**", "**/*")]
+    if blanket:
+        raise ValueError(
+            f"outputs {', '.join(blanket)} would copy everything, shims included; "
+            "name the files or directories a solution may change"
+        )
     if has_services:
         raise ValueError("isolation: clean does not support services")
     overlap = sorted(set(checker.outputs) & set(checker.protect))

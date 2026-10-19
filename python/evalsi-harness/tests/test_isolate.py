@@ -85,6 +85,7 @@ def test_missing_outputs_grade_the_untouched_setup(sandboxes: LocalSandboxClient
         ({"isolation": "sealed", "outputs": ["a.py"]}, "isolation must be one of"),
         ({**CLEAN, "outputs": ["../x"]}, "relative to the workdir"),
         ({**CLEAN, "protect": ["calc.py"]}, "both an output and protected"),
+        ({**CLEAN, "outputs": ["**"]}, "would copy everything"),
     ],
 )
 def test_bad_configuration_is_refused(
@@ -92,3 +93,29 @@ def test_bad_configuration_is_refused(
 ) -> None:
     with pytest.raises(TaskError, match=message):
         run(spec_for("true", **checker), record("x"), sandboxes)
+
+
+def test_the_gym_grades_a_clean_environment_too() -> None:
+    import asyncio
+
+    from evalsi_harness.gym import Action, TaskEnv
+
+    async def episode(**checker: Any) -> float | None:
+        spec = spec_of(
+            {
+                "environment": {
+                    "files": FILES,
+                    "checker": {
+                        "command": ["sh", "-c", "PYTHONPATH=. python3 tests/test_calc.py"],
+                        **checker,
+                    },
+                }
+            }
+        )
+        async with TaskEnv(LocalSandboxClient()) as env:
+            await env.reset(record("x"), spec)
+            await env.step(Action("bash", {"command": SHIM}))
+            return (await env.step(Action("submit"))).reward
+
+    assert asyncio.run(episode()) == 1.0  # shared: the shim fools the checker
+    assert asyncio.run(episode(**CLEAN)) == 0.0  # clean: it never reaches it
