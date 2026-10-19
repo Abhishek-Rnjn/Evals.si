@@ -67,3 +67,24 @@ downloaded datasets, run results or backups. Exact source revision deduplication
 does not establish semantic grouping. The synthetic fixture does not qualify
 real-agent safety, enterprise operating capacity or production handling of
 sensitive customer incidents.
+
+## Review fixes
+
+Failure edits reconstruct `Record.provenance` from the immutable captured trace,
+discarding supplied trace/run identities and isolation claims. Tests cover omitted
+provenance and forged trace/run provenance, preservation of the source digest,
+the stored copy, protobuf export and browser JSONL. The real server test also
+submits a forged run/VM claim and verifies that it cannot reach exported records.
+
+Approval now checks contained values for row, tensor and media content rather
+than the size of the outer wrapper. Empty variants in either input or reference,
+tensors with descriptions but no data, and media without a nonblank URI fail
+approval and remain unexportable. Five positive controls preserve valid row
+features, zero/false predictions, tensor bytes and media URIs.
+
+All 17 new negative cases fail against the previous service using a Go source
+overlay; the working tree is not modified for that check. The corrected service,
+server, store and authorization packages passed, as did Go vet, race-enabled
+service tests, all 18 selected Python CLI/client/real-server tests, the 82-page
+website build and local links. These focused checks are separate from the
+earlier full-suite sandbox limitation above.

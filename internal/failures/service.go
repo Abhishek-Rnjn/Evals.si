@@ -227,6 +227,7 @@ func (s *Service) UpdateFailure(ctx context.Context, req *connect.Request[pb.Upd
 	f.Record = proto.Clone(m.GetRecord()).(*pb.Record)
 	// Source identity is immutable even when a reviewer redacts or replaces fields.
 	f.Record.Id = f.GetSource().GetTraceId()
+	f.Record.Provenance = &pb.Provenance{Source: &pb.Provenance_Trace{Trace: &pb.TraceProvenance{TraceId: f.GetSource().GetTraceId()}}}
 	f.Title, f.Reason, f.Assignee, f.Status = m.GetTitle(), m.GetReason(), m.GetAssignee(), m.GetStatus()
 	f.ReviewedBy, f.ReviewNote, f.ReviewedAt = "", "", nil
 	f.Revision++
@@ -252,19 +253,32 @@ func hasContent(content *pb.Content) bool {
 		}
 		return false
 	}
-	if value, ok := content.GetKind().(*pb.Content_Json); ok {
-		switch kind := value.Json.GetKind().(type) {
-		case nil, *structpb.Value_NullValue:
-			return false
-		case *structpb.Value_StringValue:
-			return strings.TrimSpace(kind.StringValue) != ""
-		case *structpb.Value_StructValue:
-			return len(kind.StructValue.GetFields()) != 0
-		case *structpb.Value_ListValue:
-			return len(kind.ListValue.GetValues()) != 0
-		}
+	switch kind := content.GetKind().(type) {
+	case *pb.Content_Json:
+		return hasJSONContent(kind.Json)
+	case *pb.Content_Row:
+		return len(kind.Row.GetFeatures()) != 0 || len(kind.Row.GetProbabilities()) != 0 || hasJSONContent(kind.Row.GetPrediction())
+	case *pb.Content_Tensor:
+		return len(kind.Tensor.GetData()) != 0
+	case *pb.Content_Media:
+		return strings.TrimSpace(kind.Media.GetUri()) != ""
 	}
-	return proto.Size(content) > 0
+	return false
+}
+
+func hasJSONContent(value *structpb.Value) bool {
+	switch kind := value.GetKind().(type) {
+	case nil, *structpb.Value_NullValue:
+		return false
+	case *structpb.Value_StringValue:
+		return strings.TrimSpace(kind.StringValue) != ""
+	case *structpb.Value_StructValue:
+		return len(kind.StructValue.GetFields()) != 0
+	case *structpb.Value_ListValue:
+		return len(kind.ListValue.GetValues()) != 0
+	default:
+		return true
+	}
 }
 
 func (s *Service) ReviewFailure(ctx context.Context, req *connect.Request[pb.ReviewFailureRequest]) (*connect.Response[pb.ReviewFailureResponse], error) {

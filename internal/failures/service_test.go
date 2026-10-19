@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -201,5 +202,106 @@ func TestRecaptureCannotExposeCaseThroughChangedSourceLabels(t *testing.T) {
 	ctx = authz.WithChecker(ctx, &authz.Checker{Engine: engine, Principal: &auth.Principal{Kind: auth.KindAPIKey, KeyName: "limited"}})
 	if _, err := svc.CaptureFailure(ctx, connect.NewRequest(&pb.CaptureFailureRequest{Project: "support", TraceId: f.GetSource().GetTraceId(), Title: "Recapture", Reason: "changed source labels"})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("recapture disclosed hidden curated data: %v", err)
+	}
+}
+
+func TestFailureEditsRestoreServerOwnedProvenance(t *testing.T) {
+	for name, supplied := range map[string]*pb.Provenance{
+		"omitted":         nil,
+		"different-trace": {Source: &pb.Provenance_Trace{Trace: &pb.TraceProvenance{TraceId: "forged-trace"}}, Isolation: &pb.IsolationReport{Driver: "forged-backend", Level: pb.IsolationLevel_ISOLATION_LEVEL_VM}},
+		"different-run":   {Source: &pb.Provenance_Run{Run: &pb.RunProvenance{RunId: "forged-run", TaskId: "forged-task", Trial: 99}}, Isolation: &pb.IsolationReport{Driver: "forged-backend", Level: pb.IsolationLevel_ISOLATION_LEVEL_VM}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			st, svc, f := fixture(t)
+			request := editRequest(f)
+			request.Record.Provenance = supplied
+			response, err := svc.UpdateFailure(t.Context(), connect.NewRequest(request))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := &pb.Provenance{Source: &pb.Provenance_Trace{Trace: &pb.TraceProvenance{TraceId: f.GetSource().GetTraceId()}}}
+			if !proto.Equal(response.Msg.GetFailure().GetRecord().GetProvenance(), want) {
+				t.Fatalf("edit changed source provenance: %v", response.Msg.GetFailure().GetRecord().GetProvenance())
+			}
+			if !proto.Equal(request.GetRecord().GetProvenance(), supplied) {
+				t.Fatal("update mutated the caller's record")
+			}
+			stored, err := st.GetFailure(t.Context(), f.GetProject(), f.GetId())
+			if err != nil || !proto.Equal(stored.GetRecord().GetProvenance(), want) || stored.GetSourceSha256() != f.GetSourceSha256() {
+				t.Fatalf("stored provenance changed: %v %v", stored, err)
+			}
+			if _, err := svc.ReviewFailure(t.Context(), connect.NewRequest(&pb.ReviewFailureRequest{Project: f.GetProject(), Id: f.GetId(), ExpectedRevision: 2, Decision: pb.FailureStatus_FAILURE_STATUS_APPROVED, Note: "Expected behavior checked"})); err != nil {
+				t.Fatal(err)
+			}
+			exported, err := svc.ExportFailures(t.Context(), connect.NewRequest(&pb.ExportFailuresRequest{Project: f.GetProject(), Selections: []*pb.FailureSelection{{Id: f.GetId(), Revision: 3}}}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(exported.Msg.GetRecords()[0].GetProvenance(), want) {
+				t.Fatal("export retained caller-supplied provenance")
+			}
+			var row pb.Record
+			if err := protojson.Unmarshal([]byte(exported.Msg.GetJsonl()), &row); err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(row.GetProvenance(), want) {
+				t.Fatalf("browser JSONL retained caller-supplied provenance: %v", row.GetProvenance())
+			}
+		})
+	}
+}
+
+func TestApprovalRejectsEmptyContainedContent(t *testing.T) {
+	for name, content := range map[string]*pb.Content{
+		"row":                             {Kind: &pb.Content_Row{Row: &pb.TabularRow{}}},
+		"tensor":                          {Kind: &pb.Content_Tensor{Tensor: &pb.Tensor{}}},
+		"media":                           {Kind: &pb.Content_Media{Media: &pb.MediaRef{}}},
+		"tensor-description-without-data": {Kind: &pb.Content_Tensor{Tensor: &pb.Tensor{Shape: []int64{1}, Dtype: "float32"}}},
+		"media-type-without-uri":          {Kind: &pb.Content_Media{Media: &pb.MediaRef{MediaType: "image/png"}}},
+		"blank-media-uri":                 {Kind: &pb.Content_Media{Media: &pb.MediaRef{Uri: " \n "}}},
+		"row-empty-prediction":            {Kind: &pb.Content_Row{Row: &pb.TabularRow{Prediction: &structpb.Value{}}}},
+	} {
+		for _, field := range []string{"input", "reference"} {
+			t.Run(name+"/"+field, func(t *testing.T) {
+				_, svc, f := fixture(t)
+				request := editRequest(f)
+				if field == "input" {
+					request.Record.Input = content
+				} else {
+					request.Record.Reference = content
+				}
+				if _, err := svc.UpdateFailure(t.Context(), connect.NewRequest(request)); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := svc.ReviewFailure(t.Context(), connect.NewRequest(&pb.ReviewFailureRequest{Project: f.GetProject(), Id: f.GetId(), ExpectedRevision: 2, Decision: pb.FailureStatus_FAILURE_STATUS_APPROVED, Note: "Must have actual input and expected behavior"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+					t.Fatalf("approved empty %s: %v", field, err)
+				}
+				if _, err := svc.ExportFailures(t.Context(), connect.NewRequest(&pb.ExportFailuresRequest{Project: f.GetProject(), Selections: []*pb.FailureSelection{{Id: f.GetId(), Revision: 2}}})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+					t.Fatalf("exported empty %s: %v", field, err)
+				}
+			})
+		}
+	}
+}
+
+func TestApprovalAcceptsSubstantiveContainedContent(t *testing.T) {
+	for name, content := range map[string]*pb.Content{
+		"row-features":         {Kind: &pb.Content_Row{Row: &pb.TabularRow{Features: map[string]*structpb.Value{"count": structpb.NewNumberValue(0)}}}},
+		"row-prediction-zero":  {Kind: &pb.Content_Row{Row: &pb.TabularRow{Prediction: structpb.NewNumberValue(0)}}},
+		"row-prediction-false": {Kind: &pb.Content_Row{Row: &pb.TabularRow{Prediction: structpb.NewBoolValue(false)}}},
+		"tensor-data":          {Kind: &pb.Content_Tensor{Tensor: &pb.Tensor{Shape: []int64{1}, Dtype: "int8", Data: []byte{0}}}},
+		"media-uri":            {Kind: &pb.Content_Media{Media: &pb.MediaRef{Uri: "s3://synthetic/case.png", MediaType: "image/png"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, svc, f := fixture(t)
+			request := editRequest(f)
+			request.Record.Input, request.Record.Reference = content, content
+			if _, err := svc.UpdateFailure(t.Context(), connect.NewRequest(request)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := svc.ReviewFailure(t.Context(), connect.NewRequest(&pb.ReviewFailureRequest{Project: f.GetProject(), Id: f.GetId(), ExpectedRevision: 2, Decision: pb.FailureStatus_FAILURE_STATUS_APPROVED, Note: "Reviewed nonempty content"})); err != nil {
+				t.Fatalf("rejected substantive content: %v", err)
+			}
+		})
 	}
 }

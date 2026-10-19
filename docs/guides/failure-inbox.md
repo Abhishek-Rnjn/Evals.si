@@ -23,6 +23,8 @@ Open `/ui/` on your server and select the incident's project.
    record and provide a note before approving or dismissing it. Approval
    requires a nonempty input and reference. An evaluator's output never becomes
    an approved expectation automatically.
+   Rows need features, probabilities or a nonempty prediction; tensors need data;
+   media needs a nonblank URI. A present but empty content wrapper is insufficient.
 4. Download an approved case as JSONL, or export selected approved revisions
    directly into a pinned snapshot through the CLI below.
 
@@ -102,6 +104,8 @@ follow `nextPageToken`, including after an empty filtered page. The CLI accepts
   and digest, reviewer/time and reviewed-record digest. CLI snapshots also
   retain this under each row's source provenance. Clients cannot supply the
   reserved `evalsi.failure` or `evalsi.dataset` metadata identities on edits.
+  Record provenance is restored from the captured trace on every edit; supplied
+  run/trace identities or sandbox isolation claims cannot replace it.
   Source/reviewed-record digests use deterministic protobuf encoding; the
   exported snapshot has its separate canonical JSON digest.
 - Reading requires both `failures.read` and `traces.read` against the captured

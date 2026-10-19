@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
@@ -104,6 +105,7 @@ func TestFailureInboxPermissionsAndLiveApproval(t *testing.T) {
 		t.Fatalf("filtered list: %v %v", listed, err)
 	}
 	update := &pb.UpdateFailureRequest{Project: "support", Id: f.GetId(), ExpectedRevision: 1, Title: "Wrong refund", Reason: "Require human approval", Assignee: "support-oncall", Record: &pb.Record{Input: text("Refund order"), Output: text("Refunded"), Reference: text("Ask for approval")}, Status: pb.FailureStatus_FAILURE_STATUS_IN_REVIEW}
+	update.Record.Provenance = &pb.Provenance{Source: &pb.Provenance_Run{Run: &pb.RunProvenance{RunId: "forged-run"}}, Isolation: &pb.IsolationReport{Level: pb.IsolationLevel_ISOLATION_LEVEL_VM}}
 	if _, err := client(s.keys["viewer"]).UpdateFailure(ctx, connect.NewRequest(update)); codeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("viewer edit: %v", err)
 	}
@@ -141,6 +143,15 @@ func TestFailureInboxPermissionsAndLiveApproval(t *testing.T) {
 	}
 	if exported.Msg.GetRecords()[0].GetMetadata()["evalsi.failure"].GetStructValue().AsMap()["revision"] != "3" {
 		t.Fatal("missing export revision")
+	}
+	var exportedRow pb.Record
+	if err := protojson.Unmarshal([]byte(exported.Msg.GetJsonl()), &exportedRow); err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range []*pb.Record{f.GetRecord(), exported.Msg.GetRecords()[0], &exportedRow} {
+		if record.GetProvenance().GetTrace().GetTraceId() != ids["public"] || record.GetProvenance().GetRun() != nil || record.GetProvenance().GetIsolation() != nil {
+			t.Fatalf("caller replaced server-owned provenance: %v", record.GetProvenance())
+		}
 	}
 	update.ExpectedRevision = 3
 	update.Reason = "new findings require another review"
