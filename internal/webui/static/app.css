@@ -109,3 +109,8 @@ textarea {
   .who { margin-left: 0; width: 100%; }
   main { padding: 12px; }
 }
+
+.inbox-field { display: grid; gap: 4px; margin: 10px 0; max-width: 900px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+
+a.text-link { text-decoration: underline; }

@@ -90,6 +90,8 @@ func restRules() []*annotations.HttpRule {
 			r.Pattern = &annotations.HttpRule_Get{Get: path}
 		case http.MethodPost:
 			r.Pattern = &annotations.HttpRule_Post{Post: path}
+		case http.MethodPut:
+			r.Pattern = &annotations.HttpRule_Put{Put: path}
 		case http.MethodDelete:
 			r.Pattern = &annotations.HttpRule_Delete{Delete: path}
 		}
@@ -119,6 +121,14 @@ func restRules() []*annotations.HttpRule {
 		rule("MonitorService.ListPolicies", http.MethodGet, v+"/policies", ""),
 		rule("MonitorService.DeletePolicy", http.MethodDelete, v+"/policies/{name}", ""),
 		rule("MonitorService.GetPolicyStats", http.MethodGet, v+"/policies/{name}/stats", ""),
+		rule("FailureService.CaptureFailure", http.MethodPost, v+"/failures", "*"),
+		rule("FailureService.ListFailures", http.MethodGet, v+"/failures", ""),
+		rule("FailureService.GetFailure", http.MethodGet, v+"/failures/{id}", ""),
+		rule("FailureService.UpdateFailure", http.MethodPut, v+"/failures/{id}", "*"),
+		rule("FailureService.ReviewFailure", http.MethodPost, v+"/failures/{id}:review", "*"),
+		rule("FailureService.ListFailureEvents", http.MethodGet, v+"/failures/{id}/events", ""),
+		rule("FailureService.ExportFailures", http.MethodPost, v+"/failures:export", "*"),
+		rule("FailureService.DeleteFailure", http.MethodDelete, v+"/failures/{id}", ""),
 		rule("TraceService.ListTraces", http.MethodGet, v+"/traces", ""),
 		rule("TraceService.GetTrace", http.MethodGet, v+"/traces/{trace_id}", ""),
 		rule("TraceService.ListScores", http.MethodGet, v+"/traces/{trace_id}/scores", ""),
@@ -178,6 +188,7 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		evalsiv1alpha1connect.RunServiceName,
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
+		evalsiv1alpha1connect.FailureServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,

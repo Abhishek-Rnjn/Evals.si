@@ -103,7 +103,7 @@ const (
 
 func (g *gate) accessRules() map[string]accessRule {
 	catalog := accessRule{action: "catalog.read", anyProject: true}
-	return map[string]accessRule{
+	rules := map[string]accessRule{
 		evalsiv1alpha1connect.DatasetServiceUploadDatasetProcedure: {action: "datasets.write", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.datasetUploadTargets(msg.(*evalsiv1alpha1.UploadDatasetRequest).GetConfig())
 		}},
@@ -403,6 +403,8 @@ func (g *gate) accessRules() map[string]accessRule {
 			return g.mcpGuardrailTarget(ctx, msg.(*extmcp.McpResponse).GetMetadataContext())
 		}},
 	}
+	g.addFailureRules(rules)
+	return rules
 }
 
 // guardrailTarget is an existing guardrail: its project, with its name and

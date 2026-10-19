@@ -58,6 +58,12 @@ func validIdempotencyKey(key string) bool {
 
 func (g *gate) idempotent(ctx context.Context, req connect.AnyRequest, next connect.UnaryFunc) (connect.AnyResponse, error) {
 	key := req.Header().Get("Idempotency-Key")
+	// Inbox operations use source deduplication and revision CAS. Caching their
+	// record responses would retain redacted payloads, and replaying an export
+	// could bypass a later edit that revoked approval. Always reconcile live.
+	if strings.HasPrefix(req.Spec().Procedure, "/evalsi.v1alpha1.FailureService/") {
+		return next(ctx, req)
+	}
 	if key == "" || strings.HasSuffix(g.rules[req.Spec().Procedure].action, ".read") {
 		return next(ctx, req)
 	}

@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/trace_service.proto";
+import "google/protobuf/timestamp.proto";
+
+// FailureService turns explicitly selected production incidents into reviewed
+// regression cases. Capture is deduplicated by project, trace ID and revision;
+// updates and reviews require the current revision to prevent lost work.
+service FailureService {
+  rpc CaptureFailure(CaptureFailureRequest) returns (CaptureFailureResponse);
+  rpc ListFailures(ListFailuresRequest) returns (ListFailuresResponse);
+  rpc GetFailure(GetFailureRequest) returns (GetFailureResponse);
+  rpc UpdateFailure(UpdateFailureRequest) returns (UpdateFailureResponse);
+  rpc ReviewFailure(ReviewFailureRequest) returns (ReviewFailureResponse);
+  rpc ListFailureEvents(ListFailureEventsRequest) returns (ListFailureEventsResponse);
+  // Explicit, revision-pinned selection; all cases must still be approved.
+  // No agent is invoked and no live tool is replayed.
+  rpc ExportFailures(ExportFailuresRequest) returns (ExportFailuresResponse);
+  rpc DeleteFailure(DeleteFailureRequest) returns (DeleteFailureResponse);
+}
+
+enum FailureStatus {
+  FAILURE_STATUS_UNSPECIFIED = 0;
+  FAILURE_STATUS_OPEN = 1;
+  FAILURE_STATUS_IN_REVIEW = 2;
+  FAILURE_STATUS_APPROVED = 3;
+  FAILURE_STATUS_DISMISSED = 4;
+}
+
+message FailureCase {
+  string id = 1;
+  string project = 2;
+  TraceSummary source = 3;
+  // SHA-256 of the captured source record, before any human edits.
+  string source_sha256 = 4;
+  // The current editable copy. ListFailures omits this payload.
+  Record record = 5;
+  string title = 6;
+  string reason = 7;
+  string assignee = 8;
+  FailureStatus status = 9;
+  int64 revision = 10;
+  string created_by = 11;
+  string updated_by = 12;
+  string reviewed_by = 13;
+  string review_note = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+  google.protobuf.Timestamp reviewed_at = 17;
+}
+
+// Events contain identity, decision and a digest of the edited record, never
+// old record payloads or copies of free-text notes that a redaction would leave.
+message FailureEvent {
+  int64 revision = 1;
+  string actor = 2;
+  string action = 3;
+  FailureStatus status = 4;
+  string record_sha256 = 5;
+  google.protobuf.Timestamp time = 6;
+}
+
+message CaptureFailureRequest {
+  string project = 1;
+  string trace_id = 2;
+  string title = 3;
+  string reason = 4;
+}
+message CaptureFailureResponse {
+  FailureCase failure = 1;
+  bool deduplicated = 2;
+}
+message ListFailuresRequest {
+  string project = 1;
+  FailureStatus status = 2;
+  string assignee = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+message ListFailuresResponse {
+  repeated FailureCase failures = 1;
+  string next_page_token = 2;
+}
+message GetFailureRequest {
+  string project = 1;
+  string id = 2;
+}
+message GetFailureResponse {
+  FailureCase failure = 1;
+}
+message UpdateFailureRequest {
+  string project = 1;
+  string id = 2;
+  int64 expected_revision = 3;
+  // Full replacement of the editable fields. IDs/provenance are server-owned.
+  Record record = 4;
+  string title = 5;
+  string reason = 6;
+  string assignee = 7;
+  // Only OPEN or IN_REVIEW. Any edit clears the previous approval.
+  FailureStatus status = 8;
+}
+message UpdateFailureResponse {
+  FailureCase failure = 1;
+}
+message ReviewFailureRequest {
+  string project = 1;
+  string id = 2;
+  int64 expected_revision = 3;
+  // APPROVED or DISMISSED; approval requires IN_REVIEW and input/reference.
+  FailureStatus decision = 4;
+  string note = 5;
+}
+message ReviewFailureResponse {
+  FailureCase failure = 1;
+}
+message ListFailureEventsRequest {
+  string project = 1;
+  string id = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+message ListFailureEventsResponse {
+  repeated FailureEvent events = 1;
+  string next_page_token = 2;
+}
+message FailureSelection {
+  string id = 1;
+  int64 revision = 2;
+}
+message ExportFailuresRequest {
+  string project = 1;
+  // 1-100 explicit, unique selections; no implicit approval of a later edit.
+  repeated FailureSelection selections = 2;
+}
+message ExportFailuresResponse {
+  // Stable failure IDs; metadata["evalsi.failure"] carries server-owned
+  // source/reviewer/revision provenance. Suitable for a pinned dataset snapshot.
+  repeated Record records = 1;
+  // Dataset rows with protobuf field names (including nested tool_calls),
+  // rather than REST's camelCase message representation.
+  string jsonl = 2;
+}
+message DeleteFailureRequest {
+  string project = 1;
+  string id = 2;
+  int64 expected_revision = 3;
+}
+message DeleteFailureResponse {}

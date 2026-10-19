@@ -39,6 +39,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
+	"github.com/abhishek-rnjn/evals.si/internal/failures"
 	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/mcp"
@@ -596,6 +597,9 @@ func Handler(d deps) http.Handler {
 		func() (string, http.Handler) {
 			return evalsiv1alpha1connect.NewAnnotationServiceHandler(annotate.New(d.store, d.runs), gated)
 		},
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewFailureServiceHandler(failures.New(d.store), gated)
+		},
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewGuardrailServiceHandler(guard, gated) },
 		func() (string, http.Handler) {
 			return evalsiv1alpha1connect.NewWebhookServiceHandler(d.webhooks, gated)
@@ -628,6 +632,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.RunServiceName,
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
+		evalsiv1alpha1connect.FailureServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,

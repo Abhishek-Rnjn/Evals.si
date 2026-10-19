@@ -29,6 +29,7 @@ func TestRESTRoutes(t *testing.T) {
 		evalsiv1alpha1connect.EvaluationServiceName, evalsiv1alpha1connect.CatalogServiceName,
 		evalsiv1alpha1connect.RunServiceName, evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
+		evalsiv1alpha1connect.FailureServiceName,
 	} {
 		handlers[name] = echo
 	}
@@ -39,6 +40,14 @@ func TestRESTRoutes(t *testing.T) {
 	cases := []struct {
 		method, path, body, rpc, field, value string
 	}{
+		{"POST", "/v1alpha1/failures", `{"trace_id":"abc","title":"Incident"}`, "FailureService/CaptureFailure", "trace_id", "abc"},
+		{"GET", "/v1alpha1/failures?project=p", "", "FailureService/ListFailures", "project", "p"},
+		{"GET", "/v1alpha1/failures/case-id", "", "FailureService/GetFailure", "id", "case-id"},
+		{"PUT", "/v1alpha1/failures/case-id", `{"expected_revision":"2"}`, "FailureService/UpdateFailure", "id", "case-id"},
+		{"POST", "/v1alpha1/failures/case-id:review", `{"decision":"FAILURE_STATUS_APPROVED"}`, "FailureService/ReviewFailure", "id", "case-id"},
+		{"GET", "/v1alpha1/failures/case-id/events", "", "FailureService/ListFailureEvents", "id", "case-id"},
+		{"POST", "/v1alpha1/failures:export", `{"project":"p"}`, "FailureService/ExportFailures", "project", "p"},
+		{"DELETE", "/v1alpha1/failures/case-id?expected_revision=2", "", "FailureService/DeleteFailure", "id", "case-id"},
 		{"POST", "/v1alpha1/datasets:import", `{"config":{"project":"p","name":"data","format":"jsonl"},"uri":"s3://bucket/incoming/p/data.jsonl"}`, "DatasetService/ImportDataset", "", ""},
 		{"POST", "/v1alpha1/evaluate", `{"records": []}`, "EvaluationService/Evaluate", "", ""},
 		{"GET", "/v1alpha1/evaluators", "", "CatalogService/ListEvaluators", "", ""},

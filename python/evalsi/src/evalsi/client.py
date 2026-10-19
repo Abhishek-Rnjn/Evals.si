@@ -456,6 +456,140 @@ class Client:
         body = {"name": name, "project": project, "candidate": spec, "labels": labels or {}}
         return self.call("RunService", "CreateShadowReplay", body)
 
+    # --- production failure inbox ---
+
+    def capture_failure(
+        self, trace_id: str, *, project: str = "", title: str, reason: str
+    ) -> dict[str, Any]:
+        """Capture once per source revision; retries preserve human edits."""
+        return self.call(
+            "FailureService",
+            "CaptureFailure",
+            {"project": project, "traceId": trace_id, "title": title, "reason": reason},
+        )
+
+    def list_failures(
+        self,
+        *,
+        project: str = "",
+        status: str = "",
+        assignee: str = "",
+        page_size: int = 50,
+        page_token: str = "",
+    ) -> dict[str, Any]:
+        """One payload-free page; follow nextPageToken even when the page is empty."""
+        body = {
+            "project": project,
+            "assignee": assignee,
+            "pageSize": page_size,
+            "pageToken": page_token,
+        }
+        if status:
+            body["status"] = status
+        return self.call("FailureService", "ListFailures", body)
+
+    def get_failure(self, case_id: str, *, project: str = "") -> dict[str, Any]:
+        out: dict[str, Any] = self.call(
+            "FailureService", "GetFailure", {"project": project, "id": case_id}
+        )["failure"]
+        return out
+
+    def update_failure(
+        self,
+        case_id: str,
+        *,
+        project: str = "",
+        expected_revision: int,
+        record: dict[str, Any],
+        title: str,
+        reason: str,
+        assignee: str = "",
+        status: str = "FAILURE_STATUS_OPEN",
+    ) -> dict[str, Any]:
+        out: dict[str, Any] = self.call(
+            "FailureService",
+            "UpdateFailure",
+            {
+                "project": project,
+                "id": case_id,
+                "expectedRevision": str(expected_revision),
+                "record": record,
+                "title": title,
+                "reason": reason,
+                "assignee": assignee,
+                "status": status,
+            },
+        )["failure"]
+        return out
+
+    def review_failure(
+        self,
+        case_id: str,
+        *,
+        project: str = "",
+        expected_revision: int,
+        decision: str,
+        note: str,
+    ) -> dict[str, Any]:
+        out: dict[str, Any] = self.call(
+            "FailureService",
+            "ReviewFailure",
+            {
+                "project": project,
+                "id": case_id,
+                "expectedRevision": str(expected_revision),
+                "decision": decision,
+                "note": note,
+            },
+        )["failure"]
+        return out
+
+    def failure_events(
+        self,
+        case_id: str,
+        *,
+        project: str = "",
+        page_size: int = 50,
+        page_token: str = "",
+    ) -> dict[str, Any]:
+        return self.call(
+            "FailureService",
+            "ListFailureEvents",
+            {
+                "project": project,
+                "id": case_id,
+                "pageSize": page_size,
+                "pageToken": page_token,
+            },
+        )
+
+    def export_failures(
+        self, selections: dict[str, int], *, project: str = ""
+    ) -> list[dict[str, Any]]:
+        """Export explicit approved revisions; stale/unapproved selections fail together."""
+        out: list[dict[str, Any]] = self.call(
+            "FailureService",
+            "ExportFailures",
+            {
+                "project": project,
+                "selections": [
+                    {"id": key, "revision": str(revision)} for key, revision in selections.items()
+                ],
+            },
+        ).get("records", [])
+        return out
+
+    def delete_failure(self, case_id: str, *, project: str = "", expected_revision: int) -> None:
+        self.call(
+            "FailureService",
+            "DeleteFailure",
+            {
+                "project": project,
+                "id": case_id,
+                "expectedRevision": str(expected_revision),
+            },
+        )
+
     # --- human annotation ---
 
     def annotation_call(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
