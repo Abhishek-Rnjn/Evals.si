@@ -176,6 +176,19 @@ class TaskEnv:
         """The actions' schemas, in the form chat models take tool definitions."""
         return tool_schemas(list(self._tools.values()))
 
+    @property
+    def record(self) -> Record | None:
+        """The running episode's record (None between episodes)."""
+        return self._record
+
+    @property
+    def spec(self) -> run_pb2.RunSpec | None:
+        return self._spec
+
+    async def abort(self) -> None:
+        """Destroy the running episode's sandbox without grading it."""
+        await self._end_episode()
+
     async def _ensure_pool(self) -> EnvironmentPool:
         if self._pool is None:
             if self._client is None:
