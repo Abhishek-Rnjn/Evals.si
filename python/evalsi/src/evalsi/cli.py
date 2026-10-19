@@ -306,7 +306,7 @@ def _add_harness2(sub: Any) -> None:
     add_credential_args(archive)
     archive.set_defaults(func=_cmd_archive_run)
 
-    dataset = sub.add_parser("dataset", help="upload or import server datasets")
+    dataset = sub.add_parser("dataset", help="upload, import or review dataset snapshots")
     actions = dataset.add_subparsers(dest="action", required=True)
     for action in ("upload", "import"):
         command = actions.add_parser(action)
@@ -317,6 +317,10 @@ def _add_harness2(sub: Any) -> None:
         command.add_argument("--server", required=True)
         add_credential_args(command)
         command.set_defaults(func=_cmd_dataset)
+
+    from evalsi.cli_datasets import add_snapshot_commands
+
+    add_snapshot_commands(actions)
 
 
 def _add_gate(sub: Any) -> None:
