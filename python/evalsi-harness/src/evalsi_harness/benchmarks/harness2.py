@@ -387,7 +387,8 @@ def results_for(
                 "trial": trial,
             }
             if e.outcome is Outcome.SCORED:
-                assert e.n_passed is not None and e.n_criteria is not None
+                assert e.n_passed is not None
+                assert e.n_criteria is not None
                 if metric == FRACTION:
                     value = e.n_passed / e.n_criteria
                     res["scores"] = [{"name": metric, "number": value}]

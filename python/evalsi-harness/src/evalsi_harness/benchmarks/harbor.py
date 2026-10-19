@@ -427,7 +427,8 @@ def _checker_script(
 ) -> str:
     names = reward_files or ("reward.json", "reward.txt")
     reads = "\n".join(
-        f"{'if' if i == 0 else 'elif'} [ -f {LOGS}/{n} ]; then printf '{MARK} {n}\\n'; cat {LOGS}/{n}"
+        f"{'if' if i == 0 else 'elif'} [ -f {LOGS}/{n} ]; "
+        f"then printf '{MARK} {n}\\n'; cat {LOGS}/{n}"
         for i, n in enumerate(names)
     )
     exports = "".join(f"export {k}={shlex.quote(v)}\n" for k, v in verifier_env.items())
@@ -689,7 +690,10 @@ def _grade_score_json(text: str, code: int, out: str) -> TaskCheck:
     if score is None:
         return TaskCheck(
             passed=False,
-            error="score.json has no usable score (reward, overall, test_pass_rate or tests_passed/tests_total)",
+            error=(
+                "score.json has no usable score "
+                "(reward, overall, test_pass_rate or tests_passed/tests_total)"
+            ),
             details=_tail(text),
         )
     return TaskCheck(
@@ -778,8 +782,8 @@ __all__ = [
     "grade_harbor",
     "grade_pytest",
     "load_harbor",
-    "score_from_payload",
     "load_terminal_bench",
+    "score_from_payload",
     "translate_dockerfile",
 ]
 

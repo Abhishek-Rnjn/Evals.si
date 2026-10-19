@@ -104,7 +104,8 @@ def test_matrix_pairs_the_refined_harness_with_base_by_task(ns: Path) -> None:
     assert agg.harness == "harness2:agg-k2"
     # Paired on trial 0: (0.8-0.4, 0.75-0.5, 0.6-0.2).
     assert agg.diff == pytest.approx((0.4 + 0.25 + 0.4) / 3)
-    assert agg.diff_low is not None and agg.diff_high is not None
+    assert agg.diff_low is not None
+    assert agg.diff_high is not None
 
 
 def test_the_directory_is_only_read(ns: Path, tmp_path: Path) -> None:
@@ -152,7 +153,9 @@ def test_inconsistent_scores_are_errors(tmp_path: Path) -> None:
     root = tmp_path / "ns"
     (root / "t1").mkdir(parents=True)
     (root / "t1" / "summary.json").write_text(json.dumps({"task_id": "t1"}))
-    rows = [{"task_id": "t1", "mode": "agg", "k": 1, "label": "agg1", "n_passed": 5, "n_criteria": 3}]
+    rows = [
+        {"task_id": "t1", "mode": "agg", "k": 1, "label": "agg1", "n_passed": 5, "n_criteria": 3}
+    ]
     (root / "judged.json").write_text(json.dumps(rows))
     cell = import_namespace(root).cells()["agg1"]
     assert cell["results"][0]["outcome"] == "error"

@@ -1,0 +1,53 @@
+# UNVERIFIED: written from Harness²'s OpenCode run argument list and this repo's
+# run-spec schema. It has not been run against a live OpenCode CLI or model.
+#
+# The OpenCode CLI as a bring-your-own CLI agent inside the task's sandbox, with a
+# per-host network allowlist. Known gap: there is no OpenCode reader in
+# `output_format` (the available formats are dsh-json, claude-stream-json,
+# codex-json, gemini-json and pi-json), so the agent's standard output is its
+# answer and the run has NO steps. Evaluators that need a trajectory
+# (tool-errors, loop-detection) therefore have nothing to score here;
+# task-success, policy-violations and agent-efficiency (wall time) still work.
+#
+# Fill in before running: REPLACE_WITH_PINNED_VERSION, the model (provider/model),
+# the model host in allow_hosts, OPENCODE_API_KEY on the worker, and the dataset.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: harness2-opencode-sandboxed
+spec:
+  target:
+    agent:
+      cli:
+        command:
+          - opencode
+          - run
+          - "{instruction}"
+          - --model
+          - REPLACE_WITH_PROVIDER/MODEL
+        install:
+          - npm install -g opencode-ai@REPLACE_WITH_PINNED_VERSION
+        # The variable name your provider reads (for example ANTHROPIC_API_KEY).
+        env_from: {ANTHROPIC_API_KEY: HARNESS2_OPENCODE_API_KEY}
+        allow_hosts: ["api.anthropic.com:443"]
+        timeout: 30m
+  dataset:
+    uri: "harbor://./workbuddy-bench/wb-bench-code-v1.0/tasks?reward=score.json&tasks=REPLACE_WITH_TASK"
+  environment:
+    setup_network: allow
+    env:
+      HOME: /tmp/agent-home
+      # The file-access fence from Harness²'s reference OpenCode environment:
+      # without it the session auto-rejects reads of its own working tree. The
+      # workdir must match the task's workdir (/app for Harbor tasks).
+      OPENCODE_PERMISSION: '{"external_directory": {"*": "deny", "/app": "allow", "/app/**": "allow"}}'
+    sandbox:
+      network: allowlist
+      allow_hosts: ["api.anthropic.com:443"]
+      min_isolation: namespaced
+      memory_mb: 4096
+  evaluators:
+    - ref: task-success
+    - ref: policy-violations
+    - ref: agent-efficiency
+  trials: 1
