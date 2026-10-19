@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **`builtin/evidence-stage-audit`.** A deterministic funnel for agents that read evidence: required passages retrieved, then held by active evidence the answer cites, then the expected answer present. Each stage is scored only when the one before passed, so its mean is conditional. Needs `evidence_state` and a `{evidence, answer}` reference. The judge-based audit is not built.
+
 - **Variance-aware trial recommendation.** With `trials` above 1, `evalsi run` prints how many trials per task the observed within-task variance supports (an upper confidence bound, the worst case for a pass/fail metric that never varied) and writes `trial_advice` to `--output`; `evalsi determinism` carries it too. A report only: default trials and gates are unchanged. Server runs get it through `evalsi determinism` on their results.
 
 - **Clean checker isolation.** `checker.isolation: clean` with `checker.outputs` runs the checker in a fresh sandbox of the same environment that receives only the agent's declared output files, so edited tests, shims on `PATH` and installed packages cannot reach the grader. New `Checker.isolation` and `Checker.outputs` proto fields; the server validates them.
