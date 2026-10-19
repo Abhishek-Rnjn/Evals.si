@@ -203,3 +203,55 @@ def test_the_default_isolation_floor_refuses_landlock_instead_of_downgrading(con
     outcome = play(FIX, "landlock", min_isolation="namespaced")
     assert outcome.record is None
     assert "below namespaced" in outcome.error
+
+
+async def _pause_and_resume(rung: str) -> None:
+    from evalsi_harness.models import ModelTurn
+    from evalsi_harness.rollout import DONE, PAUSED, RolloutPool
+    from tests.test_rollout import Scripted, call
+
+    spec = spec_of(
+        {
+            "environment": {
+                "files": FILES,
+                "setup": ["echo ready > setup.log"],
+                "sandbox": {"min_isolation": MIN_ISOLATION[rung]},
+                "checker": {"command": CHECK},
+            }
+        }
+    )
+    async with await connect() as client:
+        rungs = {r["driver"]: r["available"] for r in await client.probe()}
+        if not rungs.get(rung):
+            message = f"the {rung} rung is not available on this host"
+            if os.environ.get("EVALSI_REQUIRE_SANDBOX"):
+                pytest.fail(message)
+            pytest.skip(message)
+        fix = ModelTurn(text="fix", tool_calls=[call("bash", "c1", command=FIX)])
+        submit = ModelTurn(text="", tool_calls=[call("submit", "c2")])
+        pool_ref: list[RolloutPool] = []
+
+        async def stop_after_first(n: int) -> None:
+            if n == 1:
+                pool_ref[0].stop()
+
+        model = Scripted([fix, submit], on_call=stop_after_first)
+        pool = RolloutPool(model, client)
+        pool_ref.append(pool)
+        try:
+            [paused] = await pool.run([(record("Fix add()"), spec)])
+            assert paused.status == PAUSED, paused.error
+            # The fix is in the saved sandbox; the second turn then submits it.
+            pool.clear()
+            [done] = await pool.run(resume=[paused])
+            assert (done.status, done.reward) == (DONE, 1.0), done.error
+            assert len(done.turns) == 2
+            await pool.delete_snapshot(paused)
+        finally:
+            await pool.aclose()
+
+
+@pytest.mark.parametrize("rung", RUNGS)
+def test_a_paused_rollout_resumes_in_a_restored_sandbox(config: Any, rung: str) -> None:
+    config(rung)
+    asyncio.run(_pause_and_resume(rung))

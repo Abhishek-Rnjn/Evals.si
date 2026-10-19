@@ -86,11 +86,22 @@ async def collect_chat(events: Events) -> dict[str, Any]:
     calls: dict[int, dict[str, Any]] = {}
     finish = ""
     usage: dict[str, Any] = {}
+    # vLLM's token trace, in the pieces the stream carries it in.
+    prompt_ids: Any = None
+    token_ids: list[Any] | None = None
+    logprob_entries: list[Any] | None = None
     async for _, data in events:
         if "error" in data:
             raise ModelError(f"model stream error: {data['error']!r:.300}")
         usage = data.get("usage") or usage
+        if data.get("prompt_token_ids") is not None:
+            prompt_ids = data["prompt_token_ids"]
         for choice in data.get("choices") or []:
+            if isinstance(choice.get("token_ids"), list):
+                token_ids = (token_ids or []) + choice["token_ids"]
+            block = choice.get("logprobs")
+            if isinstance(block, dict) and isinstance(block.get("content"), list):
+                logprob_entries = (logprob_entries or []) + block["content"]
             delta = choice.get("delta") or {}
             if delta.get("content"):
                 text.append(delta["content"])
@@ -113,7 +124,15 @@ async def collect_chat(events: Events) -> dict[str, Any]:
         message["refusal"] = "".join(refusal)
     if calls:
         message["tool_calls"] = [calls[i] for i in sorted(calls)]
-    return {"choices": [{"message": message, "finish_reason": finish}], "usage": usage}
+    chosen: dict[str, Any] = {"message": message, "finish_reason": finish}
+    if token_ids is not None:
+        chosen["token_ids"] = token_ids
+    if logprob_entries is not None:
+        chosen["logprobs"] = {"content": logprob_entries}
+    result: dict[str, Any] = {"choices": [chosen], "usage": usage}
+    if prompt_ids is not None:
+        result["prompt_token_ids"] = prompt_ids
+    return result
 
 
 @_closing

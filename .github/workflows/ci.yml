@@ -464,7 +464,7 @@ jobs:
         run: cd tests/rlframeworks && "$RUNNER_TEMP/rl/bin/python" -m pytest -q
 
   envspecs:
-    # The task environments as OpenEnv and verifiers environments, against the
+    # The task environments as OpenEnv, verifiers, Gymnasium and NeMo Gym environments, against the
     # real packages at the versions the adapters were written for (each has
     # its own dependency tree, so each gets its own environment).
     runs-on: ubuntu-latest
@@ -484,6 +484,19 @@ jobs:
           grep -E '^(verifiers|pytest)==' tests/envspecs/requirements.txt \
             | VIRTUAL_ENV="$RUNNER_TEMP/verifiers" uv pip install -r - -e python/evalsi -e python/evalsi-harness
           cd tests/envspecs && "$RUNNER_TEMP/verifiers/bin/python" -m pytest -q test_verifiers.py
+      - name: Gymnasium
+        run: |
+          uv venv -p 3.12 "$RUNNER_TEMP/gymnasium"
+          grep -E '^(gymnasium|pytest)==' tests/envspecs/requirements.txt \
+            | VIRTUAL_ENV="$RUNNER_TEMP/gymnasium" uv pip install -r - -e python/evalsi -e python/evalsi-harness
+          cd tests/envspecs && "$RUNNER_TEMP/gymnasium/bin/python" -m pytest -q test_gymnasium.py
+      - name: NeMo Gym
+        # nemo-gym 0.7 needs Python 3.13.14 or newer.
+        run: |
+          uv venv -p 3.13 "$RUNNER_TEMP/nemogym"
+          grep -E '^(nemo-gym|pytest|pytest-asyncio)==' tests/envspecs/requirements.txt \
+            | VIRTUAL_ENV="$RUNNER_TEMP/nemogym" uv pip install -r - -e python/evalsi -e python/evalsi-harness
+          cd tests/envspecs && "$RUNNER_TEMP/nemogym/bin/python" -m pytest -q test_nemogym.py
 
   mcp-agent:
     # Phase 6's exit test with a real coding agent: Claude Code, headless,

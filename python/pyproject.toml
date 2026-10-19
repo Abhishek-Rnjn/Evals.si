@@ -55,7 +55,7 @@ ignore_missing_imports = true
 
 # The environment specs the envspecs adapters target are optional installs.
 [[tool.mypy.overrides]]
-module = ["openenv", "openenv.*", "verifiers", "verifiers.*"]
+module = ["openenv", "openenv.*", "verifiers", "verifiers.*", "gymnasium", "gymnasium.*", "nemo_gym", "nemo_gym.*", "resources_servers", "resources_servers.*", "fastapi", "fastapi.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

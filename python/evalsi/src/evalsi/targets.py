@@ -67,6 +67,10 @@ class TargetConfig:
     api: str = ""  # openai-compatible: "" or "chat-completions", or "responses"
     fallbacks: tuple[TargetConfig, ...] = ()
     fallback_after: int = 0
+    # openai-compatible chat completions on a vLLM server: ask for the token IDs
+    # and log-probabilities of every turn (for RL rollouts). Set by code that
+    # builds the client (a trainer); not part of a run spec.
+    token_trace: bool = False
 
     def __post_init__(self) -> None:
         if self.connector not in CONNECTORS:
@@ -89,6 +93,8 @@ class TargetConfig:
             raise ValueError("thinking is for anthropic targets")
         if self.thinking == "enabled" and not 0 < self.thinking_budget < self.max_tokens:
             raise ValueError("thinking enabled needs thinking_budget above 0 and below max_tokens")
+        if self.token_trace and (self.connector != "openai-compatible" or self.api == "responses"):
+            raise ValueError("token_trace is for openai-compatible chat-completions targets")
         if self.max_concurrency < 0 or self.fallback_after < 0:
             raise ValueError("max_concurrency and fallback_after cannot be negative")
 
@@ -112,6 +118,7 @@ class TargetConfig:
                     "api": self.api,
                     "fallbacks": [f.describe() for f in self.fallbacks],
                     "fallback_after": self.fallback_after,
+                    "token_trace": self.token_trace,
                 }.items()
                 if v
             },

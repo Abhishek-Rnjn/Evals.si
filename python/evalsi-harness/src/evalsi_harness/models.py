@@ -48,6 +48,114 @@ class ToolCallRequest:
 
 
 @dataclass
+class TokenTrace:
+    """The exact tokens of one turn, for a trainer: the prompt the server
+    tokenized, the tokens it generated and the log-probability of each.
+    ``missing`` names what the server did not return (``prompt_token_ids``
+    when it ignored ``return_token_ids``), so a gap is never an empty list
+    taken for data."""
+
+    prompt_token_ids: list[int] = field(default_factory=list)
+    completion_token_ids: list[int] = field(default_factory=list)
+    logprobs: list[float] = field(default_factory=list)
+    missing: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "prompt_token_ids": self.prompt_token_ids,
+            "completion_token_ids": self.completion_token_ids,
+            "logprobs": self.logprobs,
+            "missing": self.missing,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> TokenTrace:
+        return cls(
+            prompt_token_ids=list(data.get("prompt_token_ids") or []),
+            completion_token_ids=list(data.get("completion_token_ids") or []),
+            logprobs=[float(x) for x in data.get("logprobs") or []],
+            missing=list(data.get("missing") or []),
+        )
+
+
+# What a vLLM chat-completions server is asked for to return a turn's tokens
+# (vLLM's OpenAI-compatible server: ``return_token_ids`` adds ``prompt_token_ids``
+# to the response and ``token_ids`` to each choice; ``return_tokens_as_token_ids``
+# makes each log-probability entry's ``token`` read ``token_id:<int>``).
+TOKEN_TRACE_REQUEST: dict[str, Any] = {
+    "logprobs": True,
+    "top_logprobs": 0,
+    "return_tokens_as_token_ids": True,
+    "return_token_ids": True,
+}
+
+
+def _int_list(value: Any, what: str) -> list[int]:
+    if not isinstance(value, list) or not all(
+        isinstance(x, int) and not isinstance(x, bool) for x in value
+    ):
+        raise ModelError(f"{what} is not a list of token IDs: {value!r:.200}")
+    return list(value)
+
+
+def token_trace(payload: dict[str, Any], choice: dict[str, Any]) -> TokenTrace:
+    """A turn's :class:`TokenTrace` from a chat-completions response (vLLM's
+    fields, see ``TOKEN_TRACE_REQUEST``). A server that returns some of it
+    gets a trace that names the rest in ``missing``; ids and log-probabilities
+    that disagree in length or value are an error."""
+    message = choice.get("message") or {}
+    prompt = payload.get("prompt_token_ids")
+    if prompt is None:
+        prompt = choice.get("prompt_token_ids", message.get("prompt_token_ids"))
+    block = choice.get("logprobs")
+    entries = block.get("content") if isinstance(block, dict) else None
+    from_logprobs: list[int] = []
+    logprobs: list[float] = []
+    for entry in entries or []:
+        token = entry.get("token") if isinstance(entry, dict) else None
+        value = entry.get("logprob") if isinstance(entry, dict) else None
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            raise ModelError(f"a log-probability entry has no numeric logprob: {entry!r:.200}")
+        logprobs.append(float(value))
+        if isinstance(token, str) and token.startswith("token_id:"):
+            try:
+                from_logprobs.append(int(token.removeprefix("token_id:")))
+            except ValueError as exc:
+                raise ModelError(
+                    f"a log-probability token is not token_id:<int>: {token!r}"
+                ) from exc
+    returned = choice.get("token_ids")
+    completion = _int_list(returned, "choice.token_ids") if returned is not None else from_logprobs
+    if returned is not None and len(from_logprobs) == len(completion) and returned != from_logprobs:
+        raise ModelError("the response's token_ids disagree with its log-probability tokens")
+    if logprobs and len(logprobs) != len(completion):
+        raise ModelError(
+            f"the response has {len(logprobs)} log-probabilities for {len(completion)} tokens"
+        )
+    usage = payload.get("usage") or {}
+    # A turn that generated anything (text, a tool call, or tokens the server counted)
+    # has completion tokens and log-probabilities to return.
+    generated = bool(
+        message.get("content")
+        or message.get("tool_calls")
+        or (usage.get("completion_tokens") or 0) > 0
+    )
+    missing = []
+    if prompt is None:
+        missing.append("prompt_token_ids")
+    if not completion and generated:
+        missing.append("completion_token_ids")
+    if not logprobs and generated:
+        missing.append("logprobs")
+    return TokenTrace(
+        prompt_token_ids=_int_list(prompt, "prompt_token_ids") if prompt is not None else [],
+        completion_token_ids=completion,
+        logprobs=logprobs,
+        missing=missing,
+    )
+
+
+@dataclass
 class ModelTurn:
     text: str
     tool_calls: list[ToolCallRequest] = field(default_factory=list)
@@ -64,6 +172,10 @@ class ModelTurn:
     # fallback), and the one it replaced when this turn switched models.
     model: str = ""
     switched_from: str = ""
+    # The turn's tokens and log-probabilities, when the client was asked for
+    # them (``TargetConfig.token_trace``); None otherwise, and for a turn
+    # served by a model that cannot (a fallback).
+    tokens: TokenTrace | None = None
 
     @property
     def truncated(self) -> bool:
@@ -162,6 +274,8 @@ class OpenAIChat:
             ]
         if self.config.temperature is not None:
             body["temperature"] = self.config.temperature
+        if self.config.token_trace:
+            body.update(TOKEN_TRACE_REQUEST)
         start = time.perf_counter()
         if self.config.stream:
             body["stream"] = True
@@ -202,6 +316,7 @@ class OpenAIChat:
             stop_reason=finish,
             # A part of prompt_tokens, as in Anthropic's normalized total.
             cache_read_tokens=int(details.get("cached_tokens") or 0),
+            tokens=token_trace(payload, choice) if self.config.token_trace else None,
         )
 
     async def aclose(self) -> None:
