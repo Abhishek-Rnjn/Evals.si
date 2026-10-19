@@ -1,5 +1,9 @@
 # UNVERIFIED: written from Harness²'s OpenCode run argument list and this repo's
 # run-spec schema. It has not been run against a live OpenCode CLI or model.
+# Measured only that OpenCode 1.19.3 honours the proxy variables
+# (scripts/probe-cli-proxy.py). It also needs models.opencode.ai:443 and, to install
+# its provider package at run time, registry.npmjs.org:443: with only the model host
+# allowed it will not start. Add them below or pre-seed both in the image.
 #
 # The OpenCode CLI as a bring-your-own CLI agent inside the task's sandbox, with a
 # per-host network allowlist. Known gap: there is no OpenCode reader in

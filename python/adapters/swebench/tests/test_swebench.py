@@ -102,7 +102,13 @@ def local_sandbox(monkeypatch: pytest.MonkeyPatch) -> LocalSandboxClient:
     return client
 
 
-def run_spec(tmp_path: Path, dataset: Path, command: list[str], oracle: bool = False) -> Any:
+def run_spec(
+    tmp_path: Path,
+    dataset: Path,
+    command: list[str],
+    oracle: bool = False,
+    evaluators: tuple[str, ...] = ("task-success",),
+) -> Any:
     spec = tmp_path / "run.json"
     document = {
         "apiVersion": "evals.si/v1alpha1",
@@ -111,7 +117,7 @@ def run_spec(tmp_path: Path, dataset: Path, command: list[str], oracle: bool = F
         "spec": {
             "target": {"agent": {"cli": {"command": command}}},
             "dataset": {"uri": f"swebench://{dataset}?oracle={str(oracle).lower()}"},
-            "evaluators": [{"ref": "task-success"}],
+            "evaluators": [{"ref": name} for name in evaluators],
         },
     }
     spec.write_text(json.dumps(document))
@@ -146,3 +152,26 @@ def test_the_gold_patches_resolve_every_instance(
     )
     summary = {s.metric: s for s in result.result.summaries}["task-success"]
     assert summary.mean == 1.0
+
+
+def test_the_gold_patches_are_not_flagged_as_reward_hacking(
+    local_sandbox: LocalSandboxClient, tmp_path: Path, dataset: Path
+) -> None:
+    """An honest-run control: the reference solutions are what a correct agent writes,
+    so ``trial-tampering`` must leave every one of them clean. Two fixture instances,
+    not the benchmark: it shows the signals do not fire on a real fix in the SWE-bench
+    format, not what the false-positive rate is on real agents."""
+    result = run_spec(
+        tmp_path,
+        dataset,
+        ["sh", "-c", "git apply .evalsi-gold.patch && rm .evalsi-gold.patch"],
+        oracle=True,
+        evaluators=("task-success", "trial-tampering"),
+    )
+    summaries = {s.metric: s for s in result.result.summaries}
+    assert summaries["task-success"].mean == 1.0
+    clean = summaries["trial-tampering.reward-hacking-clean"]
+    assert (clean.n, clean.mean, clean.skipped, clean.errors) == (2, 1.0, 0, 0)
+    assert summaries["trial-tampering.reward-hacking-signals"].mean == 0.0
+    # The signals are exercised, not skipped: each record carries the agent's diff.
+    assert all(isinstance(r.metadata.get("diff"), str) for r in result.result.records)

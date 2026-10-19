@@ -707,9 +707,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if show:
         print(file=sys.stderr)
     result = outcome.result
+    advice = _trial_advice(result)
     if args.output:
         payload = result.to_dict()
         payload["gates"] = [g.to_dict() for g in outcome.gates]
+        if advice:
+            payload["trial_advice"] = advice
         with open(args.output, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2, default=str)
     gates = [g.to_dict() for g in outcome.gates]
@@ -720,6 +723,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                     "manifest": result.manifest,
                     "summaries": [s.to_dict() for s in result.summaries],
                     "gates": gates,
+                    **({"trial_advice": advice} if advice else {}),
                 },
                 indent=2,
                 default=str,
@@ -730,6 +734,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         note = f" x {trials} trials" if trials > 1 else ""
         print(f"{_plural(result.manifest['dataset']['records'], 'record')}{note}\n")
         print(result.table())
+        if advice:
+            print("\n" + _trial_advice_line(advice, trials))
         _print_gates(gates)
     errors = result.errors()
     if result.all_errored:
@@ -746,6 +752,34 @@ def _cmd_run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     return 0 if outcome.passed else EXIT_GATES_FAILED
+
+
+def _trial_advice(result: Any) -> dict[str, Any] | None:
+    """The variance-aware trial recommendation for a run with repeated trials. A report
+    only; a run never fails because it could not be computed."""
+    from evalsi.determinism import trial_advice
+
+    if int(result.manifest.get("trials", 1)) < 2:
+        return None
+    try:
+        advice = trial_advice(result.to_dict())
+    except (ValueError, KeyError, TypeError):
+        return None
+    return advice if advice["metrics"] else None
+
+
+def _trial_advice_line(advice: dict[str, Any], ran: int) -> str:
+    """One line for the metric that needs the most trials at a margin of 0.1."""
+    metrics = [m for m in advice["metrics"] if m["trials_for_margin"]]
+    if not metrics:
+        return "trials: no numeric metric varied, so no recommendation (`evalsi determinism`)"
+    worst = max(metrics, key=lambda m: m["trials_for_margin"]["0.1"])
+    needed = worst["trials_for_margin"]["0.1"]
+    return (
+        f"trials: {worst['metric']} would need about {needed} per task for +/-0.1 on the "
+        f"noisiest task's mean (variance bound {worst['variance_bound']:.3f}; you ran {ran}). "
+        "A report only; trials is unchanged. See `evalsi determinism`."
+    )
 
 
 def summary_from_json(s: dict[str, Any]) -> Any:
