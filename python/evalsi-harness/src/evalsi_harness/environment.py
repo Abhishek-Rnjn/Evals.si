@@ -157,6 +157,18 @@ class EnvironmentPool:
             raise TaskError(f"environment: {exc}") from exc
         return TaskEnvironment(sandbox, config)
 
+    async def restore(self, config: EnvironmentConfig, snapshot_id: str) -> TaskEnvironment:
+        """A sandbox restored from a snapshot of a running episode (not the
+        environment's setup snapshot), under the environment's own network."""
+        sb = config.sandbox
+        try:
+            sandbox = await self.client.restore(
+                snapshot_id, network=sb.network, allow_hosts=list(sb.allow_hosts)
+            )
+        except SandboxError as exc:
+            raise TaskError(f"environment: {exc}") from exc
+        return TaskEnvironment(sandbox, config)
+
     async def _set_up_in_place(
         self, config: EnvironmentConfig, network: str, allow: list[str]
     ) -> TaskEnvironment:

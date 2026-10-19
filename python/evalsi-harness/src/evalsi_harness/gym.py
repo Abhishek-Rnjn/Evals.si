@@ -23,16 +23,23 @@ the environment's checker grades the end state and the reward is its score
 failure is never a reward of 0.
 
 Setup runs once per distinct environment and is snapshotted, so ``reset``
-costs a restore, not a rebuild (on rungs that snapshot).
+costs a restore, not a rebuild (on rungs that snapshot). Environments built
+with the same ``pool=`` share that setup, so many concurrent rollouts of one
+task pay it once. Cancelling a running ``reset`` or ``step`` destroys the
+episode's sandbox. ``snapshot()`` saves a running episode (its sandbox and its
+step count) so ``restore()`` can continue it later, on rungs that snapshot; on
+the others it raises ``SnapshotsUnsupported`` rather than pretend.
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from evalsi.sandbox.client import connect
+from evalsi.sandbox import SandboxError
+from evalsi.sandbox.client import SnapshotsUnsupported, connect
 from evalsi.types import Record
 from evalsi.v1alpha1 import run_pb2
 from evalsi_harness.checker import run_checker
@@ -58,23 +65,43 @@ class StepResult:
     info: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class EpisodeSnapshot:
+    """A running episode saved by :meth:`TaskEnv.snapshot`: its sandbox's
+    snapshot, the task, and how far it had got. Delete it with
+    :meth:`TaskEnv.delete_snapshot` when it is no longer needed."""
+
+    snapshot_id: str
+    record: Record
+    spec: run_pb2.RunSpec
+    steps: int
+
+
 class TaskEnv:
-    """One episode at a time over a sandbox client."""
+    """One episode at a time over a sandbox client.
+
+    ``pool`` shares setup with other environments (it is not closed here);
+    without one the environment makes its own.
+    """
 
     def __init__(
         self,
         client: SandboxClientLike | None = None,
         *,
         max_steps: int = 30,
+        pool: EnvironmentPool | None = None,
     ) -> None:
         if max_steps < 1:
             raise ValueError("max_steps must be at least 1")
         self.max_steps = max_steps
         self._client = client
         self._owned: Any = None
-        self._pool: EnvironmentPool | None = None
+        self._pool = pool
+        self._shared_pool = pool is not None
+        self._spec: run_pb2.RunSpec | None = None
         self._env: TaskEnvironment | None = None
         self._task: Task | None = None
+        self._record: Record | None = None
         self._tools: dict[str, Tool] = {}
         self.steps = 0
 
@@ -111,6 +138,21 @@ class TaskEnv:
             self._pool = EnvironmentPool(self._client)
         return self._pool
 
+    def _begin(self, record: Record, spec: run_pb2.RunSpec) -> Task:
+        task = Task.build(spec, record)
+        if task.environment is None:
+            raise TaskError(f"record {record.id} has no environment")
+        if task.environment.checker is None:
+            raise TaskError(f"record {record.id}'s environment has no checker to give a reward")
+        return task
+
+    def _enter(
+        self, env: TaskEnvironment, task: Task, record: Record, spec: run_pb2.RunSpec
+    ) -> None:
+        self._env, self._task = env, task
+        self._record, self._spec = record, spec
+        self._tools = {t.spec.name: t for t in sandbox_tools(env)}
+
     async def reset(
         self, record: Record | Mapping[str, Any], spec: run_pb2.RunSpec | None = None
     ) -> str:
@@ -118,25 +160,69 @@ class TaskEnv:
         ``spec.environment`` and ``metadata["environment"]``). Returns the
         task's instruction."""
         await self._end_episode()
-        if not isinstance(record, Record):
-            from evalsi.datasets import load_records
+        try:
+            if not isinstance(record, Record):
+                from evalsi.datasets import load_records
 
-            (record,) = load_records([dict(record)])
-        task = Task.build(spec or run_pb2.RunSpec(), record)
-        if task.environment is None:
-            raise TaskError(f"record {record.id} has no environment")
-        if task.environment.checker is None:
-            raise TaskError(f"record {record.id}'s environment has no checker to give a reward")
+                (record,) = load_records([dict(record)])
+            spec = spec or run_pb2.RunSpec()
+            task = self._begin(record, spec)
+            assert task.environment is not None
+            pool = await self._ensure_pool()
+            self._enter(await pool.acquire(task.environment), task, record, spec)
+            self.steps = 0
+            return task.instruction
+        except asyncio.CancelledError:
+            await self._end_episode()
+            raise
+
+    async def snapshot(self) -> EpisodeSnapshot:
+        """Save the running episode. Raises ``SnapshotsUnsupported`` on a rung
+        that cannot snapshot (the pod rung): there is nothing to resume from."""
+        if self._env is None or self._record is None or self._spec is None:
+            raise RuntimeError("call reset() before snapshot()")
+        try:
+            snapshot_id: str = await self._env.sandbox.snapshot()
+        except SnapshotsUnsupported as exc:
+            raise SnapshotsUnsupported(
+                f"this sandbox rung cannot snapshot a running episode, so it cannot be resumed: {exc}"
+            ) from exc
+        return EpisodeSnapshot(snapshot_id, self._record, self._spec, self.steps)
+
+    async def restore(self, saved: EpisodeSnapshot) -> str:
+        """Continue a saved episode in a new sandbox restored from it, with
+        its step count. The saved snapshot stays until :meth:`delete_snapshot`."""
+        await self._end_episode()
+        try:
+            task = self._begin(saved.record, saved.spec)
+            assert task.environment is not None
+            pool = await self._ensure_pool()
+            self._enter(
+                await pool.restore(task.environment, saved.snapshot_id),
+                task,
+                saved.record,
+                saved.spec,
+            )
+            self.steps = saved.steps
+            return task.instruction
+        except asyncio.CancelledError:
+            await self._end_episode()
+            raise
+
+    async def delete_snapshot(self, saved: EpisodeSnapshot) -> None:
         pool = await self._ensure_pool()
-        self._env = await pool.acquire(task.environment)
-        self._task = task
-        self._tools = {t.spec.name: t for t in sandbox_tools(self._env)}
-        self.steps = 0
-        return task.instruction
+        await pool.client.delete_snapshot(saved.snapshot_id)
 
     async def step(self, action: Action) -> StepResult:
         if self._env is None or self._task is None:
             raise RuntimeError("call reset() before step()")
+        try:
+            return await self._step(action)
+        except asyncio.CancelledError:
+            await self._end_episode()
+            raise
+
+    async def _step(self, action: Action) -> StepResult:
         self.steps += 1
         if action.tool == "submit":
             return await self._finish("submitted")
@@ -188,7 +274,7 @@ class TaskEnv:
 
     async def close(self) -> None:
         await self._end_episode()
-        if self._pool is not None:
+        if self._pool is not None and not self._shared_pool:
             await self._pool.aclose()
         if self._owned is not None:
             await self._owned.aclose()

@@ -16,7 +16,9 @@ rollout with ``state["error"]`` set instead of scoring it 0).
 Built against ``verifiers`` 0.3: a ``StatefulToolEnv`` over a one-row-per-task
 ``datasets.Dataset`` (``question``, ``answer``, ``info``), a rubric with one
 reward function over ``state``, ``@vf.stop`` and ``@vf.cleanup`` handlers.
-Each rollout owns a ``TaskEnv`` (and so pays the environment's setup itself).
+Each rollout owns a ``TaskEnv``. With ``client=`` given, the rollouts share one
+environment pool, so setup runs once per distinct environment; without it each
+rollout connects on its own and pays setup itself.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ except ImportError as exc:  # pragma: no cover - depends on the install
 from evalsi.types import Record
 from evalsi.v1alpha1 import run_pb2
 from evalsi_harness import gym
-from evalsi_harness.environment import SandboxClientLike
+from evalsi_harness.environment import EnvironmentPool, SandboxClientLike
 from evalsi_harness.task import Task
 
 TaskLike = tuple[Record | Mapping[str, Any], run_pb2.RunSpec | None]
@@ -102,6 +104,7 @@ class TaskVerifiersEnv(vf.StatefulToolEnv):
             raise ValueError("TaskVerifiersEnv needs at least one task")
         self._tasks = list(tasks)
         self._client = client
+        self._pool = EnvironmentPool(client) if client is not None else None
         rows = []
         for i, (record, spec) in enumerate(self._tasks):
             rec = record if isinstance(record, Record) else _record(record)
@@ -134,7 +137,7 @@ class TaskVerifiersEnv(vf.StatefulToolEnv):
     async def setup_state(self, state: vf.State) -> vf.State:
         index = int((state.get("info") or {}).get("task_index", 0))
         record, spec = self._tasks[index]
-        env = gym.TaskEnv(self._client, max_steps=self.max_turns * 4)
+        env = gym.TaskEnv(self._client, max_steps=self.max_turns * 4, pool=self._pool)
         await env.reset(record, spec)
         state[STATE_KEY] = _Rollout(env)
         return state
