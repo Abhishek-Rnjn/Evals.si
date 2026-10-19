@@ -38,7 +38,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from evalsi.sandbox import SandboxError
 from evalsi.sandbox.client import SnapshotsUnsupported, connect
 from evalsi.types import Record
 from evalsi.v1alpha1 import run_pb2
@@ -185,7 +184,7 @@ class TaskEnv:
             snapshot_id: str = await self._env.sandbox.snapshot()
         except SnapshotsUnsupported as exc:
             raise SnapshotsUnsupported(
-                f"this sandbox rung cannot snapshot a running episode, so it cannot be resumed: {exc}"
+                f"this rung cannot snapshot a running episode, so it cannot be resumed: {exc}"
             ) from exc
         return EpisodeSnapshot(snapshot_id, self._record, self._spec, self.steps)
 
