@@ -13,6 +13,8 @@ node scripts/check-links.mjs   # after a build
 
 Deployed to GitHub Pages by `.github/workflows/website.yml` (enable Pages with source "GitHub Actions" in the repo settings). The site is served from the custom domain `https://evalsi.dev` (set in the repo's Pages settings), so the base path is `/`. To serve it from the project URL instead, build with `SITE_BASE=/Evals.si SITE_URL=https://abhishek-rnjn.github.io`.
 
+After publishing a release, merge a documentation PR updating the current-release references and version-pinned installation examples. Merges to `main` that change this website, docs, examples, `README.md` or `CHANGELOG.md` automatically rebuild and deploy the site; no laptop command is needed. Pull requests build and check links without deploying. A release tag alone does not trigger this workflow, and homepage feature descriptions remain hand-written.
+
 ## Search and link previews
 
 - Every page has a canonical URL, Open Graph and Twitter tags and a sitemap (`sitemap-index.xml`). An imported doc's description is its first paragraph, cut near 160 characters (`describe()` in `scripts/sync-content.mjs`).
