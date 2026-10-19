@@ -143,7 +143,7 @@ Exit criteria: a red-team fixture suite (injection, tampering and escalation att
 The goal is for the same tasks to train models as well as evaluate them.
 
 - **Token-in, token-out.** For vLLM and SGLang targets, keep the token IDs and log-probs of every turn, so trainers get exact multi-turn rollouts without re-tokenizing. *Built (unreleased) for vLLM's chat-completions fields, opt-in as `TargetConfig(token_trace=True)`; tested against a fake server only. SGLang is not built or checked, and there is no run-spec field.*
-- **Asynchronous and partial rollouts.** Run rollouts concurrently and let a trainer cancel or resume them, with shared environment setup across rollouts of the same task (the open verifiers row in LEFTOVERS). *Built (unreleased): `RolloutPool`, `TaskEnv(pool=)`, pause at a turn boundary and resume from a snapshot on rungs that snapshot; cancellation destroys the sandboxes.*
+- **Asynchronous and partial rollouts.** Run rollouts concurrently and let a trainer cancel or resume them, with shared environment setup across rollouts of the same task (the open verifiers row in LEFTOVERS). *Built (unreleased): `RolloutPool`, `TaskEnv(pool=)`, pause at a turn boundary and resume from a snapshot on rungs that snapshot (run on real bubblewrap and Landlock sandboxes; not Firecracker); cancellation destroys the sandboxes.*
 - **More environment specs.** Add gymnasium and NeMo Gym next to OpenEnv and verifiers. *Built (unreleased), tested against the real packages in the `envspecs` job.*
 - **Step-level rewards.** Expose per-step evaluator scores as process rewards, next to the checker's outcome reward. *Built (unreleased): `evalsi_harness.process`.*
 

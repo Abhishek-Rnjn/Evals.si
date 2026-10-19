@@ -37,10 +37,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Any
 
+from evalsi.sandbox import SandboxError
 from evalsi.sandbox.client import SnapshotsUnsupported
 from evalsi.types import Record
 from evalsi.v1alpha1 import run_pb2
@@ -48,6 +49,7 @@ from evalsi_harness import gym
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike
 from evalsi_harness.models import ChatModel, ModelError, ModelTurn, TokenTrace, ToolSpec
 from evalsi_harness.process import ProcessReward
+from evalsi_harness.task import TaskError
 
 SYSTEM = (
     "You are completing a task in a sandbox. Use the tools to do the work, then call submit. "
@@ -104,6 +106,12 @@ class Trajectory:
     @property
     def resumable(self) -> bool:
         return self.status == PAUSED and self.snapshot is not None
+
+
+def _record_id(record: Record | dict[str, Any] | None) -> str:
+    if isinstance(record, Record):
+        return record.id
+    return str((record or {}).get("id", ""))
 
 
 def _specs(tools: list[dict[str, Any]]) -> list[ToolSpec]:
@@ -309,21 +317,30 @@ class RolloutPool:
                 # Never started (or, for a resume, still paused): hand it back as it was.
                 if resume is not None:
                     return resume
-                rec = record.id if isinstance(record, Record) else str((record or {}).get("id", ""))
-                return Trajectory(rec, status=CANCELLED, error="stopped before it started")
+                return Trajectory(
+                    _record_id(record), status=CANCELLED, error="stopped before it started"
+                )
             env = gym.TaskEnv(self._client, pool=self.environments, **self._options)
             try:
-                return await rollout(
-                    self.model,
-                    env,
-                    record,
-                    spec,
-                    system=self.system,
-                    max_turns=self.max_turns,
-                    max_tokens=max_tokens,
-                    should_stop=self._stop.is_set,
-                    resume=resume,
-                )
+                try:
+                    return await rollout(
+                        self.model,
+                        env,
+                        record,
+                        spec,
+                        system=self.system,
+                        max_turns=self.max_turns,
+                        max_tokens=max_tokens,
+                        should_stop=self._stop.is_set,
+                        resume=resume,
+                    )
+                except (TaskError, SandboxError) as exc:
+                    # This task's environment failed (its setup, say): that rollout is an
+                    # error with no reward, and the others carry on.
+                    message = f"the environment failed: {exc}"
+                    if resume is not None:
+                        return replace(resume, status=ERROR, error=message)
+                    return Trajectory(_record_id(record), status=ERROR, error=message)
             finally:
                 await env.close()
 

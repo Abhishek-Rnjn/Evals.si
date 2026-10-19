@@ -16,6 +16,7 @@ from nemo_gym.openai_utils import (
     NeMoGymResponseCreateParamsNonStreaming,
     NeMoGymResponseFunctionToolCall,
 )
+from nemo_gym.openai_utils import NeMoGymFunctionCallOutput
 from nemo_gym.server_utils import ServerClient
 
 from conftest import task
@@ -74,12 +75,17 @@ def test_a_dataset_row_is_valid_for_nemo_gym() -> None:
 async def test_an_episode_is_rewarded_by_the_checked_end_state() -> None:
     env = server()
     obs, info = await env.reset(row(), session_id="s1")
-    assert obs == "Mark the notes done."
+    # The task is in the row's input already; the agent would add an observation twice.
+    assert obs is None
     assert info["record_id"] == "t1"
-    obs, reward, terminated, truncated, _ = await env.step(
+    obs, reward, terminated, truncated, info = await env.step(
         response(("bash", {"command": "cat setup.log notes.txt"})), {}, "s1"
     )
-    assert obs is not None and "ready" in obs and "draft" in obs
+    # The call's output goes back as the agent expects it: a function-call output.
+    [out] = info["tool_outputs"]
+    assert out["call_id"] == "c0"
+    assert NeMoGymFunctionCallOutput(type="function_call_output", **out)
+    assert "ready" in json.loads(out["output"]) and "draft" in json.loads(out["output"])
     assert (reward, terminated, truncated) == (0.0, False, False)
     # Several calls in one response run in order; submit ends the episode.
     obs, reward, terminated, truncated, info = await env.step(
@@ -101,7 +107,6 @@ async def test_a_response_without_a_tool_call_costs_a_step_and_is_reminded() -> 
     env = server(max_steps=1, process_rewards=[ToolErrorPenalty(0.5)])
     await env.reset(row(), session_id="s")
     obs, reward, terminated, truncated, info = await env.step(response(), {}, "s")
-    assert obs is not None and "no tool call" in obs
     # The step limit ends it; the checker still grades (notes are not done: 0), less the penalty.
     assert (terminated, truncated, info["ended"]) == (False, True, "max_steps")
     assert reward == -0.5
@@ -142,7 +147,8 @@ def test_the_http_endpoints_drive_an_episode() -> None:
         data = row()
         reset = client.post("/reset", json=data)
         assert reset.status_code == 200, reset.text
-        assert reset.json()["observation"] == "Mark the notes done."
+        assert reset.json()["observation"] is None
+        assert reset.json()["info"]["supports_explicit_close"] is True
         body = {
             "responses_create_params": data["responses_create_params"],
             "response": response(
@@ -153,3 +159,73 @@ def test_the_http_endpoints_drive_an_episode() -> None:
         step = client.post("/step", json=body)
         assert step.status_code == 200, step.text
         assert (step.json()["reward"], step.json()["terminated"]) == (1.0, True)
+
+
+class FakeResponse:
+    """What nemo_gym's raise_for_status and get_response_json read from a response."""
+
+    ok = True
+    cookies: dict[str, str] = {}  # noqa: RUF012
+
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+
+    async def read(self) -> bytes:
+        return json.dumps(self._payload).encode()
+
+
+@pytest.mark.asyncio
+async def test_the_real_gymnasium_agent_drives_an_episode() -> None:
+    """Nemo Gym's own agent, with the model scripted and the server behind a test client."""
+    from fastapi.testclient import TestClient
+    from responses_api_agents.gymnasium_agent.app import (
+        GymnasiumAgent,
+        GymnasiumAgentConfig,
+        GymnasiumAgentRunRequest,
+    )
+
+    env = server()
+    data = row()
+    model_outputs = [
+        response(("bash", {"command": "cat notes.txt"})),
+        response(("write_file", {"path": "notes.txt", "content": "done\n"})),
+        response(("submit", {})),
+    ]
+    model_inputs: list[Any] = []
+
+    with TestClient(env.setup_webserver()) as http:
+
+        async def post(
+            server_name: str, url_path: str, json: Any, cookies: Any = None
+        ) -> Any:
+            if server_name == "model":
+                model_inputs.append(json)
+                return FakeResponse(model_outputs.pop(0).model_dump())
+            http.cookies.update(cookies or {})
+            reply = http.post(url_path, json=json)
+            assert reply.status_code == 200, reply.text
+            return FakeResponse(reply.json())
+
+        client = MagicMock(spec=ServerClient)
+        client.post = post
+
+        config = GymnasiumAgentConfig(
+            host="",
+            port=0,
+            entrypoint="",
+            name="agent",
+            resources_server={"type": "resources_servers", "name": "evalsi"},
+            model_server={"type": "responses_api_models", "name": "model"},
+            max_steps=5,
+        )
+        agent = GymnasiumAgent(config=config, server_client=client)
+        request = type("R", (), {"cookies": {}})()
+        result = await agent.run(request, GymnasiumAgentRunRequest.model_validate(data))
+
+    assert (result.reward, result.terminated, result.truncated) == (1.0, True, False)
+    # The second model call saw the first call answered, not left dangling.
+    second = [item for item in model_inputs[1].input if getattr(item, "type", "") == "function_call_output"]
+    assert len(second) == 1 and "draft" in second[0].output
+    # The task was in the input once, not added again as an observation.
+    assert sum(1 for item in model_inputs[0].input if "Mark the notes done." in str(item)) == 1
+    assert env.session_state == {}

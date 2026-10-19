@@ -11,9 +11,14 @@ calls ``submit`` or the step limit is reached.
 A dataset row is made by :func:`dataset_row`: the model's ``input`` and
 function ``tools`` (``bash``, ``read_file``, ``write_file``, ``submit``), plus
 the task itself under ``evalsi_record`` and ``evalsi_spec``, which NeMo Gym
-passes to ``reset`` untouched. Each call in a response is one step; a response
-with no function call costs one step and gets a reminder. The observation is
-the calls' outputs.
+passes to ``reset`` and ``/step`` untouched. Each call in a response is one step.
+The calls' outputs go back to the agent in ``info["tool_outputs"]`` (what
+``gymnasium_agent`` turns into function-call outputs); a response with no
+function call costs one step and the observation is a reminder.
+
+The reset response sets ``supports_explicit_close`` and the server has a
+``/close`` route, which the agent calls when a rollout fails part-way, so no
+sandbox outlives its episode.
 
 A checker that cannot run raises: NeMo Gym's step response has no unscored
 marker, and a reward of 0 would train on an infrastructure failure, so the
@@ -28,7 +33,9 @@ from collections.abc import Mapping
 from typing import Any
 
 try:
+    from fastapi import FastAPI, Request
     from nemo_gym.openai_utils import NeMoGymResponse, NeMoGymResponseFunctionToolCall
+    from nemo_gym.server_utils import SESSION_ID_KEY
     from pydantic import ConfigDict, Field
     from resources_servers.gymnasium import GymnasiumServer
 except ImportError as exc:  # pragma: no cover - depends on the install
@@ -116,9 +123,11 @@ class TaskResourcesServer(GymnasiumServer):
             pool=self._pool(),
             process_rewards=process,
         )
-        instruction = await env.reset(record, spec)
+        await env.reset(record, spec)
         self.session_state[session_id] = env
-        return instruction, {"record_id": record.id}
+        # The task is already the row's ``input``; an observation here would
+        # make the agent add it to the conversation a second time.
+        return None, {"record_id": record.id, "supports_explicit_close": True}
 
     async def step(
         self, action: NeMoGymResponse, metadata: dict[str, Any], session_id: str | None = None
@@ -132,13 +141,14 @@ class TaskResourcesServer(GymnasiumServer):
         actions = [gym.action_from(c.name, c.arguments) for c in calls] or [
             gym.Action("", error=REMINDER)
         ]
-        observations: list[str] = []
+        tool_outputs: list[dict[str, Any]] = []
         outcome: float | None = 0.0
         process = 0.0
         info: dict[str, Any] = {}
-        for act in actions:
+        for call, act in zip(calls or [None], actions, strict=True):
             result = await env.step(act)
-            observations.append(result.observation)
+            if call is not None:
+                tool_outputs.append(self.tool_output(call, result.observation))
             process += result.process_reward or 0.0
             info = result.info
             if result.done:
@@ -148,19 +158,49 @@ class TaskResourcesServer(GymnasiumServer):
                 outcome = result.reward
                 ended = info.get("ended")
                 return (
-                    "\n".join(o for o in observations if o) or None,
+                    None,
                     outcome + process,
                     ended == "submitted",
                     ended == "max_steps",
-                    {**info, "outcome_reward": outcome, "process_reward": process},
+                    {
+                        **info,
+                        "tool_outputs": tool_outputs,
+                        "outcome_reward": outcome,
+                        "process_reward": process,
+                    },
+                )
+            if call is None:
+                # No function call to answer: the reminder goes in as a message.
+                return (
+                    result.observation,
+                    process,
+                    False,
+                    False,
+                    {**info, "outcome_reward": 0.0, "process_reward": process},
                 )
         return (
-            "\n".join(observations),
+            None,
             process,
             False,
             False,
-            {**info, "outcome_reward": 0.0, "process_reward": process},
+            {
+                **info,
+                "tool_outputs": tool_outputs,
+                "outcome_reward": 0.0,
+                "process_reward": process,
+            },
         )
+
+    def setup_webserver(self) -> FastAPI:
+        app: FastAPI = super().setup_webserver()
+        # The agent calls /close when a rollout fails part-way, so a sandbox
+        # is never left running for a session that will not step again.
+        app.post("/close")(self._close_endpoint)
+        return app
+
+    async def _close_endpoint(self, request: Request) -> dict[str, Any]:
+        await self._drop(request.session.get(SESSION_ID_KEY))
+        return {}
 
     async def _drop(self, session_id: str | None) -> None:
         env = self.session_state.pop(session_id, None)

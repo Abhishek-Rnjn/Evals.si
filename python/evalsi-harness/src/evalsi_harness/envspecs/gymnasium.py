@@ -26,6 +26,9 @@ returning a reward of 0.
 
 Gymnasium's ``Env`` is synchronous and the task environment is not, so this
 runs a private event loop in a background thread; call ``close()`` when done.
+Leave ``client`` unset (the environment then connects to the sandbox service
+on that loop): a sandbox client created on another event loop is bound to it
+and fails here. Pass ``client`` only for one that is not (the test double).
 Built against ``gymnasium`` 1.4 and checked with its ``check_env``.
 """
 

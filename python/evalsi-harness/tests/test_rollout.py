@@ -245,3 +245,18 @@ def test_cancelling_the_run_destroys_every_sandbox() -> None:
         await pool.aclose()
 
     run(go())
+
+
+def test_one_tasks_failing_environment_does_not_take_the_batch_down() -> None:
+    async def go() -> None:
+        client = LocalSandboxClient()
+        broken = spec_of({"environment": {**ENVIRONMENT, "setup": ["exit 3"]}})
+        model = Scripted([mark_done(), ModelTurn(text="d")])
+        pool = RolloutPool(model, client)
+        bad, good = await pool.run([(record(id="bad"), broken), (record(id="good"), SPEC)])
+        assert (bad.status, bad.reward) == (ERROR, None)
+        assert "environment" in bad.error
+        assert (good.status, good.reward) == (DONE, 1.0)
+        await pool.aclose()
+
+    run(go())

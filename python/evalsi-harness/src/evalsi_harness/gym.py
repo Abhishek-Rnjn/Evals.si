@@ -341,7 +341,8 @@ class TaskEnv:
             self._memory,
         )
         total: float | None = 0.0
-        for reward in self.process_rewards:
+        for slot, reward in enumerate(self.process_rewards):
+            context.slot = slot
             value = await reward(context)
             total = None if value is None or total is None else total + value
         return total, context.errors

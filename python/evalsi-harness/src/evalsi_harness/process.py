@@ -45,8 +45,11 @@ class ProcessContext:
     action: str = ""
     observation: str = ""
     is_error: bool = False
-    # State a reward keeps for this episode only, keyed by the reward itself.
+    # State a reward keeps for this episode only, under ``slot``: the reward's
+    # position in the environment's ``process_rewards`` (so it survives a resume
+    # with new reward objects), which the environment sets before each call.
     memory: dict[int, Any] = field(default_factory=dict)
+    slot: int = 0
     errors: list[str] = field(default_factory=list)
 
 
@@ -140,7 +143,7 @@ class EvaluatorReward:
                     value = _number(score)
         if value is None:
             return None
-        before = context.memory.get(id(self), self.baseline)
-        context.memory[id(self)] = value
+        before = context.memory.get(context.slot, self.baseline)
+        context.memory[context.slot] = value
         raw = value if self.mode == "level" else value - before
         return self.weight * self._sign * raw

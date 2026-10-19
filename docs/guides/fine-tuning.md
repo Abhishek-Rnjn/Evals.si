@@ -165,7 +165,7 @@ from evalsi_harness.envspecs.nemogym import TaskResourcesServer, dataset_row
 row = dataset_row(record, spec)                  # a NeMo Gym dataset row (nemo-gym==0.7.0, Python 3.13+)
 ```
 
-`submit` ends a Gymnasium episode as `terminated`, the step limit as `truncated`; the checker grades both. `TaskResourcesServer` is a NeMo Gym `GymnasiumServer` (`/reset`, `/step`) for use with its `gymnasium_agent`: each function call in a response is one step. A checker that cannot run raises in both (`InfrastructureError`, a failed request) because a reward of 0 would train on an infrastructure failure. Both are tested against the real packages in CI, with a test client for NeMo Gym's endpoints; neither has driven a trainer.
+`submit` ends a Gymnasium episode as `terminated`, the step limit as `truncated`; the checker grades both. `TaskResourcesServer` is a NeMo Gym `GymnasiumServer` (`/reset`, `/step`) for use with its `gymnasium_agent`: each function call in a response is one step. A checker that cannot run raises in both (`InfrastructureError`, a failed request) because a reward of 0 would train on an infrastructure failure. Both are tested against the real packages in CI; for NeMo Gym that includes its own `gymnasium_agent` driving an episode with a scripted model (the server behind a test client), and neither has driven a trainer. `TaskGymEnv` runs its own event loop on a thread, so leave `client` unset and let it connect to the sandbox service itself.
 
 #### Step-level rewards
 
@@ -188,7 +188,7 @@ pool.stop()                                               # pause the running on
 paused = await pool.run(resume=paused_trajectories)       # ...and continue them later
 ```
 
-`token_trace=True` asks a vLLM server for each turn's prompt token IDs, generated token IDs and log-probabilities (`return_token_ids`, `return_tokens_as_token_ids`, `logprobs`), so a trainer need not re-tokenize. What the server did not return is named in `TokenTrace.missing` and `Trajectory.tokens_complete` is false; a turn served by a fallback model has no tokens at all. It is set from code, not from a run spec, and it was written against vLLM's documented fields and tested against a fake server: SGLang's fields were not checked and there has been no live vLLM run. Pausing keeps a snapshot of each episode's sandbox, so it needs a rung that snapshots (bubblewrap, Firecracker); on the pod rung a stopped rollout is `cancelled` and cannot be resumed. Cancelling the `run` destroys every sandbox.
+`token_trace=True` asks a vLLM server for each turn's prompt token IDs, generated token IDs and log-probabilities (`return_token_ids`, `return_tokens_as_token_ids`, `logprobs`), so a trainer need not re-tokenize. What the server did not return is named in `TokenTrace.missing` and `Trajectory.tokens_complete` is false; a turn served by a fallback model has no tokens at all. It is set from code, not from a run spec, and it was written against vLLM's documented fields and tested against a fake server: SGLang's fields were not checked and there has been no live vLLM run. Pausing keeps a snapshot of each episode's sandbox, so it needs a rung that snapshots (it ran on bubblewrap and Landlock in the real-rung tests; Firecracker is untested); on the pod rung a stopped rollout is `cancelled` and cannot be resumed. Cancelling the `run` destroys every sandbox.
 
 ## Evaluating checkpoints
 
