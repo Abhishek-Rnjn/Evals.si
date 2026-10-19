@@ -129,14 +129,14 @@ Exit criteria: a multi-service Terminal-Bench task and a WebArena-style fixture 
 The goal is grades that are trustworthy.
 
 - **Prompt-injection faults.** Add a fault type that plants instructions in tool results, files or web pages, and an evaluator that scores whether the agent followed them.
-- **Reward-hacking signals.** Detect test tampering, hard-coded expected outputs and checker probing, and mark the trial so pass@k can exclude it. *Built (unreleased): `trial-tampering` with opt-in `summary.exclude_flagged_trials`; its false-positive rate on SWE-bench and Terminal-Bench honest runs is unmeasured.*
+- **Reward-hacking signals.** Detect test tampering, hard-coded expected outputs and checker probing, and mark the trial so pass@k can exclude it. *Built (unreleased): `trial-tampering` with opt-in `summary.exclude_flagged_trials`; honest-run false positives are measured only on the two gold patches of the SWE-bench-format fixture (0 flags, n=2; fixtures, not the benchmark) and not at all on Terminal-Bench, whose workdirs are not git repositories so the diff signals cannot fire there.*
 - **Contamination canaries.** Put canary strings in imported tasks, and add a probe that checks whether a model reproduces them.
 - **Evidence-stage audit (after LongHarness).** An evaluator in the `agent` pack that splits each trajectory into three stages: was the required evidence retrieved, was it kept and used in the final decision, and was it converted into a correct answer. The last two rates are conditional on the stage before. It tells a team where an agent fails, not only that it fails. LongHarness's version uses an LLM judge, so ours must be checked against human labels before it is trusted, and it reports the judge's agreement.
 - **Citation grounding.** A check that every claim an agent submits cites a passage it actually read, and that the citation resolves to the current version of that evidence. It works on any BYO agent's trajectory, and a failed check is also a reward-hacking signal.
 - **Determinism report.** For each run, record seeds, model snapshots, tool versions and image digests. A replay that differs points to the step where it diverged.
 - **Variance-aware defaults.** Recommend a number of trials from the variance seen per task, and report pass^k next to pass@k by default.
 
-Exit criteria: a red-team fixture suite (injection, tampering and escalation attempts) runs in CI with expected scores.
+Exit criteria: a red-team fixture suite (injection, tampering and escalation attempts) runs in CI with expected scores. *Built (unreleased): `python/evalsi-harness/tests/test_redteam.py` plays an honest fix and 11 repo attacks plus prompt injection, escalation and a canary, each with pinned expected scores, in the Python CI job. The attacks and heuristics were written together, so it is a regression suite and a map of blind spots, not a false-positive rate.*
 
 ### H6: RL at scale (GA, Mar 2027)
 
