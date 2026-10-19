@@ -15,7 +15,7 @@ const ogImage = `${site}${base === "/" ? "" : base}/og.png`;
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 
 const guides = [
-  "agent-runs", "gate-an-agent-in-ci", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
+  "onboarding", "agent-runs", "gate-an-agent-in-ci", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-harness",
   "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2",
 ];
@@ -76,6 +76,8 @@ export default defineConfig({
         ] },
         { label: "Design", items: [
           { slug: "docs/architecture" },
+          { label: "Product roadmap", slug: "docs/product-roadmap" },
+          { label: "Product strategy", slug: "docs/product-strategy" },
           { slug: "docs/roadmap" },
           { label: "Decision records", slug: "docs/decisions", collapsed: true },
         ] },

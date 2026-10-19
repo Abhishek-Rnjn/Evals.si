@@ -22,11 +22,13 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
-  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["harness2", 20],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21],
 ];
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
 pages.set("docs/LEFTOVERS.md", "/docs/roadmap/");
+pages.set("docs/PRODUCT-ROADMAP.md", "/docs/product-roadmap/");
+pages.set("docs/PRODUCT-STRATEGY.md", "/docs/product-strategy/");
 pages.set("docs/decisions/README.md", "/docs/decisions/");
 const decisions = (await fs.readdir(path.join(root, "docs/decisions"))).filter((f) => /^\d{4}-.*\.md$/.test(f)).sort();
 for (const f of decisions) pages.set(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
@@ -107,6 +109,8 @@ await fs.mkdir(out, { recursive: true });
 for (const [name] of guides) await importDoc(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 await importDoc("docs/DESIGN.md", "/docs/architecture/", { title: "Architecture and implementation plan" });
 await importDoc("docs/LEFTOVERS.md", "/docs/roadmap/", { title: "Roadmap and open leftovers" });
+await importDoc("docs/PRODUCT-ROADMAP.md", "/docs/product-roadmap/", { title: "Product roadmap", description: "Proposed work for production-agent and enterprise AI teams, with priorities, dependencies and acceptance criteria." });
+await importDoc("docs/PRODUCT-STRATEGY.md", "/docs/product-strategy/", { title: "Product strategy", description: "Competitive research and proposed adoption, deployment and governance strategy for Evals.si." });
 await importDoc("docs/decisions/README.md", "/docs/decisions/", { title: "Decision records" });
 for (const f of decisions) await importDoc(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
 await importDoc("CHANGELOG.md", "/docs/changelog/", { description: "What changed in each Evals.si release." });
@@ -150,6 +154,8 @@ ${guides.map(([n]) => `- [${n.replace(/-/g, " ")}](${BASE}/docs/guides/${n}/)`).
 ## Understand the design
 
 - [Architecture and implementation plan](${BASE}/docs/architecture/)
+- [Product roadmap](${BASE}/docs/product-roadmap/): proposed work, dependencies and acceptance criteria.
+- [Product strategy](${BASE}/docs/product-strategy/): competitive research and adoption plan.
 - [Decision records](${BASE}/docs/decisions/)
 - [Roadmap and open leftovers](${BASE}/docs/roadmap/)
 `);

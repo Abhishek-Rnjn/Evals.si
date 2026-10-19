@@ -2,6 +2,11 @@
 
 These items were deferred, left unverified, or are described in [DESIGN.md](DESIGN.md) but not built. Each item names where it was recorded.
 
+The proposed [product roadmap](PRODUCT-ROADMAP.md) turns the [product strategy](PRODUCT-STRATEGY.md)
+for production-agent and enterprise AI teams into prioritized work IDs,
+dependencies and acceptance criteria. This inventory retains the implementation
+and verification evidence behind that plan.
+
 The [runtime follow-up](verification/RUNTIME-VERIFICATION-2026-10-18.md)
 retains all 50 original inventory IDs, adds a real-KVM test/workflow with no
 simulated fallback, and rechecks free local MLflow/Phoenix score persistence.
@@ -72,7 +77,13 @@ Built from a read of the Harness² source and tested on synthetic fixtures; noth
 
 ## Production-readiness review (2026-10-16)
 
-A review against a generic checklist for software that serves paying customers. Evals.si is self-hosted, so the billing, SOC 2/HIPAA/PCI, account-system (SAML, SCIM, MFA, password reset, impersonation), status-page, CDN, email-deliverability and consumer-UX items do not apply: the operator's identity provider and platform own them. They become relevant only if someone runs Evals.si as a hosted service.
+This review focused on self-hosted installations, where the customer's identity
+provider and platform own many account and infrastructure controls. Enterprise
+customers can still require vendor security/procurement evidence and supported
+operating procedures for a self-hosted product. The proposed [enterprise roadmap](PRODUCT-ROADMAP.md#enterprise-aiplatform-workflow)
+tracks those requirements separately from additional hosted-service work such as
+billing and account operations. Certification, native provisioning/federation and
+other buyer-specific controls require an explicit scope and evidence.
 
 Two findings were fixed on the review branch:
 
