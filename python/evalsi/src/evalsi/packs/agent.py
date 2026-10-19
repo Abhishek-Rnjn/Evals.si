@@ -22,6 +22,13 @@ from evalsi.judges import JudgeError
 from evalsi.mechanisms import CONTEXT_COUNTERS, called_tools, context_acted
 from evalsi.packs.agent_checks import citation_grounding, handoff_correctness
 from evalsi.packs.agent_hacking import trial_tampering
+from evalsi.packs.contamination import contamination_fetch
+from evalsi.packs.harness_edit import (
+    edit_mechanism_ran,
+    edit_policy_violation,
+    edit_scope,
+    edit_weakened_guardrail,
+)
 from evalsi.packs.judge import fence, judge_cost, judge_metadata, rubric_score
 from evalsi.registry import Pack
 from evalsi.types import Record, Score, ToolUse, Trajectory
@@ -556,7 +563,8 @@ PACK = Pack(
         "Agent trajectories and agent runs: tool-call accuracy, trajectory match, tool "
         "errors, loops, step budgets, judge-rated goal completion, environment-checked "
         "task success, judge-reviewed code quality, sandbox policy violations, reward-hacking "
-        "signals, efficiency and harness mechanism activity."
+        "signals, harness-edit checks, contamination fetches, efficiency and harness "
+        "mechanism activity."
     ),
     evaluators=[
         tool_call_accuracy,
@@ -572,6 +580,11 @@ PACK = Pack(
         code_quality,
         policy_violations,
         trial_tampering,
+        edit_weakened_guardrail,
+        edit_policy_violation,
+        edit_scope,
+        edit_mechanism_ran,
+        contamination_fetch,
         agent_efficiency,
     ],
 )
