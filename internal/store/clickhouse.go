@@ -236,8 +236,10 @@ func (c *clickhouse) PutTraces(ctx context.Context, traces []TraceWrite) error {
 	if len(traces) == 0 {
 		return nil
 	}
-	if err := c.copyLegacyTraceScores(ctx, traces); err != nil {
-		return err
+	if skip, _ := ctx.Value(watchSkipLegacyCopyKey{}).(bool); !skip {
+		if err := c.copyLegacyTraceScores(ctx, traces); err != nil {
+			return err
+		}
 	}
 	var body bytes.Buffer
 	enc := json.NewEncoder(&body)
@@ -628,11 +630,8 @@ func (c *clickhouse) currentRecordHash(ctx context.Context, project, id string) 
 
 // Preserve scores on an unchanged legacy record when assigning its first hash.
 func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWrite) error {
-	var projects, ids []string
 	byKey := map[[2]string]TraceWrite{}
 	for _, t := range traces {
-		projects = append(projects, t.Summary.GetProject())
-		ids = append(ids, t.Summary.GetTraceId())
 		byKey[[2]string{t.Summary.GetProject(), t.Summary.GetTraceId()}] = t
 	}
 	type legacyCopy struct {
@@ -644,39 +643,53 @@ func (c *clickhouse) copyLegacyTraceScores(ctx context.Context, traces []TraceWr
 	for _, t := range traces {
 		references = append(references, map[string]any{"project": t.Summary.GetProject(), "trace_id": t.Summary.GetTraceId(), "record_hash": traceProjection(ctx, t.Summary, t.Record), "start_ns": t.Summary.GetStartTime().AsTime().UnixNano()})
 	}
-	err := c.query(ctx, `SELECT project,trace_id,record_hash,start_ns,base64Encode(record) AS record FROM trace_current WHERE has({projects:Array(String)},project) AND has({ids:Array(String)},trace_id)`, chParams{"projects": chArray(projects), "ids": chArray(ids)}, func(line []byte) error {
-		var row struct {
-			Project string `json:"project"`
-			TraceID string `json:"trace_id"`
-			Record  string `json:"record"`
-			Hash    string `json:"record_hash"`
-			Start   int64  `json:"start_ns"`
+	const chunkSize = 80
+	for lo := 0; lo < len(traces); lo += chunkSize {
+		chunk := traces[lo:min(lo+chunkSize, len(traces))]
+		projectSet := map[string]bool{}
+		var projects, ids []string
+		for _, t := range chunk {
+			p := t.Summary.GetProject()
+			if !projectSet[p] {
+				projectSet[p] = true
+				projects = append(projects, p)
+			}
+			ids = append(ids, t.Summary.GetTraceId())
 		}
-		if err := json.Unmarshal(line, &row); err != nil {
-			return err
-		}
-		t, ok := byKey[[2]string{row.Project, row.TraceID}]
-		if !ok {
+		err := c.query(ctx, `SELECT project,trace_id,record_hash,start_ns,base64Encode(record) AS record FROM trace_current WHERE project IN {projects:Array(String)} AND trace_id IN {ids:Array(String)}`, chParams{"projects": chArray(projects), "ids": chArray(ids)}, func(line []byte) error {
+			var row struct {
+				Project string `json:"project"`
+				TraceID string `json:"trace_id"`
+				Record  string `json:"record"`
+				Hash    string `json:"record_hash"`
+				Start   int64  `json:"start_ns"`
+			}
+			if err := json.Unmarshal(line, &row); err != nil {
+				return err
+			}
+			t, ok := byKey[[2]string{row.Project, row.TraceID}]
+			if !ok {
+				return nil
+			}
+			// Preserve the outgoing binding's expiry before overwriting its
+			// projection, even when different input means no scores are copied.
+			references = append(references, map[string]any{"project": row.Project, "trace_id": row.TraceID, "record_hash": row.Hash, "start_ns": row.Start})
+			record := &evalsiv1alpha1.Record{}
+			if err := unb64(row.Record, record); err != nil {
+				return err
+			}
+			target, input := traceProjection(ctx, t.Summary, t.Record), RecordHash(record)
+			// Copy only when entering/leaving a legacy unversioned binding.
+			// A new watch generation after retention must never inherit scores
+			// from the expired generation if its old projection is still visible.
+			if legacyCopyAllowed(ctx, row.Project, row.TraceID, row.Hash, row.Start) && row.Hash != target && (row.Hash == "" || row.Hash == input || target == input) && proto.Equal(record, t.Record) {
+				unchanged = append(unchanged, legacyCopy{Trace: t, OldHash: row.Hash})
+			}
 			return nil
-		}
-		// Preserve the outgoing binding's expiry before overwriting its
-		// projection, even when different input means no scores are copied.
-		references = append(references, map[string]any{"project": row.Project, "trace_id": row.TraceID, "record_hash": row.Hash, "start_ns": row.Start})
-		record := &evalsiv1alpha1.Record{}
-		if err := unb64(row.Record, record); err != nil {
+		})
+		if err != nil {
 			return err
 		}
-		target, input := traceProjection(ctx, t.Summary, t.Record), RecordHash(record)
-		// Copy only when entering/leaving a legacy unversioned binding.
-		// A new watch generation after retention must never inherit scores
-		// from the expired generation if its old projection is still visible.
-		if legacyCopyAllowed(ctx, row.Project, row.TraceID, row.Hash, row.Start) && row.Hash != target && (row.Hash == "" || row.Hash == input || target == input) && proto.Equal(record, t.Record) {
-			unchanged = append(unchanged, legacyCopy{Trace: t, OldHash: row.Hash})
-		}
-		return nil
-	})
-	if err != nil {
-		return err
 	}
 	for offset := 0; offset < len(references); offset += retentionBatchSize {
 		var body bytes.Buffer

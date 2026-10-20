@@ -111,6 +111,23 @@ def test_codex_failed_turn() -> None:
     assert run.error == "rate limited"
 
 
+def test_codex_completed_turn_clears_transient_reconnect_and_fallback_warnings() -> None:
+    run = parse_output(
+        "codex-json",
+        '{"type":"thread.started","thread_id":"t"}\n'
+        '{"type":"item.completed","item":{"id":"i0","type":"error","message":"fallback meta"}}\n'
+        '{"type":"turn.started"}\n'
+        '{"type":"error","message":"Reconnecting... 2/5 (WebSocket protocol error)"}\n'
+        '{"type":"item.completed","item":{"id":"i1","type":"error","message":"HTTPS fallback"}}\n'
+        '{"type":"item.completed","item":{"id":"i2","type":"agent_message","text":"Fixed add."}}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":20}}\n',
+    )
+    assert run is not None
+    assert run.error == ""
+    assert run.answer == "Fixed add."
+    assert (run.usage.input_tokens, run.usage.output_tokens) == (100, 20)
+
+
 def test_gemini_stream() -> None:
     run = read("gemini-json", "gemini-0.64.0-fix-calc.jsonl")
     assert run.answer == "Fixed add."
@@ -129,7 +146,30 @@ def test_gemini_json_object_with_session_metrics() -> None:
     out = json.dumps({"session_id": "s", "response": "done", "stats": stats})
     run = parse_output("gemini-json", out)
     assert run is not None
+    assert run.session_id == "s"
     assert (run.usage.input_tokens, run.usage.output_tokens) == (40, 9)
+
+
+def test_gemini_consecutive_tool_turns_without_intermediate_text() -> None:
+    out = (
+        '{"type":"init","session_id":"g2","model":"gemini-2.5-flash"}\n'
+        '{"type":"tool_use","tool_name":"read_file","tool_id":"c1","parameters":{"p":"calc.js"}}\n'
+        '{"type":"tool_result","tool_id":"c1","status":"success","output":"a - b"}\n'
+        '{"type":"tool_use","tool_name":"write_file","tool_id":"c2","parameters":{"p":"calc.js"}}\n'
+        '{"type":"tool_result","tool_id":"c2","status":"success","output":"ok"}\n'
+        '{"type":"message","role":"assistant","content":"Fixed calc.js.","delta":true}\n'
+        '{"type":"result","status":"success","stats":{"input_tokens":80,"output_tokens":15}}\n'
+    )
+    run = parse_output("gemini-json", out)
+    assert run is not None
+    assert kinds(run) == [
+        ("llm", "gemini"),
+        ("tool", "read_file"),
+        ("llm", "gemini"),
+        ("tool", "write_file"),
+        ("llm", "gemini"),
+    ]
+    assert run.answer == "Fixed calc.js."
 
 
 def test_gemini_single_json_object() -> None:

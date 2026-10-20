@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
@@ -234,7 +236,8 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 		}
 		ctx = context.WithValue(ctx, watchVersionKey{}, watchReservation{Start: end - int64(len(items)) + 1, End: end})
 		tx, err = s.beginReservedWatchWrite(ctx)
-		if errors.Is(err, errWatchReservationStale) {
+		stale := errors.Is(err, errWatchReservationStale)
+		if stale {
 			ctx, tx, err = s.beginVersionedWatchWrite(ctx, len(items))
 		}
 		if err != nil {
@@ -243,9 +246,11 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 		if err := checkWatchLease(ctx, tx, lease); err != nil {
 			return nil, err
 		}
-		eligible, writes, heads, err = s.prepareWatchTraces(ctx, tx, items)
-		if err != nil {
-			return nil, err
+		if stale {
+			eligible, writes, heads, err = s.prepareWatchTraces(ctx, tx, items)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	if len(writes) > 0 {
@@ -395,12 +400,184 @@ func traceProjection(ctx context.Context, summary *evalsiv1alpha1.TraceSummary, 
 
 // SnapshotHash tracks query-visible metadata independently of evaluator input.
 func SnapshotHash(summary *evalsiv1alpha1.TraceSummary, record *evalsiv1alpha1.Record) string {
+	return snapshotHashFromRecordHash(RecordHash(record), summary)
+}
+
+func snapshotHashFromRecordHash(recHash string, summary *evalsiv1alpha1.TraceSummary) string {
 	blob, err := (proto.MarshalOptions{Deterministic: true}).Marshal(summary)
 	if err != nil {
 		panic(err)
 	}
 	hash := sha256.New()
-	_, _ = hash.Write([]byte(RecordHash(record)))
+	_, _ = hash.Write([]byte(recHash))
 	_, _ = hash.Write(blob)
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+type watchSkipLegacyCopyKey struct{}
+
+// PutUnwatchedTraces stores assembled traces in a single batch when no online
+// policies exist, recording the same head and retention metadata as PutWatchTraces.
+func (s *Store) PutUnwatchedTraces(ctx context.Context, lease PolicyLease, writes []TraceWrite) error {
+	if len(writes) == 0 {
+		return nil
+	}
+	type preppedTrace struct {
+		project, traceID, service string
+		startNS                   int64
+		recHash, snapHash         string
+		sumBlob, recBlob          []byte
+	}
+	prepped := make([]preppedTrace, len(writes))
+	workers := min(len(writes), 8)
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := w; i < len(writes); i += workers {
+				wr := writes[i]
+				recHash := RecordHash(wr.Record)
+				prepped[i] = preppedTrace{
+					project:  wr.Summary.GetProject(),
+					traceID:  wr.Summary.GetTraceId(),
+					service:  wr.Summary.GetService(),
+					startNS:  wr.Summary.GetStartTime().AsTime().UnixNano(),
+					recHash:  recHash,
+					snapHash: snapshotHashFromRecordHash(recHash, wr.Summary),
+					sumBlob:  marshal(wr.Summary),
+					recBlob:  marshal(wr.Record),
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	tx, err := s.beginWatchWrite(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := checkWatchLease(ctx, tx, lease); err != nil {
+		return err
+	}
+	end, err := nextWatchClock(ctx, tx, len(writes))
+	if err != nil {
+		return err
+	}
+	startVer := end - int64(len(writes)) + 1
+	projections := make(map[[2]string]string, len(writes))
+	bindings := make([]string, len(writes))
+	for i := range prepped {
+		rev := startVer + int64(i)
+		p := &prepped[i]
+		b := scoreBinding(p.recHash, rev)
+		bindings[i] = b
+		projections[[2]string{p.project, p.traceID}] = b
+	}
+	// Deduplicate by (project, trace_id) within each multi-row chunk so ON CONFLICT never sees two identical keys in one statement.
+	const chunkRows = 100
+	for lo := 0; lo < len(prepped); lo += chunkRows {
+		hi := min(lo+chunkRows, len(prepped))
+		seen := map[[2]string]bool{}
+		unique := true
+		for i := lo; i < hi; i++ {
+			k := [2]string{prepped[i].project, prepped[i].traceID}
+			if seen[k] {
+				unique = false
+				break
+			}
+			seen[k] = true
+		}
+		if !unique {
+			for i := lo; i < hi; i++ {
+				rev := startVer + int64(i)
+				p := &prepped[i]
+				b := bindings[i]
+				if err := retainWatchScore(ctx, tx, p.project, p.traceID, b, p.startNS); err != nil {
+					return err
+				}
+				if err := putWatchHead(ctx, tx, watchHead{
+					Project: p.project, TraceID: p.traceID, Revision: rev, ScoreRevision: rev,
+					Hash: p.recHash, SnapshotHash: p.snapHash, ProjectionHash: b,
+					StartNS: p.startNS, Published: true,
+				}); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		var refValues, headValues strings.Builder
+		refArgs := make([]any, 0, (hi-lo)*4)
+		headArgs := make([]any, 0, (hi-lo)*10)
+		for i := lo; i < hi; i++ {
+			if i > lo {
+				refValues.WriteByte(',')
+				headValues.WriteByte(',')
+			}
+			refValues.WriteString("(?,?,?,?)")
+			headValues.WriteString("(?,?,?,?,?,?,?,?,?,?)")
+			rev := startVer + int64(i)
+			p := &prepped[i]
+			b := bindings[i]
+			refArgs = append(refArgs, p.project, p.traceID, b, p.startNS)
+			headArgs = append(headArgs, p.project, p.traceID, rev, p.recHash, p.startNS, true, false, b, p.snapHash, rev)
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO watch_score_references(project,trace_id,record_hash,start_ns) VALUES `+refValues.String()+` ON CONFLICT(project,trace_id,record_hash) DO UPDATE SET start_ns=CASE WHEN excluded.start_ns>watch_score_references.start_ns THEN excluded.start_ns ELSE watch_score_references.start_ns END,dirty=CASE WHEN excluded.start_ns>watch_score_references.start_ns THEN 1 ELSE watch_score_references.dirty END`, refArgs...); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO watch_trace_heads(project,trace_id,revision,record_hash,start_ns,published,deleted,projection_hash,snapshot_hash,score_revision) VALUES `+headValues.String()+` ON CONFLICT(project,trace_id) DO UPDATE SET revision=excluded.revision,record_hash=excluded.record_hash,start_ns=excluded.start_ns,published=excluded.published,deleted=excluded.deleted,projection_hash=excluded.projection_hash,snapshot_hash=excluded.snapshot_hash,score_revision=excluded.score_revision`, headArgs...); err != nil {
+			return err
+		}
+	}
+	ctx = context.WithValue(ctx, watchProjectionKey{}, projections)
+	ctx = context.WithValue(ctx, watchVersionKey{}, watchReservation{Start: startVer, End: end})
+	ctx = context.WithValue(ctx, watchSkipLegacyCopyKey{}, true)
+	if _, ok := s.traces.(*sqlTraces); ok {
+		for lo := 0; lo < len(prepped); lo += chunkRows {
+			hi := min(lo+chunkRows, len(prepped))
+			seen := map[[2]string]bool{}
+			unique := true
+			for i := lo; i < hi; i++ {
+				k := [2]string{prepped[i].project, prepped[i].traceID}
+				if seen[k] {
+					unique = false
+					break
+				}
+				seen[k] = true
+			}
+			if !unique {
+				for i := lo; i < hi; i++ {
+					p := &prepped[i]
+					if _, err := tx.ExecContext(ctx, putTraceSQL, p.project, p.traceID, p.service, p.startNS, p.sumBlob, p.recBlob, bindings[i]); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			var trValues strings.Builder
+			trArgs := make([]any, 0, (hi-lo)*7)
+			for i := lo; i < hi; i++ {
+				if i > lo {
+					trValues.WriteByte(',')
+				}
+				trValues.WriteString("(?,?,?,?,?,?,?)")
+				p := &prepped[i]
+				trArgs = append(trArgs, p.project, p.traceID, p.service, p.startNS, p.sumBlob, p.recBlob, bindings[i])
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO traces (project, trace_id, service, start_ns, summary, record, record_hash) VALUES `+trValues.String()+` ON CONFLICT (project, trace_id) DO UPDATE SET service = excluded.service, start_ns = excluded.start_ns, summary = excluded.summary, record = excluded.record, record_hash=excluded.record_hash`, trArgs...); err != nil {
+				return err
+			}
+		}
+		return tx.Commit()
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	tx = nil
+	return s.traces.PutTraces(ctx, writes)
 }

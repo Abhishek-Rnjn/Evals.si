@@ -8,6 +8,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - `evalsid` Firecracker snapshots (`internal/sandbox/firecracker.go`) now disable HTTP/2 keep-alives on the vsock transport and wait for the guest agent to recover after `resume()`, preventing `unavailable: unexpected EOF` on the first command or file write after `PUT /snapshot/create` on real KVM.
 - `evalsid sandbox probe` (`internal/sandbox/sandbox.go`) now preserves `res.Error` (which carries the `mode: privileged` and `ladder: [pod]` fallback hint when `bwrap` fails with `RTM_NEWADDR: Operation not permitted` on Ubuntu 24.04) instead of truncating at the first newline of `stderr`.
+- `parse_codex` and `parse_gemini` (`python/evalsi-harness/src/evalsi_harness/readers.py`) now handle real `codex 0.163.0` transient reconnect/fallback warnings when `turn.completed` arrives and real `gemini 0.64.0` consecutive `tool_use` turns and `-o json` `session_id` fields.
+- `internal/watch` and `internal/store` now batch unwatched OTLP trace writes (`PutUnwatchedTraces`) and pending acknowledgments (`AckWatchPendingBatch`) and chunk ClickHouse legacy-score lookups, restoring `TestLoad` `OTLPIngest` throughput above the 20k spans/s stored target (`23.5k/s` SQLite, `27.4k/s` ClickHouse) with PR #101/103 durability enabled; `internal/sandbox/firecracker.go` hard-links immutable snapshot memory files and bounds concurrent warm-pool refills.
 
 ### Added
 

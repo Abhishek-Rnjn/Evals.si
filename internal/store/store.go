@@ -92,7 +92,7 @@ func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)")
 	if err != nil {
 		return nil, err
 	}

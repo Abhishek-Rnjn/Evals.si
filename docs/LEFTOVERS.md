@@ -31,15 +31,27 @@ Istio ambient), native **OpenRLHF 0.11.2** (`vLLM 0.29.0`), native `verl 0.9.1`
 non-streaming, text and tool turns), and trainer-backed `OpenEnv`, `verifiers`
 (shared setup), `Gymnasium` and `NeMo Gym` with step-level process rewards
 (`EvaluatorReward`, `ToolErrorPenalty`) passed. Real-KVM `TestFirecrackerRealKVM`,
-the stock `evalsi-sandboxd` Firecracker chart, clean checking across all four
-rungs (`bwrap`, `landlock`, `firecracker`, `pod`), `RolloutPool` pause/resume on
-Firecracker and cancel on `pod`, a real SWE-bench Verified task
-(`sympy__sympy-20590` on `bwrap` and `firecracker`), all `RECHECK.md` rows,
-concurrent PostgreSQL `CreateRun` reconciliation, direct S3 `ImportDataset`,
-Production Failure Inbox (`#114`), Shared Dataset Catalog (`#117`) and BYO
-agent stop-reason gating (`#116`, `#119`) also passed. AWS S3, external
-mesh/provider cases, Kata node runtime installation, manual accessibility and
-production recovery/scale remain.
+the stock `evalsi-sandboxd` Firecracker chart, 5-node Firecracker warm microVM
+pool (320-microVM capacity, 100 simultaneous microVMs, 256 VM-isolated reward
+rollouts), `TestLoad` (400,000 OTLP spans at 27,401 spans/s stored in ClickHouse,
+200,000-task run at 13,272 tasks/s, 4,096-rollout `RewardThroughput`), M4
+zero-downtime rolling upgrade (`v0.3.0` -> `HEAD`), active run-leader failover,
+`N-1` (`v0.3.0`) reader/writer compatibility against the `HEAD` schema,
+multi-service task environments (`deploy/e2e/services.py` & `services_lifecycle.py`),
+PR #101/103 cluster controls, real `codex 0.163.0` / `gemini 0.64.0` /
+`pi 0.73.1` / `opencode 1.19.3` CLI runs inside `bwrap` under the logging egress
+allowlist, clean checking across all four rungs (`bwrap`, `landlock`,
+`firecracker`, `pod`), `RolloutPool` pause/resume on Firecracker and cancel on
+`pod`, a real SWE-bench Verified task (`sympy__sympy-20590` on `bwrap` and
+`firecracker`), all `RECHECK.md` rows, concurrent PostgreSQL `CreateRun`
+reconciliation, direct S3 `ImportDataset`, Production Failure Inbox (`#114`),
+Shared Dataset Catalog (`#117`), BYO agent stop-reason gating (`#116`, `#119`),
+live MLflow/Phoenix/ClickHouse TraceSource loops + 30-day backfill/lag,
+PostgreSQL PITR, OTLP credential redaction across NATS/PostgreSQL/ClickHouse/API,
+3-node NATS HA, mounted Python/Wasm plugins, MCP OAuth 2.0 + elicitation, and
+the 8-test Playwright Web UI + WCAG suite also passed. AWS S3, external
+SaaS/provider workspaces, Kata node runtime installation, manual screen-reader
+accessibility and 10k-trial multi-cluster scale remain.
 
 ## Milestones
 

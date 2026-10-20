@@ -91,6 +91,13 @@ func watchPendingMatches(ctx context.Context, q querier, item WatchPending) (boo
 // A newer revision of the same stream must survive an older evaluation's ack.
 // A nonempty owner also fences against the policy-engine lease.
 func (s *Store) AckWatchPending(ctx context.Context, lease PolicyLease, item WatchPending) error {
+	return s.AckWatchPendingBatch(ctx, lease, []WatchPending{item})
+}
+
+func (s *Store) AckWatchPendingBatch(ctx context.Context, lease PolicyLease, items []WatchPending) error {
+	if len(items) == 0 {
+		return nil
+	}
 	tx, err := s.beginWatchWrite(ctx)
 	if err != nil {
 		return err
@@ -99,8 +106,10 @@ func (s *Store) AckWatchPending(ctx context.Context, lease PolicyLease, item Wat
 	if err := checkWatchLease(ctx, tx, lease); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload); err != nil {
-		return err
+	for _, item := range items {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM watch_pending WHERE project = ? AND trace_id = ? AND stream = ? AND payload = ?`, item.Project, item.TraceID, item.Stream, item.Payload); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

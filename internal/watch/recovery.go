@@ -43,8 +43,29 @@ func decodePending(blob []byte, p *pendingPayload) error {
 	return gob.NewDecoder(bytes.NewReader(blob)).Decode(p)
 }
 
+func (it *item) initPending() store.WatchPending {
+	if it.summary == nil {
+		it.summary = Summary(it.record, it.info)
+	}
+	recHash := store.RecordHash(it.record)
+	it.pend = store.WatchPending{
+		Project:      it.info.Project,
+		TraceID:      it.record.GetId(),
+		Stream:       it.stream,
+		Payload:      it.payload,
+		RecordHash:   recHash,
+		SnapshotHash: store.SnapshotHash(it.summary, it.record),
+		StartNS:      it.summary.GetStartTime().AsTime().UnixNano(),
+	}
+	return it.pend
+}
+
 func (it item) pending() store.WatchPending {
-	return store.WatchPending{Project: it.info.Project, TraceID: it.record.GetId(), Stream: it.stream, Payload: it.payload, RecordHash: store.RecordHash(it.record), SnapshotHash: store.SnapshotHash(Summary(it.record, it.info), it.record), StartNS: Summary(it.record, it.info).GetStartTime().AsTime().UnixNano()}
+	if it.pend.Project != "" || it.pend.TraceID != "" {
+		it.pend.Payload = it.payload
+		return it.pend
+	}
+	return (&it).initPending()
 }
 
 // recoverPending replays bounded batches, only on the elected policy engine.
@@ -53,12 +74,13 @@ func (e *Engine) recoverPending(ctx context.Context) {
 	if e.follower.Load() {
 		return
 	}
-	rows, err := e.store.ListWatchPending(ctx, e.opts.BatchSize, e.recoveryCursor)
+	limit := max(e.opts.BatchSize, 500)
+	rows, err := e.store.ListWatchPending(ctx, limit, e.recoveryCursor)
 	if err != nil {
 		e.log.Error("reading pending online traces", "err", err)
 		return
 	}
-	if len(rows) < e.opts.BatchSize {
+	if len(rows) < limit {
 		e.recoveryCursor = store.WatchPending{}
 	} else {
 		e.recoveryCursor = rows[len(rows)-1]

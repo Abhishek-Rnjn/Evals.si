@@ -58,10 +58,11 @@ type imageStore struct {
 
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
+	byRef map[string]*imageRoot
 }
 
 func newImageStore(dir string) *imageStore {
-	return &imageStore{dir: dir, locks: map[string]*sync.Mutex{}}
+	return &imageStore{dir: dir, locks: map[string]*sync.Mutex{}, byRef: map[string]*imageRoot{}}
 }
 
 func (st *imageStore) lock(key string) func() {
@@ -92,6 +93,16 @@ func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
 		}
 		return &imageRoot{Ref: ref, Digest: "dir:" + abs, Root: abs, Env: []string{"PATH=" + sandboxPath}}, nil
 	}
+	if st.verifier == nil {
+		st.mu.Lock()
+		cached := st.byRef[ref]
+		st.mu.Unlock()
+		if cached != nil {
+			if _, err := os.Stat(cached.Root); err == nil {
+				return cached, nil
+			}
+		}
+	}
 	img, err := resolveImage(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("image %s: %w", ref, err)
@@ -110,6 +121,9 @@ func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
 	dir := filepath.Join(st.dir, key)
 	if info, err := readImageInfo(dir); err == nil {
 		info.Root = filepath.Join(dir, "root")
+		st.mu.Lock()
+		st.byRef[ref] = info
+		st.mu.Unlock()
 		return info, nil
 	}
 	cfg, err := img.ConfigFile()
@@ -139,6 +153,9 @@ func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
 		return nil, err
 	}
 	info.Root = filepath.Join(dir, "root")
+	st.mu.Lock()
+	st.byRef[ref] = info
+	st.mu.Unlock()
 	return info, nil
 }
 
