@@ -229,3 +229,38 @@ def test_delta_path_needs_a_stream() -> None:
         http_agent(delta_path="delta")
     with pytest.raises(TaskError, match="or stream with delta_path"):
         http_agent()
+
+
+def test_http_stream_without_any_reported_trajectory_is_an_error() -> None:
+    connector = http_agent(stream=True, delta_path="delta", trajectory_path="step")
+    with pytest.raises(TaskError, match="no trajectory at 'step'"):
+        run_http(connector, sse({"delta": "hi"}))
+
+
+def test_http_stream_counts_every_event_against_the_limit() -> None:
+    connector = http_agent(stream=True, delta_path="delta")
+    with (
+        patch("evalsi_harness.connectors.MAX_STREAM_EVENTS", 3),
+        pytest.raises(TaskError, match="more than 3 events"),
+    ):
+        run_http(connector, sse("ping", "ping", "ping", "ping", {"delta": "hi"}))
+
+
+def test_a_reported_session_id_outlives_turns_that_omit_it() -> None:
+    connector = http_agent(output_path="out", trajectory_path="trajectory")
+    replies = iter(
+        [
+            {"out": "one", "trajectory": {"session_id": "agent-7", "steps": []}},
+            {"out": "two", "trajectory": {"steps": []}},
+        ]
+    )
+    mock(connector, lambda req: httpx.Response(200, json=next(replies)))
+
+    async def go() -> Any:
+        try:
+            await connector.send("first")
+            return await connector.send("second")
+        finally:
+            await connector.aclose()
+
+    assert asyncio.run(go()).extra == {"session_id": "agent-7"}

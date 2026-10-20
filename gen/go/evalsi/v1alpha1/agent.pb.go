@@ -419,8 +419,9 @@ type HTTPAgent struct {
 	TrajectoryPath string `protobuf:"bytes,9,opt,name=trajectory_path,json=trajectoryPath,proto3" json:"trajectory_path,omitempty"`
 	// Read the response as server-sent events, each a JSON object. The answer,
 	// messages and usage are taken from the last event that has them at their
-	// path; trajectory_path is read from every event (a step, a list of steps
-	// or {"steps": [...]}) and the steps are kept in order.
+	// path; trajectory_path is read from every event that has it (a step, a
+	// list of steps or {"steps": [...]}, at least one event must) and the
+	// steps are kept in order.
 	Stream bool `protobuf:"varint,10,opt,name=stream,proto3" json:"stream,omitempty"`
 	// With stream: a dotted path to a text chunk in an event. The chunks are
 	// joined into the answer when no event has output_path, which may then be

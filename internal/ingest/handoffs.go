@@ -3,6 +3,7 @@ package ingest
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -19,7 +20,8 @@ func invokedAgent(s *evalsiv1alpha1.Step) string {
 	if name := attrs["gen_ai.agent.name"].GetStringValue(); name != "" {
 		return name
 	}
-	return s.GetName()
+	// The convention names the span "invoke_agent {gen_ai.agent.name}".
+	return strings.TrimPrefix(s.GetName(), "invoke_agent ")
 }
 
 // linkHandoffs adds a handoff step wherever one agent invokes another: an

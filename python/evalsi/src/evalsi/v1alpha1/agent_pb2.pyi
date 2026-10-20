@@ -281,8 +281,9 @@ class HTTPAgent(_message.Message):
     stream: _builtins.bool
     """Read the response as server-sent events, each a JSON object. The answer,
     messages and usage are taken from the last event that has them at their
-    path; trajectory_path is read from every event (a step, a list of steps
-    or {"steps": [...]}) and the steps are kept in order.
+    path; trajectory_path is read from every event that has it (a step, a
+    list of steps or {"steps": [...]}, at least one event must) and the
+    steps are kept in order.
     """
     delta_path: _builtins.str
     """With stream: a dotted path to a text chunk in an event. The chunks are

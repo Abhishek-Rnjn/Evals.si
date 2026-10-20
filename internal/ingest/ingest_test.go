@@ -343,6 +343,7 @@ func TestSubAgentInvocationIsAHandoff(t *testing.T) {
 			kv("gen_ai.operation.name", "invoke_agent"), kv("gen_ai.agent.name", "billing")),
 		span(4, 3, "invoke_agent billing", 120, 700,
 			kv("gen_ai.operation.name", "invoke_agent"), kv("gen_ai.agent.name", "billing")),
+		span(6, 4, "invoke_agent billing", 125, 128, kv("gen_ai.operation.name", "invoke_agent")),
 		span(5, 4, "execute_tool refund", 130, 200,
 			kv("gen_ai.operation.name", "execute_tool"), kv("gen_ai.tool.name", "refund")),
 	}
@@ -356,7 +357,8 @@ func TestSubAgentInvocationIsAHandoff(t *testing.T) {
 		}
 	}
 	// billing re-entering itself is not a transfer.
-	if len(handoffs) != 1 || info.Steps != 6 {
+	// Nor is a span named for its agent without gen_ai.agent.name.
+	if len(handoffs) != 1 || info.Steps != 7 {
 		t.Fatalf("handoffs = %v, steps %d", handoffs, info.Steps)
 	}
 	h := handoffs[0]

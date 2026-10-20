@@ -684,6 +684,8 @@ class HTTPConnector:
         self.history: list[dict[str, str]] = []
         # One conversation per task and trial: trials must not share an agent thread.
         self.session_id = f"{task.run_id or 'run'}/{task.id}/{task.trial}"
+        # The agent's own session id, once it reports one; later turns may not.
+        self.reported_session = ""
 
     async def send(self, text: str) -> AgentReply:
         self.history.append({"role": "user", "content": text})
@@ -724,14 +726,20 @@ class HTTPConnector:
                 steps = steps_from_messages(messages)
         extra: dict[str, Any] = {}
         if self.cfg.trajectory_path:
-            for event in events:
-                value = _get_path(event, self.cfg.trajectory_path)
-                if value is None and self.cfg.stream:
-                    continue  # not every event in a stream reports steps
+            reported = [_get_path(e, self.cfg.trajectory_path) for e in events]
+            # Not every event in a stream reports steps, but one must.
+            if not any(v is not None for v in reported):
+                raise TaskError(
+                    f"http agent: no trajectory at {self.cfg.trajectory_path!r} in the response"
+                )
+            for value in reported:
+                if value is None:
+                    continue
                 trajectory = self._trajectory(value)
                 steps.extend(trajectory.steps)
-                if trajectory.session_id:
-                    extra["session_id"] = trajectory.session_id
+                self.reported_session = trajectory.session_id or self.reported_session
+        if self.reported_session:
+            extra["session_id"] = self.reported_session
         usage = Usage()
         if self.cfg.usage_path:
             usage = _usage(self._last(events, self.cfg.usage_path))
@@ -780,6 +788,7 @@ class HTTPConnector:
 
     async def _stream(self, body: Any) -> list[Any]:
         events: list[Any] = []
+        blocks = 0
         try:
             async with self.client.stream(
                 self.cfg.method or "POST",
@@ -793,7 +802,8 @@ class HTTPConnector:
                         f"http agent {self.cfg.url}: HTTP {response.status_code}: {detail}"
                     )
                 async for block in _sse_events(response):
-                    if len(events) >= MAX_STREAM_EVENTS:
+                    blocks += 1  # every event counts, kept or not
+                    if blocks > MAX_STREAM_EVENTS:
                         raise TaskError(
                             f"http agent {self.cfg.url}: more than {MAX_STREAM_EVENTS} events"
                         )
