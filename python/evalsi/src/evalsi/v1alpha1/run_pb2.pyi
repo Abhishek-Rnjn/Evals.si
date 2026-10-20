@@ -12,6 +12,7 @@ from evalsi.v1alpha1 import score_pb2 as _score_pb2
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import message as _message
+from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
@@ -630,6 +631,7 @@ class Run(_message.Message):
     CREATED_BY_FIELD_NUMBER: _builtins.int
     ARCHIVED_AT_FIELD_NUMBER: _builtins.int
     IMPORTED_FIELD_NUMBER: _builtins.int
+    EVALUATION_CONTRACT_FIELD_NUMBER: _builtins.int
     id: _builtins.str
     name: _builtins.str
     project: _builtins.str
@@ -674,6 +676,12 @@ class Run(_message.Message):
         and what is left is this summary (spec, status, summaries, gates, usage).
         """
 
+    @_builtins.property
+    def evaluation_contract(self) -> Global___RunEvaluationContract:
+        """Captured at admission and rechecked before execution/resume. Older and
+        imported runs have no trusted contract and cannot pass release checks.
+        """
+
     def __init__(
         self,
         *,
@@ -697,10 +705,70 @@ class Run(_message.Message):
         created_by: _builtins.str = ...,
         archived_at: _timestamp_pb2.Timestamp | None = ...,
         imported: _builtins.bool = ...,
+        evaluation_contract: Global___RunEvaluationContract | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["archived_at", b"archived_at", "created_at", b"created_at", "finished_at", b"finished_at", "judge_usage", b"judge_usage", "progress", b"progress", "spec", b"spec", "started_at", b"started_at", "target_usage", b"target_usage"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["archived_at", b"archived_at", "created_at", b"created_at", "evaluation_contract", b"evaluation_contract", "finished_at", b"finished_at", "judge_usage", b"judge_usage", "progress", b"progress", "spec", b"spec", "started_at", b"started_at", "target_usage", b"target_usage"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["archived_at", b"archived_at", "created_at", b"created_at", "created_by", b"created_by", "dataset_sha256", b"dataset_sha256", "error", b"error", "finished_at", b"finished_at", "gates", b"gates", "id", b"id", "imported", b"imported", "judge_usage", b"judge_usage", "labels", b"labels", "name", b"name", "progress", b"progress", "project", b"project", "records", b"records", "spec", b"spec", "started_at", b"started_at", "status", b"status", "summaries", b"summaries", "target_usage", b"target_usage"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["archived_at", b"archived_at", "created_at", b"created_at", "created_by", b"created_by", "dataset_sha256", b"dataset_sha256", "error", b"error", "evaluation_contract", b"evaluation_contract", "finished_at", b"finished_at", "gates", b"gates", "id", b"id", "imported", b"imported", "judge_usage", b"judge_usage", "labels", b"labels", "name", b"name", "progress", b"progress", "project", b"project", "records", b"records", "spec", b"spec", "started_at", b"started_at", "status", b"status", "summaries", b"summaries", "target_usage", b"target_usage"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Run: _TypeAlias = Run  # noqa: Y015
+
+@_typing.final
+class BoundRunEvaluator(_message.Message):
+    """Declared evaluator identities/settings, not an attestation of worker binaries
+    or the remote model provider's immutable weights.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    MANIFEST_FIELD_NUMBER: _builtins.int
+    PARAMS_FIELD_NUMBER: _builtins.int
+    JUDGE_FIELD_NUMBER: _builtins.int
+    JUDGE_SETTINGS_SHA256_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    judge: _builtins.str
+    judge_settings_sha256: _builtins.str
+    @_builtins.property
+    def manifest(self) -> _evaluator_pb2.EvaluatorManifest: ...
+    @_builtins.property
+    def params(self) -> _struct_pb2.Struct: ...
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        manifest: _evaluator_pb2.EvaluatorManifest | None = ...,
+        params: _struct_pb2.Struct | None = ...,
+        judge: _builtins.str = ...,
+        judge_settings_sha256: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["manifest", b"manifest", "params", b"params"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["judge", b"judge", "judge_settings_sha256", b"judge_settings_sha256", "manifest", b"manifest", "name", b"name", "params", b"params"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___BoundRunEvaluator: _TypeAlias = BoundRunEvaluator  # noqa: Y015
+
+@_typing.final
+class RunEvaluationContract(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    EVALUATORS_FIELD_NUMBER: _builtins.int
+    SETTINGS_SHA256_FIELD_NUMBER: _builtins.int
+    SERVER_VERSION_FIELD_NUMBER: _builtins.int
+    settings_sha256: _builtins.str
+    server_version: _builtins.str
+    @_builtins.property
+    def evaluators(self) -> _containers.RepeatedCompositeFieldContainer[Global___BoundRunEvaluator]: ...
+    def __init__(
+        self,
+        *,
+        evaluators: _abc.Iterable[Global___BoundRunEvaluator] | None = ...,
+        settings_sha256: _builtins.str = ...,
+        server_version: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["evaluators", b"evaluators", "server_version", b"server_version", "settings_sha256", b"settings_sha256"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___RunEvaluationContract: _TypeAlias = RunEvaluationContract  # noqa: Y015

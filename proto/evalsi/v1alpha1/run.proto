@@ -8,6 +8,7 @@ import "evalsi/v1alpha1/evaluator.proto";
 import "evalsi/v1alpha1/record.proto";
 import "evalsi/v1alpha1/score.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 // RunSpec is the "Run" door: execute a target over a dataset, then grade it.
@@ -227,4 +228,22 @@ message Run {
   // The run was evaluated elsewhere and stored with ImportRun: its results
   // are as it was sent them, and it cannot be resumed.
   bool imported = 20;
+  // Captured at admission and rechecked before execution/resume. Older and
+  // imported runs have no trusted contract and cannot pass release checks.
+  RunEvaluationContract evaluation_contract = 21;
+}
+
+// Declared evaluator identities/settings, not an attestation of worker binaries
+// or the remote model provider's immutable weights.
+message BoundRunEvaluator {
+  string name = 1;
+  EvaluatorManifest manifest = 2;
+  google.protobuf.Struct params = 3;
+  string judge = 4;
+  string judge_settings_sha256 = 5;
+}
+message RunEvaluationContract {
+  repeated BoundRunEvaluator evaluators = 1;
+  string settings_sha256 = 2;
+  string server_version = 3;
 }

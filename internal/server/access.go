@@ -405,6 +405,7 @@ func (g *gate) accessRules() map[string]accessRule {
 	}
 	g.addFailureRules(rules)
 	g.addDatasetCatalogRules(rules)
+	g.addReleaseRules(rules)
 	return rules
 }
 

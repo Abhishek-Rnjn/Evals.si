@@ -22,15 +22,36 @@ inputs:
   baseline:
     description: Optional results JSON path relative to working-directory; comparison is advisory.
     default: ''
+  server:
+    description: Optional evalsid URL for enforced release decisions; requires a compatible SDK and explicit policy/baseline pins.
+    default: ''
+  release-policy:
+    description: Reviewed release policy JSON/YAML path, relative to working-directory.
+    default: ''
+  release-policy-sha256:
+    description: Independently reviewed policy pin; never computed from a candidate-controlled policy automatically.
+    default: ''
+  baseline-run:
+    description: Explicit reviewed baseline server run ID.
+    default: ''
+  baseline-sha256:
+    description: Reviewed baseline run evidence SHA-256.
+    default: ''
+  baseline-commit:
+    description: Declared commit recorded on the baseline run.
+    default: ''
+  release-id:
+    description: New immutable decision ID; defaults to ci-GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT.
+    default: ''
   artifact-name:
     description: Opt in to uploading raw results and process logs (may contain private data).
     default: ''
 outputs:
   exit-code:
-    description: 0 passed, 3 failed gates, 1 execution/configuration/comparison error.
+    description: 0 passed, 3 blocked or failed gates, 1 insufficient evidence or execution/configuration error.
     value: ${{ steps.gate.outputs.exit-code }}
   results:
-    description: Absolute path to results.json, if execution produced one.
+    description: Absolute path to run results or a portable release report, if produced.
     value: ${{ steps.gate.outputs.results }}
 runs:
   using: composite
@@ -60,6 +81,13 @@ runs:
         EVALSI_ACTION_SPEC: ${{ inputs.spec }}
         EVALSI_ACTION_DIRECTORY: ${{ inputs.working-directory }}
         EVALSI_ACTION_BASELINE: ${{ inputs.baseline }}
+        EVALSI_ACTION_SERVER: ${{ inputs.server }}
+        EVALSI_ACTION_RELEASE_POLICY: ${{ inputs.release-policy }}
+        EVALSI_ACTION_RELEASE_POLICY_SHA256: ${{ inputs.release-policy-sha256 }}
+        EVALSI_ACTION_BASELINE_RUN: ${{ inputs.baseline-run }}
+        EVALSI_ACTION_BASELINE_SHA256: ${{ inputs.baseline-sha256 }}
+        EVALSI_ACTION_BASELINE_COMMIT: ${{ inputs.baseline-commit }}
+        EVALSI_ACTION_RELEASE_ID: ${{ inputs.release-id }}
       run: python "$EVALSI_ACTION_ROOT/.github/actions/evalsi/run.py"
     - name: Upload private run data only when requested
       if: always() && inputs.artifact-name != '' && steps.gate.outputs.artifact-directory != ''

@@ -121,12 +121,14 @@ def _add_product_commands(sub: Any) -> None:
     from evalsi.cli_doctor import add_doctor_command
     from evalsi.cli_inbox import add_inbox_commands
     from evalsi.cli_init import add_init_command
+    from evalsi.cli_release import add_release_commands
 
     add_canary_commands(sub)
     add_determinism_command(sub)
     add_doctor_command(sub)
     add_init_command(sub)
     add_inbox_commands(sub)
+    add_release_commands(sub)
 
 
 def _add_eval(sub: Any) -> None:
