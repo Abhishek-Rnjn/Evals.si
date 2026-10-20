@@ -43,6 +43,9 @@ class AgentReply:
     usage: Usage = field(default_factory=Usage)
     # The agent ended the conversation on its side (a terminal A2A state).
     finished: bool = False
+    # Why the agent stopped, when it says it did not simply complete
+    # ("awaiting_human", "failed", ...); empty means completed.
+    stop_reason: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -166,6 +169,15 @@ def _a2a_text(parts: Any) -> str:
 
 
 TERMINAL = {"completed", "failed", "canceled", "rejected"}
+
+
+def _a2a_stop(state: str) -> str:
+    """The run's stop reason for a task's last state: empty once it completed."""
+    if state in ("", "completed", "submitted", "working"):
+        return ""
+    return state.replace("-", "_")
+
+
 MAX_STREAM_EVENTS = 10_000
 
 
@@ -425,6 +437,7 @@ class A2AConnector:
                 reply,
                 steps=self._link_tasks(steps),
                 finished=state in TERMINAL,
+                stop_reason=_a2a_stop(state),
                 extra={"a2a_state": state},
             )
         if isinstance(result, Mapping):
@@ -532,6 +545,7 @@ class A2AConnector:
             reply,
             steps=self._link_tasks(steps),
             finished=state in TERMINAL or not state,
+            stop_reason=_a2a_stop(state),
             extra={"a2a_state": state or "completed", "a2a_events": events},
         )
 
@@ -745,8 +759,10 @@ class HTTPConnector:
             usage = _usage(self._last(events, self.cfg.usage_path))
         if self.cfg.stream:
             extra["http_events"] = len(events)
+        stop = self._last(events, self.cfg.stop_reason_path) if self.cfg.stop_reason_path else None
+        stop_reason = "" if stop is None or str(stop) == "completed" else str(stop)
         steps.append(_agent_step("http", reply, input_text=text))
-        return AgentReply(reply, steps=steps, usage=usage, extra=extra)
+        return AgentReply(reply, steps=steps, usage=usage, stop_reason=stop_reason, extra=extra)
 
     @staticmethod
     def _last(events: list[Any], path: str) -> Any:
@@ -978,5 +994,8 @@ async def drive_agent(
     assert reply is not None
     extra = {"steps": turns, **reply.extra}
     return FinalEvent(
-        output=Content(text=reply.text), usage=usage, stop_reason="completed", extra=extra
+        output=Content(text=reply.text),
+        usage=usage,
+        stop_reason=reply.stop_reason or "completed",
+        extra=extra,
     )

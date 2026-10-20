@@ -403,6 +403,25 @@ def agent_efficiency(record: Record) -> list[Score]:
     return scores
 
 
+@evaluator(
+    name="builtin/run-completed",
+    version="1.0.0",
+    description=(
+        "Whether the agent run ended completed: not stopped for steps, spend or time, not "
+        "failed, and not left waiting on a human approval or input. A gate on it catches an "
+        "agent that stops short, which tool-error and loop checks pass."
+    ),
+    requires=Requirements(output=False),
+    outputs=[MetricSpec("run-completed", PASSED, higher_is_better=True)],
+)
+def run_completed(record: Record) -> Score:
+    info = record.metadata.get("agent")
+    if not isinstance(info, dict) or not info.get("stop_reason"):
+        raise SkipRecord("not an agent-run record (no metadata.agent.stop_reason)")
+    reason = str(info["stop_reason"])
+    return Score(passed=reason == "completed", explanation=f"stopped: {reason}")
+
+
 # Review dimensions, in the spirit of maintainers deciding whether to merge.
 QUALITY_DIMENSIONS: dict[str, str] = {
     "correctness": (
@@ -589,5 +608,6 @@ PACK = Pack(
         edit_mechanism_ran,
         contamination_fetch,
         agent_efficiency,
+        run_completed,
     ],
 )

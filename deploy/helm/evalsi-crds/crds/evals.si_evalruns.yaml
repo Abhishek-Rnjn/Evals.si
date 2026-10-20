@@ -1429,6 +1429,10 @@ spec:
                             type: string
                           outputPath:
                             type: string
+                          stop_reason_path:
+                            type: string
+                          stopReasonPath:
+                            type: string
                           stream:
                             type: boolean
                           timeout:

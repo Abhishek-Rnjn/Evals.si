@@ -264,3 +264,41 @@ def test_a_reported_session_id_outlives_turns_that_omit_it() -> None:
             await connector.aclose()
 
     assert asyncio.run(go()).extra == {"session_id": "agent-7"}
+
+
+def test_http_agent_reports_why_it_stopped() -> None:
+    connector = http_agent(stream=True, delta_path="delta", stop_reason_path="run.stop")
+    reply = run_http(
+        connector,
+        sse({"delta": "Need approval."}, {"run": {"stop": "awaiting_human"}}),
+    )
+    assert reply.stop_reason == "awaiting_human"
+    done = http_agent(output_path="out", stop_reason_path="stop")
+    mock(done, lambda req: httpx.Response(200, json={"out": "ok", "stop": "completed"}))
+
+    async def go() -> Any:
+        try:
+            return await done.send("hi")
+        finally:
+            await done.aclose()
+
+    assert asyncio.run(go()).stop_reason == ""
+
+
+def test_an_a2a_task_left_waiting_is_not_completed() -> None:
+    connector = A2AConnector(agent_pb2.A2AAgent(url="https://agent.invalid"))
+    mock(
+        connector,
+        lambda req: httpx.Response(
+            200,
+            json={"result": {"kind": "task", "id": "t1", "status": {"state": "input-required"}}},
+        ),
+    )
+
+    async def go() -> Any:
+        try:
+            return await connector.send("refund")
+        finally:
+            await connector.aclose()
+
+    assert asyncio.run(go()).stop_reason == "input_required"

@@ -252,6 +252,7 @@ class HTTPAgent(_message.Message):
     TRAJECTORY_PATH_FIELD_NUMBER: _builtins.int
     STREAM_FIELD_NUMBER: _builtins.int
     DELTA_PATH_FIELD_NUMBER: _builtins.int
+    STOP_REASON_PATH_FIELD_NUMBER: _builtins.int
     url: _builtins.str
     method: _builtins.str
     """"POST" by default."""
@@ -290,6 +291,12 @@ class HTTPAgent(_message.Message):
     joined into the answer when no event has output_path, which may then be
     empty.
     """
+    stop_reason_path: _builtins.str
+    """Dotted path to the agent's own stop reason, for example "awaiting_human"
+    or "error" (from the last event that has one, in a stream). Kept as
+    metadata.agent.stop_reason in place of "completed", so a run that
+    stopped short is not counted as finished.
+    """
     @_builtins.property
     def headers_env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
     @_builtins.property
@@ -308,10 +315,11 @@ class HTTPAgent(_message.Message):
         trajectory_path: _builtins.str = ...,
         stream: _builtins.bool = ...,
         delta_path: _builtins.str = ...,
+        stop_reason_path: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["body_template", b"body_template", "delta_path", b"delta_path", "headers_env", b"headers_env", "messages_path", b"messages_path", "method", b"method", "output_path", b"output_path", "stream", b"stream", "timeout", b"timeout", "trajectory_path", b"trajectory_path", "url", b"url", "usage_path", b"usage_path"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["body_template", b"body_template", "delta_path", b"delta_path", "headers_env", b"headers_env", "messages_path", b"messages_path", "method", b"method", "output_path", b"output_path", "stop_reason_path", b"stop_reason_path", "stream", b"stream", "timeout", b"timeout", "trajectory_path", b"trajectory_path", "url", b"url", "usage_path", b"usage_path"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___HTTPAgent: _TypeAlias = HTTPAgent  # noqa: Y015

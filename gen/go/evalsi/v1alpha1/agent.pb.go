@@ -426,9 +426,14 @@ type HTTPAgent struct {
 	// With stream: a dotted path to a text chunk in an event. The chunks are
 	// joined into the answer when no event has output_path, which may then be
 	// empty.
-	DeltaPath     string `protobuf:"bytes,11,opt,name=delta_path,json=deltaPath,proto3" json:"delta_path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DeltaPath string `protobuf:"bytes,11,opt,name=delta_path,json=deltaPath,proto3" json:"delta_path,omitempty"`
+	// Dotted path to the agent's own stop reason, for example "awaiting_human"
+	// or "error" (from the last event that has one, in a stream). Kept as
+	// metadata.agent.stop_reason in place of "completed", so a run that
+	// stopped short is not counted as finished.
+	StopReasonPath string `protobuf:"bytes,12,opt,name=stop_reason_path,json=stopReasonPath,proto3" json:"stop_reason_path,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *HTTPAgent) Reset() {
@@ -534,6 +539,13 @@ func (x *HTTPAgent) GetStream() bool {
 func (x *HTTPAgent) GetDeltaPath() string {
 	if x != nil {
 		return x.DeltaPath
+	}
+	return ""
+}
+
+func (x *HTTPAgent) GetStopReasonPath() string {
+	if x != nil {
+		return x.StopReasonPath
 	}
 	return ""
 }
@@ -2564,7 +2576,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1e\n" +
 	"\vapi_key_env\x18\x03 \x01(\tR\tapiKeyEnv\x123\n" +
-	"\atimeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xe0\x03\n" +
+	"\atimeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\x8a\x04\n" +
 	"\tHTTPAgent\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12K\n" +
@@ -2581,7 +2593,8 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x06stream\x18\n" +
 	" \x01(\bR\x06stream\x12\x1d\n" +
 	"\n" +
-	"delta_path\x18\v \x01(\tR\tdeltaPath\x1a=\n" +
+	"delta_path\x18\v \x01(\tR\tdeltaPath\x12(\n" +
+	"\x10stop_reason_path\x18\f \x01(\tR\x0estopReasonPath\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x02\n" +
