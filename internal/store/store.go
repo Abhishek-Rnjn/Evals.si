@@ -102,20 +102,9 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrating: %w", err)
 	}
-	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + sandboxSchema + rewardCacheSchema + annotationSchema + failureSchema + datasetCatalogSchema + guardrailSchema + webhookSchema + sourceSchema + idempotencySchema + watchPendingSchema); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("store: creating schema: %w", err)
-	}
-	if err := addTenantColumns(context.Background(), db, sqliteDialect); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("store: migrating: %w", err)
-	}
 	tx, err := db.Begin()
 	if err == nil {
-		err = migrateArchivedRuns(context.Background(), tx, sqliteDialect)
-		if err == nil {
-			err = migrateWatchPending(context.Background(), tx, sqliteDialect)
-		}
+		err = applyMigrations(context.Background(), tx, sqliteDialect, migrations)
 		if err == nil {
 			err = tx.Commit()
 		} else {
@@ -124,7 +113,10 @@ func Open(path string) (*Store, error) {
 	}
 	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("store: migrating archived runs: %w", err)
+		if errors.Is(err, ErrSchemaTooNew) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("store: migrating: %w", err)
 	}
 	return newStore(&conn{db: db, d: sqliteDialect}), nil
 }

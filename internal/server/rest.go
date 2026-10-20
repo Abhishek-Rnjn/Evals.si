@@ -55,6 +55,7 @@ import (
 //	POST   /v1alpha1/bindings                  AuthService.CreateBinding (body: the binding)
 //	POST   /v1alpha1/bindings:delete           AuthService.DeleteBinding (body: the binding)
 //	GET    /v1alpha1/audit                     AuthService.ListAuditEvents
+//	GET    /v1alpha1/audit:verify              AuthService.VerifyAuditLog
 //	POST   /v1alpha1/queues                    AnnotationService.CreateQueue (body: the queue)
 //	GET    /v1alpha1/queues                    AnnotationService.ListQueues (?project=)
 //	GET    /v1alpha1/queues/{name}             AnnotationService.GetQueue (?project=)
@@ -154,6 +155,7 @@ func restRules() []*annotations.HttpRule {
 		rule("AuthService.CreateBinding", http.MethodPost, v+"/bindings", "binding"),
 		rule("AuthService.DeleteBinding", http.MethodPost, v+"/bindings:delete", "binding"),
 		rule("AuthService.ListAuditEvents", http.MethodGet, v+"/audit", ""),
+		rule("AuthService.VerifyAuditLog", http.MethodGet, v+"/audit:verify", ""),
 		rule("AnnotationService.CreateQueue", http.MethodPost, v+"/queues", "queue"),
 		rule("AnnotationService.ListQueues", http.MethodGet, v+"/queues", ""),
 		rule("AnnotationService.GetQueue", http.MethodGet, v+"/queues/{name}", ""),

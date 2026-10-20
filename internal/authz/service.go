@@ -30,6 +30,7 @@ type ServiceStore interface {
 	APIKey(ctx context.Context, name string) (KeyRecord, error)
 	RevokeAPIKey(ctx context.Context, name string) error
 	ListAudit(ctx context.Context, q AuditQuery, pageSize int, pageToken string) ([]*evalsiv1alpha1.AuditEvent, string, error)
+	VerifyAudit(ctx context.Context) (*evalsiv1alpha1.VerifyAuditLogResponse, error)
 }
 
 // Service implements AuthService. The enforcement point has already checked
@@ -635,4 +636,17 @@ func (s *Service) ListAuditEvents(ctx context.Context, req *connect.Request[eval
 		return nil, invalid("%v", err)
 	}
 	return connect.NewResponse(&evalsiv1alpha1.ListAuditEventsResponse{Events: events, NextPageToken: next}), nil
+}
+
+// VerifyAuditLog implements AuthService. The chain spans every project, so
+// only an owner may check it.
+func (s *Service) VerifyAuditLog(ctx context.Context, _ *connect.Request[evalsiv1alpha1.VerifyAuditLogRequest]) (*connect.Response[evalsiv1alpha1.VerifyAuditLogResponse], error) {
+	if s.engine.Enabled() && !s.engine.IsOwner(auth.PrincipalFrom(ctx)) {
+		return nil, denied(errors.New("verifying the audit log reads every project's entries; it needs the owner role"))
+	}
+	res, err := s.store.VerifyAudit(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(res), nil
 }

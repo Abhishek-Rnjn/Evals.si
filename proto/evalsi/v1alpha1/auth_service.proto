@@ -38,6 +38,9 @@ service AuthService {
 
   // Mutating and denied calls, newest first.
   rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
+  // Checks the audit log's hash chain and reports the first break. Owners
+  // only: it reads every project's entries.
+  rpc VerifyAuditLog(VerifyAuditLogRequest) returns (VerifyAuditLogResponse);
 }
 
 // Principal is an authenticated caller.
@@ -270,6 +273,50 @@ message AuditEvent {
   string source = 11;
   // Extra detail, for example a role's old and new definitions as JSON.
   string detail = 12;
+
+  // How the principal authenticated: jwt, apikey, mtls or proxy. Empty for
+  // the system's own entries (decision 0026).
+  string auth_method = 13;
+  // For a JWT: its issuer, token ID (jti) and signing key ID (kid), never
+  // the token.
+  string issuer = 14;
+  string token_id = 15;
+  string key_id = 16;
+  // For an API key: its name, never the key or its hash.
+  string api_key = 17;
+  // For a client certificate: the SHA-256 fingerprint of the leaf.
+  string cert_fingerprint = 18;
+  // The principal's groups when the call was decided.
+  repeated string groups = 19;
+  // Whose authority the call carried, and who made it (RFC 8693 sub and
+  // act). Equal until delegation is built.
+  string subject = 20;
+  string actor = 21;
+  // Position in the hash chain, from 1; 0 for entries written before it.
+  int64 sequence = 22;
+  // SHA-256 (hex) of the previous entry, and of this entry's stored content
+  // (everything above, with hash empty and id 0).
+  string prev_hash = 23;
+  string hash = 24;
+}
+
+message VerifyAuditLogRequest {}
+
+message VerifyAuditLogResponse {
+  // Whether every chained entry checked out.
+  bool ok = 1;
+  // Chained entries checked, and the first and last sequence numbers seen.
+  int64 checked = 2;
+  int64 first_sequence = 3;
+  int64 last_sequence = 4;
+  // The newest entry's hash: keep it off the server to detect later
+  // truncation of the log.
+  string last_hash = 5;
+  // When not ok: the sequence (or entry id) where the chain breaks, and why.
+  int64 break_sequence = 6;
+  string problem = 7;
+  // Entries written before the chain began (sequence 0).
+  int64 unchained = 8;
 }
 
 message ListAuditEventsRequest {

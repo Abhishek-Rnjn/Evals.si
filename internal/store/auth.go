@@ -2,9 +2,12 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -294,12 +297,108 @@ func (s *Store) RevokeAPIKey(ctx context.Context, name string) error {
 
 // --- audit ---
 
-// AppendAudit adds an event and returns its id.
+// auditChainLock serializes appends across PostgreSQL replicas, so each
+// entry chains to the one before it.
+const auditChainLock = 7266657473690002
+
+// AppendAudit adds an event and returns its id. The event is hash-chained
+// (decision 0026): it gets the next sequence number and the previous entry's
+// hash, and its hash is the SHA-256 of the exact bytes stored, so verifying
+// never depends on re-encoding. ev's sequence and hashes are set.
 func (s *Store) AppendAudit(ctx context.Context, ev *evalsiv1alpha1.AuditEvent) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if s.db.d == postgresDialect {
+		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(?)`, int64(auditChainLock)); err != nil {
+			return 0, err
+		}
+	}
+	var prevSeq int64
+	var prevHash string
+	err = tx.QueryRowContext(ctx, `SELECT seq, hash FROM audit WHERE seq > 0 ORDER BY seq DESC LIMIT 1`).Scan(&prevSeq, &prevHash)
+	if err != nil && !isNoRows(err) {
+		return 0, err
+	}
+	ev.Id, ev.Hash = 0, ""
+	ev.Sequence, ev.PrevHash = prevSeq+1, prevHash
+	content := marshal(ev)
+	sum := sha256.Sum256(content)
+	hash := hex.EncodeToString(sum[:])
 	var id int64
-	err := s.db.QueryRowContext(ctx, `INSERT INTO audit (time_ns, project, action, allowed, event) VALUES (?, ?, ?, ?, ?) RETURNING id`,
-		ev.GetTime().AsTime().UnixNano(), ev.GetProject(), ev.GetAction(), ev.GetAllowed(), marshal(ev)).Scan(&id)
-	return id, err
+	if err := tx.QueryRowContext(ctx, `INSERT INTO audit (time_ns, project, action, allowed, event, seq, hash) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		ev.GetTime().AsTime().UnixNano(), ev.GetProject(), ev.GetAction(), ev.GetAllowed(), content, ev.GetSequence(), hash).Scan(&id); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	ev.Hash = hash
+	return id, nil
+}
+
+// VerifyAudit walks the audit log in order and checks its hash chain: each
+// chained entry's stored bytes hash to its hash, its sequence follows the one
+// before, and it names the previous entry's hash. The oldest remaining entry
+// starts the chain (retention removes older ones). Entries written before the
+// chain existed, or by a release without it, are counted as unchained.
+func (s *Store) VerifyAudit(ctx context.Context) (*evalsiv1alpha1.VerifyAuditLogResponse, error) {
+	out := &evalsiv1alpha1.VerifyAuditLogResponse{Ok: true}
+	fail := func(seq int64, format string, args ...any) (*evalsiv1alpha1.VerifyAuditLogResponse, error) {
+		out.Ok, out.BreakSequence, out.Problem = false, seq, fmt.Sprintf(format, args...)
+		return out, nil
+	}
+	after := int64(0)
+	for {
+		rows, err := s.db.QueryContext(ctx, `SELECT id, seq, hash, event FROM audit WHERE id > ? ORDER BY id LIMIT 1000`, after)
+		if err != nil {
+			return nil, err
+		}
+		n := 0
+		for rows.Next() {
+			var id, seq int64
+			var hash string
+			var blob []byte
+			if err := rows.Scan(&id, &seq, &hash, &blob); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			after, n = id, n+1
+			if seq == 0 {
+				out.Unchained++
+				continue
+			}
+			sum := sha256.Sum256(blob)
+			ev := &evalsiv1alpha1.AuditEvent{}
+			switch {
+			case hex.EncodeToString(sum[:]) != hash:
+				_ = rows.Close()
+				return fail(seq, "entry %d (id %d) does not match its hash: it was changed after it was written", seq, id)
+			case proto.Unmarshal(blob, ev) != nil || ev.GetSequence() != seq:
+				_ = rows.Close()
+				return fail(seq, "entry id %d is stored as sequence %d but its content says %d", id, seq, ev.GetSequence())
+			case out.Checked > 0 && seq != out.LastSequence+1:
+				_ = rows.Close()
+				return fail(seq, "entries %d to %d are missing", out.LastSequence+1, seq-1)
+			case out.Checked > 0 && ev.GetPrevHash() != out.LastHash:
+				_ = rows.Close()
+				return fail(seq, "entry %d does not follow entry %d: the chain was rewritten", seq, out.LastSequence)
+			}
+			if out.Checked == 0 {
+				out.FirstSequence = seq
+			}
+			out.Checked++
+			out.LastSequence, out.LastHash = seq, hash
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+		if n < 1000 {
+			return out, nil
+		}
+	}
 }
 
 // ListAudit returns events newest first. pageToken is the id to continue below.
@@ -312,7 +411,7 @@ func (s *Store) ListAudit(ctx context.Context, f authz.AuditQuery, pageSize int,
 		}
 	}
 	where, args := projectFilter("project", f.Projects)
-	q := `SELECT id, event FROM audit WHERE id < ? AND ` + where + ` AND (? = '' OR action = ?) AND (? = 0 OR allowed = 0) ORDER BY id DESC LIMIT ?`
+	q := `SELECT id, event, hash FROM audit WHERE id < ? AND ` + where + ` AND (? = '' OR action = ?) AND (? = 0 OR allowed = 0) ORDER BY id DESC LIMIT ?`
 	all := append([]any{before}, args...)
 	all = append(all, f.Action, f.Action, f.DeniedOnly, pageSize+1)
 	rows, err := s.db.QueryContext(ctx, q, all...)
@@ -324,14 +423,15 @@ func (s *Store) ListAudit(ctx context.Context, f authz.AuditQuery, pageSize int,
 	for rows.Next() {
 		var id int64
 		var blob []byte
-		if err := rows.Scan(&id, &blob); err != nil {
+		var hash string
+		if err := rows.Scan(&id, &blob, &hash); err != nil {
 			return nil, "", err
 		}
 		ev := &evalsiv1alpha1.AuditEvent{}
 		if err := proto.Unmarshal(blob, ev); err != nil {
 			return nil, "", err
 		}
-		ev.Id = id
+		ev.Id, ev.Hash = id, hash
 		out = append(out, ev)
 	}
 	next := ""

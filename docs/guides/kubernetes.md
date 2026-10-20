@@ -115,7 +115,9 @@ The Job signs in with its own service account's token, projected for the install
 ### High availability
 
 For the upgrade compatibility policy, maintenance-window backups and restores,
-and reference cluster values, see [operations](operations.md).
+and reference cluster values, see [operations](operations.md). For the supported
+topologies, every outbound connection, enterprise audit settings and data
+erasure, see [enterprise deployment](enterprise-deployment.md).
 
 Every `evalsid` replica serves the API and OTLP ingest. The run scheduler and the policy engine run on one replica at a time, under database leases: when a replica stops, another adopts its runs (resuming them, never double-counting) and takes over the policy engine. Workers pull from the work queues, so a worker that dies mid-task loses nothing: its task is redelivered after the ack wait. The operator runs with leader election when it has more than one replica.
 

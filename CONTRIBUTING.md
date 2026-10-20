@@ -53,6 +53,14 @@ Never skip, disable or weaken a test to get green.
 - No secrets, API keys, internal hostnames or private registry names in commits.
 - When something lands or is deferred, update the PRD's status cells, LEFTOVERS.md, docs/verification/README.md and the README.
 
+## Schema changes
+
+The store records each schema step it applies in `schema_migrations` (`internal/store/migrations.go`). Change the schema by expanding, then contracting:
+
+- **Expand.** A new table, column or index can go in a schema constant with `IF NOT EXISTS` (or in `addedColumns`), and reaches existing databases on the next open. A backfill or any other one-off change is a new step at the end of `migrations`. Either way, the previous release can still read the database, so N and N-1 can run side by side during a rolling upgrade, and N-1 can be rolled back to without a restore.
+- **Contract.** Dropping, renaming or rewriting anything the previous release reads is a step with `contract: true`. Ship it at least one release after the code stopped needing the old shape. It raises the database's minimum reader, so an older `evalsid` refuses to open the database instead of misreading it. Rolling back past a contract step means restoring a backup taken before the upgrade ([operations guide](docs/guides/operations.md)).
+- Never edit, reorder or renumber a released step. `TestThePreviousReleaseReadsAnExpandedSchemaButNotAContractedOne` checks the N-1 rule.
+
 ## Pull requests
 
 - Keep a pull request to one change, and say what you ran and what you could not run.

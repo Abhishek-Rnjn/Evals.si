@@ -48,6 +48,7 @@ class IdP:
 
     def __init__(self) -> None:
         self.polls = 0
+        self.verify: dict[str, Any] = {}
         self.refreshes = 0
         self.seen_auth: list[str] = []
         self.codes: dict[str, str] = {}
@@ -153,6 +154,8 @@ class IdP:
                         ]
                     },
                 )
+            if method == "VerifyAuditLog":
+                return httpx.Response(200, json=self.verify)
             return httpx.Response(200, json={"echo": body, "method": method})
         return httpx.Response(404, json={"url": url})
 
@@ -381,3 +384,22 @@ def test_auth_token_prints_the_cached_login(capsys: pytest.CaptureFixture[str]) 
     auth.save_credentials(SERVER, auth.Credentials(id_token=token))
     assert cli.main(["auth", "token", "--server", SERVER]) == 0
     assert capsys.readouterr().out.strip() == token
+
+
+def test_cli_audit_verify(mock_server: IdP, capsys: pytest.CaptureFixture[str]) -> None:
+    args = ["auth", "audit", "verify", "--server", SERVER, "--token", "t"]
+    mock_server.verify = {
+        "ok": True,
+        "checked": "12",
+        "firstSequence": "3",
+        "lastSequence": "14",
+        "lastHash": "ab12",
+        "unchained": "2",
+    }
+    assert cli.main(args) == 0
+    out = capsys.readouterr().out
+    assert "ok: 12 entries chained, 3 to 14; 2 entries from before the chain" in out
+    assert "ab12" in out
+    mock_server.verify = {"breakSequence": "7", "problem": "entries 5 to 6 are missing"}
+    assert cli.main(args) == 3
+    assert "BROKEN at entry 7: entries 5 to 6 are missing" in capsys.readouterr().out

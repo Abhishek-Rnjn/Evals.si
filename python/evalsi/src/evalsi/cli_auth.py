@@ -135,7 +135,16 @@ def _add_projects_and_audit(au_sub: Any) -> list[argparse.ArgumentParser]:
     pc.add_argument("name")
     pc.add_argument("--description", default="")
 
-    audit = au_sub.add_parser("audit", help="read the audit log")
+    audit = au_sub.add_parser(
+        "audit", help="read the audit log, or verify its hash chain (owners only)"
+    )
+    audit.add_argument(
+        "what",
+        nargs="?",
+        choices=["list", "verify"],
+        default="list",
+        help="verify checks the hash chain and exits 3 at a break",
+    )
     audit.add_argument("--project", default="")
     audit.add_argument("--action", dest="audit_action", default="")
     audit.add_argument("--denied", action="store_true", help="only denied calls")
@@ -304,6 +313,8 @@ def _cmd_auth(args: argparse.Namespace) -> int:
         print(rows)
     elif rows:
         _table(rows)
+    if args.area == "audit" and args.what == "verify" and not out.get("ok"):
+        return 3
     return 0
 
 
@@ -397,6 +408,9 @@ def _auth_action(client: Any, args: argparse.Namespace) -> tuple[Any, Rows]:
         for p in out.get("projects", []):
             rows.append([p["name"], p.get("source", ""), p.get("description", "")])
         return out, rows
+    if args.what == "verify":
+        out = call("VerifyAuditLog")
+        return out, _verify_message(out)
     out = call(
         "ListAuditEvents",
         {
@@ -420,3 +434,17 @@ def _auth_action(client: Any, args: argparse.Namespace) -> tuple[Any, Rows]:
             ]
         )
     return out, rows
+
+
+def _verify_message(out: dict[str, Any]) -> str:
+    checked, unchained = int(out.get("checked", 0)), int(out.get("unchained", 0))
+    note = f"; {unchained} entries from before the chain" if unchained else ""
+    if not out.get("ok"):
+        return f"BROKEN at entry {out.get('breakSequence', '?')}: {out.get('problem', '')}"
+    if not checked:
+        return f"no chained entries yet{note}"
+    return (
+        f"ok: {checked} entries chained, {out.get('firstSequence')} to "
+        f"{out.get('lastSequence')}{note}\nlast hash {out.get('lastHash')} "
+        "(keep it elsewhere to detect later truncation)"
+    )

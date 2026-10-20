@@ -259,6 +259,7 @@ func (g *gate) accessRules() map[string]accessRule {
 			return g.bindingTarget(msg.(*evalsiv1alpha1.DeleteBindingRequest).GetBinding())
 		}},
 		evalsiv1alpha1connect.AuthServiceListAuditEventsProcedure: {action: "audit.read", filtered: true},
+		evalsiv1alpha1connect.AuthServiceVerifyAuditLogProcedure:  {action: "audit.read", filtered: true},
 
 		evalsiv1alpha1connect.AnnotationServiceCreateQueueProcedure: {action: "annotations.manage", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			q := msg.(*evalsiv1alpha1.CreateQueueRequest).GetQueue()
@@ -766,18 +767,46 @@ func (g *gate) authenticate(ctx context.Context, procedure, protocol, source str
 
 // decide checks one target and audits the outcome when it must.
 func (g *gate) decide(ctx context.Context, chk *authz.Checker, action string, t target, audit bool) authz.Decision {
+	d, _ := g.decideAudited(ctx, chk, action, t, audit)
+	return d
+}
+
+// decideAudited is decide for a call that changes something: the allowed
+// call's audit entry is written before the handler runs, and in strict mode a
+// failed write is returned as Unavailable, so the change is never made
+// unaudited. A denial is returned as a denial whatever its audit write does.
+func (g *gate) decideAudited(ctx context.Context, chk *authz.Checker, action string, t target, audit bool) (authz.Decision, error) {
 	req := chk.Meta
 	req.Action, req.Project, req.Resource = action, t.project, t.resource
 	d := g.engine.Decide(ctx, chk.Principal, req)
 	chk.Decision = d
 	if !d.Allowed || audit {
-		g.auditor.Record(ctx, &evalsiv1alpha1.AuditEvent{
+		ev := &evalsiv1alpha1.AuditEvent{
 			Principal: chk.Principal.ID(), Action: action, Project: t.project, Resource: t.name,
 			Allowed: d.Allowed, Reason: d.Reason, Procedure: req.Procedure,
 			RequestId: req.Headers.Get("X-Request-Id"), Source: req.Source,
-		})
+		}
+		if !d.Allowed {
+			g.auditor.Record(ctx, ev)
+		} else if err := g.auditor.Append(ctx, ev); err != nil {
+			return d, connect.NewError(connect.CodeUnavailable, err)
+		}
 	}
-	return d
+	return d, nil
+}
+
+// recordRead writes an allowed read to the audit log when audit.reads names
+// its kind: who read which project's resource, through which call, never
+// what was returned. Best effort even in strict mode: strict guards changes.
+func (g *gate) recordRead(ctx context.Context, chk *authz.Checker, action string, t target) {
+	if !g.auditor.AuditsRead(action) {
+		return
+	}
+	g.auditor.Record(ctx, &evalsiv1alpha1.AuditEvent{
+		Principal: chk.Principal.ID(), Action: action, Project: t.project, Resource: t.name,
+		Allowed: true, Reason: chk.Decision.Reason, Procedure: chk.Meta.Procedure,
+		RequestId: chk.Meta.Headers.Get("X-Request-Id"), Source: chk.Meta.Source,
+	})
 }
 
 func permissionDenied(action string, t target) error {
@@ -800,10 +829,14 @@ func (g *gate) check(ctx context.Context, chk *authz.Checker, procedure string, 
 	case !g.engine.Enabled():
 		return nil
 	case rule.filtered:
+		// The service filters what it returns by permission; the call itself
+		// is the read that is recorded.
+		g.recordRead(ctx, chk, rule.action, target{name: procedure})
 		return nil
 	case rule.anyProject:
 		for _, p := range append([]string{authz.DefaultProject}, projectNames(g.engine)...) {
 			if g.engine.Allowed(ctx, chk.Principal, authz.Request{Action: rule.action, Project: p, Procedure: procedure, Headers: chk.Meta.Headers, Source: chk.Meta.Source, Protocol: chk.Meta.Protocol}) {
+				g.recordRead(ctx, chk, rule.action, target{name: procedure})
 				return nil
 			}
 		}
@@ -819,13 +852,22 @@ func (g *gate) check(ctx context.Context, chk *authz.Checker, procedure string, 
 		}
 	}
 	for _, t := range targets {
-		action, audited := rule.action, perm.Audited && !rule.serviceAudits
+		// A service that audits its own changes writes its entry after the
+		// change; in strict mode the gate also writes one before it.
+		action, audited := rule.action, perm.Audited && (!rule.serviceAudits || g.auditor.Strict())
 		if t.action != "" {
 			p, _ := authz.Lookup(t.action)
 			action, audited = t.action, p.Audited
 		}
-		if d := g.decide(ctx, chk, action, t, audited); !d.Allowed {
+		d, err := g.decideAudited(ctx, chk, action, t, audited)
+		if err != nil {
+			return err
+		}
+		if !d.Allowed {
 			return permissionDenied(action, t)
+		}
+		if !audited {
+			g.recordRead(ctx, chk, action, t)
 		}
 	}
 	return nil
@@ -1102,4 +1144,5 @@ func (g *gate) WriteMetrics(w io.Writer) {
 	const name = "evalsi_unauthenticated_total"
 	fmt.Fprintf(w, "# HELP %s Calls rejected for a missing or invalid credential.\n# TYPE %s counter\n%s %d\n", name, name, name, g.unauthTotal.Load())
 	g.limits.writeMetrics(w)
+	g.auditor.WriteMetrics(w)
 }

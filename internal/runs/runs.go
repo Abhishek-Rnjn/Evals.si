@@ -73,8 +73,10 @@ type Options struct {
 	Quotas config.Quotas
 	// How long finished runs are kept (see Manager.Retain).
 	Retention config.Runs
-	// Records an audit event; nil records none. Automatic deletes and archives use it.
-	Audit func(context.Context, *evalsiv1alpha1.AuditEvent)
+	// Records an audit event before the change it describes; nil records
+	// none. Automatic deletes and archives use it, and skip the run when it
+	// returns an error (strict audit mode).
+	Audit func(context.Context, *evalsiv1alpha1.AuditEvent) error
 	// The time, for daily quotas; time.Now when nil (tests set it).
 	Now func() time.Time
 }
