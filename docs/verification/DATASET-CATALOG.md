@@ -86,3 +86,18 @@ is not erasure: catalog data, runs, sources, downloads and backups have separate
 lifecycles. There is no catalog deletion API in this slice. See the
 [guide](../guides/dataset-catalog.md) for limits and the
 [roadmap](../PRODUCT-ROADMAP.md) for remaining acceptance work.
+
+## Review follow-up
+
+Authorized pagination now scans to a visible lookahead and returns only a
+previously returned identity as its cursor; forbidden-only projects return no
+cursor. Enabled authorization rejects anonymous approval even if optional auth
+and allow rules grant read/review permissions. The no-auth demo remains supported.
+The browser converts standard nested usage and trajectory values before posting,
+and CLI JSON/JSONL publication preserves supplied protobuf source provenance.
+Active-run polls update status/metrics without remounting the record viewer;
+terminal refresh preserves sorting, expanded cases and keyboard focus.
+
+Catalog service tests, all 10 selected SDK/CLI tests, strict mypy and lint passed.
+All 8 Chromium tests passed, including nested import conversion and a dedicated
+active-to-terminal focus/inspection regression test.

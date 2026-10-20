@@ -520,7 +520,7 @@ test('a shared dataset is published, reviewed, run by pin and retired in the bro
   await page.getByLabel('Owner', { exact: true }).fill('support-team');
   await page.getByLabel('Dataset records (JSON file)', { exact: true }).setInputFiles({
     name: 'cases.json', mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify([{ id: 'refund', input: 'Request refund', output: 'Approval required', reference: 'Approval required' }])),
+    buffer: Buffer.from(JSON.stringify([{ id: 'refund', input: 'Request refund', output: 'Approval required', reference: 'Approval required', usage: { latency_ms: 12.5 }, trajectory: { steps: [{ type: 'tool', input: 'approval', output: 'granted', usage: { latency_ms: 2 } }] } }])),
   });
   await page.getByRole('button', { name: 'Publish immutable draft', exact: true }).click();
   await page.getByRole('heading', { name: 'shared-support@v1', exact: true }).waitFor();
@@ -528,6 +528,8 @@ test('a shared dataset is published, reviewed, run by pin and retired in the bro
   assert.equal(await runButton.isDisabled(), true, 'draft cannot run');
   await page.getByText('Inspect all record content', { exact: true }).click();
   assert.match(await page.textContent('#main'), /Approval required/);
+  assert.match(await page.textContent('#main'), /STEP_TYPE_TOOL/);
+  assert.match(await page.textContent('#main'), /0\.012500s/);
   await checkAccessibility(page);
   await page.getByLabel('Dataset review note', { exact: true }).fill('Reviewed all records in this digest');
   await page.getByRole('button', { name: 'Approve this dataset version', exact: true }).click();
@@ -545,5 +547,35 @@ test('a shared dataset is published, reviewed, run by pin and retired in the bro
   assert.equal(await page.getByRole('button', { name: 'Approve this dataset version', exact: true }).isDisabled(), true);
   await checkAccessibility(page);
   assert.deepEqual(problems, []);
+  await page.close();
+});
+
+test('active run polling preserves keyboard focus and record inspection state', async () => {
+  const url = await startServer('run-inspection');
+  const page = await browser.newPage();
+  let polls = 0;
+  await page.route('**/v1alpha1/runs/inspection', route => {
+    polls += 1;
+    return route.fulfill({ json: { run: { id: 'inspection', name: 'Inspect active results', status: polls < 3 ? 'RUN_STATUS_RUNNING' : 'RUN_STATUS_SUCCEEDED', progress: { done: polls, total: 3 } } } });
+  });
+  await page.route('**/v1alpha1/runs/inspection/results?*', route => route.fulfill({ json: {
+    records: [{ id: 'case', input: { text: 'Inspect this record' }, output: { text: 'answer' } }],
+    results: [{ recordId: 'case', evaluator: 'exact-match', outcome: 'OUTCOME_SCORED', scores: [{ number: 1 }] }],
+  } }));
+  await page.goto(`${url}/ui/#/runs/inspection`);
+  await page.locator('details > summary').click();
+  const sort = page.getByLabel('sort by metric', { exact: true });
+  await sort.selectOption('exact-match');
+  // Sorting is a user action that reconstructs rows; expand the chosen row again.
+  await page.locator('details > summary').click();
+  await sort.focus();
+  await page.waitForFunction(() => document.querySelector('.kv')?.textContent.includes('2/3'));
+  assert.equal(await page.locator('details[open]').count(), 1);
+  assert.equal(await sort.inputValue(), 'exact-match');
+  assert.equal(await sort.evaluate(node => node === document.activeElement), true);
+  await page.waitForFunction(() => /succeeded/.test(document.querySelector('h1')?.textContent ?? ''));
+  await page.waitForFunction(() => document.querySelector('select[aria-label="sort by metric"]')?.value === 'exact-match');
+  assert.equal(await page.locator('details[open]').count(), 1);
+  assert.equal(await sort.evaluate(node => node === document.activeElement), true);
   await page.close();
 });

@@ -248,44 +248,57 @@
     clearTimeout(runRefresh);
     const routeHash = location.hash, scope = project, credential = token;
     const current = () => location.hash === routeHash && project === scope && token === credential;
-    const { run } = await api(`/v1alpha1/runs/${encodeURIComponent(id)}`);
-    if (!current()) return;
-    const spec = run.spec || {};
-    const metrics = (run.summaries || []).map((s) => [
-      el("code", {}, s.metric), enumName(s.kind, "METRIC_KIND_"), s.n || "0", fmt(s.mean),
-      interval(s.ci), ciBar(s), s.skipped || "0", s.errors || "0",
-      chips(s.labels),
-    ]);
-    const gates = (run.gates || []).map((g) => [
-      el("code", {}, g.gate?.metric || ""), enumName(g.gate?.stat, "GATE_STAT_") || "mean",
-      [g.gate?.min !== undefined ? `≥ ${g.gate.min}` : "", g.gate?.max !== undefined ? `≤ ${g.gate.max}` : ""].join(" "),
-      fmt(g.value), el("span", { class: g.passed ? "pass" : "fail" }, g.passed ? "pass" : "FAIL"), g.reason || "",
-    ]);
-    const usage = (u) => (u ? `${u.inputTokens || 0} in, ${u.outputTokens || 0} out${u.costUsd ? `, $${Number(u.costUsd).toFixed(4)}` : ""}` : "");
-    const results = el("div", {}, el("p", { class: "sub" }, run.archivedAt ? "This run was archived: its records and results are gone; the summary above remains." : "Loading results…"));
-    show(
-      el("h1", {}, run.name || run.id, " ", el("span", { class: `status-${run.status}` }, `(${enumName(run.status, "RUN_STATUS_")})`)),
-      el("div", { class: "card" }, kv([
-        ["ID", el("code", {}, run.id)], ["Project", run.project], ["Created", when(run.createdAt)], ["By", run.createdBy],
-        ["Finished", when(run.finishedAt)], ["Archived", run.archivedAt ? when(run.archivedAt) : ""], ["Target", spec.target ? `${spec.target.connector || ""} ${spec.target.model || ""}` : ""],
-        ["Records", run.records], ["Progress", run.progress ? `${run.progress.done || 0}/${run.progress.total || 0}` : ""],
-        ["Target usage", usage(run.targetUsage)], ["Judge usage", usage(run.judgeUsage)],
-        ["Dataset sha256", run.datasetSha256 ? el("code", {}, run.datasetSha256) : ""], ["Labels", chips(run.labels)],
-        ["Error", run.error ? el("span", { class: "error" }, run.error) : ""],
-      ])),
-      el("h2", {}, "Metrics"),
-      table(["Metric", "Kind", "n", "Mean", "Interval", "", "Skipped", "Errors", "Labels"], metrics, [2, 3, 6, 7]),
-      gates.length ? el("h2", {}, "Gates") : null, gates.length ? table(["Metric", "Stat", "Bound", "Value", "", "Reason"], gates, [3]) : null,
-      el("h2", {}, "Records"), results,
-    );
-    if (!run.archivedAt) loadResults(run, results).catch((err) => results.replaceChildren(el("p", { class: "error" }, String(err.message || err))));
-    if (["RUN_STATUS_PENDING", "RUN_STATUS_RUNNING"].includes(run.status)) {
-      runRefresh = setTimeout(() => { if (current()) viewRun(id).catch(err => { if (current()) failed(err); }); }, 1500);
+    const panel = el("div"), results = el("div");
+    let initial = true;
+    async function refresh() {
+      const { run } = await api(`/v1alpha1/runs/${encodeURIComponent(id)}`);
+      if (!current()) return;
+      const spec = run.spec || {};
+      const metrics = (run.summaries || []).map((s) => [
+        el("code", {}, s.metric), enumName(s.kind, "METRIC_KIND_"), s.n || "0", fmt(s.mean),
+        interval(s.ci), ciBar(s), s.skipped || "0", s.errors || "0",
+        chips(s.labels),
+      ]);
+      const gates = (run.gates || []).map((g) => [
+        el("code", {}, g.gate?.metric || ""), enumName(g.gate?.stat, "GATE_STAT_") || "mean",
+        [g.gate?.min !== undefined ? `≥ ${g.gate.min}` : "", g.gate?.max !== undefined ? `≤ ${g.gate.max}` : ""].join(" "),
+        fmt(g.value), el("span", { class: g.passed ? "pass" : "fail" }, g.passed ? "pass" : "FAIL"), g.reason || "",
+      ]);
+      const usage = (u) => (u ? `${u.inputTokens || 0} in, ${u.outputTokens || 0} out${u.costUsd ? `, $${Number(u.costUsd).toFixed(4)}` : ""}` : "");
+
+      if (initial) show(panel, el("h2", {}, "Records"), results);
+      panel.replaceChildren(
+        el("h1", {}, run.name || run.id, " ", el("span", { class: `status-${run.status}` }, `(${enumName(run.status, "RUN_STATUS_")})`)),
+        el("div", { class: "card" }, kv([
+          ["ID", el("code", {}, run.id)], ["Project", run.project], ["Created", when(run.createdAt)], ["By", run.createdBy],
+          ["Finished", when(run.finishedAt)], ["Archived", run.archivedAt ? when(run.archivedAt) : ""], ["Target", spec.target ? `${spec.target.connector || ""} ${spec.target.model || ""}` : ""],
+          ["Records", run.records], ["Progress", run.progress ? `${run.progress.done || 0}/${run.progress.total || 0}` : ""],
+          ["Target usage", usage(run.targetUsage)], ["Judge usage", usage(run.judgeUsage)],
+          ["Dataset sha256", run.datasetSha256 ? el("code", {}, run.datasetSha256) : ""], ["Labels", chips(run.labels)],
+          ["Error", run.error ? el("span", { class: "error" }, run.error) : ""],
+        ])),
+        el("h2", {}, "Metrics"),
+        table(["Metric", "Kind", "n", "Mean", "Interval", "", "Skipped", "Errors", "Labels"], metrics, [2, 3, 6, 7]),
+        gates.length ? el("h2", {}, "Gates") : null, gates.length ? table(["Metric", "Stat", "Bound", "Value", "", "Reason"], gates, [3]) : null,
+      );
+      const active = ["RUN_STATUS_PENDING", "RUN_STATUS_RUNNING"].includes(run.status);
+      if (!run.archivedAt && (initial || !active)) loadResults(run, results).catch((err) => results.replaceChildren(el("p", { class: "error" }, String(err.message || err))));
+      if (run.archivedAt) results.textContent = "This run was archived; its records and results are gone.";
+      initial = false;
+      if (active) {
+        runRefresh = setTimeout(() => { if (current()) refresh().catch(err => { if (current()) failed(err); }); }, 1500);
+      }
     }
+    await refresh();
   }
 
   async function loadResults(run, box) {
     const resp = await api(`/v1alpha1/runs/${encodeURIComponent(run.id)}/results`, { page_size: 500 });
+    const selectedMetric = box.querySelector('select[aria-label="sort by metric"]')?.value || "";
+    const expanded = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.recordKey));
+    const focused = box.contains(document.activeElement) ? document.activeElement : null;
+    const focusedKey = focused?.closest("details")?.dataset.recordKey;
+    const focusedSort = focused?.matches('select[aria-label="sort by metric"]');
     const records = new Map((resp.records || []).map((r) => [r.id, r]));
     const byRecord = new Map();
     const metrics = new Set();
@@ -305,6 +318,7 @@
     const names = [...metrics].sort();
     const sortBy = el("select", { "aria-label": "sort by metric" }, el("option", { value: "" }, "record order"),
       names.map((n) => el("option", { value: n }, `lowest ${n} first`)));
+    sortBy.value = selectedMetric;
     const holder = el("div");
     const render = () => {
       let rows = [...byRecord.values()];
@@ -315,7 +329,7 @@
         return [
           el("code", {}, r.trial ? `${r.id} (trial ${r.trial})` : r.id),
           ...names.map((n) => (typeof r.scores[n] === "number" ? fmt(r.scores[n], 2) : r.scores[n] ?? "–")),
-          el("details", {}, el("summary", {}, short(contentText(rec.input), 80) || "show"),
+          el("details", { "data-record-key": `${r.id}#${r.trial}`, open: expanded.has(`${r.id}#${r.trial}`) }, el("summary", {}, short(contentText(rec.input), 80) || "show"),
             ...[["input", rec.input], ["output", rec.output], ["reference", rec.reference]]
               .filter(([, c]) => c).map(([label, c]) => [el("div", { class: "sub" }, label), el("pre", { class: "content" }, contentText(c))]),
             r.notes.length ? el("pre", { class: "content" }, r.notes.join("\n")) : null),
@@ -328,6 +342,8 @@
       el("p", { class: "sub" }, `${byRecord.size} record result(s)${resp.nextPageToken ? " (first page)" : ""}. Sort: `, sortBy),
       holder,
     );
+    if (focusedSort) sortBy.focus({ preventScroll: true });
+    else if (focusedKey) [...box.querySelectorAll("details")].find(d => d.dataset.recordKey === focusedKey)?.querySelector("summary")?.focus({ preventScroll: true });
   }
 
   async function viewCompare(_, query) {
@@ -737,12 +753,36 @@
     }
     return { json: value };
   }
+  function wireUsage(value) {
+    if (!value || typeof value !== "object") throw new Error("Usage must be an object.");
+    const out = { ...value };
+    if (out.latency_ms !== undefined) {
+      const nanos = Number(out.latency_ms) * 1e6;
+      if (!Number.isFinite(nanos) || nanos < 0) throw new Error("latency_ms must be nonnegative and finite.");
+      out.latency = (nanos / 1e9).toFixed(9) + "s";
+      delete out.latency_ms;
+    }
+    return out;
+  }
+  function wireTrajectory(value) {
+    return { ...value, steps: (value.steps || []).map(step => {
+      const out = { ...step };
+      if (typeof out.type === "string" && !out.type.startsWith("STEP_TYPE_")) out.type = "STEP_TYPE_" + out.type.toUpperCase();
+      for (const key of ["input", "output"]) if (out[key] !== undefined && out[key] !== null) out[key] = wireContent(out[key]);
+      if (out.usage) out.usage = wireUsage(out.usage);
+      else if (out.duration_ms !== undefined) out.usage = wireUsage({ latency_ms: out.duration_ms });
+      delete out.duration_ms;
+      return out;
+    }) };
+  }
   function wireRow(row) {
     if (!row || typeof row !== "object" || typeof row.id !== "string" || !row.id.trim()) throw new Error("Every record needs an explicit string ID.");
     const out = { id: row.id };
     for (const key of ["input", "output", "reference"]) if (row[key] !== undefined && row[key] !== null) out[key] = wireContent(row[key]);
     if (row.context !== undefined) out.context = (Array.isArray(row.context) ? row.context : [row.context]).map(wireContent);
-    for (const key of ["metadata", "usage", "trajectory", "check", "provenance"]) if (row[key] !== undefined) out[key] = row[key];
+    for (const key of ["metadata", "check", "provenance"]) if (row[key] !== undefined) out[key] = row[key];
+    if (row.usage !== undefined) out.usage = wireUsage(row.usage);
+    if (row.trajectory !== undefined) out.trajectory = wireTrajectory(row.trajectory);
     return out;
   }
   function publishDatasetForm(scope, failure = null) {

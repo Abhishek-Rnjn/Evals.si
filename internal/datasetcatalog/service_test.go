@@ -218,3 +218,54 @@ func TestFailurePublicationRetainsCapturedAccessBoundaries(t *testing.T) {
 		t.Fatal("source retention removed curated dataset", err)
 	}
 }
+
+func TestDatasetCatalogPaginationRevealsOnlyAuthorizedIdentities(t *testing.T) {
+	st, svc, _ := fixture(t)
+	for _, version := range []string{"hidden-a", "hidden-b", "public-a", "public-b"} {
+		c := content(version)
+		c.Labels = map[string]string{"visibility": strings.Split(version, "-")[0]}
+		if _, err := svc.PublishDatasetVersion(t.Context(), connect.NewRequest(&pb.PublishDatasetVersionRequest{Content: c})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	engine, err := authz.NewEngine(t.Context(), authz.Options{Enabled: true, RBAC: authz.RBACConfig{Roles: []authz.Role{{Name: "public-reader", Permissions: []string{"datasets.read"}, Condition: `resource.labels.visibility == "public"`}}, Projects: map[string]map[string][]string{"support": {"public-reader": {"key:limited"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal := auth.PrincipalFrom(as(t.Context(), "limited"))
+	ctx := authz.WithChecker(as(t.Context(), "limited"), &authz.Checker{Engine: engine, Principal: principal})
+	first, err := svc.ListDatasetVersions(ctx, connect.NewRequest(&pb.ListDatasetVersionsRequest{Project: "support", PageSize: 1}))
+	if err != nil || len(first.Msg.GetDatasets()) != 1 || first.Msg.GetNextPageToken() != "refunds/public-a" {
+		t.Fatalf("first authorized page: %v %v", first, err)
+	}
+	second, err := svc.ListDatasetVersions(ctx, connect.NewRequest(&pb.ListDatasetVersionsRequest{Project: "support", PageSize: 1, PageToken: first.Msg.GetNextPageToken()}))
+	if err != nil || len(second.Msg.GetDatasets()) != 1 || second.Msg.GetNextPageToken() != "" {
+		t.Fatalf("last authorized page: %v %v", second, err)
+	}
+	forbidden := content("secret")
+	forbidden.Project = "forbidden"
+	digest, _ := store.DatasetContentHash(forbidden)
+	if err := st.PublishDatasetVersion(t.Context(), &pb.DatasetVersion{Content: forbidden, Sha256: digest, Records: int64(len(forbidden.Records)), Revision: 1}, &pb.DatasetVersionEvent{Revision: 1}); err != nil {
+		t.Fatal(err)
+	}
+	none, err := svc.ListDatasetVersions(ctx, connect.NewRequest(&pb.ListDatasetVersionsRequest{Project: "forbidden", PageSize: 1}))
+	if err != nil || len(none.Msg.GetDatasets()) != 0 || none.Msg.GetNextPageToken() != "" {
+		t.Fatalf("forbidden identity leak: %v %v", none, err)
+	}
+}
+
+func TestDatasetApprovalRejectsAnonymousWithEnabledAuthorization(t *testing.T) {
+	_, svc, d := fixture(t)
+	engine, err := authz.NewEngine(t.Context(), authz.Options{Enabled: true, Authorization: authz.AuthorizationConfig{Rules: []authz.Rule{{Allow: "true"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal := auth.Anonymous(auth.MethodNone)
+	ctx := authz.WithChecker(auth.WithResult(t.Context(), auth.Result{Principal: principal}), &authz.Checker{Engine: engine, Principal: principal})
+	if _, err := svc.ReviewDatasetVersion(ctx, connect.NewRequest(review(d, pb.DatasetVersionState_DATASET_VERSION_STATE_APPROVED))); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("anonymous approved: %v", err)
+	}
+	if _, err := svc.ReviewDatasetVersion(t.Context(), connect.NewRequest(review(d, pb.DatasetVersionState_DATASET_VERSION_STATE_APPROVED))); err != nil {
+		t.Fatal("no-auth development should work", err)
+	}
+}

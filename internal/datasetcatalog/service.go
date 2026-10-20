@@ -15,6 +15,7 @@ import (
 
 	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/failures"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 )
@@ -144,19 +145,32 @@ func (s *Service) ListDatasetVersions(ctx context.Context, req *connect.Request[
 		}
 		afterName, afterVersion = parts[0], parts[1]
 	}
-	rows, nextName, nextVersion, err := s.store.ListDatasetVersions(ctx, Project(m.GetProject()), m.GetName(), m.GetOwner(), m.GetState(), size, afterName, afterVersion)
-	if err != nil {
-		return nil, dbError(err)
-	}
-	visible := rows[:0]
-	for _, d := range rows {
-		if Readable(ctx, d) {
-			visible = append(visible, d)
+	// Scan until we have a full authorized page and one authorized lookahead.
+	// Only a returned identity may appear in the continuation token.
+	visible := []*pb.DatasetVersion{}
+	for len(visible) <= size {
+		rows, nextName, nextVersion, err := s.store.ListDatasetVersions(ctx, Project(m.GetProject()), m.GetName(), m.GetOwner(), m.GetState(), 50, afterName, afterVersion)
+		if err != nil {
+			return nil, dbError(err)
 		}
+		for _, d := range rows {
+			if Readable(ctx, d) {
+				visible = append(visible, d)
+				if len(visible) > size {
+					break
+				}
+			}
+		}
+		if len(visible) > size || nextName == "" {
+			break
+		}
+		afterName, afterVersion = nextName, nextVersion
 	}
 	next := ""
-	if nextName != "" {
-		next = nextName + "/" + nextVersion
+	if len(visible) > size {
+		visible = visible[:size]
+		last := visible[size-1].GetContent()
+		next = last.GetName() + "/" + last.GetVersion()
 	}
 	return connect.NewResponse(&pb.ListDatasetVersionsResponse{Datasets: visible, NextPageToken: next}), nil
 }
@@ -195,7 +209,11 @@ func (s *Service) ReviewDatasetVersion(ctx context.Context, req *connect.Request
 		if d.GetState() != pb.DatasetVersionState_DATASET_VERSION_STATE_DRAFT {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("only draft versions can be approved"))
 		}
-		if p := auth.PrincipalFrom(ctx); p != nil && !p.Anonymous() && p.ID() == d.GetPublishedBy() {
+		p := auth.PrincipalFrom(ctx)
+		if checker := authz.CheckerFrom(ctx); checker != nil && checker.Engine.Enabled() && (p == nil || p.Anonymous()) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("approval requires an authenticated principal when authorization is enabled"))
+		}
+		if p != nil && !p.Anonymous() && p.ID() == d.GetPublishedBy() {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("approval requires a different authenticated principal than the publisher"))
 		}
 	case pb.DatasetVersionState_DATASET_VERSION_STATE_RETIRED:

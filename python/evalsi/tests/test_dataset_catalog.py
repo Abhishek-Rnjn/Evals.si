@@ -114,7 +114,17 @@ def test_cli_sdk_publication_review_history_and_diff_pins(
         lambda _: Client("http://unused", transport=httpx.MockTransport(send)),
     )
     source = tmp_path / "records.json"
-    source.write_text(json.dumps([{"id": "refund", "input": {"z": 2, "a": 1}}]))
+    source.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "refund",
+                    "input": {"z": 2, "a": 1},
+                    "provenance": {"trace": {"traceId": "a" * 32}},
+                }
+            ]
+        )
+    )
     assert (
         main(
             [
@@ -136,6 +146,7 @@ def test_cli_sdk_publication_review_history_and_diff_pins(
         == 0
     )
     assert calls[-1][1]["content"]["records"][0]["id"] == "refund"
+    assert calls[-1][1]["content"]["records"][0]["provenance"]["trace"]["traceId"] == "a" * 32
     assert calls[-1][1]["content"]["labels"] == {"classification": "internal"}
     assert (
         main(

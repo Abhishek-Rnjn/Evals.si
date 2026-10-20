@@ -131,6 +131,16 @@ def _publish(client: Client, args: argparse.Namespace) -> dict[str, Any]:
             raise DatasetError("catalog records require explicit nonempty string IDs")
         records = load_records(rows)
     content["records"] = [json_format.MessageToDict(record_to_proto(record)) for record in records]
+    if not args.snapshot:
+        from evalsi.v1alpha1.record_pb2 import Provenance
+
+        for wire, row in zip(content["records"], rows, strict=True):
+            if "provenance" in row:
+                try:
+                    provenance = json_format.ParseDict(row["provenance"], Provenance())
+                except json_format.ParseError as exc:
+                    raise ValueError("source provenance must use protobuf JSON fields") from exc
+                wire["provenance"] = json_format.MessageToDict(provenance)
     return client.publish_dataset_version(content)
 
 
