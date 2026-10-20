@@ -35,6 +35,11 @@ message A2AAgent {
   // polling, so each task state and artifact chunk the agent reports becomes
   // a step. The agent's card must declare streaming.
   bool stream = 4;
+  // The A2A transport: "JSONRPC" (the default) or "HTTP+JSON", the REST
+  // binding of A2A 0.3, where url is the interface's base URL and the calls
+  // are POST {url}/v1/message:send, POST {url}/v1/message:stream and
+  // GET {url}/v1/tasks/{id}.
+  string binding = 5;
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -63,14 +68,36 @@ message HTTPAgent {
   // "POST" by default.
   string method = 2;
   map<string, string> headers_env = 3;
-  // JSON with {{input}} (the instruction, JSON-escaped) and {{task_id}}.
+  // JSON with {{input}} (the instruction, JSON-escaped), {{task_id}},
+  // {{messages}} (the conversation so far), {{trial}} (the trial number) and
+  // {{session_id}} (unique to this task and trial in the run: use it as the
+  // agent's conversation or thread id so trials do not share history).
   // Default: {"input": {{input}}}.
   string body_template = 4;
   // Dotted path to the answer in the response, for example "output.text".
+  // Required, except for a stream with delta_path.
   string output_path = 5;
   // Dotted path to an OpenAI-style message list, kept as the trajectory.
   string messages_path = 6;
   google.protobuf.Duration timeout = 7;
+  // Dotted path to the turn's token usage: input_tokens/output_tokens (or
+  // prompt_tokens/completion_tokens) and optionally cost_usd.
+  string usage_path = 8;
+  // Dotted path to the turn's trajectory in Evals.si record form: an object
+  // with "steps" (and optionally "session_id"), or a list of steps. Kept as
+  // the trajectory, for agents that report their own tool, handoff and
+  // guardrail steps.
+  string trajectory_path = 9;
+  // Read the response as server-sent events, each a JSON object. The answer,
+  // messages and usage are taken from the last event that has them at their
+  // path; trajectory_path is read from every event that has it (a step, a
+  // list of steps or {"steps": [...]}, at least one event must) and the
+  // steps are kept in order.
+  bool stream = 10;
+  // With stream: a dotted path to a text chunk in an event. The chunks are
+  // joined into the answer when no event has output_path, which may then be
+  // empty.
+  string delta_path = 11;
 }
 
 // A command-line agent (a coding agent, for example) run inside the task's

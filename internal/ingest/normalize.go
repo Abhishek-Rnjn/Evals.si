@@ -478,6 +478,7 @@ func ToRecord(t Trace) (*evalsiv1alpha1.Record, TraceInfo) {
 		}
 	}
 	wrappers := demoteWrappers(traj.Steps)
+	traj.Steps = linkHandoffs(t.TraceID, traj.Steps)
 	var firstLLM, lastLLM *evalsiv1alpha1.Step
 	for _, step := range traj.Steps {
 		if step.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_LLM {

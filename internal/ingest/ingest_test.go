@@ -333,3 +333,45 @@ func TestReceiverReportsDroppedSpans(t *testing.T) {
 		t.Errorf("partial success = %v; want 1 of the 4 spans rejected", ps)
 	}
 }
+
+func TestSubAgentInvocationIsAHandoff(t *testing.T) {
+	spans := []*tracepb.Span{
+		span(1, 0, "invoke_agent triage", 0, 900,
+			kv("gen_ai.operation.name", "invoke_agent"), kv("gen_ai.agent.name", "triage")),
+		span(2, 1, "chat claude", 10, 100, kv("gen_ai.operation.name", "chat")),
+		span(3, 1, "invoke_agent billing", 110, 800,
+			kv("gen_ai.operation.name", "invoke_agent"), kv("gen_ai.agent.name", "billing")),
+		span(4, 3, "invoke_agent billing", 120, 700,
+			kv("gen_ai.operation.name", "invoke_agent"), kv("gen_ai.agent.name", "billing")),
+		span(6, 4, "invoke_agent billing", 125, 128, kv("gen_ai.operation.name", "invoke_agent")),
+		span(5, 4, "execute_tool refund", 130, 200,
+			kv("gen_ai.operation.name", "execute_tool"), kv("gen_ai.tool.name", "refund")),
+	}
+	rs := []*tracepb.ResourceSpans{{ScopeSpans: []*tracepb.ScopeSpans{{Spans: spans}}}}
+	record, info := ToRecord(Trace{TraceID: hex.EncodeToString(traceID), Spans: SpansOf(rs)})
+	steps := record.GetTrajectory().GetSteps()
+	var handoffs []*evalsiv1alpha1.Step
+	for _, s := range steps {
+		if s.GetType() == evalsiv1alpha1.StepType_STEP_TYPE_HANDOFF {
+			handoffs = append(handoffs, s)
+		}
+	}
+	// billing re-entering itself is not a transfer.
+	// Nor is a span named for its agent without gen_ai.agent.name.
+	if len(handoffs) != 1 || info.Steps != 7 {
+		t.Fatalf("handoffs = %v, steps %d", handoffs, info.Steps)
+	}
+	h := handoffs[0]
+	if h.GetName() != "billing" || h.GetAttributes()["evalsi.handoff.from"].GetStringValue() != "triage" {
+		t.Errorf("handoff = %v", h)
+	}
+	if h.GetParentSpanId() != hex.EncodeToString(bytes.Repeat([]byte{1}, 8)) {
+		t.Errorf("handoff parent = %s", h.GetParentSpanId())
+	}
+	if sub := steps[3]; sub.GetName() != "invoke_agent billing" || sub.GetParentSpanId() != h.GetSpanId() || steps[2] != h {
+		t.Errorf("sub-agent = %v after %v", sub, steps[2])
+	}
+	if record.GetTrajectory().GetSteps()[0].GetName() != "invoke_agent triage" {
+		t.Errorf("root moved: %v", steps[0])
+	}
+}

@@ -97,6 +97,10 @@ def spans(
         op = _OPERATION.get(step.type)
         if op:
             attrs.append(_attr("gen_ai.operation.name", op))
+        if step.type == "agent" and "gen_ai.agent.name" not in step.attributes:
+            # A turn of the agent under test, not another agent: ingest reads
+            # a different agent name under an invoke_agent span as a handoff.
+            attrs.append(_attr("gen_ai.agent.name", agent))
         if step.type == "tool":
             attrs.append(_attr("gen_ai.tool.name", step.name))
             if step.input is not None:

@@ -34,6 +34,9 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 		if agent.GetA2A().GetUrl() == "" {
 			return invalid("spec.target.agent.a2a.url is required")
 		}
+		if b := strings.ToUpper(agent.GetA2A().GetBinding()); b != "" && b != "JSONRPC" && b != "HTTP+JSON" {
+			return invalid("spec.target.agent.a2a.binding %q is not JSONRPC or HTTP+JSON", agent.GetA2A().GetBinding())
+		}
 	case agent.GetMcp() != nil:
 		if agent.GetMcp().GetUrl() == "" {
 			return invalid("spec.target.agent.mcp.url is required")
@@ -43,8 +46,12 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("spec.target.agent.responses needs base_url and model")
 		}
 	case agent.GetHttp() != nil:
-		if h := agent.GetHttp(); h.GetUrl() == "" || h.GetOutputPath() == "" {
-			return invalid("spec.target.agent.http needs url and output_path")
+		h := agent.GetHttp()
+		switch {
+		case h.GetDeltaPath() != "" && !h.GetStream():
+			return invalid("spec.target.agent.http.delta_path reads a stream: set stream too")
+		case h.GetUrl() == "" || (h.GetOutputPath() == "" && h.GetDeltaPath() == ""):
+			return invalid("spec.target.agent.http needs url and output_path (or stream with delta_path)")
 		}
 	case agent.GetCli() != nil:
 		// A CLI agent runs in the task's sandbox; the environment may come
