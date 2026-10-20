@@ -1415,7 +1415,15 @@ spec:
                             description: 'A duration: "250ms", "30s", "10m", "1.5h",
                               or a number of seconds.'
                             x-kubernetes-int-or-string: true
+                          trajectory_path:
+                            type: string
+                          trajectoryPath:
+                            type: string
                           url:
+                            type: string
+                          usage_path:
+                            type: string
+                          usagePath:
                             type: string
                         type: object
                         x-kubernetes-preserve-unknown-fields: true

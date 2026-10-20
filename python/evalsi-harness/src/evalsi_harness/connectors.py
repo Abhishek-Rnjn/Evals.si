@@ -25,7 +25,7 @@ import httpx
 
 from evalsi.sandbox import SandboxError
 from evalsi.targets import api_key
-from evalsi.types import Content, Message, Step, ToolCall, Usage
+from evalsi.types import Content, Message, Step, ToolCall, Trajectory, Usage
 from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness.environment import TaskEnvironment
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
@@ -76,6 +76,21 @@ def _get_path(data: Any, path: str) -> Any:
         else:
             return None
     return data
+
+
+def _usage(data: Any) -> Usage:
+    """Token usage as an agent reported it, in Evals.si or OpenAI Chat names."""
+    if not isinstance(data, Mapping):
+        return Usage()
+    try:
+        usage = Usage.from_dict(data)
+        if usage.input_tokens is None and data.get("prompt_tokens") is not None:
+            usage.input_tokens = int(data["prompt_tokens"])
+        if usage.output_tokens is None and data.get("completion_tokens") is not None:
+            usage.output_tokens = int(data["completion_tokens"])
+    except (TypeError, ValueError) as exc:
+        raise TaskError(f"http agent: the usage is malformed: {exc}") from exc
+    return usage
 
 
 def _agent_step(name: str, text: str, *, input_text: str = "", error: str = "") -> Step:
@@ -534,6 +549,8 @@ class HTTPConnector:
         self.name = cfg.url
         self.client = httpx.AsyncClient(timeout=_timeout(cfg), headers=_headers(cfg.headers_env))
         self.history: list[dict[str, str]] = []
+        # One conversation per task and trial: trials must not share an agent thread.
+        self.session_id = f"{task.run_id or 'run'}/{task.id}/{task.trial}"
 
     async def send(self, text: str) -> AgentReply:
         self.history.append({"role": "user", "content": text})
@@ -542,9 +559,11 @@ class HTTPConnector:
             "input": text,
             "task_id": self.task.id,
             "messages": self.history,
+            "trial": self.task.trial,
+            "session_id": self.session_id,
         }
         raw = re.sub(
-            r"\{\{(input|task_id|messages)\}\}",
+            r"\{\{(input|task_id|messages|trial|session_id)\}\}",
             lambda match: json.dumps(values[match[1]]),
             template,
         )
@@ -573,8 +592,29 @@ class HTTPConnector:
             messages = _get_path(data, self.cfg.messages_path)
             if isinstance(messages, list):
                 steps = steps_from_messages(messages)
+        extra: dict[str, Any] = {}
+        if self.cfg.trajectory_path:
+            trajectory = _get_path(data, self.cfg.trajectory_path)
+            if isinstance(trajectory, list):
+                trajectory = {"steps": trajectory}
+            if not isinstance(trajectory, Mapping):
+                raise TaskError(
+                    f"http agent: no trajectory at {self.cfg.trajectory_path!r} in the response"
+                )
+            try:
+                parsed = Trajectory.from_dict(trajectory)
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise TaskError(f"http agent: the trajectory is malformed: {exc}") from exc
+            for step in parsed.steps:
+                step.span_id = step.span_id or span_id()
+            steps.extend(parsed.steps)
+            if parsed.session_id:
+                extra["session_id"] = parsed.session_id
+        usage = Usage()
+        if self.cfg.usage_path:
+            usage = _usage(_get_path(data, self.cfg.usage_path))
         steps.append(_agent_step("http", reply, input_text=text))
-        return AgentReply(reply, steps=steps)
+        return AgentReply(reply, steps=steps, usage=usage, extra=extra)
 
     async def aclose(self) -> None:
         await self.client.aclose()

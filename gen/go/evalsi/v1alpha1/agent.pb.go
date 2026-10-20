@@ -385,16 +385,27 @@ type HTTPAgent struct {
 	// "POST" by default.
 	Method     string            `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
 	HeadersEnv map[string]string `protobuf:"bytes,3,rep,name=headers_env,json=headersEnv,proto3" json:"headers_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// JSON with {{input}} (the instruction, JSON-escaped) and {{task_id}}.
+	// JSON with {{input}} (the instruction, JSON-escaped), {{task_id}},
+	// {{messages}} (the conversation so far), {{trial}} (the trial number) and
+	// {{session_id}} (unique to this task and trial in the run: use it as the
+	// agent's conversation or thread id so trials do not share history).
 	// Default: {"input": {{input}}}.
 	BodyTemplate string `protobuf:"bytes,4,opt,name=body_template,json=bodyTemplate,proto3" json:"body_template,omitempty"`
 	// Dotted path to the answer in the response, for example "output.text".
 	OutputPath string `protobuf:"bytes,5,opt,name=output_path,json=outputPath,proto3" json:"output_path,omitempty"`
 	// Dotted path to an OpenAI-style message list, kept as the trajectory.
-	MessagesPath  string               `protobuf:"bytes,6,opt,name=messages_path,json=messagesPath,proto3" json:"messages_path,omitempty"`
-	Timeout       *durationpb.Duration `protobuf:"bytes,7,opt,name=timeout,proto3" json:"timeout,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MessagesPath string               `protobuf:"bytes,6,opt,name=messages_path,json=messagesPath,proto3" json:"messages_path,omitempty"`
+	Timeout      *durationpb.Duration `protobuf:"bytes,7,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// Dotted path to the turn's token usage: input_tokens/output_tokens (or
+	// prompt_tokens/completion_tokens) and optionally cost_usd.
+	UsagePath string `protobuf:"bytes,8,opt,name=usage_path,json=usagePath,proto3" json:"usage_path,omitempty"`
+	// Dotted path to the turn's trajectory in Evals.si record form: an object
+	// with "steps" (and optionally "session_id"), or a list of steps. Kept as
+	// the trajectory, for agents that report their own tool, handoff and
+	// guardrail steps.
+	TrajectoryPath string `protobuf:"bytes,9,opt,name=trajectory_path,json=trajectoryPath,proto3" json:"trajectory_path,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *HTTPAgent) Reset() {
@@ -474,6 +485,20 @@ func (x *HTTPAgent) GetTimeout() *durationpb.Duration {
 		return x.Timeout
 	}
 	return nil
+}
+
+func (x *HTTPAgent) GetUsagePath() string {
+	if x != nil {
+		return x.UsagePath
+	}
+	return ""
+}
+
+func (x *HTTPAgent) GetTrajectoryPath() string {
+	if x != nil {
+		return x.TrajectoryPath
+	}
+	return ""
 }
 
 // A command-line agent (a coding agent, for example) run inside the task's
@@ -2501,7 +2526,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1e\n" +
 	"\vapi_key_env\x18\x03 \x01(\tR\tapiKeyEnv\x123\n" +
-	"\atimeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xe1\x02\n" +
+	"\atimeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xa9\x03\n" +
 	"\tHTTPAgent\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12K\n" +
@@ -2511,7 +2536,10 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\voutput_path\x18\x05 \x01(\tR\n" +
 	"outputPath\x12#\n" +
 	"\rmessages_path\x18\x06 \x01(\tR\fmessagesPath\x123\n" +
-	"\atimeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\atimeout\x1a=\n" +
+	"\atimeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x1d\n" +
+	"\n" +
+	"usage_path\x18\b \x01(\tR\tusagePath\x12'\n" +
+	"\x0ftrajectory_path\x18\t \x01(\tR\x0etrajectoryPath\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x02\n" +

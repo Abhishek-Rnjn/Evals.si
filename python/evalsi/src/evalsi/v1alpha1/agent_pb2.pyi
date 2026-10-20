@@ -240,17 +240,32 @@ class HTTPAgent(_message.Message):
     OUTPUT_PATH_FIELD_NUMBER: _builtins.int
     MESSAGES_PATH_FIELD_NUMBER: _builtins.int
     TIMEOUT_FIELD_NUMBER: _builtins.int
+    USAGE_PATH_FIELD_NUMBER: _builtins.int
+    TRAJECTORY_PATH_FIELD_NUMBER: _builtins.int
     url: _builtins.str
     method: _builtins.str
     """"POST" by default."""
     body_template: _builtins.str
-    """JSON with {{input}} (the instruction, JSON-escaped) and {{task_id}}.
+    """JSON with {{input}} (the instruction, JSON-escaped), {{task_id}},
+    {{messages}} (the conversation so far), {{trial}} (the trial number) and
+    {{session_id}} (unique to this task and trial in the run: use it as the
+    agent's conversation or thread id so trials do not share history).
     Default: {"input": {{input}}}.
     """
     output_path: _builtins.str
     """Dotted path to the answer in the response, for example "output.text"."""
     messages_path: _builtins.str
     """Dotted path to an OpenAI-style message list, kept as the trajectory."""
+    usage_path: _builtins.str
+    """Dotted path to the turn's token usage: input_tokens/output_tokens (or
+    prompt_tokens/completion_tokens) and optionally cost_usd.
+    """
+    trajectory_path: _builtins.str
+    """Dotted path to the turn's trajectory in Evals.si record form: an object
+    with "steps" (and optionally "session_id"), or a list of steps. Kept as
+    the trajectory, for agents that report their own tool, handoff and
+    guardrail steps.
+    """
     @_builtins.property
     def headers_env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
     @_builtins.property
@@ -265,10 +280,12 @@ class HTTPAgent(_message.Message):
         output_path: _builtins.str = ...,
         messages_path: _builtins.str = ...,
         timeout: _duration_pb2.Duration | None = ...,
+        usage_path: _builtins.str = ...,
+        trajectory_path: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["body_template", b"body_template", "headers_env", b"headers_env", "messages_path", b"messages_path", "method", b"method", "output_path", b"output_path", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["body_template", b"body_template", "headers_env", b"headers_env", "messages_path", b"messages_path", "method", b"method", "output_path", b"output_path", "timeout", b"timeout", "trajectory_path", b"trajectory_path", "url", b"url", "usage_path", b"usage_path"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___HTTPAgent: _TypeAlias = HTTPAgent  # noqa: Y015

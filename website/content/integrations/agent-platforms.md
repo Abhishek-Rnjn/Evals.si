@@ -55,7 +55,7 @@ Put the agent in a run spec's `target.agent`:
 | A2A | `a2a: {url, headers_env}` | JSON-RPC `message/send`, following the task until it settles |
 | MCP | `mcp: {url, tool, argument}` | The agent is a tool on an MCP server |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses` with `previous_response_id` for later turns |
-| HTTP | `http: {url, method, body_template, output_path, messages_path}` | A JSON body from a template; the answer and its steps are read by path |
+| HTTP | `http: {url, method, body_template, output_path, messages_path, trajectory_path, usage_path}` | A JSON body from a template (`{{session_id}}` is unique per trial); the answer, its steps and its token usage are read by path |
 | CLI | `cli: {command, install, env_from, allow_hosts, timeout}` | Runs inside the task's sandbox |
 
 Credentials go in environment variables named in the spec, not in the spec itself. Add `trials` to get pass@k and pass^k, and gates so a run fails when quality drops. Turn production failures into the next test set with the promote step from Recipe A.

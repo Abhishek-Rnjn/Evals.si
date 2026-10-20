@@ -40,7 +40,7 @@ A run spec becomes an agent run when it has `target.agent` or `harness`. To run 
 | A2A | `a2a: {url, headers_env, timeout, stream}` | JSON-RPC `message/send`, following the task until it settles; with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events; push notifications are not used) |
 | MCP | `mcp: {url, tool, argument}` | the agent is a tool on an MCP server; each message is one call |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses`; later turns continue with `previous_response_id` |
-| HTTP | `http: {url, method, body_template, output_path, messages_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`); the answer at `output_path`, its steps at `messages_path` |
+| HTTP | `http: {url, method, body_template, output_path, messages_path, trajectory_path, usage_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`, `{{trial}}`, `{{session_id}}`); the answer at `output_path`, its steps at `messages_path` (OpenAI messages) or `trajectory_path` (Evals.si steps, for tool, handoff and guardrail steps the agent reports itself), its token usage at `usage_path`. Key the agent's thread on `{{session_id}}`, not `{{task_id}}`: the task id is the same in every trial, so trials sharing it share one conversation |
 | CLI | `cli: {command, install, env_from, allow_hosts, timeout, output_format}` | runs **inside the task's sandbox**, in its workdir |
 
 A CLI agent:

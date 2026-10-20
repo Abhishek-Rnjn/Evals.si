@@ -219,6 +219,89 @@ def test_http_agent(agent_server: Callable[[Handler], str], sandboxes: LocalSand
     assert [(t.name, t.result) for t in tools] == [("lookup", "found")]
 
 
+def test_http_agent_reports_its_trajectory_usage_and_a_thread_per_trial(
+    agent_server: Callable[[Handler], str], sandboxes: LocalSandboxClient
+) -> None:
+    threads: list[Any] = []
+
+    def http(
+        path: str, body: dict[str, Any], headers: dict[str, str]
+    ) -> tuple[int, dict[str, Any], dict[str, str]]:
+        threads.append((body["thread"], body["trial"]))
+        return (
+            200,
+            {
+                "output": "routed",
+                "record": {
+                    "trajectory": {
+                        "session_id": "orbit-42",
+                        "steps": [
+                            {"type": "tool", "name": "lookup", "output": "found"},
+                            {"type": "STEP_TYPE_HANDOFF", "name": "billing"},
+                            {"type": "guardrail", "name": "hitl", "error": "denied"},
+                        ],
+                    }
+                },
+                "usage": {"prompt_tokens": 12, "completion_tokens": 5, "cost_usd": 0.01},
+            },
+            {},
+        )
+
+    url = agent_server(http)
+    spec = spec_of(
+        {
+            "target": {
+                "agent": {
+                    "http": {
+                        "url": url,
+                        "body_template": (
+                            '{"q": {{input}}, "thread": {{session_id}}, "trial": {{trial}}}'
+                        ),
+                        "output_path": "output",
+                        "trajectory_path": "record.trajectory",
+                        "usage_path": "usage",
+                    }
+                }
+            }
+        }
+    )
+    first = run(spec, record("route me"), sandboxes).record
+    second = run(spec, record("route me"), sandboxes, trial=1).record
+    assert threads == [("run1/t1/0", 0), ("run1/t1/1", 1)]
+    assert first is not None
+    assert first.trajectory is not None
+    assert [(s.type, s.name) for s in first.trajectory.steps if s.type != "agent"] == [
+        ("tool", "lookup"),
+        ("handoff", "billing"),
+        ("guardrail", "hitl"),
+    ]
+    assert [t.name for t in first.trajectory.tool_uses()] == ["lookup"]
+    assert all(s.span_id for s in first.trajectory.steps)
+    assert first.usage is not None
+    assert (first.usage.input_tokens, first.usage.output_tokens) == (12, 5)
+    assert first.usage.cost_usd == 0.01
+    assert first.metadata["agent"]["session_id"] == "orbit-42"
+    assert second is not None
+
+
+def test_http_agent_without_the_trajectory_it_was_promised_is_an_error(
+    agent_server: Callable[[Handler], str], sandboxes: LocalSandboxClient
+) -> None:
+    url = agent_server(lambda path, body, headers: (200, {"output": "hi"}, {}))
+    spec = spec_of(
+        {
+            "target": {
+                "agent": {
+                    "http": {"url": url, "output_path": "output", "trajectory_path": "record"}
+                }
+            }
+        }
+    )
+    outcome = run(spec, record("hi"), sandboxes)
+    assert outcome.record is None
+    assert outcome.error == "http agent: no trajectory at 'record' in the response"
+
+
 def test_unreachable_agents_are_errors_not_failures(sandboxes: LocalSandboxClient) -> None:
     spec = spec_of(
         {"target": {"agent": {"a2a": {"url": "http://127.0.0.1:1/a2a", "timeout": "2s"}}}}
