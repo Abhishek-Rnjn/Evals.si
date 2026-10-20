@@ -128,6 +128,21 @@ def test_codex_completed_turn_clears_transient_reconnect_and_fallback_warnings()
     assert (run.usage.input_tokens, run.usage.output_tokens) == (100, 20)
 
 
+def test_codex_completed_turn_keeps_an_earlier_failed_turn() -> None:
+    run = parse_output(
+        "codex-json",
+        '{"type":"thread.started","thread_id":"t"}\n'
+        '{"type":"turn.started"}\n'
+        '{"type":"turn.failed","error":{"message":"rate limited"}}\n'
+        '{"type":"turn.started"}\n'
+        '{"type":"error","message":"Reconnecting... 1/5"}\n'
+        '{"type":"item.completed","item":{"id":"i1","type":"agent_message","text":"Done."}}\n'
+        '{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":2}}\n',
+    )
+    assert run is not None
+    assert run.error == "rate limited"
+
+
 def test_gemini_stream() -> None:
     run = read("gemini-json", "gemini-0.64.0-fix-calc.jsonl")
     assert run.answer == "Fixed add."

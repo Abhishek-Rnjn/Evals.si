@@ -60,13 +60,16 @@ type FirecrackerConfig struct {
 	DiskMB int `json:"disk_mb,omitempty"`
 	// Booted VMs kept ready per image, so creating a sandbox skips the boot.
 	WarmPool int `json:"warm_pool,omitempty"`
+	// Cold boots (warm-pool refills and leases the pool cannot serve) that
+	// run at once; default 8. Restores are not limited: callers wait on them.
+	MaxParallelBoots int `json:"max_parallel_boots,omitempty"`
 	// The KVM device; default /dev/kvm.
 	KVMDevice string `json:"kvm_device,omitempty"`
 }
 
 func (c *FirecrackerConfig) validate() error {
-	if c.WarmPool < 0 || c.VCPUs < 0 || c.MemoryMB < 0 || c.DiskMB < 0 {
-		return errors.New("sandbox.firecracker: sizes and warm_pool cannot be negative")
+	if c.WarmPool < 0 || c.VCPUs < 0 || c.MemoryMB < 0 || c.DiskMB < 0 || c.MaxParallelBoots < 0 {
+		return errors.New("sandbox.firecracker: sizes, warm_pool and max_parallel_boots cannot be negative")
 	}
 	if c.Jailer != "" && (c.JailerUID == 0 || c.JailerGID == 0) {
 		return errors.New("sandbox.firecracker: the jailer needs jailer_uid and jailer_gid (non-root)")
@@ -124,7 +127,11 @@ func (d *firecrackerDriver) shutdown() {
 }
 
 func newFirecracker(sb *Sandbox) driver {
-	return &firecrackerDriver{sb: sb, pools: map[string]chan *fcVM{}, inflight: map[string]int{}, disks: map[string]*sync.Mutex{}, bootSem: make(chan struct{}, 8)}
+	boots := 8
+	if c := sb.cfg.Firecracker; c != nil && c.MaxParallelBoots > 0 {
+		boots = c.MaxParallelBoots
+	}
+	return &firecrackerDriver{sb: sb, pools: map[string]chan *fcVM{}, inflight: map[string]int{}, disks: map[string]*sync.Mutex{}, bootSem: make(chan struct{}, boots)}
 }
 
 func (d *firecrackerDriver) cfg() *FirecrackerConfig {
@@ -480,7 +487,11 @@ func (d *firecrackerDriver) start(ctx context.Context, vm *fcVM, jailID string) 
 	p.SetUnencryptedHTTP2(true)
 	uds := filepath.Join(vm.dir, fcVsockSocket)
 	vm.guest = guestv1alpha1connect.NewGuestAgentServiceClient(&http.Client{Transport: &http.Transport{
-		Protocols:         p,
+		Protocols: p,
+		// Firecracker resets every host vsock connection on PUT
+		// /snapshot/create; a pooled connection from before a snapshot
+		// fails the next call with "unexpected EOF". A connection per call
+		// costs one local CONNECT handshake.
 		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return dialVsock(ctx, uds, 1024)
@@ -584,8 +595,20 @@ func (d *firecrackerDriver) restore(ctx context.Context, from, dir string, img *
 	if err := copyTree(ctx, filepath.Join(from, fcRootfs), filepath.Join(root, fcRootfs)); err != nil {
 		return nil, err
 	}
+	// Firecracker maps the memory file privately and never writes either
+	// file, and a later snapshot unlinks them first, so restores can share
+	// the inodes. The jailer chowns every file in the VM root to its uid,
+	// which would let one jailed VMM rewrite the snapshot others restore
+	// from: copy them then.
 	for _, f := range []string{fcSnapshot, fcMemory} {
-		if err := linkOrCopy(filepath.Join(from, f), filepath.Join(root, f)); err != nil {
+		src, dst := filepath.Join(from, f), filepath.Join(root, f)
+		var err error
+		if d.cfg().Jailer != "" {
+			err = copyTree(ctx, src, dst)
+		} else {
+			err = linkOrCopy(src, dst)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}

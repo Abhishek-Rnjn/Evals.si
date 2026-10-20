@@ -421,6 +421,15 @@ type Storage struct {
 	ClickHouse *store.ClickHouseConfig `json:"clickhouse,omitempty"`
 	// S3-compatible object storage, for datasets_dir s3://bucket/prefix.
 	S3 *objstore.Config `json:"s3,omitempty"`
+	// SQLite tuning for the default database under data_dir.
+	SQLite *SQLite `json:"sqlite,omitempty"`
+}
+
+// SQLite tunes the default database. Synchronous "normal" trades the last
+// commits before a power loss (never corruption, in WAL mode) for faster
+// writes; the default, "full", keeps every acknowledged commit.
+type SQLite struct {
+	Synchronous string `json:"synchronous,omitempty"`
 }
 
 // Postgres names the database; the DSN usually carries a password, so it
@@ -678,6 +687,9 @@ func (c Config) Validate() error {
 		if s.CAFile == "" || s.CertFile == "" || s.KeyFile == "" {
 			errs = append(errs, errors.New("worker.sandbox_service needs ca_file, cert_file and key_file (mutual TLS)"))
 		}
+	}
+	if sq := c.Storage.SQLite; sq != nil && sq.Synchronous != "" && sq.Synchronous != "full" && sq.Synchronous != "normal" {
+		errs = append(errs, fmt.Errorf("storage.sqlite.synchronous %q must be full or normal", sq.Synchronous))
 	}
 	if ch := c.Storage.ClickHouse; ch != nil && ch.URL == "" {
 		errs = append(errs, errors.New("storage.clickhouse needs url"))

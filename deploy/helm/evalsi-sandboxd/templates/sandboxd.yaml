@@ -13,6 +13,7 @@
 {{- $fc := dict "kernel" "/opt/evalsi/vmlinux" "warm_pool" (int $v.firecracker.warmPool) "vcpus" (int $v.firecracker.vcpus) "memory_mb" (int $v.firecracker.memoryMB) }}
 {{- with $v.firecracker.defaultImage }}{{ $_ := set $fc "default_image" (include "sandboxd.ref" (dict "root" $ "ref" .)) }}{{ end }}
 {{- with $v.firecracker.diskMB }}{{ $_ := set $fc "disk_mb" (int .) }}{{ end }}
+{{- with $v.firecracker.maxParallelBoots }}{{ $_ := set $fc "max_parallel_boots" (int .) }}{{ end }}
 {{- $_ := set $sandbox "firecracker" $fc }}
 {{- end }}
 {{- if not (has $v.mode (list "bwrap" "privileged" "firecracker")) }}

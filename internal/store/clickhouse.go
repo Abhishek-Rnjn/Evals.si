@@ -236,10 +236,8 @@ func (c *clickhouse) PutTraces(ctx context.Context, traces []TraceWrite) error {
 	if len(traces) == 0 {
 		return nil
 	}
-	if skip, _ := ctx.Value(watchSkipLegacyCopyKey{}).(bool); !skip {
-		if err := c.copyLegacyTraceScores(ctx, traces); err != nil {
-			return err
-		}
+	if err := c.copyLegacyTraceScores(ctx, traces); err != nil {
+		return err
 	}
 	var body bytes.Buffer
 	enc := json.NewEncoder(&body)

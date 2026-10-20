@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -207,50 +206,67 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 	if err != nil {
 		return nil, err
 	}
+	if err := checkWatchLease(ctx, tx, lease); err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	eligible, writes, heads, err := s.prepareWatchTraces(ctx, tx, items)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	err = s.publishWatchHeads(ctx, tx, lease, len(items), writes, heads, func(ctx context.Context, tx *txn) ([]TraceWrite, []watchHead, error) {
+		var err error
+		eligible, writes, heads, err = s.prepareWatchTraces(ctx, tx, items)
+		return writes, heads, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return eligible, nil
+}
+
+// publishWatchHeads stores the traces of accepted heads and marks the heads
+// published, finishing tx. For ClickHouse it first commits publication
+// intents, then reopens the write lock; anything may have changed in between
+// (a newer acceptance, retention), so reprepare re-reads what is still current.
+func (s *Store) publishWatchHeads(ctx context.Context, tx *txn, lease PolicyLease, count int, writes []TraceWrite, heads []watchHead, reprepare func(context.Context, *txn) ([]TraceWrite, []watchHead, error)) error {
 	defer func() {
 		if tx != nil {
 			_ = tx.Rollback()
 		}
 	}()
-	if err := checkWatchLease(ctx, tx, lease); err != nil {
-		return nil, err
-	}
-	eligible, writes, heads, err := s.prepareWatchTraces(ctx, tx, items)
-	if err != nil {
-		return nil, err
-	}
+	var err error
 	if _, external := s.traces.(*clickhouse); external && len(writes) > 0 {
 		// Commit intents before sending an external request: a timed-out
 		// INSERT can outlive both this transaction and a superseding head.
 		for _, h := range heads {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO watch_publications(project,trace_id,revision,start_ns) VALUES(?,?,?,?) ON CONFLICT(project,trace_id,revision) DO NOTHING`, h.Project, h.TraceID, h.Revision, h.StartNS); err != nil {
-				return nil, err
+				return err
 			}
 		}
-		end, err := nextWatchClock(ctx, tx, len(items))
+		end, err := nextWatchClock(ctx, tx, count)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err := tx.Commit(); err != nil {
-			return nil, err
+			return err
 		}
-		ctx = context.WithValue(ctx, watchVersionKey{}, watchReservation{Start: end - int64(len(items)) + 1, End: end})
+		ctx = context.WithValue(ctx, watchVersionKey{}, watchReservation{Start: end - int64(count) + 1, End: end})
 		tx, err = s.beginReservedWatchWrite(ctx)
-		stale := errors.Is(err, errWatchReservationStale)
-		if stale {
-			ctx, tx, err = s.beginVersionedWatchWrite(ctx, len(items))
+		if errors.Is(err, errWatchReservationStale) {
+			ctx, tx, err = s.beginVersionedWatchWrite(ctx, count)
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err := checkWatchLease(ctx, tx, lease); err != nil {
-			return nil, err
+			return err
 		}
-		if stale {
-			eligible, writes, heads, err = s.prepareWatchTraces(ctx, tx, items)
-			if err != nil {
-				return nil, err
-			}
+		// Retention can tombstone a head without moving the clock, so a
+		// current reservation does not mean the heads are unchanged.
+		if writes, heads, err = reprepare(ctx, tx); err != nil {
+			return err
 		}
 	}
 	if len(writes) > 0 {
@@ -262,29 +278,29 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 			projections[key] = scoreBinding(h.Hash, h.ScoreRevision)
 			var retired int64
 			if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(retired_before_ns),0) FROM watch_publications WHERE project=? AND trace_id=? AND revision=0`, h.Project, h.TraceID).Scan(&retired); err != nil {
-				return nil, err
+				return err
 			}
 			retiredBefore[key] = retired
 			if retired > 0 {
 				rows, err := tx.QueryContext(ctx, `SELECT record_hash,start_ns FROM watch_score_references WHERE project=? AND trace_id=? AND start_ns>=?`, h.Project, h.TraceID, retired)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				for rows.Next() {
 					var hash string
 					var start int64
 					if err := rows.Scan(&hash, &start); err != nil {
 						_ = rows.Close()
-						return nil, err
+						return err
 					}
 					liveLegacyRefs[[3]string{h.Project, h.TraceID, hash}] = start
 				}
 				if err := rows.Err(); err != nil {
 					_ = rows.Close()
-					return nil, err
+					return err
 				}
 				if err := rows.Close(); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
@@ -297,21 +313,20 @@ func (s *Store) PutWatchTraces(ctx context.Context, lease PolicyLease, items []W
 			err = s.traces.PutTraces(ctx, writes)
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, h := range heads {
 			if _, err := tx.ExecContext(ctx, `UPDATE watch_trace_heads SET published=1,projection_hash=? WHERE project=? AND trace_id=? AND revision=? AND deleted=0`, scoreBinding(h.Hash, h.ScoreRevision), h.Project, h.TraceID, h.Revision); err != nil {
-				return nil, err
+				return err
 			}
 			if _, err := tx.ExecContext(ctx, `DELETE FROM watch_publications WHERE project=? AND trace_id=? AND revision=?`, h.Project, h.TraceID, h.Revision); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return eligible, nil
+	err = tx.Commit()
+	tx = nil
+	return err
 }
 
 func (s *Store) PutWatchResults(ctx context.Context, lease PolicyLease, item WatchPending, policy string, results []*evalsiv1alpha1.EvaluationResult) error {
@@ -414,39 +429,42 @@ func snapshotHashFromRecordHash(recHash string, summary *evalsiv1alpha1.TraceSum
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-type watchSkipLegacyCopyKey struct{}
-
-// PutUnwatchedTraces stores assembled traces in a single batch when no online
-// policies exist, recording the same head and retention metadata as PutWatchTraces.
+// PutUnwatchedTraces stores traces when no online policy could score them,
+// without queuing evaluation work. Heads, score bindings, retention and
+// ClickHouse publication intents follow the same rules as PutWatchPending
+// followed by PutWatchTraces, so a trace stored here is indistinguishable
+// from one that went through the queue: an unchanged re-ingest keeps its
+// score binding, and an already-published identical trace is not rewritten.
+// Within one call, the last write of a trace wins.
 func (s *Store) PutUnwatchedTraces(ctx context.Context, lease PolicyLease, writes []TraceWrite) error {
-	if len(writes) == 0 {
+	last := make(map[[2]string]int, len(writes))
+	for i, w := range writes {
+		last[[2]string{w.Summary.GetProject(), w.Summary.GetTraceId()}] = i
+	}
+	unique := make([]TraceWrite, 0, len(last))
+	for i, w := range writes {
+		if last[[2]string{w.Summary.GetProject(), w.Summary.GetTraceId()}] == i {
+			unique = append(unique, w)
+		}
+	}
+	if len(unique) == 0 {
 		return nil
 	}
-	type preppedTrace struct {
-		project, traceID, service string
-		startNS                   int64
-		recHash, snapHash         string
-		sumBlob, recBlob          []byte
-	}
-	prepped := make([]preppedTrace, len(writes))
-	workers := min(len(writes), 8)
+	// Hashing dominates for large traces; it needs no lock.
+	pending := make([]WatchPending, len(unique))
+	workers := min(len(unique), 8)
 	var wg sync.WaitGroup
 	for w := range workers {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := w; i < len(writes); i += workers {
-				wr := writes[i]
-				recHash := RecordHash(wr.Record)
-				prepped[i] = preppedTrace{
-					project:  wr.Summary.GetProject(),
-					traceID:  wr.Summary.GetTraceId(),
-					service:  wr.Summary.GetService(),
-					startNS:  wr.Summary.GetStartTime().AsTime().UnixNano(),
-					recHash:  recHash,
-					snapHash: snapshotHashFromRecordHash(recHash, wr.Summary),
-					sumBlob:  marshal(wr.Summary),
-					recBlob:  marshal(wr.Record),
+			for i := w; i < len(unique); i += workers {
+				t := unique[i]
+				recHash := RecordHash(t.Record)
+				pending[i] = WatchPending{
+					Project: t.Summary.GetProject(), TraceID: t.Summary.GetTraceId(),
+					RecordHash: recHash, SnapshotHash: snapshotHashFromRecordHash(recHash, t.Summary),
+					StartNS: t.Summary.GetStartTime().AsTime().UnixNano(),
 				}
 			}
 		}(w)
@@ -457,127 +475,44 @@ func (s *Store) PutUnwatchedTraces(ctx context.Context, lease PolicyLease, write
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if tx != nil {
-			_ = tx.Rollback()
-		}
-	}()
 	if err := checkWatchLease(ctx, tx, lease); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
-	end, err := nextWatchClock(ctx, tx, len(writes))
-	if err != nil {
-		return err
-	}
-	startVer := end - int64(len(writes)) + 1
-	projections := make(map[[2]string]string, len(writes))
-	bindings := make([]string, len(writes))
-	for i := range prepped {
-		rev := startVer + int64(i)
-		p := &prepped[i]
-		b := scoreBinding(p.recHash, rev)
-		bindings[i] = b
-		projections[[2]string{p.project, p.traceID}] = b
-	}
-	// Deduplicate by (project, trace_id) within each multi-row chunk so ON CONFLICT never sees two identical keys in one statement.
-	const chunkRows = 100
-	for lo := 0; lo < len(prepped); lo += chunkRows {
-		hi := min(lo+chunkRows, len(prepped))
-		seen := map[[2]string]bool{}
-		unique := true
-		for i := lo; i < hi; i++ {
-			k := [2]string{prepped[i].project, prepped[i].traceID}
-			if seen[k] {
-				unique = false
-				break
-			}
-			seen[k] = true
-		}
-		if !unique {
-			for i := lo; i < hi; i++ {
-				rev := startVer + int64(i)
-				p := &prepped[i]
-				b := bindings[i]
-				if err := retainWatchScore(ctx, tx, p.project, p.traceID, b, p.startNS); err != nil {
-					return err
-				}
-				if err := putWatchHead(ctx, tx, watchHead{
-					Project: p.project, TraceID: p.traceID, Revision: rev, ScoreRevision: rev,
-					Hash: p.recHash, SnapshotHash: p.snapHash, ProjectionHash: b,
-					StartNS: p.startNS, Published: true,
-				}); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-		var refValues, headValues strings.Builder
-		refArgs := make([]any, 0, (hi-lo)*4)
-		headArgs := make([]any, 0, (hi-lo)*10)
-		for i := lo; i < hi; i++ {
-			if i > lo {
-				refValues.WriteByte(',')
-				headValues.WriteByte(',')
-			}
-			refValues.WriteString("(?,?,?,?)")
-			headValues.WriteString("(?,?,?,?,?,?,?,?,?,?)")
-			rev := startVer + int64(i)
-			p := &prepped[i]
-			b := bindings[i]
-			refArgs = append(refArgs, p.project, p.traceID, b, p.startNS)
-			headArgs = append(headArgs, p.project, p.traceID, rev, p.recHash, p.startNS, true, false, b, p.snapHash, rev)
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO watch_score_references(project,trace_id,record_hash,start_ns) VALUES `+refValues.String()+` ON CONFLICT(project,trace_id,record_hash) DO UPDATE SET start_ns=CASE WHEN excluded.start_ns>watch_score_references.start_ns THEN excluded.start_ns ELSE watch_score_references.start_ns END,dirty=CASE WHEN excluded.start_ns>watch_score_references.start_ns THEN 1 ELSE watch_score_references.dirty END`, refArgs...); err != nil {
+	var out []TraceWrite
+	var heads []watchHead
+	for i, p := range pending {
+		h, err := acceptWatchHead(ctx, tx, p)
+		if err != nil {
+			_ = tx.Rollback()
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO watch_trace_heads(project,trace_id,revision,record_hash,start_ns,published,deleted,projection_hash,snapshot_hash,score_revision) VALUES `+headValues.String()+` ON CONFLICT(project,trace_id) DO UPDATE SET revision=excluded.revision,record_hash=excluded.record_hash,start_ns=excluded.start_ns,published=excluded.published,deleted=excluded.deleted,projection_hash=excluded.projection_hash,snapshot_hash=excluded.snapshot_hash,score_revision=excluded.score_revision`, headArgs...); err != nil {
-			return err
+		if h.Published {
+			continue // this exact trace is already stored
 		}
+		out = append(out, unique[i])
+		heads = append(heads, h)
 	}
-	ctx = context.WithValue(ctx, watchProjectionKey{}, projections)
-	ctx = context.WithValue(ctx, watchVersionKey{}, watchReservation{Start: startVer, End: end})
-	ctx = context.WithValue(ctx, watchSkipLegacyCopyKey{}, true)
-	if _, ok := s.traces.(*sqlTraces); ok {
-		for lo := 0; lo < len(prepped); lo += chunkRows {
-			hi := min(lo+chunkRows, len(prepped))
-			seen := map[[2]string]bool{}
-			unique := true
-			for i := lo; i < hi; i++ {
-				k := [2]string{prepped[i].project, prepped[i].traceID}
-				if seen[k] {
-					unique = false
-					break
-				}
-				seen[k] = true
-			}
-			if !unique {
-				for i := lo; i < hi; i++ {
-					p := &prepped[i]
-					if _, err := tx.ExecContext(ctx, putTraceSQL, p.project, p.traceID, p.service, p.startNS, p.sumBlob, p.recBlob, bindings[i]); err != nil {
-						return err
-					}
-				}
+	// After the intents commit, keep only heads nothing has superseded or
+	// retired since, as prepareWatchTraces does for queued work.
+	reprepare := func(ctx context.Context, tx *txn) ([]TraceWrite, []watchHead, error) {
+		var w []TraceWrite
+		var hs []watchHead
+		for i, h := range heads {
+			cur, err := getWatchHead(ctx, tx, h.Project, h.TraceID)
+			if isNoRows(err) {
 				continue
 			}
-			var trValues strings.Builder
-			trArgs := make([]any, 0, (hi-lo)*7)
-			for i := lo; i < hi; i++ {
-				if i > lo {
-					trValues.WriteByte(',')
-				}
-				trValues.WriteString("(?,?,?,?,?,?,?)")
-				p := &prepped[i]
-				trArgs = append(trArgs, p.project, p.traceID, p.service, p.startNS, p.sumBlob, p.recBlob, bindings[i])
+			if err != nil {
+				return nil, nil, err
 			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO traces (project, trace_id, service, start_ns, summary, record, record_hash) VALUES `+trValues.String()+` ON CONFLICT (project, trace_id) DO UPDATE SET service = excluded.service, start_ns = excluded.start_ns, summary = excluded.summary, record = excluded.record, record_hash=excluded.record_hash`, trArgs...); err != nil {
-				return err
+			if cur.Deleted || cur.Published || cur.Revision != h.Revision {
+				continue
 			}
+			w = append(w, out[i])
+			hs = append(hs, cur)
 		}
-		return tx.Commit()
+		return w, hs, nil
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	tx = nil
-	return s.traces.PutTraces(ctx, writes)
+	return s.publishWatchHeads(ctx, tx, lease, len(out), out, heads, reprepare)
 }

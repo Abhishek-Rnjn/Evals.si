@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
+
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 )
@@ -436,5 +438,34 @@ func TestNewEpochOfSameOwnerCancelsCapturedProcessingTerm(t *testing.T) {
 	defer done()
 	if current.Epoch != 3 {
 		t.Fatalf("new term not installed: %v", current)
+	}
+}
+
+// With no policy, traces are stored without queuing work; once a policy
+// exists, they are queued so it scores them.
+func TestUnwatchedTracesSkipTheQueueOnlyWithoutPolicies(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	first := trace(1, "chat", "good", false)
+	h.e.ingestDirect(ctx, []ingest.Trace{first})
+	if _, _, err := h.st.GetTrace(ctx, DefaultProject, first.TraceID); err != nil {
+		t.Fatalf("unwatched trace was not stored: %v", err)
+	}
+	if rows, err := h.st.ListWatchPending(ctx, 10); err != nil || len(rows) != 0 {
+		t.Fatalf("unwatched trace queued work: %v %v", rows, err)
+	}
+	if got := h.e.TracesIngested.Load(); got != 1 {
+		t.Fatalf("ingested %d", got)
+	}
+
+	policy := &evalsiv1alpha1.OnlineEvalPolicy{Name: "p", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/quality")}}}
+	if _, err := h.e.ApplyPolicy(ctx, connect.NewRequest(&evalsiv1alpha1.ApplyPolicyRequest{Policy: policy})); err != nil {
+		t.Fatal(err)
+	}
+	second := trace(2, "chat", "good", false)
+	h.e.ingestDirect(ctx, []ingest.Trace{second})
+	rows, err := h.st.ListWatchPending(ctx, 10)
+	if err != nil || len(rows) != 1 || rows[0].TraceID != second.TraceID {
+		t.Fatalf("a watched trace was not queued: %v %v", rows, err)
 	}
 }

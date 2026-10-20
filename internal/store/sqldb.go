@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -101,9 +102,22 @@ type txn struct {
 	stmts map[string]*sql.Stmt
 }
 
+// Statements a transaction keeps prepared. Batched writes repeat a few
+// statements per row; queries built per call (a VALUES list of varying
+// length) stop being cached once this many are held.
+const maxTxStmts = 64
+
+var errTxStmtsFull = errors.New("transaction statement cache is full")
+
+// stmt prepares q once per SQLite transaction, so per-row statements in a
+// batch skip re-parsing. The driver prepares each unprepared call anyway, so
+// a statement used once costs the same either way.
 func (t *txn) stmt(ctx context.Context, q string) (*sql.Stmt, error) {
 	if s, ok := t.stmts[q]; ok {
 		return s, nil
+	}
+	if len(t.stmts) >= maxTxStmts {
+		return nil, errTxStmtsFull
 	}
 	s, err := t.tx.PrepareContext(ctx, t.d.rebind(q))
 	if err != nil {

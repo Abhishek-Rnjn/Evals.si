@@ -4,15 +4,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
-### Fixed
-
-- `evalsid` Firecracker snapshots (`internal/sandbox/firecracker.go`) now disable HTTP/2 keep-alives on the vsock transport and wait for the guest agent to recover after `resume()`, preventing `unavailable: unexpected EOF` on the first command or file write after `PUT /snapshot/create` on real KVM.
-- `evalsid sandbox probe` (`internal/sandbox/sandbox.go`) now preserves `res.Error` (which carries the `mode: privileged` and `ladder: [pod]` fallback hint when `bwrap` fails with `RTM_NEWADDR: Operation not permitted` on Ubuntu 24.04) instead of truncating at the first newline of `stderr`.
-- `parse_codex` and `parse_gemini` (`python/evalsi-harness/src/evalsi_harness/readers.py`) now handle real `codex 0.163.0` transient reconnect/fallback warnings when `turn.completed` arrives and real `gemini 0.64.0` consecutive `tool_use` turns and `-o json` `session_id` fields.
-- `internal/watch` and `internal/store` now batch unwatched OTLP trace writes (`PutUnwatchedTraces`) and pending acknowledgments (`AckWatchPendingBatch`) and chunk ClickHouse legacy-score lookups, restoring `TestLoad` `OTLPIngest` throughput above the 20k spans/s stored target (`23.5k/s` SQLite, `27.4k/s` ClickHouse) with PR #101/103 durability enabled; `internal/sandbox/firecracker.go` hard-links immutable snapshot memory files and bounds concurrent warm-pool refills.
-
 ### Added
 
+- `storage.sqlite.synchronous: normal` opts the default SQLite database into `PRAGMA synchronous=NORMAL`: faster writes, but a power loss can drop the last commits (WAL mode never corrupts). The default stays `full`.
+- `sandbox.firecracker.max_parallel_boots` (chart: `firecracker.maxParallelBoots`) limits concurrent cold microVM boots; default 8.
 - **`builtin/run-completed`** passes an agent run that ended `completed`, and fails one stopped for steps, spend or time, failed, or left waiting on a human. Connectors now report why a run stopped instead of always `completed`: an A2A task's last state (`input_required`, `failed`, ...) and an HTTP agent's `stop_reason_path`. A run left at `awaiting_human` previously passed gates on tool errors.
 - A gate on a metric every record skipped now says so (`no record was scored (3 skipped, 0 errors)`) instead of `metric has no mean`.
 - A shared dataset catalog publishes immutable project/name/version suites from explicit records, portable snapshots or approved failure revisions. Adds digest-bound approval with separate authenticated publishing/reviewing principals, retirement, item/manifest diffs, transactional history and source-aware read permissions. Approved catalog pins load directly into server runs and remain on stored records; browser, CLI and SDK cover publication through regression runs. Initial storage is limited to 2 MiB of content per version, with no erasure API or signature guarantee.
@@ -48,8 +43,16 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - `evalsi init` creates offline recorded-output or sandboxed-agent starter projects, including a working example, a deliberately regressed control, error-rate gates and local report instructions. Existing directories are never overwritten.
 - A root composite GitHub Action runs gates with published 0.3.0, writes metrics and identity summaries, optionally compares compatible paired baselines and propagates failures. Raw results/log uploads are opt-in. Added an onboarding guide, website navigation and action positive/negative CI controls; roadmap acceptance criteria remain open beyond these initial slices.
 
+### Changed
+
+- The sandbox image store reuses an unpacked root without asking the registry only for digest-pinned refs; tags are resolved every time.
+
 ### Fixed
 
+- `evalsid` Firecracker snapshots (`internal/sandbox/firecracker.go`) now disable HTTP/2 keep-alives on the vsock transport and wait for the guest agent to recover after `resume()`, preventing `unavailable: unexpected EOF` on the first command or file write after `PUT /snapshot/create` on real KVM.
+- `evalsid sandbox probe` (`internal/sandbox/sandbox.go`) now preserves `res.Error` (which carries the `mode: privileged` and `ladder: [pod]` fallback hint when `bwrap` fails with `RTM_NEWADDR: Operation not permitted` on Ubuntu 24.04) instead of truncating at the first newline of `stderr`.
+- `parse_codex` and `parse_gemini` (`python/evalsi-harness/src/evalsi_harness/readers.py`) now handle real `codex 0.163.0` transient reconnect/fallback warnings when `turn.completed` arrives and real `gemini 0.64.0` consecutive `tool_use` turns and `-o json` `session_id` fields.
+- `internal/watch` and `internal/store` now store traces without queuing evaluation work when no online policy exists (`PutUnwatchedTraces`, with the same head, score-binding, retention and ClickHouse publication rules as queued traces), batch pending acknowledgments (`AckWatchPendingBatch`) and chunk ClickHouse legacy-score lookups, restoring `TestLoad` `OTLPIngest` above the 20k spans/s stored target with PR #101/103 durability enabled. `internal/sandbox/firecracker.go` hard-links snapshot files on restore (copies them under the jailer) and bounds concurrent cold boots and warm-pool refills.
 - Failure-case edits restore provenance from the captured trace and discard caller-supplied run/trace identities and isolation claims. Approval rejects empty row, tensor and media content, including tensors without data and media without a URI.
 - Snapshot loading rejects metadata remapping that could replace its verified identity and canonicalizes nested object keys before evaluation, keeping structured input and tool-call argument text stable under the same approved pin.
 - CI baseline validation now compares the complete checker configuration and validates each run against its dataset, trials and evaluator coverage. Shared skips, errors, duplicate rows and omitted scores cannot masquerade as complete paired evidence.

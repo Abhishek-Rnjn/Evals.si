@@ -389,6 +389,10 @@ def parse_codex(stdout: str) -> Parsed:
     current: Step | None = None
     tin = tout = 0
     seen = False
+    # Codex reports reconnects and transport fallbacks as error events and
+    # items; a turn that then completes recovered from them. A failed turn
+    # stays the run's error.
+    failed = ""
     for e in evs:
         kind = e.get("type")
         if kind == "thread.started":
@@ -421,7 +425,7 @@ def parse_codex(stdout: str) -> Parsed:
                     )
                     run.steps.append(tool)
         elif kind == "turn.completed":
-            run.error = ""
+            run.error = failed
             u = e.get("usage") or {}
             a, b = _int(u.get("input_tokens")), _int(u.get("output_tokens"))
             if a is not None or b is not None:
@@ -432,6 +436,7 @@ def parse_codex(stdout: str) -> Parsed:
             err = e.get("error") or {}
             detail = err.get("message") if isinstance(err, dict) else err
             run.error = str(detail or "the turn failed")
+            failed = failed or run.error
         elif kind == "error":
             run.error = run.error or str(e.get("message", "error"))
     run.answer = message_texts[-1] if message_texts else ""

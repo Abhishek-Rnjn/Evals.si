@@ -99,8 +99,11 @@ func (e *Engine) recoverPending(ctx context.Context) {
 		}
 		batch = append(batch, item{record: record, info: p.Info, only: p.Only, stream: row.Stream, payload: row.Payload})
 	}
-	if !e.follower.Load() {
-		e.process(ctx, batch)
+	// One worker call per BatchSize traces, as for live ones.
+	for len(batch) > 0 && !e.follower.Load() {
+		n := min(len(batch), e.opts.BatchSize)
+		e.process(ctx, batch[:n])
+		batch = batch[n:]
 	}
 }
 

@@ -125,7 +125,7 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 		opts.FlushInterval = 500 * time.Millisecond
 	}
 	if opts.QueueSize <= 0 {
-		opts.QueueSize = 100000
+		opts.QueueSize = 10000
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
@@ -433,6 +433,12 @@ func (e *Engine) ingestDirect(ctx context.Context, traces []ingest.Trace) {
 		}
 		return
 	}
+	// A policy applied while these were stored would never see them: queue
+	// them as well. Storing an unchanged trace again keeps its head.
+	if !e.hasNoPolicies() {
+		e.IngestBatch(traces)
+		return
+	}
 	e.TracesIngested.Add(int64(len(writes)))
 }
 
@@ -506,9 +512,9 @@ func (e *Engine) Run(ctx context.Context) {
 			e.recoverPending(ctx)
 		case it := <-e.queue:
 			batch = append(batch, it)
-			maxWriteBatch := max(e.opts.BatchSize, 500)
+			// Take what is already queued, up to one worker call.
 		drainQueue:
-			for len(batch) < maxWriteBatch {
+			for len(batch) < e.opts.BatchSize {
 				select {
 				case next := <-e.queue:
 					batch = append(batch, next)

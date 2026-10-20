@@ -68,6 +68,7 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"datasets_dir: s3://bucket/datasets":                                             "needs storage.s3",
 		"storage: {postgres: {dsn_env: EVALSI_UNSET_DSN_FOR_TEST}}":                      "storage.postgres",
 		"storage: {clickhouse: {database: x}}":                                           "needs url",
+		"storage: {sqlite: {synchronous: off}}":                                          "must be full or normal",
 	} {
 		if _, err := Load(write(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Load(%q) error = %v, want it to mention %q", body, err, want)

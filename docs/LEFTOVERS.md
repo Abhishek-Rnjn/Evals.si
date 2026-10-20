@@ -33,7 +33,8 @@ non-streaming, text and tool turns), and trainer-backed `OpenEnv`, `verifiers`
 (`EvaluatorReward`, `ToolErrorPenalty`) passed. Real-KVM `TestFirecrackerRealKVM`,
 the stock `evalsi-sandboxd` Firecracker chart, 5-node Firecracker warm microVM
 pool (320-microVM capacity, 100 simultaneous microVMs, 256 VM-isolated reward
-rollouts), `TestLoad` (400,000 OTLP spans at 27,401 spans/s stored in ClickHouse,
+rollouts), `TestLoad` (400,000 OTLP spans at 27,401 spans/s stored in ClickHouse, measured
+before the final ingest revision; see the report's re-measurement note,
 200,000-task run at 13,272 tasks/s, 4,096-rollout `RewardThroughput`), M4
 zero-downtime rolling upgrade (`v0.3.0` -> `HEAD`), active run-leader failover,
 `N-1` (`v0.3.0`) reader/writer compatibility against the `HEAD` schema,
