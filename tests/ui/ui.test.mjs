@@ -133,7 +133,7 @@ test('the UI loads under its Content-Security-Policy and every section renders',
   const sections = {
     runs: /Runs/i, compare: /Compare|baseline/i, policies: /Online policies|policies/i,
     queues: /Annotation|queues/i, guardrails: /Guardrails/i, catalog: /Evaluator catalog/i,
-    traces: /Production traces/i, inbox: /Failure inbox/i, datasets: /Dataset versions/i,
+    traces: /Production traces/i, inbox: /Failure inbox/i, datasets: /Dataset versions/i, releases: /Release decisions/i,
   };
   for (const [section, heading] of Object.entries(sections)) {
     await page.click(`#nav a[data-section="${section}"]`);
@@ -421,7 +421,7 @@ test('keyboard navigation and both palettes pass automated WCAG checks', async (
   await page.waitForSelector('#project option', { state: 'attached' });
   await page.keyboard.press('Tab');
   assert.equal(await page.locator(':focus').getAttribute('class'), 'brand');
-  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'datasets', 'queues', 'guardrails', 'catalog']) {
+  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'datasets', 'releases', 'queues', 'guardrails', 'catalog']) {
     await page.keyboard.press('Tab');
     assert.equal(await page.locator(':focus').getAttribute('data-section'), section);
     await page.keyboard.press('Enter');
@@ -430,7 +430,7 @@ test('keyboard navigation and both palettes pass automated WCAG checks', async (
     await checkAccessibility(page);
   }
   await page.emulateMedia({ colorScheme: 'dark' });
-  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'datasets', 'queues', 'guardrails', 'catalog']) {
+  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'datasets', 'releases', 'queues', 'guardrails', 'catalog']) {
     await page.click(`#nav a[data-section="${section}"]`);
     await page.waitForFunction(() => !document.getElementById('main').textContent.includes('Loading'));
     await checkAccessibility(page);
@@ -510,7 +510,7 @@ test('a production incident is edited, reviewed and exported through the inbox',
 });
 
 
-test('a shared dataset is published, reviewed, run by pin and retired in the browser', async () => {
+test('a shared dataset reaches a reviewed release decision and retirement in the browser', async () => {
   const url = await startServer('dataset-catalog');
   const page = await browser.newPage();
   const problems = await watch(page);
@@ -520,7 +520,7 @@ test('a shared dataset is published, reviewed, run by pin and retired in the bro
   await page.getByLabel('Owner', { exact: true }).fill('support-team');
   await page.getByLabel('Dataset records (JSON file)', { exact: true }).setInputFiles({
     name: 'cases.json', mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify([{ id: 'refund', input: 'Request refund', output: 'Approval required', reference: 'Approval required', usage: { latency_ms: 12.5 }, trajectory: { steps: [{ type: 'tool', input: 'approval', output: 'granted', usage: { latency_ms: 2 } }] } }])),
+    buffer: Buffer.from(JSON.stringify([{ id: 'refund', input: 'Request refund', output: 'Approval required', reference: 'Approval required', usage: { latency_ms: 12.5 }, trajectory: { steps: [{ type: 'tool', input: 'approval', output: 'granted', usage: { latency_ms: 2 } }] } }, { id: 'handoff', input: 'Ask for help', output: 'Hand over', reference: 'Hand over' }])),
   });
   await page.getByRole('button', { name: 'Publish immutable draft', exact: true }).click();
   await page.getByRole('heading', { name: 'shared-support@v1', exact: true }).waitFor();
@@ -535,16 +535,57 @@ test('a shared dataset is published, reviewed, run by pin and retired in the bro
   await page.getByRole('button', { name: 'Approve this dataset version', exact: true }).click();
   await runButton.waitFor({ state: 'visible' });
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === 'Start pinned regression run' && !b.disabled));
+  await page.getByLabel('Declared agent commit (for release comparisons)', { exact: true }).fill('a'.repeat(40));
   await runButton.click();
   await page.waitForURL(/#\/runs\//);
   await page.waitForFunction(() => /succeeded/i.test(document.querySelector('#main')?.textContent ?? ''));
   await checkAccessibility(page);
+  const baselineID = new URL(page.url()).hash.split('/').at(-1);
+  await page.goto(`${url}/ui/#/datasets/shared-support/v1`);
+  await page.getByLabel('Declared agent commit (for release comparisons)', { exact: true }).fill('b'.repeat(40));
+  await page.getByRole('button', { name: 'Start pinned regression run', exact: true }).click();
+  await page.waitForURL(/#\/runs\//);
+  await page.waitForFunction(() => /succeeded/i.test(document.querySelector('h1')?.textContent ?? ''));
+  const candidateID = new URL(page.url()).hash.split('/').at(-1);
+  await page.goto(`${url}/ui/#/releases`);
+  await page.getByLabel('Release decision ID', { exact: true }).fill('verified-release');
+  await page.getByLabel('Baseline run ID', { exact: true }).fill(baselineID);
+  await page.getByLabel('Candidate run ID', { exact: true }).fill(candidateID);
+  await page.getByRole('button', { name: 'Inspect both run identities', exact: true }).click();
+  await page.getByRole('heading', { name: 'Baseline identity', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Inspect release policy', exact: true }).click();
+  await page.getByText('Policy SHA-256:', { exact: false }).waitFor();
+  await checkAccessibility(page);
+  const confirm = page.getByLabel('I reviewed this policy and both run identities', { exact: true });
+  await confirm.check();
+  const policyInput = page.getByLabel('Release policy (JSON)', { exact: true });
+  await policyInput.fill((await policyInput.inputValue()) + '\n');
+  assert.equal(await confirm.isChecked(), false, 'editing policy revokes review');
+  await page.getByRole('button', { name: 'Inspect release policy', exact: true }).click();
+  await page.getByText('Policy SHA-256:', { exact: false }).waitFor();
+  await confirm.check();
+  await page.getByRole('button', { name: 'Evaluate and save release decision', exact: true }).click();
+  await page.getByRole('heading', { name: 'verified-release: pass', exact: true }).waitFor();
+  await checkAccessibility(page);
+  const releaseDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download portable release report', exact: true }).click();
+  const reportStream = await (await releaseDownload).createReadStream();
+  const reportChunks = [];
+  for await (const chunk of reportStream) reportChunks.push(chunk);
+  const report = JSON.parse(Buffer.concat(reportChunks).toString());
+  assert.equal(report.schema, 'evalsi.release-report/v1');
+  assert.equal(report.decision.outcome, 'RELEASE_OUTCOME_PASS');
+  assert.equal(report.decision.baseline.reference.runId, baselineID);
+  assert.equal(report.decision.candidate.reference.runId, candidateID);
   await page.goto(`${url}/ui/#/datasets/shared-support/v1`);
   await page.getByLabel('Dataset review note', { exact: true }).fill('Retire suite after verification');
   await page.getByRole('button', { name: 'Retire this dataset version', exact: true }).click();
   await page.waitForFunction(() => /Retire suite after verification/.test(document.querySelector('#main')?.textContent ?? ''));
   assert.equal(await runButton.isDisabled(), true, 'retired cannot run');
   assert.equal(await page.getByRole('button', { name: 'Approve this dataset version', exact: true }).isDisabled(), true);
+  await checkAccessibility(page);
+  await page.goto(`${url}/ui/#/releases/verified-release`);
+  await page.getByRole('heading', { name: 'verified-release: pass', exact: true }).waitFor();
   await checkAccessibility(page);
   assert.deepEqual(problems, []);
   await page.close();
@@ -577,5 +618,51 @@ test('active run polling preserves keyboard focus and record inspection state', 
   await page.waitForFunction(() => document.querySelector('select[aria-label="sort by metric"]')?.value === 'exact-match');
   assert.equal(await page.locator('details[open]').count(), 1);
   assert.equal(await sort.evaluate(node => node === document.activeElement), true);
+  await page.close();
+});
+
+// The active project belongs to the release runs; the suite and inbox case may
+// belong to a different project. Keep that scope across both editor refreshes.
+test('release case links preserve the suite project through inbox save and review', async () => {
+  const url = await startServer('release-cross-project');
+  const page = await browser.newPage();
+  const problems = await watch(page);
+  const id = '1234567890abcdef12345678';
+  const scopedRequests = [];
+  let failure = { id, project: 'suite-project', title: 'Cross-project regression', reason: 'Needs approval', revision: 1, status: 'FAILURE_STATUS_OPEN', source: { traceId: 'source-trace' }, record: { input: { text: 'Request' }, reference: { text: 'Approved answer' } } };
+  await page.route('**/v1alpha1/release-decisions/cross-project?*', route => route.fulfill({ json: { decision: {
+    id: 'cross-project', outcome: 'RELEASE_OUTCOME_BLOCK', policy: { dataset: { project: 'suite-project', name: 'suite', version: 'v1' } },
+    baseline: { reference: { runId: 'baseline' } }, candidate: { reference: { runId: 'candidate' } },
+    metrics: [{ metric: 'exact-match', changes: [{ recordId: `failure/${id}`, criticalFailure: true }] }],
+  } } }));
+  await page.route(`**/v1alpha1/failures/${id}**`, async route => {
+    const request = route.request(), parsed = new URL(request.url());
+    const body = request.method() === 'GET' ? null : request.postDataJSON();
+    scopedRequests.push({ method: request.method(), project: body?.project || parsed.searchParams.get('project') });
+    if (parsed.pathname.endsWith('/events')) return route.fulfill({ json: { events: [] } });
+    if (body) {
+      failure = { ...failure, revision: failure.revision + 1, status: body.decision || body.status, title: body.title || failure.title };
+    }
+    return route.fulfill({ json: { failure } });
+  });
+  await page.goto(`${url}/ui/#/releases/cross-project`);
+  await page.getByText('exact-match: changed and critical cases', { exact: true }).click();
+  await page.getByRole('link', { name: `failure/${id}`, exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: `failure/${id}`, exact: true }).getAttribute('href'), `#/inbox/${id}?project=suite-project`);
+  await page.getByRole('link', { name: `failure/${id}`, exact: true }).click();
+  await page.getByRole('heading', { name: 'Edit case', exact: true }).waitFor();
+  assert.match(await page.textContent('#main'), /suite-project/);
+  await page.getByLabel('Case title', { exact: true }).fill('Updated scoped case');
+  await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Updated scoped case');
+  await page.getByLabel('Review note', { exact: true }).fill('Reviewed in the suite project');
+  await page.getByRole('button', { name: 'Approve this revision', exact: true }).click();
+  await page.getByRole('button', { name: 'Download approved case (JSONL)', exact: true }).waitFor();
+  assert.ok(scopedRequests.filter(request => request.method === 'GET').length >= 3, 'both refreshes fetched the saved case');
+  assert.deepEqual(scopedRequests.filter(request => request.method !== 'GET').map(request => request.method), ['PUT', 'POST']);
+  assert.ok(scopedRequests.every(request => request.project === 'suite-project'), JSON.stringify(scopedRequests));
+  assert.equal(await page.locator('#project').inputValue(), 'default', 'source navigation does not change the selected run project');
+  await checkAccessibility(page);
+  assert.deepEqual(problems, []);
   await page.close();
 });

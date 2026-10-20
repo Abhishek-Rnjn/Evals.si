@@ -292,7 +292,7 @@ func (fakeWorker) Evaluate(_ context.Context, req *pluginv1alpha1.EvaluateReques
 	resp := &pluginv1alpha1.EvaluateResponse{BatchId: req.GetBatchId()}
 	for _, r := range req.GetRecords() {
 		resp.Results = append(resp.Results, &evalsiv1alpha1.EvaluationResult{
-			RecordId: r.GetId(), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED,
+			EvaluatorRef: req.GetEvaluator() + "@1.0.0", RecordId: r.GetId(), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED,
 			Scores: []*evalsiv1alpha1.Score{{Value: &evalsiv1alpha1.Score_Passed{Passed: true}}},
 		})
 	}

@@ -10,6 +10,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -1207,9 +1208,12 @@ type Run struct {
 	ArchivedAt *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=archived_at,json=archivedAt,proto3" json:"archived_at,omitempty"`
 	// The run was evaluated elsewhere and stored with ImportRun: its results
 	// are as it was sent them, and it cannot be resumed.
-	Imported      bool `protobuf:"varint,20,opt,name=imported,proto3" json:"imported,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Imported bool `protobuf:"varint,20,opt,name=imported,proto3" json:"imported,omitempty"`
+	// Captured at admission and rechecked before execution/resume. Older and
+	// imported runs have no trusted contract and cannot pass release checks.
+	EvaluationContract *RunEvaluationContract `protobuf:"bytes,21,opt,name=evaluation_contract,json=evaluationContract,proto3" json:"evaluation_contract,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Run) Reset() {
@@ -1382,11 +1386,156 @@ func (x *Run) GetImported() bool {
 	return false
 }
 
+func (x *Run) GetEvaluationContract() *RunEvaluationContract {
+	if x != nil {
+		return x.EvaluationContract
+	}
+	return nil
+}
+
+// Declared evaluator identities/settings, not an attestation of worker binaries
+// or the remote model provider's immutable weights.
+type BoundRunEvaluator struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Manifest            *EvaluatorManifest     `protobuf:"bytes,2,opt,name=manifest,proto3" json:"manifest,omitempty"`
+	Params              *structpb.Struct       `protobuf:"bytes,3,opt,name=params,proto3" json:"params,omitempty"`
+	Judge               string                 `protobuf:"bytes,4,opt,name=judge,proto3" json:"judge,omitempty"`
+	JudgeSettingsSha256 string                 `protobuf:"bytes,5,opt,name=judge_settings_sha256,json=judgeSettingsSha256,proto3" json:"judge_settings_sha256,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *BoundRunEvaluator) Reset() {
+	*x = BoundRunEvaluator{}
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BoundRunEvaluator) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BoundRunEvaluator) ProtoMessage() {}
+
+func (x *BoundRunEvaluator) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BoundRunEvaluator.ProtoReflect.Descriptor instead.
+func (*BoundRunEvaluator) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *BoundRunEvaluator) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *BoundRunEvaluator) GetManifest() *EvaluatorManifest {
+	if x != nil {
+		return x.Manifest
+	}
+	return nil
+}
+
+func (x *BoundRunEvaluator) GetParams() *structpb.Struct {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+func (x *BoundRunEvaluator) GetJudge() string {
+	if x != nil {
+		return x.Judge
+	}
+	return ""
+}
+
+func (x *BoundRunEvaluator) GetJudgeSettingsSha256() string {
+	if x != nil {
+		return x.JudgeSettingsSha256
+	}
+	return ""
+}
+
+type RunEvaluationContract struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Evaluators     []*BoundRunEvaluator   `protobuf:"bytes,1,rep,name=evaluators,proto3" json:"evaluators,omitempty"`
+	SettingsSha256 string                 `protobuf:"bytes,2,opt,name=settings_sha256,json=settingsSha256,proto3" json:"settings_sha256,omitempty"`
+	ServerVersion  string                 `protobuf:"bytes,3,opt,name=server_version,json=serverVersion,proto3" json:"server_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RunEvaluationContract) Reset() {
+	*x = RunEvaluationContract{}
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunEvaluationContract) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunEvaluationContract) ProtoMessage() {}
+
+func (x *RunEvaluationContract) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunEvaluationContract.ProtoReflect.Descriptor instead.
+func (*RunEvaluationContract) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RunEvaluationContract) GetEvaluators() []*BoundRunEvaluator {
+	if x != nil {
+		return x.Evaluators
+	}
+	return nil
+}
+
+func (x *RunEvaluationContract) GetSettingsSha256() string {
+	if x != nil {
+		return x.SettingsSha256
+	}
+	return ""
+}
+
+func (x *RunEvaluationContract) GetServerVersion() string {
+	if x != nil {
+		return x.ServerVersion
+	}
+	return ""
+}
+
 var File_evalsi_v1alpha1_run_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\n" +
-	"\x19evalsi/v1alpha1/run.proto\x12\x0fevalsi.v1alpha1\x1a\x1bevalsi/v1alpha1/agent.proto\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xee\x03\n" +
+	"\x19evalsi/v1alpha1/run.proto\x12\x0fevalsi.v1alpha1\x1a\x1bevalsi/v1alpha1/agent.proto\x1a(evalsi/v1alpha1/evaluation_service.proto\x1a\x1fevalsi/v1alpha1/evaluator.proto\x1a\x1cevalsi/v1alpha1/record.proto\x1a\x1bevalsi/v1alpha1/score.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xee\x03\n" +
 	"\aRunSpec\x12/\n" +
 	"\x06target\x18\x01 \x01(\v2\x17.evalsi.v1alpha1.TargetR\x06target\x128\n" +
 	"\adataset\x18\x02 \x01(\v2\x1e.evalsi.v1alpha1.DatasetSourceR\adataset\x12=\n" +
@@ -1474,7 +1623,7 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x10max_judge_tokens\x18\x02 \x01(\x03R\x0emaxJudgeTokens\"4\n" +
 	"\bProgress\x12\x14\n" +
 	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x12\n" +
-	"\x04done\x18\x02 \x01(\x03R\x04done\"\xb8\a\n" +
+	"\x04done\x18\x02 \x01(\x03R\x04done\"\x91\b\n" +
 	"\x03Run\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -1502,10 +1651,23 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"created_by\x18\x12 \x01(\tR\tcreatedBy\x12;\n" +
 	"\varchived_at\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"archivedAt\x12\x1a\n" +
-	"\bimported\x18\x14 \x01(\bR\bimported\x1a9\n" +
+	"\bimported\x18\x14 \x01(\bR\bimported\x12W\n" +
+	"\x13evaluation_contract\x18\x15 \x01(\v2&.evalsi.v1alpha1.RunEvaluationContractR\x12evaluationContract\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\x80\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe2\x01\n" +
+	"\x11BoundRunEvaluator\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
+	"\bmanifest\x18\x02 \x01(\v2\".evalsi.v1alpha1.EvaluatorManifestR\bmanifest\x12/\n" +
+	"\x06params\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
+	"\x05judge\x18\x04 \x01(\tR\x05judge\x122\n" +
+	"\x15judge_settings_sha256\x18\x05 \x01(\tR\x13judgeSettingsSha256\"\xab\x01\n" +
+	"\x15RunEvaluationContract\x12B\n" +
+	"\n" +
+	"evaluators\x18\x01 \x03(\v2\".evalsi.v1alpha1.BoundRunEvaluatorR\n" +
+	"evaluators\x12'\n" +
+	"\x0fsettings_sha256\x18\x02 \x01(\tR\x0esettingsSha256\x12%\n" +
+	"\x0eserver_version\x18\x03 \x01(\tR\rserverVersion*\x80\x01\n" +
 	"\bGateStat\x12\x19\n" +
 	"\x15GATE_STAT_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eGATE_STAT_MEAN\x10\x01\x12\x14\n" +
@@ -1535,7 +1697,7 @@ func file_evalsi_v1alpha1_run_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_v1alpha1_run_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_evalsi_v1alpha1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_evalsi_v1alpha1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_evalsi_v1alpha1_run_proto_goTypes = []any{
 	(GateStat)(0),                 // 0: evalsi.v1alpha1.GateStat
 	(RunStatus)(0),                // 1: evalsi.v1alpha1.RunStatus
@@ -1552,57 +1714,65 @@ var file_evalsi_v1alpha1_run_proto_goTypes = []any{
 	(*Budget)(nil),                // 12: evalsi.v1alpha1.Budget
 	(*Progress)(nil),              // 13: evalsi.v1alpha1.Progress
 	(*Run)(nil),                   // 14: evalsi.v1alpha1.Run
-	nil,                           // 15: evalsi.v1alpha1.DatasetSource.MappingEntry
-	nil,                           // 16: evalsi.v1alpha1.Run.LabelsEntry
-	(*EvaluatorRef)(nil),          // 17: evalsi.v1alpha1.EvaluatorRef
-	(*SummaryOptions)(nil),        // 18: evalsi.v1alpha1.SummaryOptions
-	(*Harness)(nil),               // 19: evalsi.v1alpha1.Harness
-	(*Environment)(nil),           // 20: evalsi.v1alpha1.Environment
-	(*AgentTarget)(nil),           // 21: evalsi.v1alpha1.AgentTarget
-	(*durationpb.Duration)(nil),   // 22: google.protobuf.Duration
-	(*Record)(nil),                // 23: evalsi.v1alpha1.Record
-	(*timestamppb.Timestamp)(nil), // 24: google.protobuf.Timestamp
-	(*MetricSummary)(nil),         // 25: evalsi.v1alpha1.MetricSummary
-	(*Usage)(nil),                 // 26: evalsi.v1alpha1.Usage
+	(*BoundRunEvaluator)(nil),     // 15: evalsi.v1alpha1.BoundRunEvaluator
+	(*RunEvaluationContract)(nil), // 16: evalsi.v1alpha1.RunEvaluationContract
+	nil,                           // 17: evalsi.v1alpha1.DatasetSource.MappingEntry
+	nil,                           // 18: evalsi.v1alpha1.Run.LabelsEntry
+	(*EvaluatorRef)(nil),          // 19: evalsi.v1alpha1.EvaluatorRef
+	(*SummaryOptions)(nil),        // 20: evalsi.v1alpha1.SummaryOptions
+	(*Harness)(nil),               // 21: evalsi.v1alpha1.Harness
+	(*Environment)(nil),           // 22: evalsi.v1alpha1.Environment
+	(*AgentTarget)(nil),           // 23: evalsi.v1alpha1.AgentTarget
+	(*durationpb.Duration)(nil),   // 24: google.protobuf.Duration
+	(*Record)(nil),                // 25: evalsi.v1alpha1.Record
+	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
+	(*MetricSummary)(nil),         // 27: evalsi.v1alpha1.MetricSummary
+	(*Usage)(nil),                 // 28: evalsi.v1alpha1.Usage
+	(*EvaluatorManifest)(nil),     // 29: evalsi.v1alpha1.EvaluatorManifest
+	(*structpb.Struct)(nil),       // 30: google.protobuf.Struct
 }
 var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	3,  // 0: evalsi.v1alpha1.RunSpec.target:type_name -> evalsi.v1alpha1.Target
 	5,  // 1: evalsi.v1alpha1.RunSpec.dataset:type_name -> evalsi.v1alpha1.DatasetSource
-	17, // 2: evalsi.v1alpha1.RunSpec.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
-	18, // 3: evalsi.v1alpha1.RunSpec.summary:type_name -> evalsi.v1alpha1.SummaryOptions
+	19, // 2: evalsi.v1alpha1.RunSpec.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
+	20, // 3: evalsi.v1alpha1.RunSpec.summary:type_name -> evalsi.v1alpha1.SummaryOptions
 	10, // 4: evalsi.v1alpha1.RunSpec.gates:type_name -> evalsi.v1alpha1.Gate
 	12, // 5: evalsi.v1alpha1.RunSpec.budget:type_name -> evalsi.v1alpha1.Budget
-	19, // 6: evalsi.v1alpha1.RunSpec.harness:type_name -> evalsi.v1alpha1.Harness
-	20, // 7: evalsi.v1alpha1.RunSpec.environment:type_name -> evalsi.v1alpha1.Environment
-	21, // 8: evalsi.v1alpha1.Target.agent:type_name -> evalsi.v1alpha1.AgentTarget
+	21, // 6: evalsi.v1alpha1.RunSpec.harness:type_name -> evalsi.v1alpha1.Harness
+	22, // 7: evalsi.v1alpha1.RunSpec.environment:type_name -> evalsi.v1alpha1.Environment
+	23, // 8: evalsi.v1alpha1.Target.agent:type_name -> evalsi.v1alpha1.AgentTarget
 	4,  // 9: evalsi.v1alpha1.Target.thinking:type_name -> evalsi.v1alpha1.Thinking
 	3,  // 10: evalsi.v1alpha1.Target.fallbacks:type_name -> evalsi.v1alpha1.Target
 	9,  // 11: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
 	7,  // 12: evalsi.v1alpha1.DatasetSource.traces:type_name -> evalsi.v1alpha1.TraceQuery
 	8,  // 13: evalsi.v1alpha1.DatasetSource.run:type_name -> evalsi.v1alpha1.RunOutputs
 	6,  // 14: evalsi.v1alpha1.DatasetSource.catalog:type_name -> evalsi.v1alpha1.DatasetVersionRef
-	15, // 15: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
-	22, // 16: evalsi.v1alpha1.TraceQuery.lookback:type_name -> google.protobuf.Duration
-	23, // 17: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
+	17, // 15: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
+	24, // 16: evalsi.v1alpha1.TraceQuery.lookback:type_name -> google.protobuf.Duration
+	25, // 17: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
 	0,  // 18: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
 	10, // 19: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
 	2,  // 20: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
 	1,  // 21: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
-	24, // 22: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
-	24, // 23: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
-	24, // 24: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
+	26, // 22: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
+	26, // 23: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
+	26, // 24: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
 	13, // 25: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
-	25, // 26: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
+	27, // 26: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
 	11, // 27: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
-	26, // 28: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
-	26, // 29: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
-	16, // 30: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
-	24, // 31: evalsi.v1alpha1.Run.archived_at:type_name -> google.protobuf.Timestamp
-	32, // [32:32] is the sub-list for method output_type
-	32, // [32:32] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	28, // 28: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
+	28, // 29: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
+	18, // 30: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
+	26, // 31: evalsi.v1alpha1.Run.archived_at:type_name -> google.protobuf.Timestamp
+	16, // 32: evalsi.v1alpha1.Run.evaluation_contract:type_name -> evalsi.v1alpha1.RunEvaluationContract
+	29, // 33: evalsi.v1alpha1.BoundRunEvaluator.manifest:type_name -> evalsi.v1alpha1.EvaluatorManifest
+	30, // 34: evalsi.v1alpha1.BoundRunEvaluator.params:type_name -> google.protobuf.Struct
+	15, // 35: evalsi.v1alpha1.RunEvaluationContract.evaluators:type_name -> evalsi.v1alpha1.BoundRunEvaluator
+	36, // [36:36] is the sub-list for method output_type
+	36, // [36:36] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_proto_init() }
@@ -1632,7 +1802,7 @@ func file_evalsi_v1alpha1_run_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_run_proto_rawDesc), len(file_evalsi_v1alpha1_run_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

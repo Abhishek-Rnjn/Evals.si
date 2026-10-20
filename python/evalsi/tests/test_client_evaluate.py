@@ -357,3 +357,32 @@ def test_shared_dataset_incident_to_candidate_end_to_end(server: str, tmp_path: 
     assert snapshot.records[0]["provenance"]["catalog"]["sha256"] == report["sha256"]
     assert snapshot.records[0]["provenance"]["record_source"]["trace"]["traceId"]
     assert "synthetic-private-528" not in destination.read_text()
+
+
+def test_production_failure_to_release_decision_end_to_end(server: str, tmp_path: Path) -> None:
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "examples/release-decisions/demo.py"),
+            "--server",
+            server,
+            "--output-dir",
+            str(tmp_path / "reports"),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads(run.stdout)
+    assert len(report["failure_cases"]) == 2
+    assert report["controls"]["passed"]["exit_code"] == 0
+    assert report["controls"]["passed"]["action_exit_code"] == 0
+    assert report["controls"]["blocked"]["exit_code"] == 3
+    assert report["controls"]["blocked"]["action_exit_code"] == 3
+    assert report["controls"]["insufficient"]["exit_code"] == 1
+    assert report["controls"]["insufficient"]["action_exit_code"] == 1
+    assert report["tamper_rejected"]
+    assert report["actual_agent_calls"] >= 8
+    assert "synthetic-private-528" not in (tmp_path / "reports/passed.release.json").read_text()

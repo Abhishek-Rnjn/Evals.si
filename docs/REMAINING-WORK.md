@@ -17,7 +17,7 @@ it comes from, and their acceptance criteria apply. Nothing here is a new commit
 Not repeated below: [#117](https://github.com/Abhishek-Rnjn/Evals.si/pull/117)
 (shared dataset catalog and pinned regression runs, PROD-04; merged) and
 [#118](https://github.com/Abhishek-Rnjn/Evals.si/pull/118) (production failures to
-baseline-aware release decisions, PROD-02/PROD-03; in flight).
+baseline-aware release decisions, PROD-02/PROD-03/ENT-08 foundation; merged).
 
 ## Application-team product work
 

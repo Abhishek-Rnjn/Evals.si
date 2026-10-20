@@ -277,9 +277,10 @@
           ["Dataset sha256", run.datasetSha256 ? el("code", {}, run.datasetSha256) : ""], ["Labels", chips(run.labels)],
           ["Error", run.error ? el("span", { class: "error" }, run.error) : ""],
         ])),
+        ["RUN_STATUS_SUCCEEDED", "RUN_STATUS_FAILED"].includes(run.status) ? el("p", {}, el("a", { href: "#/releases" }, "Compare runs and decide a release")) : el("span"),
         el("h2", {}, "Metrics"),
         table(["Metric", "Kind", "n", "Mean", "Interval", "", "Skipped", "Errors", "Labels"], metrics, [2, 3, 6, 7]),
-        gates.length ? el("h2", {}, "Gates") : null, gates.length ? table(["Metric", "Stat", "Bound", "Value", "", "Reason"], gates, [3]) : null,
+        gates.length ? el("h2", {}, "Gates") : el("span"), gates.length ? table(["Metric", "Stat", "Bound", "Value", "", "Reason"], gates, [3]) : el("span"),
       );
       const active = ["RUN_STATUS_PENDING", "RUN_STATUS_RUNNING"].includes(run.status);
       if (!run.archivedAt && (initial || !active)) loadResults(run, results).catch((err) => results.replaceChildren(el("p", { class: "error" }, String(err.message || err))));
@@ -678,8 +679,8 @@
         el("a", { href: `#/traces/${encodeURIComponent(f.source.traceId)}` }, short(f.source.traceId, 12)),
       ])), response.nextPageToken ? el("button", { onclick: () => viewInbox(response.nextPageToken, selectedStatus).catch(failed) }, "More cases") : null);
   }
-  async function viewFailure(id) {
-    const scope = project;
+  async function viewFailure(id, query = new URLSearchParams()) {
+    const scope = query.get("project") || project;
     const { failure: f } = await api(`/v1alpha1/failures/${id}`, { project: scope });
     const title = el("input", { value: f.title, required: true, maxlength: 256 });
     const reason = el("textarea", { rows: 3, required: true, maxlength: 4096 }, f.reason);
@@ -694,7 +695,7 @@
         await api(`/v1alpha1/failures/${id}`, {}, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           project: scope, expectedRevision: f.revision, record: edited, title: title.value, reason: reason.value, assignee: assignee.value, status,
         }) });
-        await viewFailure(id);
+        await viewFailure(id, new URLSearchParams({ project: scope }));
       } catch (err) { notice(slot, err); }
     }
     const form = el("form", { onsubmit: e => { e.preventDefault(); save("FAILURE_STATUS_OPEN"); } },
@@ -714,7 +715,7 @@
     async function review(decision) {
       try {
         await post(`/v1alpha1/failures/${id}:review`, { project: scope, expectedRevision: f.revision, decision, note: note.value });
-        await viewFailure(id);
+        await viewFailure(id, new URLSearchParams({ project: scope }));
       } catch (err) { notice(reviewSlot, err); }
     }
     form.addEventListener("input", () => {
@@ -734,7 +735,7 @@
       history.replaceChildren(table(["Revision", "Action", "Actor", "Status", "When"], (out.events || []).map(e => [e.revision, e.action, e.actor, enumName(e.status, "FAILURE_STATUS_"), when(e.time)])),
         ...(out.nextPageToken ? [el("button", { onclick: () => events(out.nextPageToken).catch(err => notice(history, err)) }, "Older events")] : []));
     }
-    show(el("h1", {}, f.title), kv([["Status", enumName(f.status, "FAILURE_STATUS_")], ["Revision", f.revision], ["Source", f.source.traceId], ["Source digest", f.sourceSha256], ["Reviewer", f.reviewedBy], ["Review note", f.reviewNote]]),
+    show(el("h1", {}, f.title), kv([["Project", scope], ["Status", enumName(f.status, "FAILURE_STATUS_")], ["Revision", f.revision], ["Source", f.source.traceId], ["Source digest", f.sourceSha256], ["Reviewer", f.reviewedBy], ["Review note", f.reviewNote]]),
       el("h2", {}, "Edit case"), form, el("h2", {}, "Review saved revision"),
       el("p", { class: "sub" }, "Review applies to the saved revision shown above. Save your edits before reviewing."), reviewForm,
       exportButton, exportSlot, f.status === "FAILURE_STATUS_APPROVED" ? el("details", {}, el("summary", {}, "Publish this case to a shared dataset"), publishDatasetForm(scope, f)) : null,
@@ -835,8 +836,8 @@
       ])), response.nextPageToken ? el("button", { onclick: () => viewDatasets(response.nextPageToken, state).catch(failed) }, "More dataset versions") : null,
       el("details", {}, el("summary", {}, "Publish a new dataset version"), publishDatasetForm(scope)));
   }
-  async function viewDatasetVersion(key) {
-    const scope = project;
+  async function viewDatasetVersion(key, query = new URLSearchParams()) {
+    const scope = query.get("project") || project;
     const [name, version] = key.split("/");
     const path = `/v1alpha1/dataset-versions/${encodeURIComponent(name)}/${encodeURIComponent(version)}`;
     const result = await api(path, { project: scope });
@@ -850,7 +851,7 @@
     async function decide(decision) {
       try {
         await post(path + ":review", { project: scope, sha256: d.sha256, expectedRevision: d.revision, decision, note: reviewNote.value });
-        await viewDatasetVersion(key);
+        await viewDatasetVersion(key, new URLSearchParams({ project: scope }));
       } catch (err) { notice(reviewSlot, err); }
     }
     const recorded = el("select", {}, el("option", { value: "recorded" }, "Score recorded outputs"), el("option", { value: "target" }, "Generate responses from a model endpoint"));
@@ -858,6 +859,7 @@
     const model = el("input", { disabled: true, placeholder: "model name" });
     const keyEnv = el("input", { disabled: true, value: "none", placeholder: "server environment variable name" });
     recorded.onchange = () => { for (const input of [targetURL, model, keyEnv]) input.disabled = recorded.value !== "target"; };
+    const commit = el("input", { placeholder: "declared agent commit (hexadecimal)" });
     const runSlot = el("div");
     const runForm = el("form", { onsubmit: async e => {
       e.preventDefault();
@@ -867,10 +869,10 @@
           if (!targetURL.value || !model.value) throw new Error("Model generation needs an endpoint and model name.");
           spec.target = { connector: "openai-compatible", baseUrl: targetURL.value, model: model.value, apiKeyEnv: keyEnv.value };
         }
-        const run = await post("/v1alpha1/runs", { project: scope, name: `${name}@${version}`, spec });
+        const run = await post("/v1alpha1/runs", { project: scope, name: `${name}@${version}`, spec, labels: commit.value ? { "agent.commit": commit.value } : {} });
         window.location.hash = `#/runs/${run.run.id}`;
       } catch (err) { notice(runSlot, err); }
-    } }, field("Run mode", recorded), el("p", { class: "sub" }, "Recorded scoring makes no target calls. Model generation sends these inputs to the chosen endpoint using the server's granted credentials. This starter uses exact-match and error-rate gates."),
+    } }, field("Declared agent commit (for release comparisons)", commit), field("Run mode", recorded), el("p", { class: "sub" }, "Recorded scoring makes no target calls. Model generation sends these inputs to the chosen endpoint using the server's granted credentials. This starter uses exact-match and error-rate gates."),
       el("details", {}, el("summary", {}, "Model generation settings"), field("Model endpoint", targetURL), field("Model name", model), field("Credential variable (none for no key)", keyEnv)),
       el("button", { type: "submit", disabled: d.state !== "DATASET_VERSION_STATE_APPROVED" }, "Start pinned regression run"), runSlot);
     const diffSlot = el("div");
@@ -890,7 +892,7 @@
       history.replaceChildren(table(["Revision", "Decision", "Actor", "When"], (out.events || []).map(event => [event.revision, enumName(event.state, "DATASET_VERSION_STATE_"), event.actor, when(event.time)])),
         ...(out.nextPageToken ? [el("button", { onclick: () => events(out.nextPageToken).catch(err => notice(history, err)) }, "Older dataset events")] : []));
     }
-    show(el("h1", {}, `${name}@${version}`), kv([["State", enumName(d.state, "DATASET_VERSION_STATE_")], ["Digest", d.sha256], ["Records", d.records], ["Owner", c.owner], ["Split", c.split], ["Published by", d.publishedBy], ["Reviewed by", d.reviewedBy], ["Review note", d.reviewNote]]),
+    show(el("h1", {}, `${name}@${version}`), kv([["Project", scope], ["State", enumName(d.state, "DATASET_VERSION_STATE_")], ["Digest", d.sha256], ["Records", d.records], ["Owner", c.owner], ["Split", c.split], ["Published by", d.publishedBy], ["Reviewed by", d.reviewedBy], ["Review note", d.reviewNote]]),
       el("h2", {}, "Review immutable content"), el("p", { class: "sub" }, "Approval covers every record, metadata and source access boundary in this digest. With authentication enabled, the approver must be a different principal from the publisher."),
       el("details", {}, el("summary", {}, "Inspect all record content"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify(c, null, 2))), reviewForm,
       el("h2", {}, "Compare versions"), previous, diffButton, diffSlot,
@@ -900,7 +902,94 @@
     await events();
   }
 
+  // ---- explicit baseline/candidate release decisions ----
+  function releaseDecisionForm(scope) {
+    const id = el("input", { required: true, placeholder: "release-v1" });
+    const baseline = el("input", { required: true, placeholder: "reviewed baseline run ID" });
+    const candidate = el("input", { required: true, placeholder: "candidate run ID" });
+    const policy = el("textarea", { required: true, rows: 16 });
+    const reviewed = el("input", { type: "checkbox", required: true });
+    const evidenceSlot = el("div"), policySlot = el("div"), resultSlot = el("div");
+    let evidence = null, policyPin = "";
+    function resetPolicy() { reviewed.checked = false; policyPin = ""; policySlot.replaceChildren(); }
+    for (const input of [baseline, candidate]) input.addEventListener("input", () => { evidence = null; resetPolicy(); evidenceSlot.replaceChildren(); });
+    policy.addEventListener("input", resetPolicy);
+    const inspectRuns = el("button", { type: "button", onclick: async () => {
+      try {
+        evidence = null; resetPolicy();
+        const requested = [baseline.value, candidate.value];
+        const [a, b] = await Promise.all([baseline, candidate].map(input => api(`/v1alpha1/runs/${encodeURIComponent(input.value)}/release-evidence`)));
+        if (baseline.value !== requested[0] || candidate.value !== requested[1]) throw new Error("Run IDs changed during inspection; inspect again.");
+        evidence = [a.evidence, b.evidence];
+        evidenceSlot.replaceChildren(...evidence.map((e, i) => el("div", { class: "card" }, el("h3", {}, i === 0 ? "Baseline identity" : "Candidate identity"), kv([
+          ["Run", e.reference.runId], ["Declared commit", e.reference.commit || "Missing agent.commit label"], ["Evidence SHA-256", e.reference.sha256], ["Evaluation contract", e.evaluationContractSha256 || "Unavailable"], ["Status", enumName(e.status, "RUN_STATUS_")], ["Dataset", JSON.stringify(e.dataset)], ["Records", e.records], ["Trials", e.trials],
+        ]))));
+        if (!policy.value) policy.value = JSON.stringify({ name: "production", version: "v1", dataset: b.evidence.dataset, minRecords: 2, confidenceLevel: 0.95,
+          rules: [{ metric: "exact-match", direction: "METRIC_DIRECTION_HIGHER", maxRegression: 0, minCase: 1 }] }, null, 2);
+      } catch (err) { notice(resultSlot, err); }
+    } }, "Inspect both run identities");
+    const inspectPolicy = el("button", { type: "button", onclick: async () => {
+      try {
+        resetPolicy();
+        const source = policy.value;
+        const parsed = JSON.parse(source);
+        const out = await post("/v1alpha1/release-policies:inspect", { policy: parsed });
+        if (source !== policy.value) throw new Error("Policy changed during inspection; inspect again.");
+        policyPin = out.sha256;
+        policySlot.replaceChildren(el("p", {}, "Policy SHA-256: ", el("code", {}, policyPin)), el("p", { class: "sub" }, "Review the complete policy and both run identities before confirming. A declared commit is metadata, not proof that those Git bytes executed."));
+      } catch (err) { notice(resultSlot, err); }
+    } }, "Inspect release policy");
+    return el("form", { onsubmit: async event => {
+      event.preventDefault();
+      try {
+        if (!evidence || !policyPin || !reviewed.checked) throw new Error("Inspect both run identities and the current policy, then confirm your review.");
+        const out = await post("/v1alpha1/release-decisions", { project: scope, id: id.value, policy: JSON.parse(policy.value), policySha256: policyPin, baseline: evidence[0].reference, candidate: evidence[1].reference });
+        location.hash = `#/releases/${encodeURIComponent(out.decision.id)}`;
+      } catch (err) { notice(resultSlot, err); }
+    } }, field("Release decision ID", id), field("Baseline run ID", baseline), field("Candidate run ID", candidate), inspectRuns, evidenceSlot,
+      field("Release policy (JSON)", policy), inspectPolicy, policySlot, field("I reviewed this policy and both run identities", reviewed),
+      el("p", { class: "sub" }, "Every source record and trial must be covered. Minimum counts are independent records, not trials. Regression thresholds use paired interval upper bounds; positive regression means worse. Missing evidence cannot pass. This records a decision and does not deploy anything."),
+      el("button", { type: "submit" }, "Evaluate and save release decision"), resultSlot);
+  }
+  async function viewReleases(cursor = "") {
+    const scope = project;
+    const result = await api("/v1alpha1/release-decisions", { project: scope, page_token: cursor });
+    show(el("h1", {}, "Release decisions"), el("p", { class: "sub" }, "Production failure → approved regression suite → candidate comparison → release decision."),
+      table(["Decision", "Outcome", "Baseline", "Candidate", "Created"], (result.decisions || []).map(d => [
+        el("a", { href: `#/releases/${encodeURIComponent(d.id)}` }, d.id), enumName(d.outcome, "RELEASE_OUTCOME_"), d.baseline.reference.runId, d.candidate.reference.runId, when(d.createdAt),
+      ])), result.nextPageToken ? el("button", { onclick: () => viewReleases(result.nextPageToken).catch(failed) }, "More release decisions") : null,
+      el("h2", {}, "Compare existing runs"), releaseDecisionForm(scope));
+  }
+  async function viewRelease(id) {
+    const { decision: d } = await api(`/v1alpha1/release-decisions/${encodeURIComponent(id)}`, { project });
+    const dataset = d.policy.dataset;
+    const download = el("button", { onclick: () => {
+      const blob = new Blob([JSON.stringify({ schema: "evalsi.release-report/v1", decision: d }, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob), link = el("a", { href: url, download: `${d.id}.release.json` });
+      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } }, "Download portable release report");
+    const sources = [d.baseline, d.candidate].map((e, i) => el("div", { class: "card" }, el("h2", {}, i === 0 ? "Baseline evidence" : "Candidate evidence"),
+      el("a", { href: `#/runs/${encodeURIComponent(e.reference.runId)}` }, e.reference.runId), kv([
+        ["Declared commit", e.reference.commit], ["Evidence SHA-256", e.reference.sha256], ["Evaluation contract", e.evaluationContractSha256], ["Spec SHA-256", e.specSha256], ["Model", `${e.modelConnector || "recorded"} ${e.model || ""}`], ["Agent kind", e.agentKind], ["Model settings SHA-256", e.modelSettingsSha256], ["Environment image", e.environmentImage || "host/default"], ["Environment SHA-256", e.environmentSha256], ["Checker SHA-256", e.checkerSha256], ["Server version", e.serverVersion], ["Evaluators", (e.evaluators || []).map(v => `${v.name}: ${v.ref}; params ${v.paramsSha256}; judge ${v.judge || "none"} ${v.judgeSettingsSha256 || ""}`).join(" | ")], ["Records", e.records], ["Trials", e.trials],
+      ])));
+    show(el("h1", {}, `${d.id}: ${enumName(d.outcome, "RELEASE_OUTCOME_")}`),
+      kv([["Decision SHA-256", d.sha256], ["Policy SHA-256", d.policySha256], ["Created by", d.createdBy], ["Created", when(d.createdAt)], ["Dataset reviewer", d.datasetReviewedBy], ["Dataset review time", when(d.datasetReviewedAt)]]),
+      el("p", {}, "Approved regression suite: ", el("a", { class: "prose-link", href: `#/datasets/${encodeURIComponent(dataset.name)}/${encodeURIComponent(dataset.version)}?project=${encodeURIComponent(dataset.project)}` }, `${dataset.project}/${dataset.name}@${dataset.version}`)),
+      el("p", { class: "sub" }, "This is the saved decision at the time shown. It is not a deployment authorization or signed execution attestation. Source access permissions still apply."),
+      ...(d.reasons || []).map(reason => el("p", { class: "error" }, reason)),
+      table(["Metric", "Independent pairs", "Baseline", "Candidate", "Regression", "Regression interval", "Outcome"], (d.metrics || []).map(m => [m.metric, m.pairedRecords || 0, fmt(m.baselineMean), fmt(m.candidateMean), fmt(m.meanRegression), m.regressionLow !== undefined ? `${fmt(m.regressionLow)} … ${fmt(m.regressionHigh)}` : "Unavailable", enumName(m.outcome, "RELEASE_OUTCOME_")])),
+      ...(d.metrics || []).map(m => el("details", {}, el("summary", {}, `${m.metric}: changed and critical cases`),
+        ...(m.reasons || []).map(reason => el("p", {}, reason)), table(["Case", "Trial", "Baseline", "Candidate", "Critical failure"], (m.changes || []).map(change => [
+          /^failure\/[a-f0-9]{24}$/.test(change.recordId) ? el("a", { href: `#/inbox/${change.recordId.slice(8)}?project=${encodeURIComponent(dataset.project)}` }, change.recordId) : change.recordId,
+          change.trial || 0, fmt(change.baseline ?? 0), fmt(change.candidate ?? 0), change.criticalFailure ? "yes" : "no",
+        ])), m.changesOmitted ? el("p", {}, `${m.changesOmitted} additional changes omitted; inspect the pinned run evidence.`) : null)),
+      ...sources, el("h2", {}, "Reviewed release policy"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify(d.policy, null, 2)), download,
+      el("p", {}, "Verify independently: ", el("code", {}, `evalsi release verify ${d.id}.release.json --sha256 ${d.sha256}`)));
+  }
+
   const routes = [
+    [/^\/releases\/([^/]+)$/, viewRelease, "releases"],
+    [/^\/releases$/, () => viewReleases(), "releases"],
     [/^\/datasets\/([^/]+\/[^/]+)$/, viewDatasetVersion, "datasets"],
     [/^\/datasets$/, () => viewDatasets(), "datasets"],
     [/^\/inbox\/([a-f0-9]{24})$/, viewFailure, "inbox"],

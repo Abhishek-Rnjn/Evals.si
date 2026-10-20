@@ -176,6 +176,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	var watcher *watch.Engine     // created below; runs read its policies' score names
 	var sourceMgr *source.Manager // likewise; pulled traces' scores are written back through it
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
+		Judges:        cfg.WorkerJudges(),
 		DatasetsDir:   cfg.DatasetsDir,
 		Objects:       objects,
 		MaxConcurrent: cfg.Runs.MaxConcurrent,
@@ -596,6 +597,7 @@ func Handler(d deps) http.Handler {
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewCatalogServiceHandler(d.svc, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRewardServiceHandler(d.rewards, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRunServiceHandler(d.runs, gated) },
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewReleaseServiceHandler(d.runs, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewMonitorServiceHandler(d.watcher, gated) },
 		func() (string, http.Handler) {
 			return evalsiv1alpha1connect.NewTraceServiceHandler(watch.Traces{Store: d.store}, gated)
@@ -637,6 +639,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.CatalogServiceName,
 		evalsiv1alpha1connect.RewardServiceName,
 		evalsiv1alpha1connect.RunServiceName,
+		evalsiv1alpha1connect.ReleaseServiceName,
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.FailureServiceName,
