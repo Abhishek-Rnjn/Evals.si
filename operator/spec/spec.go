@@ -98,7 +98,7 @@ func ValidateRun(s *evalsiv1alpha1.RunSpec) error {
 		return errors.New("spec.evaluators must list at least one evaluator")
 	}
 	if s.GetDataset().GetSource() == nil {
-		return errors.New("spec.dataset needs one of inline, path, uri, traces or run")
+		return errors.New("spec.dataset needs one of inline, path, uri, traces, run or catalog")
 	}
 	if s.GetTrials() < 0 {
 		return errors.New("spec.trials cannot be negative")

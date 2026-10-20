@@ -147,5 +147,9 @@ business tool. It does not establish real-agent business safety.
 
 The current slice does not automatically collect policy failures, infer or
 approve labels, send assignment notifications, provide semantic deduplication,
-manage a central dataset catalog, enforce independent review, or implement
+enforce independent review of inbox cases, or implement
 backup erasure/legal holds. The roadmap keeps those acceptance limits open.
+
+Approved cases can now be published directly into the unreleased [shared dataset
+catalog](dataset-catalog.md). Dataset approval requires a distinct authenticated
+publisher and approver; this does not change inbox-case review rules.

@@ -89,6 +89,10 @@ def load_dataset(source: run_pb2.DatasetSource, base_dir: Path) -> list[Record]:
         )
     if kind == "uri":
         return load_records(_resolve_uri(source.uri, base_dir), mapping=mapping, limit=limit)
+    if kind == "catalog":
+        raise DatasetError(
+            "dataset.catalog reads approved server dataset versions; run this spec with --server"
+        )
     if kind in ("traces", "run"):
         raise DatasetError(
             f"dataset.{kind} reads the server's stored {'traces' if kind == 'traces' else 'runs'}; "

@@ -251,7 +251,7 @@ def check_from_proto(msg: record_pb2.TaskCheck) -> TaskCheck:
 
 
 def record_from_proto(msg: record_pb2.Record) -> Record:
-    return Record(
+    record = Record(
         id=msg.id,
         input=content_from_proto(msg.input) if msg.HasField("input") else None,
         output=content_from_proto(msg.output) if msg.HasField("output") else None,
@@ -262,6 +262,26 @@ def record_from_proto(msg: record_pb2.Record) -> Record:
         trajectory=trajectory_from_proto(msg.trajectory) if msg.HasField("trajectory") else None,
         check=check_from_proto(msg.check) if msg.HasField("check") else None,
     )
+    if "evalsi.dataset-version" in record.metadata:
+        # Protobuf map iteration is not an execution order. Catalog digests
+        # ignore it, so JSON views must use one key order at the worker boundary.
+        for content in [record.input, record.output, record.reference, *record.context]:
+            if content is not None and content.is_json:
+                content.json = _ordered_json(content.json)
+        if record.trajectory is not None:
+            for step in record.trajectory.steps:
+                for content in [step.input, step.output]:
+                    if content is not None and content.is_json:
+                        content.json = _ordered_json(content.json)
+    return record
+
+
+def _ordered_json(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _ordered_json(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [_ordered_json(item) for item in value]
+    return value
 
 
 # --- scores and results ---

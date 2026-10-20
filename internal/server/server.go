@@ -37,6 +37,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/cluster"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	"github.com/abhishek-rnjn/evals.si/internal/datasetcatalog"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/failures"
@@ -585,6 +586,9 @@ func Handler(d deps) http.Handler {
 		func() (string, http.Handler) {
 			return evalsiv1alpha1connect.NewDatasetServiceHandler(d.datasets, gated)
 		},
+		func() (string, http.Handler) {
+			return evalsiv1alpha1connect.NewDatasetCatalogServiceHandler(datasetcatalog.New(d.store), gated)
+		},
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewEvaluationServiceHandler(d.svc, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewCatalogServiceHandler(d.svc, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRewardServiceHandler(d.rewards, gated) },
@@ -633,6 +637,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.FailureServiceName,
+		evalsiv1alpha1connect.DatasetCatalogServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,

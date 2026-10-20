@@ -133,7 +133,7 @@ test('the UI loads under its Content-Security-Policy and every section renders',
   const sections = {
     runs: /Runs/i, compare: /Compare|baseline/i, policies: /Online policies|policies/i,
     queues: /Annotation|queues/i, guardrails: /Guardrails/i, catalog: /Evaluator catalog/i,
-    traces: /Production traces/i, inbox: /Failure inbox/i,
+    traces: /Production traces/i, inbox: /Failure inbox/i, datasets: /Dataset versions/i,
   };
   for (const [section, heading] of Object.entries(sections)) {
     await page.click(`#nav a[data-section="${section}"]`);
@@ -421,7 +421,7 @@ test('keyboard navigation and both palettes pass automated WCAG checks', async (
   await page.waitForSelector('#project option', { state: 'attached' });
   await page.keyboard.press('Tab');
   assert.equal(await page.locator(':focus').getAttribute('class'), 'brand');
-  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'queues', 'guardrails', 'catalog']) {
+  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'datasets', 'queues', 'guardrails', 'catalog']) {
     await page.keyboard.press('Tab');
     assert.equal(await page.locator(':focus').getAttribute('data-section'), section);
     await page.keyboard.press('Enter');
@@ -430,7 +430,7 @@ test('keyboard navigation and both palettes pass automated WCAG checks', async (
     await checkAccessibility(page);
   }
   await page.emulateMedia({ colorScheme: 'dark' });
-  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'queues', 'guardrails', 'catalog']) {
+  for (const section of ['runs', 'compare', 'policies', 'traces', 'inbox', 'datasets', 'queues', 'guardrails', 'catalog']) {
     await page.click(`#nav a[data-section="${section}"]`);
     await page.waitForFunction(() => !document.getElementById('main').textContent.includes('Loading'));
     await checkAccessibility(page);
@@ -489,12 +489,61 @@ test('a production incident is edited, reviewed and exported through the inbox',
   assert.equal(row.reference.text, 'Ask for approval');
   assert.equal(row.metadata['evalsi.failure'].revision, '3');
   assert.equal(row.metadata['evalsi.failure'].trace_id, traceId);
+  const caseURL = page.url();
+  await page.getByText('Publish this case to a shared dataset', { exact: true }).click();
+  await page.getByLabel('Dataset name', { exact: true }).fill('incident-regressions');
+  await page.getByRole('button', { name: 'Publish immutable draft', exact: true }).click();
+  await page.getByRole('heading', { name: 'incident-regressions@v1', exact: true }).waitFor();
+  await page.getByText('Inspect all record content', { exact: true }).click();
+  assert.match(await page.textContent('#main'), /Ask for approval/);
+  await checkAccessibility(page);
+  await page.goto(caseURL);
+  await page.getByRole('heading', { name: 'Edit case', exact: true }).waitFor();
   assert.equal(await page.getByLabel('What went wrong?', { exact: true }).count(), 1, await page.textContent('#main'));
   await page.getByLabel('What went wrong?', { exact: true }).fill('New finding needs another review');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#main')?.textContent.includes('New finding needs another review'));
   await page.waitForFunction(() => !document.querySelector('#main')?.textContent.includes('Download approved case'));
   assert.equal(await page.getByRole('button', { name: 'Approve this revision', exact: true }).isDisabled(), true);
+  assert.deepEqual(problems, []);
+  await page.close();
+});
+
+
+test('a shared dataset is published, reviewed, run by pin and retired in the browser', async () => {
+  const url = await startServer('dataset-catalog');
+  const page = await browser.newPage();
+  const problems = await watch(page);
+  await page.goto(`${url}/ui/#/datasets`);
+  await page.getByText('Publish a new dataset version', { exact: true }).click();
+  await page.getByLabel('Dataset name', { exact: true }).fill('shared-support');
+  await page.getByLabel('Owner', { exact: true }).fill('support-team');
+  await page.getByLabel('Dataset records (JSON file)', { exact: true }).setInputFiles({
+    name: 'cases.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify([{ id: 'refund', input: 'Request refund', output: 'Approval required', reference: 'Approval required' }])),
+  });
+  await page.getByRole('button', { name: 'Publish immutable draft', exact: true }).click();
+  await page.getByRole('heading', { name: 'shared-support@v1', exact: true }).waitFor();
+  const runButton = page.getByRole('button', { name: 'Start pinned regression run', exact: true });
+  assert.equal(await runButton.isDisabled(), true, 'draft cannot run');
+  await page.getByText('Inspect all record content', { exact: true }).click();
+  assert.match(await page.textContent('#main'), /Approval required/);
+  await checkAccessibility(page);
+  await page.getByLabel('Dataset review note', { exact: true }).fill('Reviewed all records in this digest');
+  await page.getByRole('button', { name: 'Approve this dataset version', exact: true }).click();
+  await runButton.waitFor({ state: 'visible' });
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === 'Start pinned regression run' && !b.disabled));
+  await runButton.click();
+  await page.waitForURL(/#\/runs\//);
+  await page.waitForFunction(() => /succeeded/i.test(document.querySelector('#main')?.textContent ?? ''));
+  await checkAccessibility(page);
+  await page.goto(`${url}/ui/#/datasets/shared-support/v1`);
+  await page.getByLabel('Dataset review note', { exact: true }).fill('Retire suite after verification');
+  await page.getByRole('button', { name: 'Retire this dataset version', exact: true }).click();
+  await page.waitForFunction(() => /Retire suite after verification/.test(document.querySelector('#main')?.textContent ?? ''));
+  assert.equal(await runButton.isDisabled(), true, 'retired cannot run');
+  assert.equal(await page.getByRole('button', { name: 'Approve this dataset version', exact: true }).isDisabled(), true);
+  await checkAccessibility(page);
   assert.deepEqual(problems, []);
   await page.close();
 });

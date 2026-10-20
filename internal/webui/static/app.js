@@ -21,6 +21,7 @@
   };
   let token = store.get("sessionStorage", "evalsi.token");
   let project = store.get("localStorage", "evalsi.project") || "";
+  let runRefresh = null;
   let authEnabled = true;
   let uiLogin = false; // the server names an identity provider the UI can sign in with
 
@@ -244,7 +245,11 @@
   }
 
   async function viewRun(id) {
+    clearTimeout(runRefresh);
+    const routeHash = location.hash, scope = project, credential = token;
+    const current = () => location.hash === routeHash && project === scope && token === credential;
     const { run } = await api(`/v1alpha1/runs/${encodeURIComponent(id)}`);
+    if (!current()) return;
     const spec = run.spec || {};
     const metrics = (run.summaries || []).map((s) => [
       el("code", {}, s.metric), enumName(s.kind, "METRIC_KIND_"), s.n || "0", fmt(s.mean),
@@ -274,6 +279,9 @@
       el("h2", {}, "Records"), results,
     );
     if (!run.archivedAt) loadResults(run, results).catch((err) => results.replaceChildren(el("p", { class: "error" }, String(err.message || err))));
+    if (["RUN_STATUS_PENDING", "RUN_STATUS_RUNNING"].includes(run.status)) {
+      runRefresh = setTimeout(() => { if (current()) viewRun(id).catch(err => { if (current()) failed(err); }); }, 1500);
+    }
   }
 
   async function loadResults(run, box) {
@@ -713,11 +721,148 @@
     show(el("h1", {}, f.title), kv([["Status", enumName(f.status, "FAILURE_STATUS_")], ["Revision", f.revision], ["Source", f.source.traceId], ["Source digest", f.sourceSha256], ["Reviewer", f.reviewedBy], ["Review note", f.reviewNote]]),
       el("h2", {}, "Edit case"), form, el("h2", {}, "Review saved revision"),
       el("p", { class: "sub" }, "Review applies to the saved revision shown above. Save your edits before reviewing."), reviewForm,
-      exportButton, exportSlot, el("h2", {}, "Review history"), history);
+      exportButton, exportSlot, f.status === "FAILURE_STATUS_APPROVED" ? el("details", {}, el("summary", {}, "Publish this case to a shared dataset"), publishDatasetForm(scope, f)) : null,
+      el("h2", {}, "Review history"), history);
+    await events();
+  }
+
+  // ---- shared immutable dataset catalog ----
+  function wireContent(value) {
+    if (typeof value === "string") return { text: value };
+    if (Array.isArray(value) && value.length && value.every(m => m && typeof m === "object" && m.role)) return { messages: { messages: value } };
+    if (value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1) {
+      const key = Object.keys(value)[0];
+      if (key === "messages" && Array.isArray(value.messages)) return { messages: { messages: value.messages } };
+      if (["text", "json", "messages", "row", "tensor", "media"].includes(key)) return value;
+    }
+    return { json: value };
+  }
+  function wireRow(row) {
+    if (!row || typeof row !== "object" || typeof row.id !== "string" || !row.id.trim()) throw new Error("Every record needs an explicit string ID.");
+    const out = { id: row.id };
+    for (const key of ["input", "output", "reference"]) if (row[key] !== undefined && row[key] !== null) out[key] = wireContent(row[key]);
+    if (row.context !== undefined) out.context = (Array.isArray(row.context) ? row.context : [row.context]).map(wireContent);
+    for (const key of ["metadata", "usage", "trajectory", "check", "provenance"]) if (row[key] !== undefined) out[key] = row[key];
+    return out;
+  }
+  function publishDatasetForm(scope, failure = null) {
+    const name = el("input", { required: true, maxlength: 128 });
+    const version = el("input", { required: true, value: "v1", maxlength: 128 });
+    const owner = el("input", { required: true, value: failure?.assignee || "", maxlength: 256 });
+    const split = el("select", {}, el("option", { value: "held-out" }, "Held-out"), el("option", { value: "tuning" }, "Tuning"));
+    const tags = el("input", { placeholder: "regression, approved" });
+    const labels = el("textarea", { rows: 2, placeholder: "classification=internal" });
+    const file = failure ? null : el("input", { type: "file", required: true, accept: ".json,application/json" });
+    const slot = el("div");
+    const button = el("button", { type: "submit" }, "Publish immutable draft");
+    return el("form", { onsubmit: async e => {
+      e.preventDefault(); button.disabled = true;
+      try {
+        const labelMap = Object.create(null);
+        for (const line of labels.value.split("\n").filter(s => s.trim())) {
+          const at = line.indexOf("=");
+          if (at < 1 || Object.hasOwn(labelMap, line.slice(0, at).trim())) throw new Error("Labels need unique KEY=VALUE entries.");
+          labelMap[line.slice(0, at).trim()] = line.slice(at + 1).trim();
+        }
+        const content = { project: scope, name: name.value, version: version.value, owner: owner.value, split: split.value,
+          tags: tags.value.split(",").map(s => s.trim()).filter(Boolean), labels: labelMap };
+        const body = { content };
+        if (failure) body.failures = [{ id: failure.id, revision: failure.revision }];
+        else {
+          const source = file.files[0];
+          if (source.size > 4 * 1024 * 1024) throw new Error("Use a JSON file of at most 4 MiB; catalog content is limited to 2 MiB.");
+          const rows = JSON.parse(await source.text());
+          if (!Array.isArray(rows)) throw new Error("Choose a JSON array of records. Publish portable snapshots through the CLI with their approved pin.");
+          content.records = rows.map(wireRow);
+        }
+        const result = await post("/v1alpha1/dataset-versions", body);
+        const c = result.dataset.content;
+        window.location.hash = `#/datasets/${encodeURIComponent(c.name)}/${encodeURIComponent(c.version)}`;
+      } catch (err) { notice(slot, err); } finally { button.disabled = false; }
+    } }, failure ? el("p", { class: "sub" }, "Publish this approved case revision as a shared dataset draft. Source trace access boundaries are retained.") :
+      [el("p", { class: "sub" }, "Upload a JSON array with explicit IDs. No model or tool is invoked. The published content cannot be overwritten."), field("Dataset records (JSON file)", file)],
+      field("Dataset name", name), field("Version", version), field("Owner", owner), field("Split", split), field("Tags (comma separated)", tags), field("Access labels (KEY=VALUE, one per line)", labels), button, slot);
+  }
+  async function viewDatasets(cursor = "", state = "") {
+    const scope = project;
+    const response = await api("/v1alpha1/dataset-versions", { project: scope, state, page_token: cursor });
+    const filter = el("select", { "aria-label": "Dataset state", onchange: () => viewDatasets("", filter.value).catch(failed) },
+      el("option", { value: "" }, "All states"), ...["DRAFT", "APPROVED", "RETIRED"].map(s => el("option", { value: `DATASET_VERSION_STATE_${s}`, selected: state === `DATASET_VERSION_STATE_${s}` }, s.toLowerCase())));
+    show(el("h1", {}, "Dataset versions"), el("p", { class: "sub" }, "Publish once, review the exact content, then pin that approved version in a run."), filter,
+      table(["Dataset", "Version", "State", "Owner", "Split", "Records"], (response.datasets || []).map(d => [
+        el("a", { href: `#/datasets/${encodeURIComponent(d.content.name)}/${encodeURIComponent(d.content.version)}` }, d.content.name), d.content.version,
+        enumName(d.state, "DATASET_VERSION_STATE_"), d.content.owner, d.content.split, d.records,
+      ])), response.nextPageToken ? el("button", { onclick: () => viewDatasets(response.nextPageToken, state).catch(failed) }, "More dataset versions") : null,
+      el("details", {}, el("summary", {}, "Publish a new dataset version"), publishDatasetForm(scope)));
+  }
+  async function viewDatasetVersion(key) {
+    const scope = project;
+    const [name, version] = key.split("/");
+    const path = `/v1alpha1/dataset-versions/${encodeURIComponent(name)}/${encodeURIComponent(version)}`;
+    const result = await api(path, { project: scope });
+    const d = result.dataset, c = d.content;
+    const reviewNote = el("textarea", { required: true, rows: 2, maxlength: 4096 });
+    const reviewSlot = el("div");
+    const reviewForm = el("form", { onsubmit: async e => { e.preventDefault(); await decide("DATASET_VERSION_STATE_APPROVED"); } },
+      field("Dataset review note", reviewNote), el("div", { class: "actions" },
+        el("button", { type: "submit", disabled: d.state !== "DATASET_VERSION_STATE_DRAFT" }, "Approve this dataset version"),
+        el("button", { type: "button", disabled: d.state === "DATASET_VERSION_STATE_RETIRED", onclick: () => { if (reviewForm.reportValidity()) decide("DATASET_VERSION_STATE_RETIRED"); } }, "Retire this dataset version")), reviewSlot);
+    async function decide(decision) {
+      try {
+        await post(path + ":review", { project: scope, sha256: d.sha256, expectedRevision: d.revision, decision, note: reviewNote.value });
+        await viewDatasetVersion(key);
+      } catch (err) { notice(reviewSlot, err); }
+    }
+    const recorded = el("select", {}, el("option", { value: "recorded" }, "Score recorded outputs"), el("option", { value: "target" }, "Generate responses from a model endpoint"));
+    const targetURL = el("input", { type: "url", disabled: true, placeholder: "https://model.example.com/v1" });
+    const model = el("input", { disabled: true, placeholder: "model name" });
+    const keyEnv = el("input", { disabled: true, value: "none", placeholder: "server environment variable name" });
+    recorded.onchange = () => { for (const input of [targetURL, model, keyEnv]) input.disabled = recorded.value !== "target"; };
+    const runSlot = el("div");
+    const runForm = el("form", { onsubmit: async e => {
+      e.preventDefault();
+      try {
+        const spec = { dataset: { catalog: result.reference }, evaluators: [{ ref: "exact-match" }], gates: [{ metric: "exact-match", min: 1 }, { metric: "exact-match", stat: "GATE_STAT_ERROR_RATE", max: 0 }] };
+        if (recorded.value === "target") {
+          if (!targetURL.value || !model.value) throw new Error("Model generation needs an endpoint and model name.");
+          spec.target = { connector: "openai-compatible", baseUrl: targetURL.value, model: model.value, apiKeyEnv: keyEnv.value };
+        }
+        const run = await post("/v1alpha1/runs", { project: scope, name: `${name}@${version}`, spec });
+        window.location.hash = `#/runs/${run.run.id}`;
+      } catch (err) { notice(runSlot, err); }
+    } }, field("Run mode", recorded), el("p", { class: "sub" }, "Recorded scoring makes no target calls. Model generation sends these inputs to the chosen endpoint using the server's granted credentials. This starter uses exact-match and error-rate gates."),
+      el("details", {}, el("summary", {}, "Model generation settings"), field("Model endpoint", targetURL), field("Model name", model), field("Credential variable (none for no key)", keyEnv)),
+      el("button", { type: "submit", disabled: d.state !== "DATASET_VERSION_STATE_APPROVED" }, "Start pinned regression run"), runSlot);
+    const diffSlot = el("div");
+    const previous = el("select", { "aria-label": "Compare with version" });
+    const versions = await api("/v1alpha1/dataset-versions", { project: scope, name });
+    for (const other of versions.datasets || []) if (other.content.version !== version) previous.append(el("option", { value: other.content.version, "data-sha256": other.sha256 }, other.content.version));
+    const diffButton = el("button", { disabled: !previous.options.length, onclick: async () => {
+      try {
+        const option = previous.selectedOptions[0];
+        const diff = await post(`/v1alpha1/dataset-versions/${encodeURIComponent(name)}:diff`, { project: scope, beforeVersion: option.value, beforeSha256: option.dataset.sha256, afterVersion: version, afterSha256: d.sha256 });
+        diffSlot.replaceChildren(el("pre", { class: "content", tabindex: 0 }, JSON.stringify(diff, null, 2)));
+      } catch (err) { notice(diffSlot, err); }
+    } }, "Compare version changes");
+    const history = el("div");
+    async function events(cursor = "") {
+      const out = await api(path + "/events", { project: scope, page_token: cursor });
+      history.replaceChildren(table(["Revision", "Decision", "Actor", "When"], (out.events || []).map(event => [event.revision, enumName(event.state, "DATASET_VERSION_STATE_"), event.actor, when(event.time)])),
+        ...(out.nextPageToken ? [el("button", { onclick: () => events(out.nextPageToken).catch(err => notice(history, err)) }, "Older dataset events")] : []));
+    }
+    show(el("h1", {}, `${name}@${version}`), kv([["State", enumName(d.state, "DATASET_VERSION_STATE_")], ["Digest", d.sha256], ["Records", d.records], ["Owner", c.owner], ["Split", c.split], ["Published by", d.publishedBy], ["Reviewed by", d.reviewedBy], ["Review note", d.reviewNote]]),
+      el("h2", {}, "Review immutable content"), el("p", { class: "sub" }, "Approval covers every record, metadata and source access boundary in this digest. With authentication enabled, the approver must be a different principal from the publisher."),
+      el("details", {}, el("summary", {}, "Inspect all record content"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify(c, null, 2))), reviewForm,
+      el("h2", {}, "Compare versions"), previous, diffButton, diffSlot,
+      el("h2", {}, "Run regression checks"), runForm,
+      el("details", {}, el("summary", {}, "Pinned server-run dataset reference"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify({ dataset: { catalog: result.reference } }, null, 2))),
+      el("h2", {}, "Publication and review history"), history);
     await events();
   }
 
   const routes = [
+    [/^\/datasets\/([^/]+\/[^/]+)$/, viewDatasetVersion, "datasets"],
+    [/^\/datasets$/, () => viewDatasets(), "datasets"],
     [/^\/inbox\/([a-f0-9]{24})$/, viewFailure, "inbox"],
     [/^\/inbox$/, () => viewInbox(), "inbox"],
     [/^\/traces\/([^/]+)$/, viewTrace, "traces"],
@@ -734,6 +879,7 @@
     [/^\/catalog$/, viewCatalog, "catalog"],
   ];
   async function route() {
+    clearTimeout(runRefresh);
     const raw = location.hash.replace(/^#/, "") || "/runs";
     const [path, qs] = raw.split("?");
     const query = new URLSearchParams(qs || "");

@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- A shared dataset catalog publishes immutable project/name/version suites from explicit records, portable snapshots or approved failure revisions. Adds digest-bound approval with separate authenticated publishing/reviewing principals, retirement, item/manifest diffs, transactional history and source-aware read permissions. Approved catalog pins load directly into server runs and remain on stored records; browser, CLI and SDK cover publication through regression runs. Initial storage is limited to 2 MiB of content per version, with no erasure API or signature guarantee.
+
 - A project-scoped production failure inbox captures source trace revisions once, supports assignment and editable/redacted cases, records transactional revision history and approves explicit saved expectations. Adds browser trace/inbox workflows, a synchronous SDK and `evalsi inbox` commands, including approved-revision export directly to digest-pinned snapshots. Optimistic concurrency prevents lost edits; edits revoke approval, and exports recheck current state without replaying cached private responses. Includes a synthetic incident-to-CI demo with passing/failing controls.
 
 - `evalsi dataset overlap` checks independently pinned tuning/held-out snapshots for shared IDs and exact normalized inputs, including renamed cases. Its opt-in CI policy exits 3 on overlap and 1 on incomplete input coverage; reports omit raw payloads and group duplicate inputs without a Cartesian expansion. Includes reproducible clean and deliberately overlapping split controls.

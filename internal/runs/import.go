@@ -33,6 +33,9 @@ func (m *Manager) ImportRun(ctx context.Context, req *connect.Request[evalsiv1al
 	if spec == nil || len(spec.GetEvaluators()) == 0 {
 		return nil, invalid("spec with its evaluators is required")
 	}
+	if spec.GetDataset().GetCatalog() != nil {
+		return nil, invalid("imported results cannot attest to catalog execution; use an inline dataset")
+	}
 	if err := validateGates(spec); err != nil {
 		return nil, err
 	}

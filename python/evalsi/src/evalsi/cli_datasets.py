@@ -10,6 +10,9 @@ from evalsi.dataset_snapshots import create_snapshot, diff_snapshots, read_snaps
 
 
 def add_snapshot_commands(commands: Any) -> None:
+    from evalsi.cli_dataset_catalog import add_catalog_commands
+
+    add_catalog_commands(commands)
     create = commands.add_parser("snapshot", help="publish a new snapshot; never overwrite")
     create.add_argument("source", help="local JSON/JSONL with explicit record IDs")
     create.add_argument("-o", "--output", required=True, help="new file in an existing directory")

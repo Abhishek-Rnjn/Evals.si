@@ -40,6 +40,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	"github.com/abhishek-rnjn/evals.si/internal/datasetcatalog"
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/objstore"
@@ -457,6 +458,14 @@ func (m *Manager) loadDataset(ctx context.Context, src *evalsiv1alpha1.DatasetSo
 	var records []*evalsiv1alpha1.Record
 	var err error
 	switch s := src.GetSource().(type) {
+	case *evalsiv1alpha1.DatasetSource_Catalog:
+		if len(src.GetMapping()) != 0 || src.GetLimit() < 0 {
+			return nil, invalid("catalog datasets reject mapping and negative limits")
+		}
+		records, err = datasetcatalog.Load(ctx, m.store, s.Catalog, projectOr(project), int(src.GetLimit()))
+		if err != nil {
+			return nil, err
+		}
 	case *evalsiv1alpha1.DatasetSource_Inline:
 		records = s.Inline.GetRecords()
 		if n := int(src.GetLimit()); n > 0 && n < len(records) {
