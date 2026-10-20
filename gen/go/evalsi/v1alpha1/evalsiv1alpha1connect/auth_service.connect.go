@@ -72,6 +72,9 @@ const (
 	// AuthServiceListAuditEventsProcedure is the fully-qualified name of the AuthService's
 	// ListAuditEvents RPC.
 	AuthServiceListAuditEventsProcedure = "/evalsi.v1alpha1.AuthService/ListAuditEvents"
+	// AuthServiceVerifyAuditLogProcedure is the fully-qualified name of the AuthService's
+	// VerifyAuditLog RPC.
+	AuthServiceVerifyAuditLogProcedure = "/evalsi.v1alpha1.AuthService/VerifyAuditLog"
 )
 
 // AuthServiceClient is a client for the evalsi.v1alpha1.AuthService service.
@@ -99,6 +102,9 @@ type AuthServiceClient interface {
 	DeleteBinding(context.Context, *connect.Request[v1alpha1.DeleteBindingRequest]) (*connect.Response[v1alpha1.DeleteBindingResponse], error)
 	// Mutating and denied calls, newest first.
 	ListAuditEvents(context.Context, *connect.Request[v1alpha1.ListAuditEventsRequest]) (*connect.Response[v1alpha1.ListAuditEventsResponse], error)
+	// Checks the audit log's hash chain and reports the first break. Owners
+	// only: it reads every project's entries.
+	VerifyAuditLog(context.Context, *connect.Request[v1alpha1.VerifyAuditLogRequest]) (*connect.Response[v1alpha1.VerifyAuditLogResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the evalsi.v1alpha1.AuthService service. By default,
@@ -202,6 +208,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("ListAuditEvents")),
 			connect.WithClientOptions(opts...),
 		),
+		verifyAuditLog: connect.NewClient[v1alpha1.VerifyAuditLogRequest, v1alpha1.VerifyAuditLogResponse](
+			httpClient,
+			baseURL+AuthServiceVerifyAuditLogProcedure,
+			connect.WithSchema(authServiceMethods.ByName("VerifyAuditLog")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -222,6 +234,7 @@ type authServiceClient struct {
 	createBinding   *connect.Client[v1alpha1.CreateBindingRequest, v1alpha1.CreateBindingResponse]
 	deleteBinding   *connect.Client[v1alpha1.DeleteBindingRequest, v1alpha1.DeleteBindingResponse]
 	listAuditEvents *connect.Client[v1alpha1.ListAuditEventsRequest, v1alpha1.ListAuditEventsResponse]
+	verifyAuditLog  *connect.Client[v1alpha1.VerifyAuditLogRequest, v1alpha1.VerifyAuditLogResponse]
 }
 
 // WhoAmI calls evalsi.v1alpha1.AuthService.WhoAmI.
@@ -299,6 +312,11 @@ func (c *authServiceClient) ListAuditEvents(ctx context.Context, req *connect.Re
 	return c.listAuditEvents.CallUnary(ctx, req)
 }
 
+// VerifyAuditLog calls evalsi.v1alpha1.AuthService.VerifyAuditLog.
+func (c *authServiceClient) VerifyAuditLog(ctx context.Context, req *connect.Request[v1alpha1.VerifyAuditLogRequest]) (*connect.Response[v1alpha1.VerifyAuditLogResponse], error) {
+	return c.verifyAuditLog.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the evalsi.v1alpha1.AuthService service.
 type AuthServiceHandler interface {
 	// The caller's principal and what it can do in each project.
@@ -324,6 +342,9 @@ type AuthServiceHandler interface {
 	DeleteBinding(context.Context, *connect.Request[v1alpha1.DeleteBindingRequest]) (*connect.Response[v1alpha1.DeleteBindingResponse], error)
 	// Mutating and denied calls, newest first.
 	ListAuditEvents(context.Context, *connect.Request[v1alpha1.ListAuditEventsRequest]) (*connect.Response[v1alpha1.ListAuditEventsResponse], error)
+	// Checks the audit log's hash chain and reports the first break. Owners
+	// only: it reads every project's entries.
+	VerifyAuditLog(context.Context, *connect.Request[v1alpha1.VerifyAuditLogRequest]) (*connect.Response[v1alpha1.VerifyAuditLogResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -423,6 +444,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("ListAuditEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceVerifyAuditLogHandler := connect.NewUnaryHandler(
+		AuthServiceVerifyAuditLogProcedure,
+		svc.VerifyAuditLog,
+		connect.WithSchema(authServiceMethods.ByName("VerifyAuditLog")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/evalsi.v1alpha1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceWhoAmIProcedure:
@@ -455,6 +482,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceDeleteBindingHandler.ServeHTTP(w, r)
 		case AuthServiceListAuditEventsProcedure:
 			authServiceListAuditEventsHandler.ServeHTTP(w, r)
+		case AuthServiceVerifyAuditLogProcedure:
+			authServiceVerifyAuditLogHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -522,4 +551,8 @@ func (UnimplementedAuthServiceHandler) DeleteBinding(context.Context, *connect.R
 
 func (UnimplementedAuthServiceHandler) ListAuditEvents(context.Context, *connect.Request[v1alpha1.ListAuditEventsRequest]) (*connect.Response[v1alpha1.ListAuditEventsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.AuthService.ListAuditEvents is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) VerifyAuditLog(context.Context, *connect.Request[v1alpha1.VerifyAuditLogRequest]) (*connect.Response[v1alpha1.VerifyAuditLogResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.AuthService.VerifyAuditLog is not implemented"))
 }

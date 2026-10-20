@@ -2,6 +2,7 @@ package runs
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -126,10 +127,11 @@ func TestRetentionArchivesThenDeletes(t *testing.T) {
 			ProjectArchiveAfter: map[string]string{"audit": "0"},
 			ProjectRetention:    map[string]string{"research": "0"},
 		}
-		o.Audit = func(_ context.Context, ev *evalsiv1alpha1.AuditEvent) {
+		o.Audit = func(_ context.Context, ev *evalsiv1alpha1.AuditEvent) error {
 			mu.Lock()
 			defer mu.Unlock()
 			events = append(events, ev)
+			return nil
 		}
 	})
 	ctx := context.Background()
@@ -196,5 +198,35 @@ func TestRetentionArchivesThenDeletes(t *testing.T) {
 	// A second pass has nothing to do.
 	if d, a, err := h.m.retainOnce(ctx); err != nil || d != 0 || a != 0 {
 		t.Errorf("second pass: %d %d %v", d, a, err)
+	}
+}
+
+// Strict audit mode: when the retention entry cannot be written, the run is
+// left as it is rather than deleted or archived unaudited.
+func TestRetentionLeavesARunItCannotAudit(t *testing.T) {
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	h := newRetentionHarness(t, func(o *Options) {
+		o.Now = func() time.Time { return now }
+		o.Retention = config.Runs{ArchiveAfter: "168h", Retention: "720h"}
+		o.Audit = func(context.Context, *evalsiv1alpha1.AuditEvent) error { return errors.New("audit store down") }
+	})
+	ctx := context.Background()
+	for id, age := range map[string]time.Duration{"old": 40 * 24 * time.Hour, "week-old": 10 * 24 * time.Hour} {
+		created := now.Add(-age)
+		run := &evalsiv1alpha1.Run{Id: id, Project: "support", Status: evalsiv1alpha1.RunStatus_RUN_STATUS_SUCCEEDED,
+			CreatedAt: timestamppb.New(created), FinishedAt: timestamppb.New(created.Add(time.Hour))}
+		if err := h.st.CreateRun(ctx, run, []*evalsiv1alpha1.Record{{Id: "r"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deleted, archived, err := h.m.retainOnce(ctx)
+	if err == nil || deleted != 0 || archived != 0 {
+		t.Fatalf("deleted %d, archived %d, err %v; want nothing done and the audit error", deleted, archived, err)
+	}
+	for _, id := range []string{"old", "week-old"} {
+		run, err := h.st.GetRun(ctx, id)
+		if err != nil || run.GetArchivedAt() != nil {
+			t.Errorf("%s changed without an audit entry: %v %v", id, run, err)
+		}
 	}
 }

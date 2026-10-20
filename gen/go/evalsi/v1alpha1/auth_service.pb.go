@@ -1972,7 +1972,31 @@ type AuditEvent struct {
 	// The peer address.
 	Source string `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`
 	// Extra detail, for example a role's old and new definitions as JSON.
-	Detail        string `protobuf:"bytes,12,opt,name=detail,proto3" json:"detail,omitempty"`
+	Detail string `protobuf:"bytes,12,opt,name=detail,proto3" json:"detail,omitempty"`
+	// How the principal authenticated: jwt, apikey, mtls or proxy. Empty for
+	// the system's own entries (decision 0026).
+	AuthMethod string `protobuf:"bytes,13,opt,name=auth_method,json=authMethod,proto3" json:"auth_method,omitempty"`
+	// For a JWT: its issuer, token ID (jti) and signing key ID (kid), never
+	// the token.
+	Issuer  string `protobuf:"bytes,14,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	TokenId string `protobuf:"bytes,15,opt,name=token_id,json=tokenId,proto3" json:"token_id,omitempty"`
+	KeyId   string `protobuf:"bytes,16,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	// For an API key: its name, never the key or its hash.
+	ApiKey string `protobuf:"bytes,17,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+	// For a client certificate: the SHA-256 fingerprint of the leaf.
+	CertFingerprint string `protobuf:"bytes,18,opt,name=cert_fingerprint,json=certFingerprint,proto3" json:"cert_fingerprint,omitempty"`
+	// The principal's groups when the call was decided.
+	Groups []string `protobuf:"bytes,19,rep,name=groups,proto3" json:"groups,omitempty"`
+	// Whose authority the call carried, and who made it (RFC 8693 sub and
+	// act). Equal until delegation is built.
+	Subject string `protobuf:"bytes,20,opt,name=subject,proto3" json:"subject,omitempty"`
+	Actor   string `protobuf:"bytes,21,opt,name=actor,proto3" json:"actor,omitempty"`
+	// Position in the hash chain, from 1; 0 for entries written before it.
+	Sequence int64 `protobuf:"varint,22,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	// SHA-256 (hex) of the previous entry, and of this entry's stored content
+	// (everything above, with hash empty and id 0).
+	PrevHash      string `protobuf:"bytes,23,opt,name=prev_hash,json=prevHash,proto3" json:"prev_hash,omitempty"`
+	Hash          string `protobuf:"bytes,24,opt,name=hash,proto3" json:"hash,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2091,6 +2115,232 @@ func (x *AuditEvent) GetDetail() string {
 	return ""
 }
 
+func (x *AuditEvent) GetAuthMethod() string {
+	if x != nil {
+		return x.AuthMethod
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetTokenId() string {
+	if x != nil {
+		return x.TokenId
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetApiKey() string {
+	if x != nil {
+		return x.ApiKey
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetCertFingerprint() string {
+	if x != nil {
+		return x.CertFingerprint
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetGroups() []string {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+func (x *AuditEvent) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetActor() string {
+	if x != nil {
+		return x.Actor
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetSequence() int64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *AuditEvent) GetPrevHash() string {
+	if x != nil {
+		return x.PrevHash
+	}
+	return ""
+}
+
+func (x *AuditEvent) GetHash() string {
+	if x != nil {
+		return x.Hash
+	}
+	return ""
+}
+
+type VerifyAuditLogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VerifyAuditLogRequest) Reset() {
+	*x = VerifyAuditLogRequest{}
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifyAuditLogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifyAuditLogRequest) ProtoMessage() {}
+
+func (x *VerifyAuditLogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifyAuditLogRequest.ProtoReflect.Descriptor instead.
+func (*VerifyAuditLogRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_auth_service_proto_rawDescGZIP(), []int{37}
+}
+
+type VerifyAuditLogResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether every chained entry checked out.
+	Ok bool `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	// Chained entries checked, and the first and last sequence numbers seen.
+	Checked       int64 `protobuf:"varint,2,opt,name=checked,proto3" json:"checked,omitempty"`
+	FirstSequence int64 `protobuf:"varint,3,opt,name=first_sequence,json=firstSequence,proto3" json:"first_sequence,omitempty"`
+	LastSequence  int64 `protobuf:"varint,4,opt,name=last_sequence,json=lastSequence,proto3" json:"last_sequence,omitempty"`
+	// The newest entry's hash: keep it off the server to detect later
+	// truncation of the log.
+	LastHash string `protobuf:"bytes,5,opt,name=last_hash,json=lastHash,proto3" json:"last_hash,omitempty"`
+	// When not ok: the sequence (or entry id) where the chain breaks, and why.
+	BreakSequence int64  `protobuf:"varint,6,opt,name=break_sequence,json=breakSequence,proto3" json:"break_sequence,omitempty"`
+	Problem       string `protobuf:"bytes,7,opt,name=problem,proto3" json:"problem,omitempty"`
+	// Entries written before the chain began (sequence 0).
+	Unchained     int64 `protobuf:"varint,8,opt,name=unchained,proto3" json:"unchained,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VerifyAuditLogResponse) Reset() {
+	*x = VerifyAuditLogResponse{}
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerifyAuditLogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerifyAuditLogResponse) ProtoMessage() {}
+
+func (x *VerifyAuditLogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerifyAuditLogResponse.ProtoReflect.Descriptor instead.
+func (*VerifyAuditLogResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_auth_service_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *VerifyAuditLogResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *VerifyAuditLogResponse) GetChecked() int64 {
+	if x != nil {
+		return x.Checked
+	}
+	return 0
+}
+
+func (x *VerifyAuditLogResponse) GetFirstSequence() int64 {
+	if x != nil {
+		return x.FirstSequence
+	}
+	return 0
+}
+
+func (x *VerifyAuditLogResponse) GetLastSequence() int64 {
+	if x != nil {
+		return x.LastSequence
+	}
+	return 0
+}
+
+func (x *VerifyAuditLogResponse) GetLastHash() string {
+	if x != nil {
+		return x.LastHash
+	}
+	return ""
+}
+
+func (x *VerifyAuditLogResponse) GetBreakSequence() int64 {
+	if x != nil {
+		return x.BreakSequence
+	}
+	return 0
+}
+
+func (x *VerifyAuditLogResponse) GetProblem() string {
+	if x != nil {
+		return x.Problem
+	}
+	return ""
+}
+
+func (x *VerifyAuditLogResponse) GetUnchained() int64 {
+	if x != nil {
+		return x.Unchained
+	}
+	return 0
+}
+
 type ListAuditEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Only this project, when set.
@@ -2107,7 +2357,7 @@ type ListAuditEventsRequest struct {
 
 func (x *ListAuditEventsRequest) Reset() {
 	*x = ListAuditEventsRequest{}
-	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[37]
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2119,7 +2369,7 @@ func (x *ListAuditEventsRequest) String() string {
 func (*ListAuditEventsRequest) ProtoMessage() {}
 
 func (x *ListAuditEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[37]
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2132,7 +2382,7 @@ func (x *ListAuditEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuditEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListAuditEventsRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_auth_service_proto_rawDescGZIP(), []int{37}
+	return file_evalsi_v1alpha1_auth_service_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ListAuditEventsRequest) GetProject() string {
@@ -2180,7 +2430,7 @@ type ListAuditEventsResponse struct {
 
 func (x *ListAuditEventsResponse) Reset() {
 	*x = ListAuditEventsResponse{}
-	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[38]
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2192,7 +2442,7 @@ func (x *ListAuditEventsResponse) String() string {
 func (*ListAuditEventsResponse) ProtoMessage() {}
 
 func (x *ListAuditEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[38]
+	mi := &file_evalsi_v1alpha1_auth_service_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2205,7 +2455,7 @@ func (x *ListAuditEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuditEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListAuditEventsResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_auth_service_proto_rawDescGZIP(), []int{38}
+	return file_evalsi_v1alpha1_auth_service_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ListAuditEventsResponse) GetEvents() []*AuditEvent {
@@ -2364,7 +2614,7 @@ const file_evalsi_v1alpha1_auth_service_proto_rawDesc = "" +
 	"\abinding\x18\x01 \x01(\v2\x1c.evalsi.v1alpha1.RoleBindingR\abinding\"N\n" +
 	"\x14DeleteBindingRequest\x126\n" +
 	"\abinding\x18\x01 \x01(\v2\x1c.evalsi.v1alpha1.RoleBindingR\abinding\"\x17\n" +
-	"\x15DeleteBindingResponse\"\xd7\x02\n" +
+	"\x15DeleteBindingResponse\"\x9b\x05\n" +
 	"\n" +
 	"AuditEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12.\n" +
@@ -2380,7 +2630,30 @@ const file_evalsi_v1alpha1_auth_service_proto_rawDesc = "" +
 	"request_id\x18\n" +
 	" \x01(\tR\trequestId\x12\x16\n" +
 	"\x06source\x18\v \x01(\tR\x06source\x12\x16\n" +
-	"\x06detail\x18\f \x01(\tR\x06detail\"\xa7\x01\n" +
+	"\x06detail\x18\f \x01(\tR\x06detail\x12\x1f\n" +
+	"\vauth_method\x18\r \x01(\tR\n" +
+	"authMethod\x12\x16\n" +
+	"\x06issuer\x18\x0e \x01(\tR\x06issuer\x12\x19\n" +
+	"\btoken_id\x18\x0f \x01(\tR\atokenId\x12\x15\n" +
+	"\x06key_id\x18\x10 \x01(\tR\x05keyId\x12\x17\n" +
+	"\aapi_key\x18\x11 \x01(\tR\x06apiKey\x12)\n" +
+	"\x10cert_fingerprint\x18\x12 \x01(\tR\x0fcertFingerprint\x12\x16\n" +
+	"\x06groups\x18\x13 \x03(\tR\x06groups\x12\x18\n" +
+	"\asubject\x18\x14 \x01(\tR\asubject\x12\x14\n" +
+	"\x05actor\x18\x15 \x01(\tR\x05actor\x12\x1a\n" +
+	"\bsequence\x18\x16 \x01(\x03R\bsequence\x12\x1b\n" +
+	"\tprev_hash\x18\x17 \x01(\tR\bprevHash\x12\x12\n" +
+	"\x04hash\x18\x18 \x01(\tR\x04hash\"\x17\n" +
+	"\x15VerifyAuditLogRequest\"\x8a\x02\n" +
+	"\x16VerifyAuditLogResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
+	"\achecked\x18\x02 \x01(\x03R\achecked\x12%\n" +
+	"\x0efirst_sequence\x18\x03 \x01(\x03R\rfirstSequence\x12#\n" +
+	"\rlast_sequence\x18\x04 \x01(\x03R\flastSequence\x12\x1b\n" +
+	"\tlast_hash\x18\x05 \x01(\tR\blastHash\x12%\n" +
+	"\x0ebreak_sequence\x18\x06 \x01(\x03R\rbreakSequence\x12\x18\n" +
+	"\aproblem\x18\a \x01(\tR\aproblem\x12\x1c\n" +
+	"\tunchained\x18\b \x01(\x03R\tunchained\"\xa7\x01\n" +
 	"\x16ListAuditEventsRequest\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
@@ -2391,8 +2664,7 @@ const file_evalsi_v1alpha1_auth_service_proto_rawDesc = "" +
 	"deniedOnly\"v\n" +
 	"\x17ListAuditEventsResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.evalsi.v1alpha1.AuditEventR\x06events\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xeb\n" +
-	"\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xce\v\n" +
 	"\vAuthService\x12I\n" +
 	"\x06WhoAmI\x12\x1e.evalsi.v1alpha1.WhoAmIRequest\x1a\x1f.evalsi.v1alpha1.WhoAmIResponse\x12[\n" +
 	"\fListProjects\x12$.evalsi.v1alpha1.ListProjectsRequest\x1a%.evalsi.v1alpha1.ListProjectsResponse\x12^\n" +
@@ -2411,7 +2683,8 @@ const file_evalsi_v1alpha1_auth_service_proto_rawDesc = "" +
 	"\fListBindings\x12$.evalsi.v1alpha1.ListBindingsRequest\x1a%.evalsi.v1alpha1.ListBindingsResponse\x12^\n" +
 	"\rCreateBinding\x12%.evalsi.v1alpha1.CreateBindingRequest\x1a&.evalsi.v1alpha1.CreateBindingResponse\x12^\n" +
 	"\rDeleteBinding\x12%.evalsi.v1alpha1.DeleteBindingRequest\x1a&.evalsi.v1alpha1.DeleteBindingResponse\x12d\n" +
-	"\x0fListAuditEvents\x12'.evalsi.v1alpha1.ListAuditEventsRequest\x1a(.evalsi.v1alpha1.ListAuditEventsResponseB\xcd\x01\n" +
+	"\x0fListAuditEvents\x12'.evalsi.v1alpha1.ListAuditEventsRequest\x1a(.evalsi.v1alpha1.ListAuditEventsResponse\x12a\n" +
+	"\x0eVerifyAuditLog\x12&.evalsi.v1alpha1.VerifyAuditLogRequest\x1a'.evalsi.v1alpha1.VerifyAuditLogResponseB\xcd\x01\n" +
 	"\x13com.evalsi.v1alpha1B\x10AuthServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
@@ -2426,7 +2699,7 @@ func file_evalsi_v1alpha1_auth_service_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_auth_service_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_evalsi_v1alpha1_auth_service_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_evalsi_v1alpha1_auth_service_proto_goTypes = []any{
 	(*Principal)(nil),               // 0: evalsi.v1alpha1.Principal
 	(*ProjectAccess)(nil),           // 1: evalsi.v1alpha1.ProjectAccess
@@ -2465,31 +2738,33 @@ var file_evalsi_v1alpha1_auth_service_proto_goTypes = []any{
 	(*DeleteBindingRequest)(nil),    // 34: evalsi.v1alpha1.DeleteBindingRequest
 	(*DeleteBindingResponse)(nil),   // 35: evalsi.v1alpha1.DeleteBindingResponse
 	(*AuditEvent)(nil),              // 36: evalsi.v1alpha1.AuditEvent
-	(*ListAuditEventsRequest)(nil),  // 37: evalsi.v1alpha1.ListAuditEventsRequest
-	(*ListAuditEventsResponse)(nil), // 38: evalsi.v1alpha1.ListAuditEventsResponse
-	nil,                             // 39: evalsi.v1alpha1.Principal.LabelsEntry
-	nil,                             // 40: evalsi.v1alpha1.APIKey.RolesEntry
-	nil,                             // 41: evalsi.v1alpha1.APIKey.LabelsEntry
-	nil,                             // 42: evalsi.v1alpha1.CreateAPIKeyRequest.RolesEntry
-	nil,                             // 43: evalsi.v1alpha1.CreateAPIKeyRequest.LabelsEntry
-	(*timestamppb.Timestamp)(nil),   // 44: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),     // 45: google.protobuf.Duration
+	(*VerifyAuditLogRequest)(nil),   // 37: evalsi.v1alpha1.VerifyAuditLogRequest
+	(*VerifyAuditLogResponse)(nil),  // 38: evalsi.v1alpha1.VerifyAuditLogResponse
+	(*ListAuditEventsRequest)(nil),  // 39: evalsi.v1alpha1.ListAuditEventsRequest
+	(*ListAuditEventsResponse)(nil), // 40: evalsi.v1alpha1.ListAuditEventsResponse
+	nil,                             // 41: evalsi.v1alpha1.Principal.LabelsEntry
+	nil,                             // 42: evalsi.v1alpha1.APIKey.RolesEntry
+	nil,                             // 43: evalsi.v1alpha1.APIKey.LabelsEntry
+	nil,                             // 44: evalsi.v1alpha1.CreateAPIKeyRequest.RolesEntry
+	nil,                             // 45: evalsi.v1alpha1.CreateAPIKeyRequest.LabelsEntry
+	(*timestamppb.Timestamp)(nil),   // 46: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),     // 47: google.protobuf.Duration
 }
 var file_evalsi_v1alpha1_auth_service_proto_depIdxs = []int32{
-	39, // 0: evalsi.v1alpha1.Principal.labels:type_name -> evalsi.v1alpha1.Principal.LabelsEntry
+	41, // 0: evalsi.v1alpha1.Principal.labels:type_name -> evalsi.v1alpha1.Principal.LabelsEntry
 	0,  // 1: evalsi.v1alpha1.WhoAmIResponse.principal:type_name -> evalsi.v1alpha1.Principal
 	1,  // 2: evalsi.v1alpha1.WhoAmIResponse.access:type_name -> evalsi.v1alpha1.ProjectAccess
-	44, // 3: evalsi.v1alpha1.Project.created_at:type_name -> google.protobuf.Timestamp
+	46, // 3: evalsi.v1alpha1.Project.created_at:type_name -> google.protobuf.Timestamp
 	4,  // 4: evalsi.v1alpha1.ListProjectsResponse.projects:type_name -> evalsi.v1alpha1.Project
 	4,  // 5: evalsi.v1alpha1.CreateProjectResponse.project:type_name -> evalsi.v1alpha1.Project
-	40, // 6: evalsi.v1alpha1.APIKey.roles:type_name -> evalsi.v1alpha1.APIKey.RolesEntry
-	41, // 7: evalsi.v1alpha1.APIKey.labels:type_name -> evalsi.v1alpha1.APIKey.LabelsEntry
-	44, // 8: evalsi.v1alpha1.APIKey.created_at:type_name -> google.protobuf.Timestamp
-	44, // 9: evalsi.v1alpha1.APIKey.expires_at:type_name -> google.protobuf.Timestamp
-	44, // 10: evalsi.v1alpha1.APIKey.last_used_at:type_name -> google.protobuf.Timestamp
-	42, // 11: evalsi.v1alpha1.CreateAPIKeyRequest.roles:type_name -> evalsi.v1alpha1.CreateAPIKeyRequest.RolesEntry
-	43, // 12: evalsi.v1alpha1.CreateAPIKeyRequest.labels:type_name -> evalsi.v1alpha1.CreateAPIKeyRequest.LabelsEntry
-	45, // 13: evalsi.v1alpha1.CreateAPIKeyRequest.ttl:type_name -> google.protobuf.Duration
+	42, // 6: evalsi.v1alpha1.APIKey.roles:type_name -> evalsi.v1alpha1.APIKey.RolesEntry
+	43, // 7: evalsi.v1alpha1.APIKey.labels:type_name -> evalsi.v1alpha1.APIKey.LabelsEntry
+	46, // 8: evalsi.v1alpha1.APIKey.created_at:type_name -> google.protobuf.Timestamp
+	46, // 9: evalsi.v1alpha1.APIKey.expires_at:type_name -> google.protobuf.Timestamp
+	46, // 10: evalsi.v1alpha1.APIKey.last_used_at:type_name -> google.protobuf.Timestamp
+	44, // 11: evalsi.v1alpha1.CreateAPIKeyRequest.roles:type_name -> evalsi.v1alpha1.CreateAPIKeyRequest.RolesEntry
+	45, // 12: evalsi.v1alpha1.CreateAPIKeyRequest.labels:type_name -> evalsi.v1alpha1.CreateAPIKeyRequest.LabelsEntry
+	47, // 13: evalsi.v1alpha1.CreateAPIKeyRequest.ttl:type_name -> google.protobuf.Duration
 	10, // 14: evalsi.v1alpha1.CreateAPIKeyResponse.key:type_name -> evalsi.v1alpha1.APIKey
 	10, // 15: evalsi.v1alpha1.ListAPIKeysResponse.keys:type_name -> evalsi.v1alpha1.APIKey
 	17, // 16: evalsi.v1alpha1.ListRolesResponse.roles:type_name -> evalsi.v1alpha1.Role
@@ -2498,12 +2773,12 @@ var file_evalsi_v1alpha1_auth_service_proto_depIdxs = []int32{
 	17, // 19: evalsi.v1alpha1.UpdateRoleRequest.role:type_name -> evalsi.v1alpha1.Role
 	17, // 20: evalsi.v1alpha1.UpdateRoleResponse.role:type_name -> evalsi.v1alpha1.Role
 	26, // 21: evalsi.v1alpha1.ListPermissionsResponse.permissions:type_name -> evalsi.v1alpha1.Permission
-	44, // 22: evalsi.v1alpha1.RoleBinding.created_at:type_name -> google.protobuf.Timestamp
+	46, // 22: evalsi.v1alpha1.RoleBinding.created_at:type_name -> google.protobuf.Timestamp
 	29, // 23: evalsi.v1alpha1.ListBindingsResponse.bindings:type_name -> evalsi.v1alpha1.RoleBinding
 	29, // 24: evalsi.v1alpha1.CreateBindingRequest.binding:type_name -> evalsi.v1alpha1.RoleBinding
 	29, // 25: evalsi.v1alpha1.CreateBindingResponse.binding:type_name -> evalsi.v1alpha1.RoleBinding
 	29, // 26: evalsi.v1alpha1.DeleteBindingRequest.binding:type_name -> evalsi.v1alpha1.RoleBinding
-	44, // 27: evalsi.v1alpha1.AuditEvent.time:type_name -> google.protobuf.Timestamp
+	46, // 27: evalsi.v1alpha1.AuditEvent.time:type_name -> google.protobuf.Timestamp
 	36, // 28: evalsi.v1alpha1.ListAuditEventsResponse.events:type_name -> evalsi.v1alpha1.AuditEvent
 	9,  // 29: evalsi.v1alpha1.APIKey.RolesEntry.value:type_name -> evalsi.v1alpha1.RoleList
 	9,  // 30: evalsi.v1alpha1.CreateAPIKeyRequest.RolesEntry.value:type_name -> evalsi.v1alpha1.RoleList
@@ -2521,24 +2796,26 @@ var file_evalsi_v1alpha1_auth_service_proto_depIdxs = []int32{
 	30, // 42: evalsi.v1alpha1.AuthService.ListBindings:input_type -> evalsi.v1alpha1.ListBindingsRequest
 	32, // 43: evalsi.v1alpha1.AuthService.CreateBinding:input_type -> evalsi.v1alpha1.CreateBindingRequest
 	34, // 44: evalsi.v1alpha1.AuthService.DeleteBinding:input_type -> evalsi.v1alpha1.DeleteBindingRequest
-	37, // 45: evalsi.v1alpha1.AuthService.ListAuditEvents:input_type -> evalsi.v1alpha1.ListAuditEventsRequest
-	3,  // 46: evalsi.v1alpha1.AuthService.WhoAmI:output_type -> evalsi.v1alpha1.WhoAmIResponse
-	6,  // 47: evalsi.v1alpha1.AuthService.ListProjects:output_type -> evalsi.v1alpha1.ListProjectsResponse
-	8,  // 48: evalsi.v1alpha1.AuthService.CreateProject:output_type -> evalsi.v1alpha1.CreateProjectResponse
-	12, // 49: evalsi.v1alpha1.AuthService.CreateAPIKey:output_type -> evalsi.v1alpha1.CreateAPIKeyResponse
-	14, // 50: evalsi.v1alpha1.AuthService.ListAPIKeys:output_type -> evalsi.v1alpha1.ListAPIKeysResponse
-	16, // 51: evalsi.v1alpha1.AuthService.RevokeAPIKey:output_type -> evalsi.v1alpha1.RevokeAPIKeyResponse
-	19, // 52: evalsi.v1alpha1.AuthService.ListRoles:output_type -> evalsi.v1alpha1.ListRolesResponse
-	21, // 53: evalsi.v1alpha1.AuthService.CreateRole:output_type -> evalsi.v1alpha1.CreateRoleResponse
-	23, // 54: evalsi.v1alpha1.AuthService.UpdateRole:output_type -> evalsi.v1alpha1.UpdateRoleResponse
-	25, // 55: evalsi.v1alpha1.AuthService.DeleteRole:output_type -> evalsi.v1alpha1.DeleteRoleResponse
-	28, // 56: evalsi.v1alpha1.AuthService.ListPermissions:output_type -> evalsi.v1alpha1.ListPermissionsResponse
-	31, // 57: evalsi.v1alpha1.AuthService.ListBindings:output_type -> evalsi.v1alpha1.ListBindingsResponse
-	33, // 58: evalsi.v1alpha1.AuthService.CreateBinding:output_type -> evalsi.v1alpha1.CreateBindingResponse
-	35, // 59: evalsi.v1alpha1.AuthService.DeleteBinding:output_type -> evalsi.v1alpha1.DeleteBindingResponse
-	38, // 60: evalsi.v1alpha1.AuthService.ListAuditEvents:output_type -> evalsi.v1alpha1.ListAuditEventsResponse
-	46, // [46:61] is the sub-list for method output_type
-	31, // [31:46] is the sub-list for method input_type
+	39, // 45: evalsi.v1alpha1.AuthService.ListAuditEvents:input_type -> evalsi.v1alpha1.ListAuditEventsRequest
+	37, // 46: evalsi.v1alpha1.AuthService.VerifyAuditLog:input_type -> evalsi.v1alpha1.VerifyAuditLogRequest
+	3,  // 47: evalsi.v1alpha1.AuthService.WhoAmI:output_type -> evalsi.v1alpha1.WhoAmIResponse
+	6,  // 48: evalsi.v1alpha1.AuthService.ListProjects:output_type -> evalsi.v1alpha1.ListProjectsResponse
+	8,  // 49: evalsi.v1alpha1.AuthService.CreateProject:output_type -> evalsi.v1alpha1.CreateProjectResponse
+	12, // 50: evalsi.v1alpha1.AuthService.CreateAPIKey:output_type -> evalsi.v1alpha1.CreateAPIKeyResponse
+	14, // 51: evalsi.v1alpha1.AuthService.ListAPIKeys:output_type -> evalsi.v1alpha1.ListAPIKeysResponse
+	16, // 52: evalsi.v1alpha1.AuthService.RevokeAPIKey:output_type -> evalsi.v1alpha1.RevokeAPIKeyResponse
+	19, // 53: evalsi.v1alpha1.AuthService.ListRoles:output_type -> evalsi.v1alpha1.ListRolesResponse
+	21, // 54: evalsi.v1alpha1.AuthService.CreateRole:output_type -> evalsi.v1alpha1.CreateRoleResponse
+	23, // 55: evalsi.v1alpha1.AuthService.UpdateRole:output_type -> evalsi.v1alpha1.UpdateRoleResponse
+	25, // 56: evalsi.v1alpha1.AuthService.DeleteRole:output_type -> evalsi.v1alpha1.DeleteRoleResponse
+	28, // 57: evalsi.v1alpha1.AuthService.ListPermissions:output_type -> evalsi.v1alpha1.ListPermissionsResponse
+	31, // 58: evalsi.v1alpha1.AuthService.ListBindings:output_type -> evalsi.v1alpha1.ListBindingsResponse
+	33, // 59: evalsi.v1alpha1.AuthService.CreateBinding:output_type -> evalsi.v1alpha1.CreateBindingResponse
+	35, // 60: evalsi.v1alpha1.AuthService.DeleteBinding:output_type -> evalsi.v1alpha1.DeleteBindingResponse
+	40, // 61: evalsi.v1alpha1.AuthService.ListAuditEvents:output_type -> evalsi.v1alpha1.ListAuditEventsResponse
+	38, // 62: evalsi.v1alpha1.AuthService.VerifyAuditLog:output_type -> evalsi.v1alpha1.VerifyAuditLogResponse
+	47, // [47:63] is the sub-list for method output_type
+	31, // [31:47] is the sub-list for method input_type
 	31, // [31:31] is the sub-list for extension type_name
 	31, // [31:31] is the sub-list for extension extendee
 	0,  // [0:31] is the sub-list for field type_name
@@ -2555,7 +2832,7 @@ func file_evalsi_v1alpha1_auth_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_auth_service_proto_rawDesc), len(file_evalsi_v1alpha1_auth_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   44,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

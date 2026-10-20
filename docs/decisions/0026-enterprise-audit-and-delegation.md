@@ -1,6 +1,9 @@
 # 0026. Enterprise-grade audit, and a delegation-ready identity model
 
-- **Status:** Proposed, 2026-10-15. Nothing here is built.
+- **Status:** Proposed 2026-10-15; partly built 2026-10-20.
+  - **Built:** strict mode (item 1); the authentication context, `subject` and `actor` (items 3 and 9); configuration audit for the sections that reload live, plus a startup entry with per-section hashes (item 5); read auditing by kind, without sampling or row counts (item 2); the hash chain with `evalsi auth audit verify` (part of item 6).
+  - **Not built:** initiator, executor and grant fields on runs (item 4); signed checkpoints and archival retention (the rest of item 6); guaranteed export (item 7); legal holds (item 8); token exchange (item 10).
+  - The [identity guide](../guides/identity.md#7-audit-metrics-external-authorization) describes what is built.
 
 ## Context
 

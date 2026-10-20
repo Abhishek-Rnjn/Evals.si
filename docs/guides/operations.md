@@ -18,6 +18,18 @@ changes until a separately documented maintenance release. Do not rename/drop
 columns or require a backfill during a rolling startup. Large indexes and
 backfills need a separate resumable migration, not the startup transaction.
 
+Each schema step is recorded in the `schema_migrations` table (version, name,
+time applied and the minimum reader version), in the same transaction as the
+step. An expand step leaves the minimum reader unchanged. A contract step raises
+it, and an older `evalsid` then refuses to start against the database with
+"the database schema is newer than this evalsid can read", instead of
+misreading it. A database written before versioning is adopted on its first
+open: its idempotent steps are recorded without changing data. The release
+steps and the expand/contract rule are in [CONTRIBUTING](../../CONTRIBUTING.md#schema-changes).
+This guard is tested with simulated releases; it does not replace running the
+real N-1 release against a migrated database before claiming rolling
+compatibility.
+
 Before an upgrade, save the release values, back up all storage below, read the
 release's migration notes, and verify N-1 compatibility evidence. Install the
 CRD chart first, then the API/worker chart and sandboxd at the same target

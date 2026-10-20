@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -41,7 +44,7 @@ var reloadInterval = 15 * time.Second
 // at once, stored online policies are checked again (and dropped while they
 // name what is no longer granted), and guardrails recompile on their next
 // use. Other settings need a restart.
-func reloadCredentials(ctx context.Context, cfg config.Config, creds *credentials.Policy, watcher *watch.Engine, log *slog.Logger) {
+func reloadCredentials(ctx context.Context, cfg config.Config, creds *credentials.Policy, watcher *watch.Engine, auditor *authz.Auditor, log *slog.Logger) {
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	defer signal.Stop(hup)
@@ -64,6 +67,11 @@ func reloadCredentials(ctx context.Context, cfg config.Config, creds *credential
 		if reflect.DeepEqual(settings, current) {
 			continue
 		}
+		auditConfig(ctx, auditor, "config.reload", map[string]any{
+			"changed": changedSections(current, settings),
+			"before":  current, "after": settings,
+			"hash": configDigest(settings),
+		})
 		current = settings
 		creds.Update(settings)
 		log.Info("credential grants and judge projects reloaded", "grants", len(settings.Credentials.Grants), "enforced", creds.Enforced())
@@ -71,4 +79,43 @@ func reloadCredentials(ctx context.Context, cfg config.Config, creds *credential
 			log.Error("re-checking online policies against the new grants", "err", err)
 		}
 	}
+}
+
+// auditConfig records the configuration in effect (decision 0026): at
+// startup a hash per security-relevant section, and on a reload what
+// changed. Credential grants name variables and hosts, never values.
+func auditConfig(ctx context.Context, auditor *authz.Auditor, action string, detail map[string]any) {
+	raw, _ := json.Marshal(detail)
+	auditor.Record(ctx, &evalsiv1alpha1.AuditEvent{
+		Principal: "system:config", Action: action, Resource: "config", Allowed: true,
+		Reason: "configuration in effect", Detail: string(raw),
+	})
+}
+
+// configSections are the sections whose changes are audited, as hashes.
+func configSections(cfg config.Config) map[string]string {
+	return map[string]string{
+		"credentials":   configDigest(cfg.Credentials),
+		"judges":        configDigest(cfg.CredentialSettings().Judges),
+		"rbac":          configDigest(cfg.RBAC),
+		"authorization": configDigest(cfg.Authorization),
+		"audit":         configDigest(cfg.Audit),
+	}
+}
+
+func configDigest(v any) string {
+	raw, _ := json.Marshal(v)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func changedSections(before, after credentials.Settings) []string {
+	var out []string
+	if !reflect.DeepEqual(before.Credentials, after.Credentials) {
+		out = append(out, "credentials")
+	}
+	if !reflect.DeepEqual(before.Judges, after.Judges) {
+		out = append(out, "judges")
+	}
+	return out
 }

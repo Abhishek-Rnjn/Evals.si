@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -152,6 +153,15 @@ type AuthorizationConfig struct {
 type AuditConfig struct {
 	// How long audit events are kept. Default 2160h (90 days).
 	Retention string `json:"retention,omitempty"`
+	// "strict": a mutating call whose audit entry cannot be written fails
+	// (Unavailable) instead of proceeding. "besteffort": it proceeds and the
+	// failure is logged and counted. Default: strict when authentication is
+	// enabled, besteffort otherwise (decision 0026).
+	Mode string `json:"mode,omitempty"`
+	// Resource kinds whose allowed reads are recorded too, for example
+	// [traces, runs, datasets], or [all]. A read entry names the principal,
+	// project and resource or call, never the data returned. Off by default.
+	Reads []string `json:"reads,omitempty"`
 }
 
 var nameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -235,6 +245,17 @@ func (c AuthorizationConfig) Validate() error {
 
 // Validate checks the audit section.
 func (c AuditConfig) Validate() error {
+	switch c.Mode {
+	case "", "strict", "besteffort":
+	default:
+		return fmt.Errorf("audit.mode %q: use strict or besteffort", c.Mode)
+	}
+	kinds := ReadKinds()
+	for _, k := range c.Reads {
+		if k != "all" && !slices.Contains(kinds, k) {
+			return fmt.Errorf("audit.reads: unknown kind %q (use all, or one of %s)", k, strings.Join(kinds, ", "))
+		}
+	}
 	if c.Retention == "" {
 		return nil
 	}
@@ -242,6 +263,15 @@ func (c AuditConfig) Validate() error {
 		return fmt.Errorf("audit.retention: %w", err)
 	}
 	return nil
+}
+
+// StrictMode reports whether audit.mode is strict, given whether
+// authentication is enabled (the default follows it).
+func (c AuditConfig) StrictMode(authEnabled bool) bool {
+	if c.Mode == "" {
+		return authEnabled
+	}
+	return c.Mode == "strict"
 }
 
 // RetentionDuration is the configured retention, or 90 days.

@@ -460,3 +460,15 @@ func unverifiedClaims(raw string) map[string]any {
 	}
 	return claims
 }
+
+// tokenKeyID is a verified token's signing key ID (kid), for the audit log.
+func tokenKeyID(raw string) string {
+	tok, err := jwt.ParseSigned(raw, []jose.SignatureAlgorithm{
+		jose.RS256, jose.RS384, jose.RS512, jose.ES256, jose.ES384, jose.ES512,
+		jose.PS256, jose.PS384, jose.PS512, jose.EdDSA,
+	})
+	if err != nil || len(tok.Headers) == 0 {
+		return ""
+	}
+	return tok.Headers[0].KeyID
+}

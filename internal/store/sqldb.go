@@ -156,8 +156,14 @@ func addTenantColumns(ctx context.Context, q querier, d dialect) error {
 
 // addColumn adds a text column, empty by default, when the table lacks it.
 func addColumn(ctx context.Context, q querier, d dialect, table, column string) error {
+	return addTypedColumn(ctx, q, d, table, column, "TEXT NOT NULL DEFAULT ''")
+}
+
+// addTypedColumn adds a column with the given SQLite definition when the
+// table lacks it.
+func addTypedColumn(ctx context.Context, q querier, d dialect, table, column, def string) error {
 	if d == postgresDialect {
-		if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN IF NOT EXISTS `+column+` TEXT NOT NULL DEFAULT ''`); err != nil {
+		if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN IF NOT EXISTS `+column+` `+d.ddl(" " + def)[1:]); err != nil {
 			return fmt.Errorf("adding %s to %s: %w", column, table, err)
 		}
 		return nil
@@ -167,7 +173,7 @@ func addColumn(ctx context.Context, q querier, d dialect, table, column string) 
 		return err
 	}
 	if n == 0 {
-		if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN `+column+` TEXT NOT NULL DEFAULT ''`); err != nil {
+		if _, err := q.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN `+column+` `+def); err != nil {
 			return fmt.Errorf("adding %s to %s: %w", column, table, err)
 		}
 	}

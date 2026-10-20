@@ -740,6 +740,11 @@ func (c Config) validateAccess() []error {
 			errs = append(errs, err)
 		}
 	}
+	if c.Audit.Mode == "strict" && !c.AuthEnabled() {
+		// Without authentication no call is authorized or audited, so strict
+		// mode would promise what it cannot do.
+		errs = append(errs, errors.New("audit.mode: strict needs authentication: calls are only audited when the server authenticates them"))
+	}
 	addrs := []string{c.Listen, c.OTLP.GRPCListen, c.OTLP.HTTPListen}
 	for _, addr := range addrs {
 		if addr == "" || auth.IsLoopback(addr) {

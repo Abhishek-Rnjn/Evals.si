@@ -6,6 +6,11 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Strict audit mode** (decision 0026). `audit.mode: strict`, the default when authentication is on, writes a change's audit entry before the change and refuses the call (`unavailable`) when the entry cannot be written. Automatic run deletes and archives skip runs they cannot audit. `besteffort` keeps the previous behaviour. Failed writes are counted in `evalsi_audit_write_failures_total`.
+- **Richer audit entries.** Each entry records how the caller authenticated (method, JWT issuer, `jti` and `kid`, API key name, client certificate fingerprint), the caller's groups, and `subject` and `actor`. `audit.reads` records allowed reads of the listed kinds. The server records `config.load` at startup, and `config.reload` when credential grants or judge projects change.
+- **Hash-chained audit log.** Entries carry a sequence number and SHA-256 hashes. `evalsi auth audit verify` (`AuthService.VerifyAuditLog`, `GET /v1alpha1/audit:verify`, owners only) reports the first edited, missing or reordered entry and exits 3 when it finds one.
+- **Versioned schema migrations.** Steps are recorded in `schema_migrations` with a minimum reader version, so an older `evalsid` refuses a database a newer release contracted. The expand-then-contract rule is in CONTRIBUTING.
+- The [enterprise deployment guide](docs/guides/enterprise-deployment.md) covers topologies, every outbound connection, audit settings, and data lifecycle and erasure.
 - Pinned baseline/candidate release decisions connect approved held-out catalog suites to enforced CLI, browser and GitHub Action workflows. Captured evaluator/judge/checker contracts, full record/trial coverage, paired regression bounds, critical cases and usage thresholds prevent incomplete evidence from passing. Saves immutable, source-authorized decision records and portable integrity-checked reports; commit/model identities remain declarations rather than execution attestations.
 
 - **`builtin/run-completed`** passes an agent run that ended `completed`, and fails one stopped for steps, spend or time, failed, or left waiting on a human. Connectors now report why a run stopped instead of always `completed`: an A2A task's last state (`input_required`, `failed`, ...) and an HTTP agent's `stop_reason_path`. A run left at `awaiting_human` previously passed gates on tool errors.
@@ -42,6 +47,11 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - `evalsi doctor` checks installed versions, worker dependencies and real sandbox availability. `--require server` and `--require agent` fail when the requested capabilities are missing; plain SDK scoring does not require a sandbox.
 - `evalsi init` creates offline recorded-output or sandboxed-agent starter projects, including a working example, a deliberately regressed control, error-rate gates and local report instructions. Existing directories are never overwritten.
 - A root composite GitHub Action runs gates with published 0.3.0, writes metrics and identity summaries, optionally compares compatible paired baselines and propagates failures. Raw results/log uploads are opt-in. Added an onboarding guide, website navigation and action positive/negative CI controls; roadmap acceptance criteria remain open beyond these initial slices.
+
+### Changed
+
+- **Authenticated installs now audit strictly by default.** With authentication enabled and no `audit.mode` set, a change whose audit entry cannot be written fails with `unavailable` instead of proceeding. Set `audit.mode: besteffort` to keep the old behaviour. In strict mode, access-management calls write one entry before the change and a detailed one after it.
+- The audit table gains `seq` and `hash` columns, an additive step. Entries written before the upgrade, or by an older release during a rolling upgrade, are not chained; verification counts them separately.
 
 ### Fixed
 

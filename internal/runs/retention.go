@@ -125,9 +125,11 @@ func (m *Manager) retire(ctx context.Context, run *evalsiv1alpha1.Run, cutoff ti
 	if active {
 		return false, nil
 	}
+	if err := m.auditRetention(ctx, run, "runs.delete", cutoff); err != nil {
+		return false, err
+	}
 	switch err := m.store.DeleteRun(ctx, id); {
 	case err == nil:
-		m.auditRetention(ctx, run, "runs.delete", cutoff)
 		return true, nil
 	case errors.Is(err, store.ErrRunActive), errors.Is(err, store.ErrNotFound):
 		return false, nil
@@ -141,12 +143,12 @@ func (m *Manager) retireToSummary(ctx context.Context, run *evalsiv1alpha1.Run, 
 	if run.GetArchivedAt() != nil {
 		return false, nil
 	}
+	if err := m.auditRetention(ctx, run, "runs.archive", cutoff); err != nil {
+		return false, err
+	}
 	_, did, err := m.archive(ctx, run.GetId())
 	switch {
 	case err == nil:
-		if did {
-			m.auditRetention(ctx, run, "runs.archive", cutoff)
-		}
 		return did, nil
 	case connect.CodeOf(err) == connect.CodeFailedPrecondition, connect.CodeOf(err) == connect.CodeNotFound:
 		return false, nil
@@ -155,13 +157,14 @@ func (m *Manager) retireToSummary(ctx context.Context, run *evalsiv1alpha1.Run, 
 	}
 }
 
-// auditRetention records an automatic delete or archive: the same event a
-// caller's DeleteRun or ArchiveRun leaves, with the system as the principal.
-func (m *Manager) auditRetention(ctx context.Context, run *evalsiv1alpha1.Run, action string, cutoff time.Time) {
+// auditRetention records an automatic delete or archive before it is made:
+// the same event a caller's DeleteRun or ArchiveRun leaves, with the system as
+// the principal. An error (strict audit mode) means the run must be left.
+func (m *Manager) auditRetention(ctx context.Context, run *evalsiv1alpha1.Run, action string, cutoff time.Time) error {
 	if m.opts.Audit == nil {
-		return
+		return nil
 	}
-	m.opts.Audit(ctx, &evalsiv1alpha1.AuditEvent{
+	return m.opts.Audit(ctx, &evalsiv1alpha1.AuditEvent{
 		Principal: "system:retention", Action: action, Project: run.GetProject(),
 		Resource: "run/" + run.GetId(), Allowed: true,
 		Reason:    "run retention",

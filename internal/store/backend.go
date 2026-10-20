@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -61,21 +62,12 @@ func OpenPostgres(ctx context.Context, dsn string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, c.d.ddl(schema+authSchema+leaseSchema+quotaSchema+sandboxSchema+rewardCacheSchema+annotationSchema+failureSchema+datasetCatalogSchema+releaseDecisionSchema+guardrailSchema+webhookSchema+sourceSchema+idempotencySchema+watchPendingSchema)); err != nil {
+	if err := applyMigrations(ctx, &txn{tx: tx, d: postgresDialect}, postgresDialect, migrations); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("store: creating schema: %w", err)
-	}
-	if err := addTenantColumns(ctx, tx, postgresDialect); err != nil {
-		_ = db.Close()
+		if errors.Is(err, ErrSchemaTooNew) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("store: migrating: %w", err)
-	}
-	if err := migrateArchivedRuns(ctx, tx, postgresDialect); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("store: migrating archived runs: %w", err)
-	}
-	if err := migrateWatchPending(ctx, tx, postgresDialect); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("store: migrating pending work: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		_ = db.Close()

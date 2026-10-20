@@ -61,6 +61,10 @@ class AuthServiceStub:
     DeleteBinding: _grpc.UnaryUnaryMultiCallable[_auth_service_pb2.DeleteBindingRequest, _auth_service_pb2.DeleteBindingResponse]
     ListAuditEvents: _grpc.UnaryUnaryMultiCallable[_auth_service_pb2.ListAuditEventsRequest, _auth_service_pb2.ListAuditEventsResponse]
     """Mutating and denied calls, newest first."""
+    VerifyAuditLog: _grpc.UnaryUnaryMultiCallable[_auth_service_pb2.VerifyAuditLogRequest, _auth_service_pb2.VerifyAuditLogResponse]
+    """Checks the audit log's hash chain and reports the first break. Owners
+    only: it reads every project's entries.
+    """
 
 @_typing.type_check_only
 class AuthServiceAsyncStub(AuthServiceStub):
@@ -95,6 +99,10 @@ class AuthServiceAsyncStub(AuthServiceStub):
     DeleteBinding: _aio.UnaryUnaryMultiCallable[_auth_service_pb2.DeleteBindingRequest, _auth_service_pb2.DeleteBindingResponse]  # type: ignore[assignment]
     ListAuditEvents: _aio.UnaryUnaryMultiCallable[_auth_service_pb2.ListAuditEventsRequest, _auth_service_pb2.ListAuditEventsResponse]  # type: ignore[assignment]
     """Mutating and denied calls, newest first."""
+    VerifyAuditLog: _aio.UnaryUnaryMultiCallable[_auth_service_pb2.VerifyAuditLogRequest, _auth_service_pb2.VerifyAuditLogResponse]  # type: ignore[assignment]
+    """Checks the audit log's hash chain and reports the first break. Owners
+    only: it reads every project's entries.
+    """
 
 class AuthServiceServicer(metaclass=_abc_1.ABCMeta):
     """AuthService reports who the caller is and manages projects, API keys,
@@ -216,5 +224,15 @@ class AuthServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_auth_service_pb2.ListAuditEventsResponse, _abc.Awaitable[_auth_service_pb2.ListAuditEventsResponse]]:
         """Mutating and denied calls, newest first."""
+
+    @_abc_1.abstractmethod
+    def VerifyAuditLog(
+        self,
+        request: _auth_service_pb2.VerifyAuditLogRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_auth_service_pb2.VerifyAuditLogResponse, _abc.Awaitable[_auth_service_pb2.VerifyAuditLogResponse]]:
+        """Checks the audit log's hash chain and reports the first break. Owners
+        only: it reads every project's entries.
+        """
 
 def add_AuthServiceServicer_to_server(servicer: AuthServiceServicer, server: _typing.Union[_grpc.Server, _aio.Server]) -> None: ...

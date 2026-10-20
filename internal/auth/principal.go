@@ -48,6 +48,10 @@ type Principal struct {
 	KeyRoles map[string][]string
 	// Roles mapped from token claims (role_claims), per project.
 	ClaimRoles map[string][]string
+	// The JWT's signing key ID (kid), for the audit log.
+	TokenKeyID string
+	// The client certificate's SHA-256 fingerprint (hex), for the audit log.
+	CertFingerprint string
 }
 
 // Anonymous is the principal of a request without a credential.
