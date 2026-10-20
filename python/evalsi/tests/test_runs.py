@@ -195,6 +195,15 @@ def test_check_gates() -> None:
     assert "no such metric" in third.reason
 
 
+def test_a_gate_on_a_metric_no_record_scored_says_so() -> None:
+    em = bind_evaluators(["exact-match"])
+    results = [EvaluationResult(i, "exact-match", "x", Outcome.SKIPPED, []) for i in "ab"]
+    summaries = summarize(em, results, [Record(id="a"), Record(id="b")])
+    (gate,) = check_gates([run_pb2.Gate(metric="exact-match", min=1.0)], summaries)
+    assert not gate.passed
+    assert gate.reason.startswith("no record was scored (2 skipped, 0 errors)")
+
+
 def test_trials_add_pass_at_k_and_cluster_by_record() -> None:
     em = bind_evaluators(["exact-match"])
     outcomes = {"a": [True, True, True], "b": [True, False, False], "c": [False, False, False]}

@@ -98,6 +98,11 @@ message HTTPAgent {
   // joined into the answer when no event has output_path, which may then be
   // empty.
   string delta_path = 11;
+  // Dotted path to the agent's own stop reason, for example "awaiting_human"
+  // or "error" (from the last event that has one, in a stream). Kept as
+  // metadata.agent.stop_reason in place of "completed", so a run that
+  // stopped short is not counted as finished.
+  string stop_reason_path = 12;
 }
 
 // A command-line agent (a coding agent, for example) run inside the task's

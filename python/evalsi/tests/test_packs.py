@@ -442,3 +442,16 @@ def test_promoted_trace_rows_load_with_trajectories() -> None:
     assert "provenance" not in record.metadata
     result = evalsi.evaluate([record], ["trajectory-match", "step-budget"], params={})
     assert result.metric("step-budget.tool_calls").mean == 1
+
+
+def test_run_completed_reads_the_agent_stop_reason() -> None:
+    def record(reason: str) -> Record:
+        return Record(id="r", metadata={"agent": {"stop_reason": reason}})
+
+    assert run(agent.run_completed, record("completed"))["run-completed"].passed
+    waiting = run(agent.run_completed, record("awaiting_human"))["run-completed"]
+    assert not waiting.passed
+    assert waiting.explanation == "stopped: awaiting_human"
+    assert not run(agent.run_completed, record("max_steps"))["run-completed"].passed
+    with pytest.raises(SkipRecord):
+        asyncio.run(agent.run_completed.bind({}).run(Record(id="r"), EvalContext()))
