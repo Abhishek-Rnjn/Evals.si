@@ -234,7 +234,7 @@ def test_http_agent_reports_its_trajectory_usage_and_a_thread_per_trial(
                 "output": "routed",
                 "record": {
                     "trajectory": {
-                        "session_id": "orbit-42",
+                        "session_id": "agent-42",
                         "steps": [
                             {"type": "tool", "name": "lookup", "output": "found"},
                             {"type": "STEP_TYPE_HANDOFF", "name": "billing"},
@@ -280,7 +280,7 @@ def test_http_agent_reports_its_trajectory_usage_and_a_thread_per_trial(
     assert first.usage is not None
     assert (first.usage.input_tokens, first.usage.output_tokens) == (12, 5)
     assert first.usage.cost_usd == 0.01
-    assert first.metadata["agent"]["session_id"] == "orbit-42"
+    assert first.metadata["agent"]["session_id"] == "agent-42"
     assert second is not None
 
 
