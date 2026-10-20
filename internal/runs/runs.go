@@ -50,6 +50,8 @@ import (
 
 // Options configures the manager.
 type Options struct {
+	// Worker-visible judge settings captured in the release evaluation contract.
+	Judges map[string]config.Judge
 	// Root that dataset paths are resolved against: a directory or
 	// s3://bucket/prefix. Empty disallows paths.
 	DatasetsDir string
@@ -607,6 +609,11 @@ func (m *Manager) storeRun(ctx context.Context, name, project string, labels map
 		DatasetSha256: datasetHash(records),
 		Records:       int64(len(records)),
 	}
+	contract, err := m.evaluationContract(spec, insts)
+	if err != nil {
+		return nil, err
+	}
+	run.EvaluationContract = contract
 	if len(ids) > 0 {
 		run.Id = ids[0]
 	}
@@ -842,6 +849,13 @@ func (m *Manager) prepare(ctx context.Context, run *evalsiv1alpha1.Run, a *activ
 	if err != nil {
 		return nil, err
 	}
+	if run.GetEvaluationContract() != nil {
+		current, contractErr := m.evaluationContract(run.GetSpec(), insts)
+		if contractErr != nil || !proto.Equal(current, run.GetEvaluationContract()) {
+			return nil, errors.New("evaluation contract changed since admission; create a new run")
+		}
+	}
+
 	records, err := m.store.Records(ctx, run.GetId())
 	if err != nil {
 		return nil, err

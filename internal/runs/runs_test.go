@@ -119,7 +119,7 @@ func (f *fakeWorker) Evaluate(ctx context.Context, req *pluginv1alpha1.EvaluateR
 	}
 	resp := &pluginv1alpha1.EvaluateResponse{BatchId: req.GetBatchId()}
 	for _, r := range req.GetRecords() {
-		res := &evalsiv1alpha1.EvaluationResult{RecordId: r.GetId(), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}
+		res := &evalsiv1alpha1.EvaluationResult{EvaluatorRef: req.GetEvaluator() + "@1.0.0", RecordId: r.GetId(), Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED}
 		if req.GetEvaluator() == "test/sandboxed" {
 			res.Duration = durationpb.New(f.sandboxedDuration)
 		}

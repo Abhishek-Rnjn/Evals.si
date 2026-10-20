@@ -61,7 +61,7 @@ func OpenPostgres(ctx context.Context, dsn string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, c.d.ddl(schema+authSchema+leaseSchema+quotaSchema+sandboxSchema+rewardCacheSchema+annotationSchema+failureSchema+datasetCatalogSchema+guardrailSchema+webhookSchema+sourceSchema+idempotencySchema+watchPendingSchema)); err != nil {
+	if _, err := tx.ExecContext(ctx, c.d.ddl(schema+authSchema+leaseSchema+quotaSchema+sandboxSchema+rewardCacheSchema+annotationSchema+failureSchema+datasetCatalogSchema+releaseDecisionSchema+guardrailSchema+webhookSchema+sourceSchema+idempotencySchema+watchPendingSchema)); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}

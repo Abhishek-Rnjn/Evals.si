@@ -36,6 +36,8 @@ type Permission struct {
 var Permissions = []Permission{
 	{Name: "catalog.read", Description: "List evaluators and use gRPC reflection."},
 	{Name: "evaluations.run", Description: "Score records (Evaluate, EvaluateStream) and RL rollouts (ScoreRewards). Spends judge budget and may run code."},
+	{Name: "releases.read", Description: "Read saved release decisions and their source evidence."},
+	{Name: "releases.create", Description: "Evaluate a pinned release policy and save an immutable decision.", Audited: true},
 	{Name: "runs.read", Description: "Read runs, their results and comparisons."},
 	{Name: "runs.create", Description: "Start runs. Spends target and judge budget and may run code.", Audited: true},
 	{Name: "runs.cancel", Description: "Cancel runs.", Audited: true},

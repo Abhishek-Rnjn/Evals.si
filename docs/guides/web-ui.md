@@ -8,6 +8,7 @@ evalsid serves a small UI at `/ui/`, for example
 - **paired comparisons** of two runs;
 - **online policies**, with their counters, windows and alerts;
 - **production traces** and the [failure inbox](failure-inbox.md), including case editing and review;
+- **release decisions**, with [baseline/candidate inspection, policy review and portable reports](release-decisions.md);
 - **dataset versions**, with [publication, review, diffs and pinned regression runs](dataset-catalog.md);
 - **annotation queues**, with progress and agreement, and a form to
   [annotate](#annotating);

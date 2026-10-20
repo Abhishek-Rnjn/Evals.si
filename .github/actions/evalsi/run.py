@@ -12,6 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 
 def cell(value: object) -> str:
     escaped = html.escape(str(value)).replace("\n", " ").replace("\r", " ")
@@ -168,6 +170,144 @@ def summary(data: dict[str, Any], code: int) -> list[str]:
     return lines
 
 
+def embedded_gate(root: Path, result: Path, directory: Path, spec: Path) -> tuple[int, list[str]]:
+    spec_digest = hashlib.sha256(spec.read_bytes()).hexdigest()
+    with (root / "process.log").open("w", encoding="utf-8") as log:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "evalsi",
+                "run",
+                "-f",
+                str(spec.resolve()),
+                "--output",
+                str(result),
+                "--format",
+                "json",
+                "--quiet",
+            ],
+            cwd=directory,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+    code = proc.returncode if proc.returncode in (0, 3) else 1
+    if code == 1:
+        raise ValueError("evaluation could not complete")
+    data = json.loads(result.read_text(encoding="utf-8"))
+    lines = summary(data, code)
+    lines += [
+        "",
+        f"Candidate commit: `{cell(os.environ.get('GITHUB_SHA', 'unknown'))}`",
+        f"Spec SHA-256: `{spec_digest}`",
+    ]
+    baseline = os.environ.get("EVALSI_ACTION_BASELINE", "")
+    if baseline:
+        baseline_bytes = (directory / baseline).read_bytes()
+        lines += comparison(json.loads(baseline_bytes), data)
+        lines += [
+            "",
+            f"Baseline results SHA-256: `{hashlib.sha256(baseline_bytes).hexdigest()}`",
+        ]
+    return code, lines
+
+
+def server_gate(result: Path, directory: Path, spec: Path) -> tuple[int, list[str]]:
+    from evalsi.client import Client
+    from evalsi.release_decisions import exit_code, gate_candidate, load_policy, write_report
+
+    if os.environ.get("EVALSI_ACTION_BASELINE"):
+        raise ValueError("a baseline file cannot be combined with server release decisions")
+    required = (
+        "RELEASE_POLICY",
+        "RELEASE_POLICY_SHA256",
+        "BASELINE_RUN",
+        "BASELINE_SHA256",
+        "BASELINE_COMMIT",
+    )
+    if any(not os.environ.get("EVALSI_ACTION_" + key) for key in required):
+        raise ValueError("server release mode requires reviewed policy and baseline pins")
+    decision_id = (
+        os.environ.get("EVALSI_ACTION_RELEASE_ID")
+        or f"ci-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+    )
+    with Client(os.environ["EVALSI_ACTION_SERVER"]) as client:
+        decision = gate_candidate(
+            client,
+            policy=load_policy(str(directory / os.environ["EVALSI_ACTION_RELEASE_POLICY"])),
+            policy_sha256=os.environ["EVALSI_ACTION_RELEASE_POLICY_SHA256"],
+            baseline={
+                "runId": os.environ["EVALSI_ACTION_BASELINE_RUN"],
+                "sha256": os.environ["EVALSI_ACTION_BASELINE_SHA256"],
+                "commit": os.environ["EVALSI_ACTION_BASELINE_COMMIT"],
+            },
+            spec_file=spec,
+            candidate_commit=os.environ["GITHUB_SHA"],
+            decision_id=decision_id,
+        )
+    write_report(result, decision)
+    return exit_code(decision), release_summary(decision)
+
+
+def release_summary(decision: dict[str, Any]) -> list[str]:
+    lines = [
+        "# Evals.si release decision",
+        "",
+        "**" + cell(decision["outcome"].removeprefix("RELEASE_OUTCOME_")) + "**",
+        "",
+        "One explicit baseline, one candidate attempt. "
+        "Commit labels are declared, not execution attestations.",
+        "",
+        f"Decision: `{cell(decision['id'])}`",
+        f"Decision SHA-256: `{cell(decision['sha256'])}`",
+        f"Policy SHA-256: `{cell(decision['policySha256'])}`",
+        f"Dataset SHA-256: `{cell(decision['policy']['dataset']['sha256'])}`",
+    ]
+    lines += [
+        f"Minimum independent records: `{cell(decision['policy']['minRecords'])}`",
+        f"Confidence level: `{number(decision['policy'].get('confidenceLevel', 0.95))}`",
+    ]
+    for reason in decision.get("reasons", []):
+        lines.append("- " + cell(reason))
+    for side in ("baseline", "candidate"):
+        evidence = decision[side]
+        lines += [
+            "",
+            f"{side.title()} run: `{cell(evidence['reference']['runId'])}`",
+            f"Declared commit: `{cell(evidence['reference']['commit'])}`",
+            f"Evidence SHA-256: `{cell(evidence['reference']['sha256'])}`",
+        ]
+    lines += [
+        "",
+        "| Metric | Independent pairs | Baseline | Candidate | Regression | Interval | Outcome |",
+        "|---|---:|---:|---:|---:|---|---|",
+    ]
+    for metric in decision.get("metrics", []):
+        columns = [
+            cell(metric["metric"]),
+            cell(metric.get("pairedRecords", 0)),
+            number(metric.get("baselineMean")),
+            number(metric.get("candidateMean")),
+            number(metric.get("meanRegression")),
+            number(metric.get("regressionLow")) + " … " + number(metric.get("regressionHigh")),
+            cell(metric["outcome"].removeprefix("RELEASE_OUTCOME_")),
+        ]
+        lines.append("| " + " | ".join(columns) + " |")
+    for metric in decision.get("metrics", []):
+        for reason in metric.get("reasons", []):
+            lines.append("- " + cell(metric["metric"]) + ": " + cell(reason))
+    lines += [
+        "",
+        "Positive regression is worse. "
+        "Case identities/content stay in the authorized server report.",
+        "Open the server's Releases screen using the decision ID above, "
+        "or retrieve with `evalsi release get`.",
+        "Verify the portable report with `evalsi release verify FILE --sha256 DECISION_SHA256`.",
+    ]
+    return lines
+
+
 def main() -> int:
     root = Path(tempfile.mkdtemp(prefix="evalsi-action-", dir=os.environ["RUNNER_TEMP"]))
     result = root / "results.json"
@@ -176,46 +316,22 @@ def main() -> int:
     try:
         directory = Path(os.environ["GITHUB_WORKSPACE"]) / os.environ["EVALSI_ACTION_DIRECTORY"]
         spec = directory / os.environ["EVALSI_ACTION_SPEC"]
-        spec_digest = hashlib.sha256(spec.read_bytes()).hexdigest()
-        with (root / "process.log").open("w", encoding="utf-8") as log:
-            proc = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "evalsi",
-                    "run",
-                    "-f",
-                    str(spec.resolve()),
-                    "--output",
-                    str(result),
-                    "--format",
-                    "json",
-                    "--quiet",
-                ],
-                cwd=directory,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                check=False,
-            )
-        code = proc.returncode if proc.returncode in (0, 3) else 1
-        if code == 1:
-            raise ValueError("evaluation could not complete")
-        data = json.loads(result.read_text(encoding="utf-8"))
-        lines = summary(data, code)
-        lines += [
-            "",
-            f"Candidate commit: `{cell(os.environ.get('GITHUB_SHA', 'unknown'))}`",
-            f"Spec SHA-256: `{spec_digest}`",
-        ]
-        baseline = os.environ.get("EVALSI_ACTION_BASELINE", "")
-        if baseline:
-            baseline_bytes = (directory / baseline).read_bytes()
-            lines += comparison(json.loads(baseline_bytes), data)
-            lines += [
-                "",
-                f"Baseline results SHA-256: `{hashlib.sha256(baseline_bytes).hexdigest()}`",
-            ]
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, ImportError):
+        if os.environ.get("EVALSI_ACTION_SERVER"):
+            code, lines = server_gate(result, directory, spec)
+        else:
+            if os.environ.get("EVALSI_ACTION_RELEASE_POLICY"):
+                raise ValueError("release policy requires a server")
+            code, lines = embedded_gate(root, result, directory, spec)
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        ImportError,
+        RuntimeError,
+        httpx.HTTPError,
+    ):
         code = 1
         lines[2] = "**Action failed (exit 1)**"
         lines += [
@@ -229,7 +345,9 @@ def main() -> int:
         "Only metrics, labels and identity hashes appear here. Raw results and process logs",
         "remain on the runner unless artifact upload is explicitly enabled.",
         "Reproduce with the same checkout, package version and spec: `evalsi run -f YOUR_SPEC`.",
-        "Gate thresholds and error-rate checks come from your spec; comparison is advisory.",
+        "Release policy is enforced; insufficient evidence cannot pass."
+        if os.environ.get("EVALSI_ACTION_SERVER")
+        else "Gate thresholds and error-rate checks come from your spec; comparison is advisory.",
     ]
     rendered = "\n".join(lines) + "\n"
     (root / "summary.md").write_text(rendered, encoding="utf-8")

@@ -198,3 +198,6 @@ See the [synthetic end-to-end example](../../examples/dataset-catalog/README.md)
 and [verification record](../verification/DATASET-CATALOG.md). Customer-incident
 validation, enterprise operating capacity and broader governance remain open in
 the [product roadmap](../PRODUCT-ROADMAP.md).
+
+Use an approved held-out version in the [release-decision workflow](release-decisions.md)
+to compare an explicit baseline/candidate and enforce regression policies in CI.
