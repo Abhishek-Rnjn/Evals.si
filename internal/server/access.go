@@ -809,6 +809,47 @@ func (g *gate) recordRead(ctx context.Context, chk *authz.Checker, action string
 	})
 }
 
+// recordFilteredRead records a read whose resources the service authorizes
+// itself (a filtered rule, such as GetTrace or ListRuns), once the service
+// has answered: with the request's project and identifier, and the outcome.
+// A forbidden resource is reported as not found, so that outcome is recorded
+// as not allowed. Never the data returned.
+func (g *gate) recordFilteredRead(ctx context.Context, chk *authz.Checker, procedure string, msg any, err error) {
+	rule := g.rules[procedure]
+	if !rule.filtered || !g.engine.Enabled() || !g.auditor.AuditsRead(rule.action) {
+		return
+	}
+	ev := &evalsiv1alpha1.AuditEvent{
+		Principal: chk.Principal.ID(), Action: rule.action, Resource: procedure, Allowed: err == nil,
+		Reason: "results limited to what the caller may read", Procedure: chk.Meta.Procedure,
+		RequestId: chk.Meta.Headers.Get("X-Request-Id"), Source: chk.Meta.Source,
+	}
+	if m, ok := msg.(interface{ GetProject() string }); ok {
+		ev.Project = m.GetProject()
+	}
+	if id := idOf(msg); id != "" {
+		ev.Resource = procedure + " " + id
+	}
+	if err != nil {
+		ev.Reason = connect.CodeOf(err).String()
+		if connect.CodeOf(err) == connect.CodeNotFound {
+			ev.Reason = "not found, or not visible to the caller"
+		}
+	}
+	g.auditor.Record(ctx, ev)
+}
+
+// idOf reads a request's identifier through GetTraceId or GetId.
+func idOf(m any) string {
+	switch v := m.(type) {
+	case interface{ GetTraceId() string }:
+		return v.GetTraceId()
+	case interface{ GetId() string }:
+		return v.GetId()
+	}
+	return ""
+}
+
 func permissionDenied(action string, t target) error {
 	where := fmt.Sprintf(" in project %q", t.project)
 	if t.project == "" {
@@ -829,9 +870,8 @@ func (g *gate) check(ctx context.Context, chk *authz.Checker, procedure string, 
 	case !g.engine.Enabled():
 		return nil
 	case rule.filtered:
-		// The service filters what it returns by permission; the call itself
-		// is the read that is recorded.
-		g.recordRead(ctx, chk, rule.action, target{name: procedure})
+		// The service authorizes each resource itself; its read is recorded
+		// after it answers (recordFilteredRead).
 		return nil
 	case rule.anyProject:
 		for _, p := range append([]string{authz.DefaultProject}, projectNames(g.engine)...) {
@@ -1000,7 +1040,9 @@ func (i gateInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		if err := i.g.check(ctx, chk, req.Spec().Procedure, req.Any()); err != nil {
 			return nil, err
 		}
-		return i.g.idempotent(ctx, req, next)
+		resp, err := i.g.idempotent(ctx, req, next)
+		i.g.recordFilteredRead(ctx, chk, req.Spec().Procedure, req.Any(), err)
+		return resp, err
 	}
 }
 

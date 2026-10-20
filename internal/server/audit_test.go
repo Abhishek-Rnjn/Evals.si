@@ -102,7 +102,7 @@ func auditEvents(t *testing.T, s *testServer, action string) []*evalsiv1alpha1.A
 // credential), reads of the configured kinds are recorded, the configuration
 // in effect is recorded, and the hash chain verifies.
 func TestAuditEntriesCarryAuthContextReadsConfigAndAChain(t *testing.T) {
-	s := startAuthServer(t, func(c *config.Config) { c.Audit.Reads = []string{"runs"} })
+	s := startAuthServer(t, func(c *config.Config) { c.Audit.Reads = []string{"runs", "traces"} })
 	ctx := t.Context()
 	owner := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["owner"]))
 	if _, err := owner.CreateProject(ctx, connect.NewRequest(&evalsiv1alpha1.CreateProjectRequest{Name: "labs"})); err != nil {
@@ -153,6 +153,17 @@ func TestAuditEntriesCarryAuthContextReadsConfigAndAChain(t *testing.T) {
 	if got := auditEvents(t, s, "audit.read"); len(got) != 0 {
 		t.Fatalf("an unconfigured read kind was recorded: %v", got)
 	}
+	// A read the service itself authorizes is recorded after it answers,
+	// with the identifier asked for and the real outcome.
+	traces := evalsiv1alpha1connect.NewTraceServiceClient(s.http, s.url, as(s.keys["viewer"]))
+	if _, err := traces.GetTrace(ctx, connect.NewRequest(&evalsiv1alpha1.GetTraceRequest{TraceId: "nope", Project: "support"})); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("get missing trace: %v", err)
+	}
+	traceReads := auditEvents(t, s, "traces.read")
+	if len(traceReads) != 1 || traceReads[0].GetAllowed() || traceReads[0].GetProject() != "support" ||
+		!strings.HasSuffix(traceReads[0].GetResource(), " nope") {
+		t.Fatalf("trace read = %v", traceReads)
+	}
 
 	if loaded := auditEvents(t, s, "config.load"); len(loaded) != 1 || !strings.Contains(loaded[0].GetDetail(), `"credentials":"`) {
 		t.Fatalf("config.load = %v", loaded)
@@ -165,6 +176,10 @@ func TestAuditEntriesCarryAuthContextReadsConfigAndAChain(t *testing.T) {
 	admin := evalsiv1alpha1connect.NewAuthServiceClient(s.http, s.url, as(s.keys["admin"]))
 	if _, err := admin.VerifyAuditLog(ctx, connect.NewRequest(&evalsiv1alpha1.VerifyAuditLogRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("a project admin verified the whole log: %v", err)
+	}
+	refused := auditEvents(t, s, "audit.read")
+	if len(refused) != 1 || refused[0].GetAllowed() || refused[0].GetPrincipal() != "key:admin" {
+		t.Fatalf("the refused verification was not audited: %v", refused)
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, s.url+"/v1alpha1/audit:verify", nil)
 	req.Header.Set("Authorization", "Bearer "+s.keys["owner"])

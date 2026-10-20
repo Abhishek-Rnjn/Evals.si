@@ -101,6 +101,10 @@ func applyMigrations(ctx context.Context, q querier, d dialect, steps []migratio
 		applied[v] = true
 		minReader = max(minReader, r)
 	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
 	if err := rows.Close(); err != nil {
 		return err
 	}

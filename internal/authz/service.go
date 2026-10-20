@@ -642,7 +642,17 @@ func (s *Service) ListAuditEvents(ctx context.Context, req *connect.Request[eval
 // only an owner may check it.
 func (s *Service) VerifyAuditLog(ctx context.Context, _ *connect.Request[evalsiv1alpha1.VerifyAuditLogRequest]) (*connect.Response[evalsiv1alpha1.VerifyAuditLogResponse], error) {
 	if s.engine.Enabled() && !s.engine.IsOwner(auth.PrincipalFrom(ctx)) {
-		return nil, denied(errors.New("verifying the audit log reads every project's entries; it needs the owner role"))
+		err := errors.New("verifying the audit log reads every project's entries; it needs the owner role")
+		ev := &evalsiv1alpha1.AuditEvent{
+			Principal: auth.PrincipalFrom(ctx).ID(), Action: "audit.read", Resource: "audit",
+			Allowed: false, Reason: err.Error(),
+		}
+		if c := CheckerFrom(ctx); c != nil {
+			ev.Procedure, ev.Source = c.Meta.Procedure, c.Meta.Source
+			ev.RequestId = c.Meta.Headers.Get("X-Request-Id")
+		}
+		s.auditor.Record(ctx, ev)
+		return nil, denied(err)
 	}
 	res, err := s.store.VerifyAudit(ctx)
 	if err != nil {

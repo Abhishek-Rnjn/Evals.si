@@ -94,3 +94,33 @@ func TestEntriesWithoutAChainAreCounted(t *testing.T) {
 		t.Fatalf("%v", res)
 	}
 }
+
+// Entry times come from replicas' clocks and need not follow the chain:
+// retention removes only a contiguous prefix, never the chain's middle.
+func TestRetentionKeepsTheChainWhenTimesAreOutOfOrder(t *testing.T) {
+	ctx := context.Background()
+	s := open(t)
+	base := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	// Chain order 1..4 with times 101, 99, 102, 98 (minutes).
+	for _, minute := range []int{101, 99, 102, 98} {
+		ev := &evalsiv1alpha1.AuditEvent{Time: timestamppb.New(base.Add(time.Duration(minute) * time.Minute)), Action: "runs.create"}
+		if _, err := s.AppendAudit(ctx, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Cutoff 100: entries 2 and 4 are older, but entry 1 is not, so nothing
+	// can go without cutting the chain.
+	if n, err := s.DeleteAuditBefore(ctx, base.Add(100*time.Minute)); err != nil || n != 0 {
+		t.Fatalf("deleted %d, %v; want 0", n, err)
+	}
+	if res := verify(t, s); !res.GetOk() || res.GetChecked() != 4 {
+		t.Fatalf("%v", res)
+	}
+	// Cutoff 101.5: entries 1 and 2 form the expired prefix; 3 is newer, so 4 stays.
+	if n, err := s.DeleteAuditBefore(ctx, base.Add(101*time.Minute+30*time.Second)); err != nil || n != 2 {
+		t.Fatalf("deleted %d, %v; want 2", n, err)
+	}
+	if res := verify(t, s); !res.GetOk() || res.GetFirstSequence() != 3 || res.GetChecked() != 2 {
+		t.Fatalf("%v", res)
+	}
+}

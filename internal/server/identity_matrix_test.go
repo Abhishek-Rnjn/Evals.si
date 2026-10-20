@@ -43,14 +43,18 @@ func surfaces(t *testing.T, s *testServer, cred, runID string) map[string]string
 	_ = resp.Body.Close()
 	out["rest"] = map[int]string{200: "ok", 401: "unauthenticated", 403: "denied", 404: "denied"}[resp.StatusCode]
 
-	status, _, body := s.mcpCall(t, cred, nil, "tools/list", map[string]any{})
+	status, _, body := s.mcpCall(t, cred, nil, "tools/call", map[string]any{"name": "get_run", "arguments": map[string]any{"run_id": runID}})
 	switch {
 	case status == http.StatusUnauthorized:
 		out["mcp"] = "unauthenticated"
-	case body["result"] != nil:
-		out["mcp"] = "ok"
+	case body["result"] == nil:
+		t.Fatalf("mcp get_run: %d %v", status, body)
 	default:
-		out["mcp"] = "denied"
+		if _, isErr, _ := toolResult(t, body); isErr {
+			out["mcp"] = "denied"
+		} else {
+			out["mcp"] = "ok"
+		}
 	}
 	return out
 }
@@ -87,9 +91,7 @@ func TestAnIdentityIsDecidedAlikeOnEverySurfaceAndRevokedEverywhere(t *testing.T
 	expectEverywhere(t, surfaces(t, s, key, id), "ok", "a support viewer reading a support run")
 
 	// Project isolation: a viewer of another project is refused on every surface.
-	other := surfaces(t, s, s.keys["checkout-viewer"], id)
-	delete(other, "mcp") // tools/list is not project-scoped; its tools check per call
-	expectEverywhere(t, other, "denied", "a checkout viewer reading a support run")
+	expectEverywhere(t, surfaces(t, s, s.keys["checkout-viewer"], id), "denied", "a checkout viewer reading a support run")
 
 	if _, err := owner.RevokeAPIKey(ctx, connect.NewRequest(&evalsiv1alpha1.RevokeAPIKeyRequest{Name: "matrix"})); err != nil {
 		t.Fatal(err)
@@ -107,7 +109,5 @@ func TestAnIdentityIsDecidedAlikeOnEverySurfaceAndRevokedEverywhere(t *testing.T
 	if _, err := owner.DeleteBinding(ctx, connect.NewRequest(&evalsiv1alpha1.DeleteBindingRequest{Binding: binding})); err != nil {
 		t.Fatal(err)
 	}
-	unbound := surfaces(t, s, tok, id)
-	delete(unbound, "mcp")
-	expectEverywhere(t, unbound, "denied", "after deleting the JWT user's binding")
+	expectEverywhere(t, surfaces(t, s, tok, id), "denied", "after deleting the JWT user's binding")
 }

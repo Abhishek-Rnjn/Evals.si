@@ -350,9 +350,22 @@ func (s *Store) VerifyAudit(ctx context.Context) (*evalsiv1alpha1.VerifyAuditLog
 		out.Ok, out.BreakSequence, out.Problem = false, seq, fmt.Sprintf(format, args...)
 		return out, nil
 	}
+	// Every page is read from one snapshot, so retention or new entries
+	// during the walk cannot look like a break.
+	// (A SQLite transaction is already one snapshot; PostgreSQL needs
+	// repeatable read for that.)
+	var opts *sql.TxOptions
+	if s.db.d == postgresDialect {
+		opts = &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true}
+	}
+	tx, err := s.db.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	after := int64(0)
 	for {
-		rows, err := s.db.QueryContext(ctx, `SELECT id, seq, hash, event FROM audit WHERE id > ? ORDER BY id LIMIT 1000`, after)
+		rows, err := tx.QueryContext(ctx, `SELECT id, seq, hash, event FROM audit WHERE id > ? ORDER BY id LIMIT 1000`, after)
 		if err != nil {
 			return nil, err
 		}
@@ -391,6 +404,10 @@ func (s *Store) VerifyAudit(ctx context.Context) (*evalsiv1alpha1.VerifyAuditLog
 			}
 			out.Checked++
 			out.LastSequence, out.LastHash = seq, hash
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, err
 		}
 		if err := rows.Close(); err != nil {
 			return nil, err
@@ -442,9 +459,14 @@ func (s *Store) ListAudit(ctx context.Context, f authz.AuditQuery, pageSize int,
 	return out, next, rows.Err()
 }
 
-// DeleteAuditBefore removes events older than t.
+// DeleteAuditBefore removes events older than t. Chained entries go only as
+// a contiguous prefix of the chain: an entry is kept while any entry chained
+// before it is still newer than t (times come from replicas' clocks, so they
+// need not follow the chain order), so retention never cuts its middle.
 func (s *Store) DeleteAuditBefore(ctx context.Context, t time.Time) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM audit WHERE time_ns < ?`, t.UnixNano())
+	res, err := s.db.ExecContext(ctx, `DELETE FROM audit WHERE time_ns < ? AND (seq = 0 OR seq < COALESCE(
+		(SELECT MIN(seq) FROM audit WHERE seq > 0 AND time_ns >= ?), (SELECT MAX(seq) FROM audit) + 1))`,
+		t.UnixNano(), t.UnixNano())
 	if err != nil {
 		return 0, err
 	}
