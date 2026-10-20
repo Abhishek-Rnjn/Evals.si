@@ -37,10 +37,10 @@ A run spec becomes an agent run when it has `target.agent` or `harness`. To run 
 
 | Kind | Spec | How it is driven |
 |---|---|---|
-| A2A | `a2a: {url, headers_env, timeout, stream}` | JSON-RPC `message/send`, following the task until it settles; with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events; push notifications are not used) |
+| A2A | `a2a: {url, headers_env, timeout, stream, binding}` | `message/send`, following the task until it settles, over JSON-RPC or, with `binding: HTTP+JSON`, A2A 0.3's REST binding (`POST {url}/v1/message:send`, `GET {url}/v1/tasks/{id}`, `POST {url}/v1/message:stream`; `url` is the interface's base URL); with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events; push notifications are not used) |
 | MCP | `mcp: {url, tool, argument}` | the agent is a tool on an MCP server; each message is one call |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses`; later turns continue with `previous_response_id` |
-| HTTP | `http: {url, method, body_template, output_path, messages_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`); the answer at `output_path`, its steps at `messages_path` |
+| HTTP | `http: {url, method, body_template, output_path, messages_path, trajectory_path, usage_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`, `{{trial}}`, `{{session_id}}`); the answer at `output_path`, its steps at `messages_path` (OpenAI messages) or `trajectory_path` (Evals.si steps, for tool, handoff and guardrail steps the agent reports itself), its token usage at `usage_path`. With `stream: true` the response is server-sent events, each a JSON object: the answer, messages and usage come from the last event that has them, steps at `trajectory_path` are collected from every event that has them (at least one must), and with `delta_path` the text chunks are joined into the answer when no event has `output_path`. Key the agent's thread on `{{session_id}}`, not `{{task_id}}`: the task id is the same in every trial, so trials sharing it share one conversation |
 | CLI | `cli: {command, install, env_from, allow_hosts, timeout, output_format}` | runs **inside the task's sandbox**, in its workdir |
 
 A CLI agent:
@@ -316,6 +316,13 @@ with `metadata: {evalsi: {parent_task_id: "parent-task"}}` on child task/status
 events. Both task IDs must have recorded steps in the conversation. Ordinary
 `referenceTaskIds` do not imply a handoff. Other CLI readers retain their exposed
 parent links and do not fabricate missing agent relationships.
+
+Traces ingested over OTLP get a handoff wherever one agent invokes another: an
+`invoke_agent` span (GenAI conventions) whose nearest `invoke_agent` ancestor
+runs a different agent (`gen_ai.agent.name`, else the span name). The handoff is
+placed between the two, named after the target, with `evalsi.handoff.from` and
+`evalsi.handoff.to`. An agent re-entering itself is not a handoff, and agent
+spans of other conventions (graph nodes, chains) are left alone.
 
 The opt-in [live CLI kind check](../../tests/cli-agent/README.md) exercises a real
 Claude CLI in a pod sandbox when a model key is configured. Its default-off CI
