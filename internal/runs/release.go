@@ -18,12 +18,16 @@ import (
 // ReleaseReadable rechecks the original run/dataset/source boundaries after
 // retention. A decision grants no additional access to its source resources.
 func ReleaseReadable(ctx context.Context, d *pb.StoredReleaseDecision) bool {
+	if d.GetBaselineAttributes() == nil || d.GetCandidateAttributes() == nil {
+		return false // Legacy envelopes lack effective authorization attributes.
+	}
 	project := d.GetDecision().GetProject()
-	if !authz.Can(ctx, "releases.read", project, authz.RunResourceFor(ctx, d.GetCandidateAccess())) {
+	if !authz.Can(ctx, "releases.read", project, authz.CapturedRunResource(d.GetCandidateAccess(), d.GetCandidateAttributes())) {
 		return false
 	}
-	for _, run := range []*pb.Run{d.GetBaselineAccess(), d.GetCandidateAccess()} {
-		if !authz.Can(ctx, "runs.read", run.GetProject(), authz.RunResourceFor(ctx, run)) {
+	for i, run := range []*pb.Run{d.GetBaselineAccess(), d.GetCandidateAccess()} {
+		attributes := []*pb.ReleaseRunAccessAttributes{d.GetBaselineAttributes(), d.GetCandidateAttributes()}[i]
+		if !authz.Can(ctx, "runs.read", run.GetProject(), authz.CapturedRunResource(run, attributes)) {
 			return false
 		}
 	}
@@ -102,7 +106,7 @@ func (m *Manager) CreateReleaseDecision(ctx context.Context, req *connect.Reques
 	}
 	d.DatasetReviewedBy, d.DatasetReviewedAt = dataset.GetReviewedBy(), dataset.GetReviewedAt()
 	if !proto.Equal(a.evidence.GetDataset(), ref) || !proto.Equal(b.evidence.GetDataset(), ref) {
-		insufficient("baseline/candidate must use the policy's exact approved catalog version")
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("baseline/candidate must use the policy's exact approved catalog version"))
 	}
 	if a.run.GetStatus() != pb.RunStatus_RUN_STATUS_SUCCEEDED {
 		insufficient("baseline is not a completed successful run")
@@ -139,7 +143,7 @@ func (m *Manager) CreateReleaseDecision(ctx context.Context, req *connect.Reques
 	}
 	d.Sha256 = store.ReleaseDecisionHash(d)
 	access := authz.DatasetAccessSnapshot(dataset.GetContent())
-	envelope := &pb.StoredReleaseDecision{Decision: d, BaselineAccess: authz.RunAccessSnapshot(a.run), CandidateAccess: authz.RunAccessSnapshot(b.run), DatasetAccess: access}
+	envelope := &pb.StoredReleaseDecision{Decision: d, BaselineAccess: authz.RunAccessSnapshot(a.run), CandidateAccess: authz.RunAccessSnapshot(b.run), DatasetAccess: access, BaselineAttributes: authz.RunAccessAttributes(a.run, m.engine.RunsCode, m.engine.EffectiveJudge), CandidateAttributes: authz.RunAccessAttributes(b.run, m.engine.RunsCode, m.engine.EffectiveJudge)}
 	if !ReleaseReadable(ctx, envelope) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("release source read permissions are required"))
 	}

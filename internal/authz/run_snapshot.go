@@ -61,3 +61,18 @@ func DatasetAccessSnapshot(content *pb.DatasetVersionContent) *pb.DatasetVersion
 	}
 	return proto.Clone(snapshot).(*pb.DatasetVersionContent)
 }
+
+// RunAccessAttributes captures catalog/default-dependent authorization values.
+func RunAccessAttributes(run *pb.Run, runsCode RunsCode, judgeOf JudgeOf) *pb.ReleaseRunAccessAttributes {
+	resource := EffectiveJudge(RunResource(run, runsCode), judgeOf, run.GetSpec().GetEvaluators(), run.GetSpec().GetJudge())
+	return &pb.ReleaseRunAccessAttributes{Judge: resource["judge"].(string), RunsCode: resource["runs_code"].(bool)}
+}
+
+// CapturedRunResource reconstructs the static attributes and applies saved
+// effective values without consulting the current evaluator catalog or defaults.
+func CapturedRunResource(run *pb.Run, attributes *pb.ReleaseRunAccessAttributes) map[string]any {
+	resource := RunResource(run, nil)
+	resource["judge"] = attributes.GetJudge()
+	resource["runs_code"] = attributes.GetRunsCode()
+	return resource
+}

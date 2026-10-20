@@ -52,7 +52,9 @@ func (m *Manager) evaluationContract(spec *pb.RunSpec, insts []evaluation.Instan
 		if in.Params != nil {
 			bound.Params = proto.Clone(in.Params).(*structpb.Struct)
 		}
-		if in.Manifest.GetRequires().GetJudge() {
+		// Cluster workers use their own settings; the API cannot attest to them.
+		// Leave the digest absent so snapshotValues rejects this release evidence.
+		if in.Manifest.GetRequires().GetJudge() && m.opts.Cluster == nil {
 			if judge, ok := m.opts.Judges[in.Judge]; ok {
 				data, err := json.Marshal(judge)
 				if err != nil {

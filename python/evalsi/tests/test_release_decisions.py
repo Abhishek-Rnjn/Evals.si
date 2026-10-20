@@ -219,3 +219,39 @@ def test_invalid_portable_shapes_fail_without_tracebacks(tmp_path: Path, raw: st
     path = tmp_path / "invalid.json"
     path.write_text(raw)
     assert main(["release", "verify", str(path), "--sha256", "0" * 64]) == 1
+
+
+def test_large_unicode_report_round_trip_and_decoded_size_limit(tmp_path: Path) -> None:
+    import copy
+
+    from google.protobuf import json_format
+
+    from evalsi.v1alpha1.release_service_pb2 import ReleaseDecision
+
+    value = copy.deepcopy(decision())
+    value["policy"]["rules"][0]["case_ids"] = ["😀" * 60 + f"{i:04}" for i in range(6000)]
+    assert json_format.ParseDict(value, ReleaseDecision()).ByteSize() < 2 << 20
+    value["policySha256"] = policy_hash(value["policy"])
+    value["sha256"] = decision_hash(value)
+    path = tmp_path / "unicode.json"
+    write_report(path, value)
+    assert path.stat().st_size > 4 << 20  # JSON expansion previously rejected valid reports.
+    assert read_report(path, value["sha256"]) == value
+    assert main(["release", "verify", str(path), "--sha256", value["sha256"]]) == 0
+    # Browser exports use literal Unicode and must verify against the same pin.
+    path.write_text(
+        json.dumps({"schema": "evalsi.release-report/v1", "decision": value}, ensure_ascii=False)
+    )
+    assert read_report(path, value["sha256"]) == value
+    value["reasons"] = ["x" * (4 << 20)]
+    oversized = tmp_path / "oversized.json"
+    with pytest.raises(ValueError, match="protobuf data"):
+        write_report(oversized, value)
+    assert not oversized.exists()
+    path.write_text(json.dumps({"schema": "evalsi.release-report/v1", "decision": value}))
+    with pytest.raises(ValueError, match="protobuf data"):
+        read_report(path, value["sha256"])
+    with path.open("wb") as writer:
+        writer.truncate((32 << 20) + 1)
+    with pytest.raises(ValueError, match="32 MiB"):
+        read_report(path, value["sha256"])

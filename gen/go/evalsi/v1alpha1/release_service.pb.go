@@ -1343,13 +1343,15 @@ func (x *ListReleaseDecisionsResponse) GetNextPageToken() string {
 // Stored authorization snapshots retain source access boundaries independently
 // of run retention. Never returned as a release report.
 type StoredReleaseDecision struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Decision        *ReleaseDecision       `protobuf:"bytes,1,opt,name=decision,proto3" json:"decision,omitempty"`
-	BaselineAccess  *Run                   `protobuf:"bytes,2,opt,name=baseline_access,json=baselineAccess,proto3" json:"baseline_access,omitempty"`
-	CandidateAccess *Run                   `protobuf:"bytes,3,opt,name=candidate_access,json=candidateAccess,proto3" json:"candidate_access,omitempty"`
-	DatasetAccess   *DatasetVersionContent `protobuf:"bytes,4,opt,name=dataset_access,json=datasetAccess,proto3" json:"dataset_access,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state               protoimpl.MessageState      `protogen:"open.v1"`
+	Decision            *ReleaseDecision            `protobuf:"bytes,1,opt,name=decision,proto3" json:"decision,omitempty"`
+	BaselineAccess      *Run                        `protobuf:"bytes,2,opt,name=baseline_access,json=baselineAccess,proto3" json:"baseline_access,omitempty"`
+	CandidateAccess     *Run                        `protobuf:"bytes,3,opt,name=candidate_access,json=candidateAccess,proto3" json:"candidate_access,omitempty"`
+	DatasetAccess       *DatasetVersionContent      `protobuf:"bytes,4,opt,name=dataset_access,json=datasetAccess,proto3" json:"dataset_access,omitempty"`
+	BaselineAttributes  *ReleaseRunAccessAttributes `protobuf:"bytes,5,opt,name=baseline_attributes,json=baselineAttributes,proto3" json:"baseline_attributes,omitempty"`
+	CandidateAttributes *ReleaseRunAccessAttributes `protobuf:"bytes,6,opt,name=candidate_attributes,json=candidateAttributes,proto3" json:"candidate_attributes,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *StoredReleaseDecision) Reset() {
@@ -1406,6 +1408,20 @@ func (x *StoredReleaseDecision) GetCandidateAccess() *Run {
 func (x *StoredReleaseDecision) GetDatasetAccess() *DatasetVersionContent {
 	if x != nil {
 		return x.DatasetAccess
+	}
+	return nil
+}
+
+func (x *StoredReleaseDecision) GetBaselineAttributes() *ReleaseRunAccessAttributes {
+	if x != nil {
+		return x.BaselineAttributes
+	}
+	return nil
+}
+
+func (x *StoredReleaseDecision) GetCandidateAttributes() *ReleaseRunAccessAttributes {
+	if x != nil {
+		return x.CandidateAttributes
 	}
 	return nil
 }
@@ -1584,6 +1600,60 @@ func (x *ReleaseEvaluatorIdentity) GetScope() Scope {
 	return Scope_SCOPE_UNSPECIFIED
 }
 
+// Effective catalog/default-dependent attributes captured at decision creation.
+// Saved reads use current permissions against these values, never re-resolve them.
+type ReleaseRunAccessAttributes struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Judge         string                 `protobuf:"bytes,1,opt,name=judge,proto3" json:"judge,omitempty"`
+	RunsCode      bool                   `protobuf:"varint,2,opt,name=runs_code,json=runsCode,proto3" json:"runs_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseRunAccessAttributes) Reset() {
+	*x = ReleaseRunAccessAttributes{}
+	mi := &file_evalsi_v1alpha1_release_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseRunAccessAttributes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseRunAccessAttributes) ProtoMessage() {}
+
+func (x *ReleaseRunAccessAttributes) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_release_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseRunAccessAttributes.ProtoReflect.Descriptor instead.
+func (*ReleaseRunAccessAttributes) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_release_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReleaseRunAccessAttributes) GetJudge() string {
+	if x != nil {
+		return x.Judge
+	}
+	return ""
+}
+
+func (x *ReleaseRunAccessAttributes) GetRunsCode() bool {
+	if x != nil {
+		return x.RunsCode
+	}
+	return false
+}
+
 var File_evalsi_v1alpha1_release_service_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_release_service_proto_rawDesc = "" +
@@ -1707,12 +1777,14 @@ const file_evalsi_v1alpha1_release_service_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tR\tpageToken\"\x86\x01\n" +
 	"\x1cListReleaseDecisionsResponse\x12>\n" +
 	"\tdecisions\x18\x01 \x03(\v2 .evalsi.v1alpha1.ReleaseDecisionR\tdecisions\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa4\x02\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe2\x03\n" +
 	"\x15StoredReleaseDecision\x12<\n" +
 	"\bdecision\x18\x01 \x01(\v2 .evalsi.v1alpha1.ReleaseDecisionR\bdecision\x12=\n" +
 	"\x0fbaseline_access\x18\x02 \x01(\v2\x14.evalsi.v1alpha1.RunR\x0ebaselineAccess\x12?\n" +
 	"\x10candidate_access\x18\x03 \x01(\v2\x14.evalsi.v1alpha1.RunR\x0fcandidateAccess\x12M\n" +
-	"\x0edataset_access\x18\x04 \x01(\v2&.evalsi.v1alpha1.DatasetVersionContentR\rdatasetAccess\"U\n" +
+	"\x0edataset_access\x18\x04 \x01(\v2&.evalsi.v1alpha1.DatasetVersionContentR\rdatasetAccess\x12\\\n" +
+	"\x13baseline_attributes\x18\x05 \x01(\v2+.evalsi.v1alpha1.ReleaseRunAccessAttributesR\x12baselineAttributes\x12^\n" +
+	"\x14candidate_attributes\x18\x06 \x01(\v2+.evalsi.v1alpha1.ReleaseRunAccessAttributesR\x13candidateAttributes\"U\n" +
 	"\x1bInspectReleasePolicyRequest\x126\n" +
 	"\x06policy\x18\x01 \x01(\v2\x1e.evalsi.v1alpha1.ReleasePolicyR\x06policy\"6\n" +
 	"\x1cInspectReleasePolicyResponse\x12\x16\n" +
@@ -1723,7 +1795,10 @@ const file_evalsi_v1alpha1_release_service_proto_rawDesc = "" +
 	"\rparams_sha256\x18\x03 \x01(\tR\fparamsSha256\x12\x14\n" +
 	"\x05judge\x18\x04 \x01(\tR\x05judge\x122\n" +
 	"\x15judge_settings_sha256\x18\x05 \x01(\tR\x13judgeSettingsSha256\x12,\n" +
-	"\x05scope\x18\x06 \x01(\x0e2\x16.evalsi.v1alpha1.ScopeR\x05scope*\x88\x01\n" +
+	"\x05scope\x18\x06 \x01(\x0e2\x16.evalsi.v1alpha1.ScopeR\x05scope\"O\n" +
+	"\x1aReleaseRunAccessAttributes\x12\x14\n" +
+	"\x05judge\x18\x01 \x01(\tR\x05judge\x12\x1b\n" +
+	"\truns_code\x18\x02 \x01(\bR\brunsCode*\x88\x01\n" +
 	"\x0eReleaseOutcome\x12\x1f\n" +
 	"\x1bRELEASE_OUTCOME_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14RELEASE_OUTCOME_PASS\x10\x01\x12\x19\n" +
@@ -1754,7 +1829,7 @@ func file_evalsi_v1alpha1_release_service_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_v1alpha1_release_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_evalsi_v1alpha1_release_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_evalsi_v1alpha1_release_service_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_evalsi_v1alpha1_release_service_proto_goTypes = []any{
 	(ReleaseOutcome)(0),                   // 0: evalsi.v1alpha1.ReleaseOutcome
 	(MetricDirection)(0),                  // 1: evalsi.v1alpha1.MetricDirection
@@ -1777,20 +1852,21 @@ var file_evalsi_v1alpha1_release_service_proto_goTypes = []any{
 	(*InspectReleasePolicyRequest)(nil),   // 18: evalsi.v1alpha1.InspectReleasePolicyRequest
 	(*InspectReleasePolicyResponse)(nil),  // 19: evalsi.v1alpha1.InspectReleasePolicyResponse
 	(*ReleaseEvaluatorIdentity)(nil),      // 20: evalsi.v1alpha1.ReleaseEvaluatorIdentity
-	(*DatasetVersionRef)(nil),             // 21: evalsi.v1alpha1.DatasetVersionRef
-	(RunStatus)(0),                        // 22: evalsi.v1alpha1.RunStatus
-	(*timestamppb.Timestamp)(nil),         // 23: google.protobuf.Timestamp
-	(*Run)(nil),                           // 24: evalsi.v1alpha1.Run
-	(*DatasetVersionContent)(nil),         // 25: evalsi.v1alpha1.DatasetVersionContent
-	(Scope)(0),                            // 26: evalsi.v1alpha1.Scope
+	(*ReleaseRunAccessAttributes)(nil),    // 21: evalsi.v1alpha1.ReleaseRunAccessAttributes
+	(*DatasetVersionRef)(nil),             // 22: evalsi.v1alpha1.DatasetVersionRef
+	(RunStatus)(0),                        // 23: evalsi.v1alpha1.RunStatus
+	(*timestamppb.Timestamp)(nil),         // 24: google.protobuf.Timestamp
+	(*Run)(nil),                           // 25: evalsi.v1alpha1.Run
+	(*DatasetVersionContent)(nil),         // 26: evalsi.v1alpha1.DatasetVersionContent
+	(Scope)(0),                            // 27: evalsi.v1alpha1.Scope
 }
 var file_evalsi_v1alpha1_release_service_proto_depIdxs = []int32{
 	1,  // 0: evalsi.v1alpha1.ReleaseMetricRule.direction:type_name -> evalsi.v1alpha1.MetricDirection
-	21, // 1: evalsi.v1alpha1.ReleasePolicy.dataset:type_name -> evalsi.v1alpha1.DatasetVersionRef
+	22, // 1: evalsi.v1alpha1.ReleasePolicy.dataset:type_name -> evalsi.v1alpha1.DatasetVersionRef
 	2,  // 2: evalsi.v1alpha1.ReleasePolicy.rules:type_name -> evalsi.v1alpha1.ReleaseMetricRule
 	4,  // 3: evalsi.v1alpha1.ReleaseRunEvidence.reference:type_name -> evalsi.v1alpha1.ReleaseRunEvidenceRef
-	22, // 4: evalsi.v1alpha1.ReleaseRunEvidence.status:type_name -> evalsi.v1alpha1.RunStatus
-	21, // 5: evalsi.v1alpha1.ReleaseRunEvidence.dataset:type_name -> evalsi.v1alpha1.DatasetVersionRef
+	23, // 4: evalsi.v1alpha1.ReleaseRunEvidence.status:type_name -> evalsi.v1alpha1.RunStatus
+	22, // 5: evalsi.v1alpha1.ReleaseRunEvidence.dataset:type_name -> evalsi.v1alpha1.DatasetVersionRef
 	20, // 6: evalsi.v1alpha1.ReleaseRunEvidence.evaluators:type_name -> evalsi.v1alpha1.ReleaseEvaluatorIdentity
 	0,  // 7: evalsi.v1alpha1.ReleaseMetricDecision.outcome:type_name -> evalsi.v1alpha1.ReleaseOutcome
 	6,  // 8: evalsi.v1alpha1.ReleaseMetricDecision.changes:type_name -> evalsi.v1alpha1.ReleaseCaseChange
@@ -1799,8 +1875,8 @@ var file_evalsi_v1alpha1_release_service_proto_depIdxs = []int32{
 	5,  // 11: evalsi.v1alpha1.ReleaseDecision.candidate:type_name -> evalsi.v1alpha1.ReleaseRunEvidence
 	0,  // 12: evalsi.v1alpha1.ReleaseDecision.outcome:type_name -> evalsi.v1alpha1.ReleaseOutcome
 	7,  // 13: evalsi.v1alpha1.ReleaseDecision.metrics:type_name -> evalsi.v1alpha1.ReleaseMetricDecision
-	23, // 14: evalsi.v1alpha1.ReleaseDecision.created_at:type_name -> google.protobuf.Timestamp
-	23, // 15: evalsi.v1alpha1.ReleaseDecision.dataset_reviewed_at:type_name -> google.protobuf.Timestamp
+	24, // 14: evalsi.v1alpha1.ReleaseDecision.created_at:type_name -> google.protobuf.Timestamp
+	24, // 15: evalsi.v1alpha1.ReleaseDecision.dataset_reviewed_at:type_name -> google.protobuf.Timestamp
 	5,  // 16: evalsi.v1alpha1.GetReleaseRunEvidenceResponse.evidence:type_name -> evalsi.v1alpha1.ReleaseRunEvidence
 	3,  // 17: evalsi.v1alpha1.CreateReleaseDecisionRequest.policy:type_name -> evalsi.v1alpha1.ReleasePolicy
 	4,  // 18: evalsi.v1alpha1.CreateReleaseDecisionRequest.baseline:type_name -> evalsi.v1alpha1.ReleaseRunEvidenceRef
@@ -1809,26 +1885,28 @@ var file_evalsi_v1alpha1_release_service_proto_depIdxs = []int32{
 	8,  // 21: evalsi.v1alpha1.GetReleaseDecisionResponse.decision:type_name -> evalsi.v1alpha1.ReleaseDecision
 	8,  // 22: evalsi.v1alpha1.ListReleaseDecisionsResponse.decisions:type_name -> evalsi.v1alpha1.ReleaseDecision
 	8,  // 23: evalsi.v1alpha1.StoredReleaseDecision.decision:type_name -> evalsi.v1alpha1.ReleaseDecision
-	24, // 24: evalsi.v1alpha1.StoredReleaseDecision.baseline_access:type_name -> evalsi.v1alpha1.Run
-	24, // 25: evalsi.v1alpha1.StoredReleaseDecision.candidate_access:type_name -> evalsi.v1alpha1.Run
-	25, // 26: evalsi.v1alpha1.StoredReleaseDecision.dataset_access:type_name -> evalsi.v1alpha1.DatasetVersionContent
-	3,  // 27: evalsi.v1alpha1.InspectReleasePolicyRequest.policy:type_name -> evalsi.v1alpha1.ReleasePolicy
-	26, // 28: evalsi.v1alpha1.ReleaseEvaluatorIdentity.scope:type_name -> evalsi.v1alpha1.Scope
-	18, // 29: evalsi.v1alpha1.ReleaseService.InspectReleasePolicy:input_type -> evalsi.v1alpha1.InspectReleasePolicyRequest
-	9,  // 30: evalsi.v1alpha1.ReleaseService.GetReleaseRunEvidence:input_type -> evalsi.v1alpha1.GetReleaseRunEvidenceRequest
-	11, // 31: evalsi.v1alpha1.ReleaseService.CreateReleaseDecision:input_type -> evalsi.v1alpha1.CreateReleaseDecisionRequest
-	13, // 32: evalsi.v1alpha1.ReleaseService.GetReleaseDecision:input_type -> evalsi.v1alpha1.GetReleaseDecisionRequest
-	15, // 33: evalsi.v1alpha1.ReleaseService.ListReleaseDecisions:input_type -> evalsi.v1alpha1.ListReleaseDecisionsRequest
-	19, // 34: evalsi.v1alpha1.ReleaseService.InspectReleasePolicy:output_type -> evalsi.v1alpha1.InspectReleasePolicyResponse
-	10, // 35: evalsi.v1alpha1.ReleaseService.GetReleaseRunEvidence:output_type -> evalsi.v1alpha1.GetReleaseRunEvidenceResponse
-	12, // 36: evalsi.v1alpha1.ReleaseService.CreateReleaseDecision:output_type -> evalsi.v1alpha1.CreateReleaseDecisionResponse
-	14, // 37: evalsi.v1alpha1.ReleaseService.GetReleaseDecision:output_type -> evalsi.v1alpha1.GetReleaseDecisionResponse
-	16, // 38: evalsi.v1alpha1.ReleaseService.ListReleaseDecisions:output_type -> evalsi.v1alpha1.ListReleaseDecisionsResponse
-	34, // [34:39] is the sub-list for method output_type
-	29, // [29:34] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	25, // 24: evalsi.v1alpha1.StoredReleaseDecision.baseline_access:type_name -> evalsi.v1alpha1.Run
+	25, // 25: evalsi.v1alpha1.StoredReleaseDecision.candidate_access:type_name -> evalsi.v1alpha1.Run
+	26, // 26: evalsi.v1alpha1.StoredReleaseDecision.dataset_access:type_name -> evalsi.v1alpha1.DatasetVersionContent
+	21, // 27: evalsi.v1alpha1.StoredReleaseDecision.baseline_attributes:type_name -> evalsi.v1alpha1.ReleaseRunAccessAttributes
+	21, // 28: evalsi.v1alpha1.StoredReleaseDecision.candidate_attributes:type_name -> evalsi.v1alpha1.ReleaseRunAccessAttributes
+	3,  // 29: evalsi.v1alpha1.InspectReleasePolicyRequest.policy:type_name -> evalsi.v1alpha1.ReleasePolicy
+	27, // 30: evalsi.v1alpha1.ReleaseEvaluatorIdentity.scope:type_name -> evalsi.v1alpha1.Scope
+	18, // 31: evalsi.v1alpha1.ReleaseService.InspectReleasePolicy:input_type -> evalsi.v1alpha1.InspectReleasePolicyRequest
+	9,  // 32: evalsi.v1alpha1.ReleaseService.GetReleaseRunEvidence:input_type -> evalsi.v1alpha1.GetReleaseRunEvidenceRequest
+	11, // 33: evalsi.v1alpha1.ReleaseService.CreateReleaseDecision:input_type -> evalsi.v1alpha1.CreateReleaseDecisionRequest
+	13, // 34: evalsi.v1alpha1.ReleaseService.GetReleaseDecision:input_type -> evalsi.v1alpha1.GetReleaseDecisionRequest
+	15, // 35: evalsi.v1alpha1.ReleaseService.ListReleaseDecisions:input_type -> evalsi.v1alpha1.ListReleaseDecisionsRequest
+	19, // 36: evalsi.v1alpha1.ReleaseService.InspectReleasePolicy:output_type -> evalsi.v1alpha1.InspectReleasePolicyResponse
+	10, // 37: evalsi.v1alpha1.ReleaseService.GetReleaseRunEvidence:output_type -> evalsi.v1alpha1.GetReleaseRunEvidenceResponse
+	12, // 38: evalsi.v1alpha1.ReleaseService.CreateReleaseDecision:output_type -> evalsi.v1alpha1.CreateReleaseDecisionResponse
+	14, // 39: evalsi.v1alpha1.ReleaseService.GetReleaseDecision:output_type -> evalsi.v1alpha1.GetReleaseDecisionResponse
+	16, // 40: evalsi.v1alpha1.ReleaseService.ListReleaseDecisions:output_type -> evalsi.v1alpha1.ListReleaseDecisionsResponse
+	36, // [36:41] is the sub-list for method output_type
+	31, // [31:36] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_release_service_proto_init() }
@@ -1847,7 +1925,7 @@ func file_evalsi_v1alpha1_release_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_release_service_proto_rawDesc), len(file_evalsi_v1alpha1_release_service_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   19,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

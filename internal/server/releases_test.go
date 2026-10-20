@@ -100,3 +100,23 @@ func TestReleaseDecisionAuthorizationRESTAndRunRetention(t *testing.T) {
 		t.Fatalf("list leaked private decision: %v %v", listed, err)
 	}
 }
+
+func TestReleaseTargetsUseCapturedEffectiveAuthorization(t *testing.T) {
+	baseline := &pb.Run{Id: "baseline", Project: "support", Spec: &pb.RunSpec{}}
+	candidate := &pb.Run{Id: "candidate", Project: "support", Spec: &pb.RunSpec{}}
+	d := &pb.StoredReleaseDecision{Decision: &pb.ReleaseDecision{Id: "saved", Project: "support"}, BaselineAccess: baseline, CandidateAccess: candidate,
+		BaselineAttributes:  &pb.ReleaseRunAccessAttributes{Judge: "restricted-judge", RunsCode: true},
+		CandidateAttributes: &pb.ReleaseRunAccessAttributes{Judge: "other-judge"}, DatasetAccess: &pb.DatasetVersionContent{Project: "support", Name: "suite", Version: "v1"}}
+	targets := releaseTargets(d)
+	if len(targets) != 4 {
+		t.Fatal(targets)
+	}
+	for i, want := range []*pb.ReleaseRunAccessAttributes{d.CandidateAttributes, d.BaselineAttributes, d.CandidateAttributes} {
+		if targets[i].resource["judge"] != want.GetJudge() || targets[i].resource["runs_code"] != want.GetRunsCode() {
+			t.Fatalf("gate lost captured authorization for target %d: %v", i, targets[i])
+		}
+	}
+	if targets[1].action != "runs.read" || targets[2].action != "runs.read" || targets[3].action != "datasets.read" {
+		t.Fatal(targets)
+	}
+}

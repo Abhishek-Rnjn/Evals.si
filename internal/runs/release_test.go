@@ -10,7 +10,10 @@ import (
 	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evals.si/internal/catalog"
+	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/datasetcatalog"
+	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"google.golang.org/protobuf/proto"
 )
@@ -275,5 +278,114 @@ func TestReleasePolicyNonfiniteThresholdsCannotProduceDecisions(t *testing.T) {
 	list, err := f.h.m.ListReleaseDecisions(t.Context(), connect.NewRequest(&pb.ListReleaseDecisionsRequest{Project: "support"}))
 	if err != nil || len(list.Msg.GetDecisions()) != 0 {
 		t.Fatalf("invalid policy persisted: %v %v", list, err)
+	}
+}
+
+func TestReleaseDecisionRejectsMismatchedDatasetWithoutSaving(t *testing.T) {
+	for _, side := range []string{"baseline", "candidate"} {
+		t.Run(side, func(t *testing.T) {
+			f := releaseFixtureFor(t)
+			content := proto.Clone(f.dataset.GetContent()).(*pb.DatasetVersionContent)
+			content.Project, content.Name = "restricted", "secret-suite"
+			content.Labels = map[string]string{"classification": "private"}
+			published, err := datasetcatalog.New(f.h.st).PublishDatasetVersion(t.Context(), connect.NewRequest(&pb.PublishDatasetVersionRequest{Content: content}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			run := f.baseline
+			if side == "candidate" {
+				run = f.candidate
+			}
+			run.Spec.Dataset.Source = &pb.DatasetSource_Catalog{Catalog: datasetcatalog.Reference(published.Msg.GetDataset())}
+			if err := f.h.st.UpdateRun(t.Context(), run); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.h.m.CreateReleaseDecision(t.Context(), f.request(t, "mismatched")); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+				t.Fatalf("dataset mismatch saved: %v", err)
+			}
+			rows, err := f.h.st.ListReleaseDecisions(t.Context(), "support", "", 50)
+			if err != nil || len(rows) != 0 {
+				t.Fatalf("mismatched source retained: %v %v", rows, err)
+			}
+		})
+	}
+}
+
+func TestReleaseDecisionRetainsEffectiveAccessAfterCatalogAndDefaultChange(t *testing.T) {
+	f := releaseFixtureFor(t)
+	manifest := proto.Clone(f.baseline.GetEvaluationContract().GetEvaluators()[0].GetManifest()).(*pb.EvaluatorManifest)
+	manifest.Requires = &pb.Requirements{Judge: true, Isolation: pb.IsolationLevel_ISOLATION_LEVEL_NAMESPACED}
+	f.h.m.engine = evaluation.New(f.h.worker, catalog.New([]*pb.EvaluatorManifest{manifest}), []string{"private-judge"}, "private-judge", f.h.m.opts.Evaluate)
+	if _, err := f.h.m.CreateReleaseDecision(t.Context(), f.request(t, "captured")); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := f.h.st.GetReleaseDecision(t.Context(), "support", "captured")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, attributes := range []*pb.ReleaseRunAccessAttributes{saved.GetBaselineAttributes(), saved.GetCandidateAttributes()} {
+		if !attributes.GetRunsCode() || attributes.GetJudge() != "private-judge" {
+			t.Fatalf("effective attributes not captured: %v", attributes)
+		}
+	}
+	// Restart with the evaluator removed and another default; also delete both runs.
+	f.h.m.engine = evaluation.New(f.h.worker, catalog.New(nil), nil, "new-default", f.h.m.opts.Evaluate)
+	for _, run := range []*pb.Run{f.baseline, f.candidate} {
+		if err := f.h.st.DeleteRun(t.Context(), run.GetId()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, condition := range []string{"!resource.runs_code", `resource.judge != "private-judge"`} {
+		engine, err := authz.NewEngine(t.Context(), authz.Options{Enabled: true, RBAC: authz.RBACConfig{Roles: []authz.Role{{Name: "restricted", Permissions: []string{"releases.read", "runs.read"}, Condition: condition}, {Name: "datasets", Permissions: []string{"datasets.read"}}}, Projects: map[string]map[string][]string{"support": {"restricted": {"key:reader"}, "datasets": {"key:reader"}}}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := &auth.Principal{Kind: auth.KindAPIKey, KeyName: "reader"}
+		ctx := authz.WithChecker(t.Context(), &authz.Checker{Engine: engine, Principal: p, RunsCode: f.h.m.engine.RunsCode, JudgeOf: f.h.m.engine.EffectiveJudge})
+		if _, err := f.h.m.GetReleaseDecision(ctx, connect.NewRequest(&pb.GetReleaseDecisionRequest{Project: "support", Id: "captured"})); connect.CodeOf(err) != connect.CodeNotFound {
+			t.Fatalf("catalog/default change bypassed %s: %v", condition, err)
+		}
+		rows, err := f.h.m.ListReleaseDecisions(ctx, connect.NewRequest(&pb.ListReleaseDecisionsRequest{Project: "support", PageSize: 1}))
+		if err != nil || len(rows.Msg.GetDecisions()) != 0 || rows.Msg.GetNextPageToken() != "" {
+			t.Fatalf("list bypassed captured attributes: %v %v", rows, err)
+		}
+	}
+	saved.CandidateAttributes = nil
+	if ReleaseReadable(t.Context(), saved) {
+		t.Fatal("legacy envelope without effective attributes was readable")
+	}
+}
+
+type releaseUnverifiedCluster struct{ Coordinator }
+
+func TestReleaseClusterJudgeEvidenceCannotPass(t *testing.T) {
+	f := releaseFixtureFor(t)
+	manifest := proto.Clone(f.baseline.GetEvaluationContract().GetEvaluators()[0].GetManifest()).(*pb.EvaluatorManifest)
+	manifest.Requires = &pb.Requirements{Judge: true}
+	insts := []evaluation.Instance{{Name: "exact-match", Manifest: manifest, Judge: "reviewer"}}
+	manager := &Manager{opts: Options{Judges: map[string]config.Judge{"reviewer": {Model: "api-model"}}}}
+	local, err := manager.evaluationContract(f.baseline.GetSpec(), insts)
+	if err != nil || local.GetEvaluators()[0].GetJudgeSettingsSha256() == "" {
+		t.Fatalf("local judge settings missing: %v %v", local, err)
+	}
+	manager.opts.Cluster = releaseUnverifiedCluster{}
+	clustered, err := manager.evaluationContract(f.baseline.GetSpec(), insts)
+	if err != nil || clustered.GetEvaluators()[0].GetJudgeSettingsSha256() != "" {
+		t.Fatalf("API settings misrepresented as worker settings: %v %v", clustered, err)
+	}
+	// Identical API contracts with unverified worker settings must still fail closed,
+	// including after a restart in standalone mode.
+	for _, run := range []*pb.Run{f.baseline, f.candidate} {
+		run.EvaluationContract = proto.Clone(clustered).(*pb.RunEvaluationContract)
+		if err := f.h.st.UpdateRun(t.Context(), run); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := f.h.m.CreateReleaseDecision(t.Context(), f.request(t, "cluster-judge"))
+	if err != nil || out.Msg.GetDecision().GetOutcome() != pb.ReleaseOutcome_RELEASE_OUTCOME_INSUFFICIENT {
+		t.Fatalf("unverified cluster judge evidence passed: %v %v", out, err)
+	}
+	if !strings.Contains(strings.Join(out.Msg.GetDecision().GetReasons(), " "), "judge configuration identity was not captured") {
+		t.Fatal(out.Msg)
 	}
 }

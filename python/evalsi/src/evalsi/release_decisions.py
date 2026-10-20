@@ -20,6 +20,11 @@ from google.protobuf.message import Message
 from evalsi.client import Client
 from evalsi.v1alpha1.release_service_pb2 import ReleaseDecision, ReleasePolicy
 
+# Match the server's decoded protobuf envelope bound, with bounded JSON
+# expansion for escaped Unicode, field names and formatting.
+_MAX_DECISION_BYTES = 4 << 20
+_MAX_REPORT_BYTES = 32 << 20
+
 
 def _digest(domain: str, message: Message) -> str:
     return hashlib.sha256(
@@ -41,6 +46,8 @@ def decision_hash(decision: Mapping[str, Any]) -> str:
         message = json_format.ParseDict(dict(decision), ReleaseDecision())
     except json_format.ParseError as exc:
         raise ValueError(f"invalid release decision: {exc}") from exc
+    if message.ByteSize() > _MAX_DECISION_BYTES:
+        raise ValueError("release decision exceeds 4 MiB of protobuf data")
     message.ClearField("sha256")
     return _digest("evalsi.release-decision/v1", message)
 
@@ -71,6 +78,8 @@ def write_report(path: str | Path, decision: dict[str, Any]) -> None:
         )
         + "\n"
     )
+    if len(raw.encode("utf-8")) > _MAX_REPORT_BYTES:
+        raise ValueError("release report exceeds 32 MiB of JSON")
     # Write completely to a private sibling before atomic no-replace publication.
     import tempfile
 
@@ -101,10 +110,12 @@ def _reject_constant(value: str) -> Any:
 
 def read_report(path: str | Path, expected: str) -> dict[str, Any]:
     source = Path(path)
-    if source.stat().st_size > 4 << 20:
-        raise ValueError("release report exceeds 4 MiB")
+    with source.open("rb") as reader:
+        encoded = reader.read(_MAX_REPORT_BYTES + 1)
+    if len(encoded) > _MAX_REPORT_BYTES:
+        raise ValueError("release report exceeds 32 MiB of JSON")
     raw = json.loads(
-        source.read_text(encoding="utf-8"),
+        encoded.decode("utf-8"),
         object_pairs_hook=_unique_object,
         parse_constant=_reject_constant,
     )

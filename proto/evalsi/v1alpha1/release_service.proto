@@ -160,6 +160,8 @@ message StoredReleaseDecision {
   Run baseline_access = 2;
   Run candidate_access = 3;
   DatasetVersionContent dataset_access = 4;
+  ReleaseRunAccessAttributes baseline_attributes = 5;
+  ReleaseRunAccessAttributes candidate_attributes = 6;
 }
 
 message InspectReleasePolicyRequest {
@@ -178,4 +180,11 @@ message ReleaseEvaluatorIdentity {
   string judge = 4;
   string judge_settings_sha256 = 5;
   Scope scope = 6;
+}
+
+// Effective catalog/default-dependent attributes captured at decision creation.
+// Saved reads use current permissions against these values, never re-resolve them.
+message ReleaseRunAccessAttributes {
+  string judge = 1;
+  bool runs_code = 2;
 }

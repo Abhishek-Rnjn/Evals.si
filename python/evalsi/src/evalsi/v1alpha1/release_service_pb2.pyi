@@ -613,6 +613,8 @@ class StoredReleaseDecision(_message.Message):
     BASELINE_ACCESS_FIELD_NUMBER: _builtins.int
     CANDIDATE_ACCESS_FIELD_NUMBER: _builtins.int
     DATASET_ACCESS_FIELD_NUMBER: _builtins.int
+    BASELINE_ATTRIBUTES_FIELD_NUMBER: _builtins.int
+    CANDIDATE_ATTRIBUTES_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def decision(self) -> Global___ReleaseDecision: ...
     @_builtins.property
@@ -621,6 +623,10 @@ class StoredReleaseDecision(_message.Message):
     def candidate_access(self) -> _run_pb2.Run: ...
     @_builtins.property
     def dataset_access(self) -> _dataset_catalog_service_pb2.DatasetVersionContent: ...
+    @_builtins.property
+    def baseline_attributes(self) -> Global___ReleaseRunAccessAttributes: ...
+    @_builtins.property
+    def candidate_attributes(self) -> Global___ReleaseRunAccessAttributes: ...
     def __init__(
         self,
         *,
@@ -628,10 +634,12 @@ class StoredReleaseDecision(_message.Message):
         baseline_access: _run_pb2.Run | None = ...,
         candidate_access: _run_pb2.Run | None = ...,
         dataset_access: _dataset_catalog_service_pb2.DatasetVersionContent | None = ...,
+        baseline_attributes: Global___ReleaseRunAccessAttributes | None = ...,
+        candidate_attributes: Global___ReleaseRunAccessAttributes | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["baseline_access", b"baseline_access", "candidate_access", b"candidate_access", "dataset_access", b"dataset_access", "decision", b"decision"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["baseline_access", b"baseline_access", "baseline_attributes", b"baseline_attributes", "candidate_access", b"candidate_access", "candidate_attributes", b"candidate_attributes", "dataset_access", b"dataset_access", "decision", b"decision"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["baseline_access", b"baseline_access", "candidate_access", b"candidate_access", "dataset_access", b"dataset_access", "decision", b"decision"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["baseline_access", b"baseline_access", "baseline_attributes", b"baseline_attributes", "candidate_access", b"candidate_access", "candidate_attributes", b"candidate_attributes", "dataset_access", b"dataset_access", "decision", b"decision"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___StoredReleaseDecision: _TypeAlias = StoredReleaseDecision  # noqa: Y015
@@ -705,3 +713,26 @@ class ReleaseEvaluatorIdentity(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ReleaseEvaluatorIdentity: _TypeAlias = ReleaseEvaluatorIdentity  # noqa: Y015
+
+@_typing.final
+class ReleaseRunAccessAttributes(_message.Message):
+    """Effective catalog/default-dependent attributes captured at decision creation.
+    Saved reads use current permissions against these values, never re-resolve them.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    JUDGE_FIELD_NUMBER: _builtins.int
+    RUNS_CODE_FIELD_NUMBER: _builtins.int
+    judge: _builtins.str
+    runs_code: _builtins.bool
+    def __init__(
+        self,
+        *,
+        judge: _builtins.str = ...,
+        runs_code: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["judge", b"judge", "runs_code", b"runs_code"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ReleaseRunAccessAttributes: _TypeAlias = ReleaseRunAccessAttributes  # noqa: Y015

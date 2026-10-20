@@ -620,3 +620,49 @@ test('active run polling preserves keyboard focus and record inspection state', 
   assert.equal(await sort.evaluate(node => node === document.activeElement), true);
   await page.close();
 });
+
+// The active project belongs to the release runs; the suite and inbox case may
+// belong to a different project. Keep that scope across both editor refreshes.
+test('release case links preserve the suite project through inbox save and review', async () => {
+  const url = await startServer('release-cross-project');
+  const page = await browser.newPage();
+  const problems = await watch(page);
+  const id = '1234567890abcdef12345678';
+  const scopedRequests = [];
+  let failure = { id, project: 'suite-project', title: 'Cross-project regression', reason: 'Needs approval', revision: 1, status: 'FAILURE_STATUS_OPEN', source: { traceId: 'source-trace' }, record: { input: { text: 'Request' }, reference: { text: 'Approved answer' } } };
+  await page.route('**/v1alpha1/release-decisions/cross-project?*', route => route.fulfill({ json: { decision: {
+    id: 'cross-project', outcome: 'RELEASE_OUTCOME_BLOCK', policy: { dataset: { project: 'suite-project', name: 'suite', version: 'v1' } },
+    baseline: { reference: { runId: 'baseline' } }, candidate: { reference: { runId: 'candidate' } },
+    metrics: [{ metric: 'exact-match', changes: [{ recordId: `failure/${id}`, criticalFailure: true }] }],
+  } } }));
+  await page.route(`**/v1alpha1/failures/${id}**`, async route => {
+    const request = route.request(), parsed = new URL(request.url());
+    const body = request.method() === 'GET' ? null : request.postDataJSON();
+    scopedRequests.push({ method: request.method(), project: body?.project || parsed.searchParams.get('project') });
+    if (parsed.pathname.endsWith('/events')) return route.fulfill({ json: { events: [] } });
+    if (body) {
+      failure = { ...failure, revision: failure.revision + 1, status: body.decision || body.status, title: body.title || failure.title };
+    }
+    return route.fulfill({ json: { failure } });
+  });
+  await page.goto(`${url}/ui/#/releases/cross-project`);
+  await page.getByText('exact-match: changed and critical cases', { exact: true }).click();
+  await page.getByRole('link', { name: `failure/${id}`, exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: `failure/${id}`, exact: true }).getAttribute('href'), `#/inbox/${id}?project=suite-project`);
+  await page.getByRole('link', { name: `failure/${id}`, exact: true }).click();
+  await page.getByRole('heading', { name: 'Edit case', exact: true }).waitFor();
+  assert.match(await page.textContent('#main'), /suite-project/);
+  await page.getByLabel('Case title', { exact: true }).fill('Updated scoped case');
+  await page.getByRole('button', { name: 'Submit for review', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Updated scoped case');
+  await page.getByLabel('Review note', { exact: true }).fill('Reviewed in the suite project');
+  await page.getByRole('button', { name: 'Approve this revision', exact: true }).click();
+  await page.getByRole('button', { name: 'Download approved case (JSONL)', exact: true }).waitFor();
+  assert.ok(scopedRequests.filter(request => request.method === 'GET').length >= 3, 'both refreshes fetched the saved case');
+  assert.deepEqual(scopedRequests.filter(request => request.method !== 'GET').map(request => request.method), ['PUT', 'POST']);
+  assert.ok(scopedRequests.every(request => request.project === 'suite-project'), JSON.stringify(scopedRequests));
+  assert.equal(await page.locator('#project').inputValue(), 'default', 'source navigation does not change the selected run project');
+  await checkAccessibility(page);
+  assert.deepEqual(problems, []);
+  await page.close();
+});

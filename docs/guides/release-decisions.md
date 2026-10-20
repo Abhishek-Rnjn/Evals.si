@@ -247,7 +247,10 @@ changed settings require a new run. Older runs without a captured contract and
 imported runs cannot pass release checks. Supported comparisons currently need
 record-scoped evaluators with fully matched identities and scored results for
 every record/trial/evaluator. Session, span, dataset and comparative scopes are
-not qualified by this initial decision workflow.
+not qualified by this initial decision workflow. Cluster judge evaluations are also
+insufficient: API replicas cannot verify the executing worker's judge settings.
+Their captured contract omits the judge digest, so later standalone reads cannot
+qualify that evidence. Cluster runs using evaluators without judges remain eligible.
 
 Source records must match the complete catalog content. Target outputs cannot
 change the approved input/reference/context or reserved source identities.
@@ -257,9 +260,14 @@ model weights, worker/plugin binary bytes, mutable image tags and declared agent
 commits are not attested; the report records their available identities/hashes.
 
 Existing viewer roles gain `releases.read`; runners gain `releases.create`.
+Mismatched baseline/candidate/policy dataset pins are rejected without saving a
+decision, so every retained report has exactly the captured suite boundary.
 Decision reads also require `runs.read` on both captured run resources and
 `datasets.read` plus captured source `traces.read` boundaries. Current
-permissions are rechecked even after run deletion. Retirement/deletion of source
+permissions are rechecked even after run deletion. Effective `judge` and
+`runs_code` attributes are captured at decision creation; changing the default
+judge or removing an evaluator cannot relax a saved report's boundary. Envelopes
+without these attributes fail closed and must be recreated from available runs. Retirement/deletion of source
 runs does not erase the saved report or its access metadata. There is no release
 decision deletion API in this slice; plan retention before using sensitive IDs.
 
@@ -274,7 +282,9 @@ outcome needs the original run data. It is not the complete signed evidence
 package proposed under ENT-08.
 
 Limits are 2 MiB per policy, 32 rules, 100,000 record/trial/evaluator cells and
-4 MiB per saved report/envelope. Changed cases are capped at 200 per metric with
+4 MiB of protobuf per saved report/envelope. Portable JSON permits up to 32 MiB
+of encoding expansion while still enforcing the decoded 4 MiB decision limit;
+large Unicode policies round-trip through export and offline verification. Changed cases are capped at 200 per metric with
 an explicit omitted count. Dataset catalog limits still apply. Organization-wide
 policy approval/inheritance, signed attestations, expiry/exception governance,
 transactional audit export and erasure/backup semantics remain roadmap work.

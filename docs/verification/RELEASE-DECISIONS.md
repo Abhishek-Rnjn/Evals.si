@@ -105,3 +105,24 @@ including all three CLI and Action outcomes, **14 actual scripted agent calls**,
 portable report verification and tamper rejection. This separately checks package
 contents and synchronous client operation without installing the server extra
 into the client environment.
+
+## PR review regression checks
+
+- Removing a sandboxed evaluator and changing the default judge after saving and
+  deleting both source runs cannot grant get/list access to a restricted reader.
+  Server targets use the same captured effective attributes as service filters;
+  envelopes missing those attributes fail closed.
+- Either run naming another catalog suite fails before any report is persisted.
+- Cluster judge evidence omits the unverified worker settings digest and remains
+  insufficient even when both API contracts match or a standalone server reads it.
+- Browser links from a release in one project to an inbox case in the suite's
+  project preserve the source project through draft save and approval refreshes.
+- A 6,000-case Unicode policy exports to more than 4 MiB of escaped JSON and
+  verifies unchanged, including through the CLI and browser-style literal Unicode
+  encoding. JSON remains bounded at 32 MiB and decoded decisions at 4 MiB.
+
+Review fixes were checked with race-enabled authorization/run/server/store tests,
+25 Python SDK and real-server tests (including the synthetic CLI/Action release
+workflow), Ruff, strict mypy on 299 files, protobuf lint/format, and the website
+build (84 pages) plus link checks. The cross-project Chromium regression also
+checks accessibility after case approval.

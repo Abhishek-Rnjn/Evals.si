@@ -679,8 +679,8 @@
         el("a", { href: `#/traces/${encodeURIComponent(f.source.traceId)}` }, short(f.source.traceId, 12)),
       ])), response.nextPageToken ? el("button", { onclick: () => viewInbox(response.nextPageToken, selectedStatus).catch(failed) }, "More cases") : null);
   }
-  async function viewFailure(id) {
-    const scope = project;
+  async function viewFailure(id, query = new URLSearchParams()) {
+    const scope = query.get("project") || project;
     const { failure: f } = await api(`/v1alpha1/failures/${id}`, { project: scope });
     const title = el("input", { value: f.title, required: true, maxlength: 256 });
     const reason = el("textarea", { rows: 3, required: true, maxlength: 4096 }, f.reason);
@@ -695,7 +695,7 @@
         await api(`/v1alpha1/failures/${id}`, {}, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           project: scope, expectedRevision: f.revision, record: edited, title: title.value, reason: reason.value, assignee: assignee.value, status,
         }) });
-        await viewFailure(id);
+        await viewFailure(id, new URLSearchParams({ project: scope }));
       } catch (err) { notice(slot, err); }
     }
     const form = el("form", { onsubmit: e => { e.preventDefault(); save("FAILURE_STATUS_OPEN"); } },
@@ -715,7 +715,7 @@
     async function review(decision) {
       try {
         await post(`/v1alpha1/failures/${id}:review`, { project: scope, expectedRevision: f.revision, decision, note: note.value });
-        await viewFailure(id);
+        await viewFailure(id, new URLSearchParams({ project: scope }));
       } catch (err) { notice(reviewSlot, err); }
     }
     form.addEventListener("input", () => {
@@ -735,7 +735,7 @@
       history.replaceChildren(table(["Revision", "Action", "Actor", "Status", "When"], (out.events || []).map(e => [e.revision, e.action, e.actor, enumName(e.status, "FAILURE_STATUS_"), when(e.time)])),
         ...(out.nextPageToken ? [el("button", { onclick: () => events(out.nextPageToken).catch(err => notice(history, err)) }, "Older events")] : []));
     }
-    show(el("h1", {}, f.title), kv([["Status", enumName(f.status, "FAILURE_STATUS_")], ["Revision", f.revision], ["Source", f.source.traceId], ["Source digest", f.sourceSha256], ["Reviewer", f.reviewedBy], ["Review note", f.reviewNote]]),
+    show(el("h1", {}, f.title), kv([["Project", scope], ["Status", enumName(f.status, "FAILURE_STATUS_")], ["Revision", f.revision], ["Source", f.source.traceId], ["Source digest", f.sourceSha256], ["Reviewer", f.reviewedBy], ["Review note", f.reviewNote]]),
       el("h2", {}, "Edit case"), form, el("h2", {}, "Review saved revision"),
       el("p", { class: "sub" }, "Review applies to the saved revision shown above. Save your edits before reviewing."), reviewForm,
       exportButton, exportSlot, f.status === "FAILURE_STATUS_APPROVED" ? el("details", {}, el("summary", {}, "Publish this case to a shared dataset"), publishDatasetForm(scope, f)) : null,
@@ -980,7 +980,7 @@
       table(["Metric", "Independent pairs", "Baseline", "Candidate", "Regression", "Regression interval", "Outcome"], (d.metrics || []).map(m => [m.metric, m.pairedRecords || 0, fmt(m.baselineMean), fmt(m.candidateMean), fmt(m.meanRegression), m.regressionLow !== undefined ? `${fmt(m.regressionLow)} … ${fmt(m.regressionHigh)}` : "Unavailable", enumName(m.outcome, "RELEASE_OUTCOME_")])),
       ...(d.metrics || []).map(m => el("details", {}, el("summary", {}, `${m.metric}: changed and critical cases`),
         ...(m.reasons || []).map(reason => el("p", {}, reason)), table(["Case", "Trial", "Baseline", "Candidate", "Critical failure"], (m.changes || []).map(change => [
-          /^failure\/[a-f0-9]{24}$/.test(change.recordId) ? el("a", { href: `#/inbox/${change.recordId.slice(8)}` }, change.recordId) : change.recordId,
+          /^failure\/[a-f0-9]{24}$/.test(change.recordId) ? el("a", { href: `#/inbox/${change.recordId.slice(8)}?project=${encodeURIComponent(dataset.project)}` }, change.recordId) : change.recordId,
           change.trial || 0, fmt(change.baseline ?? 0), fmt(change.candidate ?? 0), change.criticalFailure ? "yes" : "no",
         ])), m.changesOmitted ? el("p", {}, `${m.changesOmitted} additional changes omitted; inspect the pinned run evidence.`) : null)),
       ...sources, el("h2", {}, "Reviewed release policy"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify(d.policy, null, 2)), download,

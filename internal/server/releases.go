@@ -13,9 +13,10 @@ import (
 
 func releaseTargets(d *pb.StoredReleaseDecision) []target {
 	decision := d.GetDecision()
-	out := []target{{project: decision.GetProject(), resource: authz.RunResource(d.GetCandidateAccess(), nil), name: "release/" + decision.GetId()}}
-	for _, run := range []*pb.Run{d.GetBaselineAccess(), d.GetCandidateAccess()} {
-		out = append(out, target{project: run.GetProject(), resource: authz.RunResource(run, nil), name: "run/" + run.GetId(), action: "runs.read"})
+	out := []target{{project: decision.GetProject(), resource: authz.CapturedRunResource(d.GetCandidateAccess(), d.GetCandidateAttributes()), name: "release/" + decision.GetId()}}
+	for i, run := range []*pb.Run{d.GetBaselineAccess(), d.GetCandidateAccess()} {
+		attributes := []*pb.ReleaseRunAccessAttributes{d.GetBaselineAttributes(), d.GetCandidateAttributes()}[i]
+		out = append(out, target{project: run.GetProject(), resource: authz.CapturedRunResource(run, attributes), name: "run/" + run.GetId(), action: "runs.read"})
 	}
 	c := d.GetDatasetAccess()
 	out = append(out, target{project: c.GetProject(), resource: authz.DatasetVersionResource(c), name: "dataset-version/" + c.GetName() + "/" + c.GetVersion(), action: "datasets.read"})
@@ -102,19 +103,10 @@ func (g *gate) addReleaseRules(rules map[string]accessRule) {
 		if err != nil {
 			return nil, err
 		}
-		targets := releaseTargets(d)
-		// Resolve code/judge resource attributes from the captured spec, as run reads do.
-		for i := range targets {
-			if i < 3 {
-				var run *pb.Run
-				if i == 1 {
-					run = d.GetBaselineAccess()
-				} else {
-					run = d.GetCandidateAccess()
-				}
-				targets[i].resource = authz.RunResourceFor(ctx, run)
-			}
+		if d.GetBaselineAttributes() == nil || d.GetCandidateAttributes() == nil {
+			return nil, connect.NewError(connect.CodeDataLoss, errors.New("release decision lacks captured authorization attributes"))
 		}
+		targets := releaseTargets(d)
 		return targets, nil
 	}}
 	rules[evalsiv1alpha1connect.ReleaseServiceListReleaseDecisionsProcedure] = accessRule{action: "releases.read", filtered: true}
