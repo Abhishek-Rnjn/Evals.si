@@ -2,6 +2,7 @@ package runs
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 
@@ -253,5 +254,26 @@ func TestCriticalCaseCannotHideBehindPassingMean(t *testing.T) {
 	result := metricDecision(rule, &pb.ReleasePolicy{MinRecords: 2}, values(.2, .8), values(0, 1), records, 1)
 	if result.GetCandidateMean() != .5 || result.GetOutcome() != pb.ReleaseOutcome_RELEASE_OUTCOME_BLOCK || !result.GetChanges()[0].GetCriticalFailure() {
 		t.Fatal(result)
+	}
+}
+
+func TestReleasePolicyNonfiniteThresholdsCannotProduceDecisions(t *testing.T) {
+	f := releaseFixtureFor(t)
+	for _, mutate := range []func(*pb.ReleasePolicy){
+		func(p *pb.ReleasePolicy) { p.Rules[0].MaxRegression = proto.Float64(math.NaN()) },
+		func(p *pb.ReleasePolicy) { p.Rules[0].MinCase = proto.Float64(math.Inf(1)) },
+		func(p *pb.ReleasePolicy) { p.ConfidenceLevel = math.NaN() },
+		func(p *pb.ReleasePolicy) { p.Rules[0].Direction = pb.MetricDirection_METRIC_DIRECTION_UNSPECIFIED },
+	} {
+		request := f.request(t, "invalid-policy")
+		mutate(request.Msg.Policy)
+		request.Msg.PolicySha256 = releaseHash("evalsi.release-policy/v1", request.Msg.Policy)
+		if _, err := f.h.m.CreateReleaseDecision(t.Context(), request); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("invalid policy accepted: %v", err)
+		}
+	}
+	list, err := f.h.m.ListReleaseDecisions(t.Context(), connect.NewRequest(&pb.ListReleaseDecisionsRequest{Project: "support"}))
+	if err != nil || len(list.Msg.GetDecisions()) != 0 {
+		t.Fatalf("invalid policy persisted: %v %v", list, err)
 	}
 }

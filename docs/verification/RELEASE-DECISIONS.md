@@ -19,10 +19,14 @@ customer usability, statistical power or enterprise operating capacity.
 - The Go tests cover confidence-bound regression checks, lower-is-better usage,
   critical failures hidden by a passing mean, missing critical cases, insufficient
   records, missing usage, stale run/policy/commit pins, imported/old/unfinished
-  runs, changed contracts, errored scores, retirement and changed output references.
+  runs, changed contracts, errored scores, retirement, nonfinite policy thresholds
+  and changed output references.
   Trials are averaged within records rather than counted as independent samples.
 - Captured evaluator/judge/summary/trial/checker identities are checked before
   resumed work. A changed contract stops work without new evaluator calls.
+- Authorization snapshot tests preserve every exposed run/dataset/trace resource
+  attribute while discarding prompts, environment files/values, rubric values
+  and record content.
 - Store tests exercise competing immutable writes, deterministic map hashing,
   project isolation and report/access-envelope tampering. Decisions remain
   available after source-run deletion and retain captured access boundaries.
@@ -78,3 +82,26 @@ or catalog erasure API in this slice. Existing API auditing remains separate fro
 transactional audit/outbox work under ENT-03/04. The [guide](../guides/release-decisions.md)
 records operating limits and the remaining scope; the
 [roadmap](../PRODUCT-ROADMAP.md) does not mark ENT-08 complete.
+
+## Recorded results
+
+Full Go tests and vet passed. Race-enabled release/critical-case/contract and
+access-snapshot tests passed for authorization, runs, store and server packages.
+Protobuf lint/format/regeneration and operator/Helm generation passed. All
+**8 Chromium tests** passed, including the full publication-to-decision browser
+workflow and active-run inspection/focus preservation. The website built
+**84 pages**, and local links passed.
+
+Python lint/format and strict mypy passed (**298 source files**). The full Python
+suite reported **1,345 passed, 15 skipped, two existing sandbox failures**:
+`test_real_sandbox` and `test_a_sandbox_persists_across_commands`. The cloud host
+cannot create bubblewrap namespaces and has no confined fallback. Sandbox
+requirements and assertions were preserved. The release-specific CLI/SDK,
+real-server and Action controls passed.
+
+A freshly built SDK-only wheel was installed into a clean environment outside
+the checkout. It completed the same full flow against a source server/worker,
+including all three CLI and Action outcomes, **14 actual scripted agent calls**,
+portable report verification and tamper rejection. This separately checks package
+contents and synchronous client operation without installing the server extra
+into the client environment.
