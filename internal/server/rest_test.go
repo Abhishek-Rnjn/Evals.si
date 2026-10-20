@@ -30,6 +30,7 @@ func TestRESTRoutes(t *testing.T) {
 		evalsiv1alpha1connect.RunServiceName, evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.FailureServiceName,
+		evalsiv1alpha1connect.DatasetCatalogServiceName,
 	} {
 		handlers[name] = echo
 	}
@@ -40,6 +41,12 @@ func TestRESTRoutes(t *testing.T) {
 	cases := []struct {
 		method, path, body, rpc, field, value string
 	}{
+		{"POST", "/v1alpha1/dataset-versions", `{"content":{"name":"refunds"}}`, "DatasetCatalogService/PublishDatasetVersion", "", ""},
+		{"GET", "/v1alpha1/dataset-versions?project=p", "", "DatasetCatalogService/ListDatasetVersions", "project", "p"},
+		{"GET", "/v1alpha1/dataset-versions/refunds/v1", "", "DatasetCatalogService/GetDatasetVersion", "version", "v1"},
+		{"POST", "/v1alpha1/dataset-versions/refunds/v1:review", `{"sha256":"pin"}`, "DatasetCatalogService/ReviewDatasetVersion", "name", "refunds"},
+		{"GET", "/v1alpha1/dataset-versions/refunds/v1/events", "", "DatasetCatalogService/ListDatasetVersionEvents", "version", "v1"},
+		{"POST", "/v1alpha1/dataset-versions/refunds:diff", `{"before_version":"v1"}`, "DatasetCatalogService/DiffDatasetVersions", "name", "refunds"},
 		{"POST", "/v1alpha1/failures", `{"trace_id":"abc","title":"Incident"}`, "FailureService/CaptureFailure", "trace_id", "abc"},
 		{"GET", "/v1alpha1/failures?project=p", "", "FailureService/ListFailures", "project", "p"},
 		{"GET", "/v1alpha1/failures/case-id", "", "FailureService/GetFailure", "id", "case-id"},

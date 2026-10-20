@@ -97,13 +97,17 @@ func agentResource(spec *evalsiv1alpha1.RunSpec) map[string]any {
 func SpecResource(spec *evalsiv1alpha1.RunSpec, labels map[string]string, runsCode RunsCode) map[string]any {
 	t := spec.GetTarget()
 	ds := spec.GetDataset()
+	dataset := map[string]any{"path": ds.GetPath(), "uri": ds.GetUri(), "inline": ds.GetInline() != nil}
+	if ref := ds.GetCatalog(); ref != nil {
+		dataset["catalog"] = map[string]any{"project": ref.GetProject(), "name": ref.GetName(), "version": ref.GetVersion(), "sha256": ref.GetSha256()}
+	}
 	return map[string]any{
 		"target":     map[string]any{"connector": t.GetConnector(), "model": t.GetModel(), "base_url": t.GetBaseUrl()},
 		"agent":      agentResource(spec),
 		"judge":      spec.GetJudge(),
 		"evaluators": evaluatorRefs(spec.GetEvaluators()),
 		"runs_code":  AgentRun(spec) || runsCode != nil && runsCode(spec.GetEvaluators()),
-		"dataset":    map[string]any{"path": ds.GetPath(), "uri": ds.GetUri(), "inline": ds.GetInline() != nil},
+		"dataset":    dataset,
 		"trials":     int64(spec.GetTrials()),
 		"budget": map[string]any{
 			"max_target_tokens": spec.GetBudget().GetMaxTargetTokens(),
@@ -144,6 +148,15 @@ func TraceResource(t *evalsiv1alpha1.TraceSummary) map[string]any {
 		"service": t.GetService(),
 		"trace":   map[string]any{"id": t.GetTraceId(), "service": t.GetService(), "name": t.GetName()},
 		"labels":  StringMap(t.GetLabels()),
+	}
+}
+
+// DatasetVersionResource uses only immutable publication attributes, so edits
+// to review state cannot remove a dataset's label/ownership access boundary.
+func DatasetVersionResource(c *evalsiv1alpha1.DatasetVersionContent) map[string]any {
+	return map[string]any{
+		"dataset": map[string]any{"name": c.GetName(), "version": c.GetVersion(), "owner": c.GetOwner(), "split": c.GetSplit(), "tags": c.GetTags()},
+		"labels":  StringMap(c.GetLabels()),
 	}
 }
 

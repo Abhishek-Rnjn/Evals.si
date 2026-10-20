@@ -94,11 +94,23 @@ message DatasetSource {
     // trajectories and checks, to re-score with other evaluators without
     // running the target or agent again.
     RunOutputs run = 7;
+    // Server only: an approved immutable dataset version, with an independently
+    // reviewed content pin. The server snapshots its records when admitting a run.
+    DatasetVersionRef catalog = 8;
   }
   // Record field -> source column, for example input -> question.
   map<string, string> mapping = 4;
   // Use only the first N records; 0 means all.
   int32 limit = 5;
+}
+
+message DatasetVersionRef {
+  // Empty uses the run's project; cross-project reads require datasets.read.
+  string project = 1;
+  string name = 2;
+  string version = 3;
+  // Required SHA-256 of the version content, not its mutable review state.
+  string sha256 = 4;
 }
 
 // TraceQuery selects stored traces. Records keep the trace's input, output

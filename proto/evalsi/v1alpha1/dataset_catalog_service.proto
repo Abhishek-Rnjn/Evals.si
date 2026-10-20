@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/failure_service.proto";
+import "evalsi/v1alpha1/record.proto";
+import "evalsi/v1alpha1/run.proto";
+import "evalsi/v1alpha1/trace_service.proto";
+import "google/protobuf/timestamp.proto";
+
+// DatasetCatalogService shares immutable, project-scoped regression suites.
+// Publishing creates a draft; a distinct authenticated principal approves its
+// exact content before runs can use it. Retirement blocks new admissions.
+service DatasetCatalogService {
+  rpc PublishDatasetVersion(PublishDatasetVersionRequest) returns (PublishDatasetVersionResponse);
+  rpc ListDatasetVersions(ListDatasetVersionsRequest) returns (ListDatasetVersionsResponse);
+  rpc GetDatasetVersion(GetDatasetVersionRequest) returns (GetDatasetVersionResponse);
+  rpc ReviewDatasetVersion(ReviewDatasetVersionRequest) returns (ReviewDatasetVersionResponse);
+  rpc ListDatasetVersionEvents(ListDatasetVersionEventsRequest) returns (ListDatasetVersionEventsResponse);
+  rpc DiffDatasetVersions(DiffDatasetVersionsRequest) returns (DiffDatasetVersionsResponse);
+}
+
+enum DatasetVersionState {
+  DATASET_VERSION_STATE_UNSPECIFIED = 0;
+  DATASET_VERSION_STATE_DRAFT = 1;
+  DATASET_VERSION_STATE_APPROVED = 2;
+  // Terminal; the name/version cannot be reused. Existing admitted runs retain
+  // their own record snapshot and can finish/resume.
+  DATASET_VERSION_STATE_RETIRED = 3;
+}
+
+// Entirely immutable after publishing. Its SHA-256 uses domain-separated,
+// deterministic protobuf encoding; portable snapshot JSON has a separate pin.
+message DatasetVersionContent {
+  string project = 1;
+  string name = 2;
+  string version = 3;
+  string owner = 4;
+  string split = 5;
+  repeated string tags = 6;
+  string description = 7;
+  map<string, string> labels = 8;
+  repeated Record records = 9;
+  // Server-owned captured access boundaries for publishing from the failure
+  // inbox. Every read/run also needs traces.read on all these summaries.
+  repeated TraceSummary access_sources = 10;
+}
+
+message DatasetVersion {
+  DatasetVersionContent content = 1;
+  string sha256 = 2;
+  int64 records = 3;
+  DatasetVersionState state = 4;
+  int64 revision = 5;
+  string published_by = 6;
+  google.protobuf.Timestamp published_at = 7;
+  string reviewed_by = 8;
+  google.protobuf.Timestamp reviewed_at = 9;
+  string review_note = 10;
+}
+
+message DatasetVersionEvent {
+  int64 revision = 1;
+  DatasetVersionState state = 2;
+  string actor = 3;
+  string sha256 = 4;
+  google.protobuf.Timestamp time = 5;
+}
+
+message PublishDatasetVersionRequest {
+  DatasetVersionContent content = 1;
+  // Alternative to content.records: explicit approved failure revisions from
+  // this project. Records and access_sources are populated by the server.
+  repeated FailureSelection failures = 2;
+}
+message PublishDatasetVersionResponse {
+  DatasetVersion dataset = 1;
+  DatasetVersionRef reference = 2;
+}
+message ListDatasetVersionsRequest {
+  string project = 1;
+  string name = 2;
+  DatasetVersionState state = 3;
+  string owner = 4;
+  int32 page_size = 5;
+  string page_token = 6;
+}
+message ListDatasetVersionsResponse {
+  // Record payloads are omitted; get a version to inspect its content.
+  repeated DatasetVersion datasets = 1;
+  string next_page_token = 2;
+}
+message GetDatasetVersionRequest {
+  string project = 1;
+  string name = 2;
+  string version = 3;
+}
+message GetDatasetVersionResponse {
+  DatasetVersion dataset = 1;
+  DatasetVersionRef reference = 2;
+}
+message ReviewDatasetVersionRequest {
+  string project = 1;
+  string name = 2;
+  string version = 3;
+  string sha256 = 4;
+  int64 expected_revision = 5;
+  // DRAFT -> APPROVED, or DRAFT/APPROVED -> RETIRED. No reactivation.
+  DatasetVersionState decision = 6;
+  string note = 7;
+}
+message ReviewDatasetVersionResponse {
+  DatasetVersion dataset = 1;
+}
+message ListDatasetVersionEventsRequest {
+  string project = 1;
+  string name = 2;
+  string version = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+message ListDatasetVersionEventsResponse {
+  repeated DatasetVersionEvent events = 1;
+  string next_page_token = 2;
+}
+message DiffDatasetVersionsRequest {
+  string project = 1;
+  string name = 2;
+  string before_version = 3;
+  string after_version = 4;
+  string before_sha256 = 5;
+  string after_sha256 = 6;
+}
+message DatasetRecordChange {
+  string id = 1;
+  repeated string fields = 2;
+}
+message DiffDatasetVersionsResponse {
+  string before_sha256 = 1;
+  string after_sha256 = 2;
+  repeated string added = 3;
+  repeated string removed = 4;
+  repeated DatasetRecordChange changed = 5;
+  int64 unchanged = 6;
+  bool order_changed = 7;
+  repeated string metadata_changed = 8;
+}

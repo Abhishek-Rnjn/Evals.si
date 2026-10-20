@@ -102,7 +102,7 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: migrating: %w", err)
 	}
-	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + sandboxSchema + rewardCacheSchema + annotationSchema + failureSchema + guardrailSchema + webhookSchema + sourceSchema + idempotencySchema + watchPendingSchema); err != nil {
+	if _, err := db.Exec(schema + authSchema + leaseSchema + quotaSchema + sandboxSchema + rewardCacheSchema + annotationSchema + failureSchema + datasetCatalogSchema + guardrailSchema + webhookSchema + sourceSchema + idempotencySchema + watchPendingSchema); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("store: creating schema: %w", err)
 	}

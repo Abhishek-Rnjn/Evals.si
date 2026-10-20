@@ -327,3 +327,33 @@ def test_real_incident_review_snapshot_and_gate_controls(server: str, tmp_path: 
         assert failure["status"] == "FAILURE_STATUS_APPROVED"
         assert len(client.failure_events(result["case_id"])["events"]) == 3
         assert "record" not in client.list_failures(status="FAILURE_STATUS_APPROVED")["failures"][0]
+
+
+def test_shared_dataset_incident_to_candidate_end_to_end(server: str, tmp_path: Path) -> None:
+    """Real trace intake, reviews, CLI download and worker calls; no model credentials."""
+    destination = tmp_path / "shared.json"
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "examples/dataset-catalog/demo.py"),
+            "--server",
+            server,
+            "--output",
+            str(destination),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
+    report = json.loads(run.stdout)
+    assert report["observed_status"] == "RUN_STATUS_FAILED"
+    assert report["candidate_status"] == "RUN_STATUS_SUCCEEDED"
+    assert all(report[k] for k in ("draft_rejected", "wrong_pin_rejected", "retired_rejected"))
+    from evalsi.dataset_snapshots import read_snapshot
+
+    snapshot = read_snapshot(destination)
+    assert snapshot.records[0]["provenance"]["catalog"]["sha256"] == report["sha256"]
+    assert snapshot.records[0]["provenance"]["record_source"]["trace"]["traceId"]
+    assert "synthetic-private-528" not in destination.read_text()

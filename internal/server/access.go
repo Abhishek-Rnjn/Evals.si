@@ -404,6 +404,7 @@ func (g *gate) accessRules() map[string]accessRule {
 		}},
 	}
 	g.addFailureRules(rules)
+	g.addDatasetCatalogRules(rules)
 	return rules
 }
 
@@ -834,6 +835,18 @@ func (g *gate) check(ctx context.Context, chk *authz.Checker, procedure string, 
 // project's traces, an earlier run, or a dataset promoted from another project.
 func (g *gate) datasetTargets(ctx context.Context, project string, src *evalsiv1alpha1.DatasetSource) ([]target, error) {
 	switch s := src.GetSource().(type) {
+	case *evalsiv1alpha1.DatasetSource_Catalog:
+		from := s.Catalog.GetProject()
+		if from == "" {
+			from = project
+		}
+		targets, err := g.datasetVersionTargets(ctx, from, s.Catalog.GetName(), s.Catalog.GetVersion())
+		for i := range targets {
+			if targets[i].action == "" {
+				targets[i].action = "datasets.read"
+			}
+		}
+		return targets, err
 	case *evalsiv1alpha1.DatasetSource_Traces:
 		// Like listing traces: which traces the caller may read depends on
 		// each trace (its service, its labels), so they are checked one by one

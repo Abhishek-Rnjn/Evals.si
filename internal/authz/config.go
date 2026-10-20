@@ -86,13 +86,13 @@ const OwnerRole = "owner"
 // BuiltinRoles ship with Evals.si. Custom roles can inherit them.
 var BuiltinRoles = []Role{
 	{Name: "viewer", Description: "Read the catalog, runs, policies, traces, failure inbox, annotation queues and guardrails.",
-		Permissions: []string{"catalog.read", "runs.read", "policies.read", "traces.read", "failures.read", "annotations.read", "guardrails.read"}},
+		Permissions: []string{"catalog.read", "runs.read", "policies.read", "traces.read", "failures.read", "datasets.read", "annotations.read", "guardrails.read"}},
 	{Name: "runner", Description: "Viewer, plus scoring, checking content against guardrails, and starting, cancelling and resuming runs.",
 		Inherits: []string{"viewer"}, Permissions: []string{"evaluations.run", "guardrails.check", "runs.create", "runs.cancel", "runs.resume"}},
 	{Name: "editor", Description: "Runner, plus writing online policies and guardrails, promoting results into datasets, managing and answering annotation queues, and editing and reviewing failure cases.",
 		Inherits: []string{"runner"}, Permissions: []string{"policies.write", "guardrails.write", "datasets.write", "annotations.manage", "annotations.write", "failures.write", "failures.review"}},
 	{Name: "admin", Description: "Editor, plus the project's API keys, custom roles, bindings, audit log, webhooks, trace sources and failure-case deletion.",
-		Inherits: []string{"editor"}, Permissions: []string{"access.manage", "audit.read", "webhooks.read", "webhooks.write", "sources.read", "sources.write", "runs.delete", "failures.delete"}},
+		Inherits: []string{"editor"}, Permissions: []string{"access.manage", "audit.read", "webhooks.read", "webhooks.write", "sources.read", "sources.write", "runs.delete", "failures.delete", "datasets.review"}},
 	{Name: "annotator", Description: "Answer annotation queues: read queues and their records, take items and submit answers.",
 		Permissions: []string{"annotations.read", "annotations.write"}},
 	{Name: "ingest", Description: "Ingest traces over OTLP and nothing else.",
