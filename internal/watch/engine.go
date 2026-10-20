@@ -62,12 +62,14 @@ type Options struct {
 }
 
 type item struct {
-	record *evalsiv1alpha1.Record
-	info   ingest.TraceInfo
+	record  *evalsiv1alpha1.Record
+	summary *evalsiv1alpha1.TraceSummary
+	info    ingest.TraceInfo
 	// When set, only these policies score the trace (a trace source's list).
 	only    []string
 	stream  string
 	payload []byte
+	pend    store.WatchPending
 }
 
 type point struct {
@@ -350,7 +352,7 @@ func (e *Engine) ingest(ctx context.Context, traces []ingest.Trace, only []strin
 			return err
 		}
 		items[i].payload = payload
-		pending = append(pending, items[i].pending())
+		pending = append(pending, (&items[i]).initPending())
 	}
 	if err := e.store.PutWatchPending(ctx, pending); err != nil {
 		e.StoreErrors.Add(int64(len(items)))
@@ -393,11 +395,65 @@ func (e *Engine) Enqueue(t ingest.Trace) {
 	e.Ingest(t)
 }
 
+func (e *Engine) hasNoPolicies() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return len(e.policies) == 0 && len(e.unavailable) == 0
+}
+
+func (e *Engine) ingestDirect(ctx context.Context, traces []ingest.Trace) {
+	pctx, lease, cancel := e.processingContext(ctx)
+	defer cancel()
+	if pctx.Err() != nil || !e.hasNoPolicies() {
+		e.IngestBatch(traces)
+		return
+	}
+	writes := make([]store.TraceWrite, len(traces))
+	workers := min(len(traces), 8)
+	var wg sync.WaitGroup
+	for w := range workers {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := w; i < len(traces); i += workers {
+				t := e.opts.Redactor.Trace(traces[i])
+				record, info := ingest.ToRecord(t)
+				if info.Project == "" {
+					info.Project = DefaultProject
+				}
+				writes[i] = store.TraceWrite{Summary: Summary(record, info), Record: record}
+			}
+		}(w)
+	}
+	wg.Wait()
+	if err := e.store.PutUnwatchedTraces(pctx, lease, writes); err != nil {
+		if !errors.Is(err, store.ErrWatchStale) {
+			e.StoreErrors.Add(int64(len(writes)))
+			e.log.Error("storing traces", "err", err)
+		}
+		return
+	}
+	// A policy applied while these were stored would never see them: queue
+	// them as well. Storing an unchanged trace again keeps its head.
+	if !e.hasNoPolicies() {
+		e.IngestBatch(traces)
+		return
+	}
+	e.TracesIngested.Add(int64(len(writes)))
+}
+
 // write stores traces handed to Enqueue, a batch per transaction, until ctx
 // is done, then drains what is left.
 func (e *Engine) write(ctx context.Context) {
-	const maxBatch = 500
+	const maxBatch = 2000
 	batch := make([]ingest.Trace, 0, maxBatch)
+	storeBatch := func(b []ingest.Trace) {
+		if !e.follower.Load() && e.hasNoPolicies() {
+			e.ingestDirect(ctx, b)
+			return
+		}
+		e.IngestBatch(b)
+	}
 	for {
 		select {
 		case t := <-e.writes:
@@ -411,7 +467,7 @@ func (e *Engine) write(ctx context.Context) {
 					break drain
 				}
 			}
-			e.IngestBatch(batch)
+			storeBatch(batch)
 		case <-ctx.Done():
 			// From here on Enqueue stores traces itself (the assembler's
 			// last flush comes after this).
@@ -456,6 +512,16 @@ func (e *Engine) Run(ctx context.Context) {
 			e.recoverPending(ctx)
 		case it := <-e.queue:
 			batch = append(batch, it)
+			// Take what is already queued, up to one worker call.
+		drainQueue:
+			for len(batch) < e.opts.BatchSize {
+				select {
+				case next := <-e.queue:
+					batch = append(batch, next)
+				default:
+					break drainQueue
+				}
+			}
 			if len(batch) >= e.opts.BatchSize {
 				flush()
 			}
@@ -505,7 +571,11 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 	}
 	writes := make([]store.WatchTraceWrite, len(batch))
 	for i, it := range batch {
-		writes[i] = store.WatchTraceWrite{Pending: it.pending(), Trace: store.TraceWrite{Summary: Summary(it.record, it.info), Record: it.record}}
+		sum := it.summary
+		if sum == nil {
+			sum = Summary(it.record, it.info)
+		}
+		writes[i] = store.WatchTraceWrite{Pending: it.pending(), Trace: store.TraceWrite{Summary: sum, Record: it.record}}
 	}
 	// Visibility does not depend on policy compilation or source readiness.
 	// The store checks the lease and exact pending revision under its write lock.
@@ -533,10 +603,12 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 		}
 	}
 	if complete && ctx.Err() == nil {
-		for _, it := range current {
-			if err := e.store.AckWatchPending(ctx, lease, it.pending()); err != nil && ctx.Err() == nil {
-				e.log.Error("acknowledging online trace", "err", err)
-			}
+		acks := make([]store.WatchPending, len(current))
+		for i, it := range current {
+			acks[i] = it.pending()
+		}
+		if err := e.store.AckWatchPendingBatch(ctx, lease, acks); err != nil && ctx.Err() == nil {
+			e.log.Error("acknowledging online trace", "err", err)
 		}
 	}
 }

@@ -20,7 +20,11 @@ func openStorage(ctx context.Context, cfg config.Config) (*store.Store, *objstor
 	if pg := cfg.Storage.Postgres; pg != nil {
 		st, err = store.OpenPostgres(ctx, pg.ResolvedDSN())
 	} else {
-		st, err = store.Open(filepath.Join(cfg.DataDir, "evalsi.db"))
+		opts := store.Options{}
+		if sq := cfg.Storage.SQLite; sq != nil {
+			opts.SynchronousNormal = sq.Synchronous == "normal"
+		}
+		st, err = store.OpenWithOptions(filepath.Join(cfg.DataDir, "evalsi.db"), opts)
 	}
 	if err != nil {
 		return nil, nil, err

@@ -389,6 +389,10 @@ def parse_codex(stdout: str) -> Parsed:
     current: Step | None = None
     tin = tout = 0
     seen = False
+    # Codex reports reconnects and transport fallbacks as error events and
+    # items; a turn that then completes recovered from them. A failed turn
+    # stays the run's error.
+    failed = ""
     for e in evs:
         kind = e.get("type")
         if kind == "thread.started":
@@ -421,6 +425,7 @@ def parse_codex(stdout: str) -> Parsed:
                     )
                     run.steps.append(tool)
         elif kind == "turn.completed":
+            run.error = failed
             u = e.get("usage") or {}
             a, b = _int(u.get("input_tokens")), _int(u.get("output_tokens"))
             if a is not None or b is not None:
@@ -431,6 +436,7 @@ def parse_codex(stdout: str) -> Parsed:
             err = e.get("error") or {}
             detail = err.get("message") if isinstance(err, dict) else err
             run.error = str(detail or "the turn failed")
+            failed = failed or run.error
         elif kind == "error":
             run.error = run.error or str(e.get("message", "error"))
     run.answer = message_texts[-1] if message_texts else ""
@@ -459,6 +465,7 @@ def parse_gemini(stdout: str) -> Parsed:  # noqa: PLR0915
     evs = [whole] if isinstance(whole, dict) else events(stdout)
     if len(evs) == 1 and "response" in evs[0] and "type" not in evs[0]:
         only = evs[0]
+        run.session_id = str(only.get("session_id", ""))
         run.answer = _text(only.get("response"))
         stats = only.get("stats") or {}
         total = _stats(stats)
@@ -471,6 +478,7 @@ def parse_gemini(stdout: str) -> Parsed:  # noqa: PLR0915
     calls: list[ToolCall] = []
     tool_steps: dict[str, Step] = {}
     order: list[Step] = []
+    after_result = False
     tin = tout = 0
     seen = False
 
@@ -492,10 +500,14 @@ def parse_gemini(stdout: str) -> Parsed:  # noqa: PLR0915
             run.model = str(e.get("model", ""))
         elif kind == "message":
             if e.get("role") == "assistant":
-                if order:  # text after tool results starts a new model call
+                if order or after_result:  # text after tool calls/results starts a new model call
                     flush()
+                    after_result = False
                 chunks.append(str(e.get("content", "")))
         elif kind == "tool_use":
+            if after_result:  # tool call after prior tool results starts a new model call
+                flush()
+                after_result = False
             ident = str(e.get("tool_id", ""))
             name = str(e.get("tool_name", ""))
             args = _args(e.get("parameters"))
@@ -504,6 +516,7 @@ def parse_gemini(stdout: str) -> Parsed:  # noqa: PLR0915
             tool_steps[ident] = step
             order.append(step)
         elif kind == "tool_result":
+            after_result = True
             done = tool_steps.get(str(e.get("tool_id", "")))
             if done is None:
                 continue

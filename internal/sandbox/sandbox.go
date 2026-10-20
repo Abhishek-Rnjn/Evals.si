@@ -419,7 +419,11 @@ func (s *Sandbox) probeRun(ctx context.Context, d driver) error {
 	var stderr bytes.Buffer
 	res := b.exec(ctx, &Exec{Command: []string{"true"}, Timeout: 30 * time.Second}, io.Discard, &stderr)
 	if res.Outcome != OutcomeExit || res.ExitCode != 0 {
-		return fmt.Errorf("probe failed (%s, exit %d): %s", res.Outcome, res.ExitCode, firstLine(stderr.String()+res.Error))
+		detail := res.Error
+		if detail == "" {
+			detail = stderr.String()
+		}
+		return fmt.Errorf("probe failed (%s, exit %d): %s", res.Outcome, res.ExitCode, firstLine(detail))
 	}
 	if v, ok := d.(verifier); ok {
 		if w := v.verify(ctx, b); w != "" {

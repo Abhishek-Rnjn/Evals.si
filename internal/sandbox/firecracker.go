@@ -60,13 +60,16 @@ type FirecrackerConfig struct {
 	DiskMB int `json:"disk_mb,omitempty"`
 	// Booted VMs kept ready per image, so creating a sandbox skips the boot.
 	WarmPool int `json:"warm_pool,omitempty"`
+	// Cold boots (warm-pool refills and leases the pool cannot serve) that
+	// run at once; default 8. Restores are not limited: callers wait on them.
+	MaxParallelBoots int `json:"max_parallel_boots,omitempty"`
 	// The KVM device; default /dev/kvm.
 	KVMDevice string `json:"kvm_device,omitempty"`
 }
 
 func (c *FirecrackerConfig) validate() error {
-	if c.WarmPool < 0 || c.VCPUs < 0 || c.MemoryMB < 0 || c.DiskMB < 0 {
-		return errors.New("sandbox.firecracker: sizes and warm_pool cannot be negative")
+	if c.WarmPool < 0 || c.VCPUs < 0 || c.MemoryMB < 0 || c.DiskMB < 0 || c.MaxParallelBoots < 0 {
+		return errors.New("sandbox.firecracker: sizes, warm_pool and max_parallel_boots cannot be negative")
 	}
 	if c.Jailer != "" && (c.JailerUID == 0 || c.JailerGID == 0) {
 		return errors.New("sandbox.firecracker: the jailer needs jailer_uid and jailer_gid (non-root)")
@@ -90,10 +93,12 @@ const (
 type firecrackerDriver struct {
 	sb *Sandbox
 
-	mu     sync.Mutex
-	pools  map[string]chan *fcVM
-	disks  map[string]*sync.Mutex
-	closed bool
+	mu       sync.Mutex
+	pools    map[string]chan *fcVM
+	inflight map[string]int
+	disks    map[string]*sync.Mutex
+	bootSem  chan struct{}
+	closed   bool
 	// Refills in flight; shutdown waits for them.
 	refills sync.WaitGroup
 }
@@ -122,7 +127,11 @@ func (d *firecrackerDriver) shutdown() {
 }
 
 func newFirecracker(sb *Sandbox) driver {
-	return &firecrackerDriver{sb: sb, pools: map[string]chan *fcVM{}, disks: map[string]*sync.Mutex{}}
+	boots := 8
+	if c := sb.cfg.Firecracker; c != nil && c.MaxParallelBoots > 0 {
+		boots = c.MaxParallelBoots
+	}
+	return &firecrackerDriver{sb: sb, pools: map[string]chan *fcVM{}, inflight: map[string]int{}, disks: map[string]*sync.Mutex{}, bootSem: make(chan struct{}, boots)}
 }
 
 func (d *firecrackerDriver) cfg() *FirecrackerConfig {
@@ -419,6 +428,17 @@ func linkOrCopy(src, dst string) error {
 	return out.Close()
 }
 
+// place puts a read-only input (kernel, snapshot) into a VM root. The
+// jailer chowns every file in the root to its uid, so a hard link would let
+// one jailed VMM rewrite the file every other VM boots or restores from:
+// under the jailer it is copied.
+func (d *firecrackerDriver) place(ctx context.Context, src, dst string) error {
+	if d.cfg().Jailer != "" {
+		return copyTree(ctx, src, dst)
+	}
+	return linkOrCopy(src, dst)
+}
+
 // start launches firecracker (under the jailer when configured) for a VM
 // root that already holds its files, and waits for the API socket.
 func (d *firecrackerDriver) start(ctx context.Context, vm *fcVM, jailID string) error {
@@ -456,8 +476,10 @@ func (d *firecrackerDriver) start(ctx context.Context, vm *fcVM, jailID string) 
 	go func() { _ = cmd.Wait(); close(vm.exited) }()
 	vm.api = newFCAPI(filepath.Join(vm.dir, fcAPISocket))
 	deadline := time.Now().Add(10 * time.Second)
+	sockPath := filepath.Join(vm.dir, fcAPISocket)
 	for {
-		if _, err := os.Stat(filepath.Join(vm.dir, fcAPISocket)); err == nil {
+		if c, err := dialUnix(ctx, sockPath); err == nil {
+			_ = c.Close()
 			break
 		}
 		select {
@@ -470,13 +492,18 @@ func (d *firecrackerDriver) start(ctx context.Context, vm *fcVM, jailID string) 
 		if time.Now().After(deadline) {
 			return errors.New("firecracker did not open its API socket")
 		}
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(time.Millisecond)
 	}
 	p := new(http.Protocols)
 	p.SetUnencryptedHTTP2(true)
 	uds := filepath.Join(vm.dir, fcVsockSocket)
 	vm.guest = guestv1alpha1connect.NewGuestAgentServiceClient(&http.Client{Transport: &http.Transport{
 		Protocols: p,
+		// Firecracker resets every host vsock connection on PUT
+		// /snapshot/create; a pooled connection from before a snapshot
+		// fails the next call with "unexpected EOF". A connection per call
+		// costs one local CONNECT handshake.
+		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return dialVsock(ctx, uds, 1024)
 		},
@@ -504,12 +531,20 @@ func (vm *fcVM) waitGuest(ctx context.Context) error {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("the guest agent did not answer: %w", err)
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(2 * time.Millisecond)
 	}
 }
 
 // boot starts a fresh VM from the image's base disk.
 func (d *firecrackerDriver) boot(ctx context.Context, img *imageRoot, dir string) (*fcVM, error) {
+	if d.bootSem != nil {
+		select {
+		case d.bootSem <- struct{}{}:
+			defer func() { <-d.bootSem }()
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	c := d.cfg()
 	disk, err := d.baseDisk(ctx, img)
 	if err != nil {
@@ -522,7 +557,7 @@ func (d *firecrackerDriver) boot(ctx context.Context, img *imageRoot, dir string
 	if err := copyTree(ctx, disk, filepath.Join(root, fcRootfs)); err != nil {
 		return nil, err
 	}
-	if err := linkOrCopy(c.Kernel, filepath.Join(root, fcKernel)); err != nil {
+	if err := d.place(ctx, c.Kernel, filepath.Join(root, fcKernel)); err != nil {
 		return nil, fmt.Errorf("guest kernel: %w", err)
 	}
 	vm := &fcVM{d: d, dir: root, image: img}
@@ -568,12 +603,18 @@ func (d *firecrackerDriver) restore(ctx context.Context, from, dir string, img *
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
-	for _, f := range []string{fcRootfs, fcSnapshot, fcMemory} {
-		if err := copyTree(ctx, filepath.Join(from, f), filepath.Join(root, f)); err != nil {
+	if err := copyTree(ctx, filepath.Join(from, fcRootfs), filepath.Join(root, fcRootfs)); err != nil {
+		return nil, err
+	}
+	// Firecracker maps the memory file privately and never writes either
+	// file, and a later snapshot unlinks them first, so restores can share
+	// the inodes.
+	for _, f := range []string{fcSnapshot, fcMemory} {
+		if err := d.place(ctx, filepath.Join(from, f), filepath.Join(root, f)); err != nil {
 			return nil, err
 		}
 	}
-	if err := linkOrCopy(d.cfg().Kernel, filepath.Join(root, fcKernel)); err != nil {
+	if err := d.place(ctx, d.cfg().Kernel, filepath.Join(root, fcKernel)); err != nil {
 		return nil, err
 	}
 	vm := &fcVM{d: d, dir: root, image: img}
@@ -610,19 +651,25 @@ func (d *firecrackerDriver) take(img *imageRoot) *fcVM {
 	if n <= 0 {
 		return nil
 	}
+	key := d.poolKey(img)
 	d.mu.Lock()
 	if d.closed {
 		d.mu.Unlock()
 		return nil
 	}
-	pool, ok := d.pools[d.poolKey(img)]
+	pool, ok := d.pools[key]
 	if !ok {
 		pool = make(chan *fcVM, n)
-		d.pools[d.poolKey(img)] = pool
+		d.pools[key] = pool
 	}
 	d.mu.Unlock()
 	refill := func() {
-		defer d.refills.Done()
+		defer func() {
+			d.mu.Lock()
+			d.inflight[key]--
+			d.mu.Unlock()
+			d.refills.Done()
+		}()
 		dir, err := os.MkdirTemp(d.sb.cfg.WorkDir, "evalsi-warm-")
 		if err != nil {
 			return
@@ -654,11 +701,15 @@ func (d *firecrackerDriver) take(img *imageRoot) *fcVM {
 	}
 	select {
 	case vm := <-pool:
-		d.refills.Add(1)
-		go refill()
+		if len(pool)+d.inflight[key] < n {
+			d.inflight[key]++
+			d.refills.Add(1)
+			go refill()
+		}
 		return vm
 	default:
-		for range n - len(pool) {
+		for range max(0, n-len(pool)-d.inflight[key]) {
+			d.inflight[key]++
 			d.refills.Add(1)
 			go refill()
 		}
@@ -768,7 +819,10 @@ func (vm *fcVM) snapshot(ctx context.Context, dir string) error {
 			return err
 		}
 	}
-	return resume()
+	if err := resume(); err != nil {
+		return err
+	}
+	return vm.waitGuest(ctx)
 }
 
 func (vm *fcVM) kill() {

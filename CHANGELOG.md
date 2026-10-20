@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- `storage.sqlite.synchronous: normal` opts the default SQLite database into `PRAGMA synchronous=NORMAL`: faster writes, but a power loss can drop the last commits (WAL mode never corrupts). The default stays `full`.
+- `sandbox.firecracker.max_parallel_boots` (chart: `firecracker.maxParallelBoots`) limits concurrent cold microVM boots; default 8.
 - **Strict audit mode** (decision 0026). `audit.mode: strict`, the default when authentication is on, writes a change's audit entry before the change and refuses the call (`unavailable`) when the entry cannot be written. Automatic run deletes and archives skip runs they cannot audit. `besteffort` keeps the previous behaviour. Failed writes are counted in `evalsi_audit_write_failures_total`.
 - **Richer audit entries.** Each entry records how the caller authenticated (method, JWT issuer, `jti` and `kid`, API key name, client certificate fingerprint), the caller's groups, and `subject` and `actor`. `audit.reads` records allowed reads of the listed kinds. The server records `config.load` at startup, and `config.reload` when credential grants or judge projects change.
 - **Hash-chained audit log.** Entries carry a sequence number and SHA-256 hashes. `evalsi auth audit verify` (`AuthService.VerifyAuditLog`, `GET /v1alpha1/audit:verify`, owners only) reports the first edited, missing or reordered entry and exits 3 when it finds one.
@@ -50,11 +52,16 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
+- The sandbox image store reuses an unpacked root without asking the registry only for digest-pinned refs; tags are resolved every time.
 - **Authenticated installs now audit strictly by default.** With authentication enabled and no `audit.mode` set, a change whose audit entry cannot be written fails with `unavailable` instead of proceeding. Set `audit.mode: besteffort` to keep the old behaviour. In strict mode, access-management calls write one entry before the change and a detailed one after it.
 - The audit table gains `seq` and `hash` columns, an additive step. Entries written before the upgrade, or by an older release during a rolling upgrade, are not chained; verification counts them separately.
 
 ### Fixed
 
+- `evalsid` Firecracker snapshots (`internal/sandbox/firecracker.go`) now disable HTTP/2 keep-alives on the vsock transport and wait for the guest agent to recover after `resume()`, preventing `unavailable: unexpected EOF` on the first command or file write after `PUT /snapshot/create` on real KVM.
+- `evalsid sandbox probe` (`internal/sandbox/sandbox.go`) now preserves `res.Error` (which carries the `mode: privileged` and `ladder: [pod]` fallback hint when `bwrap` fails with `RTM_NEWADDR: Operation not permitted` on Ubuntu 24.04) instead of truncating at the first newline of `stderr`.
+- `parse_codex` and `parse_gemini` (`python/evalsi-harness/src/evalsi_harness/readers.py`) now handle real `codex 0.163.0` transient reconnect/fallback warnings when `turn.completed` arrives and real `gemini 0.64.0` consecutive `tool_use` turns and `-o json` `session_id` fields.
+- `internal/watch` and `internal/store` now store traces without queuing evaluation work when no online policy exists (`PutUnwatchedTraces`, with the same head, score-binding, retention and ClickHouse publication rules as queued traces), batch pending acknowledgments (`AckWatchPendingBatch`) and chunk ClickHouse legacy-score lookups, restoring `TestLoad` `OTLPIngest` above the 20k spans/s stored target with PR #101/103 durability enabled. `internal/sandbox/firecracker.go` hard-links snapshot files on restore, and copies them and the guest kernel instead when the jailer is configured (it chowns every file in the VM root, so a hard link let a jailed VMM rewrite the shared source) and bounds concurrent cold boots and warm-pool refills.
 - Failure-case edits restore provenance from the captured trace and discard caller-supplied run/trace identities and isolation claims. Approval rejects empty row, tensor and media content, including tensors without data and media without a URI.
 - Snapshot loading rejects metadata remapping that could replace its verified identity and canonicalizes nested object keys before evaluation, keeping structured input and tool-call argument text stable under the same approved pin.
 - CI baseline validation now compares the complete checker configuration and validates each run against its dataset, trials and evaluator coverage. Shared skips, errors, duplicate rows and omitted scores cannot masquerade as complete paired evidence.

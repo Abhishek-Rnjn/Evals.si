@@ -29,6 +29,8 @@ firecracker:
   defaultImage: ""
   # Root disk size per microVM; 0: sandboxd's default.
   diskMB: 0
+  # Cold microVM boots (warm-pool refills) at once; 0: sandboxd's default (8).
+  maxParallelBoots: 0
 
 # The evalsi chart's sandbox certificate (server) and the clients pools
 # admit (its workers' certificate name). These are "<evalsi fullname>-sandbox-tls"

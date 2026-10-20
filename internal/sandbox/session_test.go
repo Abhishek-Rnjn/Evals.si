@@ -452,3 +452,29 @@ func TestExtractTarStaysInside(t *testing.T) {
 		})
 	}
 }
+
+// Only a digest-pinned ref skips the registry: a tag can move.
+func TestImageCacheOnlyPinned(t *testing.T) {
+	st := newImageStore(t.TempDir())
+	root := t.TempDir()
+	pinned := "registry.invalid/img@sha256:" + strings.Repeat("a", 64)
+	tag := "registry.invalid/img:latest"
+	st.remember(true, pinned, &imageRoot{Ref: pinned, Root: root})
+	st.remember(false, tag, &imageRoot{Ref: tag, Root: root})
+	if _, ok := st.byRef[tag]; ok {
+		t.Fatal("a tag was cached")
+	}
+	img, err := st.get(context.Background(), pinned)
+	if err != nil || img.Root != root {
+		t.Fatalf("pinned ref was not served from the cache: %v %v", img, err)
+	}
+	// A removed root is unpacked again rather than served.
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if img, err := st.get(ctx, pinned); err == nil {
+		t.Fatalf("served a removed root: %+v", img)
+	}
+}

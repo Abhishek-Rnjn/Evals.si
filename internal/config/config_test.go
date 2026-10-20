@@ -68,6 +68,7 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"datasets_dir: s3://bucket/datasets":                                             "needs storage.s3",
 		"storage: {postgres: {dsn_env: EVALSI_UNSET_DSN_FOR_TEST}}":                      "storage.postgres",
 		"storage: {clickhouse: {database: x}}":                                           "needs url",
+		"storage: {sqlite: {synchronous: off}}":                                          "must be full or normal",
 		"audit: {mode: strict}":                                                          "needs authentication",
 		"auth: {api_keys: {}}\naudit: {mode: paranoid}":                                  "audit.mode",
 		"auth: {api_keys: {}}\naudit: {reads: [payloads]}":                               "audit.reads",

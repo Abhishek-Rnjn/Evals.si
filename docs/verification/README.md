@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [AKS-2026-10-20.md](AKS-2026-10-20.md) | Live AKS GPU (A100: OpenRLHF 0.11.2, verl 0.9.1, live vLLM token traces, trainer-backed OpenEnv/verifiers/Gymnasium/NeMo Gym with process rewards), real-KVM Firecracker & 5-node microVM pool, `TestLoad` (400k spans, 200k tasks, 4,096 rollouts), M4 zero-downtime rolling upgrade/HA/N-1, multi-service environments, PR #101/103 cluster controls, real Codex/Gemini/pi/OpenCode CLI readers, TraceSources/PITR/redaction/3-node NATS HA, and five bug fixes |
 | [COMPETITOR-BENCHMARKS-2026-10-18.md](COMPETITOR-BENCHMARKS-2026-10-18.md) | 112 correctness-gated local trials across five pinned SDKs, raw data/plots, observed metric-contract differences and explicit hosted/quality limits |
 | [RUNTIME-VERIFICATION-2026-10-18.md](RUNTIME-VERIFICATION-2026-10-18.md) | All 50 remaining-check dispositions, actual hardware/access blockers, strict opt-in real-KVM test, and free local trace-store verification |
 | [EKS-PAUSED-2026-10-18.md](EKS-PAUSED-2026-10-18.md) | Cluster-deletion handoff: disposition of all 49 starting rows, exact unfinished checks, GPU-first resume order, environment reconstruction and evidence/storage caveats; live verification paused |

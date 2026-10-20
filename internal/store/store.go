@@ -87,12 +87,29 @@ type Store struct {
 	traces TraceStore
 }
 
+// Options tune the SQLite database.
+type Options struct {
+	// SynchronousNormal sets PRAGMA synchronous=NORMAL: faster commits, but
+	// a power loss can drop the last ones (WAL mode never corrupts). The
+	// default is FULL.
+	SynchronousNormal bool
+}
+
 // Open opens (creating if needed) the database at path.
 func Open(path string) (*Store, error) {
+	return OpenWithOptions(path, Options{})
+}
+
+// OpenWithOptions is Open with SQLite tuning.
+func OpenWithOptions(path string, opts Options) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)")
+	sync := "FULL"
+	if opts.SynchronousNormal {
+		sync = "NORMAL"
+	}
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=synchronous("+sync+")&_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)")
 	if err != nil {
 		return nil, err
 	}

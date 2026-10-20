@@ -365,3 +365,30 @@ cd "$root" && exec "$exe" --api-sock api.sock
 		t.Fatalf("exec under the jailer: %+v %s", res, out.String())
 	}
 }
+
+// Under the jailer, which chowns the VM root, a kernel or snapshot must not
+// share its inode with the source every other VM uses.
+func TestFirecrackerPlaceCopiesUnderTheJailer(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "vmlinux")
+	if err := os.WriteFile(src, []byte("kernel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for jailer, shared := range map[string]bool{"": true, "/usr/bin/jailer": false} {
+		d := newFirecracker(&Sandbox{cfg: Config{Firecracker: &FirecrackerConfig{Jailer: jailer}}}).(*firecrackerDriver)
+		dst := filepath.Join(t.TempDir(), "vmlinux")
+		if err := d.place(context.Background(), src, dst); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := os.Stat(src)
+		b, _ := os.Stat(dst)
+		// Without the jailer a link is preferred but a copy (another
+		// filesystem) is fine; with it, never a link.
+		if !shared && os.SameFile(a, b) {
+			t.Errorf("jailer %q: the source inode is shared", jailer)
+		}
+		if data, err := os.ReadFile(dst); err != nil || string(data) != "kernel" {
+			t.Errorf("jailer %q: placed %q %v", jailer, data, err)
+		}
+	}
+}

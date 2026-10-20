@@ -23,6 +23,8 @@ data_dir: .evalsi            # SQLite database for runs, traces and policies
 #   s3:                                            # an s3:// datasets_dir
 #     endpoint: s3.us-east-1.amazonaws.com         # or minio:9000 with insecure and path_style
 #     region: us-east-1                            # credentials: the AWS chain (IRSA, ...)
+#   sqlite:                                        # the default database under data_dir
+#     synchronous: normal                          # faster writes; a power loss can drop the last commits (default: full)
 
 # Several replicas and worker processes (Kubernetes): work goes through NATS
 # JetStream queues per pool, served by `evalsid worker --pools ...`. API

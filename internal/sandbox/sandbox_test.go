@@ -272,4 +272,18 @@ func TestBwrapFailureNamesTheFallback(t *testing.T) {
 	if strings.Contains(res.Error, "mode: privileged") {
 		t.Errorf("unrelated failure got a hint: %q", res.Error)
 	}
+	if runtime.GOOS == "linux" {
+		fake := filepath.Join(t.TempDir(), "bwrap")
+		if err := os.WriteFile(fake, []byte("#!/bin/sh\necho 'bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted' >&2\nexit 1\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		s, err := New(Config{Ladder: []string{"bwrap"}, BwrapPath: fake, WorkDir: t.TempDir(), CacheDir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		st := s.Probe(context.Background())[0]
+		if st.Available || !strings.Contains(st.Reason, "mode: privileged") || !strings.Contains(st.Reason, "ladder: [pod]") {
+			t.Fatalf("probe dropped bwrap hint: %+v", st)
+		}
+	}
 }
