@@ -78,7 +78,7 @@ The second answer cites passage `[4]`, but only two passages were retrieved. Add
 
 For the unreleased setup commands and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
 For unreleased dataset version review and digest-pinned runs, see [dataset snapshots](docs/guides/dataset-snapshots.md).
-Turn production incidents into reviewed regression cases with the unreleased [failure inbox](docs/guides/failure-inbox.md), then share [approved immutable dataset versions](docs/guides/dataset-catalog.md) and pin them in server runs.
+Turn production incidents into reviewed regression cases with the unreleased [failure inbox](docs/guides/failure-inbox.md), then share [approved immutable dataset versions](docs/guides/dataset-catalog.md) and pin them in server runs. Compare a candidate with a reviewed baseline using [enforced release decisions](docs/guides/release-decisions.md).
 
 Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
 

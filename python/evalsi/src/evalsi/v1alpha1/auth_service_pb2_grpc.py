@@ -113,6 +113,11 @@ class AuthServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.ListAuditEventsRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.ListAuditEventsResponse.FromString,
                 _registered_method=True)
+        self.VerifyAuditLog = channel.unary_unary(
+                '/evalsi.v1alpha1.AuthService/VerifyAuditLog',
+                request_serializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.VerifyAuditLogRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.VerifyAuditLogResponse.FromString,
+                _registered_method=True)
 
 
 class AuthServiceServicer:
@@ -220,6 +225,14 @@ class AuthServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def VerifyAuditLog(self, request, context):
+        """Checks the audit log's hash chain and reports the first break. Owners
+        only: it reads every project's entries.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AuthServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -297,6 +310,11 @@ def add_AuthServiceServicer_to_server(servicer, server):
                     servicer.ListAuditEvents,
                     request_deserializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.ListAuditEventsRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.ListAuditEventsResponse.SerializeToString,
+            ),
+            'VerifyAuditLog': grpc.unary_unary_rpc_method_handler(
+                    servicer.VerifyAuditLog,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.VerifyAuditLogRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_auth__service__pb2.VerifyAuditLogResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -708,6 +726,33 @@ class AuthService:
             '/evalsi.v1alpha1.AuthService/ListAuditEvents',
             evalsi_dot_v1alpha1_dot_auth__service__pb2.ListAuditEventsRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_auth__service__pb2.ListAuditEventsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def VerifyAuditLog(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.AuthService/VerifyAuditLog',
+            evalsi_dot_v1alpha1_dot_auth__service__pb2.VerifyAuditLogRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_auth__service__pb2.VerifyAuditLogResponse.FromString,
             options,
             channel_credentials,
             insecure,

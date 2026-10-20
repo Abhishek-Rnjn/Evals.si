@@ -203,7 +203,9 @@ func (a *Authenticator) Authenticate(r *http.Request) Result {
 		}
 		claims, prov, err := a.jwt.verify(ctx, token)
 		if err == nil {
-			return Result{Principal: prov.principal(claims)}
+			p := prov.principal(claims)
+			p.TokenKeyID = tokenKeyID(token)
+			return Result{Principal: p}
 		}
 		if modeOf(a.cfg.JWT.Mode) == ModePermissive {
 			p := Anonymous(MethodJWT)
@@ -316,7 +318,9 @@ func (a *Authenticator) clientCert(r *http.Request) *Principal {
 }
 
 func certPrincipal(cert *x509.Certificate) *Principal {
-	p := &Principal{Kind: KindService, Method: MethodMTLS, Provider: "mtls", Name: cert.Subject.CommonName}
+	sum := sha256.Sum256(cert.Raw)
+	p := &Principal{Kind: KindService, Method: MethodMTLS, Provider: "mtls", Name: cert.Subject.CommonName,
+		CertFingerprint: hex.EncodeToString(sum[:])}
 	for _, u := range cert.URIs {
 		if u.Scheme == "spiffe" {
 			p.Subject = u.String()

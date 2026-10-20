@@ -1,0 +1,190 @@
+syntax = "proto3";
+package evalsi.v1alpha1;
+
+import "evalsi/v1alpha1/dataset_catalog_service.proto";
+import "evalsi/v1alpha1/evaluator.proto";
+import "evalsi/v1alpha1/run.proto";
+import "google/protobuf/timestamp.proto";
+
+// Release decisions evaluate explicit baseline/candidate evidence under a pinned
+// policy. They do not deploy software or assert that caller-declared commits ran.
+service ReleaseService {
+  rpc InspectReleasePolicy(InspectReleasePolicyRequest) returns (InspectReleasePolicyResponse);
+  rpc GetReleaseRunEvidence(GetReleaseRunEvidenceRequest) returns (GetReleaseRunEvidenceResponse);
+  rpc CreateReleaseDecision(CreateReleaseDecisionRequest) returns (CreateReleaseDecisionResponse);
+  rpc GetReleaseDecision(GetReleaseDecisionRequest) returns (GetReleaseDecisionResponse);
+  rpc ListReleaseDecisions(ListReleaseDecisionsRequest) returns (ListReleaseDecisionsResponse);
+}
+
+enum ReleaseOutcome {
+  RELEASE_OUTCOME_UNSPECIFIED = 0;
+  RELEASE_OUTCOME_PASS = 1;
+  RELEASE_OUTCOME_BLOCK = 2;
+  RELEASE_OUTCOME_INSUFFICIENT = 3;
+}
+enum MetricDirection {
+  METRIC_DIRECTION_UNSPECIFIED = 0;
+  METRIC_DIRECTION_HIGHER = 1;
+  METRIC_DIRECTION_LOWER = 2;
+}
+message ReleaseMetricRule {
+  string metric = 1;
+  MetricDirection direction = 2;
+  // Maximum tolerated loss. Uses the upper paired confidence bound, not just
+  // the observed mean. Omit for absolute/critical-only checks.
+  optional double max_regression = 3;
+  optional double min_mean = 4;
+  optional double max_mean = 5;
+  // Every trial of each selected case must satisfy these. Empty IDs selects
+  // every case. Missing selected cases make the decision insufficient.
+  optional double min_case = 6;
+  optional double max_case = 7;
+  repeated string case_ids = 8;
+}
+message ReleasePolicy {
+  string name = 1;
+  string version = 2;
+  DatasetVersionRef dataset = 3;
+  // Independent records, not trials; at least two are required.
+  int32 min_records = 4;
+  // Defaults to 0.95.
+  double confidence_level = 5;
+  repeated ReleaseMetricRule rules = 6;
+}
+message ReleaseRunEvidenceRef {
+  string run_id = 1;
+  string sha256 = 2;
+  // Must equal the run's agent.commit label. This is a caller declaration,
+  // not a cryptographically attested execution/SCM identity.
+  string commit = 3;
+}
+message ReleaseRunEvidence {
+  ReleaseRunEvidenceRef reference = 1;
+  string project = 2;
+  RunStatus status = 3;
+  DatasetVersionRef dataset = 4;
+  string evaluation_contract_sha256 = 5;
+  string spec_sha256 = 6;
+  int64 records = 7;
+  int32 trials = 8;
+  bool imported = 9;
+  bool archived = 10;
+  repeated ReleaseEvaluatorIdentity evaluators = 11;
+  string server_version = 12;
+  string model_connector = 13;
+  string model = 14;
+  string agent_kind = 15;
+  string model_settings_sha256 = 16;
+  string environment_image = 17;
+  string environment_sha256 = 18;
+  string checker_sha256 = 19;
+}
+message ReleaseCaseChange {
+  string record_id = 1;
+  int32 trial = 2;
+  double baseline = 3;
+  double candidate = 4;
+  bool critical_failure = 5;
+}
+message ReleaseMetricDecision {
+  string metric = 1;
+  int64 paired_records = 2;
+  optional double baseline_mean = 3;
+  optional double candidate_mean = 4;
+  // Positive is worse for either metric direction.
+  optional double mean_regression = 5;
+  optional double regression_low = 6;
+  optional double regression_high = 7;
+  ReleaseOutcome outcome = 8;
+  repeated string reasons = 9;
+  // Includes per-trial regressions and critical failures, IDs/values only.
+  repeated ReleaseCaseChange changes = 10;
+  int64 changes_omitted = 11;
+}
+message ReleaseDecision {
+  string id = 1;
+  string project = 2;
+  ReleasePolicy policy = 3;
+  string policy_sha256 = 4;
+  ReleaseRunEvidence baseline = 5;
+  ReleaseRunEvidence candidate = 6;
+  ReleaseOutcome outcome = 7;
+  repeated string reasons = 8;
+  repeated ReleaseMetricDecision metrics = 9;
+  string created_by = 10;
+  google.protobuf.Timestamp created_at = 11;
+  // Hash of this message with sha256 cleared, domain evalsi.release-decision/v1.
+  string sha256 = 12;
+  string dataset_reviewed_by = 13;
+  google.protobuf.Timestamp dataset_reviewed_at = 14;
+}
+message GetReleaseRunEvidenceRequest {
+  string run_id = 1;
+}
+message GetReleaseRunEvidenceResponse {
+  ReleaseRunEvidence evidence = 1;
+}
+message CreateReleaseDecisionRequest {
+  string id = 1;
+  string project = 2;
+  ReleasePolicy policy = 3;
+  // Pin the reviewed policy, independently from the run evidence pins.
+  string policy_sha256 = 4;
+  ReleaseRunEvidenceRef baseline = 5;
+  ReleaseRunEvidenceRef candidate = 6;
+}
+message CreateReleaseDecisionResponse {
+  ReleaseDecision decision = 1;
+}
+message GetReleaseDecisionRequest {
+  string project = 1;
+  string id = 2;
+}
+message GetReleaseDecisionResponse {
+  ReleaseDecision decision = 1;
+}
+message ListReleaseDecisionsRequest {
+  string project = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+message ListReleaseDecisionsResponse {
+  // Summaries omit metrics and policy rules; get the full decision to verify its pin.
+  repeated ReleaseDecision decisions = 1;
+  string next_page_token = 2;
+}
+// Stored authorization snapshots retain source access boundaries independently
+// of run retention. Never returned as a release report.
+message StoredReleaseDecision {
+  ReleaseDecision decision = 1;
+  Run baseline_access = 2;
+  Run candidate_access = 3;
+  DatasetVersionContent dataset_access = 4;
+  ReleaseRunAccessAttributes baseline_attributes = 5;
+  ReleaseRunAccessAttributes candidate_attributes = 6;
+}
+
+message InspectReleasePolicyRequest {
+  ReleasePolicy policy = 1;
+}
+message InspectReleasePolicyResponse {
+  string sha256 = 1;
+}
+
+// Identity metadata only: parameters, prompts and environment values remain
+// behind their source run's access permissions, represented here by hashes.
+message ReleaseEvaluatorIdentity {
+  string name = 1;
+  string ref = 2;
+  string params_sha256 = 3;
+  string judge = 4;
+  string judge_settings_sha256 = 5;
+  Scope scope = 6;
+}
+
+// Effective catalog/default-dependent attributes captured at decision creation.
+// Saved reads use current permissions against these values, never re-resolve them.
+message ReleaseRunAccessAttributes {
+  string judge = 1;
+  bool runs_code = 2;
+}

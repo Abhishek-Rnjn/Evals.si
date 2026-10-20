@@ -910,6 +910,18 @@ class AuditEvent(_message.Message):
     REQUEST_ID_FIELD_NUMBER: _builtins.int
     SOURCE_FIELD_NUMBER: _builtins.int
     DETAIL_FIELD_NUMBER: _builtins.int
+    AUTH_METHOD_FIELD_NUMBER: _builtins.int
+    ISSUER_FIELD_NUMBER: _builtins.int
+    TOKEN_ID_FIELD_NUMBER: _builtins.int
+    KEY_ID_FIELD_NUMBER: _builtins.int
+    API_KEY_FIELD_NUMBER: _builtins.int
+    CERT_FINGERPRINT_FIELD_NUMBER: _builtins.int
+    GROUPS_FIELD_NUMBER: _builtins.int
+    SUBJECT_FIELD_NUMBER: _builtins.int
+    ACTOR_FIELD_NUMBER: _builtins.int
+    SEQUENCE_FIELD_NUMBER: _builtins.int
+    PREV_HASH_FIELD_NUMBER: _builtins.int
+    HASH_FIELD_NUMBER: _builtins.int
     id: _builtins.int
     principal: _builtins.str
     """Principal id, for example "user:corp/1234"."""
@@ -927,8 +939,38 @@ class AuditEvent(_message.Message):
     """The peer address."""
     detail: _builtins.str
     """Extra detail, for example a role's old and new definitions as JSON."""
+    auth_method: _builtins.str
+    """How the principal authenticated: jwt, apikey, mtls or proxy. Empty for
+    the system's own entries (decision 0026).
+    """
+    issuer: _builtins.str
+    """For a JWT: its issuer, token ID (jti) and signing key ID (kid), never
+    the token.
+    """
+    token_id: _builtins.str
+    key_id: _builtins.str
+    api_key: _builtins.str
+    """For an API key: its name, never the key or its hash."""
+    cert_fingerprint: _builtins.str
+    """For a client certificate: the SHA-256 fingerprint of the leaf."""
+    subject: _builtins.str
+    """Whose authority the call carried, and who made it (RFC 8693 sub and
+    act). Equal until delegation is built.
+    """
+    actor: _builtins.str
+    sequence: _builtins.int
+    """Position in the hash chain, from 1; 0 for entries written before it."""
+    prev_hash: _builtins.str
+    """SHA-256 (hex) of the previous entry, and of this entry's stored content
+    (everything above, with hash empty and id 0).
+    """
+    hash: _builtins.str
     @_builtins.property
     def time(self) -> _timestamp_pb2.Timestamp: ...
+    @_builtins.property
+    def groups(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """The principal's groups when the call was decided."""
+
     def __init__(
         self,
         *,
@@ -944,13 +986,79 @@ class AuditEvent(_message.Message):
         request_id: _builtins.str = ...,
         source: _builtins.str = ...,
         detail: _builtins.str = ...,
+        auth_method: _builtins.str = ...,
+        issuer: _builtins.str = ...,
+        token_id: _builtins.str = ...,
+        key_id: _builtins.str = ...,
+        api_key: _builtins.str = ...,
+        cert_fingerprint: _builtins.str = ...,
+        groups: _abc.Iterable[_builtins.str] | None = ...,
+        subject: _builtins.str = ...,
+        actor: _builtins.str = ...,
+        sequence: _builtins.int = ...,
+        prev_hash: _builtins.str = ...,
+        hash: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["time", b"time"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["action", b"action", "allowed", b"allowed", "detail", b"detail", "id", b"id", "principal", b"principal", "procedure", b"procedure", "project", b"project", "reason", b"reason", "request_id", b"request_id", "resource", b"resource", "source", b"source", "time", b"time"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["action", b"action", "actor", b"actor", "allowed", b"allowed", "api_key", b"api_key", "auth_method", b"auth_method", "cert_fingerprint", b"cert_fingerprint", "detail", b"detail", "groups", b"groups", "hash", b"hash", "id", b"id", "issuer", b"issuer", "key_id", b"key_id", "prev_hash", b"prev_hash", "principal", b"principal", "procedure", b"procedure", "project", b"project", "reason", b"reason", "request_id", b"request_id", "resource", b"resource", "sequence", b"sequence", "source", b"source", "subject", b"subject", "time", b"time", "token_id", b"token_id"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___AuditEvent: _TypeAlias = AuditEvent  # noqa: Y015
+
+@_typing.final
+class VerifyAuditLogRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+Global___VerifyAuditLogRequest: _TypeAlias = VerifyAuditLogRequest  # noqa: Y015
+
+@_typing.final
+class VerifyAuditLogResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    OK_FIELD_NUMBER: _builtins.int
+    CHECKED_FIELD_NUMBER: _builtins.int
+    FIRST_SEQUENCE_FIELD_NUMBER: _builtins.int
+    LAST_SEQUENCE_FIELD_NUMBER: _builtins.int
+    LAST_HASH_FIELD_NUMBER: _builtins.int
+    BREAK_SEQUENCE_FIELD_NUMBER: _builtins.int
+    PROBLEM_FIELD_NUMBER: _builtins.int
+    UNCHAINED_FIELD_NUMBER: _builtins.int
+    ok: _builtins.bool
+    """Whether every chained entry checked out."""
+    checked: _builtins.int
+    """Chained entries checked, and the first and last sequence numbers seen."""
+    first_sequence: _builtins.int
+    last_sequence: _builtins.int
+    last_hash: _builtins.str
+    """The newest entry's hash: keep it off the server to detect later
+    truncation of the log.
+    """
+    break_sequence: _builtins.int
+    """When not ok: the sequence (or entry id) where the chain breaks, and why."""
+    problem: _builtins.str
+    unchained: _builtins.int
+    """Entries written before the chain began (sequence 0)."""
+    def __init__(
+        self,
+        *,
+        ok: _builtins.bool = ...,
+        checked: _builtins.int = ...,
+        first_sequence: _builtins.int = ...,
+        last_sequence: _builtins.int = ...,
+        last_hash: _builtins.str = ...,
+        break_sequence: _builtins.int = ...,
+        problem: _builtins.str = ...,
+        unchained: _builtins.int = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["break_sequence", b"break_sequence", "checked", b"checked", "first_sequence", b"first_sequence", "last_hash", b"last_hash", "last_sequence", b"last_sequence", "ok", b"ok", "problem", b"problem", "unchained", b"unchained"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___VerifyAuditLogResponse: _TypeAlias = VerifyAuditLogResponse  # noqa: Y015
 
 @_typing.final
 class ListAuditEventsRequest(_message.Message):

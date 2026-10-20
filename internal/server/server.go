@@ -164,6 +164,9 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		return err
 	}
 	auditor := authz.NewAuditor(st, exports.Audit, log)
+	auditor.SetStrict(cfg.Audit.StrictMode(cfg.AuthEnabled()))
+	auditor.SetReads(cfg.Audit.Reads)
+	auditConfig(ctx, auditor, "config.load", map[string]any{"sections": configSections(cfg)})
 	creds.OnDenied(func(ctx context.Context, d credentials.Denial) { auditDenial(ctx, auditor, d) })
 	hooks := webhooks.New(st, webhooks.Options{
 		SSRFGuard: cfg.Webhooks.SSRFGuard, AllowHosts: cfg.Webhooks.AllowHosts,
@@ -173,6 +176,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	var watcher *watch.Engine     // created below; runs read its policies' score names
 	var sourceMgr *source.Manager // likewise; pulled traces' scores are written back through it
 	runManager, err := runs.New(ctx, st, worker, svc, runs.Options{
+		Judges:        cfg.WorkerJudges(),
 		DatasetsDir:   cfg.DatasetsDir,
 		Objects:       objects,
 		MaxConcurrent: cfg.Runs.MaxConcurrent,
@@ -188,7 +192,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		AdoptInterval: optDuration(cfg.Runs.AdoptInterval),
 		Quotas:        cfg.Quotas,
 		Retention:     cfg.Runs,
-		Audit:         auditor.Record,
+		Audit:         auditor.Append,
 		TraceScores: func(policy string, results []*evalsiv1alpha1.EvaluationResult) map[string]float64 {
 			return watcher.TraceScores(policy, results)
 		},
@@ -292,7 +296,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	go func() { defer wg.Done(); pruneIdempotency(bg, st, log) }()
 	if cfg.Reload != nil {
 		wg.Add(1)
-		go func() { defer wg.Done(); reloadCredentials(bg, cfg, creds, watcher, log) }()
+		go func() { defer wg.Done(); reloadCredentials(bg, cfg, creds, watcher, auditor, log) }()
 	}
 	defer func() {
 		close(stopAssembler) // flushes buffered traces into the engine
@@ -593,6 +597,7 @@ func Handler(d deps) http.Handler {
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewCatalogServiceHandler(d.svc, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRewardServiceHandler(d.rewards, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewRunServiceHandler(d.runs, gated) },
+		func() (string, http.Handler) { return evalsiv1alpha1connect.NewReleaseServiceHandler(d.runs, gated) },
 		func() (string, http.Handler) { return evalsiv1alpha1connect.NewMonitorServiceHandler(d.watcher, gated) },
 		func() (string, http.Handler) {
 			return evalsiv1alpha1connect.NewTraceServiceHandler(watch.Traces{Store: d.store}, gated)
@@ -634,6 +639,7 @@ func Handler(d deps) http.Handler {
 		evalsiv1alpha1connect.CatalogServiceName,
 		evalsiv1alpha1connect.RewardServiceName,
 		evalsiv1alpha1connect.RunServiceName,
+		evalsiv1alpha1connect.ReleaseServiceName,
 		evalsiv1alpha1connect.MonitorServiceName,
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.FailureServiceName,

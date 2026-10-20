@@ -185,3 +185,11 @@ If your datasets, judges and keys live on an Evals.si server, run the same spec 
 - **Gate a deploy, not just a PR:** `evalsi gate` runs a spec for one release against a candidate and exits 0, 3 or 1. See [integrating an agent harness](integrate-an-agent-harness.md#3-gate-deploys).
 - **Watch production:** the same evaluators score live traces from LangGraph, CrewAI, the OpenAI Agents SDK and others, so a metric means the same thing in CI and in production. See [trace sources](trace-sources.md) and [agent frameworks](agent-frameworks.md).
 - **Go deeper on grading:** tool-call accuracy, trajectory match, loop detection, policy violations and a judge's review of the diff are in [agent runs](agent-runs.md#grading).
+
+## Enforce a baseline-aware release decision
+
+The unreleased [release-decision workflow](release-decisions.md) extends the
+maintained Action with server-backed catalog pins, reviewed baseline/policy
+identities, paired regression and critical-case gates, and a distinct
+insufficient-evidence outcome. Published 0.3.0 and embedded baseline comparisons
+retain their documented behavior.

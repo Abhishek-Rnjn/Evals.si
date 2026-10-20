@@ -69,6 +69,9 @@ func TestLoadRejectsMistakes(t *testing.T) {
 		"storage: {postgres: {dsn_env: EVALSI_UNSET_DSN_FOR_TEST}}":                      "storage.postgres",
 		"storage: {clickhouse: {database: x}}":                                           "needs url",
 		"storage: {sqlite: {synchronous: off}}":                                          "must be full or normal",
+		"audit: {mode: strict}":                                                          "needs authentication",
+		"auth: {api_keys: {}}\naudit: {mode: paranoid}":                                  "audit.mode",
+		"auth: {api_keys: {}}\naudit: {reads: [payloads]}":                               "audit.reads",
 	} {
 		if _, err := Load(write(t, body)); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Load(%q) error = %v, want it to mention %q", body, err, want)

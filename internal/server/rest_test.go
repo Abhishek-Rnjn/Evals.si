@@ -31,6 +31,7 @@ func TestRESTRoutes(t *testing.T) {
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.FailureServiceName,
 		evalsiv1alpha1connect.DatasetCatalogServiceName,
+		evalsiv1alpha1connect.ReleaseServiceName,
 	} {
 		handlers[name] = echo
 	}
@@ -41,6 +42,11 @@ func TestRESTRoutes(t *testing.T) {
 	cases := []struct {
 		method, path, body, rpc, field, value string
 	}{
+		{"POST", "/v1alpha1/release-policies:inspect", `{"policy":{"name":"release"}}`, "ReleaseService/InspectReleasePolicy", "", ""},
+		{"GET", "/v1alpha1/runs/run-a/release-evidence", "", "ReleaseService/GetReleaseRunEvidence", "runId", "run-a"},
+		{"POST", "/v1alpha1/release-decisions", `{"id":"v1"}`, "ReleaseService/CreateReleaseDecision", "id", "v1"},
+		{"GET", "/v1alpha1/release-decisions/v1?project=p", "", "ReleaseService/GetReleaseDecision", "id", "v1"},
+		{"GET", "/v1alpha1/release-decisions?project=p", "", "ReleaseService/ListReleaseDecisions", "project", "p"},
 		{"POST", "/v1alpha1/dataset-versions", `{"content":{"name":"refunds"}}`, "DatasetCatalogService/PublishDatasetVersion", "", ""},
 		{"GET", "/v1alpha1/dataset-versions?project=p", "", "DatasetCatalogService/ListDatasetVersions", "project", "p"},
 		{"GET", "/v1alpha1/dataset-versions/refunds/v1", "", "DatasetCatalogService/GetDatasetVersion", "version", "v1"},

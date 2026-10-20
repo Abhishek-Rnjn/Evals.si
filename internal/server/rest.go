@@ -55,6 +55,7 @@ import (
 //	POST   /v1alpha1/bindings                  AuthService.CreateBinding (body: the binding)
 //	POST   /v1alpha1/bindings:delete           AuthService.DeleteBinding (body: the binding)
 //	GET    /v1alpha1/audit                     AuthService.ListAuditEvents
+//	GET    /v1alpha1/audit:verify              AuthService.VerifyAuditLog
 //	POST   /v1alpha1/queues                    AnnotationService.CreateQueue (body: the queue)
 //	GET    /v1alpha1/queues                    AnnotationService.ListQueues (?project=)
 //	GET    /v1alpha1/queues/{name}             AnnotationService.GetQueue (?project=)
@@ -121,6 +122,11 @@ func restRules() []*annotations.HttpRule {
 		rule("MonitorService.ListPolicies", http.MethodGet, v+"/policies", ""),
 		rule("MonitorService.DeletePolicy", http.MethodDelete, v+"/policies/{name}", ""),
 		rule("MonitorService.GetPolicyStats", http.MethodGet, v+"/policies/{name}/stats", ""),
+		rule("ReleaseService.InspectReleasePolicy", http.MethodPost, v+"/release-policies:inspect", "*"),
+		rule("ReleaseService.GetReleaseRunEvidence", http.MethodGet, v+"/runs/{run_id}/release-evidence", ""),
+		rule("ReleaseService.CreateReleaseDecision", http.MethodPost, v+"/release-decisions", "*"),
+		rule("ReleaseService.GetReleaseDecision", http.MethodGet, v+"/release-decisions/{id}", ""),
+		rule("ReleaseService.ListReleaseDecisions", http.MethodGet, v+"/release-decisions", ""),
 		rule("DatasetCatalogService.PublishDatasetVersion", http.MethodPost, v+"/dataset-versions", "*"),
 		rule("DatasetCatalogService.ListDatasetVersions", http.MethodGet, v+"/dataset-versions", ""),
 		rule("DatasetCatalogService.GetDatasetVersion", http.MethodGet, v+"/dataset-versions/{name}/{version}", ""),
@@ -154,6 +160,7 @@ func restRules() []*annotations.HttpRule {
 		rule("AuthService.CreateBinding", http.MethodPost, v+"/bindings", "binding"),
 		rule("AuthService.DeleteBinding", http.MethodPost, v+"/bindings:delete", "binding"),
 		rule("AuthService.ListAuditEvents", http.MethodGet, v+"/audit", ""),
+		rule("AuthService.VerifyAuditLog", http.MethodGet, v+"/audit:verify", ""),
 		rule("AnnotationService.CreateQueue", http.MethodPost, v+"/queues", "queue"),
 		rule("AnnotationService.ListQueues", http.MethodGet, v+"/queues", ""),
 		rule("AnnotationService.GetQueue", http.MethodGet, v+"/queues/{name}", ""),
@@ -196,6 +203,7 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		evalsiv1alpha1connect.TraceServiceName,
 		evalsiv1alpha1connect.FailureServiceName,
 		evalsiv1alpha1connect.DatasetCatalogServiceName,
+		evalsiv1alpha1connect.ReleaseServiceName,
 		evalsiv1alpha1connect.AuthServiceName,
 		evalsiv1alpha1connect.AnnotationServiceName,
 		evalsiv1alpha1connect.GuardrailServiceName,

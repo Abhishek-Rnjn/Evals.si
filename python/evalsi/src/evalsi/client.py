@@ -456,6 +456,63 @@ class Client:
         body = {"name": name, "project": project, "candidate": spec, "labels": labels or {}}
         return self.call("RunService", "CreateShadowReplay", body)
 
+    # --- release evidence and immutable decisions ---
+
+    def inspect_release_policy(self, policy: dict[str, Any]) -> str:
+        result = self.call("ReleaseService", "InspectReleasePolicy", {"policy": policy})
+        digest: str = result["sha256"]
+        return digest
+
+    def release_run_evidence(self, run_id: str) -> dict[str, Any]:
+        result = self.call("ReleaseService", "GetReleaseRunEvidence", {"runId": run_id})
+        evidence: dict[str, Any] = result["evidence"]
+        return evidence
+
+    def create_release_decision(
+        self,
+        decision_id: str,
+        *,
+        project: str,
+        policy: dict[str, Any],
+        policy_sha256: str,
+        baseline: dict[str, str],
+        candidate: dict[str, str],
+    ) -> dict[str, Any]:
+        result = self.call(
+            "ReleaseService",
+            "CreateReleaseDecision",
+            {
+                "id": decision_id,
+                "project": project,
+                "policy": policy,
+                "policySha256": policy_sha256,
+                "baseline": baseline,
+                "candidate": candidate,
+            },
+        )
+        decision: dict[str, Any] = result["decision"]
+        return decision
+
+    def get_release_decision(self, decision_id: str, *, project: str = "") -> dict[str, Any]:
+        result = self.call(
+            "ReleaseService", "GetReleaseDecision", {"id": decision_id, "project": project}
+        )
+        decision: dict[str, Any] = result["decision"]
+        return decision
+
+    def list_release_decisions(
+        self, *, project: str = "", page_size: int = 20, page_token: str = ""
+    ) -> dict[str, Any]:
+        return self.call(
+            "ReleaseService",
+            "ListReleaseDecisions",
+            {
+                "project": project,
+                "pageSize": page_size,
+                "pageToken": page_token,
+            },
+        )
+
     # --- shared dataset catalog ---
 
     def publish_dataset_version(

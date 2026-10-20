@@ -17,7 +17,7 @@ it comes from, and their acceptance criteria apply. Nothing here is a new commit
 Not repeated below: [#117](https://github.com/Abhishek-Rnjn/Evals.si/pull/117)
 (shared dataset catalog and pinned regression runs, PROD-04; merged) and
 [#118](https://github.com/Abhishek-Rnjn/Evals.si/pull/118) (production failures to
-baseline-aware release decisions, PROD-02/PROD-03; in flight).
+baseline-aware release decisions, PROD-02/PROD-03/ENT-08 foundation; merged).
 
 ## Application-team product work
 
@@ -40,15 +40,15 @@ baseline-aware release decisions, PROD-02/PROD-03; in flight).
 
 | ID | Priority | Item | What is left | Kind | Source |
 |---|---|---|---|---|---|
-| ENT-01 | P0 pilot | Private-deployment reference architectures | Published supported topology, outbound dependencies, capacity limits and install diagnostics; disconnected operation exercised where sold | Infra, People | Roadmap, strategy |
-| ENT-02 | P0 pilot | Identity administration | Role, isolation and revocation tests across CLI, UI, API and service identities with target IdPs; UI administration; decide native SCIM/SAML only from a recorded requirement | Code, Infra | Roadmap, strategy |
-| ENT-03 | P0 pilot | Strict audit (ADR 0026) | Audit currently fails open. Build a strict mode where an audit or outbox failure cannot commit a rejected mutation, with a tested contract for RPC, REST, MCP, async jobs and service-owned writes | Code | Roadmap, LEFTOVERS, ADR 0026 |
-| ENT-04 | P0/P1 pilot | Read and configuration auditing, durable export | Read/stream auditing without private payloads; configuration-change entries; authentication context (issuer, `jti`, `kid`) and initiator/executor fields; durable export with bounded backlog; hash chain with signed checkpoints; legal holds when required | Code | Roadmap, LEFTOVERS |
+| ENT-01 | P0 pilot | Private-deployment reference architectures | Topologies and every outbound connection are now documented ([enterprise deployment](guides/enterprise-deployment.md)). Left: published capacity limits, install diagnostics, and disconnected operation exercised where sold | Infra, People | Roadmap, strategy |
+| ENT-02 | P0 pilot | Identity administration | Revocation and isolation are now tested across Connect, gRPC, REST and MCP. Left: target IdP configurations, UI administration, the web UI surface; decide SCIM/SAML only from a recorded requirement | Code, Infra | Roadmap, strategy |
+| ENT-03 | P0 pilot | Strict audit (ADR 0026) | Strict mode is built and on by default with authentication; a change that cannot be audited is refused before it runs. Left: a tested contract for asynchronous jobs other than run retention, and outbox semantics once export is guaranteed | Code | Roadmap, LEFTOVERS, ADR 0026 |
+| ENT-04 | P0/P1 pilot | Read and configuration auditing, durable export | Built: read auditing by kind, configuration load/reload entries, authentication context with `subject`/`actor`, and a hash chain with `evalsi auth audit verify`. Left: read sampling and row counts, initiator/executor/grant fields, signed checkpoints, a durable export with bounded backlog, legal holds | Code | Roadmap, LEFTOVERS |
 | ENT-05 | P1 | Central evaluation standards | Approved, versioned rubric/test packs; inheritance and effective-policy view; owners, approvals and time-bounded exceptions | Code | Roadmap, strategy |
-| ENT-06 | P0 pilot | Data and secret boundaries | Boundaries tested through ingestion, execution, results, exports and retention; per-label retention rules; a grace period before deletes; a documented erasure path including backups and logs; external secret management; per-task credential isolation where needed | Code, Infra | Roadmap, LEFTOVERS |
+| ENT-06 | P0 pilot | Data and secret boundaries | Data lifecycle and an erasure procedure are now documented ([enterprise deployment](guides/enterprise-deployment.md#data-lifecycle-and-erasure)). Left: boundaries tested through ingestion, execution, results, exports and retention; per-label retention rules; a delete grace period; an erasure API; external secret management; per-task credential isolation where needed | Code, Infra | Roadmap, LEFTOVERS |
 | ENT-07 | P1 | Shared capacity and budgets | Multi-project, multi-replica tests of hard/soft limits and fairness; usage and chargeback views. Concurrency quotas and rate limits are per replica today | Code, Infra | Roadmap, LEFTOVERS |
 | ENT-08 | P1 | Release-evidence package | Exportable, independently checkable evidence: agent commit, dataset/rubric/model/environment versions, coverage, decisions, reviewers, exceptions and expiry, with tamper detection | Code | Roadmap, strategy |
-| ENT-09 | P0 pilot | Operating qualification | Versioned, reversible migrations (`schema_migrations` table, ordered steps, expand-then-contract rule, CI test of N-1 against the N schema); upgrade and rollback paths; measured RPO/RTO and service objectives; managed/off-site PITR; ClickHouse and NATS recovery | Code, Infra | Roadmap, LEFTOVERS |
+| ENT-09 | P0 pilot | Operating qualification | Versioned migrations with a minimum-reader guard are built. Left: the real N-1 release against a migrated database in CI; upgrade and rollback paths exercised; measured RPO/RTO and service objectives; managed/off-site PITR; ClickHouse and NATS recovery | Code, Infra | Roadmap, LEFTOVERS |
 
 ## Adoption, distribution and packaging
 

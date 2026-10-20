@@ -114,3 +114,4 @@ textarea {
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 
 a.text-link { text-decoration: underline; }
+.prose-link { text-decoration: underline; }
