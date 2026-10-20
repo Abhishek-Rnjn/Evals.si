@@ -96,11 +96,18 @@ class A2AAgent(_message.Message):
     HEADERS_ENV_FIELD_NUMBER: _builtins.int
     TIMEOUT_FIELD_NUMBER: _builtins.int
     STREAM_FIELD_NUMBER: _builtins.int
+    BINDING_FIELD_NUMBER: _builtins.int
     url: _builtins.str
     stream: _builtins.bool
     """Use message/stream (server-sent events) instead of message/send and
     polling, so each task state and artifact chunk the agent reports becomes
     a step. The agent's card must declare streaming.
+    """
+    binding: _builtins.str
+    """The A2A transport: "JSONRPC" (the default) or "HTTP+JSON", the REST
+    binding of A2A 0.3, where url is the interface's base URL and the calls
+    are POST {url}/v1/message:send, POST {url}/v1/message:stream and
+    GET {url}/v1/tasks/{id}.
     """
     @_builtins.property
     def headers_env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
@@ -117,10 +124,11 @@ class A2AAgent(_message.Message):
         headers_env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         timeout: _duration_pb2.Duration | None = ...,
         stream: _builtins.bool = ...,
+        binding: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["headers_env", b"headers_env", "stream", b"stream", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["binding", b"binding", "headers_env", b"headers_env", "stream", b"stream", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___A2AAgent: _TypeAlias = A2AAgent  # noqa: Y015
@@ -242,6 +250,8 @@ class HTTPAgent(_message.Message):
     TIMEOUT_FIELD_NUMBER: _builtins.int
     USAGE_PATH_FIELD_NUMBER: _builtins.int
     TRAJECTORY_PATH_FIELD_NUMBER: _builtins.int
+    STREAM_FIELD_NUMBER: _builtins.int
+    DELTA_PATH_FIELD_NUMBER: _builtins.int
     url: _builtins.str
     method: _builtins.str
     """"POST" by default."""
@@ -253,7 +263,9 @@ class HTTPAgent(_message.Message):
     Default: {"input": {{input}}}.
     """
     output_path: _builtins.str
-    """Dotted path to the answer in the response, for example "output.text"."""
+    """Dotted path to the answer in the response, for example "output.text".
+    Required, except for a stream with delta_path.
+    """
     messages_path: _builtins.str
     """Dotted path to an OpenAI-style message list, kept as the trajectory."""
     usage_path: _builtins.str
@@ -265,6 +277,17 @@ class HTTPAgent(_message.Message):
     with "steps" (and optionally "session_id"), or a list of steps. Kept as
     the trajectory, for agents that report their own tool, handoff and
     guardrail steps.
+    """
+    stream: _builtins.bool
+    """Read the response as server-sent events, each a JSON object. The answer,
+    messages and usage are taken from the last event that has them at their
+    path; trajectory_path is read from every event (a step, a list of steps
+    or {"steps": [...]}) and the steps are kept in order.
+    """
+    delta_path: _builtins.str
+    """With stream: a dotted path to a text chunk in an event. The chunks are
+    joined into the answer when no event has output_path, which may then be
+    empty.
     """
     @_builtins.property
     def headers_env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
@@ -282,10 +305,12 @@ class HTTPAgent(_message.Message):
         timeout: _duration_pb2.Duration | None = ...,
         usage_path: _builtins.str = ...,
         trajectory_path: _builtins.str = ...,
+        stream: _builtins.bool = ...,
+        delta_path: _builtins.str = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["body_template", b"body_template", "headers_env", b"headers_env", "messages_path", b"messages_path", "method", b"method", "output_path", b"output_path", "timeout", b"timeout", "trajectory_path", b"trajectory_path", "url", b"url", "usage_path", b"usage_path"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["body_template", b"body_template", "delta_path", b"delta_path", "headers_env", b"headers_env", "messages_path", b"messages_path", "method", b"method", "output_path", b"output_path", "stream", b"stream", "timeout", b"timeout", "trajectory_path", b"trajectory_path", "url", b"url", "usage_path", b"usage_path"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___HTTPAgent: _TypeAlias = HTTPAgent  # noqa: Y015
