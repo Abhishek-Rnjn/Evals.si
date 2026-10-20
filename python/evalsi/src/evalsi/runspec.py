@@ -232,7 +232,14 @@ def check_gates(
                 "error_rate": _error_rate(summary),
             }[stat]
             result.value = value
-            if value is None:
+            if value is None and summary.n == 0 and summary.skipped:
+                # Usually the records lack what the evaluator needs (a reference, a
+                # trajectory), not a regression; the skip reasons say which.
+                result.reason = (
+                    f"no record was scored ({summary.skipped} skipped, {summary.errors} errors), "
+                    "so there is nothing to compare: see why in the records' scores"
+                )
+            elif value is None:
                 result.reason = f"metric has no {stat}"
             elif not math.isfinite(value):
                 # NaN fails every comparison below, so it would otherwise pass.

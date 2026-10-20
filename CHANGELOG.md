@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **`builtin/run-completed`** passes an agent run that ended `completed`, and fails one stopped for steps, spend or time, failed, or left waiting on a human. Connectors now report why a run stopped instead of always `completed`: an A2A task's last state (`input_required`, `failed`, ...) and an HTTP agent's `stop_reason_path`. A run left at `awaiting_human` previously passed gates on tool errors.
+- A gate on a metric every record skipped now says so (`no record was scored (3 skipped, 0 errors)`) instead of `metric has no mean`.
 - **HTTP agents report their own trajectory and usage.** `target.agent.http` takes `trajectory_path` (steps in Evals.si record form, so a wrapped agent's tool, handoff and guardrail steps reach the evaluators; a `session_id` there lands in `metadata.agent.session_id`) and `usage_path` (`input_tokens`/`output_tokens`, or `prompt_tokens`/`completion_tokens`, and `cost_usd`), so matrix tokens-per-task is no longer 0 for HTTP agents. `body_template` adds `{{trial}}` and `{{session_id}}`, which is unique per task and trial: `{{task_id}}` is the same in every trial, so an agent that keyed its thread on it carried one trial's history into the next.
 - **HTTP agents can stream.** With `stream: true`, `target.agent.http` reads server-sent events: answer, messages and usage from the last event that has them, steps from every event at `trajectory_path`, and with `delta_path` text chunks joined into the answer.
 - **A2A over HTTP+JSON.** `target.agent.a2a.binding: HTTP+JSON` speaks A2A 0.3's REST binding (`/v1/message:send`, `/v1/tasks/{id}`, `/v1/message:stream`), for servers that do not offer JSON-RPC.
