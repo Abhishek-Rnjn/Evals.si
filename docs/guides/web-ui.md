@@ -7,13 +7,16 @@ evalsid serves a small UI at `/ui/`, for example
   records sorted by any metric, lowest scores first;
 - **paired comparisons** of two runs;
 - **online policies**, with their counters, windows and alerts;
+- **production traces** and the [failure inbox](failure-inbox.md), including case editing and review;
+- **dataset versions**, with [publication, review, diffs and pinned regression runs](dataset-catalog.md);
 - **annotation queues**, with progress and agreement, and a form to
   [annotate](#annotating);
 - **guardrails;**
 - **the evaluator catalog**, with each evaluator's tier and runtime.
 
-Annotating is the only thing the UI writes. Starting runs and applying
-policies or guardrails go through the CLI or the API.
+The unreleased inbox and dataset screens also write through the same authorized
+API as the CLI. Other run configurations and applying policies or guardrails go
+through the CLI or API.
 
 ## Signing in
 

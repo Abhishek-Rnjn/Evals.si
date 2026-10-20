@@ -150,7 +150,7 @@ def validate(spec: run_pb2.RunSpec) -> None:
     if not spec.evaluators:
         raise SpecError("spec.evaluators must list at least one evaluator")
     if spec.dataset.WhichOneof("source") is None:
-        raise SpecError("spec.dataset needs one of inline, path, uri, traces or run")
+        raise SpecError("spec.dataset needs one of inline, path, uri, traces, run or catalog")
     if spec.trials < 0:
         raise SpecError("spec.trials cannot be negative")
     agent_run = spec.HasField("harness") or spec.target.HasField("agent")

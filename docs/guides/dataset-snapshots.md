@@ -13,6 +13,10 @@ and their provenance. Its canonical SHA-256 covers all of that content. A run
 pins the approved digest and rejects changed content **before creating the target
 or running evaluators**. Local runs and worker dataset loading use the same check.
 
+For team sharing, approval history and server-side immutable version lookup, use
+the [shared dataset catalog](dataset-catalog.md). Portable snapshots remain useful
+for local/CI execution; their pins differ from catalog pins.
+
 ## Create and verify a version
 
 Start with approved local JSONL or a JSON array using standard evaluation fields.

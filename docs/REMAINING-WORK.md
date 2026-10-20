@@ -14,10 +14,10 @@ it comes from, and their acceptance criteria apply. Nothing here is a new commit
 
 **Priority** is the source's (P0, P1, P2, M-milestone or H-phase); a dash means none is given.
 
-In flight, so not repeated below: [#117](https://github.com/Abhishek-Rnjn/Evals.si/pull/117)
-(central dataset catalog and pinned regression runs, PROD-04) and
+Not repeated below: [#117](https://github.com/Abhishek-Rnjn/Evals.si/pull/117)
+(shared dataset catalog and pinned regression runs, PROD-04; merged) and
 [#118](https://github.com/Abhishek-Rnjn/Evals.si/pull/118) (production failures to
-baseline-aware release decisions, PROD-02/PROD-03).
+baseline-aware release decisions, PROD-02/PROD-03; in flight).
 
 ## Application-team product work
 
@@ -25,8 +25,8 @@ baseline-aware release decisions, PROD-02/PROD-03).
 |---|---|---|---|---|---|
 | PROD-01 | P0 | Guided setup (`init`, `doctor`) | Observe onboarding on customers' own agents; measure time to a useful result against the 15-minute target; verify the documented macOS/Windows paths to Linux-backed execution | People, Infra | Roadmap, strategy §1 |
 | PROD-02 | P0 | PR check as the daily entry point | Customer PR evidence; critical business-rule and permission failures; cost/latency changes by slice; newly failing cases with baseline/candidate trajectories; a first-class policy for insufficient coverage, sample counts and regression thresholds; an explicit rerun policy (no best-of selection); pinned agent commit and tool/environment versions; a reproduce command in the report | Code, People | Roadmap, strategy §2 |
-| PROD-03 | P0 | Failure-to-regression inbox | Validate on real customer incidents; automatic policy-driven collection; recurrence/impact prioritization; semantic grouping (advisory); enforced independent review; assignment notifications; broader experiment/replay UI | Code, People | Roadmap, strategy §3 |
-| PROD-04 | P0 | Dataset lifecycle | Beyond #117: upload integration, approval/review history, shared ownership administration, broader split governance, retention and deletion. Exact overlap checks do not rule out semantic leakage | Code | Roadmap |
+| PROD-03 | P0 | Failure-to-regression inbox | Validate on real customer incidents; automatic policy-driven collection; recurrence/impact prioritization; semantic grouping (advisory); enforced independent review for inbox cases; assignment notifications; broader experiment/replay UI | Code, People | Roadmap, strategy §3 |
+| PROD-04 | P0 | Dataset lifecycle | The shared catalog from #117 is built (unreleased). Left: customer validation, shared ownership administration, broader split governance, bulk storage, retention and erasure. Exact overlap checks do not rule out semantic leakage; imported provenance is publisher-supplied | Code, People | Roadmap |
 | PROD-05 | P0 | Decision and debugging UI | Connect/import, create or rerun an experiment, compare, approve a test case and configure a gate without YAML; a task/session timeline with model calls, tool arguments/results, user interventions and the checker outcome; path comparison; error vs skipped vs failed shown distinctly; replay/fork from a recorded step that marks recorded vs live calls and blocks real side effects; shareable links inside access controls | Code | Roadmap, strategy §4 |
 | PROD-06 | P1 | Evaluator trust and judge calibration | Rubric versions, labelled calibration sets, human disagreements, slice-level false positives/negatives, held-out checks; comparisons that tell a changed judge apart from a better agent | Code | Roadmap, strategy §5 |
 | PROD-07 | P1 | Integration matrix and TypeScript | A tested compatibility matrix for partners' paths (candidates: OpenAI Agents, LangGraph, Langfuse, Phoenix); a TypeScript SDK if partners need it; resilient, diagnosable import and score write-back | Code, People | Roadmap, strategy §6 |

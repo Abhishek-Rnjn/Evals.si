@@ -515,6 +515,7 @@ type DatasetSource struct {
 	//	*DatasetSource_Uri
 	//	*DatasetSource_Traces
 	//	*DatasetSource_Run
+	//	*DatasetSource_Catalog
 	Source isDatasetSource_Source `protobuf_oneof:"source"`
 	// Record field -> source column, for example input -> question.
 	Mapping map[string]string `protobuf:"bytes,4,rep,name=mapping,proto3" json:"mapping,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -606,6 +607,15 @@ func (x *DatasetSource) GetRun() *RunOutputs {
 	return nil
 }
 
+func (x *DatasetSource) GetCatalog() *DatasetVersionRef {
+	if x != nil {
+		if x, ok := x.Source.(*DatasetSource_Catalog); ok {
+			return x.Catalog
+		}
+	}
+	return nil
+}
+
 func (x *DatasetSource) GetMapping() map[string]string {
 	if x != nil {
 		return x.Mapping
@@ -652,6 +662,12 @@ type DatasetSource_Run struct {
 	Run *RunOutputs `protobuf:"bytes,7,opt,name=run,proto3,oneof"`
 }
 
+type DatasetSource_Catalog struct {
+	// Server only: an approved immutable dataset version, with an independently
+	// reviewed content pin. The server snapshots its records when admitting a run.
+	Catalog *DatasetVersionRef `protobuf:"bytes,8,opt,name=catalog,proto3,oneof"`
+}
+
 func (*DatasetSource_Inline) isDatasetSource_Source() {}
 
 func (*DatasetSource_Path) isDatasetSource_Source() {}
@@ -661,6 +677,78 @@ func (*DatasetSource_Uri) isDatasetSource_Source() {}
 func (*DatasetSource_Traces) isDatasetSource_Source() {}
 
 func (*DatasetSource_Run) isDatasetSource_Source() {}
+
+func (*DatasetSource_Catalog) isDatasetSource_Source() {}
+
+type DatasetVersionRef struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty uses the run's project; cross-project reads require datasets.read.
+	Project string `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Name    string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Version string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	// Required SHA-256 of the version content, not its mutable review state.
+	Sha256        string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatasetVersionRef) Reset() {
+	*x = DatasetVersionRef{}
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatasetVersionRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatasetVersionRef) ProtoMessage() {}
+
+func (x *DatasetVersionRef) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatasetVersionRef.ProtoReflect.Descriptor instead.
+func (*DatasetVersionRef) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DatasetVersionRef) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *DatasetVersionRef) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DatasetVersionRef) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *DatasetVersionRef) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
 
 // TraceQuery selects stored traces. Records keep the trace's input, output
 // and trajectory; the trace id is the record id.
@@ -682,7 +770,7 @@ type TraceQuery struct {
 
 func (x *TraceQuery) Reset() {
 	*x = TraceQuery{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -694,7 +782,7 @@ func (x *TraceQuery) String() string {
 func (*TraceQuery) ProtoMessage() {}
 
 func (x *TraceQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[4]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -707,7 +795,7 @@ func (x *TraceQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TraceQuery.ProtoReflect.Descriptor instead.
 func (*TraceQuery) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{4}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *TraceQuery) GetService() string {
@@ -752,7 +840,7 @@ type RunOutputs struct {
 
 func (x *RunOutputs) Reset() {
 	*x = RunOutputs{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -764,7 +852,7 @@ func (x *RunOutputs) String() string {
 func (*RunOutputs) ProtoMessage() {}
 
 func (x *RunOutputs) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[5]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -777,7 +865,7 @@ func (x *RunOutputs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunOutputs.ProtoReflect.Descriptor instead.
 func (*RunOutputs) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{5}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RunOutputs) GetRunId() string {
@@ -810,7 +898,7 @@ type InlineRecords struct {
 
 func (x *InlineRecords) Reset() {
 	*x = InlineRecords{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -822,7 +910,7 @@ func (x *InlineRecords) String() string {
 func (*InlineRecords) ProtoMessage() {}
 
 func (x *InlineRecords) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -835,7 +923,7 @@ func (x *InlineRecords) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InlineRecords.ProtoReflect.Descriptor instead.
 func (*InlineRecords) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{6}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *InlineRecords) GetRecords() []*Record {
@@ -860,7 +948,7 @@ type Gate struct {
 
 func (x *Gate) Reset() {
 	*x = Gate{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -872,7 +960,7 @@ func (x *Gate) String() string {
 func (*Gate) ProtoMessage() {}
 
 func (x *Gate) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -885,7 +973,7 @@ func (x *Gate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Gate.ProtoReflect.Descriptor instead.
 func (*Gate) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{7}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Gate) GetMetric() string {
@@ -928,7 +1016,7 @@ type GateResult struct {
 
 func (x *GateResult) Reset() {
 	*x = GateResult{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -940,7 +1028,7 @@ func (x *GateResult) String() string {
 func (*GateResult) ProtoMessage() {}
 
 func (x *GateResult) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -953,7 +1041,7 @@ func (x *GateResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GateResult.ProtoReflect.Descriptor instead.
 func (*GateResult) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{8}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GateResult) GetGate() *Gate {
@@ -995,7 +1083,7 @@ type Budget struct {
 
 func (x *Budget) Reset() {
 	*x = Budget{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1007,7 +1095,7 @@ func (x *Budget) String() string {
 func (*Budget) ProtoMessage() {}
 
 func (x *Budget) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1020,7 +1108,7 @@ func (x *Budget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Budget.ProtoReflect.Descriptor instead.
 func (*Budget) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{9}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Budget) GetMaxTargetTokens() int64 {
@@ -1048,7 +1136,7 @@ type Progress struct {
 
 func (x *Progress) Reset() {
 	*x = Progress{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1060,7 +1148,7 @@ func (x *Progress) String() string {
 func (*Progress) ProtoMessage() {}
 
 func (x *Progress) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1073,7 +1161,7 @@ func (x *Progress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Progress.ProtoReflect.Descriptor instead.
 func (*Progress) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{10}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Progress) GetTotal() int64 {
@@ -1126,7 +1214,7 @@ type Run struct {
 
 func (x *Run) Reset() {
 	*x = Run{}
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1138,7 +1226,7 @@ func (x *Run) String() string {
 func (*Run) ProtoMessage() {}
 
 func (x *Run) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_run_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1151,7 +1239,7 @@ func (x *Run) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Run.ProtoReflect.Descriptor instead.
 func (*Run) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{11}
+	return file_evalsi_v1alpha1_run_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Run) GetId() string {
@@ -1334,19 +1422,25 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\f_temperature\"C\n" +
 	"\bThinking\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12#\n" +
-	"\rbudget_tokens\x18\x02 \x01(\x05R\fbudgetTokens\"\xfe\x02\n" +
+	"\rbudget_tokens\x18\x02 \x01(\x05R\fbudgetTokens\"\xbe\x03\n" +
 	"\rDatasetSource\x128\n" +
 	"\x06inline\x18\x01 \x01(\v2\x1e.evalsi.v1alpha1.InlineRecordsH\x00R\x06inline\x12\x14\n" +
 	"\x04path\x18\x02 \x01(\tH\x00R\x04path\x12\x12\n" +
 	"\x03uri\x18\x03 \x01(\tH\x00R\x03uri\x125\n" +
 	"\x06traces\x18\x06 \x01(\v2\x1b.evalsi.v1alpha1.TraceQueryH\x00R\x06traces\x12/\n" +
-	"\x03run\x18\a \x01(\v2\x1b.evalsi.v1alpha1.RunOutputsH\x00R\x03run\x12E\n" +
+	"\x03run\x18\a \x01(\v2\x1b.evalsi.v1alpha1.RunOutputsH\x00R\x03run\x12>\n" +
+	"\acatalog\x18\b \x01(\v2\".evalsi.v1alpha1.DatasetVersionRefH\x00R\acatalog\x12E\n" +
 	"\amapping\x18\x04 \x03(\v2+.evalsi.v1alpha1.DatasetSource.MappingEntryR\amapping\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x1a:\n" +
 	"\fMappingEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\x8d\x01\n" +
+	"\x06source\"s\n" +
+	"\x11DatasetVersionRef\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\"\x8d\x01\n" +
 	"\n" +
 	"TraceQuery\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
@@ -1441,7 +1535,7 @@ func file_evalsi_v1alpha1_run_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_v1alpha1_run_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_evalsi_v1alpha1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_evalsi_v1alpha1_run_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_evalsi_v1alpha1_run_proto_goTypes = []any{
 	(GateStat)(0),                 // 0: evalsi.v1alpha1.GateStat
 	(RunStatus)(0),                // 1: evalsi.v1alpha1.RunStatus
@@ -1449,64 +1543,66 @@ var file_evalsi_v1alpha1_run_proto_goTypes = []any{
 	(*Target)(nil),                // 3: evalsi.v1alpha1.Target
 	(*Thinking)(nil),              // 4: evalsi.v1alpha1.Thinking
 	(*DatasetSource)(nil),         // 5: evalsi.v1alpha1.DatasetSource
-	(*TraceQuery)(nil),            // 6: evalsi.v1alpha1.TraceQuery
-	(*RunOutputs)(nil),            // 7: evalsi.v1alpha1.RunOutputs
-	(*InlineRecords)(nil),         // 8: evalsi.v1alpha1.InlineRecords
-	(*Gate)(nil),                  // 9: evalsi.v1alpha1.Gate
-	(*GateResult)(nil),            // 10: evalsi.v1alpha1.GateResult
-	(*Budget)(nil),                // 11: evalsi.v1alpha1.Budget
-	(*Progress)(nil),              // 12: evalsi.v1alpha1.Progress
-	(*Run)(nil),                   // 13: evalsi.v1alpha1.Run
-	nil,                           // 14: evalsi.v1alpha1.DatasetSource.MappingEntry
-	nil,                           // 15: evalsi.v1alpha1.Run.LabelsEntry
-	(*EvaluatorRef)(nil),          // 16: evalsi.v1alpha1.EvaluatorRef
-	(*SummaryOptions)(nil),        // 17: evalsi.v1alpha1.SummaryOptions
-	(*Harness)(nil),               // 18: evalsi.v1alpha1.Harness
-	(*Environment)(nil),           // 19: evalsi.v1alpha1.Environment
-	(*AgentTarget)(nil),           // 20: evalsi.v1alpha1.AgentTarget
-	(*durationpb.Duration)(nil),   // 21: google.protobuf.Duration
-	(*Record)(nil),                // 22: evalsi.v1alpha1.Record
-	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
-	(*MetricSummary)(nil),         // 24: evalsi.v1alpha1.MetricSummary
-	(*Usage)(nil),                 // 25: evalsi.v1alpha1.Usage
+	(*DatasetVersionRef)(nil),     // 6: evalsi.v1alpha1.DatasetVersionRef
+	(*TraceQuery)(nil),            // 7: evalsi.v1alpha1.TraceQuery
+	(*RunOutputs)(nil),            // 8: evalsi.v1alpha1.RunOutputs
+	(*InlineRecords)(nil),         // 9: evalsi.v1alpha1.InlineRecords
+	(*Gate)(nil),                  // 10: evalsi.v1alpha1.Gate
+	(*GateResult)(nil),            // 11: evalsi.v1alpha1.GateResult
+	(*Budget)(nil),                // 12: evalsi.v1alpha1.Budget
+	(*Progress)(nil),              // 13: evalsi.v1alpha1.Progress
+	(*Run)(nil),                   // 14: evalsi.v1alpha1.Run
+	nil,                           // 15: evalsi.v1alpha1.DatasetSource.MappingEntry
+	nil,                           // 16: evalsi.v1alpha1.Run.LabelsEntry
+	(*EvaluatorRef)(nil),          // 17: evalsi.v1alpha1.EvaluatorRef
+	(*SummaryOptions)(nil),        // 18: evalsi.v1alpha1.SummaryOptions
+	(*Harness)(nil),               // 19: evalsi.v1alpha1.Harness
+	(*Environment)(nil),           // 20: evalsi.v1alpha1.Environment
+	(*AgentTarget)(nil),           // 21: evalsi.v1alpha1.AgentTarget
+	(*durationpb.Duration)(nil),   // 22: google.protobuf.Duration
+	(*Record)(nil),                // 23: evalsi.v1alpha1.Record
+	(*timestamppb.Timestamp)(nil), // 24: google.protobuf.Timestamp
+	(*MetricSummary)(nil),         // 25: evalsi.v1alpha1.MetricSummary
+	(*Usage)(nil),                 // 26: evalsi.v1alpha1.Usage
 }
 var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	3,  // 0: evalsi.v1alpha1.RunSpec.target:type_name -> evalsi.v1alpha1.Target
 	5,  // 1: evalsi.v1alpha1.RunSpec.dataset:type_name -> evalsi.v1alpha1.DatasetSource
-	16, // 2: evalsi.v1alpha1.RunSpec.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
-	17, // 3: evalsi.v1alpha1.RunSpec.summary:type_name -> evalsi.v1alpha1.SummaryOptions
-	9,  // 4: evalsi.v1alpha1.RunSpec.gates:type_name -> evalsi.v1alpha1.Gate
-	11, // 5: evalsi.v1alpha1.RunSpec.budget:type_name -> evalsi.v1alpha1.Budget
-	18, // 6: evalsi.v1alpha1.RunSpec.harness:type_name -> evalsi.v1alpha1.Harness
-	19, // 7: evalsi.v1alpha1.RunSpec.environment:type_name -> evalsi.v1alpha1.Environment
-	20, // 8: evalsi.v1alpha1.Target.agent:type_name -> evalsi.v1alpha1.AgentTarget
+	17, // 2: evalsi.v1alpha1.RunSpec.evaluators:type_name -> evalsi.v1alpha1.EvaluatorRef
+	18, // 3: evalsi.v1alpha1.RunSpec.summary:type_name -> evalsi.v1alpha1.SummaryOptions
+	10, // 4: evalsi.v1alpha1.RunSpec.gates:type_name -> evalsi.v1alpha1.Gate
+	12, // 5: evalsi.v1alpha1.RunSpec.budget:type_name -> evalsi.v1alpha1.Budget
+	19, // 6: evalsi.v1alpha1.RunSpec.harness:type_name -> evalsi.v1alpha1.Harness
+	20, // 7: evalsi.v1alpha1.RunSpec.environment:type_name -> evalsi.v1alpha1.Environment
+	21, // 8: evalsi.v1alpha1.Target.agent:type_name -> evalsi.v1alpha1.AgentTarget
 	4,  // 9: evalsi.v1alpha1.Target.thinking:type_name -> evalsi.v1alpha1.Thinking
 	3,  // 10: evalsi.v1alpha1.Target.fallbacks:type_name -> evalsi.v1alpha1.Target
-	8,  // 11: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
-	6,  // 12: evalsi.v1alpha1.DatasetSource.traces:type_name -> evalsi.v1alpha1.TraceQuery
-	7,  // 13: evalsi.v1alpha1.DatasetSource.run:type_name -> evalsi.v1alpha1.RunOutputs
-	14, // 14: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
-	21, // 15: evalsi.v1alpha1.TraceQuery.lookback:type_name -> google.protobuf.Duration
-	22, // 16: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
-	0,  // 17: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
-	9,  // 18: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
-	2,  // 19: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
-	1,  // 20: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
-	23, // 21: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
-	23, // 22: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
-	23, // 23: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
-	12, // 24: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
-	24, // 25: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
-	10, // 26: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
-	25, // 27: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
-	25, // 28: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
-	15, // 29: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
-	23, // 30: evalsi.v1alpha1.Run.archived_at:type_name -> google.protobuf.Timestamp
-	31, // [31:31] is the sub-list for method output_type
-	31, // [31:31] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	9,  // 11: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
+	7,  // 12: evalsi.v1alpha1.DatasetSource.traces:type_name -> evalsi.v1alpha1.TraceQuery
+	8,  // 13: evalsi.v1alpha1.DatasetSource.run:type_name -> evalsi.v1alpha1.RunOutputs
+	6,  // 14: evalsi.v1alpha1.DatasetSource.catalog:type_name -> evalsi.v1alpha1.DatasetVersionRef
+	15, // 15: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
+	22, // 16: evalsi.v1alpha1.TraceQuery.lookback:type_name -> google.protobuf.Duration
+	23, // 17: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
+	0,  // 18: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
+	10, // 19: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
+	2,  // 20: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
+	1,  // 21: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
+	24, // 22: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
+	24, // 23: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
+	24, // 24: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
+	13, // 25: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
+	25, // 26: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
+	11, // 27: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
+	26, // 28: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
+	26, // 29: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
+	16, // 30: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
+	24, // 31: evalsi.v1alpha1.Run.archived_at:type_name -> google.protobuf.Timestamp
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_proto_init() }
@@ -1526,16 +1622,17 @@ func file_evalsi_v1alpha1_run_proto_init() {
 		(*DatasetSource_Uri)(nil),
 		(*DatasetSource_Traces)(nil),
 		(*DatasetSource_Run)(nil),
+		(*DatasetSource_Catalog)(nil),
 	}
-	file_evalsi_v1alpha1_run_proto_msgTypes[7].OneofWrappers = []any{}
 	file_evalsi_v1alpha1_run_proto_msgTypes[8].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_run_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_run_proto_rawDesc), len(file_evalsi_v1alpha1_run_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   14,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

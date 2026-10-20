@@ -309,6 +309,7 @@ class DatasetSource(_message.Message):
     URI_FIELD_NUMBER: _builtins.int
     TRACES_FIELD_NUMBER: _builtins.int
     RUN_FIELD_NUMBER: _builtins.int
+    CATALOG_FIELD_NUMBER: _builtins.int
     MAPPING_FIELD_NUMBER: _builtins.int
     LIMIT_FIELD_NUMBER: _builtins.int
     path: _builtins.str
@@ -335,6 +336,12 @@ class DatasetSource(_message.Message):
         """
 
     @_builtins.property
+    def catalog(self) -> Global___DatasetVersionRef:
+        """Server only: an approved immutable dataset version, with an independently
+        reviewed content pin. The server snapshots its records when admitting a run.
+        """
+
+    @_builtins.property
     def mapping(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
         """Record field -> source column, for example input -> question."""
 
@@ -346,18 +353,46 @@ class DatasetSource(_message.Message):
         uri: _builtins.str = ...,
         traces: Global___TraceQuery | None = ...,
         run: Global___RunOutputs | None = ...,
+        catalog: Global___DatasetVersionRef | None = ...,
         mapping: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         limit: _builtins.int = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["inline", b"inline", "path", b"path", "run", b"run", "source", b"source", "traces", b"traces", "uri", b"uri"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["catalog", b"catalog", "inline", b"inline", "path", b"path", "run", b"run", "source", b"source", "traces", b"traces", "uri", b"uri"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["inline", b"inline", "limit", b"limit", "mapping", b"mapping", "path", b"path", "run", b"run", "source", b"source", "traces", b"traces", "uri", b"uri"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["catalog", b"catalog", "inline", b"inline", "limit", b"limit", "mapping", b"mapping", "path", b"path", "run", b"run", "source", b"source", "traces", b"traces", "uri", b"uri"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_source: _TypeAlias = _typing.Literal["inline", "path", "uri", "traces", "run"]  # noqa: Y015
+    _WhichOneofReturnType_source: _TypeAlias = _typing.Literal["inline", "path", "uri", "traces", "run", "catalog"]  # noqa: Y015
     _WhichOneofArgType_source: _TypeAlias = _typing.Literal["source", b"source"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType_source) -> _WhichOneofReturnType_source | None: ...
 
 Global___DatasetSource: _TypeAlias = DatasetSource  # noqa: Y015
+
+@_typing.final
+class DatasetVersionRef(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROJECT_FIELD_NUMBER: _builtins.int
+    NAME_FIELD_NUMBER: _builtins.int
+    VERSION_FIELD_NUMBER: _builtins.int
+    SHA256_FIELD_NUMBER: _builtins.int
+    project: _builtins.str
+    """Empty uses the run's project; cross-project reads require datasets.read."""
+    name: _builtins.str
+    version: _builtins.str
+    sha256: _builtins.str
+    """Required SHA-256 of the version content, not its mutable review state."""
+    def __init__(
+        self,
+        *,
+        project: _builtins.str = ...,
+        name: _builtins.str = ...,
+        version: _builtins.str = ...,
+        sha256: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["name", b"name", "project", b"project", "sha256", b"sha256", "version", b"version"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___DatasetVersionRef: _TypeAlias = DatasetVersionRef  # noqa: Y015
 
 @_typing.final
 class TraceQuery(_message.Message):

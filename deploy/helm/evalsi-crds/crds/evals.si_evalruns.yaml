@@ -77,6 +77,18 @@ spec:
                 x-kubernetes-preserve-unknown-fields: true
               dataset:
                 properties:
+                  catalog:
+                    properties:
+                      name:
+                        type: string
+                      project:
+                        type: string
+                      sha256:
+                        type: string
+                      version:
+                        type: string
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   inline:
                     properties:
                       records:

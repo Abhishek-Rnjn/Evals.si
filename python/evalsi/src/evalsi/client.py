@@ -456,6 +456,124 @@ class Client:
         body = {"name": name, "project": project, "candidate": spec, "labels": labels or {}}
         return self.call("RunService", "CreateShadowReplay", body)
 
+    # --- shared dataset catalog ---
+
+    def publish_dataset_version(
+        self,
+        content: dict[str, Any],
+        *,
+        failures: dict[str, int] | None = None,
+    ) -> dict[str, Any]:
+        """Publish an immutable draft from wire records or approved failure revisions."""
+        return self.call(
+            "DatasetCatalogService",
+            "PublishDatasetVersion",
+            {
+                "content": content,
+                "failures": [
+                    {"id": key, "revision": str(revision)}
+                    for key, revision in (failures or {}).items()
+                ],
+            },
+        )
+
+    def list_dataset_versions(
+        self,
+        *,
+        project: str = "",
+        name: str = "",
+        state: str = "",
+        owner: str = "",
+        page_size: int = 20,
+        page_token: str = "",
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "project": project,
+            "name": name,
+            "owner": owner,
+            "pageSize": page_size,
+            "pageToken": page_token,
+        }
+        if state:
+            body["state"] = state
+        return self.call("DatasetCatalogService", "ListDatasetVersions", body)
+
+    def get_dataset_version(self, name: str, version: str, *, project: str = "") -> dict[str, Any]:
+        return self.call(
+            "DatasetCatalogService",
+            "GetDatasetVersion",
+            {"project": project, "name": name, "version": version},
+        )
+
+    def review_dataset_version(
+        self,
+        name: str,
+        version: str,
+        *,
+        sha256: str,
+        expected_revision: int,
+        decision: str,
+        note: str,
+        project: str = "",
+    ) -> dict[str, Any]:
+        return self.call(
+            "DatasetCatalogService",
+            "ReviewDatasetVersion",
+            {
+                "project": project,
+                "name": name,
+                "version": version,
+                "sha256": sha256,
+                "expectedRevision": str(expected_revision),
+                "decision": decision,
+                "note": note,
+            },
+        )
+
+    def dataset_version_events(
+        self,
+        name: str,
+        version: str,
+        *,
+        project: str = "",
+        page_size: int = 20,
+        page_token: str = "",
+    ) -> dict[str, Any]:
+        return self.call(
+            "DatasetCatalogService",
+            "ListDatasetVersionEvents",
+            {
+                "project": project,
+                "name": name,
+                "version": version,
+                "pageSize": page_size,
+                "pageToken": page_token,
+            },
+        )
+
+    def diff_dataset_versions(
+        self,
+        name: str,
+        before: str,
+        after: str,
+        *,
+        before_sha256: str,
+        after_sha256: str,
+        project: str = "",
+    ) -> dict[str, Any]:
+        return self.call(
+            "DatasetCatalogService",
+            "DiffDatasetVersions",
+            {
+                "project": project,
+                "name": name,
+                "beforeVersion": before,
+                "afterVersion": after,
+                "beforeSha256": before_sha256,
+                "afterSha256": after_sha256,
+            },
+        )
+
     # --- production failure inbox ---
 
     def capture_failure(
