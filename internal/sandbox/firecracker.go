@@ -476,7 +476,8 @@ func (d *firecrackerDriver) start(ctx context.Context, vm *fcVM, jailID string) 
 	p.SetUnencryptedHTTP2(true)
 	uds := filepath.Join(vm.dir, fcVsockSocket)
 	vm.guest = guestv1alpha1connect.NewGuestAgentServiceClient(&http.Client{Transport: &http.Transport{
-		Protocols: p,
+		Protocols:         p,
+		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return dialVsock(ctx, uds, 1024)
 		},
@@ -768,7 +769,10 @@ func (vm *fcVM) snapshot(ctx context.Context, dir string) error {
 			return err
 		}
 	}
-	return resume()
+	if err := resume(); err != nil {
+		return err
+	}
+	return vm.waitGuest(ctx)
 }
 
 func (vm *fcVM) kill() {

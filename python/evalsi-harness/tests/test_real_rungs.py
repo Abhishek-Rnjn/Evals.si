@@ -28,7 +28,10 @@ pytestmark = pytest.mark.skipif(
     not os.environ.get("EVALSI_TEST_EVALSID"), reason="needs a built evalsid"
 )
 
-RUNGS = ["bwrap", "landlock"]
+SNAPSHOT_RUNGS = ["bwrap", "landlock"] + (
+    ["firecracker"] if os.environ.get("EVALSI_TEST_FIRECRACKER") == "1" else []
+)
+RUNGS = SNAPSHOT_RUNGS + (["pod"] if os.environ.get("EVALSI_TEST_POD_GUEST_IMAGE") else [])
 FILES = {
     "calc.py": "def add(a, b):\n    return a - b\n",
     "tests/test_calc.py": "from calc import add\nassert add(2, 3) == 5\n",
@@ -47,6 +50,37 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
 
     def pin(rung: str, **extra: Any) -> None:
         lines = ["sandbox:", f"  ladder: [{rung}]"]
+        if rung == "firecracker":
+            kernel = os.environ["EVALSI_FIRECRACKER_KERNEL"]
+            image = os.environ["EVALSI_FIRECRACKER_IMAGE"]
+            cache_dir = os.environ.get("EVALSI_SANDBOX_CACHE_DIR", str(tmp_path / "cache"))
+            work_dir = tmp_path / "work"
+            work_dir.mkdir(exist_ok=True)
+            lines += [
+                "  min_isolation: vm",
+                f"  cache_dir: {cache_dir}",
+                f"  work_dir: {work_dir}",
+                "  firecracker:",
+                f"    kernel: {kernel}",
+                f"    default_image: {image}",
+                "    memory_mb: 512",
+                "    warm_pool: 1",
+            ]
+        if rung == "pod":
+            guest_image = os.environ["EVALSI_TEST_POD_GUEST_IMAGE"]
+            default_image = os.environ.get("EVALSI_TEST_POD_DEFAULT_IMAGE", "python:3.13-slim")
+            ns = os.environ.get("EVALSI_TEST_POD_NAMESPACE", "default")
+            lines += [
+                "  min_isolation: namespaced",
+                "  pod:",
+                f"    namespace: {ns}",
+                f"    guest_image: {guest_image}",
+                f"    default_image: {default_image}",
+                "    tolerations: [{operator: Exists}]",
+            ]
+            node = os.environ.get("EVALSI_TEST_POD_NODE")
+            if node:
+                lines += ["    node_selector:", f"      kubernetes.io/hostname: {node}"]
         lines += [f"  {key}: {value}" for key, value in extra.items()]
         path = tmp_path / f"{rung}.yaml"
         path.write_text("\n".join(lines) + "\n")
@@ -74,7 +108,12 @@ async def _play(spec: Any, rung: str) -> TaskOutcome:
             await harness.aclose()
 
 
-MIN_ISOLATION = {"bwrap": "namespaced", "landlock": "confined"}
+MIN_ISOLATION = {
+    "firecracker": "vm",
+    "pod": "namespaced",
+    "bwrap": "namespaced",
+    "landlock": "confined",
+}
 
 
 def play(
@@ -251,7 +290,58 @@ async def _pause_and_resume(rung: str) -> None:
             await pool.aclose()
 
 
-@pytest.mark.parametrize("rung", RUNGS)
+@pytest.mark.parametrize("rung", SNAPSHOT_RUNGS)
 def test_a_paused_rollout_resumes_in_a_restored_sandbox(config: Any, rung: str) -> None:
     config(rung)
     asyncio.run(_pause_and_resume(rung))
+
+
+async def _stop_on_pod_cancels() -> None:
+    from evalsi_harness.models import ModelTurn
+    from evalsi_harness.rollout import CANCELLED, RolloutPool
+    from tests.test_rollout import Scripted, call
+
+    spec = spec_of(
+        {
+            "environment": {
+                "files": FILES,
+                "setup": ["echo ready > setup.log"],
+                "sandbox": {"min_isolation": MIN_ISOLATION["pod"]},
+                "checker": {"command": CHECK},
+            }
+        }
+    )
+    async with await connect() as client:
+        rungs = {r["driver"]: r["available"] for r in await client.probe()}
+        if not rungs.get("pod"):
+            message = "the pod rung is not available on this host"
+            if os.environ.get("EVALSI_REQUIRE_SANDBOX"):
+                pytest.fail(message)
+            pytest.skip(message)
+        fix = ModelTurn(text="fix", tool_calls=[call("bash", "c1", command=FIX)])
+        pool_ref: list[RolloutPool] = []
+
+        async def stop_after_first(n: int) -> None:
+            if n == 1:
+                pool_ref[0].stop()
+
+        pool = RolloutPool(Scripted([fix], on_call=stop_after_first), client)
+        pool_ref.append(pool)
+        try:
+            [stopped] = await pool.run([(record("Fix add()"), spec)])
+            assert stopped.status == CANCELLED
+            assert not stopped.resumable
+            assert "cannot snapshot" in stopped.error
+            pool.clear()
+            with pytest.raises(ValueError, match="paused"):
+                await pool.run(resume=[stopped])
+        finally:
+            await pool.aclose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("EVALSI_TEST_POD_GUEST_IMAGE"), reason="needs EVALSI_TEST_POD_GUEST_IMAGE"
+)
+def test_a_stopped_rollout_on_the_pod_rung_cancels_cleanly(config: Any) -> None:
+    config("pod")
+    asyncio.run(_stop_on_pod_cancels())

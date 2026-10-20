@@ -4,6 +4,11 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Fixed
+
+- `evalsid` Firecracker snapshots (`internal/sandbox/firecracker.go`) now disable HTTP/2 keep-alives on the vsock transport and wait for the guest agent to recover after `resume()`, preventing `unavailable: unexpected EOF` on the first command or file write after `PUT /snapshot/create` on real KVM.
+- `evalsid sandbox probe` (`internal/sandbox/sandbox.go`) now preserves `res.Error` (which carries the `mode: privileged` and `ladder: [pod]` fallback hint when `bwrap` fails with `RTM_NEWADDR: Operation not permitted` on Ubuntu 24.04) instead of truncating at the first newline of `stderr`.
+
 ### Added
 
 - **`builtin/run-completed`** passes an agent run that ended `completed`, and fails one stopped for steps, spend or time, failed, or left waiting on a human. Connectors now report why a run stopped instead of always `completed`: an A2A task's last state (`input_required`, `failed`, ...) and an HTTP agent's `stop_reason_path`. A run left at `awaiting_human` previously passed gates on tool errors.

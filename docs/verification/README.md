@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [AKS-2026-10-20.md](AKS-2026-10-20.md) | Live AKS GPU (A100: OpenRLHF 0.11.2, verl 0.9.1, live vLLM token traces, trainer-backed OpenEnv/verifiers/Gymnasium/NeMo Gym with process rewards), real-KVM Firecracker, all four rungs clean checker/rollout pause-resume, real SWE-bench Verified (`sympy__sympy-20590`), RECHECK rows, Istio ambient, Failure Inbox, Dataset Catalog and BYO agent stop reasons; three bug fixes |
 | [COMPETITOR-BENCHMARKS-2026-10-18.md](COMPETITOR-BENCHMARKS-2026-10-18.md) | 112 correctness-gated local trials across five pinned SDKs, raw data/plots, observed metric-contract differences and explicit hosted/quality limits |
 | [RUNTIME-VERIFICATION-2026-10-18.md](RUNTIME-VERIFICATION-2026-10-18.md) | All 50 remaining-check dispositions, actual hardware/access blockers, strict opt-in real-KVM test, and free local trace-store verification |
 | [EKS-PAUSED-2026-10-18.md](EKS-PAUSED-2026-10-18.md) | Cluster-deletion handoff: disposition of all 49 starting rows, exact unfinished checks, GPU-first resume order, environment reconstruction and evidence/storage caveats; live verification paused |

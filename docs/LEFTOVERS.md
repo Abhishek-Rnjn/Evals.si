@@ -23,18 +23,23 @@ unfinished CPU checks, infrastructure/access blockers and reconstruction
 requirements. Historical resource-state statements in the run reports
 describe the last observation, not a claim that the cluster still exists.
 
-Completed work is in `42d8127` and `cc70404` on `verify/eks-leftovers`.
-Native verl 0.9.1 and OpenRLHF **0.9.0** GPU updates passed; current
-OpenRLHF 0.11.2 and trainer-backed OpenEnv/verifiers remain unverified.
-The original EKS concurrent-create probe did not finish reconciliation and
-its subsequent direct S3-import call was never reached. Separate kind
-verification now covers PostgreSQL create/delete races, MinIO upload/hash,
-automated browser accessibility, STRICT-mTLS admission and disposable WAL
-recovery; see the [combined inventory](verification/LEFTOVERS-2026-10-17.md).
-AWS S3, external mesh/provider cases, manual accessibility and production
-recovery/scale remain. PR #85's implementation is now in `main`, but was
-excluded from this EKS exercise. Cluster-only weights/PVCs are not saved by
-a Git commit; preserve them separately if needed.
+Completed work is in `42d8127` and `cc70404` on `verify/eks-leftovers`, and
+the [2026-10-20 AKS continuation](verification/AKS-2026-10-20.md) on
+`verify/aks-2026-10-20`. On AKS (NVIDIA A100 80GB PCIe + Intel VT-x KVM +
+Istio ambient), native **OpenRLHF 0.11.2** (`vLLM 0.29.0`), native `verl 0.9.1`
+(`vLLM 0.24.0`), live `vLLM` `TargetConfig(token_trace=True)` (streaming and
+non-streaming, text and tool turns), and trainer-backed `OpenEnv`, `verifiers`
+(shared setup), `Gymnasium` and `NeMo Gym` with step-level process rewards
+(`EvaluatorReward`, `ToolErrorPenalty`) passed. Real-KVM `TestFirecrackerRealKVM`,
+the stock `evalsi-sandboxd` Firecracker chart, clean checking across all four
+rungs (`bwrap`, `landlock`, `firecracker`, `pod`), `RolloutPool` pause/resume on
+Firecracker and cancel on `pod`, a real SWE-bench Verified task
+(`sympy__sympy-20590` on `bwrap` and `firecracker`), all `RECHECK.md` rows,
+concurrent PostgreSQL `CreateRun` reconciliation, direct S3 `ImportDataset`,
+Production Failure Inbox (`#114`), Shared Dataset Catalog (`#117`) and BYO
+agent stop-reason gating (`#116`, `#119`) also passed. AWS S3, external
+mesh/provider cases, Kata node runtime installation, manual accessibility and
+production recovery/scale remain.
 
 ## Milestones
 
