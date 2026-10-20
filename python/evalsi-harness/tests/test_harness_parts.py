@@ -293,6 +293,19 @@ def test_otel_spans_follow_the_genai_conventions() -> None:
     assert int(llm["endTimeUnixNano"]) - int(llm["startTimeUnixNano"]) == 10_000_000
 
 
+def test_otel_agent_turns_are_the_run_agent_not_handoffs() -> None:
+    steps = [Step(type="agent", name="a2a:working"), Step(type="agent", name="http")]
+    _, out = spans(steps, task_id="t1", trial=0, run_id="", agent="http", started_ns=1, ended_ns=2)
+    names = [
+        {a["key"]: next(iter(a["value"].values())) for a in s["attributes"]}.get(
+            "gen_ai.agent.name"
+        )
+        for s in out
+    ]
+    # One agent throughout, so ingest (internal/ingest/handoffs.go) adds no handoff.
+    assert names == ["http", "http", "http"]
+
+
 def test_otel_export_reaches_the_collector(
     monkeypatch: pytest.MonkeyPatch, sandboxes: LocalSandboxClient
 ) -> None:

@@ -700,6 +700,15 @@ func TestAgentRunValidation(t *testing.T) {
 	h.m.opts.Agents = config.Agents{TrustedCommands: [][]string{{"npx", "mcp-crm"}}, TrustedPython: []string{"acme.check:parse"}}
 	cases := map[string]func(*evalsiv1alpha1.RunSpec){
 		"builtin needs a model": func(s *evalsiv1alpha1.RunSpec) { s.Target = nil },
+		"http needs an answer path": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Http{Http: &evalsiv1alpha1.HTTPAgent{Url: "http://agent"}}}}
+		},
+		"http delta without a stream": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Http{Http: &evalsiv1alpha1.HTTPAgent{Url: "http://agent", DeltaPath: "delta"}}}}
+		},
+		"unknown a2a binding": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_A2A{A2A: &evalsiv1alpha1.A2AAgent{Url: "http://agent", Binding: "grpc"}}}}
+		},
 		"cli needs a command": func(s *evalsiv1alpha1.RunSpec) {
 			s.Target.Agent = &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Cli{Cli: &evalsiv1alpha1.CLIAgent{}}}
 		},
@@ -876,6 +885,12 @@ func TestAgentRunValidation(t *testing.T) {
 		},
 		"a2a agent": func(s *evalsiv1alpha1.RunSpec) {
 			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_A2A{A2A: &evalsiv1alpha1.A2AAgent{Url: "http://agent"}}}}
+		},
+		"a2a agent over http+json": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_A2A{A2A: &evalsiv1alpha1.A2AAgent{Url: "http://agent", Binding: "HTTP+JSON"}}}}
+		},
+		"http agent streaming deltas only": func(s *evalsiv1alpha1.RunSpec) {
+			s.Target = &evalsiv1alpha1.Target{Agent: &evalsiv1alpha1.AgentTarget{Kind: &evalsiv1alpha1.AgentTarget_Http{Http: &evalsiv1alpha1.HTTPAgent{Url: "http://agent", Stream: true, DeltaPath: "delta"}}}}
 		},
 		"recording": func(s *evalsiv1alpha1.RunSpec) {
 			s.GetHarness().GetBuiltin().Recording = &evalsiv1alpha1.Recording{Mode: "record", Dir: "tapes"}

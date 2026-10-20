@@ -166,7 +166,12 @@ type A2AAgent struct {
 	// Use message/stream (server-sent events) instead of message/send and
 	// polling, so each task state and artifact chunk the agent reports becomes
 	// a step. The agent's card must declare streaming.
-	Stream        bool `protobuf:"varint,4,opt,name=stream,proto3" json:"stream,omitempty"`
+	Stream bool `protobuf:"varint,4,opt,name=stream,proto3" json:"stream,omitempty"`
+	// The A2A transport: "JSONRPC" (the default) or "HTTP+JSON", the REST
+	// binding of A2A 0.3, where url is the interface's base URL and the calls
+	// are POST {url}/v1/message:send, POST {url}/v1/message:stream and
+	// GET {url}/v1/tasks/{id}.
+	Binding       string `protobuf:"bytes,5,opt,name=binding,proto3" json:"binding,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -227,6 +232,13 @@ func (x *A2AAgent) GetStream() bool {
 		return x.Stream
 	}
 	return false
+}
+
+func (x *A2AAgent) GetBinding() string {
+	if x != nil {
+		return x.Binding
+	}
+	return ""
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -385,14 +397,36 @@ type HTTPAgent struct {
 	// "POST" by default.
 	Method     string            `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`
 	HeadersEnv map[string]string `protobuf:"bytes,3,rep,name=headers_env,json=headersEnv,proto3" json:"headers_env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// JSON with {{input}} (the instruction, JSON-escaped) and {{task_id}}.
+	// JSON with {{input}} (the instruction, JSON-escaped), {{task_id}},
+	// {{messages}} (the conversation so far), {{trial}} (the trial number) and
+	// {{session_id}} (unique to this task and trial in the run: use it as the
+	// agent's conversation or thread id so trials do not share history).
 	// Default: {"input": {{input}}}.
 	BodyTemplate string `protobuf:"bytes,4,opt,name=body_template,json=bodyTemplate,proto3" json:"body_template,omitempty"`
 	// Dotted path to the answer in the response, for example "output.text".
+	// Required, except for a stream with delta_path.
 	OutputPath string `protobuf:"bytes,5,opt,name=output_path,json=outputPath,proto3" json:"output_path,omitempty"`
 	// Dotted path to an OpenAI-style message list, kept as the trajectory.
-	MessagesPath  string               `protobuf:"bytes,6,opt,name=messages_path,json=messagesPath,proto3" json:"messages_path,omitempty"`
-	Timeout       *durationpb.Duration `protobuf:"bytes,7,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	MessagesPath string               `protobuf:"bytes,6,opt,name=messages_path,json=messagesPath,proto3" json:"messages_path,omitempty"`
+	Timeout      *durationpb.Duration `protobuf:"bytes,7,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// Dotted path to the turn's token usage: input_tokens/output_tokens (or
+	// prompt_tokens/completion_tokens) and optionally cost_usd.
+	UsagePath string `protobuf:"bytes,8,opt,name=usage_path,json=usagePath,proto3" json:"usage_path,omitempty"`
+	// Dotted path to the turn's trajectory in Evals.si record form: an object
+	// with "steps" (and optionally "session_id"), or a list of steps. Kept as
+	// the trajectory, for agents that report their own tool, handoff and
+	// guardrail steps.
+	TrajectoryPath string `protobuf:"bytes,9,opt,name=trajectory_path,json=trajectoryPath,proto3" json:"trajectory_path,omitempty"`
+	// Read the response as server-sent events, each a JSON object. The answer,
+	// messages and usage are taken from the last event that has them at their
+	// path; trajectory_path is read from every event that has it (a step, a
+	// list of steps or {"steps": [...]}, at least one event must) and the
+	// steps are kept in order.
+	Stream bool `protobuf:"varint,10,opt,name=stream,proto3" json:"stream,omitempty"`
+	// With stream: a dotted path to a text chunk in an event. The chunks are
+	// joined into the answer when no event has output_path, which may then be
+	// empty.
+	DeltaPath     string `protobuf:"bytes,11,opt,name=delta_path,json=deltaPath,proto3" json:"delta_path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -474,6 +508,34 @@ func (x *HTTPAgent) GetTimeout() *durationpb.Duration {
 		return x.Timeout
 	}
 	return nil
+}
+
+func (x *HTTPAgent) GetUsagePath() string {
+	if x != nil {
+		return x.UsagePath
+	}
+	return ""
+}
+
+func (x *HTTPAgent) GetTrajectoryPath() string {
+	if x != nil {
+		return x.TrajectoryPath
+	}
+	return ""
+}
+
+func (x *HTTPAgent) GetStream() bool {
+	if x != nil {
+		return x.Stream
+	}
+	return false
+}
+
+func (x *HTTPAgent) GetDeltaPath() string {
+	if x != nil {
+		return x.DeltaPath
+	}
+	return ""
 }
 
 // A command-line agent (a coding agent, for example) run inside the task's
@@ -2477,13 +2539,14 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tresponses\x18\x03 \x01(\v2\x1f.evalsi.v1alpha1.ResponsesAgentH\x00R\tresponses\x120\n" +
 	"\x04http\x18\x04 \x01(\v2\x1a.evalsi.v1alpha1.HTTPAgentH\x00R\x04http\x12-\n" +
 	"\x03cli\x18\x05 \x01(\v2\x19.evalsi.v1alpha1.CLIAgentH\x00R\x03cliB\x06\n" +
-	"\x04kind\"\xf4\x01\n" +
+	"\x04kind\"\x8e\x02\n" +
 	"\bA2AAgent\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12J\n" +
 	"\vheaders_env\x18\x02 \x03(\v2).evalsi.v1alpha1.A2AAgent.HeadersEnvEntryR\n" +
 	"headersEnv\x123\n" +
 	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x16\n" +
-	"\x06stream\x18\x04 \x01(\bR\x06stream\x1a=\n" +
+	"\x06stream\x18\x04 \x01(\bR\x06stream\x12\x18\n" +
+	"\abinding\x18\x05 \x01(\tR\abinding\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
@@ -2501,7 +2564,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1e\n" +
 	"\vapi_key_env\x18\x03 \x01(\tR\tapiKeyEnv\x123\n" +
-	"\atimeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xe1\x02\n" +
+	"\atimeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"\xe0\x03\n" +
 	"\tHTTPAgent\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12K\n" +
@@ -2511,7 +2574,14 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\voutput_path\x18\x05 \x01(\tR\n" +
 	"outputPath\x12#\n" +
 	"\rmessages_path\x18\x06 \x01(\tR\fmessagesPath\x123\n" +
-	"\atimeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\atimeout\x1a=\n" +
+	"\atimeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x1d\n" +
+	"\n" +
+	"usage_path\x18\b \x01(\tR\tusagePath\x12'\n" +
+	"\x0ftrajectory_path\x18\t \x01(\tR\x0etrajectoryPath\x12\x16\n" +
+	"\x06stream\x18\n" +
+	" \x01(\bR\x06stream\x12\x1d\n" +
+	"\n" +
+	"delta_path\x18\v \x01(\tR\tdeltaPath\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x02\n" +
