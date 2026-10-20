@@ -428,6 +428,17 @@ func linkOrCopy(src, dst string) error {
 	return out.Close()
 }
 
+// place puts a read-only input (kernel, snapshot) into a VM root. The
+// jailer chowns every file in the root to its uid, so a hard link would let
+// one jailed VMM rewrite the file every other VM boots or restores from:
+// under the jailer it is copied.
+func (d *firecrackerDriver) place(ctx context.Context, src, dst string) error {
+	if d.cfg().Jailer != "" {
+		return copyTree(ctx, src, dst)
+	}
+	return linkOrCopy(src, dst)
+}
+
 // start launches firecracker (under the jailer when configured) for a VM
 // root that already holds its files, and waits for the API socket.
 func (d *firecrackerDriver) start(ctx context.Context, vm *fcVM, jailID string) error {
@@ -546,7 +557,7 @@ func (d *firecrackerDriver) boot(ctx context.Context, img *imageRoot, dir string
 	if err := copyTree(ctx, disk, filepath.Join(root, fcRootfs)); err != nil {
 		return nil, err
 	}
-	if err := linkOrCopy(c.Kernel, filepath.Join(root, fcKernel)); err != nil {
+	if err := d.place(ctx, c.Kernel, filepath.Join(root, fcKernel)); err != nil {
 		return nil, fmt.Errorf("guest kernel: %w", err)
 	}
 	vm := &fcVM{d: d, dir: root, image: img}
@@ -597,22 +608,13 @@ func (d *firecrackerDriver) restore(ctx context.Context, from, dir string, img *
 	}
 	// Firecracker maps the memory file privately and never writes either
 	// file, and a later snapshot unlinks them first, so restores can share
-	// the inodes. The jailer chowns every file in the VM root to its uid,
-	// which would let one jailed VMM rewrite the snapshot others restore
-	// from: copy them then.
+	// the inodes.
 	for _, f := range []string{fcSnapshot, fcMemory} {
-		src, dst := filepath.Join(from, f), filepath.Join(root, f)
-		var err error
-		if d.cfg().Jailer != "" {
-			err = copyTree(ctx, src, dst)
-		} else {
-			err = linkOrCopy(src, dst)
-		}
-		if err != nil {
+		if err := d.place(ctx, filepath.Join(from, f), filepath.Join(root, f)); err != nil {
 			return nil, err
 		}
 	}
-	if err := linkOrCopy(d.cfg().Kernel, filepath.Join(root, fcKernel)); err != nil {
+	if err := d.place(ctx, d.cfg().Kernel, filepath.Join(root, fcKernel)); err != nil {
 		return nil, err
 	}
 	vm := &fcVM{d: d, dir: root, image: img}
