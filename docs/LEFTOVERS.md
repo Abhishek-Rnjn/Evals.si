@@ -30,6 +30,22 @@ These local-kind results do not certify AKS networking or production recovery;
 synthetic horizon results do not establish public-benchmark coding quality or
 a single 200k-token context.
 
+**Matching-code AKS follow-up, 2026-10-21:**
+the [audit-first report](verification/AKS-FOLLOWUP-2026-10-21.md) and
+[structured evidence](verification/data/aks-followup-2026-10-21.json) record
+all seven approved execution groups, including live Sonnet refund/approval and
+assistant-labelled native judge calibration, delegation/fork/external-write
+controls, actual current-daemon browser decisions, real jailer/boot settings,
+installed starters, source-tag PostgreSQL migration/older-reader checks and
+quiesced PostgreSQL/ClickHouse/JetStream restores. All nine throughput replicates
+failed their unchanged target; all passed freshness. Six crash trials preserved
+stored traces but lost acknowledged, still-buffered OTLP data. NetworkPolicy
+and Kata remain blocked; an approval evaluator false positive is retained
+without a product fix. Conservative cumulative spend is $22.76245520 under the
+authorized $39.50 cutoff. The report distinguishes pending cleanup, bounded
+passes and exclusions; it does not close human/customer validation, published
+release/rolling-upgrade, power-loss or production recovery requirements.
+
 **Evaluator validation (unreleased, 2026-10-21):** portable human pass/fail label
 revisions, existing annotation export import, tuning-only threshold/candidate
 selection, held-out validity and slice metrics, fresh-call repeatability,

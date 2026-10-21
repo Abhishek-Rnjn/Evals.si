@@ -472,6 +472,170 @@ Checkpoint fixture validation **passed**: Ruff, Ruff format check, mypy on all
 three new Python runners, and focused pytest **30 passed, 1 strict expected
 failure** for the retained original-denied-event defect.
 
+### Checkpoint 5: crash durability, real source-version migration and packaging
+
+#### SQLite FULL/NORMAL: actual daemon SIGKILL during ingest
+
+Executed **three declared replicates per mode**, six total:
+
+```sh
+python /work/storage.py sqlite --output /work/storage-crash
+```
+
+`storage.py` is the copied `tests/verification/aks_followup_storage.py`.
+Each trial launched a separate current `evalsid serve --no-auth` process on
+loopback, stored and read back 100 known traces, then continued OTLP/HTTP ingest
+on a separate thread. It sent SIGKILL to that exact daemon PID while ingestion
+was active, tracked response-acknowledged IDs separately from the final uncertain
+request, and restarted against the **same database**, not a new store.
+
+| Mode | Replicate | HTTP-acknowledged traces | Observed stored before kill | Recovered | Acknowledged but lost | Uncertain in-flight IDs |
+|---|---:|---:|---:|---:|---:|---:|
+| FULL | 1 | 320 | 100 | 100 | 220 | 20 |
+| FULL | 2 | 320 | 100 | 100 | 220 | 20 |
+| FULL | 3 | 300 | 100 | 100 | 200 | 20 |
+| NORMAL | 1 | 320 | 100 | 100 | 220 | 20 |
+| NORMAL | 2 | 300 | 100 | 100 | 200 | 20 |
+| NORMAL | 3 | 320 | 100 | 100 | 220 | 20 |
+
+All six recovered every previously observed stored trace with unchanged
+summary/record SHA-256, reported WAL mode and passed `PRAGMA integrity_check`.
+The final request's connection reset/disconnect is retained as **uncertain**,
+not counted as acknowledged. No previously observed stored trace was lost.
+
+**HTTP acceptance is not a durable commit:** the process's two-second assembler
+buffer lost 200-220 already-acknowledged traces per trial in **both** modes.
+This is a retained ingest durability limitation, not evidence that FULL lost
+committed SQLite rows or that NORMAL is power-loss safe. No host/power loss,
+disk failure, production RPO or transaction-level fsync instrumentation was tested.
+
+#### Actual tagged 0.3.0 and current PostgreSQL reader/writer sequence
+
+Cross-built the existing local `v0.3.0` tag at
+`203f23cbc6c6a4c5848a0d7703e2b6c38f0cc066` separately, without changing the worktree.
+SHA-256 of source-built historical/current binaries:
+
+- v0.3.0: `cf952971adeb3bef0fc51d732787a5a85524510609012bc5384416f7eab0a24f`.
+- Current: `a640f9cb4a8a58bfc4d65e509d3ee945d4fd14306a4e5478b659ba6af815f438`.
+
+Created `evalsi_followup_migration` inside the existing owned PostgreSQL 17 pod;
+the original lifecycle database was untouched. Sequential executions of
+`python /work/storage.py postgres --binary <historical-or-current-binary>
+--output <new-phase-directory> --dsn <owned-disposable-database>
+[--expected <prior-snapshots.json>] [--create <run-name>]` all **passed**:
+
+1. Actual historical daemon initialized the database and completed a recorded run.
+2. Current daemon adopted/migrated it, read that run unchanged and wrote another.
+3. Actual historical daemon reopened the migrated schema, read both unchanged
+   and wrote a third.
+4. Current daemon reopened and read all three unchanged.
+
+Each run had three synthetic recorded records, one trial, three nonempty
+passing exact-match results. IDs, common run fields/specs/summaries and exact
+stored results/records were compared, not merely row counts.
+The new `evaluationContract` field is excluded from cross-version comparison
+because the historical reader predates it. Generated agent outputs, newer
+feature semantics, simultaneous rolling replicas, Helm rollback and a published
+release-binary pair are **not** certified by this bounded source-tag test.
+
+Two initial fixture attempts were correctly rejected with HTTP 400:
+`spec.trials above 1 needs a target; without one every trial is identical`.
+The corrected recorded-only fixture uses one trial. Their launch directories
+and logs were preserved; no product change was made.
+
+Current startup recorded all **five** schema steps, each minimum reader **0**.
+After restore verification, a separate negative control temporarily marked the
+owned database as requiring reader version **6**. Executing
+`python /work/storage.py schema-guard ...` made the actual current daemon refuse
+startup with `the database schema is newer than this evalsid can read`.
+The marker was restored to 0 in `finally`. This verifies the current guard
+against simulated future metadata, not an actual destructive contract migration
+or retroactive guard support in v0.3.0.
+
+#### PostgreSQL dump/delete/restore, including application reads
+
+After all migration-phase daemons stopped and no sessions remained on that
+isolated database:
+
+```sh
+pg_dump -U postgres -d evalsi_followup_migration --format=custom --no-owner
+# Delete only this fixture's database; restore into a new empty owned database.
+pg_restore -U postgres -d evalsi_followup_restored \
+  --no-owner --exit-on-error --single-transaction
+```
+
+Both commands **passed** inside the existing PostgreSQL pod. The dump was
+streamed to a private local mode-0600 file before source deletion. SHA-256:
+`9b42d4d70bcbca93012920f8c354c5e81b3902aa771bf401738a370c24deb846`.
+Every one of **41 public tables** had identical row counts and ordered canonical
+row fingerprints after restore: three runs, nine admitted records, nine stored
+results and five migration rows, including their identities. A current daemon
+then read all three exact saved API snapshots from the restored database.
+
+This is a tiny quiesced same-version dependency backup with a private local copy,
+not encrypted off-site/managed PITR or a coordinated SQL/object-store/trace/queue
+recovery epoch. The recorded-only runs had zero generated-output rows.
+
+#### Unchanged installed agent starter: success, regression and honest failures
+
+In the ordinary clean-wheel worker:
+`python -m evalsi init --template agent /work/artifact-agent` **passed**.
+The unmodified starter's doctor and execution initially exited **1**:
+bubblewrap was missing; Landlock was below its required namespaced isolation.
+Installing only that missing dependency, bubblewrap **0.12.0**, did not solve
+the host restriction: retry exited **1**, `Failed to make / slave: Permission denied`.
+These failures and outputs are retained; isolation/network requirements were
+not weakened and no unconfined fallback was used.
+
+Used the **already authorized, owned privileged KVM pod**, not a changed shared
+node or newly privileged worker. After observed missing-venv/bubblewrap failures,
+installed the same built wheels in a fresh venv and bubblewrap inside that pod.
+`pip check` **passed**; no repository Python checkout was present.
+The exact same generated starter then used real **bwrap namespaced isolation**
+with the unchanged `network: deny` request:
+
+| Command, with `EVALSID=/work/build/evalsid` | Result |
+|---|---|
+| `python -m evalsi run -f run.yaml --output results-privileged.json` | **exit 0**, task-success 1.0, zero evaluation errors, both gates pass |
+| `python -m evalsi run -f regressed.yaml --output results-regressed-privileged.json` | **exit 3**, task-success 0.0, zero evaluation errors; expected business regression |
+| `python -m evalsi report results-privileged.json -o report-privileged.html` | **exit 0**, HTML copied privately |
+| `python -m evalsi doctor --require agent --format json` | **exit 1**: sandbox check passes (`bwrap`), but server advertises 0.0.0-dev versus SDK/harness 0.3.0.dev0 |
+
+The remaining doctor failure is a source-build metadata mismatch, not a passing
+release-package compatibility check. The CLI agent is synthetic and offline:
+**zero Claude requests**. Namespaced process networking does not repair or
+certify the cluster's unenforced pod NetworkPolicy.
+
+#### Real public-registry image cache, with deliberately offline controls
+
+Cross-built `internal/sandbox/aks_image_cache_test.go` and executed:
+
+```sh
+EVALSI_AKS_FOLLOWUP_IMAGE_CACHE=1 \
+EVALSI_FOLLOWUP_IMAGE_REPORT=/work/image-cache-report.json \
+/work/build/image-cache.test -test.run '^TestAKSFollowupImageCache$' \
+  -test.v -test.timeout=5m
+```
+
+**Passed**, 1.59 seconds. Used upstream Alpine 3.22.6 and the already recorded
+digest `sha256:3e9b4b680bfc9fb5269227cffbd6d42be39fbf7c0b908123913864aa4447e764`,
+a new test-owned image directory and actual registry responses. A counting
+transport then deliberately denied outbound registry requests for negative
+controls; no successful registry response was faked.
+
+- First digest fetch: **7** registry HTTP requests; root filesystem extracted.
+- Same-store warm pinned reuse: **0** requests, succeeds with transport blocked.
+- Real tag resolution: **4** requests, same digest as the pinned reference.
+- Reusing the tag with transport blocked: **1** attempted request, correctly fails.
+- A new image-store instance with the disk cache present: **1** attempted request,
+  correctly fails offline; the zero-request fast path is **in-memory**, not a
+  cross-process offline-cache guarantee.
+- Moving the cached root aside: **1** attempted request, correctly fails offline.
+
+No registry/repository was created, no tag was published/mutated and no signature
+verifier was configured. Mutable-tag movement and signature revalidation are not
+claimed from this bounded live lookup/reuse experiment.
+
 ## 3. Spend
 
 Prior conservative aggregate: **$16.51619320**. At checkpoint 1, the live ledger
@@ -509,6 +673,9 @@ Browser/CLI synthetic-agent checks added **$0** provider cost. No paid job remai
 running. Subsequent paid work must carry
 `live-calibration-resume/budget.json`, not an older checkpoint's ledger.
 
+Checkpoint 5 remains **$22.76245520**. All storage, migration, restore, installed
+agent and public-registry controls above added **$0** provider spend.
+
 ## 4. Failures, causes and proposed fixes
 
 All nine stored-throughput failures are retained above. Poll p95 below 0.2 seconds
@@ -516,6 +683,12 @@ versus multi-second freshness suggests that polling latency alone does not expla
 the observed freshness, but does not identify the dominant stage. A subsequent
 engineering investigation should isolate queueing, batching, database work and
 resource contention before selecting a fix.
+
+The crash trials additionally demonstrate an acknowledgment boundary: successful
+OTLP acceptance can precede durable storage. Document that boundary and evaluate
+durable buffering/acknowledgment or retained upstream delivery before promising
+crash-safe ingest. Both SQLite modes preserved every trace observed committed;
+changing SQLite synchronous mode alone does not persist the in-memory assembler.
 
 NetworkPolicy and Kata remain blocked without prohibited shared infrastructure
 changes. The denial self-event false positive is an evaluator finding, not a
@@ -531,10 +704,13 @@ Assistant-created labels are not independent human calibration.
 
 ## 6. Unverified scope
 
-Agent-template quickstart, PostgreSQL recovery and crash-durability drills,
-migration and digest-cache live controls remain pending. Delegation/forks,
-external-side-effect controls, native judge calibration and the bounded
-current-AKS browser workflow are now verified as described above.
+All seven approved execution groups are complete, with the failures and bounded
+claims retained above. Final resource cleanup remains pending at checkpoint 5.
+The actual tag-movement experiment, signature revalidation, native browser
+download event, release-package/version certification, simultaneous rolling
+upgrade, power loss and production/off-site recovery remain unverified.
+Strict audit was exercised with the current in-process real-server
+fault-injection tests on AKS, not a separate daemon unwritable-filesystem drill.
 Broader context/profile reexecution was excluded by the approved audit-first
 scope because the earlier horizon campaign already covered those mechanisms.
 Claude CLI field research remains conditional on per-request metering.
