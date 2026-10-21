@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Support and refund starter suite** (`examples/support-refund`, [guide](docs/guides/support-refund-suite.md)): twelve synthetic, editable tasks (authorization, amounts, recipients, duplicate prevention, retry after a timeout, clarification, human handoff) against a small order service, graded on its final state in a clean checker sandbox. A passing stand-in agent and a regressed one show the gate exiting 0 and 3 offline.
+- `builtin/state-assertion` turns one named outcome from a checker's per-test results into a metric, so each business rule gets its own gate. An assertion a task does not apply to is skipped, never passed.
 - `storage.sqlite.synchronous: normal` opts the default SQLite database into `PRAGMA synchronous=NORMAL`: faster writes, but a power loss can drop the last commits (WAL mode never corrupts). The default stays `full`.
 - `sandbox.firecracker.max_parallel_boots` (chart: `firecracker.maxParallelBoots`) limits concurrent cold microVM boots; default 8.
 - **Strict audit mode** (decision 0026). `audit.mode: strict`, the default when authentication is on, writes a change's audit entry before the change and refuses the call (`unavailable`) when the entry cannot be written. Automatic run deletes and archives skip runs they cannot audit. `besteffort` keeps the previous behaviour. Failed writes are counted in `evalsi_audit_write_failures_total`.
