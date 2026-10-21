@@ -22,7 +22,7 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
-  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["judge-calibration", 26],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28],
 ];
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
@@ -165,6 +165,7 @@ const examples = [
   { dir: "quickstart", title: "Quickstart: grade existing outputs", desc: "Score a JSONL file of question/answer records with built-in evaluators.", guide: "/docs/get-started/" },
   { dir: "runs", title: "Runs: execute a target on a dataset", desc: "A durable run with a dataset, evaluators and a pass/fail gate.", guide: "/docs/get-started/" },
   { dir: "agent-gate", title: "Gate an agent in CI", desc: "A runnable agent gate: a stand-in agent, a hidden checker and a pass/fail gate that exits 3, plus a GitHub Actions workflow.", guide: "/docs/guides/gate-an-agent-in-ci/" },
+  { dir: "support-refund", title: "Support and refund starter suite", desc: "Twelve synthetic support tasks graded on a shop's final state: authorization, amounts, recipients, duplicates, retries, clarification and handoff.", guide: "/docs/guides/support-refund-suite/" },
   { dir: "rag", title: "Evaluate a RAG pipeline", desc: "A gate over a RAG pipeline's recorded answers: question, answer, retrieved passages and a citation check, with no model needed.", guide: "/docs/guides/evaluate-rag/" },
   { dir: "agents", title: "Agent runs on sandboxed tasks", desc: "Put the built-in agent, or your own, to work on tasks in a sandbox, including SWE-bench.", guide: "/docs/guides/agent-runs/" },
   { dir: "watch", title: "Watch: evaluate live traces", desc: "An online policy that scores OpenTelemetry traces as they arrive.", guide: "/docs/get-started/" },

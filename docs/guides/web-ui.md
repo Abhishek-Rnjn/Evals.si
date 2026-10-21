@@ -6,6 +6,7 @@ evalsid serves a small UI at `/ui/`, for example
 - **runs:** their metrics with confidence intervals, gates, and the
   records sorted by any metric, lowest scores first;
 - **paired comparisons** of two runs;
+- **release workbench**, with [candidate configuration, policy forms and exact-trial debugging](release-workbench.md);
 - **online policies**, with their counters, windows and alerts;
 - **production traces** and the [failure inbox](failure-inbox.md), including case editing and review;
 - **release decisions**, with [baseline/candidate inspection, policy review and portable reports](release-decisions.md);
@@ -16,8 +17,7 @@ evalsid serves a small UI at `/ui/`, for example
 - **the evaluator catalog**, with each evaluator's tier and runtime.
 
 The unreleased inbox and dataset screens also write through the same authorized
-API as the CLI. Other run configurations and applying policies or guardrails go
-through the CLI or API.
+API as the CLI. The [release workbench](release-workbench.md) configures supported recorded/model/HTTP-agent runs and release policies. Advanced run configurations and applying online policies or guardrails go through the CLI or API.
 
 ## Signing in
 

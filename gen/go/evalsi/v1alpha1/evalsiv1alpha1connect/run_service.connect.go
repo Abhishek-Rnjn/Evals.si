@@ -52,6 +52,9 @@ const (
 	// RunServiceListRunResultsProcedure is the fully-qualified name of the RunService's ListRunResults
 	// RPC.
 	RunServiceListRunResultsProcedure = "/evalsi.v1alpha1.RunService/ListRunResults"
+	// RunServiceGetRecordEvidenceProcedure is the fully-qualified name of the RunService's
+	// GetRecordEvidence RPC.
+	RunServiceGetRecordEvidenceProcedure = "/evalsi.v1alpha1.RunService/GetRecordEvidence"
 	// RunServiceCompareRunsProcedure is the fully-qualified name of the RunService's CompareRuns RPC.
 	RunServiceCompareRunsProcedure = "/evalsi.v1alpha1.RunService/CompareRuns"
 	// RunServiceSliceRunsProcedure is the fully-qualified name of the RunService's SliceRuns RPC.
@@ -83,6 +86,8 @@ type RunServiceClient interface {
 	// results; it can still be read, and deleted. Archiving twice is harmless.
 	ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error)
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
+	// Exact record/trial evidence, independent of result pagination.
+	GetRecordEvidence(context.Context, *connect.Request[v1alpha1.GetRecordEvidenceRequest]) (*connect.Response[v1alpha1.GetRecordEvidenceResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
 	// A metric per run and per value of a record metadata field, computed on
@@ -170,6 +175,12 @@ func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(runServiceMethods.ByName("ListRunResults")),
 			connect.WithClientOptions(opts...),
 		),
+		getRecordEvidence: connect.NewClient[v1alpha1.GetRecordEvidenceRequest, v1alpha1.GetRecordEvidenceResponse](
+			httpClient,
+			baseURL+RunServiceGetRecordEvidenceProcedure,
+			connect.WithSchema(runServiceMethods.ByName("GetRecordEvidence")),
+			connect.WithClientOptions(opts...),
+		),
 		compareRuns: connect.NewClient[v1alpha1.CompareRunsRequest, v1alpha1.CompareRunsResponse](
 			httpClient,
 			baseURL+RunServiceCompareRunsProcedure,
@@ -214,6 +225,7 @@ type runServiceClient struct {
 	deleteRun          *connect.Client[v1alpha1.DeleteRunRequest, v1alpha1.DeleteRunResponse]
 	archiveRun         *connect.Client[v1alpha1.ArchiveRunRequest, v1alpha1.ArchiveRunResponse]
 	listRunResults     *connect.Client[v1alpha1.ListRunResultsRequest, v1alpha1.ListRunResultsResponse]
+	getRecordEvidence  *connect.Client[v1alpha1.GetRecordEvidenceRequest, v1alpha1.GetRecordEvidenceResponse]
 	compareRuns        *connect.Client[v1alpha1.CompareRunsRequest, v1alpha1.CompareRunsResponse]
 	sliceRuns          *connect.Client[v1alpha1.SliceRunsRequest, v1alpha1.SliceRunsResponse]
 	promoteResults     *connect.Client[v1alpha1.PromoteResultsRequest, v1alpha1.PromoteResultsResponse]
@@ -266,6 +278,11 @@ func (c *runServiceClient) ListRunResults(ctx context.Context, req *connect.Requ
 	return c.listRunResults.CallUnary(ctx, req)
 }
 
+// GetRecordEvidence calls evalsi.v1alpha1.RunService.GetRecordEvidence.
+func (c *runServiceClient) GetRecordEvidence(ctx context.Context, req *connect.Request[v1alpha1.GetRecordEvidenceRequest]) (*connect.Response[v1alpha1.GetRecordEvidenceResponse], error) {
+	return c.getRecordEvidence.CallUnary(ctx, req)
+}
+
 // CompareRuns calls evalsi.v1alpha1.RunService.CompareRuns.
 func (c *runServiceClient) CompareRuns(ctx context.Context, req *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error) {
 	return c.compareRuns.CallUnary(ctx, req)
@@ -308,6 +325,8 @@ type RunServiceHandler interface {
 	// results; it can still be read, and deleted. Archiving twice is harmless.
 	ArchiveRun(context.Context, *connect.Request[v1alpha1.ArchiveRunRequest]) (*connect.Response[v1alpha1.ArchiveRunResponse], error)
 	ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error)
+	// Exact record/trial evidence, independent of result pagination.
+	GetRecordEvidence(context.Context, *connect.Request[v1alpha1.GetRecordEvidenceRequest]) (*connect.Response[v1alpha1.GetRecordEvidenceResponse], error)
 	// Paired comparison of two runs over the records they share.
 	CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error)
 	// A metric per run and per value of a record metadata field, computed on
@@ -391,6 +410,12 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(runServiceMethods.ByName("ListRunResults")),
 		connect.WithHandlerOptions(opts...),
 	)
+	runServiceGetRecordEvidenceHandler := connect.NewUnaryHandler(
+		RunServiceGetRecordEvidenceProcedure,
+		svc.GetRecordEvidence,
+		connect.WithSchema(runServiceMethods.ByName("GetRecordEvidence")),
+		connect.WithHandlerOptions(opts...),
+	)
 	runServiceCompareRunsHandler := connect.NewUnaryHandler(
 		RunServiceCompareRunsProcedure,
 		svc.CompareRuns,
@@ -441,6 +466,8 @@ func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) 
 			runServiceArchiveRunHandler.ServeHTTP(w, r)
 		case RunServiceListRunResultsProcedure:
 			runServiceListRunResultsHandler.ServeHTTP(w, r)
+		case RunServiceGetRecordEvidenceProcedure:
+			runServiceGetRecordEvidenceHandler.ServeHTTP(w, r)
 		case RunServiceCompareRunsProcedure:
 			runServiceCompareRunsHandler.ServeHTTP(w, r)
 		case RunServiceSliceRunsProcedure:
@@ -494,6 +521,10 @@ func (UnimplementedRunServiceHandler) ArchiveRun(context.Context, *connect.Reque
 
 func (UnimplementedRunServiceHandler) ListRunResults(context.Context, *connect.Request[v1alpha1.ListRunResultsRequest]) (*connect.Response[v1alpha1.ListRunResultsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.ListRunResults is not implemented"))
+}
+
+func (UnimplementedRunServiceHandler) GetRecordEvidence(context.Context, *connect.Request[v1alpha1.GetRecordEvidenceRequest]) (*connect.Response[v1alpha1.GetRecordEvidenceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.v1alpha1.RunService.GetRecordEvidence is not implemented"))
 }
 
 func (UnimplementedRunServiceHandler) CompareRuns(context.Context, *connect.Request[v1alpha1.CompareRunsRequest]) (*connect.Response[v1alpha1.CompareRunsResponse], error) {

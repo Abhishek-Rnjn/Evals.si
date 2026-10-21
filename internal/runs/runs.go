@@ -1498,11 +1498,18 @@ func (m *Manager) ListRunResults(ctx context.Context, req *connect.Request[evals
 			continue
 		}
 		seen[key] = true
+		evidence := &evalsiv1alpha1.RunRecordEvidence{RecordId: r.Result.GetRecordId(), Trial: int32(r.Trial)}
 		if o, ok := outputs[key]; ok && o.Record != nil {
 			resp.Records = append(resp.Records, o.Record)
+			evidence.Record, evidence.OutputStored, evidence.OutputError = o.Record, true, o.Error
 		} else if r.RecordIdx < len(records) {
 			resp.Records = append(resp.Records, records[r.RecordIdx])
+			evidence.Record = records[r.RecordIdx]
+			if o, ok := outputs[key]; ok {
+				evidence.OutputStored, evidence.OutputError = true, o.Error
+			}
 		}
+		resp.RecordsByTrial = append(resp.RecordsByTrial, evidence)
 	}
 	return connect.NewResponse(resp), nil
 }

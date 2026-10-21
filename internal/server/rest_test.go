@@ -73,6 +73,7 @@ func TestRESTRoutes(t *testing.T) {
 		{"POST", "/v1alpha1/runs/run-1:cancel", "{}", "RunService/CancelRun", "id", "run-1"},
 		{"POST", "/v1alpha1/runs/run-1:resume", "{}", "RunService/ResumeRun", "id", "run-1"},
 		{"GET", "/v1alpha1/runs/run-1/results?evaluator=em", "", "RunService/ListRunResults", "runId", "run-1"},
+		{"GET", "/v1alpha1/runs/run-1/record?record_id=case%2F1&trial=1", "", "RunService/GetRecordEvidence", "recordId", "case/1"},
 		{"POST", "/v1alpha1/runs:compare", `{"baseline_run_id": "a"}`, "RunService/CompareRuns", "baseline_run_id", "a"},
 		{"POST", "/v1alpha1/runs:slice", `{"metric": "em", "by": "topic"}`, "RunService/SliceRuns", "metric", "em"},
 		{"POST", "/v1alpha1/runs:import", `{"name": "local"}`, "RunService/ImportRun", "name", "local"},
