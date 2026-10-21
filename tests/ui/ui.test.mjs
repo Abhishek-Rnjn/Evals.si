@@ -397,10 +397,10 @@ test('the UI signs in through the identity provider with PKCE', async () => {
   // A forged error is not shown as the provider's word, and a forged response
   // does not cancel a login in progress.
   idp.deny = false;
-  await page.goto(`${url}/ui/?error=access_denied&error_description=Call+support+on+555&state=forged`);
+  await page.goto(`${url}/ui/?error=access_denied&error_description=Call+support+on+LINE-ZZZ&state=forged`);
   await page.waitForSelector('.signin .error');
   assert.match(await page.textContent('.signin .error'), /did not match/);
-  assert.doesNotMatch(await page.textContent('#main'), /555/);
+  assert.doesNotMatch(await page.textContent('#main'), /LINE-ZZZ/);
 
   // A response this tab did not ask for is not trusted.
   await page.goto(`${url}/ui/?code=planted&state=forged`);

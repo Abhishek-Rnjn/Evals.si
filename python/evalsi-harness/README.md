@@ -22,15 +22,19 @@ evalsi run -f agent-run.yaml
 
 ## What it provides
 
-- **Sandbox tools:** `bash`, `read_file` and `write_file`, plus an escalation request the harness policy decides on.
-- **Other tools:** MCP tools over streamable HTTP or stdio; mocked tools; deterministic fault injection.
-- **Budgets:** steps, tokens, spend and wall-clock time.
-- **Simulated user:** an LLM user for multi-turn tasks.
-- **Record and replay:** model calls and tool I/O are captured, replay can branch from step N, and sandbox commands are re-executed so the environment is rebuilt.
-- **Environment checkers:** exit code, JSON, JUnit or a Python function.
-- **OTel spans:** every step becomes a span.
-- **The agent's diff:** recorded for the `code-quality` evaluator when the workdir is a git repository.
-- **Benchmark importers:** `harbor://` (Terminal-Bench 2 and other Harbor datasets) and `terminal-bench://` (Terminal-Bench 1) task directories, with their Dockerfiles translated into environments.
+- **A tool-calling agent:** OpenAI-compatible and Anthropic models with thinking, streaming and prompt caching; `bash`, file, `edit_file`, `glob`, `grep` and `apply_patch` tools; MCP tools over HTTP and stdio; mocked tools; versioned `minimal`, `standard` and `code-mode` profiles so a score names the harness it was measured on.
+- **Multi-agent runs:** a `delegate` tool starts a sub-agent with a clean context; its steps hang under the call as a tree and its spend comes out of the parent's budget (one level today).
+- **Escalation requests:** `request_escalation` asks for a wider policy; the harness decides, and every request is recorded for safety evaluators. Approval gates with human-in-the-loop events are on the [roadmap](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/HARNESS-ROADMAP.md).
+- **Users:** an LLM-simulated user for multi-turn tasks, and scripted mid-run messages that test whether the agent takes a correction into account.
+- **Long runs and budgets:** context strategies (`compact`, `clear-tool-results`, `fresh-rounds`, `evidence-state`) and caps on steps, tokens, spend and wall-clock time.
+- **Record and replay:** model calls and tool I/O are logged as they happen; replay, resume a killed trial, or fork from step N.
+- **Faults and hooks:** deterministic fault injection (errors, timeouts, malformed output, prompt injection) and Python hooks at the loop's lifecycle points.
+- **Grading:** exit-code, JSON, JUnit or Python checkers, clean checker isolation, reward-hacking signals and state-based assertions.
+- **Your own agent:** A2A, MCP, OpenAI Responses, HTTP, or a CLI inside the sandbox, with trajectory readers for Claude Code, Codex, Gemini CLI and pi.
+- **Observability:** every step becomes an OTel span, and the agent's diff is recorded for the `code-quality` evaluator when the workdir is a git repository.
+- **Benchmarks:** SWE-bench, τ-bench, Terminal-Bench, Harbor datasets and BFCL.
+
+See [The built-in agent harness](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/guides/built-in-harness.md) for what is built and what is not.
 
 ## Tasks as RL environments
 

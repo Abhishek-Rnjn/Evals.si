@@ -170,10 +170,72 @@ Exit criteria: CI imports a recorded Harness² run and scores it with the shared
 
 ## Not planned
 
-- **A general agent framework.** The built-in agent stays a small reference for comparing models and harness configurations. Hooks and profiles make it configurable; anything bigger, such as a TUI, an extension marketplace or a plan mode, belongs in the BYO path, where pi, dsh and others already do it well.
+- **A general agent framework.** The built-in agent stays a small reference for comparing models and harness configurations. Hooks and profiles make it configurable; anything bigger, such as a TUI, an extension marketplace or a plan mode, belongs in the BYO path (approval gates are the exception: H8 adds them, because an evaluation has to score them), where pi, dsh and others already do it well.
 - **Provider SDKs as dependencies.** The model clients keep speaking HTTP directly, so the harness stays light.
 - **Automated harness search, and training an evolver.** Evo2 shows harness variants can be searched and a model trained to propose edits. We provide the trusted score such a search needs (H3 and H5), but we do not build the search. It would optimize whatever the score rewards, so it waits until checker isolation (H4) and the reward-hacking signals (H5) are in place, and until a team asks for it. Harness² is such a search; H7 imports, scores, gates and sandboxes its output, and does not run its loop for users.
-- **Hosting agents.** Evals.si runs agents in sandboxes for evaluation. It does not serve them in production.
+- **Hosting agents.** Evals.si runs agents in sandboxes for evaluation. It does not serve them in production: no multi-user session store, chat UI or per-conversation pods. H8 evaluates conversational and approval behaviour without serving it.
+
+### H8: Oversight, topologies and conversations (proposed, after H3)
+
+Status: proposed and unassigned; nothing here is built. A comparison with a
+serving-oriented harness on 2026-10-21 (README-based, source unread) found three
+areas where the built-in agent is thin for *evaluation* purposes: what it does
+when it needs approval, what a multi-agent run looks like beyond one level, and
+how it behaves across a conversation. Serving agents to users, a session store and
+a chat UI stay out of scope (see "Not planned"). The comparison also understated
+what exists: one-level `delegate` sub-agents with linked trajectories, scripted
+mid-run messages, session resume and fork, and checker isolation are built.
+
+- **Approval gates and human-in-the-loop events.** Today the only decision is
+  `request_escalation`, which grants `network` or denies. Add a policy for the
+  built-in agent that can require approval before a class of tool call (by tool,
+  path glob or command pattern: allow, ask or deny, first match wins). An `ask`
+  becomes a `hitl_request` step answered by a scripted or simulated approver
+  (approve, deny, approve with an edited argument, or no answer within N steps),
+  and the answer is a `hitl_resolved` step. Both are recorded in cassettes, so a
+  replay sees the same decisions. This is what an evaluator needs to score "asked
+  before the irreversible action", "stopped after a denial" and "did not retry a
+  denied call under another name". The ACP connector's permission requests (H3)
+  use the same events. Plan mode and a TUI stay with bring-your-own agents.
+- **Approval evaluators in the `agent` pack.** `approval-before-sensitive-action`
+  (the listed tools were preceded by an approved request), `denial-respected` (no
+  equivalent call after a denial, including via `bash`) and `escalation-minimal`
+  (the request names the narrowest kind that works). A fixture agent that skips
+  approval, one that retries after a denial and one that behaves must score
+  differently.
+- **Multi-agent topologies.** `delegate` is one level, one model, and runs
+  sequentially. Let a run name specialists (a prompt, a tool allowlist, a budget
+  and optionally a cheaper model, using the model switching built in H1), allow
+  nesting to a configured depth, and run independent `delegate` calls in one turn
+  in parallel with the recording order fixed so replay stays exact. Record
+  handoffs from A2A tasks and CLI readers with the same parent links. Report
+  per-sub-agent cost, steps and outcome beside the total.
+- **Topology as an experiment variable.** Sweep single-agent, delegated and
+  specialist configurations through `evalsi matrix` next to profiles, so a team
+  can tell whether the extra agents bought anything for their tasks at their cost.
+  Extend `delegation-links` to check specialist assignment and depth limits.
+- **Multi-turn conversation evaluation.** The simulated user is one persona and
+  goal. Add a library of scripted and generated users (impatient, ambiguous,
+  adversarial, changes their mind), goals that end the conversation when
+  met, and conversation-level scoring (resolution, turns to resolve, repeated
+  questions, contradicted earlier answers). Add a fixture that interrupts a
+  conversation and reattaches to it, so an agent's recovery is measured rather
+  than assumed. This evaluates a conversational agent; it does not host one.
+- **A live run event stream.** Emit a run's steps, approvals and budget use as
+  NDJSON or server-sent events while it runs, so a UI or another tool can follow
+  a long trial. Replay and the stored trajectory stay the source of truth.
+- **Recipes for agents under test built on common frameworks.** Passing and
+  deliberately regressed `agent-run.yaml` controls for LangGraph/Deep Agents
+  and for serving-style agents reached over A2A or HTTP, with their session
+  handling and approval events mapped to steps. This is the integration work
+  PROD-07 asks for, applied to the harness.
+
+Exit criteria: CI runs the approval policy against a fixture agent that asks, one
+that skips approval and one that retries after a denial, with expected scores,
+and a replay reproduces every `hitl_*` step. A two-level, parallel specialist
+fixture replays exactly, and `evalsi matrix` compares it with a single-agent run
+and reports cost beside score. A conversation fixture with an interruption scores
+the same on replay. The recipes run offline against recorded fixtures.
 
 ## Tracking
 
