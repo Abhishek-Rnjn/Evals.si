@@ -363,12 +363,14 @@ if [ "$skip_landlock" = 1 ]; then` + block
 func TestAirgapBundlePlatform(t *testing.T) {
 	for _, test := range []struct {
 		name, platform, failure string
+		chartVersion            string
 		oldDocker               bool
 		relativeCLI             bool
 	}{
 		{name: "default", platform: "linux/amd64"},
 		{name: "relative CLI output", platform: "linux/amd64", relativeCLI: true},
 		{name: "arm64", platform: "linux/arm64"},
+		{name: "release candidate charts", platform: "linux/amd64", chartVersion: "0.4.0-rc.1"},
 		{name: "missing platform", platform: "linux/arm64", failure: "inspect"},
 		{name: "export failure", platform: "linux/arm64", failure: "save"},
 		{name: "docker without platform flags", platform: "linux/amd64", oldDocker: true},
@@ -424,6 +426,9 @@ fi
 			}
 			bundle := filepath.Join(dir, "bundle")
 			args := []string{"../../deploy/airgap/bundle.sh", "--tag", "e2e", "--out", bundle}
+			if test.chartVersion != "" {
+				args = append(args, "--chart-version", test.chartVersion)
+			}
 			if test.name != "default" {
 				args = append(args, "--platform", test.platform)
 			}
@@ -460,6 +465,9 @@ fi
 			log, err := os.ReadFile(calls)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if test.chartVersion != "" && strings.Count(string(log), "--version "+test.chartVersion+" --app-version e2e") != 3 {
+				t.Fatalf("bundle did not pin all three chart versions: %s", log)
 			}
 			wants := []string{
 				"docker image inspect --platform " + test.platform,

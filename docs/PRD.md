@@ -9,6 +9,10 @@ implementation and verification statements below retain their original scope.
 
 The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) lists acceptance work for stable 0.4. It does not change the status of this PRD's technical requirements, and it starts a first evaluation outside a cluster; the in-cluster service here remains the team and enterprise deployment path.
 
+R04-01 now has [candidate build/install controls](RELEASING.md#release-candidates-and-installed-artifact-checks)
+and a [verification record](verification/RELEASE-CANDIDATES-2026-10-21.md).
+Publication and unfamiliar-user onboarding acceptance remain open.
+
 ## Summary
 
 Evals.si becomes an evaluation microservice that customers install in their own Kubernetes cluster and call on demand. It works with any agent loop and any OpenTelemetry trace store; the agent harness is the first integration, and the first cut supports the most popular frameworks and stores. Customers get any evaluation (LLM, RAG, agent, classic ML, RL) through three doors:

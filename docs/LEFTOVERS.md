@@ -7,6 +7,13 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Candidate installation (unreleased, 2026-10-21):** RC classification, canonical
+Python stamping, matching server diagnostics and fresh-wheel onboarding/platform
+CI advance R04-01. See the [procedure](RELEASING.md#release-candidates-and-installed-artifact-checks)
+and [verification](verification/RELEASE-CANDIDATES-2026-10-21.md).
+An authorized release dry run, publication verification and an unfamiliar-user
+walkthrough remain required to complete the full readiness criterion.
+
 **Evaluator validation (unreleased, 2026-10-21):** portable human pass/fail label
 revisions, existing annotation export import, tuning-only threshold/candidate
 selection, held-out validity and slice metrics, fresh-call repeatability,

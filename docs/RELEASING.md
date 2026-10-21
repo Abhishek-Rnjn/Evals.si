@@ -51,8 +51,49 @@ Record who checked them and the run/commit used for the release.
 Stable 0.4 also needs the product-readiness rows R04-01 to R04-05 in the
 [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md#stable-release-decision); passing CI
 alone does not complete them. Release candidates (`v0.4.0-rc.N`) can support
-pilots before then. These are manual requirements, and the release workflow does
-not enforce them.
+pilots before then. The workflow enforces the artifact smoke checks below;
+the remaining product-readiness acceptance is manual.
+
+## Release candidates and installed-artifact checks
+
+Release inputs are `X.Y.Z` and `X.Y.Z-rc.N`; the older `X.Y.Z-rcN` spelling also
+works. Other suffixes and leading `v` in manual inputs are rejected before builds.
+`scripts/release_version.py` produces the `release-plan` workflow artifact with
+version identities, planned image tags and GitHub release classification.
+For `0.4.0-rc.1`, Python distributions, import versions and the exact harness
+dependency pin use `0.4.0rc1`. Go, image and chart versions retain `0.4.0-rc.1`;
+installation diagnostics recognize these equivalent identities.
+
+Candidates publish versioned server/collector image tags and a GitHub prerelease
+with `make_latest: false`. Stable inputs also update the images' `latest` tags
+and GitHub latest release. Charts use versioned OCI tags without new mutable
+aliases. Release bundles pin chart version and application version explicitly.
+
+The release `onboarding` matrix must pass before registry publication. It installs
+the actual built wheels into fresh virtual environments outside the checkout on
+Linux amd64/arm64 and macOS/Windows. Linux checks match SDK/harness/server versions
+and exercise namespaced agent controls. Portable checks score records. All four
+check `doctor`, `init`, passing/regressed runs, a configuration-error control,
+HTML generation and the Action adapter's three distinct exit outputs. Reports
+retain dependency versions, wheel hashes, capability diagnostics and elapsed time.
+
+Pull-request CI runs the same controls with a test RC and uploads
+`candidate-wheels-*` and `release-onboarding-*` artifacts. No registry publication
+occurs in those jobs. The [onboarding guide](guides/onboarding.md#install-a-reviewed-candidate)
+shows installation from those artifacts and explicit published RC selection.
+
+Inspect the version plan and reproduce checks with already built wheels:
+
+```bash
+python3 scripts/release_version.py 0.4.0-rc.1
+python3 scripts/smoke_release.py 0.4.0-rc.1 --wheels /absolute/path/to/wheels \
+  --require agent --action-adapter .github/actions/evalsi/run.py --report onboarding.json
+```
+
+Use `--require sdk` for pure-wheel scoring or `--require server` for Linux server
+diagnostics without requiring a sandbox. Release CI requires `agent` on Linux;
+server-only evidence does not close that check. Automated synthetic smoke time
+does not establish unfamiliar-user onboarding time, adoption or evaluator quality.
 
 ## Local Gates
 

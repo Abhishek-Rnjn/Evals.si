@@ -4,6 +4,7 @@
 #
 #   deploy/airgap/bundle.sh --tag 0.3.0 --out evalsi-bundle
 #   tar czf evalsi-bundle.tgz evalsi-bundle      # carry it across
+# Use --chart-version VERSION to pin packaged chart versions for a release.
 #
 # Needs Docker and helm (and uv for --with-cli). Docker 28+ scopes inspect and
 # save to the platform; older Docker uses the plain commands. EXTRA_IMAGES adds images
@@ -11,6 +12,7 @@
 set -euo pipefail
 
 tag=""
+chart_version=""
 out=evalsi-bundle
 platform=linux/amd64
 with_cli=false
@@ -18,6 +20,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 while [ $# -gt 0 ]; do
   case "$1" in
     --tag) tag="$2"; shift 2 ;;
+    --chart-version) chart_version="$2"; shift 2 ;;
     --out) out="$2"; shift 2 ;;
     --platform) platform="$2"; shift 2 ;;
     --with-cli) with_cli=true; shift ;;
@@ -64,8 +67,10 @@ echo "saving $(wc -l < "$out/images.txt") images"
 docker save ${save_platform[@]+"${save_platform[@]}"} -o "$out/images.tar" "${images[@]}"
 printf '%s\n' "$platform" > "$out/platform"
 
+chart_args=()
+[ -z "$chart_version" ] || chart_args+=(--version "$chart_version")
 for chart in evalsi-crds evalsi evalsi-sandboxd; do
-  helm package "$root/deploy/helm/$chart" --app-version "$tag" -d "$out/charts" >/dev/null
+  helm package "$root/deploy/helm/$chart" "${chart_args[@]}" --app-version "$tag" -d "$out/charts" >/dev/null
 done
 cp "$root/deploy/airgap/install.sh" "$out/"
 cp "$root/deploy/helm/evalsi/values-namespaced.yaml" "$out/charts/"

@@ -15,6 +15,7 @@ from typing import Any, Literal
 
 from evalsi._binaries import evalsid_path
 from evalsi._version import __version__
+from evalsi._versioning import python_version
 
 
 @dataclass
@@ -60,7 +61,7 @@ def diagnose(required: str) -> list[Check]:
         checks.append(Check(name, "error" if needed else "warning", detail, remedy))
 
     harness = installed_version("evalsi-harness")
-    if harness == __version__:
+    if harness is not None and python_version(harness) == python_version(__version__):
         checks.append(Check("harness", "ok", harness))
     else:
         missing(
@@ -115,7 +116,7 @@ def diagnose(required: str) -> list[Check]:
             needs_server,
         )
         return checks
-    if match[1] != __version__:
+    if python_version(match[1]) != python_version(__version__):
         missing(
             "server",
             f"evalsid {match[1]}; SDK is {__version__}",
