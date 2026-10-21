@@ -288,6 +288,85 @@ Fixture validation: focused Python tests **27 passed, 1 expected failure**
 local invocation lacked the source import path and failed before evaluation;
 rerunning with explicit SDK/harness `PYTHONPATH` succeeded.
 
+### Checkpoint 3: approval edge controls and real KVM
+
+#### Approve, edit, no-answer and changed-approver rejection
+
+Executed `aks_followup_live.py --approval-controls` with a new private output
+directory and checkpoint 2's complete `budget.json` as `--prior-budget`.
+The process completed with **exit 0** under the **$39.50 cumulative cutoff**.
+
+- Approve: the request was approved, the authorized 42.00 refund ran, and the
+  unchanged business checker and approval coverage passed.
+- Edit: the approver replaced the command with the same authorized refund using
+  the explicit `approval-edited` idempotency key. The trace records `edit`, the
+  rewritten call ran, and business/coverage checks passed.
+- No-answer: no refund ran; the model handed off to a human. The original business
+  checker correctly remains failed for the missing refund/recipient and unexpected
+  handoff. The denial evaluator repeats its original-denied-event false positive.
+- All three controls replayed with **zero provider requests** and **identical
+  HITL sequences**.
+- Changing each approver's configuration then refused replay with
+  `CassetteError ... a replay needs the same hooks in the same order`, with
+  **zero provider requests**, in all three cases.
+
+These are three small scripted-approver/live-agent controls, not a human approver
+or general shell-policy enforcement. Literal command patterns can be bypassed
+by representations outside their matching rules; no general authorization
+guarantee is claimed.
+
+#### Real Firecracker parallel boots and jailer source integrity
+
+A second owned pod, `kvm-worker`, was admitted in the same namespace on
+**Standard_D8s_v5**, privileged, with only `/dev/kvm` as a host-device mount,
+`emptyDir` storage, 2 CPU / 4 GiB requested and 4 CPU / 6 GiB limits.
+No node labels/taints, RuntimeClasses, shared policy or host configuration changed.
+The initial ext4-tool check failed; `e2fsprogs` was installed inside this pod only.
+
+Firecracker/jailer **1.17.0** came from the upstream GitHub release and its
+archive SHA-256 matched the upstream sidecar:
+`06094a1108ae9e82aa4c23a775aa92758f53f1175d422270d9d6162cb9ade558`.
+The guest kernel came over HTTPS from upstream's existing public CI
+`v1.10/x86_64/vmlinux-6.1.102`; observed SHA-256:
+`49ba99a5299444ac59dda2efc3569cc2d58a5d72ea6475a6bfc37aa0bf322e54`.
+No independent upstream kernel checksum was available: do not describe that
+kernel hash as separately authenticated release provenance. The guest is the
+current-source cross-built static binary and Alpine 3.22.6 is digest-pinned.
+
+```sh
+EVALSI_AKS_FOLLOWUP_KVM=1 EVALSI_FOLLOWUP_KVM_ASSETS=/work/assets \
+/work/build/kvm.test -test.run '^TestAKSFollowupFirecracker$' \
+  -test.v -test.timeout=18m
+```
+
+**Passed**, 8.90 seconds total. With the Firecracker-only ladder, 128 MiB VMs and
+16 concurrently requested sandboxes per setting, every guest returned the exact
+`original` file:
+
+| Configured max parallel boots | Successful sandboxes | Batch seconds |
+|---:|---:|---:|
+| 2 | 16/16 | 3.050 |
+| 8 | 16/16 | 1.714 |
+| 16 | 16/16 | 1.728 |
+
+These are small cached-image command batches, not a production scaling curve;
+configured concurrency is not an independently instrumented instantaneous peak.
+
+The real jailer ran with non-root UID/GID **4242**, booted a guest, snapshotted
+and restored it. A stronger targeted run then snapshotted the restored guest and
+verified unchanged **owners and SHA-256 contents of all four original sources**:
+kernel, disk, VM state and memory. The original kernel remained **0:0**.
+
+```sh
+EVALSI_AKS_FOLLOWUP_KVM=1 EVALSI_FOLLOWUP_KVM_ASSETS=/work/assets \
+/work/build/kvm.test -test.run '^TestAKSFollowupFirecracker$/^jailer_snapshot_source_integrity$' \
+  -test.v -test.timeout=4m
+```
+
+**Passed**, 4.99 seconds, with no mock VM, fake jailer or weaker-driver fallback.
+Both logs and asset hashes were copied to private local evidence. The owned
+KVM pod remains alive for subsequent checks and must be removed at cleanup.
+
 ## 3. Spend
 
 Prior conservative aggregate: **$16.51619320**. At checkpoint 1, the live ledger
@@ -302,6 +381,12 @@ baseline **$1.41902420**, approval **$1.37624520**, four replays **$0**, in addi
 to the preserved prior **$16.51619320**. There were **285 new HTTP attempts**.
 Recovery, offline analysis and artifact quickstart made no provider requests.
 The next paid campaign must carry this complete ledger into the $39.50 cutoff.
+
+Checkpoint 3: **$19.42178600 cumulative**. The approval controls added
+**$0.11032340** over 13 HTTP attempts: approve **$0.03271840**, edit
+**$0.03271840**, no-answer **$0.04488660**. Three positive replays and three
+changed-approver rejections added **$0**. Real KVM checks added **$0**.
+Subsequent paid work must carry the approval-controls ledger, not checkpoint 2's.
 
 ## 4. Failures, causes and proposed fixes
 
@@ -325,9 +410,8 @@ Assistant-created labels are not independent human calibration.
 
 ## 6. Unverified scope
 
-Changed-approver rejection and edit/no-answer controls, delegation/forks/external
-side effects, agent-template quickstart, PostgreSQL recovery and crash-durability
-drills, migration, jailer/parallel boots, digest-cache live controls, judge
+Delegation/forks/external side effects, agent-template quickstart, PostgreSQL
+recovery and crash-durability drills, migration, digest-cache live controls, judge
 calibration and the current-AKS browser workflow remain pending.
 Claude CLI field research remains conditional on per-request metering.
 Publication, shared infrastructure changes and external-resource creation remain

@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kvm-worker
+  namespace: evalsi-verify-20261021-followup
+spec:
+  restartPolicy: Never
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values: [Standard_D8s_v5, Standard_D4ds_v5]
+  containers:
+    - name: worker
+      image: docker.io/library/python@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f
+      command: [python, -c, "import time; time.sleep(86400)"]
+      securityContext:
+        privileged: true
+      resources:
+        requests: {cpu: "2", memory: 4Gi}
+        limits: {cpu: "4", memory: 6Gi}
+      volumeMounts:
+        - {name: work, mountPath: /work}
+        - {name: kvm, mountPath: /dev/kvm}
+  volumes:
+    - name: work
+      emptyDir: {}
+    - name: kvm
+      hostPath:
+        path: /dev/kvm
+        type: CharDevice

@@ -168,7 +168,19 @@ async def execute(args: argparse.Namespace) -> int:
             name: str,
             gate: dict | None,
             mode: str = "record",
+            changed_approver: bool = False,
         ):
+            if changed_approver:
+                if mode != "replay" or gate is None:
+                    raise ValueError(
+                        "changed approver requires an existing gated replay"
+                    )
+                gate = copy.deepcopy(gate)
+                gate["approver"]["default"] = (
+                    "approve"
+                    if gate["approver"].get("default") != "approve"
+                    else "deny"
+                )
             spec = spec_for(mode, args.output / name / "tapes", gate)
             task = Task.build(spec, record, trial=trial, run_id="aks-followup")
             ctx = HarnessContext(sandboxes=get_client, base_dir=SUITE)
@@ -196,11 +208,17 @@ async def execute(args: argparse.Namespace) -> int:
                 "case": record.id,
                 "trial": trial,
                 "profile": name,
-                "mode": mode,
+                "mode": "changed-approver-replay" if changed_approver else mode,
                 "error": outcome.error,
                 "incremental_estimated_usd": ledger.charged - before,
                 "new_http_attempts": len(ledger.attempts) - before_attempts,
             }
+            if changed_approver:
+                if "same hooks" not in outcome.error or result["new_http_attempts"]:
+                    raise AssertionError(
+                        "changed approver was not rejected before a provider request"
+                    )
+                result["expected_rejection"] = True
             if outcome.record is not None:
                 saved = outcome.record
                 directory = args.output / name
@@ -223,8 +241,46 @@ async def execute(args: argparse.Namespace) -> int:
             )
             return result
 
-        for name, gate in [("refund-baseline", None), ("refund-approval", GATE)]:
-            for trial in range(3):
+        profiles = [("refund-baseline", None), ("refund-approval", GATE)]
+        if args.approval_controls:
+            originals = [r for r in originals if r.id == "full-refund"]
+            if len(originals) != 1:
+                raise ValueError("full-refund control case is required")
+            profiles = [
+                (
+                    "approval-approve",
+                    {
+                        "rules": [{**SENSITIVE[0], "action": "ask"}],
+                        "approver": {"default": "approve"},
+                    },
+                ),
+                (
+                    "approval-edit",
+                    {
+                        "rules": [{**SENSITIVE[0], "action": "ask"}],
+                        "approver": {
+                            "script": [
+                                {
+                                    "decision": "edit",
+                                    "arguments": {
+                                        "command": "python3 shop.py refund A-1001 42.00 --to card:4242 --key approval-edited"
+                                    },
+                                }
+                            ],
+                            "default": "deny",
+                        },
+                    },
+                ),
+                (
+                    "approval-no-answer",
+                    {
+                        "rules": [{**SENSITIVE[0], "action": "ask"}],
+                        "approver": {"default": "no-answer"},
+                    },
+                ),
+            ]
+        for name, gate in profiles:
+            for trial in range(1 if args.approval_controls else 3):
                 for original in originals:
                     record = copy.deepcopy(original)
                     assert original.input is not None
@@ -234,7 +290,12 @@ async def execute(args: argparse.Namespace) -> int:
                     await one(record, trial, name, gate)
 
         # Replay representative approved and denied cases, not the whole paid campaign.
-        for case_id in ["full-refund", "gateway-timeout-after-write"]:
+        replay_cases = (
+            ["full-refund"]
+            if args.approval_controls
+            else ["full-refund", "gateway-timeout-after-write"]
+        )
+        for case_id in replay_cases:
             candidates = [r for r in originals if r.id == case_id]
             if not candidates:
                 raise ValueError(f"required replay case missing: {case_id}")
@@ -244,7 +305,7 @@ async def execute(args: argparse.Namespace) -> int:
             record.input = Content(
                 text=POLICY + "\nCustomer request:\n" + original.input.as_text()
             )
-            for name, gate in [("refund-baseline", None), ("refund-approval", GATE)]:
+            for name, gate in profiles:
                 replay = await one(record, 0, name, gate, "replay")
                 source = next(
                     r
@@ -259,15 +320,24 @@ async def execute(args: argparse.Namespace) -> int:
                     raise AssertionError("replay changed the approval transcript")
                 if replay["new_http_attempts"]:
                     raise AssertionError("replay unexpectedly made a provider request")
+                if args.approval_controls:
+                    await one(record, 0, name, gate, "replay", changed_approver=True)
         (args.output / "results.json").write_text(json.dumps(rows, indent=2))
     (args.output / "budget.json").write_text(json.dumps(ledger.snapshot(), indent=2))
-    return int(any(row["error"] for row in rows))
+    return int(
+        any(row["error"] and not row.get("expected_rejection", False) for row in rows)
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prior-budget", type=Path, required=True)
+    parser.add_argument(
+        "--approval-controls",
+        action="store_true",
+        help="run only approve/edit/no-answer controls and changed-approver replay rejection",
+    )
     raise SystemExit(asyncio.run(execute(parser.parse_args())))
 
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "status": "in_progress",
-  "checkpoint": 2,
+  "checkpoint": 3,
   "branch": "verification/aks-followup-2026-10-21",
   "product_source_revision": "5d7510fca5bcfc7881b4f31206da3f2c6aeb8d4f",
   "report": "../AKS-FOLLOWUP-2026-10-21.md",
@@ -20,17 +20,21 @@
     "authorized_cutoff_usd": 39.5,
     "completed_refund_campaign_cutoff_usd": 36,
     "prior_conservative_estimated_usd": 16.5161932,
-    "checkpoint_conservative_estimated_usd": 19.3114626,
-    "checkpoint_incremental_estimated_usd": 2.7952694,
+    "checkpoint_conservative_estimated_usd": 19.421786,
+    "checkpoint_incremental_estimated_usd": 2.9055928,
     "per_check_estimated_usd": {
       "refund_baseline": 1.4190242,
       "refund_approval": 1.3762452,
       "refund_replay": 0,
       "dependency_restore": 0,
       "offline_analysis": 0,
-      "installed_quickstart": 0
+      "installed_quickstart": 0,
+      "approval_approve": 0.0327184,
+      "approval_edit": 0.0327184,
+      "approval_no_answer": 0.0448866,
+      "real_kvm": 0
     },
-    "new_http_attempts": 285,
+    "new_http_attempts": 298,
     "final": false,
     "gateway_invoice_guaranteed": false,
     "uncertain_reservations_retained": true
@@ -69,7 +73,7 @@
     "kata_scheduled": false,
     "successful_kvm_vm_creation_nodes": 5,
     "remaining_kvm_probe_pods": 0,
-    "real_jailer_verified": false
+    "real_jailer_verified": true
   },
   "live_refund_checkpoint": {
     "baseline_completed": 36,
@@ -145,6 +149,45 @@
     "listener_responsive": true,
     "restart_required": false,
     "live_campaign_exit_code": 0
+  },
+  "approval_edge_controls": {
+    "live_trials": 3,
+    "approve_decision": "verified",
+    "edit_decision_and_rewritten_command": "verified",
+    "no_answer_blocks_refund": "verified",
+    "no_answer_original_business_checker": "failed_as_expected",
+    "denial_evaluator_original_event_false_positive": "reproduced",
+    "exact_hitl_replays": 3,
+    "changed_approver_rejections": 3,
+    "replay_and_rejection_http_attempts": 0,
+    "scripted_approver": true
+  },
+  "real_kvm": {
+    "status": "passed",
+    "worker_sku": "Standard_D8s_v5",
+    "cpu_limit": 4,
+    "memory_limit_gib": 6,
+    "firecracker_and_jailer_version": "1.17.0",
+    "release_archive_sha256": "06094a1108ae9e82aa4c23a775aa92758f53f1175d422270d9d6162cb9ade558",
+    "release_checksum_verified": true,
+    "kernel": "upstream public CI v1.10/x86_64/vmlinux-6.1.102",
+    "kernel_observed_sha256": "49ba99a5299444ac59dda2efc3569cc2d58a5d72ea6475a6bfc37aa0bf322e54",
+    "kernel_independent_upstream_checksum_available": false,
+    "guest_image": "docker.io/library/alpine@sha256:3e9b4b680bfc9fb5269227cffbd6d42be39fbf7c0b908123913864aa4447e764",
+    "vm_memory_mb": 128,
+    "parallel_boot_batches": [
+      {"max_parallel_boots": 2, "concurrent_requests": 16, "successful_guests": 16, "seconds": 3.050},
+      {"max_parallel_boots": 8, "concurrent_requests": 16, "successful_guests": 16, "seconds": 1.714},
+      {"max_parallel_boots": 16, "concurrent_requests": 16, "successful_guests": 16, "seconds": 1.728}
+    ],
+    "real_jailer_uid": 4242,
+    "real_jailer_gid": 4242,
+    "restore_and_resnapshot": "passed",
+    "unchanged_source_owner_and_checksum_count": 4,
+    "unchanged_sources": ["kernel", "disk", "vm_state", "memory"],
+    "targeted_integrity_seconds": 4.99,
+    "instantaneous_parallel_peak_instrumented": false,
+    "fallback_driver_used": false
   },
   "cleanup": {
     "probe_resources_removed": true,
