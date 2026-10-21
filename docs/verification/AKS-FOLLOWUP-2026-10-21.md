@@ -367,6 +367,111 @@ EVALSI_AKS_FOLLOWUP_KVM=1 EVALSI_FOLLOWUP_KVM_ASSETS=/work/assets \
 Both logs and asset hashes were copied to private local evidence. The owned
 KVM pod remains alive for subsequent checks and must be removed at cleanup.
 
+### Checkpoint 4: lifecycle, native Claude calibration and AKS browser
+
+#### Delegation, fork/resume and actual external side effects
+
+`aks_followup_lifecycle.py --output <new-private-directory> --prior-budget
+<approval-controls-budget.json>` **passed**, using the current AKS sandbox pool
+and explicit Sonnet through the authorized gateway. Client TLS material stayed
+in private local temporary files; provider credentials never entered Kubernetes.
+
+- One real subagent completed two subagent steps and the linked handoff checker
+  passed. Inspection of the privately retained provider request bodies verified
+  that the child's large raw background-evidence marker was absent from parent
+  requests.
+- A PostgreSQL-backed external write with an application idempotency key stayed
+  at **[1, 1, 1]** through the runner's record/replay/resume/fork checks.
+- The deliberately unkeyed negative control grew from **1 to 2** on replay.
+  These are model-only cassettes with real tools reexecuted: the harness does
+  **not** provide an exactly-once external-side-effect guarantee.
+- Completed replay and resume made **zero provider requests**; the fork made
+  one live continuation request. The original cassette SHA-256 was unchanged.
+
+#### Two real native Claude calibration passes
+
+Executed `aks_followup_calibration.py --source <live-refund-directory>
+--output <new-private-directory> --prior-budget <lifecycle-budget.json>`.
+Both rubric candidates received two fresh repeats over the same 60 observations:
+**24 frozen real model outputs and 36 synthetic policy-violating mutations**.
+All labels are assistant-created/reviewed, not independent human judgments.
+Twelve task groups split into six tuning and six held-out groups, with
+30 observations in each split and no group/input leakage.
+
+The native Anthropic SDK uses `httpx2`, unlike the harness transport. Its
+verification-only transport shares the existing cumulative ledger and reserves
+each request before network access, including SDK retries. Explicit Sonnet,
+the original approved gateway and the $39.50 cutoff were retained.
+
+The first full pass completed, but the runner's HTML export failed because the
+renderer returns bytes and the fixture initially used `write_text`. The complete
+immutable first report and **$21.09669000** ledger were preserved. After correcting
+only the fixture to `write_bytes`, execution resumed with
+`--resume-before <saved-calibration-before.json>` and that latest ledger.
+Dataset/protocol pins were checked before accepting the completed first pass;
+none of its paid requests were repeated.
+
+Both passes **completed**, with HTML and a fixed-output drift report:
+
+| Held-out result, for each candidate in each pass | Value |
+|---|---:|
+| Independent task groups / observations | 6 / 30 |
+| True positive / true negative | 12 / 18 |
+| False positive / false negative | 0 / 0 |
+| Accuracy / precision / recall / kappa | 1.0 / 1.0 / 1.0 / 1.0 |
+| Repeat decision disagreement | 0.0 |
+| Fixed-output accuracy delta between passes | 0.0 |
+
+The tuning tie selected declared-first `current-correctness`, threshold **0.5**.
+This does not show that rubric is superior. All 500 grouped bootstrap resamples
+had no empirical variation: the report explicitly marks confidence intervals
+**unavailable**, not population certainty. These small, deliberately contrasting
+synthetic observations do not certify real-world judge validity or absence of
+future drift.
+
+#### Browser workbench on the current AKS daemon
+
+Started the current cross-built daemon with `aks-followup-api.yaml` using
+`aks_followup_workbench.py` inside the owned worker, and verified the UI over
+the existing loopback-only forward. The fixture uses a **synthetic HTTP agent**,
+not Claude, three approved dataset records, two trials, and pinned built-in
+exact-match/tool-errors/run-completed evaluators.
+
+Actual browser interactions selected the approved dataset, validated and
+consented to destinations, started runs, inspected identities, configured the
+lower-is-better tool-errors rule with maximum per-trial critical score **0**,
+and saved immutable release decisions:
+
+| Control | Required independent records | Actual records / trials | Outcome |
+|---|---:|---:|---|
+| Intentionally bad agent | 3 | 3 / 2 | **BLOCK** |
+| Corrected good agent | 3 | 3 / 2 | **PASS** |
+| Same good agent, insufficient record count | 4 | 3 / 2 | **INSUFFICIENT** |
+
+The paired-case inspector showed the bad agent's `approval timeout` and
+`awaiting_human` evidence. Switching candidate trial to **1** loaded the actual
+`trial-1-lookup` evidence while baseline trial **0** remained unchanged.
+Declared commits `a`/`b`/`c` repeated 40 times are synthetic identities, not
+attestations of actual code revisions.
+
+The integrated browser did not emit Playwright's native download event within
+10 seconds. Rather than claim a completed native file download, verification
+captured the actual export Blobs while still invoking the original object-URL
+function. Candidate spec, policy and CLI export contents were persisted privately.
+The SDK command `python -m evalsi release policy-hash -f <exported-policy.json>`
+**passed**, yielding the exact CLI-export pin:
+`e937b09d3e75a0477e2c7656a173bf1c751365613a9074b76676d5663d4b9da5`.
+Dataset digest and two-trial pins matched. Running `python -m evalsi release gate`
+with the exported spec/policy, baseline evidence/commit and policy SHA pins,
+against the same AKS server **correctly returned exit 3 and
+RELEASE_OUTCOME_BLOCK**. PASS/INSUFFICIENT screenshots and CLI output are saved
+privately. No hosted Action dispatch or full browser/accessibility certification
+is claimed.
+
+Checkpoint fixture validation **passed**: Ruff, Ruff format check, mypy on all
+three new Python runners, and focused pytest **30 passed, 1 strict expected
+failure** for the retained original-denied-event defect.
+
 ## 3. Spend
 
 Prior conservative aggregate: **$16.51619320**. At checkpoint 1, the live ledger
@@ -387,6 +492,22 @@ Checkpoint 3: **$19.42178600 cumulative**. The approval controls added
 **$0.03271840**, no-answer **$0.04488660**. Three positive replays and three
 changed-approver rejections added **$0**. Real KVM checks added **$0**.
 Subsequent paid work must carry the approval-controls ledger, not checkpoint 2's.
+
+Checkpoint 4: **$22.76245520 cumulative**, **$6.24626200** above the original
+$16.51619320 aggregate. Lifecycle added **$0.05078700** across nine attempts:
+delegation **$0.03538920**, keyed record plus fork **$0.00951720**, unkeyed record
+**$0.00588060**; replay/resume added **$0**.
+Native calibration added **$3.28988220**: smoke **$0.00048180**, first pass
+**$1.62363520**, second pass **$1.66576520**.
+There were **482 calibration attempts**: 481 responses (one smoke plus
+480 ratings), and one attempt without an HTTP response, whose **$0.04030400**
+reservation remains charged conservatively. Do not relabel that unknown
+transport failure as a confirmed HTTP rate limit or a free request.
+All historical reservations and the earlier smoke allowance remain included.
+Follow-up campaigns have now added **789 HTTP attempts**, 1,584 cumulatively.
+Browser/CLI synthetic-agent checks added **$0** provider cost. No paid job remains
+running. Subsequent paid work must carry
+`live-calibration-resume/budget.json`, not an older checkpoint's ledger.
 
 ## 4. Failures, causes and proposed fixes
 
@@ -410,9 +531,12 @@ Assistant-created labels are not independent human calibration.
 
 ## 6. Unverified scope
 
-Delegation/forks/external side effects, agent-template quickstart, PostgreSQL
-recovery and crash-durability drills, migration, digest-cache live controls, judge
-calibration and the current-AKS browser workflow remain pending.
+Agent-template quickstart, PostgreSQL recovery and crash-durability drills,
+migration and digest-cache live controls remain pending. Delegation/forks,
+external-side-effect controls, native judge calibration and the bounded
+current-AKS browser workflow are now verified as described above.
+Broader context/profile reexecution was excluded by the approved audit-first
+scope because the earlier horizon campaign already covered those mechanisms.
 Claude CLI field research remains conditional on per-request metering.
 Publication, shared infrastructure changes and external-resource creation remain
 prohibited regardless of available funds.
