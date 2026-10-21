@@ -6,7 +6,7 @@ annotated-types==0.8.0
 anyio==4.15.1
 appdirs==1.4.4
 attrs==26.1.0
-certifi==2026.7.22
+certifi==2026.10.19
 charset-normalizer==3.5.2
 click==8.5.0
 dataclasses-json==0.6.7
