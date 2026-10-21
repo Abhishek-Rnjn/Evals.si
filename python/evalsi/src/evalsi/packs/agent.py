@@ -23,6 +23,7 @@ from evalsi.mechanisms import CONTEXT_COUNTERS, called_tools, context_acted
 from evalsi.packs.agent_checks import citation_grounding, handoff_correctness
 from evalsi.packs.agent_hacking import trial_tampering
 from evalsi.packs.agent_stages import evidence_stage_audit, evidence_stage_judge
+from evalsi.packs.approval import approval_coverage, denial_respected
 from evalsi.packs.contamination import contamination_fetch
 from evalsi.packs.harness_edit import (
     edit_mechanism_ran,
@@ -609,8 +610,8 @@ PACK = Pack(
         "Agent trajectories and agent runs: tool-call accuracy, trajectory match, tool "
         "errors, loops, step budgets, judge-rated goal completion, environment-checked "
         "task success, judge-reviewed code quality, sandbox policy violations, reward-hacking "
-        "signals, harness-edit checks, contamination fetches, efficiency and harness "
-        "mechanism activity."
+        "signals, approval checks, harness-edit checks, contamination fetches, efficiency and "
+        "harness mechanism activity."
     ),
     evaluators=[
         tool_call_accuracy,
@@ -621,6 +622,8 @@ PACK = Pack(
         evidence_stage_audit,
         evidence_stage_judge,
         handoff_correctness,
+        denial_respected,
+        approval_coverage,
         loop_detection,
         step_budget,
         goal_completion,
