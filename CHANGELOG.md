@@ -57,6 +57,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
+- The load test's `OnlineFreshness` polls concurrently and reports `freshness_poll_p95_ms`, so a slow read path no longer inflates the freshness it measures.
+- The release-workbench guide is in the website sidebar.
 - The sandbox image store reuses an unpacked root without asking the registry only for digest-pinned refs; tags are resolved every time.
 - **Authenticated installs now audit strictly by default.** With authentication enabled and no `audit.mode` set, a change whose audit entry cannot be written fails with `unavailable` instead of proceeding. Set `audit.mode: besteffort` to keep the old behaviour. In strict mode, access-management calls write one entry before the change and a detailed one after it.
 - The audit table gains `seq` and `hash` columns, an additive step. Entries written before the upgrade, or by an older release during a rolling upgrade, are not chained; verification counts them separately.

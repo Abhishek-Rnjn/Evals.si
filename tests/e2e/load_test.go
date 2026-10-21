@@ -250,24 +250,41 @@ func onlineFreshness(t *testing.T, e env, report map[string]any) {
 	var mu sync.Mutex
 	var pending []sent
 	var lat []time.Duration
+	var polls []time.Duration
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for deadline := time.Now().Add(5 * time.Minute); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
 			mu.Lock()
 			batch := slices.Clone(pending)
+			finished := len(lat)
 			mu.Unlock()
-			if len(batch) == 0 && len(lat) >= 200 {
+			if len(batch) == 0 && finished >= 200 {
 				return
 			}
+			// Poll concurrently: a serial pass over a backlog of pending traces
+			// would add its own duration (GetTrace reads FINAL on ClickHouse)
+			// to every latency measured behind it.
+			var wg sync.WaitGroup
+			sem := make(chan struct{}, 8)
 			for _, s := range batch {
-				if traceStored(ctx, traces, s.id, true) {
+				wg.Add(1)
+				sem <- struct{}{}
+				go func() {
+					defer func() { <-sem; wg.Done() }()
+					began := time.Now()
+					ok := traceStored(ctx, traces, s.id, true)
+					took := time.Since(began)
 					mu.Lock()
-					lat = append(lat, time.Since(s.at))
-					pending = slices.DeleteFunc(pending, func(p sent) bool { return bytes.Equal(p.id, s.id) })
-					mu.Unlock()
-				}
+					defer mu.Unlock()
+					polls = append(polls, took)
+					if ok {
+						lat = append(lat, time.Since(s.at))
+						pending = slices.DeleteFunc(pending, func(p sent) bool { return bytes.Equal(p.id, s.id) })
+					}
+				}()
 			}
+			wg.Wait()
 		}
 	}()
 	// 200 traces at 20/s.
@@ -280,6 +297,13 @@ func onlineFreshness(t *testing.T, e env, report map[string]any) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if len(polls) > 0 {
+		// How long one GetTrace poll takes, to tell a slow read path from a slow
+		// pipeline when freshness is high.
+		report["freshness_poll_p95_ms"] = float64(percentile(polls, 0.95).Microseconds()) / 1000
+	}
 	if len(lat) < 200 {
 		t.Fatalf("%d of 200 traces got scores", len(lat))
 	}
