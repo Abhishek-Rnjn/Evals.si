@@ -46,7 +46,11 @@ def scenario(
         checks.append("handoff-correct")
     if clarify:
         checks.append("clarification-asked")
-    expect: dict[str, Any] = {"caller": customer, "checks": sorted(checks), "handoff": handoff}
+    expect: dict[str, Any] = {
+        "caller": customer,
+        "checks": sorted(checks),
+        "handoff": handoff,
+    }
     if refund is not None:
         expect["refund"] = {"order": order, "cents": refund[0], "to": refund[1]}
     return {

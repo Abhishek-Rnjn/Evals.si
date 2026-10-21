@@ -17,14 +17,19 @@ The [guide](../../docs/guides/support-refund-suite.md) explains the design.
 | [`build.py`](build.py) | Builds `tasks.jsonl` and `run.yaml` from the files above |
 | [`run.yaml`](run.yaml), [`tasks.jsonl`](tasks.jsonl) | Generated: the run spec and the tasks |
 
-```bash
-pip install evalsi evalsi-harness   # Linux: the package carries the sandbox
-cd examples/support-refund
+This is unreleased: it needs the `state-assertion` evaluator, which published
+0.3.0 does not have, so run it from a source checkout (Linux, with `go` and
+`bubblewrap`; the [agent runs quick start](../../docs/guides/agent-runs.md#quick-start)
+has the same setup):
 
-evalsi run -f run.yaml              # exit 0: every business rule holds
+```bash
+go build -o bin/evalsid ./cmd/evalsid && export PATH=$PWD/bin:$PATH
+cd python && uv sync --all-packages && cd ../examples/support-refund
+
+uv run --project ../../python evalsi run -f run.yaml     # exit 0: every business rule holds
 
 sed 's/agent.py, careful/agent.py, sloppy/' run.yaml > regressed.yaml
-evalsi run -f regressed.yaml        # exit 3: the gates name the rules that broke
+uv run --project ../../python evalsi run -f regressed.yaml   # exit 3: the gates name the rules that broke
 ```
 
 The regressed agent skips the ownership, delivery, window and approval checks,
@@ -49,8 +54,8 @@ refund.
 
 ## Use it for your agent
 
-1. Replace `target.agent` in `build.py`'s spec with your agent (any command,
-   A2A, MCP or HTTP endpoint). Your agent calls the tools in `shop.py`, or you
+1. Replace `target.agent` in the spec template in `build.py` (not in `run.yaml`,
+   which is regenerated) with your agent: any command, A2A, MCP or HTTP endpoint. Your agent calls the tools in `shop.py`, or you
    swap in your own tools and keep the checker's idea: read the final state.
 2. Edit `scenarios.py` to your policy: amounts, windows, approval limits and
    the cases your support team really sees. Run `python3 build.py`.

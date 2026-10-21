@@ -3,7 +3,8 @@
 This unreleased starter suite evaluates a tool-using support agent on order
 refunds. It is a set of twelve editable tasks plus **state-based assertions**:
 deterministic checks of the business system's final state, so a judge is never
-the only evidence that a refund was correct. Requires the source SDK and worker;
+the only evidence that a refund was correct. Run it from a source checkout with
+`evalsid` on `PATH` (see the [agent runs quick start](agent-runs.md#quick-start)):
 published 0.3.0 does not include the `state-assertion` evaluator.
 
 The files are in [`examples/support-refund`](../../examples/support-refund/).
@@ -90,7 +91,7 @@ named outcomes in `tests` works with it.
 ## Make it yours
 
 Edit `scenarios.py` for your policy and cases, run `python3 build.py`, and replace
-`target.agent` with your agent. The tasks carry a `category` and a `provenance`
+`target.agent` in the spec template in `build.py` (`run.yaml` is regenerated) with your agent. The tasks carry a `category` and a `provenance`
 field; keep a provenance for tasks you add, so it is clear who may reuse them.
 
 ## Limits
@@ -99,9 +100,11 @@ field; keep a provenance for tasks you add, so it is clear who may reuse them.
   and one task moves a mean a long way; add your own cases before trusting a gate.
 - `refund-authorized` and `ledger-intact` pass for an agent that does nothing.
   Gate on `task-success` and the assertions together.
-- The ledger catches a refund written straight to the database file, not one
-  forged by also forging the ledger. Clean checking limits what an agent can
-  change; it is not a defence against a determined adversary.
+- The checker takes who owns an order, its status and its total from the seed
+  data, not from the database, and reports an edited order, a removed seed refund
+  or a refund the tools did not write as `ledger-intact` failures. It cannot catch a
+  forged ledger. Clean checking limits what an agent can change; it is not a
+  defence against a determined adversary.
 - The stand-in agents are rule-based. They show the gate working; they say
   nothing about how a model-driven agent will score.
 - This is one workflow in one simulated service. A general database tool

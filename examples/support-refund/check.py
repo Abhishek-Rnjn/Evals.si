@@ -20,13 +20,17 @@ import shop
 
 def grade(conn, expect: dict) -> dict:
     caller = expect["caller"]
+    seeded = shop.seed_refund_ids(conn)
     refunds = [
         {"order": o, "cents": c, "to": d}
-        for o, c, d in conn.execute(
-            "SELECT order_id, cents, destination FROM refunds WHERE idem_key != 'seed' ORDER BY id"
+        for i, o, c, d in conn.execute(
+            "SELECT id, order_id, cents, destination FROM refunds ORDER BY id"
         )
+        if i not in seeded
     ]
-    handoffs = conn.execute("SELECT COUNT(*) FROM messages WHERE kind='handoff'").fetchone()[0]
+    handoffs = conn.execute(
+        "SELECT COUNT(*) FROM messages WHERE kind='handoff'"
+    ).fetchone()[0]
     asks = conn.execute("SELECT COUNT(*) FROM messages WHERE kind='ask'").fetchone()[0]
     applies = set(expect["checks"])
     tests: dict[str, str] = {}
@@ -41,7 +45,8 @@ def grade(conn, expect: dict) -> dict:
             notes.append(f"{name}: {why}")
 
     def allowed(refund: dict) -> str:
-        view = shop.order_view(conn, refund["order"])
+        # Order facts come from the seed data, not the database an agent could have edited.
+        view = shop.pristine_order(refund["order"])
         if view is None:
             return f"{refund['order']} does not exist"
         if view["customer"] != caller:

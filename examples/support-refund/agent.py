@@ -35,7 +35,9 @@ def lookup(order: str) -> dict:
 def requested_cents(message: str, order: dict) -> int:
     total = order["total_cents"]
     for item in order["items"]:
-        if item["sku"] in message.lower() and re.search(r"damaged|only", message.lower()):
+        if item["sku"] in message.lower() and re.search(
+            r"damaged|only", message.lower()
+        ):
             return item["cents"]
     money = re.search(r"\$(\d+(?:\.\d\d)?)", message)
     return round(float(money.group(1)) * 100) if money else total
@@ -61,7 +63,15 @@ def careful(customer: str, message: str, order_id: str | None) -> str:
         return "A colleague will approve this refund."
     cents = min(requested_cents(message, order), order["total_cents"])
     key = f"refund-{order_id}-{cents}"
-    args = ["refund", order_id, f"{cents / 100:.2f}", "--to", order["payment_method"], "--key", key]
+    args = [
+        "refund",
+        order_id,
+        f"{cents / 100:.2f}",
+        "--to",
+        order["payment_method"],
+        "--key",
+        key,
+    ]
     code, _ = tool(*args)
     while code == 75:  # timed out: the write may have happened, so ask the service
         if lookup(order_id)["refunded_cents"] >= cents:

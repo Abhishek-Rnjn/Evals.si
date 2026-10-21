@@ -56,7 +56,8 @@ def block(name: str, indent: int) -> str:
 
 def spec() -> str:
     evaluators = "\n".join(
-        f"    - {{ref: state-assertion, name: {a}, params: {{assertion: {a}}}}}" for a in ASSERTIONS
+        f"    - {{ref: state-assertion, name: {a}, params: {{assertion: {a}}}}}"
+        for a in ASSERTIONS
     )
     gates = "\n".join(f"    - {{metric: {a}, min: 1.0}}" for a in ASSERTIONS)
     return f"""\
