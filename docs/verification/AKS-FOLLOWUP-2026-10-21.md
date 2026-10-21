@@ -636,6 +636,32 @@ No registry/repository was created, no tag was published/mutated and no signatur
 verifier was configured. Mutable-tag movement and signature revalidation are not
 claimed from this bounded live lookup/reuse experiment.
 
+### Final disposition of the audited checks
+
+Execution and cleanup are complete, with **no product fixes and no push**.
+Product-source paths remain identical to recorded main
+`5d7510fca5bcfc7881b4f31206da3f2c6aeb8d4f`; added Go files are verification tests.
+Checkpoint commits preserve intermediate failures/corrections:
+`4855edf`, `e2e4c2f`, `ba2356d`, `19969ea`, `267904d`, followed by this
+final evidence/cleanup documentation checkpoint.
+
+| Audit item | Final bounded disposition |
+|---|---|
+| 1. Current stored-ingest throughput | **Failed** unchanged target in all nine declared replicates |
+| 2. SQLite FULL/NORMAL and crash durability | Six real process-crash trials; stored rows preserved, acknowledged assembler-buffer loss in both modes; no power-loss claim |
+| 3. Corrected ClickHouse freshness polling | All three ClickHouse freshness checks pass; throughput remains failed |
+| 4. Real jailer source integrity | **Passed** real restore/resnapshot, four source owners/checksums unchanged |
+| 5. Parallel boot settings 2/8/16 | **Passed** 16/16 guests at each setting; not a production scaling curve |
+| 6. Digest reuse versus tags | Real lookup/offline controls pass; actual tag mutation and signature revalidation **not run** |
+| 7. Strict audit and besteffort | Current real-server fault-injection tests pass inside AKS; separate unwritable-daemon filesystem drill **not run** |
+| 8. Historical/current migration and readers | Real source-tag pair common recorded runs and current simulated-future guard pass; not published-release rolling certification |
+| 9. Model-driven refund suite | **36/36** baseline business passes, three trials per synthetic task |
+| 10. Live approval, evaluators and replay | Live controls/replay verified; denied-call self-event evaluator false positive retained |
+| 11. Native Claude calibration | Both repeated passes complete; assistant labels only, unavailable empirical uncertainty, no human/population certification |
+| 12. Current AKS browser workbench | BLOCK/PASS/INSUFFICIENT, paired trials and pinned CLI verified; native download event not observed |
+| 13. Claude CLI `permission_denials` | **Not run**: mandatory per-request conservative reservation was not established |
+| 14. Current KVM, NetworkPolicy and Kata | Real KVM passes; NetworkPolicy remains unenforced; Kata has no matching nodes |
+
 ## 3. Spend
 
 Prior conservative aggregate: **$16.51619320**. At checkpoint 1, the live ledger
@@ -676,6 +702,13 @@ running. Subsequent paid work must carry
 Checkpoint 5 remains **$22.76245520**. All storage, migration, restore, installed
 agent and public-registry controls above added **$0** provider spend.
 
+Final checkpoint 6 is unchanged: **$22.76245520**, including every carried
+historical/unknown-response reservation and the earlier smoke allowance.
+There are **1,584 cumulative HTTP attempts**, 789 added during this follow-up.
+The $39.50 pre-request cutoff was never reached; unused estimated headroom
+below that cutoff is **$16.73754480**. No additional model requests are planned
+or running. This remains a conservative provider-price estimate, not an invoice.
+
 ## 4. Failures, causes and proposed fixes
 
 All nine stored-throughput failures are retained above. Poll p95 below 0.2 seconds
@@ -704,8 +737,10 @@ Assistant-created labels are not independent human calibration.
 
 ## 6. Unverified scope
 
-All seven approved execution groups are complete, with the failures and bounded
-claims retained above. Final resource cleanup remains pending at checkpoint 5.
+All approved follow-up executions are complete, with the failures and bounded
+claims retained above. The seven original groups are reconciled under the
+approved audit-first scope, including the explicit exclusion of redundant
+context/profile reexecution. Final resource cleanup is verified below.
 The actual tag-movement experiment, signature revalidation, native browser
 download event, release-package/version certification, simultaneous rolling
 upgrade, power loss and production/off-site recovery remain unverified.
@@ -719,6 +754,35 @@ prohibited regardless of available funds.
 
 ## 7. Cleanup
 
-Probe resources are removed, but the owned namespace, dependency pods and active
-loopback forwarding remain necessary for the running campaign. Final namespace
-deletion, forwarding shutdown and absence checks are **not complete**.
+**Completed and verified.** Before deletion, the namespace's exact ownership
+label was checked. Its 24 inventoried objects contained no PVCs; every service
+was ClusterIP, pod volumes had no PVC references and pod specs had no Claude
+credential/gateway environment entries. No node, RuntimeClass, CRD, shared CNI/
+mesh policy, registry, external storage or other user's resources were changed.
+
+The owned workbench script received SIGTERM at its exact discovered PID and
+exited **0**; both its daemon and synthetic-agent ports closed. Its quiesced
+database, logs, 24 synthetic-agent request entries, screenshots and exported
+inputs were copied privately before deletion. The local database copy passed
+`PRAGMA integrity_check`, with four terminal runs and four release decisions.
+Observed database SHA-256:
+`89bd0d08b2b44d542d24b729fbdd4e08287c98c57950abc64d26208fce3a0094`.
+
+```sh
+kubectl --kubeconfig ./kube-aks.yaml delete namespace \
+  evalsi-verify-20261021-followup --wait=true --timeout=180s
+```
+
+**Passed.** The namespace is absent; querying its pods, services, Secrets,
+ConfigMaps, NetworkPolicies, Roles, RoleBindings and PVCs returned zero objects.
+This removed the worker, privileged KVM worker, pool process/sandboxes and all
+owned dependency/TLS/RBAC resources. The known local forward was stopped and
+both host ports **17445 and 18081** were independently verified closed.
+
+Private pre/post-cleanup manifests, crash/migration/calibration/lifecycle evidence,
+starter logs/HTML, registry results and the latest budget ledger persist locally.
+The PostgreSQL dump's mode 0600 and SHA-256 were reverified; generated starter
+files were byte-identical across the ordinary/privileged runs.
+Only the specifically created historical-source extraction directory was removed
+as build scratch; evidence and built binaries were retained. No unattended job
+or hourly commit timer was installed.

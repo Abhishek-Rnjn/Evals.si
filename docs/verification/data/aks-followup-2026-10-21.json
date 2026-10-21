@@ -1,9 +1,23 @@
 {
   "schema_version": 1,
-  "status": "execution_complete_cleanup_pending",
-  "checkpoint": 5,
+  "status": "completed_with_failures_and_limits",
+  "checkpoint": 6,
   "branch": "verification/aks-followup-2026-10-21",
   "product_source_revision": "5d7510fca5bcfc7881b4f31206da3f2c6aeb8d4f",
+  "product_source_unchanged": true,
+  "scope_dispositions": {
+    "approval": "verified_with_retained_evaluator_false_positive",
+    "lifecycle_and_external_side_effects": "verified_with_unkeyed_duplicate_negative_control",
+    "installed_artifacts_and_starters": "verified_with_host_and_doctor_version_failures_retained",
+    "load_and_freshness": "completed_throughput_failed_freshness_passed",
+    "repeated_trials_and_heuristic_validity": "verified_bounded_assistant_review_and_synthetic_challenges",
+    "context_profile_reexecution": "explicitly_excluded_by_approved_audit_first_scope",
+    "recovery_audit_identity": "verified_with_documented_drill_limits",
+    "native_claude_judge_calibration": "completed_assistant_labels_not_human_certification",
+    "aks_browser_workbench": "verified_with_native_download_event_limitation",
+    "claude_cli_permission_denials": "not_run_mandatory_per_request_reservation_not_established",
+    "mutable_registry_tag_publication": "not_run_no_registry_push_or_creation_authorized"
+  },
   "report": "../AKS-FOLLOWUP-2026-10-21.md",
   "environment": {
     "platform": "AKS",
@@ -48,7 +62,8 @@
     "new_http_attempts": 789,
     "cumulative_http_attempts": 1584,
     "latest_budget_evidence": "live-calibration-resume/budget.json",
-    "final": false,
+    "final": true,
+    "unused_estimated_headroom_to_cutoff_usd": 16.7375448,
     "gateway_invoice_guaranteed": false,
     "uncertain_reservations_retained": true
   },
@@ -374,8 +389,27 @@
   },
   "cleanup": {
     "probe_resources_removed": true,
-    "campaign_namespace_removed": false,
-    "port_forwarding_stopped": false,
-    "status": "pending_campaign_completion"
+    "namespace_owner_label_verified": true,
+    "inventoried_objects_before_deletion": 24,
+    "pvc_count_before_deletion": 0,
+    "all_services_cluster_ip": true,
+    "claude_environment_entries_in_pod_specs": false,
+    "workbench_exit_code": 0,
+    "workbench_state_quiesced_and_copied": true,
+    "workbench_copy_integrity_check": "ok",
+    "workbench_copy_runs": 4,
+    "workbench_copy_release_decisions": 4,
+    "workbench_synthetic_agent_requests": 24,
+    "workbench_database_sha256": "89bd0d08b2b44d542d24b729fbdd4e08287c98c57950abc64d26208fce3a0094",
+    "campaign_namespace_removed": true,
+    "remaining_queried_namespaced_objects": 0,
+    "port_forwarding_stopped": true,
+    "loopback_ports_verified_closed": [17445, 18081],
+    "private_evidence_preserved": true,
+    "postgres_backup_hash_and_mode_reverified": true,
+    "starter_files_byte_identical": true,
+    "historical_source_build_scratch_removed": true,
+    "unrelated_resources_changed": false,
+    "status": "verified_complete"
   }
 }
