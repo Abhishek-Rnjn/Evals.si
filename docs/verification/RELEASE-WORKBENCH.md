@@ -50,6 +50,11 @@ usability evidence, hosted-agent safety certification or a scale benchmark.
   dataset-scoped metrics, label outputs and unscored outputs are excluded.
 - The exact-trial browser control waits for the new trial's evidence, so an old
   heading remaining before hash navigation cannot satisfy the assertion.
+- CI builds the daemon in a separate step and passes `EVALSID` to the browser
+  suite. Cold compilation previously consumed about 90 seconds of Node's
+  120-second test-file deadline, cancelling the suite after ten passing tests.
+  The browser assertions, 120-second deadline and 15-minute job limit remain
+  unchanged; compilation is measured outside the browser-test budget.
 
 ## Reproduce
 
