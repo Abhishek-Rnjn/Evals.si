@@ -19,6 +19,7 @@ evalsi run -f agent-run.yaml
 | Versioned profiles | `minimal`, `standard`, `code-mode`, so a score names the harness it was measured on | [Profiles](agent-runs.md#profiles-a-harness-a-score-can-name) |
 | Multi-agent runs | A `delegate` tool starts a sub-agent with a clean context; its steps hang under the call as a tree, and its spend comes out of the parent's budget. One level, same model | [Sub-agents](agent-runs.md#sub-agents) |
 | Delegation checks | An evaluator that checks delegation links in A2A and sub-agent trajectories | [Checking delegation links](agent-runs.md#checking-delegation-links) |
+| Approval gates | The `ApprovalGate` hook asks before matching tool calls, a scripted approver answers (approve, edit, deny, no-answer), and `hitl_request` / `hitl_resolved` steps are recorded and replay exactly. `denial-respected` and `approval-coverage` score the result. A pattern gate, not a sandbox | [Approval gates](agent-runs.md#approval-gates) |
 | Escalation requests | `request_escalation` asks for a wider policy; the harness grants `network` only if configured and records every request for safety evaluators | [Harness options](agent-runs.md#harness-options) |
 | Messages from the user mid-run | Scripted corrections or new constraints at a chosen step | [Messages](agent-runs.md#messages-from-the-user-mid-run) |
 | Simulated user | An LLM user with a persona and goal for multi-turn tasks | [Harness options](agent-runs.md#harness-options) |
@@ -37,11 +38,10 @@ evalsi run -f agent-run.yaml
 These are on the [harness roadmap](../HARNESS-ROADMAP.md#h8-oversight-topologies-and-conversations-proposed-after-h3) (H8) and are
 proposals, not features:
 
-- **Approval gates and human-in-the-loop events.** Today the only decision is the
-  escalation request. Planned: allow, ask and deny rules by tool, path or command;
-  recorded `hitl_request` and `hitl_resolved` steps answered by a scripted
-  approver; and evaluators for "asked before the irreversible action" and "stopped
-  after a denial".
+- **A model or human approver, and an agent that asks on its own.** The approval gate
+  answers from a script, and the agent is asked rather than choosing to ask. Planned:
+  approver decisions recorded like the simulated user's, and a `request_approval`
+  tool scored by "asked before the irreversible action".
 - **Deeper multi-agent topologies.** Today sub-agents are one level and run one
   after another. Planned: specialists with their own prompt, tools, budget and
   model; nesting; parallel delegation with exact replay; and topology as a

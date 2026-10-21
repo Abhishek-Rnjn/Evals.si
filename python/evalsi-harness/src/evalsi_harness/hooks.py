@@ -58,6 +58,14 @@ class HookContext:
     config: dict[str, Any] = field(default_factory=dict)
     # Free for the hook to keep state in between calls.
     memory: dict[str, Any] = field(default_factory=dict)
+    # Steps the hook asked for with ``emit``, waiting to be put on the trajectory.
+    events: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+
+    def emit(self, name: str, **attributes: Any) -> None:
+        """Puts a step named ``name`` on the trajectory, under the run, after the
+        hook returns (``before_tool`` only). Its attributes are ``evalsi.hitl.*``
+        for the approval steps ``hitl_request`` and ``hitl_resolved``."""
+        self.events.append((name, attributes))
 
 
 @dataclass
@@ -102,6 +110,19 @@ class Hook:
 
 class HookError(RuntimeError):
     """A hook raised: the run ends with this, as an error."""
+
+
+def _event_step(name: str, parent: str, attributes: dict[str, Any]) -> Step:
+    prefix = "evalsi.hitl" if name.startswith("hitl_") else "evalsi.hook"
+    clean = {k: v for k, v in attributes.items() if v not in (None, "")}
+    return Step(
+        type="agent",
+        name=name,
+        output=Content(text=json.dumps(clean, sort_keys=True, default=str)),
+        span_id=span_id(),
+        parent_span_id=parent,
+        attributes={f"{prefix}.{k}": v for k, v in clean.items()},
+    )
 
 
 def _step(hook: str, event: str, parent: str, **attributes: Any) -> Step:
@@ -151,6 +172,10 @@ class Hooks:
     def _note(self, hook: Hook, event: str, parent: str, **attributes: Any) -> None:
         self.steps.append(_step(hook.name, event, parent, **attributes))
 
+    def _flush(self, hook: Hook, parent: str) -> None:
+        events, hook.ctx.events = hook.ctx.events, []
+        self.steps.extend(_event_step(name, parent, attrs) for name, attrs in events)
+
     def _each(self, event: str) -> list[Hook]:
         return [h for h in self.hooks if h.has(event)]
 
@@ -182,6 +207,7 @@ class Hooks:
         for hook in self._each("before_tool"):
             hook.ctx.step = step
             out = await self._run(hook, "before_tool", call)
+            self._flush(hook, parent)
             if out is None:
                 continue
             if isinstance(out, Deny):

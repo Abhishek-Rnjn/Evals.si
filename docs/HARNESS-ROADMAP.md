@@ -177,7 +177,8 @@ Exit criteria: CI imports a recorded Harness² run and scores it with the shared
 
 ### H8: Oversight, topologies and conversations (proposed, after H3)
 
-Status: proposed and unassigned; nothing here is built. A comparison with a
+Status: proposed and unassigned, except the approval gate and its evaluators,
+which are built (unreleased) and marked below. A comparison with a
 serving-oriented harness on 2026-10-21 (README-based, source unread) found three
 areas where the built-in agent is thin for *evaluation* purposes: what it does
 when it needs approval, what a multi-agent run looks like beyond one level, and
@@ -197,10 +198,18 @@ mid-run messages, session resume and fork, and checker isolation are built.
   before the irreversible action", "stopped after a denial" and "did not retry a
   denied call under another name". The ACP connector's permission requests (H3)
   use the same events. Plan mode and a TUI stay with bring-your-own agents.
+  *Built (unreleased): the `evalsi_harness.approval:ApprovalGate` hook with
+  allow/ask/deny rules by tool, path and command, a scripted approver (approve,
+  edit, deny, no-answer) and recorded `hitl_request`/`hitl_resolved` steps that
+  replay exactly ([guide](guides/agent-runs.md#approval-gates)). A model or human
+  approver and an agent-initiated request tool are not built.*
 - **Approval evaluators in the `agent` pack.** `approval-before-sensitive-action`
   (the listed tools were preceded by an approved request), `denial-respected` (no
   equivalent call after a denial, including via `bash`) and `escalation-minimal`
-  (the request names the narrowest kind that works). A fixture agent that skips
+  (the request names the narrowest kind that works). *Built (unreleased):
+  `builtin/denial-respected` and `builtin/approval-coverage`; the latter checks a
+  gate's coverage of patterns you name, because "approval before action" cannot fail
+  under an enforced gate. `escalation-minimal` is not built.* A fixture agent that skips
   approval, one that retries after a denial and one that behaves must score
   differently.
 - **Multi-agent topologies.** `delegate` is one level, one model, and runs
