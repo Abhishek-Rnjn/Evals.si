@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- **Support and refund starter suite** (`examples/support-refund`, [guide](docs/guides/support-refund-suite.md)): twelve synthetic, editable tasks (authorization, amounts, recipients, duplicate prevention, retry after a timeout, clarification, human handoff) against a small order service, graded on its final state in a clean checker sandbox. A passing stand-in agent and a regressed one show the gate exiting 0 and 3 offline.
+- `builtin/state-assertion` turns one named outcome from a checker's per-test results into a metric, so each business rule gets its own gate. An assertion a task does not apply to is skipped, never passed.
 - **Browser release workbench:** configure recorded/model/HTTP-agent runs on approved catalog suites, choose evaluators/judges/trials/token budgets, validate and review destinations before execution, and build reviewed release policies through forms. Explicit baselines, immutable decision IDs and new-attempt controls preserve existing release semantics. Export pinned candidate specs, policies, CLI commands and Action steps.
 - **Paired case inspector:** direct record/trial links from run and release results show model/tool events, arguments/results, stop reasons, checker outcomes and evaluator explanations. `RunService.GetRecordEvidence` (`GET /v1alpha1/runs/{run_id}/record?record_id=&trial=`) reads exact evidence with run permissions; `ListRunResults.records_by_trial` adds unambiguous trial associations while retaining existing clients.
 

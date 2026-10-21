@@ -322,6 +322,32 @@ def task_success(record: Record) -> list[Score]:
     return scores
 
 
+@evaluator(
+    name="builtin/state-assertion",
+    version="1.0.0",
+    description=(
+        "One named assertion about the end state of an agent run, taken from the checker's "
+        "per-test outcomes (`tests`). Use it once per assertion, with `name` as an alias, to "
+        "gate each business rule on its own metric. A task whose checker reports the assertion "
+        "as skipped, or not at all, is skipped, never passed."
+    ),
+    requires=Requirements(output=False),
+    outputs=[MetricSpec("state-assertion", PASSED, higher_is_better=True)],
+)
+def state_assertion(record: Record, *, assertion: str) -> Score:
+    check = record.check
+    if check is None:
+        raise SkipRecord("no environment check: the task's environment has no checker")
+    if check.error:
+        raise ValueError(f"the checker did not run: {check.error}")
+    outcome = check.tests.get(assertion)
+    if outcome is None:
+        raise SkipRecord(f"the checker did not report an assertion named {assertion!r}")
+    if outcome == "skipped":
+        raise SkipRecord(f"{assertion!r} does not apply to this task")
+    return Score(passed=outcome == "passed", explanation=f"{assertion}: {outcome}")
+
+
 def _policy_steps(record: Record) -> list[tuple[str, str, bool]]:
     out = []
     for step in record.trajectory.steps if record.trajectory else []:
@@ -599,6 +625,7 @@ PACK = Pack(
         step_budget,
         goal_completion,
         task_success,
+        state_assertion,
         code_quality,
         policy_violations,
         trial_tampering,
