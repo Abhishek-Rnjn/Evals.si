@@ -391,6 +391,7 @@ class ListRunResultsResponse(_message.Message):
     RESULTS_FIELD_NUMBER: _builtins.int
     RECORDS_FIELD_NUMBER: _builtins.int
     NEXT_PAGE_TOKEN_FIELD_NUMBER: _builtins.int
+    RECORDS_BY_TRIAL_FIELD_NUMBER: _builtins.int
     next_page_token: _builtins.str
     @_builtins.property
     def results(self) -> _containers.RepeatedCompositeFieldContainer[_score_pb2.EvaluationResult]: ...
@@ -398,17 +399,102 @@ class ListRunResultsResponse(_message.Message):
     def records(self) -> _containers.RepeatedCompositeFieldContainer[_record_pb2.Record]:
         """Records with the outputs the target produced, for the results on this page."""
 
+    @_builtins.property
+    def records_by_trial(self) -> _containers.RepeatedCompositeFieldContainer[Global___RunRecordEvidence]:
+        """Trial-aware association. `records` remains for older clients; its IDs
+        alone cannot distinguish two outputs of the same record in different trials.
+        """
+
     def __init__(
         self,
         *,
         results: _abc.Iterable[_score_pb2.EvaluationResult] | None = ...,
         records: _abc.Iterable[_record_pb2.Record] | None = ...,
         next_page_token: _builtins.str = ...,
+        records_by_trial: _abc.Iterable[Global___RunRecordEvidence] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["next_page_token", b"next_page_token", "records", b"records", "results", b"results"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["next_page_token", b"next_page_token", "records", b"records", "records_by_trial", b"records_by_trial", "results", b"results"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___ListRunResultsResponse: _TypeAlias = ListRunResultsResponse  # noqa: Y015
+
+@_typing.final
+class GetRecordEvidenceRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RUN_ID_FIELD_NUMBER: _builtins.int
+    RECORD_ID_FIELD_NUMBER: _builtins.int
+    TRIAL_FIELD_NUMBER: _builtins.int
+    run_id: _builtins.str
+    record_id: _builtins.str
+    trial: _builtins.int
+    def __init__(
+        self,
+        *,
+        run_id: _builtins.str = ...,
+        record_id: _builtins.str = ...,
+        trial: _builtins.int = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["record_id", b"record_id", "run_id", b"run_id", "trial", b"trial"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___GetRecordEvidenceRequest: _TypeAlias = GetRecordEvidenceRequest  # noqa: Y015
+
+@_typing.final
+class RunRecordEvidence(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    RECORD_ID_FIELD_NUMBER: _builtins.int
+    TRIAL_FIELD_NUMBER: _builtins.int
+    RECORD_FIELD_NUMBER: _builtins.int
+    OUTPUT_STORED_FIELD_NUMBER: _builtins.int
+    OUTPUT_ERROR_FIELD_NUMBER: _builtins.int
+    record_id: _builtins.str
+    trial: _builtins.int
+    output_stored: _builtins.bool
+    output_error: _builtins.str
+    @_builtins.property
+    def record(self) -> _record_pb2.Record:
+        """Generated record if available, otherwise the admitted dataset snapshot."""
+
+    def __init__(
+        self,
+        *,
+        record_id: _builtins.str = ...,
+        trial: _builtins.int = ...,
+        record: _record_pb2.Record | None = ...,
+        output_stored: _builtins.bool = ...,
+        output_error: _builtins.str = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["record", b"record"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["output_error", b"output_error", "output_stored", b"output_stored", "record", b"record", "record_id", b"record_id", "trial", b"trial"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___RunRecordEvidence: _TypeAlias = RunRecordEvidence  # noqa: Y015
+
+@_typing.final
+class GetRecordEvidenceResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    EVIDENCE_FIELD_NUMBER: _builtins.int
+    RESULTS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def evidence(self) -> Global___RunRecordEvidence: ...
+    @_builtins.property
+    def results(self) -> _containers.RepeatedCompositeFieldContainer[_score_pb2.EvaluationResult]: ...
+    def __init__(
+        self,
+        *,
+        evidence: Global___RunRecordEvidence | None = ...,
+        results: _abc.Iterable[_score_pb2.EvaluationResult] | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["evidence", b"evidence"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["evidence", b"evidence", "results", b"results"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___GetRecordEvidenceResponse: _TypeAlias = GetRecordEvidenceResponse  # noqa: Y015
 
 @_typing.final
 class CompareRunsRequest(_message.Message):

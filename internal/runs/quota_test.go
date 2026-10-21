@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,11 +39,12 @@ func (h *harness) tryCreate(project string, spec *evalsiv1alpha1.RunSpec) (*eval
 
 func TestQuotaDailyJudgeTokens(t *testing.T) {
 	day := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
-	now := day
+	var now atomic.Value
+	now.Store(day)
 	h := quotaHarness(t, config.Quotas{
 		Default:  config.QuotaLimits{JudgeTokensPerDay: 250},
 		Projects: map[string]config.QuotaLimits{"big": {JudgeTokensPerDay: 100000}},
-	}, func() time.Time { return now })
+	}, func() time.Time { return now.Load().(time.Time) })
 	h.worker.judgeTokens = 100
 	spec := func() *evalsiv1alpha1.RunSpec {
 		return &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy", "easy"), Evaluators: refs("exact-match")}
@@ -72,7 +74,7 @@ func TestQuotaDailyJudgeTokens(t *testing.T) {
 	if _, err := h.tryCreate("big", spec()); err != nil {
 		t.Fatal(err)
 	}
-	now = day.Add(24 * time.Hour)
+	now.Store(day.Add(24 * time.Hour))
 	if _, err := h.tryCreate("p", spec()); err != nil {
 		t.Fatalf("a new day: %v", err)
 	}
@@ -83,11 +85,12 @@ func TestQuotaDailyJudgeTokens(t *testing.T) {
 // until tomorrow.
 func TestQuotaDailySandboxSecondsCountEvaluators(t *testing.T) {
 	day := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
-	now := day
+	var now atomic.Value
+	now.Store(day)
 	h := quotaHarness(t, config.Quotas{
 		Default:  config.QuotaLimits{SandboxSecondsPerDay: 3},
 		Projects: map[string]config.QuotaLimits{"big": {SandboxSecondsPerDay: 1000}},
-	}, func() time.Time { return now })
+	}, func() time.Time { return now.Load().(time.Time) })
 	h.worker.sandboxedDuration = 2 * time.Second
 	spec := func() *evalsiv1alpha1.RunSpec {
 		return &evalsiv1alpha1.RunSpec{Target: target(), Dataset: inline("easy"), Evaluators: refs("test/sandboxed")}
@@ -119,7 +122,7 @@ func TestQuotaDailySandboxSecondsCountEvaluators(t *testing.T) {
 	if _, err := h.tryCreate("big", spec()); err != nil {
 		t.Fatal(err)
 	}
-	now = day.Add(24 * time.Hour)
+	now.Store(day.Add(24 * time.Hour))
 	if _, err := h.tryCreate("p", spec()); err != nil {
 		t.Fatalf("a new day: %v", err)
 	}

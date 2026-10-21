@@ -10,6 +10,10 @@ and its evidence identities. The CLI and GitHub Action fail closed: insufficient
 evidence cannot produce a passing check. Recording a decision does not deploy
 software or authorize deployment by itself.
 
+For browser configuration without YAML or hand-written policy JSON, use the
+[release workbench](release-workbench.md). Its paired inspector opens the exact
+record and trial behind a changed or critical case.
+
 ## 1. Capture and approve the regression suite
 
 Use the [failure inbox](failure-inbox.md) to capture a trace revision, redact the

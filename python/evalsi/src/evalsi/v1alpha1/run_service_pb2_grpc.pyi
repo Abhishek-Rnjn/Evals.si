@@ -51,6 +51,8 @@ class RunServiceStub:
     results; it can still be read, and deleted. Archiving twice is harmless.
     """
     ListRunResults: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]
+    GetRecordEvidence: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.GetRecordEvidenceRequest, _run_service_pb2.GetRecordEvidenceResponse]
+    """Exact record/trial evidence, independent of result pagination."""
     CompareRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]
     """Paired comparison of two runs over the records they share."""
     SliceRuns: _grpc.UnaryUnaryMultiCallable[_run_service_pb2.SliceRunsRequest, _run_service_pb2.SliceRunsResponse]
@@ -99,6 +101,8 @@ class RunServiceAsyncStub(RunServiceStub):
     results; it can still be read, and deleted. Archiving twice is harmless.
     """
     ListRunResults: _aio.UnaryUnaryMultiCallable[_run_service_pb2.ListRunResultsRequest, _run_service_pb2.ListRunResultsResponse]  # type: ignore[assignment]
+    GetRecordEvidence: _aio.UnaryUnaryMultiCallable[_run_service_pb2.GetRecordEvidenceRequest, _run_service_pb2.GetRecordEvidenceResponse]  # type: ignore[assignment]
+    """Exact record/trial evidence, independent of result pagination."""
     CompareRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.CompareRunsRequest, _run_service_pb2.CompareRunsResponse]  # type: ignore[assignment]
     """Paired comparison of two runs over the records they share."""
     SliceRuns: _aio.UnaryUnaryMultiCallable[_run_service_pb2.SliceRunsRequest, _run_service_pb2.SliceRunsResponse]  # type: ignore[assignment]
@@ -198,6 +202,14 @@ class RunServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _run_service_pb2.ListRunResultsRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_run_service_pb2.ListRunResultsResponse, _abc.Awaitable[_run_service_pb2.ListRunResultsResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def GetRecordEvidence(
+        self,
+        request: _run_service_pb2.GetRecordEvidenceRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_run_service_pb2.GetRecordEvidenceResponse, _abc.Awaitable[_run_service_pb2.GetRecordEvidenceResponse]]:
+        """Exact record/trial evidence, independent of result pagination."""
 
     @_abc_1.abstractmethod
     def CompareRuns(
