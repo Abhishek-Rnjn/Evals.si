@@ -48,6 +48,16 @@ Record who checked them and the run/commit used for the release.
 
 ## Local Gates
 
+For stable 0.4, also complete the
+[pre-0.4 product and adoption checklist](PRE-0.4-RELEASE-PLAN.md#release-candidate-and-stable-release-decision).
+Record artifact-based onboarding, real-customer evaluation and calibration,
+integration/report usability, pilot/distribution and commercial evidence, and
+three external teams retained weekly for four weeks with at least one explicit
+willingness-to-pay commitment. All criteria start open; passing CI alone does not
+complete them. A release candidate can support the bounded pilot before all
+stable-release criteria are met. These are manual readiness requirements; this
+documentation change does not add automated enforcement to the release workflow.
+
 ```bash
 make check
 go test -race ./...

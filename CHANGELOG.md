@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- [Pre-0.4 release plan](docs/PRE-0.4-RELEASE-PLAN.md) with open product-readiness and customer-adoption criteria, pilot onboarding and distribution steps, and required retention and willingness-to-pay evidence before stable 0.4.
 - **Support and refund starter suite** (`examples/support-refund`, [guide](docs/guides/support-refund-suite.md)): twelve synthetic, editable tasks (authorization, amounts, recipients, duplicate prevention, retry after a timeout, clarification, human handoff) against a small order service, graded on its final state in a clean checker sandbox. A passing stand-in agent and a regressed one show the gate exiting 0 and 3 offline.
 - `builtin/state-assertion` turns one named outcome from a checker's per-test results into a metric, so each business rule gets its own gate. An assertion a task does not apply to is skipped, never passed.
 - **Browser release workbench:** configure recorded/model/HTTP-agent runs on approved catalog suites, choose evaluators/judges/trials/token budgets, validate and review destinations before execution, and build reviewed release policies through forms. Explicit baselines, immutable decision IDs and new-attempt controls preserve existing release semantics. Export pinned candidate specs, policies, CLI commands and Action steps.

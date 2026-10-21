@@ -2,6 +2,12 @@
 
 End-to-end checks of Evals.si on real clusters, and where each finding stands now.
 
+Stable 0.4 also requires the evidence listed in the
+[pre-0.4 release plan](../PRE-0.4-RELEASE-PLAN.md). Its product, onboarding,
+evaluator-validation, customer-retention and commercial criteria are open, with
+owners and evidence pending. This is an acceptance checklist, not a verification
+report or a claim that customer adoption has been observed.
+
 | File | What it is |
 |------|------------|
 | [RELEASE-WORKBENCH.md](RELEASE-WORKBENCH.md) | Browser candidate/policy configuration, exact-trial paired evidence, authorization and exported CLI/Action controls; local synthetic verification and limits |

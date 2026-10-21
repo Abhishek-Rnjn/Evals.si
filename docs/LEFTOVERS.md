@@ -14,6 +14,18 @@ KVM, GPU and target-cluster certification remain blocked here. Reproducible
 [competitor benchmarks](../tests/benchmarks/README.md) distinguish local SDK
 overhead from hosted performance; they do not close production scale targets.
 
+## Required before stable 0.4
+
+The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) tracks required installed
+onboarding, own-application evaluation, explainable comparisons, customer-backed
+evaluator validation and one maintained integration. Recruitment, repeated pilot
+use, permissioned tutorials/case studies, a paid-continuation offer and an adoption
+scorecard are also required. The initial milestone is three external teams using
+it weekly for four weeks and at least one explicit willingness-to-pay commitment.
+All R04 items are open and unassigned; no pilot, retention, commercial or release
+readiness claim is established by this planning document. The detailed technical
+inventory below retains its existing evidence and limits.
+
 ## Browser release workbench, unreleased
 
 The [workbench](guides/release-workbench.md) configures supported candidate runs

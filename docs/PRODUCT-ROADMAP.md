@@ -14,6 +14,11 @@ existing agent framework, trace store and deployment environment.**
 
 ## Status, scope and tracking
 
+- The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) makes installed onboarding,
+  explainable comparisons, customer-backed evaluator validation, one supported
+  integration and real adoption evidence required before stable 0.4. Its R04 IDs
+  track that release's acceptance work alongside the broader IDs below. All R04
+  owners are initially unassigned and all acceptance evidence is pending.
 - Every item below remains **proposed** and **unassigned** unless scoped in the
   implementation progress table. An existing foundation is
   not a claim that the proposed workflow or enterprise guarantee is shipped.
