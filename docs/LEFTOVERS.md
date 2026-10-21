@@ -17,6 +17,19 @@ default-deny pod egress was not enforced, and an actual Kata pod could not
 schedule despite its RuntimeClass existing. These are not production, long-horizon
 quality or human-calibration passes. The disposable namespace was removed.
 
+**Budgeted horizon and service follow-up, 2026-10-21:**
+the [dedicated record](verification/HORIZON-SERVICES-2026-10-21.md) preserves
+real Haiku/Sonnet synthetic incident-triage outcomes and carries all spending
+under the user's increased $20 total estimated allowance. Sonnet passed
+300/300 decisions with exact evidence and retained memory across 112 compactions;
+fresh-pod zero-provider replay passed too. Aggregate conservative spend was
+$16.51619320, including earlier failed Haiku controls. Eight multi-service
+basic/lifecycle groups passed on isolated kind with enforced NetworkPolicy,
+including cancellation, deadline expiry, worker SIGKILL and pool recovery.
+These local-kind results do not certify AKS networking or production recovery;
+synthetic horizon results do not establish public-benchmark coding quality or
+a single 200k-token context.
+
 **Evaluator validation (unreleased, 2026-10-21):** portable human pass/fail label
 revisions, existing annotation export import, tuning-only threshold/candidate
 selection, held-out validity and slice metrics, fresh-call repeatability,

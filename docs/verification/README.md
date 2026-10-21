@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [HORIZON-SERVICES-2026-10-21.md](HORIZON-SERVICES-2026-10-21.md) | Budgeted live Haiku/Sonnet incident-triage controls on AKS, explicit carried spending and failed attempts, reproducible task/configuration files, and eight passing real multi-service failure groups on isolated kind |
 | [AKS-CLAUDE-2026-10-21.md](AKS-CLAUDE-2026-10-21.md) | Fresh AKS/terminal-Claude batch: 24 bounded passing harness/provider cases after an invocation correction, cache-read failures reproduced with the native SDK, unenforced default-deny egress, unschedulable Kata, complete 50-row reconciliation and cleanup |
 | [JUDGE-CALIBRATION-2026-10-21.md](JUDGE-CALIBRATION-2026-10-21.md) | Pinned human-label calibration, tuning isolation, held-out validity and fresh-call repeatability: 66 focused checks, real-client/scripted-HTTP JSON and logprob judges, synthetic example and offline desktop/mobile report review; real human-labelled judge certification remains open |
 | [RELEASE-WORKBENCH.md](RELEASE-WORKBENCH.md) | Browser candidate/policy configuration, exact-trial paired evidence, authorization and exported CLI/Action controls; local synthetic verification and limits |
