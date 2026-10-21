@@ -101,3 +101,9 @@ No GitHub-hosted Action execution or live external model is claimed by these che
 - After synchronizing the quota-test clock, `go test -race -count=1` passed all
   tests in `internal/runs`, `internal/store`, `internal/server` and
   `internal/webui` (89.8 s, 108.9 s, 105.4 s and 1.0 s respectively).
+- Final repository-wide `go test -race ./...` passed after the clock fix, with
+  `GOMAXPROCS=4` and `GOFLAGS=-p=2` (cached packages included). This default test
+  run does not replace the explicitly worker-backed `make e2e` sandbox controls.
+- The final ordinary `make go-check` rerun passed formatting/vet and every package
+  except `TestSnapshotAndRestore/bwrap`, which still returned an empty restored
+  output in this workspace. The same test failed on untouched main as noted above.
