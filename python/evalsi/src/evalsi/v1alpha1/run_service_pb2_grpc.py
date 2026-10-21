@@ -81,6 +81,11 @@ class RunServiceStub:
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsRequest.SerializeToString,
                 response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsResponse.FromString,
                 _registered_method=True)
+        self.GetRecordEvidence = channel.unary_unary(
+                '/evalsi.v1alpha1.RunService/GetRecordEvidence',
+                request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.GetRecordEvidenceRequest.SerializeToString,
+                response_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.GetRecordEvidenceResponse.FromString,
+                _registered_method=True)
         self.CompareRuns = channel.unary_unary(
                 '/evalsi.v1alpha1.RunService/CompareRuns',
                 request_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.CompareRunsRequest.SerializeToString,
@@ -169,6 +174,13 @@ class RunServiceServicer:
 
     def ListRunResults(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetRecordEvidence(self, request, context):
+        """Exact record/trial evidence, independent of result pagination.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -265,6 +277,11 @@ def add_RunServiceServicer_to_server(servicer, server):
                     servicer.ListRunResults,
                     request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsRequest.FromString,
                     response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsResponse.SerializeToString,
+            ),
+            'GetRecordEvidence': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetRecordEvidence,
+                    request_deserializer=evalsi_dot_v1alpha1_dot_run__service__pb2.GetRecordEvidenceRequest.FromString,
+                    response_serializer=evalsi_dot_v1alpha1_dot_run__service__pb2.GetRecordEvidenceResponse.SerializeToString,
             ),
             'CompareRuns': grpc.unary_unary_rpc_method_handler(
                     servicer.CompareRuns,
@@ -537,6 +554,33 @@ class RunService:
             '/evalsi.v1alpha1.RunService/ListRunResults',
             evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsRequest.SerializeToString,
             evalsi_dot_v1alpha1_dot_run__service__pb2.ListRunResultsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetRecordEvidence(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.v1alpha1.RunService/GetRecordEvidence',
+            evalsi_dot_v1alpha1_dot_run__service__pb2.GetRecordEvidenceRequest.SerializeToString,
+            evalsi_dot_v1alpha1_dot_run__service__pb2.GetRecordEvidenceResponse.FromString,
             options,
             channel_credentials,
             insecure,

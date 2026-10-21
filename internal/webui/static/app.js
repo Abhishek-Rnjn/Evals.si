@@ -121,6 +121,13 @@
     show(el("h1", {}, "Something went wrong"), el("p", { class: "error" }, String(err.message || err)));
   }
 
+  function workbench(query = new URLSearchParams()) {
+    const hash = location.hash, selectedProject = project, credential = token;
+    return window.evalsiWorkbench({ el, api, post, show, field, table, kv, fmt, contentText, notice, download,
+      scope: query.get("project") || project,
+      active: () => location.hash === hash && project === selectedProject && token === credential });
+  }
+
   // ---- sign-in ----
   // With an identity provider configured on the server (auth.cli_login), the
   // browser signs in with the authorization code flow and PKCE: it sends the
@@ -240,7 +247,7 @@
     ]);
     const next = resp.nextPageToken
       ? el("p", {}, el("a", { href: `#/runs?page=${encodeURIComponent(resp.nextPageToken)}` }, "Older runs →")) : null;
-    show(el("h1", {}, "Runs"), el("p", {}, compare),
+    show(el("h1", {}, "Runs"), el("p", {}, compare, " ", el("a", { href: "#/workbench" }, "Configure a regression run")),
       table(["", "Run", "Status", "Gates", "Records", "Created", "By", "Labels"], rows, [4]), next);
   }
 
@@ -278,6 +285,7 @@
           ["Error", run.error ? el("span", { class: "error" }, run.error) : ""],
         ])),
         ["RUN_STATUS_SUCCEEDED", "RUN_STATUS_FAILED"].includes(run.status) ? el("p", {}, el("a", { href: "#/releases" }, "Compare runs and decide a release")) : el("span"),
+        el("p", {}, el("a", { href: workbench().workbenchLink({ project: run.project, baseline: run.id }) }, "Use as an explicit baseline in the workbench")),
         el("h2", {}, "Metrics"),
         table(["Metric", "Kind", "n", "Mean", "Interval", "", "Skipped", "Errors", "Labels"], metrics, [2, 3, 6, 7]),
         gates.length ? el("h2", {}, "Gates") : el("span"), gates.length ? table(["Metric", "Stat", "Bound", "Value", "", "Reason"], gates, [3]) : el("span"),
@@ -293,14 +301,17 @@
     await refresh();
   }
 
-  async function loadResults(run, box) {
-    const resp = await api(`/v1alpha1/runs/${encodeURIComponent(run.id)}/results`, { page_size: 500 });
+  async function loadResults(run, box, pageToken = "") {
+    const resp = await api(`/v1alpha1/runs/${encodeURIComponent(run.id)}/results`, { page_size: 200, page_token: pageToken });
     const selectedMetric = box.querySelector('select[aria-label="sort by metric"]')?.value || "";
     const expanded = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.recordKey));
     const focused = box.contains(document.activeElement) ? document.activeElement : null;
     const focusedKey = focused?.closest("details")?.dataset.recordKey;
     const focusedSort = focused?.matches('select[aria-label="sort by metric"]');
-    const records = new Map((resp.records || []).map((r) => [r.id, r]));
+    const wb = workbench();
+    const records = new Map((resp.recordsByTrial || []).map(e => [wb.exactKey(e.recordId, e.trial), e]));
+    // Older servers supply no trial-aware association. Never attribute a
+    // possibly different trial's output to a result based on record ID alone.
     const byRecord = new Map();
     const metrics = new Set();
     for (const res of resp.results || []) {
@@ -326,22 +337,27 @@
       const m = sortBy.value;
       if (m) rows = rows.filter((r) => typeof r.scores[m] === "number").sort((a, b) => a.scores[m] - b.scores[m]);
       holder.replaceChildren(table(["Record", ...names, "Details"], rows.slice(0, 200).map((r) => {
-        const rec = records.get(r.id) || {};
+        const evidence = records.get(wb.exactKey(r.id, r.trial));
+        const rec = evidence?.record || {};
         return [
-          el("code", {}, r.trial ? `${r.id} (trial ${r.trial})` : r.id),
+          r.id ? el("a", { href: wb.caseLink("", run.id, r.id, r.trial, run.project) }, `${r.id} (trial ${r.trial})`) : el("span", {}, "Dataset-level result"),
           ...names.map((n) => (typeof r.scores[n] === "number" ? fmt(r.scores[n], 2) : r.scores[n] ?? "–")),
           el("details", { "data-record-key": `${r.id}#${r.trial}`, open: expanded.has(`${r.id}#${r.trial}`) }, el("summary", {}, short(contentText(rec.input), 80) || "show"),
             ...[["input", rec.input], ["output", rec.output], ["reference", rec.reference]]
               .filter(([, c]) => c).map(([label, c]) => [el("div", { class: "sub" }, label), el("pre", { class: "content" }, contentText(c))]),
-            r.notes.length ? el("pre", { class: "content" }, r.notes.join("\n")) : null),
+            r.notes.length ? el("pre", { class: "content" }, r.notes.join("\n")) : null,
+            evidence?.outputError ? el("p", { class: "error" }, evidence.outputError) : null,
+            el("p", {}, el("a", { href: wb.caseLink("", run.id, r.id, r.trial, run.project) }, "Inspect this trial’s trajectory and checker"))),
         ];
       }), names.map((_, i) => i + 1)));
     };
     sortBy.addEventListener("change", render);
     render();
     box.replaceChildren(
-      el("p", { class: "sub" }, `${byRecord.size} record result(s)${resp.nextPageToken ? " (first page)" : ""}. Sort: `, sortBy),
+      el("p", { class: "sub" }, `${byRecord.size} record result(s)${pageToken ? " (later page)" : resp.nextPageToken ? " (first page)" : ""}. Sort: `, sortBy),
       holder,
+      resp.nextPageToken ? el("button", { onclick: () => loadResults(run, box, resp.nextPageToken).catch(err => notice(box, err)) }, "Next results page") : null,
+      pageToken ? el("button", { onclick: () => loadResults(run, box).catch(err => notice(box, err)) }, "First results page") : null,
     );
     if (focusedSort) sortBy.focus({ preventScroll: true });
     else if (focusedKey) [...box.querySelectorAll("details")].find(d => d.dataset.recordKey === focusedKey)?.querySelector("summary")?.focus({ preventScroll: true });
@@ -896,6 +912,7 @@
       el("h2", {}, "Review immutable content"), el("p", { class: "sub" }, "Approval covers every record, metadata and source access boundary in this digest. With authentication enabled, the approver must be a different principal from the publisher."),
       el("details", {}, el("summary", {}, "Inspect all record content"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify(c, null, 2))), reviewForm,
       el("h2", {}, "Compare versions"), previous, diffButton, diffSlot,
+      el("p", {}, el("a", { href: workbench().workbenchLink({ project: scope, dataset: `${name}/${version}` }) }, "Configure agent, evaluators and release checks")),
       el("h2", {}, "Run regression checks"), runForm,
       el("details", {}, el("summary", {}, "Pinned server-run dataset reference"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify({ dataset: { catalog: result.reference } }, null, 2))),
       el("h2", {}, "Publication and review history"), history);
@@ -944,7 +961,7 @@
       try {
         if (!evidence || !policyPin || !reviewed.checked) throw new Error("Inspect both run identities and the current policy, then confirm your review.");
         const out = await post("/v1alpha1/release-decisions", { project: scope, id: id.value, policy: JSON.parse(policy.value), policySha256: policyPin, baseline: evidence[0].reference, candidate: evidence[1].reference });
-        location.hash = `#/releases/${encodeURIComponent(out.decision.id)}`;
+        location.hash = `#/releases/${encodeURIComponent(out.decision.id)}?project=${encodeURIComponent(scope)}`;
       } catch (err) { notice(resultSlot, err); }
     } }, field("Release decision ID", id), field("Baseline run ID", baseline), field("Candidate run ID", candidate), inspectRuns, evidenceSlot,
       field("Release policy (JSON)", policy), inspectPolicy, policySlot, field("I reviewed this policy and both run identities", reviewed),
@@ -955,13 +972,15 @@
     const scope = project;
     const result = await api("/v1alpha1/release-decisions", { project: scope, page_token: cursor });
     show(el("h1", {}, "Release decisions"), el("p", { class: "sub" }, "Production failure → approved regression suite → candidate comparison → release decision."),
+      el("p", {}, el("a", { href: "#/workbench" }, "Configure a release check without JSON")),
       table(["Decision", "Outcome", "Baseline", "Candidate", "Created"], (result.decisions || []).map(d => [
-        el("a", { href: `#/releases/${encodeURIComponent(d.id)}` }, d.id), enumName(d.outcome, "RELEASE_OUTCOME_"), d.baseline.reference.runId, d.candidate.reference.runId, when(d.createdAt),
+        el("a", { href: `#/releases/${encodeURIComponent(d.id)}?project=${encodeURIComponent(scope)}` }, d.id), enumName(d.outcome, "RELEASE_OUTCOME_"), d.baseline.reference.runId, d.candidate.reference.runId, when(d.createdAt),
       ])), result.nextPageToken ? el("button", { onclick: () => viewReleases(result.nextPageToken).catch(failed) }, "More release decisions") : null,
       el("h2", {}, "Compare existing runs"), releaseDecisionForm(scope));
   }
-  async function viewRelease(id) {
-    const { decision: d } = await api(`/v1alpha1/release-decisions/${encodeURIComponent(id)}`, { project });
+  async function viewRelease(id, query = new URLSearchParams()) {
+    const scope = query.get("project") || project;
+    const { decision: d } = await api(`/v1alpha1/release-decisions/${encodeURIComponent(id)}`, { project: scope });
     const dataset = d.policy.dataset;
     const download = el("button", { onclick: () => {
       const blob = new Blob([JSON.stringify({ schema: "evalsi.release-report/v1", decision: d }, null, 2)], { type: "application/json" });
@@ -979,15 +998,18 @@
       ...(d.reasons || []).map(reason => el("p", { class: "error" }, reason)),
       table(["Metric", "Independent pairs", "Baseline", "Candidate", "Regression", "Regression interval", "Outcome"], (d.metrics || []).map(m => [m.metric, m.pairedRecords || 0, fmt(m.baselineMean), fmt(m.candidateMean), fmt(m.meanRegression), m.regressionLow !== undefined ? `${fmt(m.regressionLow)} … ${fmt(m.regressionHigh)}` : "Unavailable", enumName(m.outcome, "RELEASE_OUTCOME_")])),
       ...(d.metrics || []).map(m => el("details", {}, el("summary", {}, `${m.metric}: changed and critical cases`),
-        ...(m.reasons || []).map(reason => el("p", {}, reason)), table(["Case", "Trial", "Baseline", "Candidate", "Critical failure"], (m.changes || []).map(change => [
+        ...(m.reasons || []).map(reason => el("p", {}, reason)), table(["Case", "Trial", "Baseline", "Candidate", "Critical failure", "Execution evidence"], (m.changes || []).map(change => [
           /^failure\/[a-f0-9]{24}$/.test(change.recordId) ? el("a", { href: `#/inbox/${change.recordId.slice(8)}?project=${encodeURIComponent(dataset.project)}` }, change.recordId) : change.recordId,
           change.trial || 0, fmt(change.baseline ?? 0), fmt(change.candidate ?? 0), change.criticalFailure ? "yes" : "no",
+          el("a", { href: workbench().caseLink(d.baseline.reference.runId, d.candidate.reference.runId, change.recordId, change.trial, scope) }, "Inspect paired case"),
         ])), m.changesOmitted ? el("p", {}, `${m.changesOmitted} additional changes omitted; inspect the pinned run evidence.`) : null)),
       ...sources, el("h2", {}, "Reviewed release policy"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify(d.policy, null, 2)), download,
       el("p", {}, "Verify independently: ", el("code", {}, `evalsi release verify ${d.id}.release.json --sha256 ${d.sha256}`)));
   }
 
   const routes = [
+    [/^\/workbench$/, (_, query) => workbench(query).view(_, query), "workbench"],
+    [/^\/case$/, (_, query) => workbench(query).inspect(_, query), "workbench"],
     [/^\/releases\/([^/]+)$/, viewRelease, "releases"],
     [/^\/releases$/, () => viewReleases(), "releases"],
     [/^\/datasets\/([^/]+\/[^/]+)$/, viewDatasetVersion, "datasets"],

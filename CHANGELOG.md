@@ -8,6 +8,9 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - **Support and refund starter suite** (`examples/support-refund`, [guide](docs/guides/support-refund-suite.md)): twelve synthetic, editable tasks (authorization, amounts, recipients, duplicate prevention, retry after a timeout, clarification, human handoff) against a small order service, graded on its final state in a clean checker sandbox. A passing stand-in agent and a regressed one show the gate exiting 0 and 3 offline.
 - `builtin/state-assertion` turns one named outcome from a checker's per-test results into a metric, so each business rule gets its own gate. An assertion a task does not apply to is skipped, never passed.
+- **Browser release workbench:** configure recorded/model/HTTP-agent runs on approved catalog suites, choose evaluators/judges/trials/token budgets, validate and review destinations before execution, and build reviewed release policies through forms. Explicit baselines, immutable decision IDs and new-attempt controls preserve existing release semantics. Export pinned candidate specs, policies, CLI commands and Action steps.
+- **Paired case inspector:** direct record/trial links from run and release results show model/tool events, arguments/results, stop reasons, checker outcomes and evaluator explanations. `RunService.GetRecordEvidence` (`GET /v1alpha1/runs/{run_id}/record?record_id=&trial=`) reads exact evidence with run permissions; `ListRunResults.records_by_trial` adds unambiguous trial associations while retaining existing clients.
+
 - `storage.sqlite.synchronous: normal` opts the default SQLite database into `PRAGMA synchronous=NORMAL`: faster writes, but a power loss can drop the last commits (WAL mode never corrupts). The default stays `full`.
 - `sandbox.firecracker.max_parallel_boots` (chart: `firecracker.maxParallelBoots`) limits concurrent cold microVM boots; default 8.
 - **Strict audit mode** (decision 0026). `audit.mode: strict`, the default when authentication is on, writes a change's audit entry before the change and refuses the call (`unavailable`) when the entry cannot be written. Automatic run deletes and archives skip runs they cannot audit. `besteffort` keeps the previous behaviour. Failed writes are counted in `evalsi_audit_write_failures_total`.
@@ -59,6 +62,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - The audit table gains `seq` and `hash` columns, an additive step. Entries written before the upgrade, or by an older release during a rolling upgrade, are not chained; verification counts them separately.
 
 ### Fixed
+
+- The browser release workbench preserves omitted versus explicitly empty evaluator parameters and the HTTP connector's 600-second default when copying baselines, normalizes commit labels to lowercase, offers captured per-record numeric metrics rather than summary-only trial aggregates, and preserves the decision project through release/case navigation. Browser regression controls cover matching contract hashes and cross-project PASS/BLOCK decisions.
+- Update the minimum Go toolchain to 1.26.10 and locked Python `certifi` to 2026.10.19, incorporating the certificate distrust fixes reported by GO-2026-6809 and PYSEC-2026-4320. Dependency security checks remain enabled.
+- The browser no longer associates different trials by record ID alone or hides later run results behind a fixed first-page table. Trial-specific outputs stay separate, result pages are navigable, and cases can be opened directly.
 
 - `evalsid` Firecracker snapshots (`internal/sandbox/firecracker.go`) now disable HTTP/2 keep-alives on the vsock transport and wait for the guest agent to recover after `resume()`, preventing `unavailable: unexpected EOF` on the first command or file write after `PUT /snapshot/create` on real KVM.
 - `evalsid sandbox probe` (`internal/sandbox/sandbox.go`) now preserves `res.Error` (which carries the `mode: privileged` and `ladder: [pod]` fallback hint when `bwrap` fails with `RTM_NEWADDR: Operation not permitted` on Ubuntu 24.04) instead of truncating at the first newline of `stderr`.

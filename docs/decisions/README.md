@@ -35,4 +35,6 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0028](0028-clickhouse-trace-source.md) | ClickHouse trace source for Collector Map tables and companion score write-back | Accepted, implemented |
 | [0029](0029-per-caller-rate-limits.md) | Per-caller token buckets for API, ingest and guardrail traffic, with protocol-native refusals | Accepted, implemented |
 
+| [0030](0030-browser-release-workbench.md) | Browser release configuration and reviewed pins over existing services; trial-correct, read-only paired case investigation | Implemented, unreleased |
+
 To add one, copy the shape of an existing record, take the next number, and link it here.

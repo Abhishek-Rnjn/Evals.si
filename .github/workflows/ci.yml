@@ -418,9 +418,13 @@ jobs:
         working-directory: tests/ui
       - run: npx playwright-core install --with-deps chromium
         working-directory: tests/ui
+      # Keep cold Go compilation outside Node's 120-second browser-test budget.
+      - name: Build UI test daemon
+        run: go build -o "$RUNNER_TEMP/evalsid-ui" ./cmd/evalsid
       - run: npm test
         working-directory: tests/ui
         env:
+          EVALSID: ${{ runner.temp }}/evalsid-ui
           EVALSI_UI_WORKER: ${{ github.workspace }}/python/.venv/bin/python -m evalsi
 
   trainers:

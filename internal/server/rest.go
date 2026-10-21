@@ -26,6 +26,7 @@ import (
 //	POST   /v1alpha1/runs/{id}:cancel          RunService.CancelRun
 //	POST   /v1alpha1/runs/{id}:resume          RunService.ResumeRun
 //	GET    /v1alpha1/runs/{run_id}/results     RunService.ListRunResults
+//	GET    /v1alpha1/runs/{run_id}/record      RunService.GetRecordEvidence (?record_id=&trial=)
 //	POST   /v1alpha1/runs:compare              RunService.CompareRuns
 //	POST   /v1alpha1/runs:slice                RunService.SliceRuns
 //	POST   /v1alpha1/runs/{id}:archive         RunService.ArchiveRun
@@ -113,6 +114,7 @@ func restRules() []*annotations.HttpRule {
 		rule("RunService.CancelRun", http.MethodPost, v+"/runs/{id}:cancel", "*"),
 		rule("RunService.ResumeRun", http.MethodPost, v+"/runs/{id}:resume", "*"),
 		rule("RunService.ListRunResults", http.MethodGet, v+"/runs/{run_id}/results", ""),
+		rule("RunService.GetRecordEvidence", http.MethodGet, v+"/runs/{run_id}/record", ""),
 		rule("RunService.CompareRuns", http.MethodPost, v+"/runs:compare", "*"),
 		rule("RunService.ImportRun", http.MethodPost, v+"/runs:import", "*"),
 		rule("RunService.SliceRuns", http.MethodPost, v+"/runs:slice", "*"),

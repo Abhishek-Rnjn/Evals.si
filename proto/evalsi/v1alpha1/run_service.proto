@@ -25,6 +25,8 @@ service RunService {
   // results; it can still be read, and deleted. Archiving twice is harmless.
   rpc ArchiveRun(ArchiveRunRequest) returns (ArchiveRunResponse);
   rpc ListRunResults(ListRunResultsRequest) returns (ListRunResultsResponse);
+  // Exact record/trial evidence, independent of result pagination.
+  rpc GetRecordEvidence(GetRecordEvidenceRequest) returns (GetRecordEvidenceResponse);
   // Paired comparison of two runs over the records they share.
   rpc CompareRuns(CompareRunsRequest) returns (CompareRunsResponse);
   // A metric per run and per value of a record metadata field, computed on
@@ -141,6 +143,29 @@ message ListRunResultsResponse {
   // Records with the outputs the target produced, for the results on this page.
   repeated Record records = 2;
   string next_page_token = 3;
+  // Trial-aware association. `records` remains for older clients; its IDs
+  // alone cannot distinguish two outputs of the same record in different trials.
+  repeated RunRecordEvidence records_by_trial = 4;
+}
+
+message GetRecordEvidenceRequest {
+  string run_id = 1;
+  string record_id = 2;
+  int32 trial = 3;
+}
+
+message RunRecordEvidence {
+  string record_id = 1;
+  int32 trial = 2;
+  // Generated record if available, otherwise the admitted dataset snapshot.
+  Record record = 3;
+  bool output_stored = 4;
+  string output_error = 5;
+}
+
+message GetRecordEvidenceResponse {
+  RunRecordEvidence evidence = 1;
+  repeated EvaluationResult results = 2;
 }
 
 message CompareRunsRequest {
