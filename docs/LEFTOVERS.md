@@ -7,6 +7,17 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Evaluator validation (unreleased, 2026-10-21):** portable human pass/fail label
+revisions, existing annotation export import, tuning-only threshold/candidate
+selection, held-out validity and slice metrics, fresh-call repeatability,
+group-bootstrap uncertainty and fixed-output judge-drift reports are built.
+See the [guide](guides/judge-calibration.md), [offline example](../examples/judge-calibration/README.md)
+and [verification record](verification/JUDGE-CALIBRATION-2026-10-21.md).
+These synthetic and scripted-HTTP checks do not close the existing real-human
+calibration requirements below. Continuous, categorical and pairwise preference
+labels, a calibration browser workspace, and representative deployed-judge
+certification remain open.
+
 The [runtime follow-up](verification/RUNTIME-VERIFICATION-2026-10-18.md)
 retains all 50 original inventory IDs, adds a real-KVM test/workflow with no
 simulated fallback, and rechecks free local MLflow/Phoenix score persistence.

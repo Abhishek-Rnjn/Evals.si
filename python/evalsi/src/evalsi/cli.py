@@ -116,6 +116,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _add_product_commands(sub: Any) -> None:
+    from evalsi.cli_calibrate import add_calibrate_commands
     from evalsi.cli_canaries import add_canary_commands
     from evalsi.cli_determinism import add_determinism_command
     from evalsi.cli_doctor import add_doctor_command
@@ -124,6 +125,7 @@ def _add_product_commands(sub: Any) -> None:
     from evalsi.cli_release import add_release_commands
 
     add_canary_commands(sub)
+    add_calibrate_commands(sub)
     add_determinism_command(sub)
     add_doctor_command(sub)
     add_init_command(sub)

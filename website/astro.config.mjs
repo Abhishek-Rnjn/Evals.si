@@ -15,7 +15,7 @@ const ogImage = `${site}${base === "/" ? "" : base}/og.png`;
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 
 const guides = [
-  "onboarding", "dataset-snapshots", "failure-inbox", "dataset-catalog", "release-decisions", "agent-runs", "gate-an-agent-in-ci", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
+  "onboarding", "dataset-snapshots", "judge-calibration", "failure-inbox", "dataset-catalog", "release-decisions", "agent-runs", "gate-an-agent-in-ci", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-harness",
   "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2",
 ];
