@@ -369,6 +369,8 @@ What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md)
 
 The proposed [product roadmap](docs/PRODUCT-ROADMAP.md) tracks future work for production-agent and enterprise AI teams, with priorities, dependencies and acceptance criteria. The [product strategy](docs/PRODUCT-STRATEGY.md) records the competitive research and adoption plan.
 
+The [pre-0.4 release plan](docs/PRE-0.4-RELEASE-PLAN.md) lists the open product-readiness work for stable 0.4 and the customer-validation criteria that come after it.
+
 [Runtime verification](docs/verification/RUNTIME-VERIFICATION-2026-10-18.md)
 tracks real KVM and other remaining prerequisites. The
 [competitor benchmark results](docs/verification/COMPETITOR-BENCHMARKS-2026-10-18.md) compare deterministic

@@ -46,6 +46,14 @@ Before the first release, a maintainer must check the live repository settings:
 These settings are prerequisites, not verified merely by reading the workflow.
 Record who checked them and the run/commit used for the release.
 
+## Before stable 0.4
+
+Stable 0.4 also needs the product-readiness rows R04-01 to R04-05 in the
+[pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md#stable-release-decision); passing CI
+alone does not complete them. Release candidates (`v0.4.0-rc.N`) can support
+pilots before then. These are manual requirements, and the release workflow does
+not enforce them.
+
 ## Local Gates
 
 ```bash

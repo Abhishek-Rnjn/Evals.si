@@ -14,6 +14,7 @@ existing agent framework, trace store and deployment environment.**
 
 ## Status, scope and tracking
 
+- The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) narrows the next release to R04 rows that each name the item below they advance, and keeps customer validation (CV rows) for beta. Its owners and evidence are pending.
 - Every item below remains **proposed** and **unassigned** unless scoped in the
   implementation progress table. An existing foundation is
   not a claim that the proposed workflow or enterprise guarantee is shipped.

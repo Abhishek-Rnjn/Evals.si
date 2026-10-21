@@ -25,6 +25,10 @@ KVM, GPU and target-cluster certification remain blocked here. Reproducible
 [competitor benchmarks](../tests/benchmarks/README.md) distinguish local SDK
 overhead from hosted performance; they do not close production scale targets.
 
+## Required before stable 0.4
+
+The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) lists the open R04 product-readiness rows and the customer-validation rows (CV) that gate beta rather than 0.4. Nothing in it is established yet. The detailed technical inventory below retains its existing evidence and limits.
+
 ## Browser release workbench, unreleased
 
 The [workbench](guides/release-workbench.md) configures supported candidate runs

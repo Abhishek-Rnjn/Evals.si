@@ -60,6 +60,8 @@ baseline-aware release decisions, PROD-02/PROD-03/ENT-08 foundation; merged).
 | GTM-04 | - | Penetration test | Commission an outside test before the first enterprise evaluation; keep answers and evidence in `docs/` | People | LEFTOVERS |
 | GTM-05 | - | Second maintainer | A second owner for `/.github/`, `/deploy/` and `SECURITY.md` in `CODEOWNERS` | People | LEFTOVERS |
 
+The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) maps its R04 (stable 0.4) and CV (beta) rows to the items above: R04-01 and R04-02 to PROD-01, R04-03 to PROD-02 and PROD-05, R04-04 to PROD-06, R04-05 to PROD-07, CV-01 and CV-05 to GTM-01, CV-02 to PROD-04 and PROD-06, CV-03 to GTM-02, CV-04 to GTM-03.
+
 ## PRD milestones
 
 | ID | Priority | Item | What is left | Kind | Source |
