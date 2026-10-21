@@ -7,6 +7,16 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Fresh live verification, 2026-10-21:** the supplied cluster is AKS, not EKS.
+The [new batch and complete 50-row reconciliation](verification/AKS-CLAUDE-2026-10-21.md)
+retain the newer 20 October evidence rather than reopening its bounded passes.
+Current SDK/harness tests against real AKS pods and terminal-configured Claude
+passed 24 bounded cases after correcting a multiprocessing invocation. Cache
+reuse still failed, also through the native Anthropic SDK on the same gateway;
+default-deny pod egress was not enforced, and an actual Kata pod could not
+schedule despite its RuntimeClass existing. These are not production, long-horizon
+quality or human-calibration passes. The disposable namespace was removed.
+
 **Evaluator validation (unreleased, 2026-10-21):** portable human pass/fail label
 revisions, existing annotation export import, tuning-only threshold/candidate
 selection, held-out validity and slice metrics, fresh-call repeatability,
