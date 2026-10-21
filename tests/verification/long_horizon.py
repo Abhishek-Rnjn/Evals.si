@@ -14,6 +14,8 @@ from typing import Any
 
 import httpx
 import yaml
+from horizon_task import ACTIONS, POLICY, current
+
 from evalsi.targets import TargetConfig
 from evalsi_harness.cassette import Cassette, CassetteModel
 from evalsi_harness.context import SUMMARY_SYSTEM, ContextConfig
@@ -22,7 +24,6 @@ from evalsi_harness.hooks import Continue, Hook, HookContext, Hooks
 from evalsi_harness.loop import AgentLoop, LoopConfig
 from evalsi_harness.models import AnthropicChat, Message, ModelTurn, ToolSpec
 from evalsi_harness.tools import FunctionTool
-from horizon_task import ACTIONS, POLICY, current
 
 
 class BudgetExhausted(RuntimeError):
@@ -68,17 +69,11 @@ class Ledger:
         request = json.loads(body)
         maximum = request["max_tokens"]
         if not isinstance(maximum, int) or not 1 <= maximum <= 1024:
-            raise ValueError(
-                "all responses, including summaries, must be capped at 1024 tokens"
-            )
+            raise ValueError("all responses, including summaries, must be capped at 1024 tokens")
         # UTF-8 bytes plus overhead is deliberately pessimistic, not a provider token count.
-        upper = (
-            (len(body) + 4096) * self.input_rate + maximum * self.output_rate
-        ) / 1e6
+        upper = ((len(body) + 4096) * self.input_rate + maximum * self.output_rate) / 1e6
         if self.charged + upper > self.limit:
-            raise BudgetExhausted(
-                "next HTTP attempt would exceed the conservative cost allowance"
-            )
+            raise BudgetExhausted("next HTTP attempt would exceed the conservative cost allowance")
         row = {
             "attempt": len(self.attempts) + 1,
             "reserved_usd": upper,
@@ -93,9 +88,7 @@ class Ledger:
     def settle(self, row: dict[str, Any], payload: dict[str, Any]) -> None:
         usage = payload.get("usage")
         if not isinstance(usage, dict):
-            raise TypeError(
-                "provider omitted usage; reservation retained and run stopped"
-            )
+            raise TypeError("provider omitted usage; reservation retained and run stopped")
         keys = (
             "input_tokens",
             "cache_creation_input_tokens",
@@ -108,9 +101,7 @@ class Ledger:
         if any(value < 0 for value in tokens.values()):
             raise ValueError("provider returned invalid usage; reservation retained")
         if "input_tokens" not in usage or "output_tokens" not in usage:
-            raise ValueError(
-                "provider omitted required token counts; reservation retained"
-            )
+            raise ValueError("provider omitted required token counts; reservation retained")
         actual = (
             sum(tokens[key] for key in keys[:-1]) * self.input_rate
             + tokens["output_tokens"] * self.output_rate
@@ -150,9 +141,7 @@ class ConciseSummaryModel(AnthropicChat):
                 "\nUse at most 120 words. Preserve the approved release code and the "
                 "current incident ID. Do not enumerate past incidents or repeat logs."
             )
-        return await super().complete(
-            messages, tools, system=system, max_tokens=max_tokens
-        )
+        return await super().complete(messages, tools, system=system, max_tokens=max_tokens)
 
 
 class MeteredTransport(httpx.AsyncBaseTransport):
@@ -187,9 +176,7 @@ async def execute(args: argparse.Namespace) -> int:
     if not 1 <= count <= 300:
         raise ValueError("fixture count must be between 1 and 300")
     if not os.environ.get("EVALSI_SANDBOX_ADDR", "").startswith("tls://"):
-        raise ValueError(
-            "an explicit mutual-TLS sandbox pool is required; no local fallback"
-        )
+        raise ValueError("an explicit mutual-TLS sandbox pool is required; no local fallback")
     model_env = (
         "ANTHROPIC_DEFAULT_HAIKU_MODEL"
         if args.model_family == "haiku"
@@ -207,17 +194,11 @@ async def execute(args: argparse.Namespace) -> int:
     ):
         raise ValueError("terminal gateway HTTPS URL and bearer token are required")
     if args.replay and args.prior_budget:
-        raise ValueError(
-            "offline replay makes no provider calls; do not carry a paid ledger"
-        )
+        raise ValueError("offline replay makes no provider calls; do not carry a paid ledger")
     if args.resume and not args.prior_budget:
-        raise ValueError(
-            "paid resume requires --prior-budget to preserve the total allowance"
-        )
+        raise ValueError("paid resume requires --prior-budget to preserve the total allowance")
     if args.output.exists() and any(args.output.iterdir()):
-        raise ValueError(
-            "output directory must be new or empty; refusing to overwrite evidence"
-        )
+        raise ValueError("output directory must be new or empty; refusing to overwrite evidence")
     args.output.mkdir(parents=True, exist_ok=True)
     live = None
     if args.replay:
@@ -287,8 +268,7 @@ async def execute(args: argparse.Namespace) -> int:
         async with SandboxClient(os.environ["EVALSI_SANDBOX_ADDR"]) as client:
             summary["pool_probe"] = await client.probe()
             if not any(
-                rung["driver"] == "pod" and rung["available"]
-                for rung in summary["pool_probe"]
+                rung["driver"] == "pod" and rung["available"] for rung in summary["pool_probe"]
             ):
                 raise RuntimeError("the real pod rung is unavailable")
             async with await client.create(
@@ -297,9 +277,7 @@ async def execute(args: argparse.Namespace) -> int:
                     min_isolation="namespaced",
                     memory_mb=128,
                     files={
-                        "horizon_task.py": Path(__file__)
-                        .with_name("horizon_task.py")
-                        .read_text()
+                        "horizon_task.py": Path(__file__).with_name("horizon_task.py").read_text()
                     },
                 )
             ) as sandbox:
@@ -310,9 +288,7 @@ async def execute(args: argparse.Namespace) -> int:
                         ["python", "horizon_task.py", *command], timeout_s=30
                     )
                     if not result.ok:
-                        raise RuntimeError(
-                            f"fixture command failed: {result.stderr[:300]}"
-                        )
+                        raise RuntimeError(f"fixture command failed: {result.stderr[:300]}")
                     return json.loads(result.stdout)
 
                 first = await remote(
@@ -352,13 +328,9 @@ async def execute(args: argparse.Namespace) -> int:
                 )
 
                 class CompletionGuard:
-                    async def on_stop(
-                        self, ctx: HookContext, final: FinalEvent
-                    ) -> Continue | None:
+                    async def on_stop(self, ctx: HookContext, final: FinalEvent) -> Continue | None:
                         state = json.loads(
-                            (await sandbox.read_files(["triage-state.json"]))[
-                                "triage-state.json"
-                            ]
+                            (await sandbox.read_files(["triage-state.json"]))["triage-state.json"]
                         )
                         if len(state["decisions"]) == state["count"]:
                             return None
@@ -393,9 +365,7 @@ async def execute(args: argparse.Namespace) -> int:
                         seconds=round(time.monotonic() - started, 3),
                     )
                     (args.output / "decisions.json").write_bytes(
-                        (await sandbox.read_files(["triage-state.json"]))[
-                            "triage-state.json"
-                        ]
+                        (await sandbox.read_files(["triage-state.json"]))["triage-state.json"]
                     )
                 summary.update(
                     stop_reason=final.stop_reason,
@@ -415,11 +385,7 @@ async def execute(args: argparse.Namespace) -> int:
         (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(
         json.dumps(
-            {
-                key: value
-                for key, value in summary.items()
-                if key not in ("events", "budget")
-            }
+            {key: value for key, value in summary.items() if key not in ("events", "budget")}
         ),
         flush=True,
     )

@@ -41,6 +41,12 @@ ignore = [
     "PLC0415", # lazy imports: optional dependencies are imported only when used
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# One-off operational runners for the live cluster verification (tests/verification/):
+# embedded pod commands and long straight-line scripts read better unwrapped.
+"../tests/verification/aks_followup_*.py" = ["E501", "PLR0915", "PLR0917", "SIM105"]
+"../tests/verification/long_horizon.py" = ["E501", "PLR0915"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["evalsi", "evalsi_harness", "evalsi_*", "conftest"]
 

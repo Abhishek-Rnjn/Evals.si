@@ -202,17 +202,11 @@ def sqlite_crash(binary: Path, root: Path, mode: str, replicate: int) -> dict:
             integrity = connection.execute("PRAGMA integrity_check").fetchall()
             journal = connection.execute("PRAGMA journal_mode").fetchone()
         if integrity != [("ok",)] or journal != ("wal",):
-            raise AssertionError(
-                f"unexpected database integrity/mode: {integrity} {journal}"
-            )
+            raise AssertionError(f"unexpected database integrity/mode: {integrity} {journal}")
         if any(recovered.get(key) != value for key, value in before.items()):
-            raise AssertionError(
-                "a confirmed pre-crash stored trace changed or was lost"
-            )
+            raise AssertionError("a confirmed pre-crash stored trace changed or was lost")
         if not observed_before_kill.keys() <= recovered.keys():
-            raise AssertionError(
-                "a trace observed stored immediately before kill was lost"
-            )
+            raise AssertionError("a trace observed stored immediately before kill was lost")
     return {
         "mode": mode,
         "replicate": replicate,
@@ -280,9 +274,7 @@ def postgres_phase(args: argparse.Namespace) -> None:
             run_id = response["run"]["id"]
             deadline = time.monotonic() + 60
             while True:
-                run = request("/evalsi.v1alpha1.RunService/GetRun", {"id": run_id})[
-                    "run"
-                ]
+                run = request("/evalsi.v1alpha1.RunService/GetRun", {"id": run_id})["run"]
                 if run["status"] == "RUN_STATUS_SUCCEEDED":
                     break
                 if run["status"] in {"RUN_STATUS_FAILED", "RUN_STATUS_CANCELLED"}:
@@ -309,9 +301,7 @@ def postgres_phase(args: argparse.Namespace) -> None:
 def schema_guard(args: argparse.Namespace) -> None:
     try:
         with daemon(args.binary, args.output, {"postgres": {"dsn": args.dsn}}):
-            raise AssertionError(
-                "daemon opened a database marked beyond its reader version"
-            )
+            raise AssertionError("daemon opened a database marked beyond its reader version")
     except RuntimeError:
         log = (args.output / "daemon.log").read_text()
         message = "the database schema is newer than this evalsid can read"
@@ -320,9 +310,7 @@ def schema_guard(args: argparse.Namespace) -> None:
     (args.output / "schema-guard.json").write_text(
         json.dumps({"refused": True, "expected_error": message}, indent=2)
     )
-    print(
-        "PASS: current daemon refused the simulated future minimum reader", flush=True
-    )
+    print("PASS: current daemon refused the simulated future minimum reader", flush=True)
 
 
 def main() -> None:
@@ -346,9 +334,7 @@ def main() -> None:
         for mode in ["full", "normal"]:
             for replicate in range(1, 4):
                 result = sqlite_crash(args.binary, args.output, mode, replicate)
-                (args.output / f"{mode}-{replicate}.json").write_text(
-                    json.dumps(result, indent=2)
-                )
+                (args.output / f"{mode}-{replicate}.json").write_text(json.dumps(result, indent=2))
                 print(f"completed {mode} replicate {replicate}", flush=True)
 
 

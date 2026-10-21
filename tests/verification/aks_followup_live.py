@@ -12,6 +12,9 @@ from unittest.mock import patch
 
 import httpx
 import yaml
+from google.protobuf import json_format
+from long_horizon import Ledger, MeteredTransport
+
 from evalsi.evaluator import SkipRecord
 from evalsi.packs.approval import approval_coverage, denial_respected
 from evalsi.runspec import normalize_durations
@@ -20,8 +23,6 @@ from evalsi.types import Content, Record
 from evalsi.v1alpha1 import run_pb2
 from evalsi_harness import HarnessContext, Task, load_harness, run_task
 from evalsi_harness.models import AnthropicChat
-from google.protobuf import json_format
-from long_horizon import Ledger, MeteredTransport
 
 ROOT = Path(__file__).resolve().parents[2]
 SUITE = ROOT / "examples" / "support-refund"
@@ -74,9 +75,7 @@ def hitl(record: Record) -> list[dict]:
     return [
         {
             "name": s.name,
-            "attributes": {
-                k: v for k, v in s.attributes.items() if k.startswith("evalsi.hitl.")
-            },
+            "attributes": {k: v for k, v in s.attributes.items() if k.startswith("evalsi.hitl.")},
         }
         for s in record.trajectory.steps
         if s.name in ("hitl_request", "hitl_resolved")
@@ -172,14 +171,10 @@ async def execute(args: argparse.Namespace) -> int:
         ):
             if changed_approver:
                 if mode != "replay" or gate is None:
-                    raise ValueError(
-                        "changed approver requires an existing gated replay"
-                    )
+                    raise ValueError("changed approver requires an existing gated replay")
                 gate = copy.deepcopy(gate)
                 gate["approver"]["default"] = (
-                    "approve"
-                    if gate["approver"].get("default") != "approve"
-                    else "deny"
+                    "approve" if gate["approver"].get("default") != "approve" else "deny"
                 )
             spec = spec_for(mode, args.output / name / "tapes", gate)
             task = Task.build(spec, record, trial=trial, run_id="aks-followup")
@@ -234,9 +229,7 @@ async def execute(args: argparse.Namespace) -> int:
             rows.append(result)
             (args.output / "results.json").write_text(json.dumps(rows, indent=2))
             print(
-                json.dumps(
-                    {k: v for k, v in result.items() if k not in ("hitl", "approvals")}
-                ),
+                json.dumps({k: v for k, v in result.items() if k not in ("hitl", "approvals")}),
                 flush=True,
             )
             return result
@@ -302,9 +295,7 @@ async def execute(args: argparse.Namespace) -> int:
             original = candidates[0]
             record = copy.deepcopy(original)
             assert original.input is not None
-            record.input = Content(
-                text=POLICY + "\nCustomer request:\n" + original.input.as_text()
-            )
+            record.input = Content(text=POLICY + "\nCustomer request:\n" + original.input.as_text())
             for name, gate in profiles:
                 replay = await one(record, 0, name, gate, "replay")
                 source = next(
@@ -324,9 +315,7 @@ async def execute(args: argparse.Namespace) -> int:
                     await one(record, 0, name, gate, "replay", changed_approver=True)
         (args.output / "results.json").write_text(json.dumps(rows, indent=2))
     (args.output / "budget.json").write_text(json.dumps(ledger.snapshot(), indent=2))
-    return int(
-        any(row["error"] and not row.get("expected_rejection", False) for row in rows)
-    )
+    return int(any(row["error"] and not row.get("expected_rejection", False) for row in rows))
 
 
 def main() -> None:

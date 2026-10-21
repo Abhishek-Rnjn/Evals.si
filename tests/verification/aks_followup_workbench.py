@@ -23,9 +23,7 @@ class Agent(BaseHTTPRequestHandler):
             "input": {"text": "order 42"},
         }
         step.update(
-            {"error": "approval timeout"}
-            if bad
-            else {"output": {"text": "refund accepted"}}
+            {"error": "approval timeout"} if bad else {"output": {"text": "refund accepted"}}
         )
         response = json.dumps(
             {
@@ -79,13 +77,9 @@ def main() -> None:
             ready = False
             for _ in range(120):
                 if server.poll() is not None:
-                    raise RuntimeError(
-                        "current daemon exited before becoming responsive"
-                    )
+                    raise RuntimeError("current daemon exited before becoming responsive")
                 try:
-                    with urllib.request.urlopen(
-                        "http://127.0.0.1:8081/ui/", timeout=2
-                    ) as response:
+                    with urllib.request.urlopen("http://127.0.0.1:8081/ui/", timeout=2) as response:
                         ready = response.status == 200
                 except urllib.error.URLError as exc:
                     if not isinstance(exc.reason, ConnectionRefusedError):
@@ -94,9 +88,7 @@ def main() -> None:
                     break
                 time.sleep(0.5)
             if not ready:
-                raise TimeoutError(
-                    "current daemon did not become responsive in 60 seconds"
-                )
+                raise TimeoutError("current daemon did not become responsive in 60 seconds")
 
             def post(path: str, value: dict) -> dict:
                 request = urllib.request.Request(

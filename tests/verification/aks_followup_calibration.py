@@ -12,12 +12,13 @@ from unittest.mock import patch
 import anthropic
 import httpx2
 from aks_followup_live import POLICY
+from long_horizon import Ledger
+
 from evalsi.calibration import acalibrate, compare_reports
 from evalsi.calibration_report import render_report
 from evalsi.calibration_sets import digest, freeze_set, read_artifact, write_artifact
 from evalsi.judges import JudgeClient, JudgeConfig
 from evalsi.judges.anthropic import AnthropicJudge
-from long_horizon import Ledger
 
 
 class NativeMeteredTransport(httpx2.AsyncBaseTransport):
@@ -56,15 +57,11 @@ def labelled_rows(source: Path) -> list[dict]:
         raise ValueError("expected twelve real baseline cases")
     rows = []
     for index, case in enumerate(cases):
-        first = json.loads(
-            (source / "refund-baseline" / f"{case}.0.record.json").read_text()
-        )
+        first = json.loads((source / "refund-baseline" / f"{case}.0.record.json").read_text())
         variants = [
             (
                 json.loads(
-                    (
-                        source / "refund-baseline" / f"{case}.{trial}.record.json"
-                    ).read_text()
+                    (source / "refund-baseline" / f"{case}.{trial}.record.json").read_text()
                 )["output"],
                 True,
                 "frozen-live-output",
@@ -124,17 +121,13 @@ async def execute(args: argparse.Namespace) -> None:
             or config.model != model
             or config.base_url != os.environ["ANTHROPIC_BASE_URL"]
         ):
-            raise ValueError(
-                "only the authorized native Anthropic endpoint/model is allowed"
-            )
+            raise ValueError("only the authorized native Anthropic endpoint/model is allowed")
         client = anthropic.AsyncAnthropic(
             api_key=None,
             auth_token=os.environ["ANTHROPIC_AUTH_TOKEN"],
             base_url=os.environ["ANTHROPIC_BASE_URL"],
             http_client=httpx2.AsyncClient(
-                transport=NativeMeteredTransport(
-                    ledger, args.output / "budget.json", phase
-                ),
+                transport=NativeMeteredTransport(ledger, args.output / "budget.json", phase),
                 timeout=60,
                 trust_env=False,
             ),
@@ -162,9 +155,7 @@ async def execute(args: argparse.Namespace) -> None:
                 },
             )
             if result.data != {"passed": True}:
-                raise AssertionError(
-                    "native structured-output smoke returned an unexpected shape"
-                )
+                raise AssertionError("native structured-output smoke returned an unexpected shape")
         finally:
             await smoke.aclose()
         print("PASS: metered native Anthropic structured-output smoke", flush=True)
@@ -228,9 +219,7 @@ async def execute(args: argparse.Namespace) -> None:
             or before["dataset_sha256"] != dataset_sha
             or before["protocol_sha256"] != digest(protocol)
         ):
-            raise ValueError(
-                "resume requires the same complete pinned dataset and protocol"
-            )
+            raise ValueError("resume requires the same complete pinned dataset and protocol")
         write_artifact(args.output / "calibration-before.json", before)
         (args.output / "calibration-before.html").write_bytes(render_report(before))
         reports.append(before)
@@ -243,9 +232,7 @@ async def execute(args: argparse.Namespace) -> None:
             reports.append(report)
             print(json.dumps({"phase": phase, "status": report["status"]}), flush=True)
             if report["status"] == "incomplete":
-                raise AssertionError(
-                    "calibration incomplete; failed measurements preserved"
-                )
+                raise AssertionError("calibration incomplete; failed measurements preserved")
     comparison = compare_reports(reports[0], reports[1])
     (args.output / "drift.json").write_text(json.dumps(comparison, indent=2))
     (args.output / "budget.json").write_text(json.dumps(ledger.snapshot(), indent=2))

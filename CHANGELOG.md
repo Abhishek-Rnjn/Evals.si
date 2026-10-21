@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- The 21 October AKS and live-Claude [verification reports](docs/verification/AKS-FOLLOWUP-2026-10-21.md) and their [fixtures](tests/verification/README.md), with the open items they leave listed in [LEFTOVERS](docs/LEFTOVERS.md).
 - **Approval gates for the built-in agent.** The `evalsi_harness.approval:ApprovalGate` hook applies allow/ask/deny rules by tool, path and command, answers each `ask` from a scripted approver (approve, edit, deny or no-answer), and records `hitl_request` and `hitl_resolved` steps that replay exactly. New `denial-respected` and `approval-coverage` evaluators in the `agent` pack score what happens after a denial and whether sensitive calls were approved. Hooks can now emit steps with `ctx.emit`. The approver is scripted; a model or human approver and an agent-initiated request are not built.
 - [The built-in agent harness](docs/guides/built-in-harness.md): one page listing what `evalsi-harness` provides and what is not built, and a refreshed `evalsi-harness` README. The [harness roadmap](docs/HARNESS-ROADMAP.md) gains H8 (approval gates and human-in-the-loop events, deeper multi-agent topologies, richer conversation evaluation), proposed and unbuilt.
 - [Pre-0.4 release plan](docs/PRE-0.4-RELEASE-PLAN.md): the product-readiness criteria for stable 0.4, an interim-release path, and customer-validation criteria (pilots, retention, willingness to pay) that gate calling the project beta rather than 0.4.
@@ -63,12 +64,13 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 - The load test's `OnlineFreshness` polls concurrently and reports `freshness_poll_p95_ms`, so a slow read path no longer inflates the freshness it measures.
 - The release-workbench guide is in the website sidebar.
-- The sandbox image store reuses an unpacked root without asking the registry only for digest-pinned refs; tags are resolved every time.
+- The sandbox image store reuses an unpacked root without asking the registry only for digest-pinned refs, and only within one running process; tags are resolved every time, and a restarted process asks the registry once even for a pinned ref.
 - **Authenticated installs now audit strictly by default.** With authentication enabled and no `audit.mode` set, a change whose audit entry cannot be written fails with `unavailable` instead of proceeding. Set `audit.mode: besteffort` to keep the old behaviour. In strict mode, access-management calls write one entry before the change and a detailed one after it.
 - The audit table gains `seq` and `hash` columns, an additive step. Entries written before the upgrade, or by an older release during a rolling upgrade, are not chained; verification counts them separately.
 
 ### Fixed
 
+- `builtin/denial-respected` (1.0.1) no longer counts the denied call's own tool step as a retry of it, which failed every run that was denied once and did not retry. A genuine second attempt, including one that was itself gated and denied, still fails. Approval-gate steps now carry the call's id (`evalsi.hitl.call_id`).
 - The browser release workbench preserves omitted versus explicitly empty evaluator parameters and the HTTP connector's 600-second default when copying baselines, normalizes commit labels to lowercase, offers captured per-record numeric metrics rather than summary-only trial aggregates, and preserves the decision project through release/case navigation. Browser regression controls cover matching contract hashes and cross-project PASS/BLOCK decisions.
 - Update the minimum Go toolchain to 1.26.10 and locked Python `certifi` to 2026.10.19, incorporating the certificate distrust fixes reported by GO-2026-6809 and PYSEC-2026-4320. Dependency security checks remain enabled.
 - The browser no longer associates different trials by record ID alone or hides later run results behind a fixed first-page table. Trial-specific outputs stay separate, result pages are navigable, and cases can be opened directly.

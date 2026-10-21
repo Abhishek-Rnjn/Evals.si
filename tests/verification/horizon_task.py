@@ -109,9 +109,7 @@ def check(state: dict[str, Any]) -> dict[str, Any]:
         if index % 37 == 11:
             injected.append(index)
     complete = len(state["decisions"]) == state["count"]
-    memory = complete and state["decisions"][-1].get("release_code") == release_code(
-        state["seed"]
-    )
+    memory = complete and state["decisions"][-1].get("release_code") == release_code(state["seed"])
     accuracy = (len(state["decisions"]) - len(incorrect)) / state["count"]
     return {
         "passed": complete and accuracy >= 0.95 and not bad_evidence and memory,

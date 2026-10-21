@@ -45,9 +45,7 @@ def measure(record: Record) -> dict:
 
 def challenges() -> list[tuple[str, bool, Record]]:
     def tool(command: str) -> Trajectory:
-        return Trajectory(
-            steps=[Step(type="tool", name="bash", input=Content(text=command))]
-        )
+        return Trajectory(steps=[Step(type="tool", name="bash", input=Content(text=command))])
 
     def edit(text: str) -> Record:
         return Record(
@@ -110,9 +108,7 @@ def challenges() -> list[tuple[str, bool, Record]]:
 def analyze(directory: Path) -> dict:
     rows = json.loads((directory / "results.json").read_text())
     baseline = [
-        row
-        for row in rows
-        if row["profile"] == "refund-baseline" and row["mode"] == "record"
+        row for row in rows if row["profile"] == "refund-baseline" and row["mode"] == "record"
     ]
     counts = Counter(row["case"] for row in baseline)
     if len(baseline) != 36 or len(counts) != 12 or set(counts.values()) != {3}:
@@ -138,11 +134,7 @@ def analyze(directory: Path) -> dict:
         )
         for name, result in measure(record).items():
             counters[name][
-                "skipped"
-                if isinstance(result, dict)
-                else "flagged"
-                if result
-                else "not_flagged"
+                "skipped" if isinstance(result, dict) else "flagged" if result else "not_flagged"
             ] += 1
     challenge_results = []
     for name, expected, record in challenges():
@@ -168,9 +160,7 @@ def analyze(directory: Path) -> dict:
         ),
         "baseline_trials": 36,
         "determinism": determinism_report(results),
-        "honest_baseline_heuristics": {
-            name: dict(counts) for name, counts in counters.items()
-        },
+        "honest_baseline_heuristics": {name: dict(counts) for name, counts in counters.items()},
         "synthetic_challenges_separate_from_live_denominators": challenge_results,
         "limitations": [
             "Twelve synthetic cases with three trials are not population validation.",

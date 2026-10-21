@@ -40,8 +40,9 @@ installed starters, source-tag PostgreSQL migration/older-reader checks and
 quiesced PostgreSQL/ClickHouse/JetStream restores. All nine throughput replicates
 failed their unchanged target; all passed freshness. Six crash trials preserved
 stored traces but lost acknowledged, still-buffered OTLP data. NetworkPolicy
-and Kata remain blocked; an approval evaluator false positive is retained
-without a product fix. Conservative cumulative spend is $22.76245520 under the
+and Kata remain blocked; the approval evaluator false positive it found
+(`denial-respected` counted the denied call itself as a retry) is fixed in
+`builtin/denial-respected` 1.0.1. Conservative cumulative spend is $22.76245520 under the
 authorized $39.50 cutoff. The owned namespace and loopback forwards were removed
 and absence verified. The report distinguishes bounded passes and exclusions.
 Redundant context/profile reruns were explicitly excluded under that scope.
@@ -69,6 +70,31 @@ overhead from hosted performance; they do not close production scale targets.
 ## Required before stable 0.4
 
 The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) lists the open R04 product-readiness rows and the customer-validation rows (CV) that gate beta rather than 0.4. Nothing in it is established yet. The detailed technical inventory below retains its existing evidence and limits.
+
+## Open items from the 21 October AKS follow-up
+
+Details and evidence are in the [follow-up report](verification/AKS-FOLLOWUP-2026-10-21.md);
+these are the items it leaves open.
+
+- **Ingest throughput.** `TestLoad` stored 15.5k to 18k spans/s on SQLite and 9.4k to
+  11.8k on ClickHouse, below the 20k target, in all nine runs. They ran on the slowest
+  node (DS4_v2, `emptyDir` storage) while other probes overlapped, so this is not a
+  measured regression. Rerun on a D8s_v5 with the load alone on the node.
+- **Acknowledged OTLP data is not durable.** The assembler holds spans in memory until a
+  trace's root span ends plus `otlp.grace` (default 2 s), and OTLP success is returned on
+  receipt. SIGKILL during ingest lost 200 to 220 acknowledged traces in each of six runs,
+  in both `synchronous` modes; stored traces were all kept. Document the boundary and
+  decide whether to buffer durably or acknowledge later before promising crash-safe ingest.
+- **The image cache is per process.** A digest-pinned reference is reused without a
+  registry request only inside one running process; a new process asks the registry once
+  even with the root on disk, so restarts and air-gapped hosts need registry access.
+  Tag movement and signature revalidation were not run.
+- **Not run in that pass:** the Claude Code `permission_denials` check, a daemon-level
+  unwritable-audit drill, a simultaneous rolling upgrade, power loss, and native browser
+  download events.
+- **Weak evidence to keep weak:** the refund suite passed 36 of 36 with Sonnet, so it does
+  not yet separate agents; calibration agreed perfectly on assistant-made labels and
+  synthetic mutations.
 
 ## Browser release workbench, unreleased
 

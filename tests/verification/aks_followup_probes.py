@@ -79,8 +79,7 @@ def main() -> None:
     kata = get("get", "runtimeclass", "kata-vm-isolation")
     selector = kata.get("scheduling", {}).get("nodeSelector", {})
     result["kata"]["matching_nodes"] = sum(
-        all(n["metadata"].get("labels", {}).get(k) == v for k, v in selector.items())
-        for n in nodes
+        all(n["metadata"].get("labels", {}).get(k) == v for k, v in selector.items()) for n in nodes
     )
     probe = pod("kata-probe", "print('KATA_EXECUTED')")
     probe["spec"]["runtimeClassName"] = "kata-vm-isolation"
@@ -119,10 +118,7 @@ def main() -> None:
     ip = get("-n", NS, "get", "pod", "network-canary")["status"]["podIP"]
     script = f"import urllib.request; print(urllib.request.urlopen('http://{ip}:8000', timeout=5).status)"
     result["network"]["baseline_connected"] = (
-        command(
-            "-n", NS, "exec", "network-client", "--", "python", "-c", script
-        ).returncode
-        == 0
+        command("-n", NS, "exec", "network-client", "--", "python", "-c", script).returncode == 0
     )
     policy = {
         "apiVersion": "networking.k8s.io/v1",
@@ -138,15 +134,10 @@ def main() -> None:
         raise RuntimeError("network policy was refused")
     time.sleep(10)
     result["network"]["connected_after_deny"] = (
-        command(
-            "-n", NS, "exec", "network-client", "--", "python", "-c", script
-        ).returncode
-        == 0
+        command("-n", NS, "exec", "network-client", "--", "python", "-c", script).returncode == 0
     )
     command("-n", NS, "delete", "networkpolicy", "probe-deny")
-    command(
-        "-n", NS, "delete", "pod", "network-client", "network-canary", "--wait=true"
-    )
+    command("-n", NS, "delete", "pod", "network-client", "network-canary", "--wait=true")
 
     device = pod(
         "kvm-probe",
@@ -186,8 +177,7 @@ def main() -> None:
                     .get("labels", {})
                     .get("node.kubernetes.io/instance-type", "unscheduled"),
                     "phase": p["status"].get("phase"),
-                    "vm_created": log.returncode == 0
-                    and '"vm_created": true' in log.stdout,
+                    "vm_created": log.returncode == 0 and '"vm_created": true' in log.stdout,
                 }
             )
         result["kvm"]["observations"] = observations

@@ -13,6 +13,8 @@ from pathlib import Path
 
 import httpx
 from aks_followup_live import TaggedTransport
+from long_horizon import Ledger
+
 from evalsi.packs.agent_checks import handoff_correctness
 from evalsi.targets import TargetConfig
 from evalsi.types import Record, Trajectory
@@ -23,7 +25,6 @@ from evalsi_harness.loop import AgentLoop, LoopConfig
 from evalsi_harness.models import AnthropicChat
 from evalsi_harness.subagent import SUBAGENT_SYSTEM
 from evalsi_harness.tools import FunctionTool, Tool
-from long_horizon import Ledger
 
 KUBECTL = [
     "/opt/homebrew/bin/kubectl",
@@ -66,9 +67,7 @@ class TracedTransport(TaggedTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         self.trace.append(json.loads(await request.aread()))
-        (self.directory / "request-bodies.json").write_text(
-            json.dumps(self.trace, indent=2)
-        )
+        (self.directory / "request-bodies.json").write_text(json.dumps(self.trace, indent=2))
         return await super().handle_async_request(request)
 
 
@@ -155,13 +154,9 @@ async def execute(args: argparse.Namespace) -> None:
         finally:
             cassette.save()
             await model.aclose()
-            (args.output / "budget.json").write_text(
-                json.dumps(ledger.snapshot(), indent=2)
-            )
+            (args.output / "budget.json").write_text(json.dumps(ledger.snapshot(), indent=2))
         record = Record(id=name, trajectory=Trajectory(steps=steps))
-        (args.output / f"{name}.{mode}.json").write_text(
-            json.dumps(record.to_dict(), indent=2)
-        )
+        (args.output / f"{name}.{mode}.json").write_text(json.dumps(record.to_dict(), indent=2))
         row = {
             "check": name,
             "mode": mode,
@@ -174,9 +169,7 @@ async def execute(args: argparse.Namespace) -> None:
         if delegate:
             row["handoff_correctness"] = handoff_correctness(record).passed
             if not row["handoff_correctness"] or loop.state.subagents != 1:
-                raise AssertionError(
-                    "expected one real delegate with valid linked handoff"
-                )
+                raise AssertionError("expected one real delegate with valid linked handoff")
         if final.stop_reason != "completed":
             raise AssertionError(f"live lifecycle task did not complete: {row}")
         if mode in ("replay", "resume") and row["new_http_attempts"]:
@@ -223,18 +216,14 @@ async def execute(args: argparse.Namespace) -> None:
     def refund_tool(scope: str, key: str, keyed: bool) -> Tool:
         async def record_refund(stable_key: str) -> str:
             if stable_key != key:
-                raise ValueError(
-                    "the synthetic experiment requires its exact stable key"
-                )
+                raise ValueError("the synthetic experiment requires its exact stable key")
             value = f"'{key}'" if keyed else "NULL"
             result = await asyncio.to_thread(
                 sql,
                 "INSERT INTO followup_lifecycle_effects(scope,stable_key) "
                 f"VALUES ('{scope}',{value}) ON CONFLICT DO NOTHING RETURNING id",
             )
-            return (
-                "write committed" if result else "already committed; key deduplicated"
-            )
+            return "write committed" if result else "already committed; key deduplicated"
 
         return FunctionTool(
             "record_refund",
@@ -260,26 +249,16 @@ async def execute(args: argparse.Namespace) -> None:
         await trial(name, "record", tape, prompt, tools)
         source_hash = hashlib.sha256(tape.read_bytes()).hexdigest()
         counts = [
-            int(
-                sql(
-                    f"SELECT count(*) FROM followup_lifecycle_effects WHERE scope='{scope}'"
-                )
-            )
+            int(sql(f"SELECT count(*) FROM followup_lifecycle_effects WHERE scope='{scope}'"))
         ]
         if counts[0] != 1:
             raise AssertionError("expected exactly one initial external write")
         await trial(name, "replay", tape, prompt, tools)
         counts.append(
-            int(
-                sql(
-                    f"SELECT count(*) FROM followup_lifecycle_effects WHERE scope='{scope}'"
-                )
-            )
+            int(sql(f"SELECT count(*) FROM followup_lifecycle_effects WHERE scope='{scope}'"))
         )
         if counts[1] != (1 if keyed else 2):
-            raise AssertionError(
-                f"external replay did not demonstrate expected effects: {counts}"
-            )
+            raise AssertionError(f"external replay did not demonstrate expected effects: {counts}")
         if keyed:
             await trial(name, "resume", tape, prompt, tools)
             fork = args.output / "external-keyed.fork.jsonl"
@@ -287,11 +266,7 @@ async def execute(args: argparse.Namespace) -> None:
             if hashlib.sha256(tape.read_bytes()).hexdigest() != source_hash:
                 raise AssertionError("fork/resume changed the original cassette")
             counts.append(
-                int(
-                    sql(
-                        f"SELECT count(*) FROM followup_lifecycle_effects WHERE scope='{scope}'"
-                    )
-                )
+                int(sql(f"SELECT count(*) FROM followup_lifecycle_effects WHERE scope='{scope}'"))
             )
             if counts[-1] != 1:
                 raise AssertionError("keyed resume/fork duplicated the external write")
@@ -304,9 +279,7 @@ async def execute(args: argparse.Namespace) -> None:
             }
         )
     (args.output / "results.json").write_text(json.dumps(rows, indent=2))
-    print(
-        "PASS: real delegation, fork/resume and external keyed/unkeyed replay controls"
-    )
+    print("PASS: real delegation, fork/resume and external keyed/unkeyed replay controls")
 
 
 def main() -> None:

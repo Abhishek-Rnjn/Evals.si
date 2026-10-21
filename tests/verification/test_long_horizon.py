@@ -7,13 +7,19 @@ from pathlib import Path
 
 import httpx
 import pytest
+
 from evalsi.targets import TargetConfig
 from evalsi_harness.context import SUMMARY_SYSTEM
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
-from horizon_task import check, current, expected_action, release_code, submit
-from long_horizon import BudgetExhausted, ConciseSummaryModel, Ledger, MeteredTransport
+from horizon_task import check, current, expected_action, release_code, submit  # noqa: E402
+from long_horizon import (  # noqa: E402
+    BudgetExhausted,
+    ConciseSummaryModel,
+    Ledger,
+    MeteredTransport,
+)
 
 
 @pytest.mark.parametrize(
@@ -35,7 +41,7 @@ def test_policy_precedence_and_boundaries(values, expected):
         "oldest_job_seconds",
     ]
     assert (
-        expected_action("OBSERVATION " + json.dumps(dict(zip(keys, values))))
+        expected_action("OBSERVATION " + json.dumps(dict(zip(keys, values, strict=True))))
         == expected
     )
 
@@ -86,9 +92,7 @@ def test_checker_uses_the_required_95_percent_threshold():
         )
     for index in range(2):
         correct = state["decisions"][index]["action"]
-        state["decisions"][index]["action"] = (
-            "observe" if correct != "observe" else "rollback_api"
-        )
+        state["decisions"][index]["action"] = "observe" if correct != "observe" else "rollback_api"
         assert check(state)["passed"] is (index == 0)
 
 
@@ -118,9 +122,7 @@ def test_usage_settlement_counts_cache_tokens_and_preserves_failed_attempt():
         },
     )
     assert first["charged_usd"] == pytest.approx((600 * 2.2 + 10 * 5.5) / 1e6)
-    assert ledger.charged == pytest.approx(
-        0.001 + first["charged_usd"] + failed["reserved_usd"]
-    )
+    assert ledger.charged == pytest.approx(0.001 + first["charged_usd"] + failed["reserved_usd"])
 
 
 @pytest.mark.parametrize(
@@ -130,7 +132,7 @@ def test_missing_or_invalid_usage_keeps_full_reservation(usage):
     ledger = Ledger()
     row = ledger.reserve(json.dumps({"max_tokens": 512}).encode())
     before = ledger.charged
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="reservation retained"):
         ledger.settle(row, {"usage": usage})
     assert ledger.charged == before
 
@@ -156,9 +158,7 @@ def test_budget_refusal_prevents_http_attempt(tmp_path):
         transport.inner = httpx.MockTransport(unexpected_request)
         async with httpx.AsyncClient(transport=transport) as client:
             with pytest.raises(BudgetExhausted):
-                await client.post(
-                    "https://example.invalid/v1/messages", json={"max_tokens": 512}
-                )
+                await client.post("https://example.invalid/v1/messages", json={"max_tokens": 512})
 
     asyncio.run(request())
     assert not calls
@@ -224,12 +224,8 @@ def test_concise_summary_profile_does_not_change_agent_instructions():
             client,
         )
         try:
-            await model.complete(
-                [{"role": "user", "content": "test"}], [], system="agent policy"
-            )
-            await model.complete(
-                [{"role": "user", "content": "test"}], [], system=SUMMARY_SYSTEM
-            )
+            await model.complete([{"role": "user", "content": "test"}], [], system="agent policy")
+            await model.complete([{"role": "user", "content": "test"}], [], system=SUMMARY_SYSTEM)
         finally:
             await model.aclose()
 
