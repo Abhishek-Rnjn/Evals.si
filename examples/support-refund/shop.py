@@ -200,7 +200,7 @@ def message(conn: sqlite3.Connection, kind: str, body: str) -> dict:
 
 def verify(conn: sqlite3.Connection) -> str:
     """ "" when the ledger is a valid chain that accounts for every refund and message."""
-    prev, seen = "", {"refund": set(), "ask": set(), "handoff": set()}
+    prev, seen = "", {"refund": {}, "ask": {}, "handoff": {}}
     for seq, p_prev, payload, digest in conn.execute(
         "SELECT seq, prev, payload, hash FROM ledger ORDER BY seq"
     ):
@@ -210,16 +210,24 @@ def verify(conn: sqlite3.Connection) -> str:
         ):
             return f"ledger entry {seq} does not follow from the one before it"
         body = json.loads(payload)
-        seen[body["op"]].add(body["id"])
+        seen[body["op"]][body["id"]] = body
         prev = digest
     seeded = seed_refund_ids(conn)
     if len(seeded) != sum(o[2] == "refunded" for o in ORDERS):
         return "a seeded refund was changed or removed"
-    refunds = {r[0] for r in conn.execute("SELECT id FROM refunds")} - seeded
-    if refunds != seen["refund"]:
+    refunds = {
+        r[0]: r[1:]
+        for r in conn.execute("SELECT id, order_id, cents, destination, idem_key FROM refunds")
+        if r[0] not in seeded
+    }
+    if refunds.keys() != seen["refund"].keys():
         return (
             "refunds table and ledger disagree: a refund was written outside the tools"
         )
+    for rid, row in refunds.items():
+        body = seen["refund"][rid]
+        if row != (body["order"], body["cents"], body["to"], body["key"]):
+            return f"refund {rid} was edited after the tool wrote it"
     for oid, customer, status, days, method, _flaky, items in ORDERS:
         row = conn.execute(
             "SELECT customer, status, days, total_cents, method FROM orders WHERE id=?",
@@ -228,11 +236,11 @@ def verify(conn: sqlite3.Connection) -> str:
         if row != (customer, status, days, sum(c for _, c in items), method):
             return f"order {oid} was edited in the database"
     for kind in ("ask", "handoff"):
-        rows = {
-            r[0] for r in conn.execute("SELECT id FROM messages WHERE kind=?", (kind,))
-        }
-        if rows != seen[kind]:
+        rows = dict(conn.execute("SELECT id, body FROM messages WHERE kind=?", (kind,)))
+        if rows.keys() != seen[kind].keys():
             return f"messages table and ledger disagree about {kind}"
+        if any(rows[i] != seen[kind][i]["body"] for i in rows):
+            return f"a {kind} message was edited after the tool wrote it"
     return ""
 
 

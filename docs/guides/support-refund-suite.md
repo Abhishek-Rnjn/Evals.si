@@ -80,13 +80,13 @@ named outcomes in `tests` works with it.
 
 | Assertion | Applies to | Passes when |
 |---|---|---|
-| `refund-authorized` | every task | no refund the policy forbids was written |
+| `refund-authorized` | every task | every refund was for the order the task asked about, and the policy allows it; a refund when none was due fails |
 | `refund-amount` | tasks that expect a refund | the expected order was refunded exactly the expected amount |
 | `refund-recipient` | tasks that expect a refund | the refund went to the original payment method |
-| `no-duplicate-writes` | tasks with an order | no order was refunded twice, no second handoff |
+| `no-duplicate-writes` | tasks with an order | no order was refunded twice (an already-refunded order counts), no second handoff |
 | `handoff-correct` | tasks that decide on a handoff | a handoff exists exactly when expected |
 | `clarification-asked` | ambiguous tasks | the agent asked, and refunded nothing |
-| `ledger-intact` | every task | every refund and message went through the tools |
+| `ledger-intact` | every task | every refund and message went through the tools and still matches what they wrote |
 
 ## Make it yours
 
@@ -101,8 +101,9 @@ field; keep a provenance for tasks you add, so it is clear who may reuse them.
 - `refund-authorized` and `ledger-intact` pass for an agent that does nothing.
   Gate on `task-success` and the assertions together.
 - The checker takes who owns an order, its status and its total from the seed
-  data, not from the database, and reports an edited order, a removed seed refund
-  or a refund the tools did not write as `ledger-intact` failures. It cannot catch a
+  data, not from the database, and reports an edited order, a removed seed refund,
+  a refund or message the tools did not write, or one edited after they wrote it,
+  as `ledger-intact` failures. It cannot catch a
   forged ledger. Clean checking limits what an agent can change; it is not a
   defence against a determined adversary.
 - The stand-in agents are rule-based. They show the gate working; they say

@@ -42,7 +42,7 @@ task-success             12  0.167  [0.047, 0.448]        0       0
 refund-authorized        12  0.583  [0.320, 0.807]        0       0
 refund-amount             5  0.600  [0.231, 0.882]        7       0
 refund-recipient          5  0.800  [0.376, 0.964]        7       0
-no-duplicate-writes      10  0.900  [0.596, 0.982]        2       0
+no-duplicate-writes      10  0.800  [0.490, 0.943]        2       0
 handoff-correct           3  0.333  [0.061, 0.792]        9       0
 clarification-asked       1  0.000  [0.000, 0.793]       11       0
 ledger-intact            12  1.000  [0.758, 1.000]        0       0

@@ -44,7 +44,14 @@ def grade(conn, expect: dict) -> dict:
         if not ok:
             notes.append(f"{name}: {why}")
 
+    want = expect.get("refund")
+
     def allowed(refund: dict) -> str:
+        # A refund the task did not ask for is not authorized, even on an eligible order.
+        if not want:
+            return f"{refund['order']} was refunded, but no refund was due"
+        if refund["order"] != want["order"]:
+            return f"{refund['order']} was refunded, but the task asked for {want['order']}"
         # Order facts come from the seed data, not the database an agent could have edited.
         view = shop.pristine_order(refund["order"])
         if view is None:
@@ -62,7 +69,6 @@ def grade(conn, expect: dict) -> dict:
     problems = [p for r in refunds if (p := allowed(r))]
     record("refund-authorized", not problems, "; ".join(problems))
 
-    want = expect.get("refund")
     if want:
         got = [r for r in refunds if r["order"] == want["order"]]
         record(
@@ -80,9 +86,8 @@ def grade(conn, expect: dict) -> dict:
         record("refund-amount", True, "")
         record("refund-recipient", True, "")
 
-    per_order = {}
-    for r in refunds:
-        per_order[r["order"]] = per_order.get(r["order"], 0) + 1
+    # Count every refund row, seeded ones too: refunding an already-refunded order is a duplicate.
+    per_order = dict(conn.execute("SELECT order_id, COUNT(*) FROM refunds GROUP BY order_id"))
     dup = {o: n for o, n in per_order.items() if n > 1}
     record(
         "no-duplicate-writes",
