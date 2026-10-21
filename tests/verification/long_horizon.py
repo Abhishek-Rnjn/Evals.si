@@ -43,8 +43,8 @@ class Ledger:
         prior = json.loads(path.read_text())
         ledger = cls(limit=limit)
         if (
-            limit not in (14.5, 19.5)
-            or prior["allowance_usd"] not in (14.5, 19.5)
+            limit not in (14.5, 19.5, 36.0, 39.5)
+            or prior["allowance_usd"] not in (14.5, 19.5, 36.0, 39.5)
             or prior["allowance_usd"] > limit
         ) or (
             prior["input_including_all_cache_per_million"],
@@ -434,7 +434,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prior-budget", type=Path)
     parser.add_argument(
-        "--budget-limit", type=float, choices=[14.5, 19.5], default=14.5
+        "--budget-limit", type=float, choices=[14.5, 19.5, 36.0, 39.5], default=14.5
     )
     parser.add_argument("--model-family", choices=["haiku", "sonnet"], default="haiku")
     parser.add_argument("--completion-guard", action="store_true")

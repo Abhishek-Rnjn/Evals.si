@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: evalsi-verify-20261021-followup
+  labels:
+    evalsi.verification: aks-followup-20261021
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: worker
+  namespace: evalsi-verify-20261021-followup
+spec:
+  restartPolicy: Never
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: node.kubernetes.io/instance-type
+                operator: In
+                values: [Standard_D8s_v5, Standard_DS4_v2]
+  containers:
+    - name: worker
+      image: docker.io/library/python@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f
+      command: [python, -c, "import time; time.sleep(86400)"]
+      resources:
+        requests: {cpu: "4", memory: 8Gi}
+        limits: {cpu: "4", memory: 8Gi}
+      env:
+        - {name: TMPDIR, value: /work/tmp}
+      volumeMounts:
+        - {name: work, mountPath: /work}
+  volumes:
+    - name: work
+      emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clickhouse-backups
+  namespace: evalsi-verify-20261021-followup
+data:
+  verification.xml: |
+    <clickhouse>
+      <storage_configuration><disks><backups>
+        <type>local</type><path>/var/lib/clickhouse/backups/</path>
+      </backups></disks></storage_configuration>
+      <backups><allowed_disk>backups</allowed_disk></backups>
+      <logger><level>warning</level></logger>
+    </clickhouse>
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: clickhouse
+  namespace: evalsi-verify-20261021-followup
+  labels: {app: clickhouse-followup}
+spec:
+  restartPolicy: Never
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+  containers:
+    - name: clickhouse
+      image: clickhouse/clickhouse-server@sha256:0152dd511befe6a2c2ef53e930726179669b08116da78500b37c51c96ff5ee77
+      env:
+        - {name: CLICKHOUSE_SKIP_USER_SETUP, value: "1"}
+      resources:
+        requests: {cpu: "1", memory: 2Gi}
+        limits: {cpu: "2", memory: 3Gi}
+      readinessProbe:
+        httpGet: {path: /ping, port: 8123}
+      volumeMounts:
+        - {name: data, mountPath: /var/lib/clickhouse}
+        - {name: config, mountPath: /etc/clickhouse-server/config.d/verification.xml, subPath: verification.xml}
+  volumes:
+    - name: data
+      emptyDir: {}
+    - name: config
+      configMap: {name: clickhouse-backups}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: evalsi-verify-20261021-followup
+spec:
+  type: ClusterIP
+  selector: {app: clickhouse-followup}
+  ports:
+    - {name: http, port: 8123, targetPort: 8123}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nats
+  namespace: evalsi-verify-20261021-followup
+  labels: {app: nats-followup}
+spec:
+  restartPolicy: Never
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+  containers:
+    - name: nats
+      image: nats@sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00
+      args: [-js, -sd, /data]
+      resources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {cpu: "1", memory: 256Mi}
+      readinessProbe:
+        tcpSocket: {port: 4222}
+      volumeMounts:
+        - {name: data, mountPath: /data}
+  volumes:
+    - name: data
+      emptyDir: {}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres
+  namespace: evalsi-verify-20261021-followup
+  labels: {app: postgres-followup}
+spec:
+  restartPolicy: Never
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+  containers:
+    - name: postgres
+      image: postgres@sha256:a63c1ea3f6a3a5a1621f97d2aba3b30faecfab4224c1b0000cc85ced57bb1939
+      env:
+        - {name: POSTGRES_HOST_AUTH_METHOD, value: trust}
+        - {name: POSTGRES_DB, value: evalsi_followup}
+      resources:
+        requests: {cpu: 200m, memory: 256Mi}
+        limits: {cpu: "1", memory: 512Mi}
+      readinessProbe:
+        exec:
+          command: [pg_isready, -U, postgres]
+      volumeMounts:
+        - {name: data, mountPath: /var/lib/postgresql/data}
+  volumes:
+    - name: data
+      emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: evalsi-verify-20261021-followup
+spec:
+  type: ClusterIP
+  selector: {app: nats-followup}
+  ports:
+    - {port: 4222, targetPort: 4222}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: evalsi-verify-20261021-followup
+spec:
+  type: ClusterIP
+  selector: {app: postgres-followup}
+  ports:
+    - {port: 5432, targetPort: 5432}

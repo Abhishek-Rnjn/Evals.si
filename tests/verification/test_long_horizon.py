@@ -272,13 +272,14 @@ def test_legacy_haiku_ledger_carries_explicit_historical_rates(tmp_path):
     assert carried.attempts[0]["output_rate"] == 5.5
 
 
-def test_explicit_budget_increase_carries_spend_without_resetting(tmp_path):
+@pytest.mark.parametrize("limit", [19.5, 36.0, 39.5])
+def test_explicit_budget_increase_carries_spend_without_resetting(tmp_path, limit):
     prior = Ledger()
     prior.reserve(json.dumps({"max_tokens": 1024}).encode())
     path = tmp_path / "prior.json"
     path.write_text(json.dumps(prior.snapshot()))
-    raised = Ledger.from_prior(path, limit=19.5)
-    assert raised.limit == 19.5
+    raised = Ledger.from_prior(path, limit=limit)
+    assert raised.limit == limit
     assert raised.charged == pytest.approx(prior.charged)
     assert raised.attempts == prior.attempts
     path.write_text(json.dumps(raised.snapshot()))
@@ -286,3 +287,22 @@ def test_explicit_budget_increase_carries_spend_without_resetting(tmp_path):
         Ledger.from_prior(path)
     with pytest.raises(ValueError, match="supported allowance"):
         Ledger.from_prior(path, limit=99)
+
+
+def test_followup_budget_increase_retains_uncertain_reservations_and_caps_next_attempt(
+    tmp_path,
+):
+    prior = Ledger(limit=36)
+    body = json.dumps({"max_tokens": 1024}).encode()
+    prior.reserve(body)
+    path = tmp_path / "prior.json"
+    path.write_text(json.dumps(prior.snapshot()))
+    raised = Ledger.from_prior(path, limit=39.5)
+    assert raised.charged == pytest.approx(prior.charged)
+    assert raised.attempts == prior.attempts
+    assert "input_tokens" not in raised.attempts[0]
+    raised.charged = raised.limit - 0.000001
+    before = raised.snapshot()
+    with pytest.raises(BudgetExhausted):
+        raised.reserve(body)
+    assert raised.snapshot() == before

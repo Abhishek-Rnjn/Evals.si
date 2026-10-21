@@ -74,6 +74,11 @@ paid cassette resume with `--prior-budget`; this changes the cutoff without
 resetting any spending. The loop separately applies the selected cutoff to
 trajectory estimates.
 
+For the AKS follow-up's explicitly authorized $40 cumulative budget, the cutoff
+was initially $36 and subsequently raised by the user to **$39.50**. Use
+`--budget-limit 39.5 --prior-budget /private/latest-output/budget.json` for
+subsequent runs. Never reset the ledger or discard failed reservations.
+
 Rates are deliberately conservative for published Haiku pricing: $2.20 per
 million input tokens **including all cache tokens at that same rate**, and
 $5.50 per million output tokens.

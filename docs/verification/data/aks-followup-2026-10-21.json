@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "status": "in_progress",
+  "checkpoint": 1,
+  "branch": "verification/aks-followup-2026-10-21",
+  "product_source_revision": "5d7510fca5bcfc7881b4f31206da3f2c6aeb8d4f",
+  "report": "../AKS-FOLLOWUP-2026-10-21.md",
+  "environment": {
+    "platform": "AKS",
+    "worker_sku": "Standard_DS4_v2",
+    "worker_cpu_limit": 4,
+    "worker_memory_limit_gib": 8,
+    "kernel": "6.8.0-1070-azure",
+    "container_runtime": "containerd://2.3.6-1",
+    "storage": "node-local emptyDir",
+    "dedicated_node": false
+  },
+  "budget": {
+    "authorized_total_usd": 40,
+    "authorized_cutoff_usd": 39.5,
+    "active_campaign_cutoff_usd": 36,
+    "prior_conservative_estimated_usd": 16.5161932,
+    "checkpoint_conservative_estimated_usd": 18.5943066,
+    "checkpoint_incremental_estimated_usd": 2.0781134,
+    "final": false,
+    "gateway_invoice_guaranteed": false,
+    "uncertain_reservations_retained": true
+  },
+  "load": {
+    "status": "failed",
+    "spans_per_replicate": 400000,
+    "minimum_stored_spans_per_second": 20000,
+    "maximum_freshness_p95_seconds": 120,
+    "replicates": [
+      {"backend": "sqlite", "synchronous": "full", "replicate": 1, "stored_spans_per_second": 15548, "freshness_p50_seconds": 2.376150294, "freshness_p95_seconds": 2.689472296, "poll_p95_ms": 4.035, "exit_code": 1},
+      {"backend": "sqlite", "synchronous": "full", "replicate": 2, "stored_spans_per_second": 18098, "freshness_p50_seconds": 3.395857934, "freshness_p95_seconds": 7.826505637, "poll_p95_ms": 14.669, "exit_code": 1},
+      {"backend": "sqlite", "synchronous": "full", "replicate": 3, "stored_spans_per_second": 15803, "freshness_p50_seconds": 2.400821553, "freshness_p95_seconds": 2.733367721, "poll_p95_ms": 4.031, "exit_code": 1},
+      {"backend": "sqlite", "synchronous": "normal", "replicate": 1, "stored_spans_per_second": 15751, "freshness_p50_seconds": 2.413072219, "freshness_p95_seconds": 2.692546365, "poll_p95_ms": 3.466, "exit_code": 1},
+      {"backend": "sqlite", "synchronous": "normal", "replicate": 2, "stored_spans_per_second": 15495, "freshness_p50_seconds": 2.381915538, "freshness_p95_seconds": 2.699113457, "poll_p95_ms": 3.222, "exit_code": 1},
+      {"backend": "sqlite", "synchronous": "normal", "replicate": 3, "stored_spans_per_second": 15689, "freshness_p50_seconds": 2.402046196, "freshness_p95_seconds": 2.694804334, "poll_p95_ms": 3.119, "exit_code": 1},
+      {"backend": "clickhouse", "synchronous": "full", "replicate": 1, "stored_spans_per_second": 11770, "freshness_p50_seconds": 17.064747025, "freshness_p95_seconds": 25.317866598, "poll_p95_ms": 79.931, "exit_code": 1},
+      {"backend": "clickhouse", "synchronous": "full", "replicate": 2, "stored_spans_per_second": 10396, "freshness_p50_seconds": 9.773992685, "freshness_p95_seconds": 13.890568767, "poll_p95_ms": 120.259, "exit_code": 1},
+      {"backend": "clickhouse", "synchronous": "full", "replicate": 3, "stored_spans_per_second": 9380, "freshness_p50_seconds": 2.82155533, "freshness_p95_seconds": 3.255162164, "poll_p95_ms": 189.262, "exit_code": 1}
+    ],
+    "throughput_passes": 0,
+    "freshness_passes": 9,
+    "overlap_caveat": "Pool initialization, capability probes and strict-audit testing overlapped part of the campaign."
+  },
+  "server_controls": {
+    "strict_and_besteffort_audit_fault_injection": "passed",
+    "chained_audit": "passed",
+    "identity_and_revocation_across_surfaces": "passed",
+    "separate_daemon_unwritable_filesystem_drill": "not_run"
+  },
+  "capabilities": {
+    "network_baseline_connected": true,
+    "network_connected_after_deny": true,
+    "network_policy_enforced": false,
+    "kata_matching_nodes": 0,
+    "kata_scheduled": false,
+    "successful_kvm_vm_creation_nodes": 5,
+    "remaining_kvm_probe_pods": 0,
+    "real_jailer_verified": false
+  },
+  "live_refund_checkpoint": {
+    "baseline_completed": 36,
+    "baseline_business_passes": 36,
+    "baseline_planned": 36,
+    "approval_completed": 19,
+    "approval_business_passes": 18,
+    "approval_planned": 36,
+    "intentional_denial_business_failures": 1,
+    "observed_retry_attempts_after_denial": 1,
+    "observed_retries_executed_after_denial": 0,
+    "replay": "pending"
+  },
+  "cleanup": {
+    "probe_resources_removed": true,
+    "campaign_namespace_removed": false,
+    "port_forwarding_stopped": false,
+    "status": "pending_campaign_completion"
+  }
+}
