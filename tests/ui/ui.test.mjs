@@ -783,7 +783,9 @@ test('the release workbench runs an HTTP candidate, explains a block, exports pi
     assert.match(await page.textContent('#main'), /awaiting_human/);
     await page.getByLabel('Candidate trial', { exact: true }).fill('1');
     await page.getByRole('button', { name: 'Inspect case', exact: true }).click();
-    await page.getByRole('heading', { name: 'Event sequence differences', exact: true }).waitFor();
+    // The old trial's heading may still exist before the hashchange is handled.
+    // Wait for the requested execution evidence, not the previous render.
+    await page.waitForFunction(() => document.querySelector('[aria-label="Candidate case"]')?.textContent.includes('trial-1-lookup'));
     assert.match(await page.getByRole('region', { name: 'Candidate case' }).textContent(), /trial-1-lookup/);
     assert.match(await page.getByRole('region', { name: 'Baseline case' }).textContent(), /trial-0-lookup/);
     await checkAccessibility(page);
@@ -826,6 +828,127 @@ test('the release workbench runs an HTTP candidate, explains a block, exports pi
     assert.deepEqual(problems, []);
   } catch (err) { console.error(await page.locator('#main').innerText()); throw err; }
   finally { await page.close(); await new Promise(resolve => agent.close(resolve)); }
+});
+
+test('baseline copies preserve evaluator contracts and HTTP defaults across project-scoped release decisions', async () => {
+  const url = await startServer('workbench-preservation');
+  const scope = 'workbench-project';
+  const call = async (pathname, body) => {
+    const response = await fetch(url + pathname, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const value = await response.json(); assert.equal(response.status, 200, JSON.stringify(value)); return value;
+  };
+  const waitRun = async id => {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      const { run } = await (await fetch(`${url}/v1alpha1/runs/${id}`)).json();
+      if (run.status === 'RUN_STATUS_SUCCEEDED') return run;
+      if (['RUN_STATUS_FAILED', 'RUN_STATUS_CANCELLED'].includes(run.status)) assert.fail(JSON.stringify(run));
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.fail('run did not complete');
+  };
+  const agent = http.createServer(async (request, response) => {
+    let raw = ''; for await (const chunk of request) raw += chunk;
+    const { input } = JSON.parse(raw);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ output: request.url === '/bad' && input === 'Question 0' ? 'Wrong' : 'Approved' }));
+  });
+  await new Promise(resolve => agent.listen(0, '127.0.0.1', resolve));
+  const agentURL = `http://127.0.0.1:${agent.address().port}`;
+  const page = await browser.newPage();
+  const problems = await watch(page);
+  try {
+    await call('/v1alpha1/projects', { name: scope });
+    const publication = await call('/v1alpha1/dataset-versions', { content: { project: scope, name: 'copies', version: 'v1', owner: 'support', split: 'held-out', records: [0, 1, 2].map(i => ({ id: `case-${i}`, input: { text: `Question ${i}` }, reference: { text: 'Approved' } })) } });
+    await call('/v1alpha1/dataset-versions/copies/v1:review', { project: scope, sha256: publication.dataset.sha256, expectedRevision: publication.dataset.revision, decision: 'DATASET_VERSION_STATE_APPROVED', note: 'Synthetic settings-preservation controls' });
+    for (const explicitParams of [false, true]) {
+      const baseline = (await call('/v1alpha1/runs', { name: 'baseline', project: scope, labels: { 'agent.commit': 'a'.repeat(40) }, spec: {
+        dataset: { catalog: { project: scope, name: 'copies', version: 'v1', sha256: publication.dataset.sha256 } }, trials: 2,
+        evaluators: [{ ref: 'builtin/exact-match@1.0.0', name: 'verdict', ...(explicitParams ? { params: {} } : {}) }],
+        target: { agent: { http: { url: agentURL + '/good', outputPath: 'output' } } },
+      } })).run.id;
+      const admittedBaseline = await waitRun(baseline);
+      assert.equal(Object.hasOwn(admittedBaseline.spec.evaluators[0], 'params'), explicitParams);
+      await page.goto(`${url}/ui/#/workbench?${new URLSearchParams({ project: scope, baseline })}`);
+      await page.getByRole('button', { name: 'Use baseline evaluation settings', exact: true }).click();
+      await page.getByText('Baseline settings copied.', { exact: false }).waitFor();
+      assert.equal(await page.getByLabel('HTTP timeout (seconds)', { exact: true }).inputValue(), '600');
+      await page.getByLabel('Declared candidate commit', { exact: true }).fill('B'.repeat(40));
+      if (!explicitParams) await page.getByLabel('Endpoint URL', { exact: true }).fill(agentURL + '/bad');
+      await page.getByRole('button', { name: 'Validate candidate configuration', exact: true }).click();
+      await page.getByText('Admission checks passed.', { exact: false }).waitFor();
+      await page.getByLabel('I reviewed the candidate configuration and destination', { exact: true }).check();
+      await page.getByRole('button', { name: 'Start candidate run', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('input[list="workbench-runs"]') && [...document.querySelectorAll('a')].some(a => a.textContent?.startsWith('run-') && /SUCCEEDED/.test(a.parentElement.textContent)));
+      const candidate = await page.getByLabel('Candidate run ID', { exact: true }).inputValue();
+      const admitted = await waitRun(candidate);
+      assert.equal(admitted.labels['agent.commit'], 'b'.repeat(40));
+      assert.equal(Object.hasOwn(admitted.spec.evaluators[0], 'params'), explicitParams);
+      assert.equal(admitted.spec.target.agent.http.timeout, '600s');
+      const evidence = await Promise.all([baseline, candidate].map(async id => (await (await fetch(`${url}/v1alpha1/runs/${id}/release-evidence`)).json()).evidence));
+      assert.equal(evidence[0].evaluationContractSha256, evidence[1].evaluationContractSha256);
+      assert.ok(admitted.summaries.some(s => s.metric === 'verdict.pass@2'), 'the run includes derived trial summaries');
+      await page.getByRole('button', { name: 'Inspect baseline and candidate', exact: true }).click();
+      await page.getByRole('heading', { name: 'Candidate identity', exact: true }).waitFor();
+      await page.waitForFunction(() => [...document.querySelectorAll('select option')].some(o => o.value === 'verdict'));
+      assert.deepEqual(await page.getByLabel('Metric', { exact: true }).locator('option').evaluateAll(options => options.map(o => o.value)), ['', 'verdict']);
+      await page.getByLabel('Metric', { exact: true }).selectOption('verdict');
+      await page.getByRole('button', { name: 'Add metric rule', exact: true }).click();
+      await page.getByLabel('Minimum independent records', { exact: true }).fill('3');
+      await page.getByLabel('Minimum per-trial critical score', { exact: true }).fill('1');
+      const id = explicitParams ? 'explicit-params-pass' : 'absent-params-block';
+      await page.getByLabel('New immutable release decision ID', { exact: true }).fill(id);
+      await page.getByRole('button', { name: 'Inspect configured release policy', exact: true }).click();
+      await page.getByText('Policy SHA-256:', { exact: false }).waitFor();
+      await page.getByLabel('I reviewed the configured policy and both run identities', { exact: true }).check();
+      await page.getByRole('button', { name: 'Evaluate configured release check', exact: true }).click();
+      await page.getByRole('heading', { name: `${id}: ${explicitParams ? 'pass' : 'block'}`, exact: true }).waitFor();
+      assert.equal(new URL(page.url()).hash, `#/releases/${id}?project=${scope}`);
+      assert.equal(await page.locator('#project').inputValue(), 'default', 'release navigation preserves its own scope');
+      if (!explicitParams) {
+        await page.getByText('verdict: changed and critical cases', { exact: true }).click();
+        const link = page.getByRole('link', { name: 'Inspect paired case', exact: true }).first();
+        assert.equal(new URLSearchParams((await link.getAttribute('href')).split('?')[1]).get('project'), scope);
+        await link.click();
+        await page.getByRole('heading', { name: 'Event sequence differences', exact: true }).waitFor();
+        assert.match(await page.getByRole('region', { name: 'Candidate case' }).textContent(), /workbench-project/);
+      }
+    }
+    assert.deepEqual(problems, []);
+  } finally { await page.close(); await new Promise(resolve => agent.close(resolve)); }
+});
+
+test('release rules use captured numeric output names and directions, excluding summary-only metrics', async () => {
+  const url = await startServer('workbench-metrics');
+  const page = await browser.newPage();
+  const problems = await watch(page);
+  const summaries = ['alias', 'alias.extra', 'alias.pass@2', 'alias.pass^2', 'alias.category', 'whole', 'alias.skipped'].map(metric => ({ metric, evaluator: metric === 'whole' ? 'whole' : 'alias', n: metric === 'alias.skipped' ? '0' : '2', mean: 0.5 }));
+  const evaluationContract = { evaluators: [
+    { name: 'alias', manifest: { name: 'custom/grade', version: 'old', scope: 'SCOPE_RECORD', outputs: [
+      { name: 'grade', type: 'SCORE_TYPE_PASSED', higherIsBetter: true },
+      { name: 'extra', type: 'SCORE_TYPE_NUMBER', higherIsBetter: false },
+      { name: 'category', type: 'SCORE_TYPE_LABEL' },
+      { name: 'skipped', type: 'SCORE_TYPE_NUMBER' },
+    ] } },
+    { name: 'whole', manifest: { name: 'custom/dataset', scope: 'SCOPE_DATASET', outputs: [{ name: 'dataset', type: 'SCORE_TYPE_NUMBER' }] } },
+  ] };
+  await page.route('**/v1alpha1/runs/**', route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith('/results')) return route.fulfill({ json: { records: [] } });
+    if (pathname.endsWith('/release-evidence')) return route.fulfill({ json: { evidence: { reference: { runId: pathname.split('/').at(-2) }, dataset: { project: 'default', name: 'suite', version: 'v1' } } } });
+    return route.fulfill({ json: { run: { id: pathname.split('/').at(-1), summaries, evaluationContract,
+      spec: { evaluators: [{ name: 'alias', ref: 'custom/grade@old' }] } } } });
+  });
+  try {
+    await page.goto(`${url}/ui/#/workbench?baseline=base&candidate=candidate`);
+    await page.getByRole('button', { name: 'Inspect baseline and candidate', exact: true }).click();
+    const metric = page.getByLabel('Metric', { exact: true });
+    await page.waitForFunction(() => [...document.querySelectorAll('select option')].some(o => o.value === 'alias.extra'));
+    assert.deepEqual(await metric.locator('option').evaluateAll(options => options.map(o => o.value)), ['', 'alias', 'alias.extra']);
+    await metric.selectOption('alias.extra');
+    await page.getByRole('button', { name: 'Add metric rule', exact: true }).click();
+    assert.equal(await page.getByLabel('Metric direction', { exact: true }).inputValue(), 'METRIC_DIRECTION_LOWER');
+    assert.deepEqual(problems, []);
+  } finally { await page.close(); }
 });
 
 test('case deep links select exact trials without result pages and hide both lanes on denial', async () => {

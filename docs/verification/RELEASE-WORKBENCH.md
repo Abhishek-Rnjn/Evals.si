@@ -14,7 +14,7 @@ usability evidence, hosted-agent safety certification or a scale benchmark.
   same run without additional HTTP-agent calls; an explicit new attempt runs anew.
 - Baseline settings are copied, the candidate endpoint/commit are changed, and
   the browser builds a critical tool-error policy through forms. Catalog direction
-  metadata selects lower-is-better for tool-error rate. A deliberately failed tool
+  metadata captured at admission selects lower-is-better for tool-error rate. A deliberately failed tool
   and incomplete agent stop cause BLOCK; a corrected explicit attempt passes.
   Raising the required independent records beyond suite size gives INSUFFICIENT.
 - Editing policy content or a run identity revokes inspection/consent. Downloaded
@@ -38,6 +38,18 @@ usability evidence, hosted-agent safety certification or a scale benchmark.
 - Existing sign-in, annotation, inbox, dataset approval and release browser flows
   remain in the browser suite. The workbench participates in keyboard navigation
   and light/dark axe scans. The case inspector has its own accessibility scan.
+- Independently submitted HTTP baselines with omitted and explicitly empty
+  evaluator parameters copy to candidates with identical captured evaluation
+  contract hashes. Omitted HTTP timeouts retain the connector's 600-second
+  effective default; uppercase declared commits are normalized before admission.
+  These copies reach BLOCK and PASS decisions in a project different from the
+  global picker, and the resulting decision/case links retain that project.
+- Release metric selection uses captured record-scope numeric/pass-fail output
+  names and aliases. A fixture whose evaluator is absent from the current catalog
+  verifies captured directions and secondary-score naming. Derived pass@k/pass^k,
+  dataset-scoped metrics, label outputs and unscored outputs are excluded.
+- The exact-trial browser control waits for the new trial's evidence, so an old
+  heading remaining before hash navigation cannot satisfy the assertion.
 
 ## Reproduce
 
@@ -78,10 +90,16 @@ No GitHub-hosted Action execution or live external model is claimed by these che
 
 ## Recorded checks
 
-- Full browser suite: **12 passed**, including all three run modes, real HTTP
+- Full browser suite: **14 passed**, including all three run modes, real HTTP
   execution, exported CLI/Action checks and PASS/BLOCK/INSUFFICIENT decisions.
-  The final inspector changes also passed the focused browser controls.
+  Focused settings-preservation and captured-metric controls also passed.
 - Python: Ruff, formatting and strict mypy passed; **1,367 passed, 19 skipped**.
+- Certificate trust updates: Go **1.26.10** fixes GO-2026-6809; locked `certifi`
+  **2026.10.19** fixes PYSEC-2026-4320. The workflow's `govulncheck` command passes
+  with no reachable vulnerabilities; the locked-workspace `pip-audit` command
+  passes with no known vulnerabilities. No advisory exclusions or disabled checks.
+- Run, store, server and web UI Go suites pass under Go 1.26.10. Node syntax
+  checks pass for both browser files and the browser test file.
 - Protobuf lint, formatting and Go/Python regeneration passed. Operator/CRD
   regeneration completed without manifest changes. Go formatting and vet passed.
 - Website: **86 pages**, build and local link check passed.

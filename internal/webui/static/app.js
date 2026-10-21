@@ -961,7 +961,7 @@
       try {
         if (!evidence || !policyPin || !reviewed.checked) throw new Error("Inspect both run identities and the current policy, then confirm your review.");
         const out = await post("/v1alpha1/release-decisions", { project: scope, id: id.value, policy: JSON.parse(policy.value), policySha256: policyPin, baseline: evidence[0].reference, candidate: evidence[1].reference });
-        location.hash = `#/releases/${encodeURIComponent(out.decision.id)}`;
+        location.hash = `#/releases/${encodeURIComponent(out.decision.id)}?project=${encodeURIComponent(scope)}`;
       } catch (err) { notice(resultSlot, err); }
     } }, field("Release decision ID", id), field("Baseline run ID", baseline), field("Candidate run ID", candidate), inspectRuns, evidenceSlot,
       field("Release policy (JSON)", policy), inspectPolicy, policySlot, field("I reviewed this policy and both run identities", reviewed),
@@ -974,12 +974,13 @@
     show(el("h1", {}, "Release decisions"), el("p", { class: "sub" }, "Production failure → approved regression suite → candidate comparison → release decision."),
       el("p", {}, el("a", { href: "#/workbench" }, "Configure a release check without JSON")),
       table(["Decision", "Outcome", "Baseline", "Candidate", "Created"], (result.decisions || []).map(d => [
-        el("a", { href: `#/releases/${encodeURIComponent(d.id)}` }, d.id), enumName(d.outcome, "RELEASE_OUTCOME_"), d.baseline.reference.runId, d.candidate.reference.runId, when(d.createdAt),
+        el("a", { href: `#/releases/${encodeURIComponent(d.id)}?project=${encodeURIComponent(scope)}` }, d.id), enumName(d.outcome, "RELEASE_OUTCOME_"), d.baseline.reference.runId, d.candidate.reference.runId, when(d.createdAt),
       ])), result.nextPageToken ? el("button", { onclick: () => viewReleases(result.nextPageToken).catch(failed) }, "More release decisions") : null,
       el("h2", {}, "Compare existing runs"), releaseDecisionForm(scope));
   }
-  async function viewRelease(id) {
-    const { decision: d } = await api(`/v1alpha1/release-decisions/${encodeURIComponent(id)}`, { project });
+  async function viewRelease(id, query = new URLSearchParams()) {
+    const scope = query.get("project") || project;
+    const { decision: d } = await api(`/v1alpha1/release-decisions/${encodeURIComponent(id)}`, { project: scope });
     const dataset = d.policy.dataset;
     const download = el("button", { onclick: () => {
       const blob = new Blob([JSON.stringify({ schema: "evalsi.release-report/v1", decision: d }, null, 2)], { type: "application/json" });
@@ -1000,7 +1001,7 @@
         ...(m.reasons || []).map(reason => el("p", {}, reason)), table(["Case", "Trial", "Baseline", "Candidate", "Critical failure", "Execution evidence"], (m.changes || []).map(change => [
           /^failure\/[a-f0-9]{24}$/.test(change.recordId) ? el("a", { href: `#/inbox/${change.recordId.slice(8)}?project=${encodeURIComponent(dataset.project)}` }, change.recordId) : change.recordId,
           change.trial || 0, fmt(change.baseline ?? 0), fmt(change.candidate ?? 0), change.criticalFailure ? "yes" : "no",
-          el("a", { href: workbench().caseLink(d.baseline.reference.runId, d.candidate.reference.runId, change.recordId, change.trial, project) }, "Inspect paired case"),
+          el("a", { href: workbench().caseLink(d.baseline.reference.runId, d.candidate.reference.runId, change.recordId, change.trial, scope) }, "Inspect paired case"),
         ])), m.changesOmitted ? el("p", {}, `${m.changesOmitted} additional changes omitted; inspect the pinned run evidence.`) : null)),
       ...sources, el("h2", {}, "Reviewed release policy"), el("pre", { class: "content", tabindex: 0 }, JSON.stringify(d.policy, null, 2)), download,
       el("p", {}, "Verify independently: ", el("code", {}, `evalsi release verify ${d.id}.release.json --sha256 ${d.sha256}`)));

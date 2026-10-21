@@ -125,7 +125,7 @@ window.evalsiWorkbench = ({ el, api, post, show, field, table, kv, fmt, contentT
     const judge = select([["", "Server default (if configured)"], ...(credentials.judges || []).map(j => [j, j])]);
     const trials = number(1, { min: 1, step: 1, required: true });
     const targetTokens = number("", { min: 0, step: 1 }), judgeTokens = number("", { min: 0, step: 1 });
-    const outputPath = input("output"), trajectoryPath = input("trajectory"), usagePath = input("usage"), stopPath = input("stop_reason"), timeout = number(120, { min: 1, required: true });
+    const outputPath = input("output"), trajectoryPath = input("trajectory"), usagePath = input("usage"), stopPath = input("stop_reason"), timeout = number(600, { min: 1, required: true });
     const body = input('{"input": {{input}}, "trial": {{trial}}, "session_id": {{session_id}}}');
     const header = input("Authorization");
     const endpointFields = el("div", {}, field("Endpoint URL", endpoint), field("Model name", model), field("Credential variable", keyEnv));
@@ -143,13 +143,18 @@ window.evalsiWorkbench = ({ el, api, post, show, field, table, kv, fmt, contentT
     }
     const evaluatorSelect = select((catalog.evaluators || []).map(m => [m.name, `${m.name}@${m.version}`]));
     const evaluatorCards = el("div"), evaluators = [];
-    function addEvaluator(ref = "builtin/exact-match", params = {}, name = "") {
+    function addEvaluator(ref = "builtin/exact-match", params, name = "") {
       const m = resolveEvaluator(ref);
       if (!m) throw new Error(`Evaluator ${ref} is unavailable.`);
       if (ref.includes("@") && ref.split("@")[1] !== m.version) throw new Error(`The pinned evaluator ${ref} is no longer available.`);
-      if (Object.keys(params).some(k => !Object.hasOwn(m.paramsSchema?.properties || {}, k))) throw new Error(`Use the original spec for parameters outside ${m.name}'s current schema.`);
+      if (Object.keys(params || {}).some(k => !Object.hasOwn(m.paramsSchema?.properties || {}, k))) throw new Error(`Use the original spec for parameters outside ${m.name}'s current schema.`);
       const alias = input(name), controls = parameterControls(m.paramsSchema, params);
-      const item = { read: () => ({ ref: `${m.name}@${m.version}`, ...(alias.value ? { name: alias.value } : {}), params: controls.read() }) };
+      const item = { read: () => {
+        const values = controls.read();
+        // Empty and absent protobuf Struct messages have different contract hashes.
+        return { ref: `${m.name}@${m.version}`, ...(alias.value ? { name: alias.value } : {}),
+          ...(params !== undefined || Object.keys(values).length ? { params: values } : {}) };
+      } };
       const card = el("div", { class: "card" }, el("h3", {}, m.name), el("p", { class: "sub" }, m.description || ""), m.requires?.judge ? el("p", {}, "Uses the explicitly configured judge; missing judge configuration fails admission.") : null,
         field("Evaluator alias (optional)", alias), controls.node, button("Remove evaluator", () => { evaluators.splice(evaluators.indexOf(item), 1); card.remove(); invalidateCandidate(); }));
       evaluators.push(item); evaluatorCards.append(card);
@@ -171,7 +176,7 @@ window.evalsiWorkbench = ({ el, api, post, show, field, table, kv, fmt, contentT
       if (targetTokens.value || judgeTokens.value) spec.budget = { maxTargetTokens: targetTokens.value || "0", maxJudgeTokens: judgeTokens.value || "0" };
       if (mode.value === "model") spec.target = { connector: "openai-compatible", baseUrl: endpoint.value, model: model.value, apiKeyEnv: keyEnv.value };
       if (mode.value === "http") spec.target = { agent: { http: { url: endpoint.value, outputPath: outputPath.value, bodyTemplate: body.value, trajectoryPath: trajectoryPath.value, usagePath: usagePath.value, stopReasonPath: stopPath.value, timeout: `${timeout.value}s`, headersEnv: keyEnv.value === "none" ? {} : { [header.value]: keyEnv.value } } } };
-      return { name: runName.value, project: scope, labels: { "agent.commit": commit.value }, spec };
+      return { name: runName.value, project: scope, labels: { "agent.commit": commit.value.toLowerCase() }, spec };
     }
     const candidateForm = el("form", { onsubmit: async event => {
       event.preventDefault();
@@ -267,7 +272,7 @@ window.evalsiWorkbench = ({ el, api, post, show, field, table, kv, fmt, contentT
           const h = t.agent.http;
           // Only connector fields exposed below can be copied faithfully.
           if (h.stream || h.method && h.method !== "POST" || h.messagesPath || h.deltaPath || Object.keys(h.headersEnv || {}).length > 1) throw new Error("Use the original spec for this advanced HTTP baseline.");
-          mode.value = "http"; endpoint.value = h.url; outputPath.value = h.outputPath || ""; body.value = h.bodyTemplate || '{"input": {{input}}}'; trajectoryPath.value = h.trajectoryPath || ""; usagePath.value = h.usagePath || ""; stopPath.value = h.stopReasonPath || ""; timeout.value = Number((h.timeout || "120s").slice(0, -1));
+          mode.value = "http"; endpoint.value = h.url; outputPath.value = h.outputPath || ""; body.value = h.bodyTemplate || '{"input": {{input}}}'; trajectoryPath.value = h.trajectoryPath || ""; usagePath.value = h.usagePath || ""; stopPath.value = h.stopReasonPath || ""; timeout.value = Number((h.timeout || "600s").slice(0, -1));
           const entries = Object.entries(h.headersEnv || {}); header.value = entries[0]?.[0] || "Authorization"; keyEnv.value = entries[0]?.[1] || "none";
         } else if (t) {
           if (Object.keys(t).some(k => !["connector", "baseUrl", "model", "apiKeyEnv"].includes(k))) throw new Error("Use the original spec for advanced model settings.");
@@ -302,12 +307,18 @@ window.evalsiWorkbench = ({ el, api, post, show, field, table, kv, fmt, contentT
         inspected = responses;
         identitySlot.replaceChildren(...responses.map((v, i) => el("div", { class: "card" }, el("h3", {}, i === 0 ? "Baseline identity" : "Candidate identity"), pre(v.evidence))));
         metricOptions.clear();
-        for (const summary of responses[1].run.summaries || []) {
-          if (Number(summary.n) <= 0 || summary.mean === undefined) continue;
-          const instance = responses[1].run.spec.evaluators.find(e => (e.name || e.ref.split("@")[0].split("/").at(-1)) === summary.evaluator);
-          const manifest = instance ? resolveEvaluator(instance.ref) : undefined;
-          const output = manifest?.outputs?.find(o => summary.metric === o.name || summary.metric.endsWith("." + o.name) || manifest.outputs.length === 1);
-          metricOptions.set(summary.metric, { lower: output?.higherIsBetter === false });
+        for (const bound of responses[1].run.evaluationContract?.evaluators || []) {
+          const manifest = bound.manifest;
+          if (manifest?.scope !== "SCOPE_RECORD") continue;
+          for (const output of manifest.outputs || []) {
+            if (!["SCORE_TYPE_NUMBER", "SCORE_TYPE_PASSED"].includes(output.type)) continue;
+            // Match evaluation.MetricKey using the captured manifest and alias.
+            // Summary-only pass@k/pass^k aggregates have no per-trial scores.
+            const key = !output.name || output.name === manifest.name.split("/").at(-1) ? bound.name : `${bound.name}.${output.name}`;
+            if (key.startsWith("usage.")) continue;
+            const measured = (responses[1].run.summaries || []).some(summary => summary.metric === key && summary.evaluator === bound.name && Number(summary.n) > 0 && summary.mean !== undefined);
+            if (measured) metricOptions.set(key, { lower: output.higherIsBetter === false });
+          }
         }
         const usage = responses[1].run.targetUsage;
         if (usage?.costUsd !== undefined) metricOptions.set("usage.cost_usd", { lower: true });
@@ -339,7 +350,7 @@ window.evalsiWorkbench = ({ el, api, post, show, field, table, kv, fmt, contentT
         if (!policyPin || !reviewed.checked || reviewedSource !== json(policyValue())) throw new Error("Inspect and review the current policy and identities first.");
         const pinned = inspected;
         const response = await post("/v1alpha1/release-decisions", { project: scope, id: decisionID.value, policy: policyValue(), policySha256: policyPin, baseline: pinned[0].evidence.reference, candidate: pinned[1].evidence.reference });
-        if (active()) location.hash = `#/releases/${encodeURIComponent(response.decision.id)}`;
+        if (active()) location.hash = `#/releases/${encodeURIComponent(response.decision.id)}?project=${encodeURIComponent(scope)}`;
       } catch (err) { if (active()) notice(decisionSlot, err); }
     } });
     policyForm.addEventListener("input", resetPolicy); policyForm.addEventListener("change", resetPolicy);
