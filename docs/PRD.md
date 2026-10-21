@@ -52,6 +52,7 @@ All three doors exist, and v0.1.0 is released. Status is as of `main` on 2026-10
 
 | Capability | Status | Where it lives |
 | --- | --- | --- |
+| Evaluator validation against human judgements | Built, unreleased: pinned pass/fail label sets, annotation export import, tuning-only selection, held-out validity/slices, uncached repeatability and paired judge-drift reports. Synthetic/HTTP-fixture verified; real human-labelled judge certification and categorical/continuous/preference calibration remain open | [Judge calibration](guides/judge-calibration.md), decision [0031](decisions/0031-evaluator-calibration.md) |
 | Helm install (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), namespace-only mode, air-gapped bundle | Built; tested on kind in CI, verified on AKS and an Istio ambient cluster | `deploy/helm/`, `deploy/airgap/` |
 | Operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator`, `SandboxClass` | Built | `operator/` |
 | gRPC, HTTP/JSON and REST API; durable, resumable runs | Built | `internal/server/`, `internal/runs/` |
