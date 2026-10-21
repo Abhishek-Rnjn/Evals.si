@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import subprocess
 import sys
 import threading
@@ -12,12 +13,22 @@ from typing import Any
 
 import pytest
 
-from evalsi import MetricSpec, Record, Registry, Requirements, Score, ScoreType, evaluator
+from evalsi import (
+    EvalContext,
+    MetricSpec,
+    Record,
+    Registry,
+    Requirements,
+    Score,
+    ScoreType,
+    evaluator,
+)
 from evalsi.calibration import PROTOCOL_SCHEMA, calibrate, compare_reports
 from evalsi.calibration_report import render_report
-from evalsi.calibration_sets import freeze_set, read_artifact, write_artifact
+from evalsi.calibration_sets import digest, freeze_set, read_artifact, write_artifact
 from evalsi.calibration_stats import paired_difference, validity
 from evalsi.cli import main
+from evalsi.judges.structured import LABEL_SYSTEM, TOP_LOGPROBS, JudgeSession
 
 
 @evaluator(name="test/score", version="1.0.0")
@@ -378,8 +389,10 @@ def test_bad_protocol_fails_before_evaluator_execution(tmp_path: Path, change: s
         calibrate(path, protocol, registry=registry)
 
 
-def test_real_http_judge_repeats_are_fresh_and_audited(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("method", ["complete_json", "next_token_logprobs"])
+@pytest.mark.parametrize("fail_heldout", [False, True])
+def test_real_http_judge_repeats_are_fresh_and_audited(  # noqa: PLR0915 - transport and report assertions
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str, fail_heldout: bool
 ) -> None:
     requests: list[dict[str, Any]] = []
     counts: Counter[str] = Counter()
@@ -392,6 +405,10 @@ def test_real_http_judge_repeats_are_fresh_and_audited(
             requests.append(body)
             prompt = body["messages"][1]["content"]
             counts[prompt] += 1
+            if fail_heldout and "question h1" in prompt:
+                self.send_response(400)
+                self.end_headers()
+                return
             # Identical prompts produce different verdicts on fresh calls.
             score = 5 if counts[prompt] % 2 else 1
             response = {
@@ -405,6 +422,27 @@ def test_real_http_judge_repeats_are_fresh_and_audited(
                     }
                 ],
             }
+            if method == "next_token_logprobs":
+                response["choices"] = [
+                    {
+                        "logprobs": {
+                            "content": [
+                                {
+                                    "top_logprobs": [
+                                        {
+                                            "token": "A",
+                                            "logprob": math.log(0.8 if score == 5 else 0.2),
+                                        },
+                                        {
+                                            "token": "B",
+                                            "logprob": math.log(0.2 if score == 5 else 0.8),
+                                        },
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
             raw = json.dumps(response).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -439,8 +477,23 @@ def test_real_http_judge_repeats_are_fresh_and_audited(
             },
         }
     ]
+    registry = None
+    if method == "next_token_logprobs":
+
+        @evaluator(name="test/logprobs", version="1.0.0", requires=Requirements(judge=True))
+        async def logprob_score(record: Record, ctx: EvalContext) -> Score:
+            assert ctx.judge is not None
+            assert record.input is not None
+            probabilities = await JudgeSession(ctx.judge).label_probabilities(
+                record.input.as_text(), ["A", "B"]
+            )
+            return Score(number=probabilities["A"])
+
+        registry = Registry([])
+        registry.add(logprob_score)
+        protocol["candidates"][0].update(evaluator={"ref": "test/logprobs"}, metric="logprobs")
     try:
-        result = calibrate(path, protocol)
+        result = calibrate(path, protocol, registry=registry)
     finally:
         server.shutdown()
         server.server_close()
@@ -450,13 +503,45 @@ def test_real_http_judge_repeats_are_fresh_and_audited(
     assert set(counts.values()) == {2}
     assert all(request["temperature"] == 0.7 for request in requests)
     candidate = result["candidates"][0]
-    assert len(candidate["judge_calls"]) == 8
-    assert {call["model"] for call in candidate["judge_calls"]} == {"actual-local-judge"}
-    assert all(not call["cached"] for call in candidate["judge_calls"])
+    calls = candidate["judge_calls"]
+    assert len(calls) == 8
+    assert {call["method"] for call in calls} == {method}
+    assert Counter((call["phase"], call["repeat"]) for call in calls) == {
+        (phase, repeat): 2 for phase in ("tuning", "held-out") for repeat in (0, 1)
+    }
+    successes = [call for call in calls if "error_type" not in call]
+    failures = [call for call in calls if "error_type" in call]
+    assert len(failures) == (2 if fail_heldout else 0)
+    assert all(call["error_type"] == "JudgeError" for call in failures)
+    assert all("response_sha256" not in call and "model" not in call for call in failures)
+    assert {call["model"] for call in successes} == {"actual-local-judge"}
+    assert all(not call["cached"] for call in successes)
+    assert {call["prompt_sha256"] for call in calls} == {digest(prompt) for prompt in counts}
+    assert all(len(call["response_sha256"]) == 64 for call in successes)
+    if method == "next_token_logprobs":
+        assert all(call["system_sha256"] == digest(LABEL_SYSTEM) for call in calls)
+        assert all(
+            call["request_settings"]
+            == {
+                "model": request["model"],
+                "temperature": request["temperature"],
+                "max_tokens": 1,
+                "logprobs": True,
+                "top_logprobs": TOP_LOGPROBS,
+            }
+            for call, request in zip(calls, requests, strict=True)
+        )
+        assert all(request["max_tokens"] == 1 for request in requests)
+        assert all(request["top_logprobs"] == TOP_LOGPROBS for request in requests)
+        assert {call["response_sha256"] for call in successes} == {
+            digest({"top_logprobs": {"A": math.log(a), "B": math.log(b)}})
+            for a, b in [(0.8, 0.2), (0.2, 0.8)]
+        }
     heldout = candidate["held-out"]
     assert heldout["repeatability"]["decision_disagreement"]["value"] == 1
-    assert heldout["cases"] == 2
-    assert heldout["outcomes"]["scored"] == 4
+    assert heldout["cases"] == (1 if fail_heldout else 2)
+    assert heldout["outcomes"]["scored"] == (2 if fail_heldout else 4)
+    assert result["status"] == ("incomplete" if fail_heldout else "complete")
     assert heldout["metrics"]["accuracy"]["value"] == 0.5
     assert "private-key-never-in-report" not in json.dumps(result)
     assert not (tmp_path / "cache").exists()

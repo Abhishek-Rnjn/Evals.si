@@ -163,6 +163,52 @@ def test_same_input_cases_must_share_independent_group_even_within_split() -> No
     assert len(freeze_set([*rows, extra], name="n", version="v", question="q")["cases"]) == 3
 
 
+def tool_conversation(arguments: str = '{"order":"one"}') -> dict[str, Any]:
+    return {
+        "messages": [
+            {"role": "user", "content": "Check my order"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": "call-1", "name": "lookup", "arguments": arguments}],
+            },
+        ]
+    }
+
+
+@pytest.mark.parametrize("content", [tool_conversation(), {"json": "   "}])
+@pytest.mark.parametrize("split", ["tuning", "held-out"])
+def test_structured_input_with_blank_text_projection_cannot_leak(
+    content: dict[str, Any], split: str
+) -> None:
+    rows = labelled_rows()
+    rows[0]["record"]["input"] = copy.deepcopy(content)
+    extra = copy.deepcopy(rows[0])
+    extra["record"]["id"] = "another-output"
+    extra["record"]["output"] = "another answer"
+    extra["split"] = split
+    with pytest.raises(ValueError, match="identical inputs"):
+        freeze_set([*rows, extra], name="n", version="v", question="q")
+    if split == "tuning":
+        rows[0]["group"] = extra["group"] = "same-conversation"
+        assert len(freeze_set([*rows, extra], name="n", version="v", question="q")["cases"]) == 3
+
+
+def test_tool_arguments_remain_part_of_structured_input_identity() -> None:
+    rows = labelled_rows()
+    rows[0]["record"]["input"] = tool_conversation()
+    rows[1]["record"]["input"] = tool_conversation('{"order":"two"}')
+    assert len(freeze_set(rows, name="n", version="v", question="q")["cases"]) == 2
+
+
+@pytest.mark.parametrize("content", [None, "", {"text": "  \n"}])
+def test_absent_or_blank_text_input_does_not_imply_overlap(content: Any) -> None:
+    rows = labelled_rows()
+    for row in rows:
+        row["record"]["input"] = content
+    assert len(freeze_set(rows, name="n", version="v", question="q")["cases"]) == 2
+
+
 def exported() -> list[dict[str, Any]]:
     record = {
         "id": "one",

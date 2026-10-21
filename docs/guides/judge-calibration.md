@@ -141,8 +141,11 @@ not stored; credential-bearing URLs are rejected. All splits, evaluator bindings
 output names and candidate configs are checked before calls begin. Calibration
 always disables Evals.si's judge cache, including for repeated identical prompts.
 Real endpoints incur fresh calls and cost. Provider-side caching, retries and
-model weight changes are outside the tool's control. A request audit records
-phase/repeat, prompt/system/schema/response hashes and returned model identities.
+model weight changes are outside the tool's control. Both JSON and next-token
+logprob calls are audited with their method, phase/repeat, prompt/system/response
+hashes and returned model identities; JSON calls also pin the schema, while
+logprob calls retain their one-token request settings and top-logprob limit.
+Failed requests retain their error type without inventing response evidence.
 Fatal judge configuration errors abort; ordinary per-record failures remain in
 the report. CLI exit 3 means incomplete measurements, with the report saved;
 exit 1 means configuration, integrity or I/O failure. A low agreement score alone

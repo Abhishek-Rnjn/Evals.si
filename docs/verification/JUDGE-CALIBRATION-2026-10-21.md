@@ -10,16 +10,17 @@ or server schema/API changes. See the [guide](../guides/judge-calibration.md),
 
 | Check | Result |
 |---|---|
-| Full Python workspace | 1422 passed, 19 skipped, 2 existing warnings in 112.20 seconds with the correct compiler/built daemon; no failures |
-| Focused calibration tests | 55 passed, including CLI/SDK, annotation protobuf JSON, pins/replacements, concurrent publication, split leakage, missing labels, threshold selection, metrics and repeated-call controls |
-| Real-client judge transport | OpenAI-compatible client against a local HTTP endpoint: four distinct prompts called twice, eight fresh requests, alternating verdicts, response model identities and prompt/response hashes retained, no local cache file created, environment key absent from report |
+| Full Python workspace | 1472 passed, 19 skipped, 2 existing warnings in 122.97 seconds after merging main, with the correct compiler/built daemon; no failures |
+| Focused calibration tests | 66 passed, including CLI/SDK, annotation protobuf JSON, pins/replacements, concurrent publication, structured split leakage, missing labels, threshold selection, metrics and repeated-call controls. Removing the two review fixes makes all six targeted regression cases fail |
+| Real-client judge transport | OpenAI-compatible JSON and next-token logprob clients against a local HTTP endpoint: four distinct prompts called twice, eight fresh requests per run, alternating verdicts, phase/repeat, response model identities and prompt/response hashes retained, logprob request settings preserved, no local cache file created, environment key absent from report. Both methods also retain failed held-out request audits and leave those measurements incomplete |
 | Tuning isolation | Changing held-out labels cannot change threshold selection; a candidate that wins held-out results cannot replace the candidate selected on tuning; incomplete/one-class tuning refuses threshold sweeps |
 | Missing evidence | Errors, skips, non-finite/missing scores and a failed repeat remain incomplete; no score imputation or successful-repeat cherry-picking. Human ties remain unlabelled with all votes retained |
 | Statistics | Equal weight per complete labelled case; repeats do not increase cases/groups; whole-group bootstrap and paired deltas; undefined/unstable denominators, one group and uniform bootstrap samples leave intervals unavailable |
 | Offline example | Exact/fuzzy comparisons, a near-match false positive, human dissent, rejected dataset-pin control and a stricter-threshold judge-drift comparison on identical outputs |
 | Formatting and typing | Workspace Ruff lint/format and strict mypy pass; example script also checked |
+| Dependency security | `govulncheck ./...` reports no reachable vulnerabilities; locked workspace `pip-audit` reports no known vulnerabilities |
 | Server integration regression | All 12 existing `test_client_evaluate.py` tests pass against a freshly built daemon and this checkout's Python worker |
-| Documentation | `npm run build` in `website`: 86 pages built, new guide and decision included |
+| Documentation | `npm run build` in `website`: 90 pages built after merging main, preserving the calibration, release-workbench and support/refund guides and decision indexes |
 | HTML browser review | Chromium/Playwright at 1440px and 390px: both candidate rows visible, unresolved human consensus retained, no document overflow, zero scripts, external requests or page errors; table scrolls within its region on mobile |
 
 Reproduce the main checks:

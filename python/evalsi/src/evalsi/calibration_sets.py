@@ -112,7 +112,7 @@ def consensus(ratings: list[dict[str, Any]]) -> bool | None:
 
 def _input_key(record: dict[str, Any]) -> str | None:
     content = load_records([record])[0].input
-    if content is None or not content.as_text().strip():
+    if content is None or (content.text is not None and not content.text.strip()):
         return None
     # Exact canonical content, including message/tool structure. No semantic claim.
     return digest(content.to_dict())

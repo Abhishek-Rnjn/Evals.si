@@ -90,6 +90,7 @@ class _AuditedJudge(JudgeClient):
         self, *, system: str, prompt: str, schema: dict[str, Any]
     ) -> JudgeResponse:
         call: dict[str, Any] = {
+            "method": "complete_json",
             "phase": self.phase,
             "repeat": self.repeat,
             "system_sha256": digest(system),
@@ -99,6 +100,38 @@ class _AuditedJudge(JudgeClient):
         self.calls.append(call)
         try:
             response = await super().complete_json(system=system, prompt=prompt, schema=schema)
+        except Exception as exc:
+            call["error_type"] = type(exc).__name__
+            raise
+        call.update(
+            model=response.model, cached=response.cached, response_sha256=digest(response.data)
+        )
+        if response.cached:
+            raise ValueError("calibration requires fresh judge responses")
+        return response
+
+    async def next_token_logprobs(
+        self, *, system: str, prompt: str, top_logprobs: int = 20
+    ) -> JudgeResponse:
+        call: dict[str, Any] = {
+            "method": "next_token_logprobs",
+            "phase": self.phase,
+            "repeat": self.repeat,
+            "system_sha256": digest(system),
+            "prompt_sha256": digest(prompt),
+            "request_settings": {
+                "model": self.config.model,
+                "temperature": self.config.temperature,
+                "max_tokens": 1,
+                "logprobs": True,
+                "top_logprobs": top_logprobs,
+            },
+        }
+        self.calls.append(call)
+        try:
+            response = await super().next_token_logprobs(
+                system=system, prompt=prompt, top_logprobs=top_logprobs
+            )
         except Exception as exc:
             call["error_type"] = type(exc).__name__
             raise
