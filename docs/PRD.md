@@ -7,10 +7,7 @@ see the [product roadmap](PRODUCT-ROADMAP.md) and [strategy](PRODUCT-STRATEGY.md
 Their work IDs and acceptance criteria supplement this technical PRD; the dated
 implementation and verification statements below retain their original scope.
 
-The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) adds required installed-product
-and customer-adoption acceptance criteria for stable 0.4. Its R04 checklist is
-open, with owners and evidence pending; recording this plan does not change the
-implementation status of this PRD's technical requirements.
+The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) lists acceptance work for stable 0.4. It does not change the status of this PRD's technical requirements, and it starts a first evaluation outside a cluster; the in-cluster service here remains the team and enterprise deployment path.
 
 ## Summary
 
@@ -57,6 +54,7 @@ All three doors exist, and v0.1.0 is released. Status is as of `main` on 2026-10
 
 | Capability | Status | Where it lives |
 | --- | --- | --- |
+| Evaluator validation against human judgements | Built, unreleased: pinned pass/fail label sets, annotation export import, tuning-only selection, held-out validity/slices, uncached repeatability and paired judge-drift reports. Synthetic/HTTP-fixture verified; real human-labelled judge certification and categorical/continuous/preference calibration remain open | [Judge calibration](guides/judge-calibration.md), decision [0031](decisions/0031-evaluator-calibration.md) |
 | Helm install (`evalsi`, `evalsi-crds`, `evalsi-sandboxd`), namespace-only mode, air-gapped bundle | Built; tested on kind in CI, verified on AKS and an Istio ambient cluster | `deploy/helm/`, `deploy/airgap/` |
 | Operator with `EvalRun`, `OnlineEvalPolicy`, `Evaluator`, `SandboxClass` | Built | `operator/` |
 | gRPC, HTTP/JSON and REST API; durable, resumable runs | Built | `internal/server/`, `internal/runs/` |

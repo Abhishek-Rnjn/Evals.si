@@ -4,10 +4,7 @@ Status: proposed product direction, 19 October 2026. Target audiences: teams shi
 
 Track implementation in the [product roadmap](PRODUCT-ROADMAP.md). This proposal adds no product functionality or certification claims. Existing implementation and verification status remains in the [technical inventory](LEFTOVERS.md), [customer Kubernetes PRD](PRD.md), and [harness roadmap](HARNESS-ROADMAP.md).
 
-The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) turns the next release's
-evaluation workflow and customer-adoption work into required acceptance criteria.
-Its pilot, retention and willingness-to-pay targets remain unmet until evidence
-is recorded; they are not claims of existing customer usage.
+The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) turns this direction into the next release's acceptance criteria. Its pilot, retention and willingness-to-pay targets are unmet and are not claims of customer usage.
 
 ## Recommendation
 

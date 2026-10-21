@@ -78,6 +78,7 @@ The second answer cites passage `[4]`, but only two passages were retrieved. Add
 
 For the unreleased setup commands and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
 For unreleased dataset version review and digest-pinned runs, see [dataset snapshots](docs/guides/dataset-snapshots.md).
+Validate the evaluator itself with unreleased [judge calibration](docs/guides/judge-calibration.md): freeze human labels, select prompts/models/thresholds on tuning cases, then measure held-out validity and fresh-call repeatability. Try the [offline example](examples/judge-calibration/README.md).
 Turn production incidents into reviewed regression cases with the unreleased [failure inbox](docs/guides/failure-inbox.md), then share [approved immutable dataset versions](docs/guides/dataset-catalog.md) and pin them in server runs. Compare a candidate with a reviewed baseline using [enforced release decisions](docs/guides/release-decisions.md), or configure and investigate the check in the unreleased [browser release workbench](docs/guides/release-workbench.md). Start an agent suite from the unreleased [support and refund starter](docs/guides/support-refund-suite.md): synthetic tasks graded on the final state of a simulated shop.
 
 Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
@@ -309,6 +310,7 @@ See the [Kubernetes guide](docs/guides/kubernetes.md).
 | [Trace redaction](docs/guides/trace-sources.md#trace-redaction) | Mask credential keys on push and pull before storage and evaluation; configurable key globs, regexes and opt-in PII classes |
 | [MCP for coding agents](docs/guides/mcp.md) | `evalsi mcp` lets an agent run a suite before and after its change and see what regressed |
 | [Human annotation](docs/guides/annotation.md) | Queues with rubrics, annotator agreement, and judge calibration against human labels |
+| [Evaluator validation](docs/guides/judge-calibration.md) | Frozen human labels, tuning/held-out judge comparisons, false positives/negatives, repeatability and portable reports (unreleased) |
 | [Fine-tuning and RL](docs/guides/fine-tuning.md) | Evaluators as rewards for TRL, verl and OpenRLHF; every checkpoint checked against the base model |
 | [Web UI](docs/guides/web-ui.md) | Runs, comparisons, policies, annotation queues, guardrails and the catalog, read through the API |
 | Reports and analytics | `evalsi report` (HTML or Markdown), `evalsi analyze` (DuckDB over runs), sinks to MLflow, OpenTelemetry, Langfuse and Phoenix, a Grafana dashboard |
@@ -367,9 +369,7 @@ What is deferred or not yet verified is listed in [LEFTOVERS](docs/LEFTOVERS.md)
 
 The proposed [product roadmap](docs/PRODUCT-ROADMAP.md) tracks future work for production-agent and enterprise AI teams, with priorities, dependencies and acceptance criteria. The [product strategy](docs/PRODUCT-STRATEGY.md) records the competitive research and adoption plan.
 
-The [pre-0.4 release plan](docs/PRE-0.4-RELEASE-PLAN.md) records required product
-polish, real-customer onboarding, evaluator validation, distribution and adoption
-evidence before stable 0.4. All checklist items remain open until evidence is recorded.
+The [pre-0.4 release plan](docs/PRE-0.4-RELEASE-PLAN.md) lists the open product-readiness work for stable 0.4 and the customer-validation criteria that come after it.
 
 [Runtime verification](docs/verification/RUNTIME-VERIFICATION-2026-10-18.md)
 tracks real KVM and other remaining prerequisites. The

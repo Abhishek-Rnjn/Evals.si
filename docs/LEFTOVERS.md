@@ -7,6 +7,17 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Evaluator validation (unreleased, 2026-10-21):** portable human pass/fail label
+revisions, existing annotation export import, tuning-only threshold/candidate
+selection, held-out validity and slice metrics, fresh-call repeatability,
+group-bootstrap uncertainty and fixed-output judge-drift reports are built.
+See the [guide](guides/judge-calibration.md), [offline example](../examples/judge-calibration/README.md)
+and [verification record](verification/JUDGE-CALIBRATION-2026-10-21.md).
+These synthetic and scripted-HTTP checks do not close the existing real-human
+calibration requirements below. Continuous, categorical and pairwise preference
+labels, a calibration browser workspace, and representative deployed-judge
+certification remain open.
+
 The [runtime follow-up](verification/RUNTIME-VERIFICATION-2026-10-18.md)
 retains all 50 original inventory IDs, adds a real-KVM test/workflow with no
 simulated fallback, and rechecks free local MLflow/Phoenix score persistence.
@@ -16,15 +27,7 @@ overhead from hosted performance; they do not close production scale targets.
 
 ## Required before stable 0.4
 
-The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) tracks required installed
-onboarding, own-application evaluation, explainable comparisons, customer-backed
-evaluator validation and one maintained integration. Recruitment, repeated pilot
-use, permissioned tutorials/case studies, a paid-continuation offer and an adoption
-scorecard are also required. The initial milestone is three external teams using
-it weekly for four weeks and at least one explicit willingness-to-pay commitment.
-All R04 items are open and unassigned; no pilot, retention, commercial or release
-readiness claim is established by this planning document. The detailed technical
-inventory below retains its existing evidence and limits.
+The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) lists the open R04 product-readiness rows and the customer-validation rows (CV) that gate beta rather than 0.4. Nothing in it is established yet. The detailed technical inventory below retains its existing evidence and limits.
 
 ## Browser release workbench, unreleased
 

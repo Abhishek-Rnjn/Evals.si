@@ -46,17 +46,15 @@ Before the first release, a maintainer must check the live repository settings:
 These settings are prerequisites, not verified merely by reading the workflow.
 Record who checked them and the run/commit used for the release.
 
-## Local Gates
+## Before stable 0.4
 
-For stable 0.4, also complete the
-[pre-0.4 product and adoption checklist](PRE-0.4-RELEASE-PLAN.md#release-candidate-and-stable-release-decision).
-Record artifact-based onboarding, real-customer evaluation and calibration,
-integration/report usability, pilot/distribution and commercial evidence, and
-three external teams retained weekly for four weeks with at least one explicit
-willingness-to-pay commitment. All criteria start open; passing CI alone does not
-complete them. A release candidate can support the bounded pilot before all
-stable-release criteria are met. These are manual readiness requirements; this
-documentation change does not add automated enforcement to the release workflow.
+Stable 0.4 also needs the product-readiness rows R04-01 to R04-05 in the
+[pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md#stable-release-decision); passing CI
+alone does not complete them. Release candidates (`v0.4.0-rc.N`) can support
+pilots before then. These are manual requirements, and the release workflow does
+not enforce them.
+
+## Local Gates
 
 ```bash
 make check
