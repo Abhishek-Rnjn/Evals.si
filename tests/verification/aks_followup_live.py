@@ -237,7 +237,7 @@ async def execute(args: argparse.Namespace) -> int:
         for case_id in ["full-refund", "gateway-timeout-after-write"]:
             candidates = [r for r in originals if r.id == case_id]
             if not candidates:
-                continue
+                raise ValueError(f"required replay case missing: {case_id}")
             original = candidates[0]
             record = copy.deepcopy(original)
             assert original.input is not None
@@ -255,6 +255,8 @@ async def execute(args: argparse.Namespace) -> int:
                     and r["mode"] == "record"
                 )
                 replay["hitl_matches"] = replay.get("hitl") == source.get("hitl")
+                if not replay["hitl_matches"]:
+                    raise AssertionError("replay changed the approval transcript")
                 if replay["new_http_attempts"]:
                     raise AssertionError("replay unexpectedly made a provider request")
         (args.output / "results.json").write_text(json.dumps(rows, indent=2))

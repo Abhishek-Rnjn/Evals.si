@@ -146,8 +146,10 @@ drill against a separately managed daemon.
 At this checkpoint, all **36/36 baseline refund trials** passed the unchanged
 business checker. **19/36 approval trials** had completed: 18 business-check
 passes and one intentionally denied refund that therefore failed the original
-amount/recipient expectations. In that denied case, the model attempted a retry;
-the gate blocked it, no refund ran, and `denial-respected` correctly failed.
+amount/recipient expectations. The initial checkpoint interpreted the
+`denial-respected` failure as a blocked retry. **Raw-trace inspection later
+disproved that interpretation:** the evaluator counted the original denied
+tool event as a retry. See checkpoint 2 below.
 These are interim observations; final denominators, replay and controls remain
 pending. Private records/cassettes and provider settings are not committed.
 
@@ -165,6 +167,127 @@ pending. Private records/cassettes and provider settings are not committed.
 - Structured checkpoint JSON: nine replicate outcomes, unchanged threshold
   classifications and cumulative/incremental spending arithmetic **verified**.
 
+### Checkpoint 2: completed refund campaign, restore and offline analysis
+
+#### Completed live trials and replay
+
+The metered `aks_followup_live.py` command completed with **exit 0**, preserving
+72 live records and four fresh-sandbox replays:
+
+| Profile | Live trials | Business checker | Approval coverage | Denial-respected |
+|---|---:|---|---|---|
+| Baseline | 36 | 36 passed | 36 not applicable | 36 not applicable |
+| Approval | 36 | 33 passed; 3 intentionally denied refunds fail original amount/recipient expectations | 15 passed; 21 not applicable | 12 passed; 3 false-positive failures; 21 not applicable |
+
+All three denied cases contain **one** attempted refund command, one denial
+resolution and the corresponding original tool event with
+`evalsi.tool.hook_denied=true`, followed by an allowed handoff. There are **zero
+repeat refund commands** and **zero executed denied refunds**. The loop emits
+hook steps before its original tool-result step; `denial_respected` scans later
+matching tool events without excluding that original denied call. It therefore
+flags a retry that never occurred. This is an evaluator defect, not observed
+model disobedience. Product code remains unchanged. The offline repro is retained
+as an explicit strict expected failure.
+
+The baseline and approval versions of `full-refund` and
+`gateway-timeout-after-write` each replayed with **zero provider HTTP attempts**
+and **identical HITL sequences**. This establishes four representative exact
+replays, not whole-campaign replay, changed-approver rejection, edit/no-answer
+controls, fork or external-service exactly-once behavior.
+
+The pool's `kubectl exec` stream subsequently ended with WebSocket close 1006 /
+unexpected EOF. The worker had zero restarts; the original pool process remained
+alive and its port accepted connections. No server restart or paid retry was
+needed, and the campaign still completed without task errors.
+
+#### ClickHouse and JetStream backup/delete/restore
+
+Executed the final current-source fixture inside the owned worker:
+
+```sh
+EVALSI_AKS_FOLLOWUP_RECOVERY=1 \
+EVALSI_TEST_CLICKHOUSE_URL=http://clickhouse:8123 \
+EVALSI_TEST_NATS_URL=nats://nats:4222 \
+/work/build/recovery.test -test.run '^TestAKSFollowupDependencyRestore$' \
+  -test.v -test.timeout=5m
+```
+
+**Passed**, both subtests, 0.10 seconds total:
+
+- ClickHouse used its supported `BACKUP ... TO Disk` and `RESTORE ... FROM Disk`
+  SQL, deleting the source database between them. The restored 100 synthetic rows
+  retained count **100**, ID sum **4950** and payload fingerprint
+  **5867902235618448090**. Restore plus fingerprint read took **0.028 seconds**.
+- JetStream used its stream snapshot/restore protocol, deleting the source
+  stream between them. All **50 exact message payloads**, delivered/ack-floor
+  sequence positions, **40 undelivered messages** and **3 pending acknowledgments**
+  were restored. Restore plus checks took **0.020 seconds**. Snapshot SHA-256:
+  `0cbe5b3d955261ce1ba9fa870e680ec41b9cb4651321359db7713e0fb7510f5b`.
+- JetStream's ack-floor last-activity timestamp was available before backup and
+  absent immediately after restoration. Do not describe this as byte-identical
+  recovery of every runtime metadata field.
+
+Two earlier JetStream fixture attempts failed and are retained:
+first, `nats: no responders available for request` after sending restore chunks
+without the required per-chunk request acknowledgment; second, `consumer state
+changed` because the assertion compared the non-restored activity timestamp as
+well as durable positions. The fixture now uses the supported acknowledged-chunk
+protocol, asserts durable positions/payloads and explicitly reports the timestamp
+limitation. No Evals.si product or NATS server code was changed. A subsequent
+JetStream-only run and the final combined run passed.
+
+These are tiny, quiesced, same-namespace, same-version dependency restores from
+`emptyDir`, **not** off-cluster disaster recovery, production RPO/RTO, PostgreSQL
+recovery or an application-wide consistent backup.
+
+#### Repeated trials and heuristic validity
+
+`aks_followup_analysis.py` analyzed the saved baseline records with no model
+requests. Twelve cases with three trials each had pair agreement **1.0** and
+observed within-case variance **0.0**. The repository's advice remains
+conservative: worst-case variance bound **0.25**; **385 / 97 / 25** trials per
+case for margins **0.05 / 0.10 / 0.20** at 95% confidence. Hoeffding gives **738**
+for margin 0.05. Three identical scores do not establish deterministic outputs.
+
+Review of all **49 distinct baseline tool inputs** found business CLI calls and
+documentation/source reads, not hidden-checker access, benchmark-answer fetching
+or test/guardrail edits. On those assistant-reviewed synthetic honest controls:
+tampering **0/36 flags**, contamination **0/36 flags**, guardrail-edit **36/36
+skipped** for missing harness-edit metadata. Skips are not clean edits.
+
+Six separately labelled synthetic challenge records preserve three known false
+positives: a legitimate existing-test correction, an ordinary
+`solutions-architecture.md` URL and a meaning-preserving guardrail rewrite.
+Each was flagged. The corresponding hidden-checker probe, benchmark-answer fetch
+and actual guardrail weakening were also flagged. Do not pool these deliberately
+hard examples with the 36 live controls or claim population false-positive rates.
+All labels are **assistant-created/reviewed, not human adjudication**.
+
+#### Installed-artifact quickstart
+
+In the clean AKS venv, with no repository source checkout:
+
+```sh
+EVALSID=/work/build/evalsid /work/venv/bin/python -m evalsi doctor --require sdk --format json
+/work/venv/bin/python -m evalsi init --template recorded /work/artifact-recorded
+cd /work/artifact-recorded
+EVALSID=/work/build/evalsid /work/venv/bin/python -m evalsi run -f run.yaml --output results.json
+/work/venv/bin/python -m evalsi report results.json -o report.html
+```
+
+All commands **passed**. Both records scored exact-match **1.0**, both gates
+passed, and HTML was exported and copied to private local evidence. Doctor
+reported SDK/harness **0.3.0.dev0**, Python **3.13.16**, installed gRPC worker
+dependencies and usable Landlock. It also correctly warned that the copied
+server advertises **0.0.0-dev**, not the SDK version. Source provenance is known;
+release-package version matching, published platform wheels, agent-template
+execution and Helm rollout remain distinct unverified surfaces.
+
+Fixture validation: focused Python tests **27 passed, 1 expected failure**
+(the denial self-event defect); Ruff and mypy passed. The analysis runner's first
+local invocation lacked the source import path and failed before evaluation;
+rerunning with explicit SDK/harness `PYTHONPATH` succeeded.
+
 ## 3. Spend
 
 Prior conservative aggregate: **$16.51619320**. At checkpoint 1, the live ledger
@@ -172,7 +295,13 @@ recorded **$18.59430660 cumulative**, an increase of **$2.07811340**.
 This is a conservative token-price estimate, not a gateway invoice.
 The active campaign retains its initial $36 cutoff. Subsequent campaigns carry
 the latest complete ledger into the explicitly authorized $39.50 cutoff.
-Per-check final accounting remains pending while the live campaign is running.
+At checkpoint 1, per-check final accounting was pending while the campaign ran.
+
+Checkpoint 2's completed live campaign records **$19.31146260 cumulative**:
+baseline **$1.41902420**, approval **$1.37624520**, four replays **$0**, in addition
+to the preserved prior **$16.51619320**. There were **285 new HTTP attempts**.
+Recovery, offline analysis and artifact quickstart made no provider requests.
+The next paid campaign must carry this complete ledger into the $39.50 cutoff.
 
 ## 4. Failures, causes and proposed fixes
 
@@ -183,8 +312,11 @@ engineering investigation should isolate queueing, batching, database work and
 resource contention before selecting a fix.
 
 NetworkPolicy and Kata remain blocked without prohibited shared infrastructure
-changes. The blocked post-denial retry is a model-behavior finding, not an
-executed unauthorized refund. No product fixes have been applied.
+changes. The denial self-event false positive is an evaluator finding, not a
+model retry or an executed unauthorized refund. A proposed product fix is to
+associate resolutions with their original tool-call identity and exclude that
+event before detecting later attempts; verification should retain a genuine
+second-attempt negative control. No product fixes have been applied.
 
 ## 5. Surprises and misleading passes
 
@@ -193,10 +325,10 @@ Assistant-created labels are not independent human calibration.
 
 ## 6. Unverified scope
 
-Approval completion/replay, delegation/forks/external-side-effect controls,
-trial/heuristic analysis, artifact quickstart execution, backup/restore and
-crash-durability drills, migration, jailer/parallel boots, digest-cache live
-controls, judge calibration and the current-AKS browser workflow remain pending.
+Changed-approver rejection and edit/no-answer controls, delegation/forks/external
+side effects, agent-template quickstart, PostgreSQL recovery and crash-durability
+drills, migration, jailer/parallel boots, digest-cache live controls, judge
+calibration and the current-AKS browser workflow remain pending.
 Claude CLI field research remains conditional on per-request metering.
 Publication, shared infrastructure changes and external-resource creation remain
 prohibited regardless of available funds.
