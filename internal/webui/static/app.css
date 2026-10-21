@@ -115,3 +115,9 @@ textarea {
 
 a.text-link { text-decoration: underline; }
 .prose-link { text-decoration: underline; }
+
+.paired-evidence { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.paired-evidence .kv { grid-template-columns: 1fr; }
+.paired-evidence section { min-width: 0; }
+[hidden] { display: none !important; }
+@media (max-width: 760px) { .paired-evidence { grid-template-columns: 1fr; } }

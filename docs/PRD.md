@@ -359,6 +359,7 @@ status:
 | `GET /v1alpha1/traces/{id}/scores`, `GET /v1alpha1/scores?project=&label=&since=` | Query scores per trace, workflow or label, for the agent harness UI. Built as `TraceService.ListScores`: labels are repeated `labels=key=value`, and `service`, `policy`, `evaluator` and paging are filters too |
 | `evalsi.Client.evaluate()`, `evaluate_stream()`, `evaluate_async()` | Python wrappers over `EvaluationService` returning `EvaluationResult` |
 | `POST /v1alpha1/runs:import`, `Client.log_run()` | `RunService.ImportRun`: store a run evaluated elsewhere (E6) |
+| `GET /v1alpha1/runs/{run_id}/record?record_id=&trial=` | Built unreleased: `RunService.GetRecordEvidence`, exact record/trial evidence under run-read authorization; additive trial-aware list results support the [browser release workbench](guides/release-workbench.md) |
 | `evalsi gate`, `evalsi traces` | A deploy gate for one release (A2) for pipelines without `kubectl`; list, show and export ingested traces |
 | `evalsi.log(input=, output=, trace_id=, metadata=)` | Buffered client that sends OTLP to evalsid |
 | Idempotency-Key header on every POST | Dedup retries |

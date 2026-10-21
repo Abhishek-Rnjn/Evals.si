@@ -172,6 +172,9 @@ func (g *gate) accessRules() map[string]accessRule {
 		evalsiv1alpha1connect.RunServiceListRunResultsProcedure: {action: "runs.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			return g.runTargets(ctx, msg.(*evalsiv1alpha1.ListRunResultsRequest).GetRunId())
 		}},
+		evalsiv1alpha1connect.RunServiceGetRecordEvidenceProcedure: {action: "runs.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
+			return g.runTargets(ctx, msg.(*evalsiv1alpha1.GetRecordEvidenceRequest).GetRunId())
+		}},
 		evalsiv1alpha1connect.RunServiceCompareRunsProcedure: {action: "runs.read", resolve: func(ctx context.Context, msg any) ([]target, error) {
 			m := msg.(*evalsiv1alpha1.CompareRunsRequest)
 			return g.runTargets(ctx, m.GetBaselineRunId(), m.GetCandidateRunId())

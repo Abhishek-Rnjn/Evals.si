@@ -14,6 +14,16 @@ KVM, GPU and target-cluster certification remain blocked here. Reproducible
 [competitor benchmarks](../tests/benchmarks/README.md) distinguish local SDK
 overhead from hosted performance; they do not close production scale targets.
 
+## Browser release workbench, unreleased
+
+The [workbench](guides/release-workbench.md) configures supported candidate runs
+and reviewed release policies through forms, exports pinned CLI/Action inputs,
+and links release regressions to exact record/trial evidence. Trial-aware result
+associations fix browser output attribution; a targeted API and paged tables make
+later cases reachable. [Verification](verification/RELEASE-WORKBENCH.md) records
+local controls. Advanced connectors/harness settings, live replay/fork and customer
+usability remain open; this does not complete every PROD-05 criterion.
+
 ## EKS verification paused, 2026-10-18
 
 The user is deleting the cluster for now. Live checks are paused, not

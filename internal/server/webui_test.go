@@ -53,15 +53,18 @@ func TestWebUI(t *testing.T) {
 // TestWebUIRendersText keeps the UI from building HTML out of strings, so
 // API data (record inputs, outputs, explanations) can never become markup.
 func TestWebUIRendersText(t *testing.T) {
-	src, err := os.ReadFile("../webui/static/app.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, re := range []string{`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document\.write`, `\beval\(`, `new Function`} {
-		if regexp.MustCompile(re).Match(src) {
-			t.Errorf("app.js uses %s", re)
+	for _, name := range []string{"app.js", "workbench.js"} {
+		src, err := os.ReadFile("../webui/static/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, re := range []string{`innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document\.write`, `\beval\(`, `new Function`} {
+			if regexp.MustCompile(re).Match(src) {
+				t.Errorf("%s uses %s", name, re)
+			}
 		}
 	}
+
 	html, _ := os.ReadFile("../webui/static/index.html")
 	if regexp.MustCompile(`<script>|\son[a-z]+=`).Match(html) {
 		t.Error("index.html has inline script, which the CSP forbids")
