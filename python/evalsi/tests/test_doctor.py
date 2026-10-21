@@ -95,6 +95,36 @@ def test_probe_failure_does_not_require_a_sandbox_for_scoring_server(
     assert any(c.name == "sandbox" and c.status == "error" for c in cli_doctor.diagnose("agent"))
 
 
+@pytest.mark.parametrize(
+    ("server_version", "ready"),
+    [
+        ("0.4.0-rc.1", True),
+        ("0.4.0-rc1", True),
+        ("0.4.0rc1", True),
+        ("0.4.0-rc.2", False),
+        ("0.4.0", False),
+    ],
+)
+def test_rc_server_identity_matches_the_canonical_python_install(
+    monkeypatch: pytest.MonkeyPatch, server_version: str, ready: bool
+) -> None:
+    monkeypatch.setattr(cli_doctor, "__version__", "0.4.0rc1")
+    monkeypatch.setattr(cli_doctor, "installed_version", lambda name: "0.4.0rc1")
+    monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/release/evalsid")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+
+    def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        text = f"evalsid {server_version} (api evalsi.v1alpha1)" if cmd[-1] == "version" else "[]"
+        return subprocess.CompletedProcess(cmd, 0, text, "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    checks = cli_doctor.diagnose("server")
+    assert next(check for check in checks if check.name == "server").status == (
+        "ok" if ready else "error"
+    )
+    assert next(check for check in checks if check.name == "harness").status == "ok"
+
+
 @pytest.mark.parametrize("level", ["confined", "namespaced", "kernel", "vm", "unknown"])
 def test_agent_requires_namespaced_isolation_and_honors_config(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], level: str

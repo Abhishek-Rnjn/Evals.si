@@ -41,14 +41,25 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      python_version: ${{ steps.v.outputs.python_version }}
       owner: ${{ steps.v.outputs.owner }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+      make_latest: ${{ steps.v.outputs.make_latest }}
+      image_tags: ${{ steps.v.outputs.image_tags }}
+      collector_tags: ${{ steps.v.outputs.collector_tags }}
     steps:
+      - uses: actions/checkout@v7
       - id: v
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
         run: |
-          if [ "${GITHUB_REF_TYPE}" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="${{ inputs.version }}"; fi
-          echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$' || { echo "bad version $v"; exit 1; }
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="$VERSION_INPUT"; fi
+          python3 scripts/release_version.py "$v" --owner "$GITHUB_REPOSITORY_OWNER" --github-output "$GITHUB_OUTPUT"
+          python3 scripts/release_version.py "$v" --owner "$GITHUB_REPOSITORY_OWNER" > release-plan.json
+      - uses: actions/upload-artifact@v5
+        with:
+          name: release-plan
+          path: release-plan.json
 
   approve:
     # The one manual gate before anything is pushed to a registry or released:
@@ -126,17 +137,51 @@ jobs:
         run: |
           python3 scripts/platform_wheel.py pure/evalsi-[0-9]*-py3-none-any.whl \
             archive/evalsi_${{ needs.version.outputs.version }}_linux_${{ matrix.arch }}.tar.gz dist
-      - name: The amd64 wheel installs and its evalsid runs
-        if: matrix.arch == 'amd64'
-        run: |
-          python3 -m venv /tmp/venv
-          /tmp/venv/bin/pip install -q dist/*.whl
-          /tmp/venv/bin/evalsi evalsid-path
-          "$(/tmp/venv/bin/evalsi evalsid-path)" version | grep -q "${{ needs.version.outputs.version }}"
       - uses: actions/upload-artifact@v5
         with:
           name: wheels-${{ matrix.arch }}
           path: dist/*.whl
+
+  onboarding:
+    # Exercise the exact built wheels before any registry publication. Native
+    # Linux runners execute both architectures; portable installs score records.
+    needs: [version, python, wheels]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, arch: amd64, capability: agent}
+          - {os: ubuntu-24.04-arm, arch: arm64, capability: agent}
+          - {os: macos-latest, arch: portable, capability: sdk}
+          - {os: windows-latest, arch: portable, capability: sdk}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v5
+        with:
+          name: python
+          path: wheels
+      - uses: actions/download-artifact@v5
+        if: matrix.arch != 'portable'
+        with:
+          name: wheels-${{ matrix.arch }}
+          path: wheels
+      - name: Enable the namespaced sandbox on Linux
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Install and exercise the candidate artifacts
+        shell: bash
+        run: |
+          python scripts/smoke_release.py "${{ needs.version.outputs.version }}" \
+            --wheels wheels --require "${{ matrix.capability }}" \
+            --action-adapter .github/actions/evalsi/run.py --report onboarding.json
+      - uses: actions/upload-artifact@v5
+        with:
+          name: onboarding-${{ matrix.os }}
+          path: onboarding.json
 
   # PyPI allows one pending trusted publisher per repository, workflow and
   # environment, so each package publishes from its own environment:
@@ -183,8 +228,8 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   image:
-    needs: [version, approve]
-    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
+    needs: [version, approve, onboarding]
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.onboarding.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -209,9 +254,7 @@ jobs:
           push: ${{ env.PUBLISH == 'true' }}
           provenance: mode=max
           sbom: true
-          tags: |
-            ghcr.io/${{ needs.version.outputs.owner }}/evalsi:${{ needs.version.outputs.version }}
-            ghcr.io/${{ needs.version.outputs.owner }}/evalsi:latest
+          tags: ${{ needs.version.outputs.image_tags }}
       - uses: sigstore/cosign-installer@v3
         if: env.PUBLISH == 'true'
       - uses: anchore/sbom-action@v0
@@ -234,8 +277,8 @@ jobs:
           path: evalsi-*.spdx.json
 
   collector:
-    needs: [version, approve]
-    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
+    needs: [version, approve, onboarding]
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.onboarding.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -260,9 +303,7 @@ jobs:
           push: ${{ env.PUBLISH == 'true' }}
           provenance: mode=max
           sbom: true
-          tags: |
-            ghcr.io/${{ needs.version.outputs.owner }}/evalsi-collector:${{ needs.version.outputs.version }}
-            ghcr.io/${{ needs.version.outputs.owner }}/evalsi-collector:latest
+          tags: ${{ needs.version.outputs.collector_tags }}
       - uses: sigstore/cosign-installer@v3
         if: env.PUBLISH == 'true'
       - name: Sign the image
@@ -270,8 +311,8 @@ jobs:
         run: cosign sign --yes "ghcr.io/${{ needs.version.outputs.owner }}/evalsi-collector@${{ steps.build.outputs.digest }}"
 
   charts:
-    needs: [version, approve]
-    if: ${{ !cancelled() && needs.version.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
+    needs: [version, approve, onboarding]
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.onboarding.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.approve.result) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -343,7 +384,7 @@ jobs:
           export EVALSI_IMAGE_REPOSITORY="ghcr.io/${{ needs.version.outputs.owner }}/evalsi"
           [ "$PUBLISH" = true ] || export PULL=0
           scripts/set-python-version.sh "$v"
-          deploy/airgap/bundle.sh --tag "$v" --out "evalsi-bundle-$v" --with-cli
+          deploy/airgap/bundle.sh --tag "$v" --chart-version "$v" --out "evalsi-bundle-$v" --with-cli
           tar czf "evalsi-bundle-$v-linux-amd64.tgz" "evalsi-bundle-$v"
       - uses: actions/upload-artifact@v5
         with:
@@ -374,4 +415,5 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
-          prerelease: ${{ contains(needs.version.outputs.version, '-') }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          make_latest: ${{ needs.version.outputs.make_latest }}

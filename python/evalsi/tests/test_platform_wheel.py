@@ -94,10 +94,18 @@ def test_platform_wheel_bundles_the_binaries_and_is_a_valid_wheel(tmp_path: Path
             assert (digest, size) == (f"sha256={expected}", str(len(data))), path
 
 
-def test_a_prerelease_tag_matches_its_pep_440_wheel(tmp_path: Path) -> None:
+@pytest.mark.parametrize("version", ["0.5.0-rc1", "0.5.0-rc.1"])
+def test_a_prerelease_tag_matches_its_pep_440_wheel(tmp_path: Path, version: str) -> None:
     build = load_script().build
-    out = build(pure_wheel(tmp_path, "0.5.0rc1"), archive(tmp_path, "0.5.0-rc1"), tmp_path / "out")
+    out = build(pure_wheel(tmp_path, "0.5.0rc1"), archive(tmp_path, version), tmp_path / "out")
     assert out.name == "evalsi-0.5.0rc1-py3-none-manylinux_2_17_x86_64.whl"
+
+
+def test_version_separators_cannot_hide_a_different_archive_version(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="archive is version"):
+        load_script().build(
+            pure_wheel(tmp_path, "1.2.34"), archive(tmp_path, "12.3.4"), tmp_path / "out"
+        )
 
 
 def test_arm64_gets_its_own_tag_and_mismatches_are_refused(tmp_path: Path) -> None:

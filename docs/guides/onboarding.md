@@ -1,7 +1,63 @@
 # Guided setup and the GitHub gate action
 
 `evalsi doctor` and `evalsi init` are **unreleased**; they are not in PyPI 0.3.0.
-Use this checkout until the next package release:
+Use reviewed candidate artifacts for the new workflow, or a source checkout for
+development. The stable install remains `pip install evalsi==0.3.0`; its
+quickstart is in the [README](../../README.md#try-it-in-30-seconds).
+
+## Install a reviewed candidate
+
+Successful `release-artifacts` and `portable-onboarding` CI jobs upload
+`candidate-wheels-*` artifacts and `release-onboarding-*` evidence. Select a run
+of the reviewed commit and extract the artifact for Linux `amd64`/`arm64`, or
+the portable macOS/Windows artifact. CI controls use the test version `0.0.0rc1`.
+
+Create a fresh virtual environment. For Linux amd64, install these actual wheel
+paths without a source checkout or a Go compiler:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install ./candidate-wheels/evalsi-0.0.0rc1-py3-none-manylinux_2_17_x86_64.whl ./candidate-wheels/evalsi_harness-0.0.0rc1-py3-none-any.whl
+evalsi doctor --require server
+```
+
+Linux arm64 uses `manylinux_2_17_aarch64`. On macOS/Windows install the
+`evalsi-0.0.0rc1-py3-none-any.whl` file for recorded scoring and use plain
+`evalsi doctor`. Windows activation is `.venv\Scripts\Activate.ps1`.
+Dependencies come from the configured package index; this is not an offline install.
+
+Once an RC is published, select its exact Python version instead. For example,
+`pip install 'evalsi==0.4.0rc1'` installs recorded scoring; on Linux,
+`pip install 'evalsi[server]==0.4.0rc1' 'evalsi-harness==0.4.0rc1'` adds agent
+execution. These example versions are not published by this code change; check
+the [release](https://github.com/Abhishek-Rnjn/Evals.si/releases) first.
+Go/Helm identify that RC as `0.4.0-rc.1`; diagnostics recognize its Python spelling.
+
+With the candidate installed:
+
+```bash
+evalsi doctor
+evalsi init my-evals
+cd my-evals
+evalsi run -f run.yaml --output results.json
+evalsi report results.json -o report.html
+evalsi run -f regressed.yaml  # expected exit 3
+```
+
+Recorded scoring needs no server, sandbox, model or key. Linux platform wheels
+bundle the server and static bubblewrap; live agent execution also requires usable
+Linux namespaces. Check `doctor --require agent` before running it. macOS/Windows
+users can use a supported Linux execution host; the pure wheel supplies no local
+Linux sandbox. A generic container does not establish those host capabilities.
+
+The Action's `version:` accepts the exact Python RC version once published. For
+downloaded candidate wheels, install them first and use `install: 'false'` with
+the Action pinned to the reviewed matching commit. The candidate checks exercise
+its adapter with distinct pass (0), regression (3) and configuration-error (1)
+outputs, retained in the onboarding evidence.
+
+## Develop from a source checkout
 
 ```bash
 python -m venv .venv

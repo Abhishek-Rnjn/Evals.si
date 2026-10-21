@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [RELEASE-CANDIDATES-2026-10-21.md](RELEASE-CANDIDATES-2026-10-21.md) | RC classification, canonical Python versions, isolated-wheel onboarding and Action controls; platform CI and remaining publication/unfamiliar-user evidence |
 | [JUDGE-CALIBRATION-2026-10-21.md](JUDGE-CALIBRATION-2026-10-21.md) | Pinned human-label calibration, tuning isolation, held-out validity and fresh-call repeatability: 66 focused checks, real-client/scripted-HTTP JSON and logprob judges, synthetic example and offline desktop/mobile report review; real human-labelled judge certification remains open |
 | [RELEASE-WORKBENCH.md](RELEASE-WORKBENCH.md) | Browser candidate/policy configuration, exact-trial paired evidence, authorization and exported CLI/Action controls; local synthetic verification and limits |
 | [AKS-2026-10-20.md](AKS-2026-10-20.md) | Live AKS GPU (A100: OpenRLHF 0.11.2, verl 0.9.1, live vLLM token traces, trainer-backed OpenEnv/verifiers/Gymnasium/NeMo Gym with process rewards), real-KVM Firecracker & 5-node microVM pool, `TestLoad` (400k spans, 200k tasks, 4,096 rollouts), M4 zero-downtime rolling upgrade/HA/N-1, multi-service environments, PR #101/103 cluster controls, real Codex/Gemini/pi/OpenCode CLI readers, TraceSources/PITR/redaction/3-node NATS HA, and five bug fixes |

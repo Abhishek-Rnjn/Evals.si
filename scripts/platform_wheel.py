@@ -36,9 +36,8 @@ def _record_hash(data: bytes) -> str:
 
 
 def _normal(version: str) -> str:
-    """A version without its separators and case, so the tag 0.5.0-rc1 (the
-    archive's name) matches the wheel's PEP 440 form 0.5.0rc1."""
-    return re.sub(r"[-._]", "", version).lower()
+    """The RC archive and PEP 440 spellings identify the same release."""
+    return re.sub(r"-rc\.?([0-9]+)$", r"rc\1", version)
 
 
 def _write(out: Path, members: dict[str, tuple[bytes, int]], dist_info: str) -> Path:
