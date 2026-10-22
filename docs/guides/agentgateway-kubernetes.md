@@ -88,6 +88,75 @@ spec:
 
 Configure the same OIDC issuers on both: agentgateway validates the user's JWT and forwards it (`preserveToken`), and `evalsid` validates the same token again against the same issuer, so access rules see the same user on both sides. In the cluster, the gateway and your agents can use their service accounts instead (see [identity](identity.md#on-kubernetes-service-account-tokens)). Trusting identity headers from the gateway (`auth.trusted_proxy`) works only from configured source CIDRs, and is discouraged.
 
+## 5. Quality per route, for routing decisions
+
+The online scores can come back out as figures per route (or backend, or service), in two forms. What Evals.si builds is the figures; what acts on them is yours ([decision 0038](../decisions/0038-quality-scores-for-routing.md)).
+
+**Get the route onto the trace.** Figures are grouped by `service`, the root span's `name`, or a trace label (`label:<key>`). Labels come from `evalsi.label.<key>` resource attributes and from the ingest key's labels, so put the route there. With an OpenTelemetry Collector between the gateway and evalsi, copy it from the span. Which span attribute names the route or backend depends on the gateway version: read a stored trace first, then write the transform against what is there (the attribute below is a placeholder):
+
+```yaml
+processors:
+  transform/route:
+    trace_statements:
+      - context: span
+        statements:
+          - set(resource.attributes["evalsi.label.route"], attributes["<the gateway's route attribute>"]) where attributes["<the gateway's route attribute>"] != nil
+```
+
+A resource attribute belongs to the whole export request, so this works only when each export carries one route's spans. The simpler way is one ingest key per route (or per backend), each with its own label, in the key's `labels`.
+
+**JSON, on demand.** `GET /v1alpha1/quality` aggregates the stored results of one policy over a window. It needs `traces.read` and counts only the traces the caller may read:
+
+```bash
+curl -s -H "Authorization: Bearer $EVALSI_KEY" \
+  "https://evalsi.evalsi.svc:8080/v1alpha1/quality?policy=support-gateway&metric=llm-judge&group_by=label:route&window=30m&min_traces=30&threshold=0.7"
+```
+
+```json
+{"policy":"support-gateway","metric":"llm-judge","group_by":"label:route","window_seconds":1800,"min_traces":30,"threshold":0.7,
+ "generated_at":"2026-10-22T12:00:00Z",
+ "groups":[
+  {"group":"billing","traces":412,"error_rate":0.004,"metrics":{"llm-judge":{"traces":410,"mean":0.86}},"state":"ok"},
+  {"group":"refunds","traces":96,"error_rate":0.02,"metrics":{"llm-judge":{"traces":95,"mean":0.61}},"state":"degraded"},
+  {"group":"search","traces":8,"error_rate":0,"metrics":{"llm-judge":{"traces":8,"mean":0.4}},"state":"insufficient_data"}]}
+```
+
+`state` is `insufficient_data` below `min_traces` (default 20), `degraded` when the mean is under `threshold`, otherwise `ok`. Groups are the busiest first, at most `max_groups` (default 50, the rest counted in `omitted_groups`). The report reads at most 20000 traces, newest first (`truncated`). Without `metric`, every metric is reported and there is no state.
+
+**Prometheus gauges.** For tooling that reads metrics (Grafana, Alertmanager, KEDA, Flagger), have the server publish them on `/metrics`:
+
+```yaml
+quality_exports:
+  - name: gateway-routes
+    project: support
+    policy: support-gateway
+    metric: llm-judge          # default: every metric
+    group_by: label:route
+    window: 30m                # defaults: 1h window, 20 traces, 50 groups, 1m refresh
+    min_traces: 30
+```
+
+This gives `evalsi_quality_score{export,project,policy,metric,group}` (the mean; omitted for a group under `min_traces`), `evalsi_quality_traces`, `evalsi_quality_error_rate`, `evalsi_quality_report_age_seconds` and `evalsi_quality_export_failures_total`. A failed refresh keeps the last report, so alert on the age.
+
+**One way to act on it: shift weights.** agentgateway implements the Kubernetes Gateway API, whose `HTTPRoute` splits traffic by `backendRef` weight. A small controller (a CronJob is enough) can read the JSON and move weight away from a degraded backend. This sketch is the shape, not a tested controller; it assumes the group is the backend's name and that the route has two backends:
+
+```bash
+#!/usr/bin/env bash
+# Every 5 minutes: if the primary backend is degraded, send most traffic to the fallback.
+set -euo pipefail
+state=$(curl -sf -H "Authorization: Bearer $EVALSI_KEY" \
+  "$EVALSI/v1alpha1/quality?policy=support-gateway&metric=llm-judge&group_by=label:backend&window=30m&min_traces=30&threshold=0.7" |
+  jq -r '.groups[] | select(.group=="primary") | .state')
+if [ "$state" = "degraded" ]; then primary=10 fallback=90; else primary=90 fallback=10; fi
+kubectl patch httproute support -n evalsi --type=json -p "[
+  {\"op\":\"replace\",\"path\":\"/spec/rules/0/backendRefs/0/weight\",\"value\":$primary},
+  {\"op\":\"replace\",\"path\":\"/spec/rules/0/backendRefs/1/weight\",\"value\":$fallback}]"
+```
+
+Build in hysteresis (two bad reports in a row, a minimum time between changes), keep the fallback's weight above zero so its own score stays measurable, and never route on `insufficient_data`.
+
+**What depends on the gateway.** Evals.si produces the figures and nothing in the gateway consumes them natively: a quality-aware load-balancing policy, a score-fed circuit breaker or auto-disabling an MCP tool needs an extension point in agentgateway that this guide does not assume exists. The weight-shifting loop above uses only the standard Gateway API and was not run against a real gateway here. The span attributes that carry the route, backend and tool depend on the gateway's version and route type.
+
 ## Checklist
 
 - The ingest key has the `ingest` role and one project, and lives in a Secret.

@@ -135,6 +135,51 @@ type Webhooks struct {
 	Retention string `json:"retention,omitempty"`
 }
 
+// QualityExport publishes an online policy's scores per group (a route,
+// backend or service) as the gauges evalsi_quality_score{export, project,
+// policy, metric, group}, evalsi_quality_traces and evalsi_quality_error_rate,
+// recomputed every Interval from the stored results over Window.
+type QualityExport struct {
+	// Names the export in the gauges' export label.
+	Name    string `json:"name"`
+	Project string `json:"project,omitempty"`
+	Policy  string `json:"policy"`
+	// Only this metric; empty exports every metric the policy scores.
+	Metric string `json:"metric,omitempty"`
+	// service, name (the root span's name), or label:<key>. Gateway routes and
+	// backends reach Evals.si as trace labels (evalsi.label.<key> resource
+	// attributes, or labels on the ingest key).
+	GroupBy string `json:"group_by,omitempty"`
+	// Defaults: 1h, 20 traces, 50 groups, 1m.
+	Window    string `json:"window,omitempty"`
+	MinTraces int    `json:"min_traces,omitempty"`
+	MaxGroups int    `json:"max_groups,omitempty"`
+	Interval  string `json:"interval,omitempty"`
+}
+
+func (q QualityExport) validate(i int) []error {
+	var errs []error
+	at := fmt.Sprintf("quality_exports[%d]", i)
+	if q.Name == "" || q.Policy == "" {
+		errs = append(errs, fmt.Errorf("%s: name and policy are required", at))
+	}
+	if k, ok := strings.CutPrefix(q.GroupBy, "label:"); q.GroupBy != "" && q.GroupBy != "service" && q.GroupBy != "name" && (!ok || k == "") {
+		errs = append(errs, fmt.Errorf("%s.group_by must be service, name or label:<key>", at))
+	}
+	for name, v := range map[string]string{"window": q.Window, "interval": q.Interval} {
+		if v == "" {
+			continue
+		}
+		if d, err := time.ParseDuration(v); err != nil || d < 10*time.Second || (name == "window" && d > 7*24*time.Hour) {
+			errs = append(errs, fmt.Errorf("%s.%s must be a duration of at least 10s (window at most 168h), got %q", at, name, v))
+		}
+	}
+	if q.MinTraces < 0 || q.MaxGroups < 0 || q.MaxGroups > 500 {
+		errs = append(errs, fmt.Errorf("%s: min_traces must be 0 or more and max_groups between 0 and 500", at))
+	}
+	return errs
+}
+
 // GuardEnabled reports whether webhook URLs are guarded (the default).
 func (w Webhooks) GuardEnabled() bool { return w.SSRFGuard == nil || *w.SSRFGuard }
 
@@ -410,6 +455,9 @@ type Config struct {
 	Sinks []sinks.Config `json:"sinks"`
 	// Signed HTTP callbacks when runs finish.
 	Webhooks Webhooks `json:"webhooks"`
+	// Per-group quality figures published as Prometheus gauges on /metrics
+	// (decision 0038).
+	QualityExports []QualityExport `json:"quality_exports,omitempty"`
 	// Trace sources pulled from MLflow and other stores.
 	Sources Sources `json:"sources"`
 	// Authentication: JWT providers, API keys, TLS. Required on a
@@ -616,6 +664,14 @@ func (c Config) Validate() error {
 		if !sourceHostRE.MatchString(h) {
 			errs = append(errs, fmt.Errorf("sources.allow_hosts[%d]: %q is not a lowercase host name or *.domain", i, h))
 		}
+	}
+	seenExports := map[string]bool{}
+	for i, q := range c.QualityExports {
+		errs = append(errs, q.validate(i)...)
+		if q.Name != "" && seenExports[q.Name] {
+			errs = append(errs, fmt.Errorf("quality_exports[%d]: name %q is used twice", i, q.Name))
+		}
+		seenExports[q.Name] = true
 	}
 	for i, h := range c.Webhooks.AllowHosts {
 		if !sourceHostRE.MatchString(h) {
