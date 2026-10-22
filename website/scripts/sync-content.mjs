@@ -22,7 +22,7 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
-  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29], ["enterprise-deployment", 30],
 ];
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
@@ -138,6 +138,8 @@ await importDoc("CHANGELOG.md", "/docs/changelog/", { description: "What changed
 await writePage("/docs/", { title: "Documentation", description: "Guides, architecture and reference for Evals.si." }, `
 Evals.si evaluates AI before you ship, while it runs, and as you train it. It runs agents, RAG pipelines and models on datasets and sandboxed tasks and fails the build when a gate fails, scores live traces, and turns the same evaluators into RL rewards and checkpoint checks. Agents come first.
 
+It is built around one decision: **can we safely ship this agent change?** Connect the agent and trace store you already use, turn real failures into reproducible tests, and get a reviewable release decision for every change. See the [product strategy](${BASE}/docs/product-strategy/).
+
 ## Start here
 
 - [Get started](${BASE}/docs/get-started/): install (PyPI, release binaries, charts) and run your first evaluation in a minute.
@@ -146,6 +148,20 @@ Evals.si evaluates AI before you ship, while it runs, and as you train it. It ru
 - [Agent frameworks](${BASE}/docs/guides/agent-frameworks/): score LangGraph, CrewAI, OpenAI Agents SDK, LlamaIndex and Claude Agent SDK traces.
 - [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.
 - [Operations](${BASE}/docs/guides/operations/): upgrade policy, backup and restore, runbooks and reference cluster values.
+
+## From production failure to release decision
+
+On \`main\` and coming in the next release; published 0.3.0 does not include these.
+
+- [Failure inbox](${BASE}/docs/guides/failure-inbox/): turn production traces into approved, redacted regression cases.
+- [Dataset snapshots](${BASE}/docs/guides/dataset-snapshots/) and the [dataset catalog](${BASE}/docs/guides/dataset-catalog/): pinned, reviewed, versioned suites.
+- [Judge calibration](${BASE}/docs/guides/judge-calibration/): validate evaluators against frozen human labels.
+- [Release decisions](${BASE}/docs/guides/release-decisions/) and the [release workbench](${BASE}/docs/guides/release-workbench/): PASS, BLOCK or INSUFFICIENT against an explicit baseline, from the CLI, the browser or a GitHub Action.
+- [Enterprise deployment](${BASE}/docs/guides/enterprise-deployment/): topologies, outbound connections, strict audit and data erasure.
+
+## The built-in agent harness
+
+[\`evalsi-harness\`](${BASE}/docs/guides/built-in-harness/) runs an agent on a task in a sandbox, records everything and grades the final state: a tool-calling agent with versioned profiles, sub-agents, approval gates, simulated users, context strategies, record/replay/fork, fault injection and hooks, plus your own agent over A2A, MCP, HTTP or a CLI. The same tasks are RL environments. Details in [agent runs](${BASE}/docs/guides/agent-runs/).
 
 ## Guides
 

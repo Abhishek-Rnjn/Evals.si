@@ -24,7 +24,7 @@ const doc = (p: string) => `${base}${p}`;
 const siteUrl = new URL(`${base}/`, Astro.site).href;
 const ogImage = new URL(`${base}/og.png`, Astro.site).href;
 const title = "Evals.si (evalsi) · Open-source evaluation for AI agents, RAG and models, from CI to production to training";
-const description = "Evals.si (pip install evalsi) evaluates AI before you ship, while it runs and as you train it: agents on sandboxed tasks, RAG pipelines, LLMs and models, with CI gates, live trace scoring and RL rewards on one set of evaluators. Self-hosted, sandboxed, open source.";
+const description = "Evals.si (pip install evalsi) evaluates AI before you ship, while it runs and as you train it: agents on sandboxed tasks, RAG pipelines, LLMs and models, with CI gates, release decisions, live trace scoring, a built-in agent harness and RL rewards on one set of evaluators. Self-hosted, sandboxed, open source.";
 // Search Console verification; the same default as astro.config.mjs.
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 const jsonLd = JSON.stringify({
@@ -38,7 +38,7 @@ const jsonLd = JSON.stringify({
   programmingLanguage: ["Python", "Go"],
   license: "https://www.apache.org/licenses/LICENSE-2.0",
   sameAs: [repo, "https://pypi.org/project/evalsi/", "https://pypi.org/project/evalsi-harness/"],
-  keywords: "agent evaluation, AI agent testing, agent CI gates, RAG evaluation, RAG faithfulness, RL rewards, fine-tuning evaluation, LLM evaluation, LLM-as-a-judge, G-Eval, JevEval, DeepEval, evals, RL rewards, OpenTelemetry, Kubernetes",
+  keywords: "agent evaluation, AI agent testing, agent CI gates, agent harness, release decisions, judge calibration, RAG evaluation, RAG faithfulness, RL rewards, fine-tuning evaluation, LLM evaluation, LLM-as-a-judge, G-Eval, JevEval, DeepEval, evals, RL rewards, OpenTelemetry, Kubernetes",
 });
 
 const ecosystem = [
@@ -61,6 +61,17 @@ evaluators: [{ref: task-success}, {ref: policy-violations}]
 trials: 3
 gates:
   - {metric: task-success.pass^3, min: 0.8}        # 3 passes in a row, on 80% of tasks` },
+  { label: "Release decision", lang: "bash", code: `# Can we safely ship this change? exit 0 PASS, 3 BLOCK, 1 INSUFFICIENT
+evalsi release policy-hash -f release-policy.yaml      # review, then pin it
+evalsi release gate -f release-policy.yaml --policy-sha256 "$POLICY_SHA256" \\
+  --server https://evals.example.com --project support \\
+  --id release-2026-10-22-attempt-1 \\
+  --baseline "$BASELINE_RUN_ID" --baseline-sha256 "$BASELINE_SHA256" \\
+  --baseline-commit "$BASELINE_COMMIT" \\
+  --spec candidate.yaml --commit "$CANDIDATE_COMMIT" -o decision.json
+
+# Later: re-check the saved decision against its reviewed digest
+evalsi release verify decision.json --sha256 "$DECISION_SHA256"` },
   { label: "RAG", lang: "bash", code: `# Retrieval and generation, scored separately
 pip install evalsi
 evalsi eval --data rag.jsonl --evaluators citation-accuracy      # no judge needed
@@ -159,6 +170,76 @@ const tracks = [
   },
 ];
 
+// Product position: the one decision Evals.si is built around
+// (docs/PRODUCT-STRATEGY.md), and the workflow that answers it.
+const workflow = [
+  { step: "1", name: "Connect what you run", text: "Point Evals.si at the agent you already have (A2A, MCP, HTTP, a CLI or the built-in harness) and the traces you already keep in OpenTelemetry, MLflow, Phoenix, Langfuse or LangSmith.", href: "/docs/guides/onboarding/" },
+  { step: "2", name: "Turn failures into tests", text: "Capture a failing production trace in the failure inbox, approve a redacted expectation, and publish it to a pinned, versioned regression suite in the dataset catalog.", href: "/docs/guides/failure-inbox/" },
+  { step: "3", name: "Decide every release", text: "Run the candidate against an explicit baseline under a reviewed policy. The decision is PASS, BLOCK or INSUFFICIENT, saved with its evidence, from the CLI, the browser or a GitHub Action.", href: "/docs/guides/release-decisions/" },
+];
+
+const audiences = [
+  { name: "Teams shipping production agents", text: "A daily PR check and a debugging loop: run the suite, open the paired cases that changed, and fix the regression before it merges." },
+  { name: "Enterprise AI and platform teams", text: "One self-hosted engine with project isolation, OIDC and RBAC, strict hash-chained audit and air-gapped installs, so every team ships against a shared standard." },
+  { name: "Model and training teams", text: "The same evaluators as RL rewards and checkpoint checks, and the same agent tasks as Gymnasium, NeMo Gym, OpenEnv and verifiers environments." },
+];
+
+// Unreleased work on main (CHANGELOG.md, [Unreleased]); 0.3.0 does not have it.
+const whatsNew = [
+  { name: "Release decisions", text: "A pinned baseline, a reviewed policy and paired confidence intervals decide PASS, BLOCK or INSUFFICIENT; insufficient evidence never passes.", href: "/docs/guides/release-decisions/" },
+  { name: "Browser release workbench", text: "Configure runs on approved suites, build release policies through forms, and export the CLI command or Action step.", href: "/docs/guides/release-workbench/" },
+  { name: "Failure inbox", text: "Production failures become editable, redacted, approved cases with full revision history.", href: "/docs/guides/failure-inbox/" },
+  { name: "Dataset catalog and snapshots", text: "Immutable, digest-pinned suites with separate publisher and reviewer approval, diffs and tuning/held-out overlap checks.", href: "/docs/guides/dataset-catalog/" },
+  { name: "Judge calibration", text: "Freeze human labels, keep tuning and held-out apart, and measure false positives, false negatives and judge drift.", href: "/docs/guides/judge-calibration/" },
+  { name: "Approval gates", text: "Allow, ask and deny rules on the built-in agent's tool calls, with recorded human-in-the-loop steps and evaluators that check denials were respected.", href: "/docs/guides/built-in-harness/" },
+  { name: "Support and refund suite", text: "Twelve editable tasks graded on a shop's final state: authorization, amounts, recipients, duplicates, retries and handoff.", href: "/docs/guides/support-refund-suite/" },
+  { name: "evalsi doctor and init", text: "Check an install's versions and sandbox capabilities, and scaffold a working project with a deliberately regressed control.", href: "/docs/guides/onboarding/" },
+  { name: "Strict, hash-chained audit", text: "Audit entries written before the change, caller identity details, and a verifier that finds edited or missing entries.", href: "/docs/guides/enterprise-deployment/" },
+];
+
+// evalsi-harness (docs/guides/built-in-harness.md): what is built.
+const harnessCaps = [
+  { name: "Tool-calling agent", text: "OpenAI-compatible and Anthropic models with thinking, streaming and prompt caching; bash, file, edit, glob, grep and patch tools; MCP over HTTP and stdio." },
+  { name: "Versioned profiles", text: "minimal, standard and code-mode, so a score names the harness it was measured on." },
+  { name: "Sub-agents", text: "A delegate tool starts a sub-agent with a clean context; its steps form a tree and its spend comes out of the parent's budget." },
+  { name: "Approval gates", text: "Ask before matching tool calls; a scripted approver approves, edits, denies or never answers, and every decision replays exactly." },
+  { name: "Users and interruptions", text: "An LLM-simulated user with a persona and goal, and scripted corrections mid-run." },
+  { name: "Long runs", text: "Compact, clear-tool-results, fresh-rounds and evidence-state context strategies, compared like any other setting." },
+  { name: "Record, replay, resume, fork", text: "Every model call and tool result is logged as it happens; resume a killed trial or fork from step N." },
+  { name: "Faults and hooks", text: "Errors, timeouts, malformed output and prompt injection per tool, and Python hooks at each point of the loop." },
+  { name: "Grading that resists gaming", text: "Hidden checkers, clean checker isolation, protected files, reward-hacking signals and per-rule state assertions." },
+  { name: "Bring your own agent", text: "A2A, MCP, OpenAI Responses, HTTP, or a CLI in the sandbox, with readers for Claude Code, Codex, Gemini CLI and pi." },
+  { name: "Benchmarks and matrices", text: "SWE-bench, τ-bench, Terminal-Bench, Harbor and BFCL; harness × model matrices with cost beside the score." },
+  { name: "Training environments", text: "Rollouts with step-level rewards and token traces, as Gymnasium, NeMo Gym, OpenEnv and verifiers environments." },
+];
+
+const harnessSpec = `# pip install evalsi-harness; evalsi run -f agent-run.yaml
+target: {connector: anthropic, model: claude-opus-5-5}
+dataset: {path: fix-calc.jsonl}
+harness:
+  builtin:
+    profile: standard
+    max_steps: 20
+    budget: {usd: 0.50, wall_clock: 5m}
+    hooks:
+      - python: evalsi_harness.approval:ApprovalGate
+        config:
+          rules: [{tool: bash, command: "git push*", action: ask}]
+          approver: {default: deny}
+environment:
+  sandbox: {min_isolation: namespaced, network: deny}
+  checker:                       # the agent never sees it
+    files: {test_hidden.py: "..."}
+    isolation: clean             # a fresh sandbox, outputs only
+    outputs: [calc.py]
+    command: [python3, test_hidden.py]
+evaluators:
+  - {ref: task-success}
+  - {ref: denial-respected}
+  - {ref: trial-tampering}
+trials: 3
+gates: [{metric: task-success.pass^3, min: 0.5}]`;
+
 const extras = [
   { name: "Trace sources", text: "Score traces kept in MLflow, Phoenix or Langfuse, and write scores back", href: "/docs/guides/trace-sources/" },
   { name: "Agent frameworks", text: "LangGraph, CrewAI, OpenAI Agents, LlamaIndex, Claude Agent SDK", href: "/docs/guides/agent-frameworks/" },
@@ -166,7 +247,10 @@ const extras = [
   { name: "Webhooks", text: "Signed events when a run finishes or fails a gate", href: "/docs/guides/webhooks/" },
   { name: "Human annotation", text: "Queues with progress and agreement", href: "/docs/guides/annotation/" },
   { name: "Wasm evaluators", text: "Ship graders as Wasm with a plugin index", href: "/docs/guides/plugins/" },
-  { name: "Read-only web UI", text: "Runs, comparisons, policies and catalog", href: "/docs/guides/web-ui/" },
+  { name: "Web UI and workbench", text: "Runs, paired case inspection, release workbench and catalog", href: "/docs/guides/web-ui/" },
+  { name: "Enterprise deployment", text: "Topologies, every outbound connection, audit and data erasure", href: "/docs/guides/enterprise-deployment/" },
+  { name: "Evaluator validation", text: "Calibrate judges against frozen human labels", href: "/docs/guides/judge-calibration/" },
+  { name: "Production failures to tests", text: "Failure inbox, snapshots and the dataset catalog", href: "/docs/guides/failure-inbox/" },
   { name: "Fine-tuning and RL", text: "Rewards and checkpoint regression checks", href: "/docs/guides/fine-tuning/" },
 ];
 ---
@@ -207,6 +291,7 @@ const extras = [
       <nav class="flex items-center gap-1 text-sm text-neutral-600 dark:text-neutral-400">
         <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 sm:block dark:hover:text-white" href={doc("/docs/get-started/")}>Docs</a>
         <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 sm:block dark:hover:text-white" href={doc("/examples/")}>Examples</a>
+        <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 md:block dark:hover:text-white" href={`${base}/#harness`}>Harness</a>
         <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 md:block dark:hover:text-white" href={doc("/integrations/")}>Integrations</a>
         <a href={repo} class="ml-1 inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 font-medium text-neutral-900 transition-colors hover:border-indigo-400 dark:border-white/10 dark:text-white">
           <GithubIcon /> GitHub
@@ -222,10 +307,10 @@ const extras = [
       <div aria-hidden="true" class="pointer-events-none absolute left-1/2 top-[-12rem] -z-10 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(99,102,241,0.35),rgba(45,212,191,0.12),transparent)] blur-2xl"></div>
 
       <div class="mx-auto max-w-6xl px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <a href={doc("/docs/guides/gate-an-agent-in-ci/")} class="animate-fade-up inline-block">
+        <a href={doc("/docs/guides/release-decisions/")} class="animate-fade-up inline-block">
           <AnimatedGradientText>
             <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
-            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">Gate an agent in CI: a free, offline walkthrough</span>
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">From production failure to release decision, on main</span>
             <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
           </AnimatedGradientText>
         </a>
@@ -236,7 +321,7 @@ const extras = [
           before you ship, while it runs, and as you train it.
         </h1>
         <p class="animate-fade-up mx-auto mt-6 max-w-2xl text-pretty text-lg text-neutral-600 [animation-delay:160ms] sm:text-xl dark:text-neutral-400">
-          Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs and CI gates, live trace scoring, and RL rewards for training. Built first for agents. Self-hosted, from a laptop to Kubernetes.
+          Answer one question for every change: can we safely ship it? Agents, RAG pipelines, LLMs and models on one set of evaluators, with sandboxed runs and CI gates, live trace scoring, release decisions and RL rewards. Built first for agents. Self-hosted, from a laptop to Kubernetes.
         </p>
         <div class="animate-fade-up mt-10 flex flex-wrap items-center justify-center gap-4 [animation-delay:240ms]">
           <RainbowButton href={doc("/docs/get-started/")}>Get started <ArrowRight className="size-4" /></RainbowButton>
@@ -287,6 +372,35 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
       </div>
     </section>
 
+    <!-- Position -->
+    <section class="mx-auto max-w-6xl px-4 pt-24 sm:px-6">
+      <div class="mx-auto mb-12 max-w-3xl text-center">
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">One decision, every change</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Can we safely ship this agent change?</h2>
+        <p class="mt-4 text-neutral-600 dark:text-neutral-400">Connect the agent and trace store you already use. Turn real failures into reproducible tests. Get a reviewable release decision for every change, with the evidence behind it.</p>
+      </div>
+      <ol class="grid gap-4 lg:grid-cols-3">
+        {workflow.map((w) => (
+          <li>
+            <a href={doc(w.href)} class="group flex h-full flex-col rounded-2xl border border-neutral-200 p-6 transition-colors hover:border-indigo-400 dark:border-white/10">
+              <span class="flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-teal-400 font-mono text-sm font-semibold text-white">{w.step}</span>
+              <h3 class="mt-4 flex items-center justify-between text-lg font-semibold">{w.name}<ArrowRight className="size-4 text-neutral-400 transition-transform group-hover:translate-x-1" /></h3>
+              <p class="mt-2 text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">{w.text}</p>
+            </a>
+          </li>
+        ))}
+      </ol>
+      <div class="mt-4 grid gap-4 md:grid-cols-3">
+        {audiences.map((a) => (
+          <div class="rounded-2xl bg-neutral-50 p-5 dark:bg-white/[.03]">
+            <h3 class="text-sm font-semibold">{a.name}</h3>
+            <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{a.text}</p>
+          </div>
+        ))}
+      </div>
+      <p class="mt-6 text-center text-sm text-neutral-500"><a class="font-semibold text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-300" href={doc("/docs/product-strategy/")}>Read the product strategy</a> and the <a class="font-semibold text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-300" href={doc("/docs/product-roadmap/")}>roadmap</a> behind it.</p>
+    </section>
+
     <!-- Doors -->
     <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6">
       <div class="mx-auto mb-12 max-w-2xl text-center">
@@ -295,6 +409,23 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
         <p class="mt-4 text-neutral-600 dark:text-neutral-400">The same evaluators work in every mode, so a metric means the same thing in CI, in production and in training.</p>
       </div>
       <Doors base={base} client:visible />
+    </section>
+
+    <!-- What's new -->
+    <section class="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
+      <div class="mx-auto mb-12 max-w-2xl text-center">
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">What's new</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">From production failure to release decision</h2>
+        <p class="mt-4 text-neutral-600 dark:text-neutral-400">On <code class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-sm dark:bg-white/10">main</code> and coming in the next release; published 0.3.0 does not include these yet. See the <a class="font-medium text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-300" href={doc("/docs/changelog/")}>changelog</a>.</p>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {whatsNew.map((n) => (
+          <a href={doc(n.href)} class="group rounded-2xl border border-neutral-200 p-5 transition-colors hover:border-indigo-400 dark:border-white/10">
+            <h3 class="flex items-center justify-between font-semibold">{n.name}<ArrowRight className="size-4 text-neutral-400 transition-transform group-hover:translate-x-1" /></h3>
+            <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{n.text}</p>
+          </a>
+        ))}
+      </div>
     </section>
 
     <!-- Tracks -->
@@ -324,6 +455,39 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
             </div>
           </div>
         ))}
+      </div>
+    </section>
+
+    <!-- Harness -->
+    <section id="harness" class="relative mt-24 border-y border-neutral-200/70 bg-gradient-to-b from-indigo-500/[.03] to-teal-400/[.03] py-24 dark:border-white/5">
+      <div class="mx-auto max-w-6xl px-4 sm:px-6">
+        <div class="grid items-start gap-12 lg:grid-cols-[1fr_1.1fr]">
+          <div>
+            <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">evalsi-harness</p>
+            <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">A built-in agent harness, made for evaluation</h2>
+            <p class="mt-4 text-neutral-600 dark:text-neutral-400">The harness runs an agent on a task in a sandbox, records every model call and tool result, and grades the final state with a checker the agent never sees. Use it to measure a model on a known, versioned agent, or to put your own agent through the same tasks, trials and gates. The tasks double as RL environments.</p>
+            <p class="mt-4 text-neutral-600 dark:text-neutral-400">It is built for evaluation, not for serving agents to users. Bring an agent that serves users over A2A or HTTP, and Evals.si evaluates it.</p>
+            <p class="mt-6 flex flex-wrap items-center gap-3 text-sm">
+              <code class="rounded-md border border-neutral-200 bg-white/60 px-2 py-1 font-mono text-[13px] text-neutral-700 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300">pip install evalsi-harness</code>
+              <a class="text-neutral-500 underline-offset-4 hover:text-neutral-900 hover:underline dark:hover:text-white" href="https://pypi.org/project/evalsi-harness/">PyPI</a>
+            </p>
+            <div class="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold text-indigo-600 dark:text-indigo-300">
+              <a href={doc("/docs/guides/built-in-harness/")} class="inline-flex items-center gap-1 transition-all hover:gap-2">What the harness provides <ArrowRight className="size-4" /></a>
+              <a href={doc("/docs/guides/agent-runs/")} class="inline-flex items-center gap-1 transition-all hover:gap-2">Agent runs guide <ArrowRight className="size-4" /></a>
+              <a href={`${repo}/blob/main/docs/HARNESS-ROADMAP.md`} class="inline-flex items-center gap-1 transition-all hover:gap-2">Harness roadmap <ArrowRight className="size-4" /></a>
+            </div>
+          </div>
+          <CodeTabs tabs={[{ label: "agent-run.yaml", lang: "yaml", code: harnessSpec }]} client:visible />
+        </div>
+        <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {harnessCaps.map((c) => (
+            <div class="rounded-2xl border border-neutral-200 bg-white/70 p-5 dark:border-white/10 dark:bg-white/[.02]">
+              <h3 class="font-semibold">{c.name}</h3>
+              <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">{c.text}</p>
+            </div>
+          ))}
+        </div>
+        <p class="mx-auto mt-8 max-w-3xl text-center text-sm text-neutral-500">Not built yet, and proposed on the harness roadmap: a model or human approver and an agent that asks for approval on its own, nested and parallel multi-agent topologies, and conversation-level scoring.</p>
       </div>
     </section>
 
@@ -402,6 +566,7 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/docs/get-started/")}>Docs</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/examples/")}>Examples</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/integrations/")}>Integrations</a>
+        <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/docs/guides/built-in-harness/")}>Harness</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={doc("/docs/changelog/")}>Changelog</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={`${repo}/releases`}>Releases</a>
         <a class="hover:text-neutral-900 dark:hover:text-white" href={repo}>GitHub</a>
