@@ -70,20 +70,19 @@ def daemon(
                         if response.status == 200:
                             break
                 except urllib.error.URLError as exc:
-                    if not isinstance(exc.reason, ConnectionRefusedError):
+                    if not isinstance(exc, urllib.error.HTTPError) and not isinstance(
+                        exc.reason, ConnectionRefusedError
+                    ):
                         raise
                 time.sleep(0.5)
             else:
                 raise TimeoutError("daemon not responsive within 60 seconds")
-            children = [
-                int(pid)
-                for pid in Path(f"/proc/{process.pid}/task/{process.pid}/children")
-                .read_text()
-                .split()
-            ]
+            children = live_children(process.pid)
             yield process
         finally:
             if process.poll() is None:
+                # Workers spawned since startup; once the parent exits they are reparented.
+                children = sorted({*children, *live_children(process.pid)})
                 process.terminate()
                 process.wait(timeout=30)
             for pid in children:
@@ -91,6 +90,13 @@ def daemon(
                     os.kill(pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
+
+
+def live_children(pid: int) -> list[int]:
+    try:
+        return [int(c) for c in Path(f"/proc/{pid}/task/{pid}/children").read_text().split()]
+    except OSError:
+        return []
 
 
 def spans(first: int, count: int) -> dict:
