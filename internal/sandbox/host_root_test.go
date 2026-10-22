@@ -1,10 +1,26 @@
 package sandbox
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestLocalImagesRefusedUnlessAllowed(t *testing.T) {
+	dir := t.TempDir()
+	st := newImageStore(filepath.Join(dir, "images"))
+	for _, ref := range []string{"dir:" + dir, "oci-layout:" + dir, "docker-archive:" + dir} {
+		if _, err := st.get(context.Background(), ref); err == nil || !strings.Contains(err.Error(), "allow_local_images") {
+			t.Errorf("%s: want a refusal naming allow_local_images, got %v", ref, err)
+		}
+	}
+	st.allowLocal = true
+	if _, err := st.get(context.Background(), "dir:"+dir); err != nil {
+		t.Errorf("allowed dir: image: %v", err)
+	}
+}
 
 // With a writable image root the workdir lives inside a tree the sandboxed
 // command controls; a symlink planted as the workdir must not redirect file

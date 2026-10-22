@@ -74,7 +74,7 @@ func fakeVMs(t *testing.T, mutate func(*FirecrackerConfig)) (*Sandbox, string) {
 	}
 	work := filepath.Join(dir, "work")
 	_ = os.MkdirAll(work, 0o700)
-	s, err := New(Config{Ladder: []string{"firecracker"}, MinIsolation: "none", Firecracker: fc, CacheDir: filepath.Join(dir, "cache"), WorkDir: work})
+	s, err := New(Config{Ladder: []string{"firecracker"}, MinIsolation: "none", AllowLocalImages: true, Firecracker: fc, CacheDir: filepath.Join(dir, "cache"), WorkDir: work})
 	if err != nil {
 		t.Fatal(err)
 	}
