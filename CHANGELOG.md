@@ -4,6 +4,19 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+These come from the 22 October deep review ([bug report](docs/reviews/2026-10-22-deep-review/bug-report.md)) and can break existing setups:
+
+- **Local image refs are refused by default.** `dir:`, `oci-layout:` and `docker-archive:` images (including with `evalsid sandbox run`) now need `sandbox.allow_local_images: true`, because a spec could name `dir:/` and read the daemon user's files. With `image_signatures` configured, its `allow_local` still decides.
+- **Strict JSON requests.** REST and Connect-JSON requests with unknown fields or enum values now get 400 `InvalidArgument` instead of having them silently dropped, and unknown query parameters get 400 instead of 500. A client that sends fields this server does not know breaks; upgrade clients and server together. Responses are unchanged.
+- **Tokens need `exp`.** A non-empty `required_claims` used to replace the default `exp` requirement; `exp` is now always required and `required_claims` adds to it.
+- **DeepEval toxicity, bias and hallucination are higher-is-better**, matching deepeval 4.2.8 (1 = pass). Flip gates and comparisons on these metrics.
+- Re-scoring a trace overwrites its Langfuse score instead of adding a second one.
+- An unknown project returns `PermissionDenied` (was `InvalidArgument`), and a rate-limited or busy dataset upload returns 429 with `Retry-After` (was 413).
+- `evalsi eval` exits 1 when every evaluation errored, as `evalsi run` does.
+- Krippendorff alpha clusters keep types apart: the string `"1"`, the number `1` and `True` are now different values.
+
 ### Added
 
 - The 21 October AKS and live-Claude [verification reports](docs/verification/AKS-FOLLOWUP-2026-10-21.md) and their [fixtures](tests/verification/README.md), with the open items they leave listed in [LEFTOVERS](docs/LEFTOVERS.md).
@@ -68,10 +81,28 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - **Authenticated installs now audit strictly by default.** With authentication enabled and no `audit.mode` set, a change whose audit entry cannot be written fails with `unavailable` instead of proceeding. Set `audit.mode: besteffort` to keep the old behaviour. In strict mode, access-management calls write one entry before the change and a detailed one after it.
 - The audit table gains `seq` and `hash` columns, an additive step. Entries written before the upgrade, or by an older release during a rolling upgrade, are not chained; verification counts them separately.
 
+### Security
+
+- A sandboxed command could replace its workdir with a symlink (`rm -rf /work; ln -s /etc /work`) so that host file reads and writes followed it onto the host. The workdir is now resolved inside the image root.
+- Image refs such as `dir:/` mounted host paths into the sandbox; see the upgrade notes.
+- A signed token without `exp` was accepted and never expired when `required_claims` was set.
+- In permissive JWT mode, a token signed with any key could satisfy `cel:jwt.*` role bindings. Anonymous principals no longer get `jwt.*` variables.
+- The `card` and `phone` redactors and the `pii-leak` evaluator missed a valid card number followed by more digits (an expiry date or CVV).
+- `CreateReleaseDecision` no longer tells a missing run from a forbidden one, and an unknown project is indistinguishable from a forbidden one.
+- `evalsi plugins remove ..` is refused; it could delete the plugins directory's parent.
+- An approver's `edit` is checked against the approval gate's deny rules again.
+
 ### Fixed
 
 - `builtin/denial-respected` (1.0.1) no longer counts the denied call's own tool step as a retry of it, which failed every run that was denied once and did not retry. A genuine second attempt, including one that was itself gated and denied, still fails. Approval-gate steps now carry the call's id (`evalsi.hitl.call_id`).
 - `builtin/denial-respected` (1.0.2) no longer counts an approved call that follows a denied identical one as a retry, and matches the denied call itself without a call id or `hook_denied` marker (older trajectories, other harnesses).
+- **Online evaluation:** a failed result handoff no longer re-runs every evaluator, including paid judges, every second; retries redo only the failed step and back off from 2 s to 60 s. Sink retries no longer duplicate Langfuse or MLflow scores. A source page that is empty but has a next cursor no longer ends the cycle and skips data. GenAI tool results are read from `response`. S3 folder markers no longer break dataset fetches, and appending to a dataset file without a trailing newline no longer joins two rows.
+- **Runs:** cluster adoption no longer re-executes a run that finished between listing and leasing (which fired webhooks and sink exports twice), and retention no longer deletes runs that a restart interrupted.
+- **Operator and chart:** deletes no longer hang when the webhook rejects the operator's own finalizer removal; removing `spec.autoscaling` deletes the KEDA ScaledObject and a missing KEDA is reported; a TraceSource whose project label changes is removed from the old project (new `status.project`); bootstrap rotates expired API keys; the all-namespaces ClusterRole covers `services` and `configmaps`; ConfigMap edits roll Evaluator pods.
+- **Scoring:** an invalid judge answer is no longer cached, so retries can recover; `rl` unit stripping needs a number (`Paris` no longer equals `Pari`); duplicate ids no longer inflate ndcg and map; `numeric-match` reads `10-12` as a range, not -12; `tool-call-accuracy` matches pinned expectations first; `refusal` catches "I'm unable to" and curly apostrophes; `data-quality` rejects an unknown `type`; a mistyped `--regression` metric is an error; non-finite confidence intervals and reward components are errors in Go and Python; interval Krippendorff alpha is numerically stable.
+- **Python client, targets and worker:** a truncated stream is an error, and `gate_candidate` checks that the candidate run finished; non-JSON responses (a proxy's 502 page) are `ServerError`s and malformed judge replies `JudgeError`s; one malformed target response no longer aborts a generation batch; the worker no longer leaks a harness per call without a `run_id`.
+- **Sandbox and harness:** a guest egress connection keeps its reply after the client half-closes; cancelling `run_sandboxed` kills the `evalsid` subprocess; a missing working directory exits 126 instead of looking like a missing command; symlinks and truncation are reported by `read_files`; `max_procs` also binds root through a pids cgroup where the guest has one; MCP stdio replies over 64 KiB are read; a harness command that never serves is terminated.
+- `evalsi eval` rejects a negative `--limit`, and a blank `cache:` key in a reward spec is a clear error.
 - The browser release workbench preserves omitted versus explicitly empty evaluator parameters and the HTTP connector's 600-second default when copying baselines, normalizes commit labels to lowercase, offers captured per-record numeric metrics rather than summary-only trial aggregates, and preserves the decision project through release/case navigation. Browser regression controls cover matching contract hashes and cross-project PASS/BLOCK decisions.
 - Update the minimum Go toolchain to 1.26.10 and locked Python `certifi` to 2026.10.19, incorporating the certificate distrust fixes reported by GO-2026-6809 and PYSEC-2026-4320. Dependency security checks remain enabled.
 - The browser no longer associates different trials by record ID alone or hides later run results behind a fixed first-page table. Trial-specific outputs stay separate, result pages are navigable, and cases can be opened directly.
