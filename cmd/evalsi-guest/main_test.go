@@ -4,9 +4,35 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
+
+// RLIMIT_NPROC never binds uid 0; max_procs must still bind a command running
+// as root, through a pids cgroup.
+func TestLimitProcsBindsRoot(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("needs root")
+	}
+	if os.Getenv("EVALSI_TEST_PIDS_CGROUP") == "" {
+		t.Skip("needs a writable root cgroup v2 with the pids controller, as in a guest: docker run --privileged --cgroupns=host -e EVALSI_TEST_PIDS_CGROUP=1")
+	}
+	bin := filepath.Join(t.TempDir(), "evalsi-guest")
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	run := func(procs string) error {
+		return exec.Command(bin, "limit", "0", procs, "0", "0", "--", "/bin/sh", "-c", "/bin/true; /bin/true").Run()
+	}
+	if err := run("0"); err != nil {
+		t.Fatalf("without a process limit: %v", err)
+	}
+	// Every uid-0 process on the machine counts, so a limit of 1 is always reached.
+	if err := run("1"); err == nil {
+		t.Fatal("max_procs did not stop a root command from forking")
+	}
+}
 
 func TestCopyTree(t *testing.T) {
 	src, dst := t.TempDir(), t.TempDir()

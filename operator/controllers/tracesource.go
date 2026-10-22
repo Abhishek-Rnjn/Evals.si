@@ -42,9 +42,13 @@ func (r *TraceSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !s.DeletionTimestamp.IsZero() {
 		// A project the namespace may not name was never applied to: there
 		// is nothing of this resource's to delete there.
-		if s.Status.Name != "" && projectErr == nil {
-			_, err := r.API.Sources.DeleteSource(ctx, connect.NewRequest(&evalsiv1alpha1.DeleteSourceRequest{Project: project, Name: s.Status.Name}))
-			if err != nil && connect.CodeOf(err) != connect.CodeNotFound && !permanent(err) {
+		// The project it was applied to, which a label edit may have moved on from.
+		applied := s.Status.Project
+		if applied == "" && projectErr == nil {
+			applied = project
+		}
+		if s.Status.Name != "" && applied != "" {
+			if err := r.deleteSource(ctx, applied, s.Status.Name); err != nil {
 				return ctrl.Result{}, err
 			}
 		}
@@ -110,10 +114,23 @@ func (r *TraceSourceReconciler) apply(ctx context.Context, s *v1.TraceSource, pr
 		}
 		return ctrl.Result{}, err
 	}
-	s.Status.Name, s.Status.ObservedGeneration, s.Status.AppliedMetadata = s.Name, s.Generation, appliedMetadata(s)
+	if old := s.Status.Project; old != "" && old != project {
+		if err := r.deleteSource(ctx, old, s.Name); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	s.Status.Name, s.Status.Project, s.Status.ObservedGeneration, s.Status.AppliedMetadata = s.Name, project, s.Generation, appliedMetadata(s)
 	mirrorSource(&s.Status, applied.GetStatus())
 	meta.SetStatusCondition(&s.Status.Conditions, metav1.Condition{Type: "Synced", Status: metav1.ConditionTrue, Reason: "Applied", Message: "applied to project " + project, ObservedGeneration: s.Generation})
 	return ctrl.Result{RequeueAfter: r.interval()}, r.Status().Update(ctx, s)
+}
+
+func (r *TraceSourceReconciler) deleteSource(ctx context.Context, project, name string) error {
+	_, err := r.API.Sources.DeleteSource(ctx, connect.NewRequest(&evalsiv1alpha1.DeleteSourceRequest{Project: project, Name: name}))
+	if err != nil && connect.CodeOf(err) != connect.CodeNotFound && !permanent(err) {
+		return err
+	}
+	return nil
 }
 
 // mirrorSource copies the API's status onto the resource.

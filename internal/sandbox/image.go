@@ -55,6 +55,8 @@ type imageStore struct {
 	dir string
 	// With sandbox.image_signatures, images must be signed before use.
 	verifier *signatureVerifier
+	// Without a verifier, local image references are refused unless set.
+	allowLocal bool
 
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
@@ -78,9 +80,13 @@ func (st *imageStore) lock(key string) func() {
 }
 
 func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
-	if st.verifier != nil && isLocalImage(ref) {
-		if err := st.verifier.verify(ctx, ref, ""); err != nil {
-			return nil, err
+	if isLocalImage(ref) {
+		if st.verifier != nil {
+			if err := st.verifier.verify(ctx, ref, ""); err != nil {
+				return nil, err
+			}
+		} else if !st.allowLocal {
+			return nil, fmt.Errorf("image %s: local images read host paths and are refused (sandbox.allow_local_images)", ref)
 		}
 	}
 	if p, ok := strings.CutPrefix(ref, "dir:"); ok {

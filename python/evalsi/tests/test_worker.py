@@ -384,3 +384,31 @@ def test_worker_refuses_undeclared_params_naming_its_variables(
     # Declared (by the _env convention) and ordinary values pass.
     with_worker(plugin, lambda stub: call(stub, request(api_key_env="WORKER_SECRET")), tmp_path)
     with_worker(plugin, lambda stub: call(stub, request(key_var="plain text")), tmp_path)
+
+
+def test_harness_without_run_id_is_cached_and_aclose_awaits_evictions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("evalsi_harness")
+    import evalsi_harness
+
+    closed: list[object] = []
+
+    class FakeHarness:
+        async def aclose(self) -> None:
+            await asyncio.sleep(0)
+            closed.append(self)
+
+    monkeypatch.setattr(evalsi_harness, "load_harness", lambda spec, ctx: FakeHarness())
+
+    async def scenario() -> None:
+        plugin = EvaluatorPlugin(default_registry())
+        assert plugin._harness("", None) is plugin._harness("", None)
+        assert len(plugin._harnesses) == 1
+        for i in range(8):
+            plugin._harness(f"run-{i}", None)
+        assert len(plugin._closing) == 1
+        await plugin.aclose()
+        assert len(closed) == 9
+
+    asyncio.run(scenario())

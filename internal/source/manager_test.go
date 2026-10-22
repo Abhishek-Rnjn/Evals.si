@@ -36,6 +36,9 @@ type fakeStore struct {
 	priorSeen []map[store.WriteKey]store.SourceWrite
 	// writeFails is how many WriteBack calls fail before one succeeds.
 	writeFails int
+	// The first page is empty but has a next cursor (a store that filters
+	// server-side after paging).
+	emptyFirstPage bool
 }
 
 func (f *fakeStore) set(infos ...Info) {
@@ -50,6 +53,9 @@ func (f *fakeStore) List(_ context.Context, req ListRequest) (ListResult, error)
 	f.lists++
 	if f.listErr != nil {
 		return ListResult{}, f.listErr
+	}
+	if f.emptyFirstPage && req.Cursor == "" {
+		return ListResult{Next: "0"}, nil
 	}
 	var all []Info
 	for _, in := range f.infos {
@@ -444,6 +450,24 @@ func TestBackfillPagesAndCommitsProgress(t *testing.T) {
 	}
 	if ph := evalsiv1alpha1.SourcePhase(h.r.phase.Load()); ph != evalsiv1alpha1.SourcePhase_SOURCE_PHASE_TAILING {
 		t.Fatalf("phase %v", ph)
+	}
+}
+
+// An empty page that still has a next cursor is not the end of the cycle:
+// stopping there would move the watermark past traces on later pages.
+func TestEmptyPageWithNextCursorDoesNotEndCycle(t *testing.T) {
+	h := newHarness(t, nil)
+	if err := h.cycle(t); err != nil {
+		t.Fatal(err)
+	}
+	h.now = epoch.Add(time.Minute)
+	h.fs.emptyFirstPage = true
+	h.fs.set(info("tr-1", epoch.Add(10*time.Second)))
+	if err := h.cycle(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.ing.ids(); len(got) != 1 {
+		t.Fatalf("ingested %v, want the trace after the empty page", got)
 	}
 }
 

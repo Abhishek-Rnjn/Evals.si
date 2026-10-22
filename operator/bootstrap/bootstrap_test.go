@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -268,5 +269,26 @@ func TestEveryWebhookEventHasAName(t *testing.T) {
 		if e := evalsiv1alpha1.WebhookEvent(v); e != evalsiv1alpha1.WebhookEvent_WEBHOOK_EVENT_UNSPECIFIED && !named[e] {
 			t.Errorf("%s has no name in bootstrap values", e)
 		}
+	}
+}
+
+// A TTL key that has expired is replaced on the next run.
+func TestBootstrapRotatesAnExpiredKey(t *testing.T) {
+	srv := newServer()
+	kube := fake.NewSimpleClientset()
+	r := runner(srv, KubeSecrets{Client: kube, Namespace: "evalsi"})
+	cfg, err := Load([]byte(`{"api_keys":[{"name":"ci","roles":{"*":["viewer"]},"ttl":"1h","secret":{"name":"ci-key"}}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	srv.keys["ci"].ExpiresAt = timestamppb.New(time.Now().Add(-time.Hour))
+	if err := r.Run(context.Background(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if srv.calls["CreateAPIKey"] != 2 {
+		t.Errorf("expired key not replaced: CreateAPIKey calls=%d", srv.calls["CreateAPIKey"])
 	}
 }

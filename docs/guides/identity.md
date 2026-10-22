@@ -73,7 +73,7 @@ auth:
 Notes:
 
 - Accepted algorithms default to RS256, ES256 and EdDSA; `none` is never accepted.
-- `exp` is required by default (`required_claims`), with 60 seconds of clock skew allowed.
+- `exp` is always required (`required_claims` adds to it), with 60 seconds of clock skew allowed.
 - Keys are cached and refreshed hourly. A token with an unknown `kid` triggers a refetch at most every 10 seconds.
 - JWKS and discovery URLs must be `https://`. `jwks.allow_insecure` exists for local development only.
 - The token is read from `Authorization: Bearer` by default; `location` can name another header, a cookie or a query parameter.

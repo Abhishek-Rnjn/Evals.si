@@ -132,7 +132,11 @@ def _cmd_list(args: argparse.Namespace) -> int:
 def _cmd_remove(args: argparse.Namespace) -> int:
     from evalsi.plugins import plugin_dirname
 
-    target = _dest(args) / plugin_dirname(args.name)
+    dirname = plugin_dirname(args.name)
+    if dirname in ("", ".", ".."):
+        print(f"{args.name!r} is not a valid plugin name", file=sys.stderr)
+        return 1
+    target = _dest(args) / dirname
     if not (target / "evalsi-plugin.yaml").is_file():
         print(f"{args.name} is not installed in {target.parent}", file=sys.stderr)
         return 1

@@ -247,3 +247,21 @@ def test_packs_are_opt_in() -> None:
     registry = default_registry()
     for name in ("ml-classic", "ml-monitoring"):
         assert not registry.packs[name].on_by_default
+
+
+def test_ranking_duplicate_ids_do_not_inflate() -> None:
+    got = means([{"output": ["a", "a", "a"], "reference": ["a"]}], "ranking", k=3)
+    assert all(v <= 1.0 for v in got.values())
+    assert got["ndcg"] == 1.0
+    assert got["map"] == 1.0
+
+
+def test_data_quality_unknown_type_is_an_error() -> None:
+    from evalsi import evaluate
+
+    recs = [{"input": "a", "metadata": {"age": "abc"}}]
+    result = evaluate(
+        recs, [{"ref": "data-quality", "params": {"schema": {"age": {"type": "int"}}}}], cache=False
+    )
+    assert result.all_errored
+    assert "unknown type" in result.errors()[0].reason

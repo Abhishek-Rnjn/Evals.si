@@ -270,3 +270,24 @@ def test_server_spec_and_results() -> None:
         )
     with pytest.raises(EvaluatorConfigError, match="server judge"):
         rewards.load({"judge": "local", "components": ["llm-judge"]})
+
+
+def test_reward_spec_blank_cache_key_and_bad_cache_type() -> None:
+    rewards.load({"components": [{"ref": "exact-match"}], "cache": None})
+    with pytest.raises(RewardSpecError, match="cache"):
+        rewards.load({"components": [{"ref": "exact-match"}], "cache": "yes"})
+
+
+@pytest.mark.parametrize("value", [math.inf, -math.inf, math.nan])
+def test_non_finite_component_value_is_an_error(value: float) -> None:
+    from evalsi import Outcome
+    from evalsi.rewards import _component_result
+    from evalsi.rewards.spec import Component
+
+    got = _component_result(
+        Component(ref="x"),
+        Outcome.SCORED,
+        [Score(name="m", number=value)],
+        "",
+    )
+    assert got.status == "error"

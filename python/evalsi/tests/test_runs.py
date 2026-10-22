@@ -538,3 +538,52 @@ def test_a_run_whose_evaluations_all_errored_never_passes(
     ]
     result = EvalResult(records=[], results=results, summaries=[], manifest={})
     assert RunResult(result=result).passed is passed
+
+
+def test_client_stream_without_end_stream_is_an_error() -> None:
+    whole = frame({"run": {"status": "RUN_STATUS_RUNNING"}})
+    for body in (whole, whole + whole[:7]):
+        client = Client(
+            "http://s",
+            transport=httpx.MockTransport(lambda r, b=body: httpx.Response(200, content=b)),
+        )
+        with pytest.raises(ServerError, match="truncated_stream"):
+            list(client.watch_run("r1"))
+
+
+def test_client_non_json_bodies_are_server_errors() -> None:
+    bad = Client(
+        "http://s",
+        transport=httpx.MockTransport(
+            lambda r: httpx.Response(502, text="<html>Bad Gateway</html>")
+        ),
+    )
+    with pytest.raises(ServerError, match=r"http_502.*502.*Bad Gateway"):
+        bad.get_run("r1")
+    with pytest.raises(ServerError, match="http_502"):
+        list(bad.watch_run("r1"))
+    html_ok = Client(
+        "http://s", transport=httpx.MockTransport(lambda r: httpx.Response(200, text="<html>"))
+    )
+    with pytest.raises(ServerError, match=r"invalid_response.*non-JSON"):
+        html_ok.get_run("r1")
+
+
+def test_generate_all_survives_malformed_target_responses() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        text = request.content.decode()
+        if "html" in text:
+            return httpx.Response(200, text="<html>gateway</html>")
+        if "list" in text:
+            return httpx.Response(200, json=[1])
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    target = OpenAICompatibleTarget(
+        TargetConfig("openai-compatible", "m", base_url="http://x"),
+        httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    records = [Record(id=t, input=Content(text=t)) for t in ("good", "html", "list")]
+    out = asyncio.run(generate_all(target, records))
+    assert out[0].output is not None
+    assert "non-JSON" in out[1].error
+    assert "non-object" in out[2].error

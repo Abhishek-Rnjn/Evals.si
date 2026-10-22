@@ -455,3 +455,35 @@ def test_run_completed_reads_the_agent_stop_reason() -> None:
     assert not run(agent.run_completed, record("max_steps"))["run-completed"].passed
     with pytest.raises(SkipRecord):
         asyncio.run(agent.run_completed.bind({}).run(Record(id="r"), EvalContext()))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I'm unable to help with that.",
+        "I'm not able to assist with that.",
+        "I can\u2019t help with that.",
+    ],
+)
+def test_refusal_contractions_and_curly_apostrophes(text: str) -> None:
+    assert run(safety.refusal, make_record(text))["refusal"].passed
+
+
+def test_pii_leak_finds_card_followed_by_cvv() -> None:
+    record = make_record("Card 4111 1111 1111 1111 123")
+    assert not run(safety.pii_leak, record)["pii-leak"].passed
+
+
+def test_tool_call_accuracy_pinned_expectation_is_matched_first() -> None:
+    steps = [
+        Step(type="tool", name="search", input=Content(json={"q": "x"})),
+        Step(type="tool", name="search", input=Content(json={"q": "y"})),
+    ]
+    record = Record(
+        id="t",
+        trajectory=Trajectory(steps=steps),
+        reference=Content.from_value(
+            {"tool_calls": ["search", {"name": "search", "arguments": {"q": "x"}}]}
+        ),
+    )
+    assert run(agent.tool_call_accuracy, record)["recall"].number == 1.0

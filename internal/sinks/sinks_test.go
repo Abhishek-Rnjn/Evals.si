@@ -412,3 +412,73 @@ func TestPhoenixAnnotations(t *testing.T) {
 		t.Fatalf("annotation: %v", a)
 	}
 }
+
+func twoScoreTrace() *Trace {
+	return &Trace{TraceID: "0123456789abcdef0123456789abcdef", Policy: "p", Time: time.Now(), Results: []*evalsiv1alpha1.EvaluationResult{{
+		Evaluator: "e", EvaluatorRef: "e@1", Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED,
+		Scores: []*evalsiv1alpha1.Score{
+			{Name: "a", Value: &evalsiv1alpha1.Score_Number{Number: 1}},
+			{Name: "b", Value: &evalsiv1alpha1.Score_Number{Number: 2}},
+		},
+	}}}
+}
+
+// A retry after a partial failure must not post the scores that already went
+// through: MLflow assigns assessment IDs, so each duplicate is a new assessment.
+func TestMLflowRetryDoesNotRepostDeliveredScores(t *testing.T) {
+	var mu sync.Mutex
+	posts := map[string]int{}
+	failed := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		defer mu.Unlock()
+		if strings.Contains(string(b), `"assessment_name":"e.b"`) && !failed {
+			failed = true
+			w.WriteHeader(500)
+			return
+		}
+		for _, n := range []string{"e.a", "e.b"} {
+			if strings.Contains(string(b), `"assessment_name":"`+n+`"`) {
+				posts[n]++
+			}
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	s := newMLflow(MLflowConfig{TrackingURI: srv.URL, TraceFeedback: true}, srv.Client())
+	d := &Dispatcher{sinks: []Sink{s}, queue: make(chan job, 8), log: slog.New(slog.NewTextHandler(io.Discard, nil)), backoff: time.Millisecond}
+	d.Start(1)
+	d.Trace(twoScoreTrace())
+	d.Close(context.Background())
+	mu.Lock()
+	defer mu.Unlock()
+	if posts["e.a"] != 1 || posts["e.b"] != 1 {
+		t.Fatalf("posts %v, want each score once", posts)
+	}
+}
+
+// Langfuse upserts scores by ID, so a retried batch must carry the same IDs.
+func TestLangfuseScoreIDsAreStableAcrossRetries(t *testing.T) {
+	t.Setenv("LF_PUBLIC", "pk-lf")
+	t.Setenv("LF_SECRET", "sk-lf")
+	rec := &recorder{}
+	srv := rec.server(t, func(string) (int, string) { return 207, `{"successes": [], "errors": []}` })
+	sink := newLangfuse(LangfuseConfig{Host: srv.URL, PublicKeyEnv: "LF_PUBLIC", SecretKeyEnv: "LF_SECRET", TraceFeedback: true}, srv.Client())
+	for range 2 {
+		if err := sink.ExportTrace(context.Background(), twoScoreTrace()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids := func(i int) []string {
+		var out []string
+		for _, ev := range rec.bodies[i]["batch"].([]any) {
+			out = append(out, ev.(map[string]any)["body"].(map[string]any)["id"].(string))
+		}
+		return out
+	}
+	first, second := ids(0), ids(1)
+	if len(first) != 2 || first[0] == first[1] || first[0] != second[0] || first[1] != second[1] {
+		t.Fatalf("score IDs differ between attempts: %v vs %v", first, second)
+	}
+}

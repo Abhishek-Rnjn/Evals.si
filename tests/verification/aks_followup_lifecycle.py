@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -27,9 +28,9 @@ from evalsi_harness.subagent import SUBAGENT_SYSTEM
 from evalsi_harness.tools import FunctionTool, Tool
 
 KUBECTL = [
-    "/opt/homebrew/bin/kubectl",
+    shutil.which("kubectl") or "kubectl",
     "--kubeconfig",
-    "./kube-aks.yaml",
+    os.environ.get("KUBECONFIG") or str(Path(__file__).resolve().parents[2] / "kube-aks.yaml"),
     "-n",
     "evalsi-verify-20261021-followup",
 ]
@@ -166,17 +167,20 @@ async def execute(args: argparse.Namespace) -> None:
             "new_http_attempts": len(ledger.attempts) - attempts,
             "incremental_estimated_usd": ledger.charged - before,
         }
+        problems = []
         if delegate:
             row["handoff_correctness"] = handoff_correctness(record).passed
             if not row["handoff_correctness"] or loop.state.subagents != 1:
-                raise AssertionError("expected one real delegate with valid linked handoff")
+                problems.append("expected one real delegate with valid linked handoff")
         if final.stop_reason != "completed":
-            raise AssertionError(f"live lifecycle task did not complete: {row}")
+            problems.append(f"live lifecycle task did not complete: {row}")
         if mode in ("replay", "resume") and row["new_http_attempts"]:
-            raise AssertionError("offline lifecycle control made a provider request")
+            problems.append("offline lifecycle control made a provider request")
         rows.append(row)
         (args.output / "results.json").write_text(json.dumps(rows, indent=2))
         print(json.dumps(row), flush=True)
+        if problems:
+            raise AssertionError("; ".join(problems))
         return row
 
     async def read_order() -> str:

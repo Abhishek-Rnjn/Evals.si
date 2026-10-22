@@ -54,6 +54,8 @@ class Ledger:
             raise ValueError(
                 "prior ledger must use recognized rates and a nondecreasing supported allowance"
             )
+        ledger.input_rate = prior["input_including_all_cache_per_million"]
+        ledger.output_rate = prior["output_per_million"]
         ledger.charged = prior["conservative_estimated_usd"]
         ledger.attempts = prior["attempts"]
         for row in ledger.attempts:

@@ -151,9 +151,13 @@ class RewardSpec:
             if not (isinstance(clip, list) and len(clip) == 2 and float(clip[0]) <= float(clip[1])):
                 raise RewardSpecError("clip must be [low, high] with low <= high")
             clip = (float(clip[0]), float(clip[1]))
-        cache = body.get("cache", {})
-        if isinstance(cache, bool):
+        cache = body.get("cache")
+        if cache is None:
+            cache = {}
+        elif isinstance(cache, bool):
             cache = {"enabled": cache}
+        elif not isinstance(cache, Mapping):
+            raise RewardSpecError("cache must be a boolean or a mapping")
         concurrency = int(body.get("concurrency", 64))
         if concurrency < 1:
             raise RewardSpecError("concurrency must be at least 1")

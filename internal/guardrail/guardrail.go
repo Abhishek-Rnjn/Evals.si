@@ -100,7 +100,10 @@ type redactor struct {
 	name  string
 	re    *regexp.Regexp
 	valid func(string) bool
-	repl  string
+	// salvage redacts the valid parts of a match that failed valid, returning
+	// the new text and how many parts it replaced.
+	salvage func(m string, valid func(string) bool, repl string) (string, int)
+	repl    string
 }
 
 // compiled is a guardrail ready to check content.
@@ -143,14 +146,66 @@ func luhn(d string) bool {
 	return total%10 == 0
 }
 
+// salvageWindows redacts valid 13-19 digit windows inside a digit run that is
+// not valid as a whole (a card followed by an expiry, say). Windows start and
+// end on digit-group boundaries, so a glued run is not carved up; at each start
+// the longest valid window wins.
+func salvageWindows(m string, valid func(string) bool, repl string) (string, int) {
+	isDigit := func(i int) bool { return m[i] >= '0' && m[i] <= '9' }
+	var starts, ends []int // of digit groups
+	for i := 0; i < len(m); i++ {
+		if !isDigit(i) {
+			continue
+		}
+		if i == 0 || !isDigit(i-1) {
+			starts = append(starts, i)
+		}
+		if i == len(m)-1 || !isDigit(i+1) {
+			ends = append(ends, i+1)
+		}
+	}
+	var out strings.Builder
+	last, n := 0, 0
+	for i := 0; i < len(starts); {
+		hit := -1
+		for j := len(ends) - 1; j >= i; j-- {
+			if valid(m[starts[i]:ends[j]]) {
+				hit = j
+				break
+			}
+		}
+		if hit < 0 {
+			i++
+			continue
+		}
+		out.WriteString(m[last:starts[i]])
+		out.WriteString(repl)
+		last, n, i = ends[hit], n+1, hit+1
+	}
+	out.WriteString(m[last:])
+	return out.String(), n
+}
+
+// salvagePrefix redacts the longest valid prefix of an over-long match.
+func salvagePrefix(m string, valid func(string) bool, repl string) (string, int) {
+	for end := len(m) - 1; end > 0; end-- {
+		if m[end-1] >= '0' && m[end-1] <= '9' && valid(m[:end]) {
+			return repl + m[end:], 1
+		}
+	}
+	return m, 0
+}
+
 // builtins are RE2 versions of the safety pack's detectors; checks that
 // RE2 cannot express (Luhn, SSN ranges) run on each match.
 var builtins = map[string]redactor{
 	"email": {re: regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)},
 	"phone": {re: regexp.MustCompile(`\+\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b`),
-		valid: func(m string) bool { n := len(digits(m)); return n >= 10 && n <= 15 }},
+		valid:   func(m string) bool { n := len(digits(m)); return n >= 10 && n <= 15 },
+		salvage: salvagePrefix},
 	"credit-card": {re: regexp.MustCompile(`\b\d(?:[ -]?\d){12,18}\b`),
-		valid: func(m string) bool { d := digits(m); return len(d) >= 13 && len(d) <= 19 && luhn(d) }},
+		valid:   func(m string) bool { d := digits(m); return len(d) >= 13 && len(d) <= 19 && luhn(d) },
+		salvage: salvageWindows},
 	"us-ssn": {re: regexp.MustCompile(`\b\d{3}-\d{2}-\d{4}\b`), valid: func(m string) bool {
 		area, group, serial := m[:3], m[4:6], m[7:]
 		return area != "000" && area != "666" && area[0] != '9' && group != "00" && serial != "0000"
@@ -214,7 +269,12 @@ func compileRedact(rules []*evalsiv1alpha1.RedactRule) ([]redactor, error) {
 func (r redactor) apply(text string, counts map[string]int64) string {
 	return r.re.ReplaceAllStringFunc(text, func(m string) string {
 		if r.valid != nil && !r.valid(m) {
-			return m
+			if r.salvage == nil {
+				return m
+			}
+			out, n := r.salvage(m, r.valid, r.repl)
+			counts[r.name] += int64(n)
+			return out
 		}
 		counts[r.name]++
 		return r.repl

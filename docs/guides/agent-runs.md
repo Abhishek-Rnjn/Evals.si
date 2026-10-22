@@ -463,6 +463,8 @@ sandbox:
 
 An image is used only when the registry holds a signature by one of the keys, on the image or on the index its tag points to (`cosign sign --key cosign.key <image>`). Signatures must be in cosign's `.sig` tag format, which is cosign 2's default. Verification is offline, with no transparency log. For an air-gapped registry, copy signatures with `cosign copy`. The pod rung's images are pulled by the kubelet, so enforce signatures there with your cluster's admission policy.
 
+**Local images.** Image references that read host paths (`dir:`, `oci-layout:`, `docker-archive:`) are refused, because a spec can name `dir:/`. Set `sandbox.allow_local_images: true` to accept them, for example on a developer machine. With `image_signatures`, its `allow_local` decides instead.
+
 To enable Firecracker:
 
 ```yaml

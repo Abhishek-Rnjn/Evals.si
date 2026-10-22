@@ -522,3 +522,17 @@ func TestScoreRewardsParamsCannotWeakenMinIsolation(t *testing.T) {
 		}
 	}
 }
+
+// An infinite component value would reach the total (0 * Inf is NaN), so it is
+// an error like NaN.
+func TestComponentResultRejectsInfinity(t *testing.T) {
+	for _, v := range []float64{math.Inf(1), math.Inf(-1), math.NaN()} {
+		r := componentResult(&evalsiv1alpha1.RewardComponent{}, &evalsiv1alpha1.EvaluationResult{
+			Outcome: evalsiv1alpha1.Outcome_OUTCOME_SCORED,
+			Scores:  []*evalsiv1alpha1.Score{{Name: "m", Value: &evalsiv1alpha1.Score_Number{Number: v}}},
+		})
+		if r.GetStatus() != evalsiv1alpha1.RewardComponentStatus_REWARD_COMPONENT_STATUS_ERROR {
+			t.Errorf("%v: status %v", v, r.GetStatus())
+		}
+	}
+}

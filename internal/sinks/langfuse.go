@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -131,8 +132,11 @@ func (l *langfuseSink) ingest(ctx context.Context, events []langfuseEvent) error
 	return nil
 }
 
-func langfuseScore(traceID, name string, s *evalsiv1alpha1.Score, comment string, meta map[string]any) map[string]any {
-	body := map[string]any{"id": newEventID(), "traceId": traceID, "name": name, "metadata": meta}
+// langfuseScore's ID is derived from what it scores, so a retried export
+// updates the score instead of adding another.
+func langfuseScore(traceID, scope, name string, s *evalsiv1alpha1.Score, comment string, meta map[string]any) map[string]any {
+	id := sha256.Sum256([]byte(traceID + "\x00" + scope + "\x00" + name))
+	body := map[string]any{"id": hex.EncodeToString(id[:16]), "traceId": traceID, "name": name, "metadata": meta}
 	switch v := s.GetValue().(type) {
 	case *evalsiv1alpha1.Score_Number:
 		body["value"], body["dataType"] = v.Number, "NUMERIC"
@@ -178,7 +182,7 @@ func (l *langfuseSink) ExportRun(ctx context.Context, run *evalsiv1alpha1.Run) e
 		if ci := s.GetCi(); ci != nil {
 			comment += fmt.Sprintf(", %.0f%% CI [%.4g, %.4g]", ci.GetLevel()*100, ci.GetLow(), ci.GetHigh())
 		}
-		body := langfuseScore(traceID, s.GetMetric(), &evalsiv1alpha1.Score{Value: &evalsiv1alpha1.Score_Number{Number: s.GetMean()}}, comment,
+		body := langfuseScore(traceID, s.GetEvaluator(), s.GetMetric(), &evalsiv1alpha1.Score{Value: &evalsiv1alpha1.Score_Number{Number: s.GetMean()}}, comment,
 			map[string]any{"evaluator": s.GetEvaluator(), "skipped": s.GetSkipped(), "errors": s.GetErrors()})
 		events = append(events, langfuseEvent{ID: newEventID(), Type: "score-create", Timestamp: now, Body: body})
 	}
@@ -197,7 +201,7 @@ func (l *langfuseSink) ExportTrace(ctx context.Context, t *Trace) error {
 			continue
 		}
 		for _, s := range r.GetScores() {
-			body := langfuseScore(t.TraceID, metricName(r, s), s, s.GetExplanation(),
+			body := langfuseScore(t.TraceID, t.Policy+"\x00"+r.GetEvaluatorRef(), metricName(r, s), s, s.GetExplanation(),
 				map[string]any{"policy": t.Policy, "evaluator": r.GetEvaluatorRef()})
 			if body != nil {
 				events = append(events, langfuseEvent{ID: newEventID(), Type: "score-create", Timestamp: now, Body: body})

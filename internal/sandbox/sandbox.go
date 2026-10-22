@@ -181,6 +181,10 @@ type Config struct {
 	// bubblewrap and Firecracker rungs; the pod rung's images are pulled by
 	// the kubelet, where cluster admission policy applies).
 	ImageSignatures *SignaturePolicy `json:"image_signatures,omitempty"`
+	// Accept images from local sources (dir:, oci-layout:, docker-archive:)
+	// named in a request, which read host paths. Default: refused. With
+	// image_signatures, its allow_local decides instead.
+	AllowLocalImages bool `json:"allow_local_images,omitempty"`
 }
 
 // Defaults for requests that leave limits unset.
@@ -321,6 +325,7 @@ func New(cfg Config) (*Sandbox, error) {
 		}
 	}
 	s := &Sandbox{cfg: cfg, min: min, probes: map[string]error{}, warnings: map[string]string{}, images: newImageStore(filepath.Join(cfg.CacheDir, "images"))}
+	s.images.allowLocal = cfg.AllowLocalImages
 	if cfg.ImageSignatures != nil {
 		v, err := newSignatureVerifier(cfg.ImageSignatures)
 		if err != nil {

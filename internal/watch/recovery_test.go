@@ -161,9 +161,55 @@ func TestRecoveryWaitsForResultHandoff(t *testing.T) {
 		t.Fatalf("failed handoff acknowledged: %v %v", pending, err)
 	}
 	h.e.opts.OnResults = nil
+	h.e.now = func() time.Time { return time.Now().Add(time.Hour) } // past the handoff backoff
 	h.e.recoverPending(ctx)
 	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
 		t.Fatalf("ready work not acknowledged: %v %v", pending, err)
+	}
+}
+
+// A failing result handoff must not re-run paid evaluators or re-count
+// statistics on each recovery tick; only the handoff is retried, with backoff.
+func TestFailedResultHandoffRetriesWithoutReevaluating(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := h.e.Apply(ctx, &evalsiv1alpha1.OnlineEvalPolicy{Name: "deep", Stages: []*evalsiv1alpha1.CascadeStage{{Evaluators: refs("test/deep")}}}); err != nil {
+		t.Fatal(err)
+	}
+	handoffs := 0
+	fail := true
+	h.e.opts.OnResults = func(context.Context, string, *evalsiv1alpha1.Record, ingest.TraceInfo, []*evalsiv1alpha1.EvaluationResult) error {
+		handoffs++
+		if fail {
+			return fmt.Errorf("runner busy")
+		}
+		return nil
+	}
+	h.e.Ingest(trace(5, "studio", "good", false))
+	for range 5 {
+		h.e.recoverPending(ctx)
+	}
+	if h.worker.deepCalls != 1 || handoffs != 1 {
+		t.Fatalf("evaluator calls=%d handoffs=%d, want 1 and 1 (backoff)", h.worker.deepCalls, handoffs)
+	}
+	later := time.Now().Add(10 * time.Second)
+	h.e.now = func() time.Time { return later }
+	h.e.recoverPending(ctx)
+	if h.worker.deepCalls != 1 || handoffs != 2 {
+		t.Fatalf("after backoff: evaluator calls=%d handoffs=%d, want 1 and 2", h.worker.deepCalls, handoffs)
+	}
+	fail = false
+	later = later.Add(20 * time.Second)
+	h.e.recoverPending(ctx)
+	st, _ := h.e.LocalStats("deep")
+	if h.worker.deepCalls != 1 || st.TracesSeen != 1 || st.TracesEvaluated != 1 || st.Metrics[0].N != 1 {
+		t.Fatalf("calls=%d seen=%d evaluated=%d window n=%d, want 1 each", h.worker.deepCalls, st.TracesSeen, st.TracesEvaluated, st.Metrics[0].N)
+	}
+	if pending, err := h.st.ListWatchPending(ctx, 10); err != nil || len(pending) != 0 {
+		t.Fatalf("delivered work not acknowledged: %v %v", pending, err)
+	}
+	if len(h.e.handoffs) != 0 {
+		t.Fatalf("handoff state leaked: %d", len(h.e.handoffs))
 	}
 }
 

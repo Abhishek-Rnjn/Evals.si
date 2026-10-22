@@ -162,6 +162,9 @@ func New(ctx context.Context, st *store.Store, worker pluginhost.Worker, engine 
 	for _, run := range stale {
 		run.Status = evalsiv1alpha1.RunStatus_RUN_STATUS_ERROR
 		run.Error = "the server stopped while this run was in progress; resume it to continue"
+		// Without it retention would age the run from CreatedAt and could
+		// delete one resumed days after creation on its first pass.
+		run.FinishedAt = timestamppb.New(opts.Now())
 		if err := st.UpdateRun(ctx, run); err != nil {
 			return nil, err
 		}
@@ -762,6 +765,11 @@ func (m *Manager) execute(ctx context.Context, id string, a *activeRun) {
 	run, err := m.store.GetRun(context.Background(), id)
 	if err != nil {
 		m.log.Error("run vanished", "run", id, "err", err)
+		return
+	}
+	// A listing taken before the run finished (cluster adopt) can start it
+	// again; a finished run must not be re-executed.
+	if terminal(run.GetStatus()) {
 		return
 	}
 	finish := func(status evalsiv1alpha1.RunStatus, msg string) {

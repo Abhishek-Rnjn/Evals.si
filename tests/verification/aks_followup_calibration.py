@@ -58,15 +58,17 @@ def labelled_rows(source: Path) -> list[dict]:
     rows = []
     for index, case in enumerate(cases):
         first = json.loads((source / "refund-baseline" / f"{case}.0.record.json").read_text())
+        trials = [
+            json.loads((source / "refund-baseline" / f"{case}.{trial}.record.json").read_text())
+            for trial in (0, 1)
+        ]
         variants = [
             (
-                json.loads(
-                    (source / "refund-baseline" / f"{case}.{trial}.record.json").read_text()
-                )["output"],
-                True,
+                trial["output"],
+                bool(trial.get("check") and trial["check"]["passed"]),
                 "frozen-live-output",
             )
-            for trial in (0, 1)
+            for trial in trials
         ] + [
             (
                 {"text": text},

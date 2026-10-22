@@ -99,6 +99,11 @@ func (val Validator) Handle(ctx context.Context, req admission.Request) admissio
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
+	// A deleting object can only change metadata (finalizer removal); denying
+	// it would hang deletion, e.g. after a project mapping was removed.
+	if req.Operation == admissionv1.Update && obj.GetDeletionTimestamp() != nil {
+		return admission.Allowed("")
+	}
 	raw, err := specOf(obj)
 	if err != nil {
 		return admission.Denied(err.Error())

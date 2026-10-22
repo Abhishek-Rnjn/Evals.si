@@ -230,6 +230,10 @@ func (a *Agent) Exec(ctx context.Context, req *connect.Request[guestv1alpha1.Exe
 		if st, ok := exit.Sys().(syscall.WaitStatus); ok && st.Signaled() {
 			res.ExitCode = 128 + int32(st.Signal())
 		}
+	case errors.Is(runErr, fs.ErrNotExist) && missingDir(cmd.Dir):
+		// fork/exec reports a failed chdir as the same ENOENT as a missing binary.
+		res.ExitCode, res.Error = 126, fmt.Sprintf("working directory not found: %s", cwd)
+		_, _ = errw.Write([]byte("sandbox: " + res.Error + "\n"))
 	case errors.Is(runErr, exec.ErrNotFound), errors.Is(runErr, fs.ErrNotExist):
 		res.ExitCode, res.Error = 127, fmt.Sprintf("command not found: %s", argv[0])
 		_, _ = errw.Write([]byte("sandbox: command not found: " + argv[0] + "\n"))
@@ -385,6 +389,9 @@ func (a *Agent) ReadFiles(_ context.Context, req *connect.Request[guestv1alpha1.
 			})
 		} else if fi.Mode().IsRegular() {
 			full, err = add(r, p)
+		} else {
+			// A symlink or special file is never followed; say it was not read.
+			out.Missing = append(out.Missing, p)
 		}
 		if err != nil {
 			return nil, err
@@ -443,13 +450,30 @@ func (a *Agent) StartEgress(_ context.Context, req *connect.Request[guestv1alpha
 				}
 				defer up.Close()
 				done := make(chan struct{}, 2)
-				go func() { _, _ = io.Copy(up, c); done <- struct{}{} }()
-				go func() { _, _ = io.Copy(c, up); done <- struct{}{} }()
+				// A client that finished sending still waits for the reply, so
+				// each direction ends with a half-close, as sandbox.Forward does.
+				go func() { _, _ = io.Copy(up, c); closeWrite(up); done <- struct{}{} }()
+				go func() { _, _ = io.Copy(c, up); closeWrite(c); done <- struct{}{} }()
+				<-done
 				<-done
 			}()
 		}
 	}()
 	return connect.NewResponse(&guestv1alpha1.StartEgressResponse{Listen: ln.Addr().String()}), nil
+}
+
+func missingDir(dir string) bool {
+	_, err := os.Stat(dir)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// closeWrite sends EOF on c; a connection that cannot half-close is closed.
+func closeWrite(c net.Conn) {
+	if hc, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = hc.CloseWrite()
+		return
+	}
+	_ = c.Close()
 }
 
 // Close stops the egress forwarders.

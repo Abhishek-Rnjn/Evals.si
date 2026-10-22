@@ -159,6 +159,11 @@ spec:
               phase:
                 description: Backfilling, Tailing, Paused or Error.
                 type: string
+              project:
+                description: |-
+                  The project the source was last applied to, so a move to another
+                  project (a label edit) removes it from this one.
+                type: string
               pulled:
                 format: int64
                 type: integer

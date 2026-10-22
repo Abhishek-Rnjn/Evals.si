@@ -205,7 +205,14 @@ class OpenAICompatibleTarget:
                     raise TargetError(f"target request failed: {exc}") from exc
             else:
                 if response.status_code < 400:
-                    payload: dict[str, Any] = response.json()
+                    try:
+                        payload = response.json()
+                    except ValueError as exc:
+                        raise TargetError(
+                            f"target returned a non-JSON body: {response.text[:300]}"
+                        ) from exc
+                    if not isinstance(payload, dict):
+                        raise TargetError(f"target returned a non-object body: {payload!r:.300}")
                     return payload
                 if response.status_code not in RETRY_STATUS or attempt == 4:
                     raise TargetError(

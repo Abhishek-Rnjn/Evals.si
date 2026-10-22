@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -264,6 +265,10 @@ def _summarize_metric(
         clusters=clusters,
         method=ci_method,
     )
+    # A non-finite interval (degenerate data) is dropped, as the daemon does;
+    # checked before clipping, which would turn a NaN bound into the clip bound.
+    if ci is not None and not (math.isfinite(ci.low) and math.isfinite(ci.high)):
+        ci = None
     if ci is not None:
         if score_type is ScoreType.PASSED:
             ci = ci.clipped(0.0, 1.0)
@@ -296,7 +301,14 @@ def _cluster_of(record: Record | None, key: str, record_id: str) -> Hashable:
     if record is None or key not in record.metadata:
         return ("record", record_id)  # unclustered records count as their own cluster
     value = record.metadata[key]
-    return value if isinstance(value, Hashable) else json.dumps(value, sort_keys=True)
+    # Type-tagged so "1", 1 and True stay distinct clusters (as in the daemon).
+    if isinstance(value, str):
+        return ("str", value)
+    if isinstance(value, bool):
+        return ("bool", value)
+    if isinstance(value, int | float):
+        return ("num", value)
+    return ("json", json.dumps(value, sort_keys=True))
 
 
 @dataclass

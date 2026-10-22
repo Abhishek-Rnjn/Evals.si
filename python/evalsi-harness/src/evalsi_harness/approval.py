@@ -18,9 +18,10 @@ A rule's ``tool``, ``path`` and ``command`` are globs (see ``call_matches``); it
 ``allow``, ``ask`` or ``deny``. A ``deny`` stops the call with its reason and asks nobody. An
 ``ask`` records a ``hitl_request`` step, the approver answers, and a ``hitl_resolved`` step
 records the answer: ``approve`` runs the call, ``edit`` runs it with the entry's ``arguments``
-merged over the model's, and ``deny`` or ``no-answer`` stops it (the agent sees the reason; a
-``no-answer`` reads as an approver that never replied). An entry with ``times: n`` answers
-at most n requests.
+merged over the model's (an edited call that matches a ``deny`` rule is stopped), and ``deny``
+or ``no-answer`` stops it (the agent sees the reason; a ``no-answer``
+reads as an approver that never replied). An entry with ``times: n`` answers at most n
+requests.
 
 The approver is a script, not a person or a model, so the same run asks the same questions
 and gets the same answers, and a recording replays with no approver involved. The rules and
@@ -145,6 +146,12 @@ class ApprovalGate:
         )
         decision, reason, entry, edit = self._answer(call.name, args)
         final = {**args, **edit} if decision == "edit" and edit else args
+        if decision == "edit":  # an edit cannot reach what a deny rule forbids
+            _, edited_action, edited_why = self._rule(call.name, final)
+            if edited_action == "deny":
+                decision = "deny"
+                reason = edited_why or f"the edited {call.name} call is not allowed by the policy"
+                final = args
         ctx.emit(
             "hitl_resolved",
             request=self.requests,
