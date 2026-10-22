@@ -81,6 +81,8 @@ class ScriptedModelServer:
         # token) instead of a fixed 100, so context management has something real
         # to count.
         self.sized_usage = False
+        # The `model` the server names in its responses (a provider's dated snapshot).
+        self.served_model = ""
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -152,6 +154,8 @@ class ScriptedModelServer:
                         ],
                         "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 20},
                     }
+                if outer.served_model:
+                    payload["model"] = outer.served_model
                 data = json.dumps(payload).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

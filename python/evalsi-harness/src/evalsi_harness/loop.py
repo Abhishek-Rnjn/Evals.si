@@ -109,6 +109,10 @@ class LoopState:
     truncation_retries: int = 0
     # Tokens by the model that used them: input, output, cache reads, cache writes.
     spend: dict[str, list[int]] = field(default_factory=dict)
+    # What the provider named in its responses, by the model asked for (the
+    # determinism record): the ``model`` field, and OpenAI's system_fingerprint.
+    served: dict[str, set[str]] = field(default_factory=dict)
+    fingerprints: dict[str, set[str]] = field(default_factory=dict)
 
 
 def _add(total: Usage, part: Usage) -> None:
@@ -362,6 +366,10 @@ class AgentLoop:
             mine = self.state.spend.setdefault(name, [0, 0, 0, 0])
             for i, n in enumerate(tokens):
                 mine[i] += n
+        for name, names in sub.state.served.items():
+            self.state.served.setdefault(name, set()).update(names)
+        for name, prints in sub.state.fingerprints.items():
+            self.state.fingerprints.setdefault(name, set()).update(prints)
         self.state.subagents += 1
         self.state.subagent_steps += sub.state.steps
 
@@ -572,7 +580,12 @@ class AgentLoop:
         self.state.cache_read_tokens += turn.cache_read_tokens
         self.state.cache_write_tokens += turn.cache_write_tokens
         self.state.reasoning_tokens += turn.reasoning_tokens
-        spent = self.state.spend.setdefault(turn.model or self.model.name, [0, 0, 0, 0])
+        asked = turn.model or self.model.name
+        if turn.response_model:
+            self.state.served.setdefault(asked, set()).add(turn.response_model)
+        if turn.system_fingerprint:
+            self.state.fingerprints.setdefault(asked, set()).add(turn.system_fingerprint)
+        spent = self.state.spend.setdefault(asked, [0, 0, 0, 0])
         spent[0] += turn.usage.input_tokens or 0
         spent[1] += turn.usage.output_tokens or 0
         spent[2] += turn.cache_read_tokens

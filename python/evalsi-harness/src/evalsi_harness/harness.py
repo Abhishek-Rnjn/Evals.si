@@ -27,6 +27,7 @@ from evalsi.run import target_config
 from evalsi.sandbox import SandboxError
 from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
+from evalsi_harness import determinism
 from evalsi_harness._version import __version__
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
@@ -177,6 +178,10 @@ class LiveTask:
     # setup): naming one of these is probing. One the sandbox already had may be run.
     checker_hidden: list[str] = field(default_factory=list)
     diff_baseline: str | None = None
+    # The agent loop, for what it learned of the models that served the run, and the
+    # MCP servers connected (name, client), for the determinism record.
+    loop: Any = None
+    mcp_servers: list[tuple[str, Any]] = field(default_factory=list)
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -581,6 +586,7 @@ class BuiltinHarness:
                 elicit=elicit,
             )
             live.closers.append(client.aclose)
+            live.mcp_servers.append((server.name, client))
             for spec in await client.list_tools():
                 if server.tools and spec.name not in server.tools:
                     continue
@@ -802,6 +808,7 @@ class BuiltinHarness:
             compaction_model=roles["compaction_model"],
             subagent_model=roles["subagent_model"],
         )
+        live.loop = loop
         conversation = await self._conversation(live, user, emit)
         try:
             return await loop.run(conversation)
@@ -897,7 +904,51 @@ class BuiltinHarness:
             out["checker_files"] = sorted(live.checker_hidden)
         if live.checker_isolation:
             out["checker_isolation"] = live.checker_isolation
+        out["determinism"] = self._determinism(live)
         return out
+
+    def _determinism(self, live: LiveTask) -> dict[str, Any]:
+        """The run's determinism record (see determinism.py)."""
+        task, c = live.task, self.config
+        spec = task.spec
+        target = spec.target if spec.HasField("target") else None
+        temperature = (
+            target.temperature if target is not None and target.HasField("temperature") else None
+        )
+        seeds: dict[str, Any] = {
+            "temperature": temperature,
+            "user_simulator": f"{task.id}#{task.trial}" if c.HasField("user_simulator") else None,
+            "fault_injection": f"{task.id}:{task.trial}" if c.tools.faults else None,
+        }
+        state = live.loop.state if live.loop is not None else None
+        harness: dict[str, Any] = {
+            "name": "evalsi-harness",
+            "version": __version__,
+            "context": self._context(live).describe(),
+            "tools": sorted(c.tools.builtin),
+        }
+        if self.profile is not None:
+            harness["profile"] = self.profile.ident
+        if c.recording.mode not in ("", "off"):
+            harness["recording"] = c.recording.mode
+        env, config = live.env, task.environment
+        image: dict[str, Any] = {}
+        if env is not None:
+            image = {
+                "name": config.image if config is not None else "",
+                "digest": getattr(env.sandbox, "image_digest", "") or "",
+                "isolation": env.isolation.to_dict(),
+            }
+        return determinism.build(
+            seeds=seeds,
+            models=determinism.served_models(
+                state.served if state is not None else {},
+                state.fingerprints if state is not None else {},
+            ),
+            harness=harness,
+            mcp_servers={n: dict(m.server_info) for n, m in live.mcp_servers if m.server_info},
+            image=image,
+        )
 
     async def teardown(self, handle: str) -> None:
         live = self._live.pop(handle, None)
