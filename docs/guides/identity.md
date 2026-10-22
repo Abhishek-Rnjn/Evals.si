@@ -357,9 +357,14 @@ Every hop can run over mutual TLS with certificates from your CA (cert-manager, 
       key:partner: {api: {per_second: 5, burst: 20}}
       key:otel: {ingest: {per_second: 0}}         # 0: no limit
     # disabled: true
+    # shared: true                                # count across replicas (below)
   ```
 
   Set `per_second` and `burst` together: a field left out keeps its default.
+
+  The rates, `principals` and `disabled: true` are reloaded with the config file (every 15 seconds, or at once on SIGHUP), and existing buckets keep the tokens they hold. Turning on limits that were off at start, and the `shared` settings, need a restart.
+
+  Limits are per replica, so N replicas allow up to N times the rate. With `shared: true`, replicas also count each caller's calls in the database (PostgreSQL with several replicas): in each `shared_window` (default `1s`) a caller gets at most `burst + per_second x window` calls of a class across all replicas. The database is not on the request path. Each replica syncs its counts every `shared_sync_interval` (default `250ms`), so between syncs the replicas together can pass the cap by what each admits in one interval. If the database fails, each replica falls back to its own buckets until it answers again: `evalsi_rate_limit_shared_fallback` is 1 meanwhile, and `evalsi_rate_limit_shared_errors_total` counts failed syncs ([decision 0036](../decisions/0036-shared-rate-limits.md)).
 - **Metrics.** `/metrics` on the main port needs `metrics.read` (owners). Or serve it unauthenticated on a loopback listener with `metrics: {listen: 127.0.0.1:9464}`.
 - **External authorization.** A central policy engine can decide too:
 

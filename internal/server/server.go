@@ -169,7 +169,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	auditConfig(ctx, auditor, "config.load", map[string]any{"sections": configSections(cfg)})
 	creds.OnDenied(func(ctx context.Context, d credentials.Denial) { auditDenial(ctx, auditor, d) })
 	hooks := webhooks.New(st, webhooks.Options{
-		SSRFGuard: cfg.Webhooks.SSRFGuard, AllowHosts: cfg.Webhooks.AllowHosts,
+		SSRFGuard: cfg.Webhooks.GuardEnabled(), AllowHosts: cfg.Webhooks.AllowHosts,
 		Logger: log, MaxAttempts: cfg.Webhooks.MaxAttempts,
 		Timeout: optDuration(cfg.Webhooks.Timeout), Retention: optDuration(cfg.Webhooks.Retention),
 	})
@@ -294,9 +294,12 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	go func() { defer wg.Done(); retain(bg, st, config.Duration(cfg.Traces.Retention), log) }()
 	go func() { defer wg.Done(); auditor.Retain(bg, cfg.Audit.RetentionDuration()) }()
 	go func() { defer wg.Done(); pruneIdempotency(bg, st, log) }()
+	limits := newLimiter(cfg, log)
+	wg.Add(1)
+	go func() { defer wg.Done(); limits.runShared(bg, st) }()
 	if cfg.Reload != nil {
 		wg.Add(1)
-		go func() { defer wg.Done(); reloadCredentials(bg, cfg, creds, watcher, auditor, log) }()
+		go func() { defer wg.Done(); reloadConfig(bg, cfg, creds, watcher, limits, auditor, log) }()
 	}
 	defer func() {
 		close(stopAssembler) // flushes buffered traces into the engine
@@ -329,7 +332,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		go func() { defer wg.Done(); reconcileAuthz(bg, engine, log) }()
 	}
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, svc.EffectiveJudge, log)
-	g.limits = newLimiter(cfg, log)
+	g.limits = limits
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
 	if cfg.Rewards.SharedCache {
 		rewardSvc.UseSharedCache(st, log)

@@ -15,6 +15,7 @@ import (
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evals.si/internal/config"
 	"github.com/abhishek-rnjn/evals.si/internal/webhooks"
 	"google.golang.org/protobuf/proto"
 )
@@ -22,7 +23,8 @@ import (
 // A run whose gate fails delivers run.finished and run.gate_failed to a
 // webhook applied over REST, signed with the secret the apply returned.
 func TestWebhooks(t *testing.T) {
-	e := start(t)
+	// The receiver is on 127.0.0.1, which the webhook guard refuses unless listed.
+	e := start(t, func(c *config.Config) { c.Webhooks.AllowHosts = []string{"127.0.0.1"} })
 	ctx := context.Background()
 
 	var mu sync.Mutex

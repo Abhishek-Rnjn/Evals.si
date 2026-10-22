@@ -40,16 +40,18 @@ const bucketIdle = 10 * time.Minute
 // limiter keeps a token bucket per caller and class (config.RateLimits). The
 // middleware takes one token per HTTP request, so a stream costs one call,
 // and stores a refusal on the request; gate.authenticate returns it, in the
-// error form of the caller's protocol.
+// error form of the caller's protocol. With rate_limits.shared, a caller's
+// calls are also counted across replicas (sharedCounts).
 type limiter struct {
-	cfg config.RateLimits
 	log *slog.Logger
 	now func() time.Time
 
 	mu      sync.Mutex
+	cfg     config.RateLimits // replaced by update on a config reload
 	buckets map[bucketKey]*bucket
 	swept   time.Time
 	limited map[string]*atomic.Int64
+	shared  *sharedCounts // nil unless rate_limits.shared was set at start
 }
 
 type bucketKey struct{ class, caller string }
@@ -70,10 +72,36 @@ func newLimiter(cfg config.Config, log *slog.Logger) *limiter {
 	for _, c := range rateClasses {
 		l.limited[c] = &atomic.Int64{}
 	}
+	if cfg.RateLimits.Shared {
+		l.shared = newSharedCounts(cfg.RateLimits, log)
+	}
 	return l
 }
 
+// update applies reloaded settings. Existing buckets take the new rate and
+// size at once, keeping the tokens they hold (up to the new size), so a
+// reload neither refills nor drains them.
+func (l *limiter) update(cfg config.RateLimits) {
+	if l == nil {
+		return
+	}
+	now := l.now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.cfg = cfg
+	for k, b := range l.buckets {
+		r := l.rateFor(k.class, k.caller)
+		if r.PerSecond <= 0 {
+			delete(l.buckets, k)
+			continue
+		}
+		b.lim.SetLimitAt(now, rate.Limit(r.PerSecond))
+		b.lim.SetBurstAt(now, r.Burst)
+	}
+}
+
 // rateFor is a caller's rate for a class: its override, else the default.
+// The caller holds l.mu.
 func (l *limiter) rateFor(class, caller string) config.Rate {
 	r, o := l.cfg.API, l.cfg.Principals[caller]
 	override := o.API
@@ -91,13 +119,13 @@ func (l *limiter) rateFor(class, caller string) config.Rate {
 
 // take spends one token. When none is left it reports how long until one is.
 func (l *limiter) take(class, caller string) (time.Duration, bool) {
-	r := l.rateFor(class, caller)
-	if r.PerSecond <= 0 {
-		return 0, true
-	}
 	now := l.now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	r := l.rateFor(class, caller)
+	if l.cfg.Disabled || r.PerSecond <= 0 {
+		return 0, true
+	}
 	if now.Sub(l.swept) >= time.Minute {
 		for k, b := range l.buckets {
 			if now.Sub(b.seen) >= bucketIdle && b.lim.TokensAt(now) >= float64(b.lim.Burst()) {
@@ -116,7 +144,15 @@ func (l *limiter) take(class, caller string) (time.Duration, bool) {
 	res := b.lim.ReserveN(now, 1)
 	wait := res.DelayFrom(now)
 	if res.OK() && wait == 0 {
-		return 0, true
+		if l.shared == nil {
+			return 0, true
+		}
+		// The replica's bucket allows it; the cluster's window may not.
+		swait, ok := l.shared.take(class+"|"+caller, r, now)
+		if ok {
+			return 0, true
+		}
+		wait = swait
 	}
 	res.CancelAt(now)
 	if !res.OK() {
@@ -128,6 +164,14 @@ func (l *limiter) take(class, caller string) (time.Duration, bool) {
 		l.log.Warn("rate limit exceeded", "caller", caller, "class", class, "per_second", r.PerSecond, "burst", r.Burst)
 	}
 	return wait, false
+}
+
+// runShared syncs the shared counts with the store until ctx ends.
+func (l *limiter) runShared(ctx context.Context, st rateStore) {
+	if l == nil || l.shared == nil {
+		return
+	}
+	l.shared.run(ctx, st)
 }
 
 // rateClass is the class of a request path; "" for routes that are open or
@@ -204,4 +248,5 @@ func (l *limiter) writeMetrics(w io.Writer) {
 	for _, c := range rateClasses {
 		fmt.Fprintf(w, "%s{class=%q} %d\n", name, c, l.limited[c].Load())
 	}
+	l.shared.writeMetrics(w)
 }

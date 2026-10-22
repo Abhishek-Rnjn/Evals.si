@@ -119,9 +119,12 @@ type Rewards struct {
 // Webhooks tunes delivery of the events projects subscribe to through the
 // WebhookService.
 type Webhooks struct {
-	// Opt in to the same endpoint and DNS guard used for trace sources.
-	SSRFGuard bool `json:"ssrf_guard,omitempty"`
-	// Explicit exceptions for trusted internal webhook receivers.
+	// The endpoint and DNS guard trace sources use: a webhook URL must be
+	// https to a public address unless its host is in AllowHosts. On unless
+	// set to false (it was opt-in before v0.4).
+	SSRFGuard *bool `json:"ssrf_guard,omitempty"`
+	// Trusted internal or plain-HTTP webhook receivers (exact, or *.domain,
+	// such as *.studio.svc.cluster.local).
 	AllowHosts []string `json:"allow_hosts,omitempty"`
 	// Attempts per delivery before it is marked failed (default 6, spread
 	// over about 80 minutes).
@@ -131,6 +134,9 @@ type Webhooks struct {
 	// How long finished deliveries are kept for inspection (default 168h).
 	Retention string `json:"retention,omitempty"`
 }
+
+// GuardEnabled reports whether webhook URLs are guarded (the default).
+func (w Webhooks) GuardEnabled() bool { return w.SSRFGuard == nil || *w.SSRFGuard }
 
 // Sources configures trace sources: stores such as MLflow that Evals.si pulls
 // traces from and writes scores to (decision 0016).
@@ -150,9 +156,22 @@ type Sources struct {
 // RateLimits throttle each caller, per evalsid replica: an API key, a user,
 // or, where authentication is optional, an anonymous source address. Each
 // class of traffic has its own token bucket, and a stream counts as one call.
-// They apply only while authentication is enabled.
+// They apply only while authentication is enabled. A config reload applies
+// changed rates and principals, and disabled: true; turning on limits that
+// were off at start, and the shared settings, need a restart.
 type RateLimits struct {
 	Disabled bool `json:"disabled,omitempty"`
+	// Also count each caller's calls across replicas, in the database, so
+	// that N replicas do not allow N times the rate: in each window a caller
+	// gets at most burst + per_second * window calls of a class, all
+	// replicas together. Replicas sync their counts every SharedSync; while
+	// the database fails, each replica falls back to its own buckets
+	// (evalsi_rate_limit_shared_fallback).
+	Shared bool `json:"shared,omitempty"`
+	// The shared window (default 1s) and how often counts are synced
+	// (default 250ms). Every replica must use the same window.
+	SharedWindow string `json:"shared_window,omitempty"`
+	SharedSync   string `json:"shared_sync_interval,omitempty"`
 	// RPCs and REST calls other than ingest and guardrail checks.
 	API Rate `json:"api"`
 	// OTLP trace exports, over gRPC and HTTP.
@@ -195,6 +214,14 @@ func (l RateLimits) validate() []error {
 			if err := r.validate(name); err != nil {
 				errs = append(errs, err)
 			}
+		}
+	}
+	for name, v := range map[string]string{"rate_limits.shared_window": l.SharedWindow, "rate_limits.shared_sync_interval": l.SharedSync} {
+		if v == "" {
+			continue
+		}
+		if d, err := time.ParseDuration(v); err != nil || d < 10*time.Millisecond {
+			errs = append(errs, fmt.Errorf("%s must be a duration of at least 10ms, got %q", name, v))
 		}
 	}
 	check("rate_limits.api", &l.API)
@@ -588,6 +615,11 @@ func (c Config) Validate() error {
 	for i, h := range c.Sources.AllowHosts {
 		if !sourceHostRE.MatchString(h) {
 			errs = append(errs, fmt.Errorf("sources.allow_hosts[%d]: %q is not a lowercase host name or *.domain", i, h))
+		}
+	}
+	for i, h := range c.Webhooks.AllowHosts {
+		if !sourceHostRE.MatchString(h) {
+			errs = append(errs, fmt.Errorf("webhooks.allow_hosts[%d]: %q is not a lowercase host name or *.domain", i, h))
 		}
 	}
 	if c.Sources.MaxRecordsPerSecond < 0 {

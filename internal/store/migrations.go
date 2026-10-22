@@ -34,7 +34,7 @@ type migration struct {
 // allSchemas is every table the store creates, for step 1.
 const allSchemas = schema + authSchema + leaseSchema + quotaSchema + sandboxSchema + rewardCacheSchema +
 	annotationSchema + failureSchema + datasetCatalogSchema + releaseDecisionSchema + guardrailSchema + webhookSchema + sourceSchema +
-	idempotencySchema + watchPendingSchema
+	idempotencySchema + watchPendingSchema + rateWindowSchema
 
 // migrations are the store's schema steps, oldest first. Append; never
 // reorder, renumber or edit a released step.
