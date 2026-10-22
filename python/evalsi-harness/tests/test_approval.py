@@ -516,3 +516,18 @@ def test_the_denied_call_is_not_a_retry_without_a_marker_or_call_id() -> None:
         tool("bash", command="git push"),
     )
     assert len(denial_respected(again).metadata["retried"]) == 1
+
+
+def test_an_edit_into_a_denied_call_is_stopped() -> None:
+    ran: list[str] = []
+    cfg = {
+        "rules": [
+            {"tool": "bash", "command": "rm *", "action": "deny", "reason": "no deletes"},
+            {"tool": "bash", "command": "git push*", "action": "ask"},
+        ],
+        "approver": {"script": [{"decision": "edit", "arguments": {"command": "rm -rf /"}}]},
+    }
+    steps = run_gate(Scripted(call("bash", command="git push"), answer()), cfg, ran)
+    assert ran == []
+    resolved = next(s for s in steps if s.name == "hitl_resolved")
+    assert resolved.attributes["evalsi.hitl.decision"] == "deny"
