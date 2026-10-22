@@ -313,6 +313,21 @@ class Client:
         )["run"]
         return run
 
+    def create_sweep(
+        self,
+        spec: dict[str, Any],
+        *,
+        name: str = "",
+        project: str = "",
+        labels: dict[str, str] | None = None,
+        idempotency_key: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Create the runs of a spec with ``sweep``: one per harness variant, in order."""
+        body = {"name": name, "project": project, "spec": spec, "labels": labels or {}}
+        response = self.call("RunService", "CreateRun", body, idempotency_key=idempotency_key)
+        runs: list[dict[str, Any]] = response.get("sweep_runs") or [response["run"]]
+        return runs
+
     def log_run(
         self,
         result: EvalResult,
