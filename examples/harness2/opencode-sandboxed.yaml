@@ -6,12 +6,11 @@
 # allowed it will not start. Add them below or pre-seed both in the image.
 #
 # The OpenCode CLI as a bring-your-own CLI agent inside the task's sandbox, with a
-# per-host network allowlist. Known gap: there is no OpenCode reader in
-# `output_format` (the available formats are dsh-json, claude-stream-json,
-# codex-json, gemini-json and pi-json), so the agent's standard output is its
-# answer and the run has NO steps. Evaluators that need a trajectory
-# (tool-errors, loop-detection) therefore have nothing to score here;
-# task-success, policy-violations and agent-efficiency (wall time) still work.
+# per-host network allowlist. `--format json` with `output_format: opencode-json`
+# reads OpenCode's run events into model-call and tool-call steps with tokens
+# and cost, so tool-errors and loop-detection have a trajectory to score. The
+# reader was checked against a recorded opencode 1.19.3 stream driven by a
+# scripted model server, not a live model.
 #
 # Fill in before running: REPLACE_WITH_PINNED_VERSION, the model (provider/model),
 # the model host in allow_hosts, OPENCODE_API_KEY on the worker, and the dataset.
@@ -38,6 +37,9 @@ spec:
           - "{instruction}"
           - --model
           - REPLACE_WITH_PROVIDER/MODEL
+          - --format
+          - json
+        output_format: opencode-json
         install:
           - npm install -g opencode-ai@REPLACE_WITH_PINNED_VERSION
         # The variable name your provider reads (for example ANTHROPIC_API_KEY).

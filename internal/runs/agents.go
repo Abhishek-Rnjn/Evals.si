@@ -60,7 +60,7 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 			return invalid("spec.target.agent.cli.command is required")
 		}
 		if f := agent.GetCli().GetOutputFormat(); !cliOutputFormats[f] {
-			return invalid("spec.target.agent.cli.output_format %q is not one of dsh-json, claude-stream-json, codex-json, gemini-json, pi-json", f)
+			return invalid("spec.target.agent.cli.output_format %q is not one of dsh-json, claude-stream-json, codex-json, gemini-json, pi-json, opencode-json", f)
 		}
 	case agent != nil:
 		return invalid("spec.target.agent needs one of a2a, mcp, responses, http or cli")
@@ -365,6 +365,7 @@ var cliOutputFormats = map[string]bool{
 	"codex-json":         true,
 	"gemini-json":        true,
 	"pi-json":            true,
+	"opencode-json":      true,
 }
 
 // maxInterjections bounds the scripted mid-run user messages.
