@@ -74,3 +74,36 @@ func TestPermissiveForgedTokenGetsNoCELRoles(t *testing.T) {
 		t.Fatalf("forged token read a run through a cel: binding: %s", body)
 	}
 }
+
+func TestReleaseDecisionMissingRunIndistinguishableFromForbidden(t *testing.T) {
+	s := startAuthServer(t, nil)
+	created, err := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys["owner"])).
+		CreateRun(t.Context(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "support", Name: "r", Spec: runSpec("qwen3")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel := evalsiv1alpha1connect.NewReleaseServiceClient(s.http, s.url, as(s.keys["checkout-viewer"]))
+	for _, id := range []string{created.Msg.GetRun().GetId(), "run-doesnotexist"} {
+		_, err := rel.CreateReleaseDecision(t.Context(), connect.NewRequest(&evalsiv1alpha1.CreateReleaseDecisionRequest{
+			Candidate: &evalsiv1alpha1.ReleaseRunEvidenceRef{RunId: id}, Baseline: &evalsiv1alpha1.ReleaseRunEvidenceRef{RunId: id},
+		}))
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("CreateReleaseDecision(%q) = %v, want PermissionDenied", id, err)
+		}
+	}
+}
+
+func TestUnknownProjectIsPermissionDenied(t *testing.T) {
+	s := startAuthServer(t, func(cfg *config.Config) { cfg.DatasetsDir = t.TempDir() })
+	for _, who := range []string{"runner", "owner"} {
+		_, err := evalsiv1alpha1connect.NewRunServiceClient(s.http, s.url, as(s.keys[who])).
+			CreateRun(t.Context(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "ghost", Spec: runSpec("qwen3")}))
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("%s CreateRun in unknown project = %v, want PermissionDenied", who, err)
+		}
+	}
+	code, body, _ := s.rest(t, s.keys["owner"], "POST", "/v1alpha1/datasets/test/upload?project=ghost&format=jsonl", "{}\n")
+	if code != http.StatusForbidden {
+		t.Errorf("upload to unknown project = %d %s, want 403", code, body)
+	}
+}
