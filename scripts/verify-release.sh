@@ -2,7 +2,7 @@
 # Verifies a release's signatures: the images and the OCI charts were signed by
 # this repository's release workflow (keyless cosign, GitHub's OIDC identity).
 #
-#   scripts/verify-release.sh 0.3.0 [owner]
+#   scripts/verify-release.sh 0.3.1 [owner]
 #
 # Needs cosign (on macOS: brew install cosign) and network access to GHCR and to
 # Sigstore's trust root. Prints what it checked; exits non-zero on the first failure.

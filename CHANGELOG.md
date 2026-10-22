@@ -4,6 +4,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-22
+
 ### Upgrade notes
 
 These come from the 22 October deep review ([bug report](docs/reviews/2026-10-22-deep-review/bug-report.md)) and can break existing setups:
@@ -329,7 +331,8 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.
 
-[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.1.0
