@@ -450,3 +450,34 @@ func TestExtMcp(t *testing.T) {
 		t.Errorf("no guardrail named: %v", err)
 	}
 }
+
+func TestRedactionSalvagesEmbeddedValues(t *testing.T) {
+	rules, err := compileRedact([]*evalsiv1alpha1.RedactRule{{Builtin: "credit-card"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone, err := compileRedact([]*evalsiv1alpha1.RedactRule{{Builtin: "phone"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	card := "4111" + "1111" + "1111" + "1111"
+	spaced := "4111 1111 1111 1111"
+	for in, want := range map[string]string{
+		"card " + card + " 12/25":   "card <CREDIT_CARD> 12/25",
+		"card " + card + " 123 now": "card <CREDIT_CARD> 123 now",
+		"card " + spaced + " 12/25": "card <CREDIT_CARD> 12/25",
+	} {
+		counts := map[string]int64{}
+		got := in
+		for _, r := range rules {
+			got = r.apply(got, counts)
+		}
+		if got != want {
+			t.Errorf("%q: got %q, want %q", in, got, want)
+		}
+	}
+	counts := map[string]int64{}
+	if got := phone[0].apply("call +1 415 555 2671 1234 5678", counts); got != "call <PHONE> 5678" || counts["phone"] != 1 {
+		t.Errorf("phone: got %q %v", got, counts)
+	}
+}

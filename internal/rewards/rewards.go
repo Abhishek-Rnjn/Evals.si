@@ -425,7 +425,7 @@ func componentResult(c *evalsiv1alpha1.RewardComponent, r *evalsiv1alpha1.Evalua
 	default:
 		return errorResult(fmt.Sprintf("metric %q is not numeric", score.GetName()))
 	}
-	if math.IsNaN(v) {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
 		return errorResult(fmt.Sprintf("metric %q is not numeric", score.GetName()))
 	}
 	return &evalsiv1alpha1.RewardComponentResult{Status: evalsiv1alpha1.RewardComponentStatus_REWARD_COMPONENT_STATUS_SCORED, Value: proto.Float64(v)}

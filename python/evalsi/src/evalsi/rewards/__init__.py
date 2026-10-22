@@ -399,7 +399,7 @@ def _component_result(
         if score is None:
             return ComponentResult("error", reason=f"no metric {component.metric!r}")
     value = score.numeric()
-    if value is None or math.isnan(value):
+    if value is None or not math.isfinite(value):
         return ComponentResult("error", reason=f"metric {score.name!r} is not numeric")
     return ComponentResult("scored", value=value)
 
