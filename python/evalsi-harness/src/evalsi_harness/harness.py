@@ -27,6 +27,7 @@ from evalsi.run import target_config
 from evalsi.sandbox import SandboxError
 from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
+from evalsi_harness import workspace
 from evalsi_harness._version import __version__
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
@@ -168,6 +169,8 @@ class LiveTask:
     # setup): naming one of these is probing. One the sandbox already had may be run.
     checker_hidden: list[str] = field(default_factory=list)
     diff_baseline: str | None = None
+    # The files under metadata.grading.workspace.paths, for a judge (workspace.py).
+    workspace_files: dict[str, Any] | None = None
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -784,6 +787,13 @@ class BuiltinHarness:
         env_config = live.task.environment
         if live.env is not None:
             live.diff = await capture_diff(live.env)
+            # Before the checker, which may change or remove the agent's files.
+            try:
+                wanted = workspace.paths_of(live.task.record.metadata)
+            except ValueError as exc:
+                raise TaskError(str(exc)) from exc
+            if wanted:
+                live.workspace_files = await workspace.collect(live.env, wanted)
         if live.env is None or env_config is None or env_config.checker is None:
             return None
         parser = env_config.checker.parser
@@ -853,6 +863,8 @@ class BuiltinHarness:
             out["checker_files"] = sorted(live.checker_hidden)
         if live.checker_isolation:
             out["checker_isolation"] = live.checker_isolation
+        if live.workspace_files is not None:
+            out["workspace_files"] = live.workspace_files
         return out
 
     async def teardown(self, handle: str) -> None:

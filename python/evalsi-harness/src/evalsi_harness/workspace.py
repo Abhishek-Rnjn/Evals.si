@@ -53,8 +53,9 @@ MAX_TOTAL_CHARS = 120_000
 MAX_MEMBER_BYTES = 32 << 20
 
 TEXT_EXTENSIONS = frozenset(
-    ".txt .md .markdown .rst .csv .tsv .json .jsonl .yaml .yml .toml .ini .xml .html .htm "
-    ".tex .log .sql .py .js .ts .r .sh .ipynb".split()
+    {".txt", ".md", ".markdown", ".rst", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml"}
+    | {".toml", ".ini", ".xml", ".html", ".htm", ".tex", ".log", ".sql", ".py", ".js", ".ts"}
+    | {".r", ".sh", ".ipynb"}
 )
 OFFICE = {".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx"}
 
@@ -211,9 +212,9 @@ async def collect(env: TaskEnvironment, paths: Sequence[str]) -> dict[str, Any]:
         return out
     entries: list[tuple[int, str]] = []
     for line in listing.stdout.splitlines():
-        size, sep, path = line.partition("\t")
+        digits, sep, path = line.partition("\t")
         if sep and path:
-            entries.append((int(size) if size.isdigit() else -1, path.removeprefix("./")))
+            entries.append((int(digits) if digits.isdigit() else -1, path.removeprefix("./")))
     if len(entries) > MAX_FILES:
         out["more_files"] = True
         entries = entries[:MAX_FILES]
