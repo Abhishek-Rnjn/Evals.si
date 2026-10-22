@@ -28,7 +28,14 @@ func (f *fakeSystem) SetTime(t time.Time) error { f.clock = t; return nil }
 
 func serve(t *testing.T, a *Agent) guestv1alpha1connect.GuestAgentServiceClient {
 	t.Helper()
-	sock := filepath.Join(t.TempDir(), "guest.sock")
+	// Not t.TempDir: with a long test name its path passes macOS's 104-byte
+	// limit on unix socket paths.
+	dir, err := os.MkdirTemp("", "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "guest.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
