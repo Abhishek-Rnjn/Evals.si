@@ -68,6 +68,11 @@ func (d *bwrapDriver) available() error {
 }
 
 func (d *bwrapDriver) supports(sp *Spec) error {
+	if len(sp.Services) > 0 {
+		if err := d.supportsServices(sp); err != nil {
+			return err
+		}
+	}
 	if sp.Network.Mode == NetworkAllowlist && sp.Image != "" && !staticBinary(d.cfg.Launcher) {
 		// The forwarder is evalsid itself, run inside the image's root.
 		return errors.New("an allowlist with an image root needs a statically linked evalsid (build with CGO_ENABLED=0)")
@@ -86,6 +91,9 @@ func (d *bwrapDriver) isolation(b *hostBackend) Isolation {
 		iso.Notes = append(iso.Notes, "root: "+d.cfg.Rootfs)
 	default:
 		iso.Notes = append(iso.Notes, "root: host system directories, read-only")
+	}
+	if b.group != nil {
+		iso.Notes = append(iso.Notes, fmt.Sprintf("services: %d, on a private network shared with this sandbox's commands (loopback only); memory, files and processes limited by rlimits, cpu_millis not enforced", len(b.sp.Services)))
 	}
 	switch b.sp.Network.Mode {
 	case NetworkAllow:
@@ -111,57 +119,24 @@ func (d *bwrapDriver) launch(b *hostBackend, e *Exec) (*launchSpec, error) {
 		"--unshare-all", "--unshare-user", "--uid", "65534", "--gid", "65534",
 		"--die-with-parent", "--new-session", "--cap-drop", "ALL",
 	}
-	if sp.Network.Mode == NetworkAllow {
+	if sp.Network.Mode == NetworkAllow || b.group != nil {
+		// With services, the network is the group's private one, joined before bwrap
+		// starts (see hostBackend.exec), and bwrap must not leave it.
 		args = append(args, "--share-net")
 	}
 	writable := sp.Mode != ModeReadOnly
-	switch {
-	case b.root != "":
-		bind := "--bind"
-		if !writable {
-			bind = "--ro-bind"
-		}
-		args = append(args, bind, b.root, "/")
-	case b.roRoot != "":
-		// Each top-level entry separately, over bwrap's own tmpfs root, so
-		// the workdir mount point can be created even when the image has none.
-		entries, err := os.ReadDir(b.roRoot)
-		if err != nil {
-			return nil, err
-		}
-		for _, ent := range entries {
-			p := filepath.Join(b.roRoot, ent.Name())
-			switch {
-			case slices.Contains([]string{"proc", "dev", "tmp", "sys"}, ent.Name()):
-			case ent.Type()&os.ModeSymlink != 0:
-				if target, err := os.Readlink(p); err == nil {
-					args = append(args, "--symlink", target, "/"+ent.Name())
-				}
-			default:
-				args = append(args, "--ro-bind", p, "/"+ent.Name())
-			}
-		}
-	case d.cfg.Rootfs != "":
-		args = append(args, "--ro-bind", d.cfg.Rootfs, "/")
-	default:
-		for _, dir := range systemDirs {
-			if target, ok := isSymlink(dir); ok {
-				args = append(args, "--symlink", target, dir)
-			} else if exists(dir) {
-				args = append(args, "--ro-bind", dir, dir)
-			}
-		}
-		for _, f := range systemFiles {
-			args = append(args, "--ro-bind-try", f, f)
-		}
-		for _, p := range absPaths(d.cfg.ReadOnlyPaths) {
-			args = append(args, "--ro-bind-try", p, p)
-		}
+	rootArgs, err := d.rootArgs(b.root, b.roRoot, writable)
+	if err != nil {
+		return nil, err
 	}
+	args = append(args, rootArgs...)
 	if sp.Network.Mode == NetworkAllow && b.image != nil {
 		args = append(args, "--ro-bind-try", "/etc/resolv.conf", "/etc/resolv.conf")
 	}
 	args = append(args, "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp")
+	if b.group != nil {
+		args = append(args, "--ro-bind", b.group.hosts, "/etc/hosts")
+	}
 	if b.root == "" {
 		bind := "--bind"
 		if !writable {
@@ -196,6 +171,57 @@ func (d *bwrapDriver) launch(b *hostBackend, e *Exec) (*launchSpec, error) {
 	args = append(args, "--chdir", cwd, "--seccomp", "3", "--")
 	spec.Argv, spec.Env = append(args, command...), env
 	return spec, nil
+}
+
+// rootArgs are the mounts that make up a sandbox's root: an image root (a private
+// writable copy, or a shared read-only one) or, with neither, the host's system
+// directories read-only.
+func (d *bwrapDriver) rootArgs(root, roRoot string, writable bool) ([]string, error) {
+	var args []string
+	switch {
+	case root != "":
+		bind := "--bind"
+		if !writable {
+			bind = "--ro-bind"
+		}
+		args = append(args, bind, root, "/")
+	case roRoot != "":
+		// Each top-level entry separately, over bwrap's own tmpfs root, so
+		// the workdir mount point can be created even when the image has none.
+		entries, err := os.ReadDir(roRoot)
+		if err != nil {
+			return nil, err
+		}
+		for _, ent := range entries {
+			p := filepath.Join(roRoot, ent.Name())
+			switch {
+			case slices.Contains([]string{"proc", "dev", "tmp", "sys"}, ent.Name()):
+			case ent.Type()&os.ModeSymlink != 0:
+				if target, err := os.Readlink(p); err == nil {
+					args = append(args, "--symlink", target, "/"+ent.Name())
+				}
+			default:
+				args = append(args, "--ro-bind", p, "/"+ent.Name())
+			}
+		}
+	case d.cfg.Rootfs != "":
+		args = append(args, "--ro-bind", d.cfg.Rootfs, "/")
+	default:
+		for _, dir := range systemDirs {
+			if target, ok := isSymlink(dir); ok {
+				args = append(args, "--symlink", target, dir)
+			} else if exists(dir) {
+				args = append(args, "--ro-bind", dir, dir)
+			}
+		}
+		for _, f := range systemFiles {
+			args = append(args, "--ro-bind-try", f, f)
+		}
+		for _, p := range absPaths(d.cfg.ReadOnlyPaths) {
+			args = append(args, "--ro-bind-try", p, p)
+		}
+	}
+	return args, nil
 }
 
 // staticBinary reports whether an ELF file has no program interpreter, so it

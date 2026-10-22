@@ -340,6 +340,14 @@ func (d *podDriver) retryCanary(ctx context.Context) {
 }
 
 func (d *podDriver) supports(sp *Spec) error {
+	for _, s := range sp.Services {
+		if strings.TrimSpace(s.Image) == "" {
+			return fmt.Errorf("service %s requires an image on the pod backend", s.Name)
+		}
+		if f := s.bwrapOnly(); f != "" {
+			return fmt.Errorf("service %s: %s is supported on the bubblewrap rung only", s.Name, f)
+		}
+	}
 	if len(sp.Services) > 0 && (os.Getenv("POD_NAME") == "" || os.Getenv("POD_UID") == "") {
 		return errors.New("services require pool POD_NAME and POD_UID for lifecycle ownership")
 	}

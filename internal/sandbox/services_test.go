@@ -97,7 +97,7 @@ func TestServiceValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sb.Close()
-	if _, err = sb.Open(t.Context(), s); err == nil || !strings.Contains(err.Error(), "services require the pod backend") {
+	if _, err = sb.Open(t.Context(), s); err == nil || !strings.Contains(err.Error(), "services need the pod or bubblewrap rung") {
 		t.Fatalf("unsupported backend: %v", err)
 	}
 }

@@ -37,6 +37,9 @@ func (d *landlockDriver) available() error {
 func (d *landlockDriver) proxyNetwork() string { return "tcp" }
 
 func (d *landlockDriver) supports(sp *Spec) error {
+	if len(sp.Services) > 0 {
+		return errors.New("services need the pod or bubblewrap rung (a private network namespace)")
+	}
 	if sp.Image != "" {
 		return errors.New("landlock shares the host's filesystem and cannot use an image root")
 	}

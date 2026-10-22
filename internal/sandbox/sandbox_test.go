@@ -18,6 +18,12 @@ func TestMain(m *testing.M) {
 	if os.Getenv(specEnv) != "" && len(os.Args) > 1 && os.Args[1] == "sandbox-exec" {
 		os.Exit(Launch(os.Stderr))
 	}
+	if len(os.Args) > 1 && os.Args[1] == "sandbox-netns" {
+		os.Exit(NetNS(os.Stdin, os.Stdout, os.Stderr))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "sandbox-probe" {
+		os.Exit(Probe(os.Args[2:], os.Stderr))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "sandbox-forward" {
 		os.Exit(Forward(os.Args[2:], os.Stderr))
 	}

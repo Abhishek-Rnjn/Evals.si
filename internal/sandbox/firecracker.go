@@ -197,6 +197,9 @@ func (d *firecrackerDriver) available() error {
 }
 
 func (d *firecrackerDriver) supports(sp *Spec) error {
+	if len(sp.Services) > 0 {
+		return errors.New("services need the pod or bubblewrap rung (the guest agent cannot keep a background process)")
+	}
 	if sp.Image == "" && d.cfg().DefaultImage == "" {
 		return errors.New("a microVM needs an image (set sandbox.firecracker.default_image)")
 	}
