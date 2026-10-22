@@ -16,7 +16,7 @@ import os
 import re
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -44,7 +44,7 @@ from evalsi_harness.mcp import (
     OAuth,
     answer_from_text,
 )
-from evalsi_harness.models import ChatModel, create_model
+from evalsi_harness.models import ChatModel, NamedModel, create_model
 from evalsi_harness.profiles import Profile, resolve
 from evalsi_harness.protect import Baseline, ProtectError
 from evalsi_harness.task import Task, TaskError
@@ -96,6 +96,15 @@ def _hook_identity(h: Any) -> Any:
     (a changed ban list changes which calls are denied)."""
     config = json_format.MessageToDict(h.config) if h.HasField("config") else {}
     return {"python": h.python, "config": config} if config else h.python
+
+
+def _all_models(target: Any) -> list[Any]:
+    """Every model a target may call: its own, its fallbacks, and its compaction and
+    sub-agent models, in that order."""
+    roles = [
+        getattr(target, r) for r in ("compaction_model", "subagent_model") if target.HasField(r)
+    ]
+    return [target, *target.fallbacks, *roles]
 
 
 def _doubled(max_tokens: int) -> int:
@@ -424,7 +433,7 @@ class BuiltinHarness:
         spec = live.task.spec
         if not spec.HasField("target"):
             return {}
-        chain = [spec.target, *spec.target.fallbacks]
+        chain = _all_models(spec.target)
         anthropic = [t.connector == "anthropic" for t in chain]
         if all(anthropic):
             return {"cache_read_mult": 0.1, "cache_write_mult": 1.25}
@@ -487,7 +496,13 @@ class BuiltinHarness:
         spec = live.task.spec
         if not spec.HasField("target"):
             return {}
-        return {t.model: _doubled(t.max_tokens) for t in [spec.target, *spec.target.fallbacks]}
+        chain = _all_models(spec.target)
+        # The compaction and sub-agent models first, so the chain's own settings win a name.
+        ordered = [
+            *chain[1 + len(spec.target.fallbacks) :],
+            *chain[: 1 + len(spec.target.fallbacks)],
+        ]
+        return {t.model: _doubled(t.max_tokens) for t in ordered}
 
     def _loop_config(self, live: LiveTask) -> LoopConfig:
         c = self.config
@@ -511,6 +526,9 @@ class BuiltinHarness:
                 ((j.at_step, j.message) for j in c.interjections), key=lambda j: j[0]
             ),
             **self._cache_prices(live),
+            model_prices={
+                name: (p.input_per_mtok, p.output_per_mtok) for name, p in c.model_pricing.items()
+            },
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,
         )
@@ -710,6 +728,20 @@ class BuiltinHarness:
         except ValueError as exc:
             raise TaskError(f"harness.builtin.recording: {exc}") from exc
 
+    def _role_model(self, live: LiveTask, role: str) -> ChatModel | None:
+        """The target's ``compaction_model`` or ``subagent_model``, built like the main
+        model (its own fallbacks ignored), or None when it is not set."""
+        spec = live.task.spec
+        if not spec.HasField("target") or not spec.target.HasField(role):  # type: ignore[arg-type]
+            return None
+        try:
+            config = replace(target_config(getattr(spec.target, role)), fallbacks=())
+            model = NamedModel(create_model(config))
+        except ValueError as exc:
+            raise TaskError(f"target.{role}: {exc}") from exc
+        live.closers.append(model.aclose)
+        return model
+
     def _reexecute_tool(self, live: LiveTask, tool: Tool) -> bool:
         return tool.spec.name in {"bash", "write_file", *MUTATING}
 
@@ -742,8 +774,16 @@ class BuiltinHarness:
             else self._user_simulator(task)
         )
         tools = await self._tools(live)
+        roles = {
+            role: self._role_model(live, role) for role in ("compaction_model", "subagent_model")
+        }
         if cassette is not None:
             model = CassetteModel(cassette, model)
+            # One log for every model, in call order: a replay serves each its turns.
+            roles = {
+                role: CassetteModel(cassette, m) if m is not None else None
+                for role, m in roles.items()
+            }
             tools = [
                 CassetteTool(cassette, t, reexecute=self._reexecute_tool(live, t)) for t in tools
             ]
@@ -757,6 +797,8 @@ class BuiltinHarness:
             user=user,
             hooks=hooks,
             progress=self._progress_reader(live),
+            compaction_model=roles["compaction_model"],
+            subagent_model=roles["subagent_model"],
         )
         conversation = await self._conversation(live, user, emit)
         try:

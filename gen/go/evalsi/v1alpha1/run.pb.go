@@ -313,8 +313,40 @@ type Target struct {
 	// fallbacks are ignored.
 	Fallbacks     []*Target `protobuf:"bytes,14,rep,name=fallbacks,proto3" json:"fallbacks,omitempty"`
 	FallbackAfter int32     `protobuf:"varint,15,opt,name=fallback_after,json=fallbackAfter,proto3" json:"fallback_after,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// openai-compatible chat completions on a vLLM or SGLang server: ask for the
+	// token IDs and log-probabilities of every turn and record them (for RL
+	// rollouts and trainers).
+	TokenTrace bool `protobuf:"varint,16,opt,name=token_trace,json=tokenTrace,proto3" json:"token_trace,omitempty"`
+	// With token_trace: the server's field names, "vllm" (default) or "sglang".
+	TokenTraceServer string `protobuf:"bytes,17,opt,name=token_trace_server,json=tokenTraceServer,proto3" json:"token_trace_server,omitempty"`
+	// Built-in agent: what happens to one provider's reasoning when the
+	// conversation moves to another (a fallback): "drop" (default; the blocks are
+	// removed) or "summarize-as-text" (the readable reasoning, Anthropic thinking
+	// text or a Responses reasoning summary, is carried as plain text in the
+	// assistant message; signed and encrypted blocks are dropped, since no other
+	// provider can verify them). Each conversion is recorded on the step.
+	ReasoningHandoff string `protobuf:"bytes,18,opt,name=reasoning_handoff,json=reasoningHandoff,proto3" json:"reasoning_handoff,omitempty"`
+	// Built-in agent: the model that writes compaction summaries (context
+	// strategy "compact") and the model delegate sub-agents run on. Unset: this
+	// target. Their own fallbacks are ignored; harness.builtin.model_pricing
+	// prices them by model name.
+	CompactionModel *Target `protobuf:"bytes,19,opt,name=compaction_model,json=compactionModel,proto3" json:"compaction_model,omitempty"`
+	SubagentModel   *Target `protobuf:"bytes,20,opt,name=subagent_model,json=subagentModel,proto3" json:"subagent_model,omitempty"`
+	// anthropic: server tools passed through as tool definitions, for example
+	// {type: web_search_20260209, name: web_search, max_uses: 5}. A turn the API
+	// pauses (stop reason pause_turn) is continued by sending its content back.
+	ServerTools []*structpb.Struct `protobuf:"bytes,21,rep,name=server_tools,json=serverTools,proto3" json:"server_tools,omitempty"`
+	// Streaming: a stream that breaks mid-response is tried again up to this many
+	// times (0: a broken stream is an error). The partial output is kept on the
+	// step's record; a tool call cut off mid-arguments is discarded, never merged.
+	StreamResumeAttempts int32 `protobuf:"varint,22,opt,name=stream_resume_attempts,json=streamResumeAttempts,proto3" json:"stream_resume_attempts,omitempty"`
+	// "retry" (default: request the turn again) or "prefill" (anthropic only:
+	// send the partial text back as the start of the reply and ask the model to
+	// continue it; older models only, the current ones refuse a prefill, and
+	// never with thinking on, where it falls back to retry).
+	StreamResumeMode string `protobuf:"bytes,23,opt,name=stream_resume_mode,json=streamResumeMode,proto3" json:"stream_resume_mode,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Target) Reset() {
@@ -450,6 +482,62 @@ func (x *Target) GetFallbackAfter() int32 {
 		return x.FallbackAfter
 	}
 	return 0
+}
+
+func (x *Target) GetTokenTrace() bool {
+	if x != nil {
+		return x.TokenTrace
+	}
+	return false
+}
+
+func (x *Target) GetTokenTraceServer() string {
+	if x != nil {
+		return x.TokenTraceServer
+	}
+	return ""
+}
+
+func (x *Target) GetReasoningHandoff() string {
+	if x != nil {
+		return x.ReasoningHandoff
+	}
+	return ""
+}
+
+func (x *Target) GetCompactionModel() *Target {
+	if x != nil {
+		return x.CompactionModel
+	}
+	return nil
+}
+
+func (x *Target) GetSubagentModel() *Target {
+	if x != nil {
+		return x.SubagentModel
+	}
+	return nil
+}
+
+func (x *Target) GetServerTools() []*structpb.Struct {
+	if x != nil {
+		return x.ServerTools
+	}
+	return nil
+}
+
+func (x *Target) GetStreamResumeAttempts() int32 {
+	if x != nil {
+		return x.StreamResumeAttempts
+	}
+	return 0
+}
+
+func (x *Target) GetStreamResumeMode() string {
+	if x != nil {
+		return x.StreamResumeMode
+	}
+	return ""
 }
 
 type Thinking struct {
@@ -1549,7 +1637,7 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x06budget\x18\b \x01(\v2\x17.evalsi.v1alpha1.BudgetR\x06budget\x122\n" +
 	"\aharness\x18\t \x01(\v2\x18.evalsi.v1alpha1.HarnessR\aharness\x12>\n" +
 	"\venvironment\x18\n" +
-	" \x01(\v2\x1c.evalsi.v1alpha1.EnvironmentR\venvironment\"\xa6\x04\n" +
+	" \x01(\v2\x1c.evalsi.v1alpha1.EnvironmentR\venvironment\"\xc6\a\n" +
 	"\x06Target\x12\x1c\n" +
 	"\tconnector\x18\x01 \x01(\tR\tconnector\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x19\n" +
@@ -1567,7 +1655,16 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x0fmax_concurrency\x18\f \x01(\x05R\x0emaxConcurrency\x12\x10\n" +
 	"\x03api\x18\r \x01(\tR\x03api\x125\n" +
 	"\tfallbacks\x18\x0e \x03(\v2\x17.evalsi.v1alpha1.TargetR\tfallbacks\x12%\n" +
-	"\x0efallback_after\x18\x0f \x01(\x05R\rfallbackAfterB\x0e\n" +
+	"\x0efallback_after\x18\x0f \x01(\x05R\rfallbackAfter\x12\x1f\n" +
+	"\vtoken_trace\x18\x10 \x01(\bR\n" +
+	"tokenTrace\x12,\n" +
+	"\x12token_trace_server\x18\x11 \x01(\tR\x10tokenTraceServer\x12+\n" +
+	"\x11reasoning_handoff\x18\x12 \x01(\tR\x10reasoningHandoff\x12B\n" +
+	"\x10compaction_model\x18\x13 \x01(\v2\x17.evalsi.v1alpha1.TargetR\x0fcompactionModel\x12>\n" +
+	"\x0esubagent_model\x18\x14 \x01(\v2\x17.evalsi.v1alpha1.TargetR\rsubagentModel\x12:\n" +
+	"\fserver_tools\x18\x15 \x03(\v2\x17.google.protobuf.StructR\vserverTools\x124\n" +
+	"\x16stream_resume_attempts\x18\x16 \x01(\x05R\x14streamResumeAttempts\x12,\n" +
+	"\x12stream_resume_mode\x18\x17 \x01(\tR\x10streamResumeModeB\x0e\n" +
 	"\f_temperature\"C\n" +
 	"\bThinking\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12#\n" +
@@ -1723,13 +1820,13 @@ var file_evalsi_v1alpha1_run_proto_goTypes = []any{
 	(*Harness)(nil),               // 21: evalsi.v1alpha1.Harness
 	(*Environment)(nil),           // 22: evalsi.v1alpha1.Environment
 	(*AgentTarget)(nil),           // 23: evalsi.v1alpha1.AgentTarget
-	(*durationpb.Duration)(nil),   // 24: google.protobuf.Duration
-	(*Record)(nil),                // 25: evalsi.v1alpha1.Record
-	(*timestamppb.Timestamp)(nil), // 26: google.protobuf.Timestamp
-	(*MetricSummary)(nil),         // 27: evalsi.v1alpha1.MetricSummary
-	(*Usage)(nil),                 // 28: evalsi.v1alpha1.Usage
-	(*EvaluatorManifest)(nil),     // 29: evalsi.v1alpha1.EvaluatorManifest
-	(*structpb.Struct)(nil),       // 30: google.protobuf.Struct
+	(*structpb.Struct)(nil),       // 24: google.protobuf.Struct
+	(*durationpb.Duration)(nil),   // 25: google.protobuf.Duration
+	(*Record)(nil),                // 26: evalsi.v1alpha1.Record
+	(*timestamppb.Timestamp)(nil), // 27: google.protobuf.Timestamp
+	(*MetricSummary)(nil),         // 28: evalsi.v1alpha1.MetricSummary
+	(*Usage)(nil),                 // 29: evalsi.v1alpha1.Usage
+	(*EvaluatorManifest)(nil),     // 30: evalsi.v1alpha1.EvaluatorManifest
 }
 var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	3,  // 0: evalsi.v1alpha1.RunSpec.target:type_name -> evalsi.v1alpha1.Target
@@ -1743,36 +1840,39 @@ var file_evalsi_v1alpha1_run_proto_depIdxs = []int32{
 	23, // 8: evalsi.v1alpha1.Target.agent:type_name -> evalsi.v1alpha1.AgentTarget
 	4,  // 9: evalsi.v1alpha1.Target.thinking:type_name -> evalsi.v1alpha1.Thinking
 	3,  // 10: evalsi.v1alpha1.Target.fallbacks:type_name -> evalsi.v1alpha1.Target
-	9,  // 11: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
-	7,  // 12: evalsi.v1alpha1.DatasetSource.traces:type_name -> evalsi.v1alpha1.TraceQuery
-	8,  // 13: evalsi.v1alpha1.DatasetSource.run:type_name -> evalsi.v1alpha1.RunOutputs
-	6,  // 14: evalsi.v1alpha1.DatasetSource.catalog:type_name -> evalsi.v1alpha1.DatasetVersionRef
-	17, // 15: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
-	24, // 16: evalsi.v1alpha1.TraceQuery.lookback:type_name -> google.protobuf.Duration
-	25, // 17: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
-	0,  // 18: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
-	10, // 19: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
-	2,  // 20: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
-	1,  // 21: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
-	26, // 22: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
-	26, // 23: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
-	26, // 24: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
-	13, // 25: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
-	27, // 26: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
-	11, // 27: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
-	28, // 28: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
-	28, // 29: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
-	18, // 30: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
-	26, // 31: evalsi.v1alpha1.Run.archived_at:type_name -> google.protobuf.Timestamp
-	16, // 32: evalsi.v1alpha1.Run.evaluation_contract:type_name -> evalsi.v1alpha1.RunEvaluationContract
-	29, // 33: evalsi.v1alpha1.BoundRunEvaluator.manifest:type_name -> evalsi.v1alpha1.EvaluatorManifest
-	30, // 34: evalsi.v1alpha1.BoundRunEvaluator.params:type_name -> google.protobuf.Struct
-	15, // 35: evalsi.v1alpha1.RunEvaluationContract.evaluators:type_name -> evalsi.v1alpha1.BoundRunEvaluator
-	36, // [36:36] is the sub-list for method output_type
-	36, // [36:36] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	3,  // 11: evalsi.v1alpha1.Target.compaction_model:type_name -> evalsi.v1alpha1.Target
+	3,  // 12: evalsi.v1alpha1.Target.subagent_model:type_name -> evalsi.v1alpha1.Target
+	24, // 13: evalsi.v1alpha1.Target.server_tools:type_name -> google.protobuf.Struct
+	9,  // 14: evalsi.v1alpha1.DatasetSource.inline:type_name -> evalsi.v1alpha1.InlineRecords
+	7,  // 15: evalsi.v1alpha1.DatasetSource.traces:type_name -> evalsi.v1alpha1.TraceQuery
+	8,  // 16: evalsi.v1alpha1.DatasetSource.run:type_name -> evalsi.v1alpha1.RunOutputs
+	6,  // 17: evalsi.v1alpha1.DatasetSource.catalog:type_name -> evalsi.v1alpha1.DatasetVersionRef
+	17, // 18: evalsi.v1alpha1.DatasetSource.mapping:type_name -> evalsi.v1alpha1.DatasetSource.MappingEntry
+	25, // 19: evalsi.v1alpha1.TraceQuery.lookback:type_name -> google.protobuf.Duration
+	26, // 20: evalsi.v1alpha1.InlineRecords.records:type_name -> evalsi.v1alpha1.Record
+	0,  // 21: evalsi.v1alpha1.Gate.stat:type_name -> evalsi.v1alpha1.GateStat
+	10, // 22: evalsi.v1alpha1.GateResult.gate:type_name -> evalsi.v1alpha1.Gate
+	2,  // 23: evalsi.v1alpha1.Run.spec:type_name -> evalsi.v1alpha1.RunSpec
+	1,  // 24: evalsi.v1alpha1.Run.status:type_name -> evalsi.v1alpha1.RunStatus
+	27, // 25: evalsi.v1alpha1.Run.created_at:type_name -> google.protobuf.Timestamp
+	27, // 26: evalsi.v1alpha1.Run.started_at:type_name -> google.protobuf.Timestamp
+	27, // 27: evalsi.v1alpha1.Run.finished_at:type_name -> google.protobuf.Timestamp
+	13, // 28: evalsi.v1alpha1.Run.progress:type_name -> evalsi.v1alpha1.Progress
+	28, // 29: evalsi.v1alpha1.Run.summaries:type_name -> evalsi.v1alpha1.MetricSummary
+	11, // 30: evalsi.v1alpha1.Run.gates:type_name -> evalsi.v1alpha1.GateResult
+	29, // 31: evalsi.v1alpha1.Run.target_usage:type_name -> evalsi.v1alpha1.Usage
+	29, // 32: evalsi.v1alpha1.Run.judge_usage:type_name -> evalsi.v1alpha1.Usage
+	18, // 33: evalsi.v1alpha1.Run.labels:type_name -> evalsi.v1alpha1.Run.LabelsEntry
+	27, // 34: evalsi.v1alpha1.Run.archived_at:type_name -> google.protobuf.Timestamp
+	16, // 35: evalsi.v1alpha1.Run.evaluation_contract:type_name -> evalsi.v1alpha1.RunEvaluationContract
+	30, // 36: evalsi.v1alpha1.BoundRunEvaluator.manifest:type_name -> evalsi.v1alpha1.EvaluatorManifest
+	24, // 37: evalsi.v1alpha1.BoundRunEvaluator.params:type_name -> google.protobuf.Struct
+	15, // 38: evalsi.v1alpha1.RunEvaluationContract.evaluators:type_name -> evalsi.v1alpha1.BoundRunEvaluator
+	39, // [39:39] is the sub-list for method output_type
+	39, // [39:39] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_proto_init() }

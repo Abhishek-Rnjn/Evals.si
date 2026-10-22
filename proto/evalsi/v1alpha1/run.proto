@@ -70,6 +70,38 @@ message Target {
   // fallbacks are ignored.
   repeated Target fallbacks = 14;
   int32 fallback_after = 15;
+  // openai-compatible chat completions on a vLLM or SGLang server: ask for the
+  // token IDs and log-probabilities of every turn and record them (for RL
+  // rollouts and trainers).
+  bool token_trace = 16;
+  // With token_trace: the server's field names, "vllm" (default) or "sglang".
+  string token_trace_server = 17;
+  // Built-in agent: what happens to one provider's reasoning when the
+  // conversation moves to another (a fallback): "drop" (default; the blocks are
+  // removed) or "summarize-as-text" (the readable reasoning, Anthropic thinking
+  // text or a Responses reasoning summary, is carried as plain text in the
+  // assistant message; signed and encrypted blocks are dropped, since no other
+  // provider can verify them). Each conversion is recorded on the step.
+  string reasoning_handoff = 18;
+  // Built-in agent: the model that writes compaction summaries (context
+  // strategy "compact") and the model delegate sub-agents run on. Unset: this
+  // target. Their own fallbacks are ignored; harness.builtin.model_pricing
+  // prices them by model name.
+  Target compaction_model = 19;
+  Target subagent_model = 20;
+  // anthropic: server tools passed through as tool definitions, for example
+  // {type: web_search_20260209, name: web_search, max_uses: 5}. A turn the API
+  // pauses (stop reason pause_turn) is continued by sending its content back.
+  repeated google.protobuf.Struct server_tools = 21;
+  // Streaming: a stream that breaks mid-response is tried again up to this many
+  // times (0: a broken stream is an error). The partial output is kept on the
+  // step's record; a tool call cut off mid-arguments is discarded, never merged.
+  int32 stream_resume_attempts = 22;
+  // "retry" (default: request the turn again) or "prefill" (anthropic only:
+  // send the partial text back as the start of the reply and ask the model to
+  // continue it; older models only, the current ones refuse a prefill, and
+  // never with thinking on, where it falls back to retry).
+  string stream_resume_mode = 23;
 }
 
 message Thinking {
