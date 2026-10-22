@@ -270,3 +270,9 @@ def test_server_spec_and_results() -> None:
         )
     with pytest.raises(EvaluatorConfigError, match="server judge"):
         rewards.load({"judge": "local", "components": ["llm-judge"]})
+
+
+def test_reward_spec_blank_cache_key_and_bad_cache_type() -> None:
+    rewards.load({"components": [{"ref": "exact-match"}], "cache": None})
+    with pytest.raises(RewardSpecError, match="cache"):
+        rewards.load({"components": [{"ref": "exact-match"}], "cache": "yes"})

@@ -768,3 +768,12 @@ def test_operator_serving_retries_the_delete_and_reports_a_server_left_behind(
     with pytest.raises(RuntimeError, match="boom") as caught, operator.serve("/c/step-1", "step-1"):
         raise RuntimeError("boom")
     assert any("left running" in note for note in caught.value.__notes__)
+
+
+def test_compare_rejects_unknown_regression_metric() -> None:
+    from evalsi.training.loop import compare
+
+    base = StepResult("r", "0", "/b", summaries={"exact-match": {"mean": 1.0}})
+    step = StepResult("r", "1", "/c", summaries={"exact-match": {"mean": 0.5}})
+    with pytest.raises(ValueError, match="exact-mtach"):
+        compare(base, step, [RegressionGate("exact-mtach")])

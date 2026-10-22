@@ -76,7 +76,7 @@ _GSM8K = re.compile(r"####\s*(.+?)\s*$", re.MULTILINE)
 _ANSWER_IS = re.compile(
     r"(?:final answer|the answer)\s*(?:is|:)\s*:?\s*(.+?)(?:\.\s*$|\n|$)", re.IGNORECASE
 )
-_LAST_NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?|-?\.\d+")
+_LAST_NUMBER = re.compile(r"(?<![\w])-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?|(?<![\w])-?\.\d+")
 
 
 def _boxed(text: str) -> str | None:
@@ -145,8 +145,8 @@ _FRAC = re.compile(r"\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}")
 _FRAC_SHORT = re.compile(r"\\[dt]?frac(\d)(\d)")
 _SQRT = re.compile(r"\\sqrt\{([^{}]*)\}")
 _UNITS = re.compile(
-    r"\s*(?:\\?(?:text\{)?(?:dollars?|cents?|units?|degrees?|cm|m|km|kg|g|s|hours?|"
-    r"minutes?|seconds?|inches|feet|ft|miles?|meters?)\}?)\s*$",
+    r"(?<=\d)\s*(?:\\?(?:text\{)?(?:dollars?|cents?|units?|degrees?|cm|m|km|kg|g|s|hours?|"
+    r"minutes?|seconds?|inches|feet|ft|miles?|meters?)\}?)\b\s*$",
     re.IGNORECASE,
 )
 

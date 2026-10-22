@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -154,16 +155,31 @@ class JudgeClient:
         )
 
     async def complete_json(
-        self, *, system: str, prompt: str, schema: dict[str, Any]
+        self,
+        *,
+        system: str,
+        prompt: str,
+        schema: dict[str, Any],
+        validate: Callable[[dict[str, Any]], None] | None = None,
     ) -> JudgeResponse:
+        """``validate`` raises on an answer the caller will reject; such an
+        answer is neither served from the cache nor stored in it, so a retry
+        reaches the judge again."""
         key = _cache_key(self.config, system, prompt, schema)
         if self.cache is not None:
             hit = self.cache.get(key)
             if hit is not None:
-                return JudgeResponse(data=hit["data"], model=hit["model"], cached=True)
+                try:
+                    if validate is not None:
+                        validate(hit["data"])
+                    return JudgeResponse(data=hit["data"], model=hit["model"], cached=True)
+                except JudgeError:
+                    pass
         if self.limiter is not None:
             await self.limiter.acquire()
         response = await self.backend.complete_json(system=system, prompt=prompt, schema=schema)
+        if validate is not None:
+            validate(response.data)
         if self.cache is not None:
             self.cache.put(key, {"data": response.data, "model": response.model})
         return response

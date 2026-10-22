@@ -19,7 +19,7 @@ REFERENCE = Requirements(reference=True)
 
 _WHITESPACE = re.compile(r"\s+")
 _PUNCTUATION = str.maketrans("", "", string.punctuation)
-_NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?|-?\.\d+")
+_NUMBER = re.compile(r"(?<![\w])-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?|(?<![\w])-?\.\d+")
 
 
 def _normalize(text: str, *, ignore_case: bool, ignore_punctuation: bool) -> str:

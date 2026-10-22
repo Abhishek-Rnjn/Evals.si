@@ -9,6 +9,7 @@ import itertools
 import math
 import platform
 import re
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -87,7 +88,12 @@ class _AuditedJudge(JudgeClient):
         self.repeat = 0
 
     async def complete_json(
-        self, *, system: str, prompt: str, schema: dict[str, Any]
+        self,
+        *,
+        system: str,
+        prompt: str,
+        schema: dict[str, Any],
+        validate: Callable[[dict[str, Any]], None] | None = None,
     ) -> JudgeResponse:
         call: dict[str, Any] = {
             "method": "complete_json",
@@ -99,7 +105,9 @@ class _AuditedJudge(JudgeClient):
         }
         self.calls.append(call)
         try:
-            response = await super().complete_json(system=system, prompt=prompt, schema=schema)
+            response = await super().complete_json(
+                system=system, prompt=prompt, schema=schema, validate=validate
+            )
         except Exception as exc:
             call["error_type"] = type(exc).__name__
             raise

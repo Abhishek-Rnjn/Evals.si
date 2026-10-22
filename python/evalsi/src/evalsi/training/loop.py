@@ -123,11 +123,21 @@ def _sort_key(step: str) -> tuple[int, int]:
     return (-1, 0) if step == BASE else (0, int(step)) if step.isdigit() else (1, 0)
 
 
+def _check_gate_metrics(limits: dict[str, float], shared: set[str]) -> None:
+    unknown = sorted(set(limits) - shared)
+    if unknown:
+        raise ValueError(
+            f"regression metric {unknown} is not scored by both checkpoints; "
+            f"available: {sorted(shared)}"
+        )
+
+
 def compare(
     base: StepResult, step: StepResult, gates: Sequence[RegressionGate], level: float = 0.95
 ) -> list[Comparison]:
     """Paired comparisons of ``step`` against ``base`` on every shared metric."""
     limits = {g.metric: g.max_drop for g in gates}
+    _check_gate_metrics(limits, set(base.summaries) & set(step.summaries))
     out = []
     for metric in sorted(set(base.summaries) & set(step.summaries)):
         c = Comparison(
@@ -303,6 +313,7 @@ class CheckpointEvaluator:
             if c.metric in limits and c.diff is not None:
                 c.regressed = c.significant and c.diff < 0 and -c.diff > limits[c.metric]
             out.append(c)
+        _check_gate_metrics(limits, {c.metric for c in out})
         return out
 
     # --- history ---

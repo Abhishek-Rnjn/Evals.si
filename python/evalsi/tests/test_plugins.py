@@ -168,3 +168,13 @@ def test_hosted_wasm_plugin_installs_from_the_repo_index(
     monkeypatch.setenv("EVALSI_PLUGIN_PATH", str(tmp_path / "plugins"))
     [pack] = discover_wasm_packs()
     assert [e.spec.name for e in pack.evaluators] == list(entry.evaluators)
+
+
+@pytest.mark.parametrize("name", [".", ".."])
+def test_remove_rejects_dot_names(
+    name: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "evalsi-plugin.yaml").write_text("x")
+    assert main(["plugins", "remove", name, "--dir", str(tmp_path / "plugins")]) == 1
+    assert "not a valid plugin name" in capsys.readouterr().err
+    assert (tmp_path / "evalsi-plugin.yaml").exists()
