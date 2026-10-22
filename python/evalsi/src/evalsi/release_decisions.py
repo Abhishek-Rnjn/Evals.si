@@ -199,6 +199,10 @@ def gate_candidate(
     for _ in client.watch_run(run["id"]):
         pass
     candidate = client.release_run_evidence(run["id"])
+    if candidate.get("status") not in ("RUN_STATUS_SUCCEEDED", "RUN_STATUS_FAILED"):
+        raise ValueError(
+            f"candidate run {run['id']} did not finish: {candidate.get('status', 'unknown')}"
+        )
     decision: dict[str, Any] = client.create_release_decision(
         decision_id,
         project=selected_project,
