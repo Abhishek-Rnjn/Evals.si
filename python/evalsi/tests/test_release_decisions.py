@@ -255,3 +255,52 @@ def test_large_unicode_report_round_trip_and_decoded_size_limit(tmp_path: Path) 
         writer.truncate((32 << 20) + 1)
     with pytest.raises(ValueError, match="32 MiB"):
         read_report(path, value["sha256"])
+
+
+def test_gate_candidate_rejects_a_candidate_that_did_not_succeed(tmp_path: Path) -> None:
+    from evalsi.release_decisions import gate_candidate
+
+    dataset = {"project": "support", "name": "refunds", "version": "v1", "sha256": "a" * 64}
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(
+        "name: cand\nproject: support\nspec:\n  evaluators: [{ref: exact-match}]\n"
+        "  dataset:\n    catalog: {project: support, name: refunds, version: v1, sha256: "
+        + "a" * 64
+        + "}\n"
+    )
+    baseline = {"runId": "base", "sha256": "b" * 64, "commit": "c" * 40}
+
+    class FakeClient:
+        def inspect_release_policy(self, policy: dict[str, Any]) -> str:
+            return policy_hash(policy)
+
+        def release_run_evidence(self, run_id: str) -> dict[str, Any]:
+            if run_id == "base":
+                return {
+                    "reference": baseline,
+                    "project": "support",
+                    "status": "RUN_STATUS_SUCCEEDED",
+                    "dataset": dataset,
+                }
+            return {"reference": {"runId": run_id}, "status": "RUN_STATUS_ERROR"}
+
+        def create_run(self, *_: Any, **__: Any) -> dict[str, Any]:
+            return {"id": "cand"}
+
+        def watch_run(self, run_id: str) -> Any:
+            yield {"run": {"status": "RUN_STATUS_ERROR"}}
+
+        def create_release_decision(self, *_: Any, **__: Any) -> dict[str, Any]:
+            raise AssertionError("decision must not be created")
+
+    with pytest.raises(ValueError, match="did not finish: RUN_STATUS_ERROR"):
+        gate_candidate(
+            FakeClient(),  # type: ignore[arg-type]
+            policy=POLICY,
+            policy_sha256=policy_hash(POLICY),
+            baseline=baseline,
+            spec_file=spec,
+            candidate_commit="e" * 40,
+            decision_id="release-v1",
+            project="support",
+        )

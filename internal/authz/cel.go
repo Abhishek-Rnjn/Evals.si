@@ -103,7 +103,9 @@ var redactedHeaders = map[string]bool{"authorization": true, "cookie": true, "x-
 // vars builds the CEL activation for a request.
 func vars(p *auth.Principal, req Request, roles []string) map[string]any {
 	jwt := map[string]any{}
-	if p.Method == auth.MethodJWT {
+	// An anonymous principal's claims are unverified (permissive mode): never
+	// expose them to rules.
+	if p.Method == auth.MethodJWT && !p.Anonymous() {
 		for k, v := range p.Claims {
 			jwt[k] = v
 		}

@@ -168,3 +168,19 @@ def test_archive_run_command(
     assert "archived: run-1 (2026-10-12T00:00:00Z)" in capsys.readouterr().out
     with pytest.raises(SystemExit):  # --yes is required
         main(["archive-run", "run-1", "--server", "http://s"])
+
+
+def test_eval_exits_1_when_every_evaluation_errored(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = tmp_path / "d.jsonl"
+    data.write_text('{"output": "a"}\n')
+    args = ["eval", "--data", str(data), "--evaluators", "regex-match", "--quiet"]
+    assert main([*args, "--param", "regex-match.pattern=["]) == 1
+    capsys.readouterr()
+
+
+def test_eval_rejects_negative_limit(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main(["eval", "--data", str(EXAMPLE), "--limit", "-1"])
+    assert "must be 0 or more" in capsys.readouterr().err

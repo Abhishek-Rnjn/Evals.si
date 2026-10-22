@@ -242,3 +242,19 @@ def test_reward_model_batches_concurrent_calls() -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.parametrize(
+    ("a", "b"), [("Paris", "Pari"), ("King", "Kin"), ("cats", "cat"), ("m", "s")]
+)
+def test_unit_stripping_needs_a_number(a: str, b: str) -> None:
+    assert not rl.answers_equal(a, b)
+
+
+def test_units_still_stripped_after_a_number() -> None:
+    assert rl.answers_equal("5 cm", "5")
+    assert rl.answers_equal("5kg", "5")
+
+
+def test_last_number_fallback_ignores_range_hyphen() -> None:
+    assert rl.extract_answer("between 10-12", fallback="last-number") == "12"

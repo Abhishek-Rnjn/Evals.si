@@ -68,7 +68,11 @@ def main() -> None:
             stderr=subprocess.STDOUT,
         )
 
+        stopping = False
+
         def stop(signum, frame) -> None:
+            nonlocal stopping
+            stopping = True
             server.terminate()
 
         signal.signal(signal.SIGTERM, stop)
@@ -82,7 +86,9 @@ def main() -> None:
                     with urllib.request.urlopen("http://127.0.0.1:8081/ui/", timeout=2) as response:
                         ready = response.status == 200
                 except urllib.error.URLError as exc:
-                    if not isinstance(exc.reason, ConnectionRefusedError):
+                    if not isinstance(exc, urllib.error.HTTPError) and not isinstance(
+                        exc.reason, ConnectionRefusedError
+                    ):
                         raise
                 if ready:
                     break
@@ -134,7 +140,7 @@ def main() -> None:
                 flush=True,
             )
             status = server.wait()
-            if status != 0:
+            if status != 0 and not stopping:
                 raise RuntimeError(f"current daemon exited with status {status}")
         finally:
             if server.poll() is None:

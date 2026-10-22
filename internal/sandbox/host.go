@@ -192,10 +192,11 @@ func (b *hostBackend) exec(ctx context.Context, e *Exec, stdout, stderr io.Write
 	return res
 }
 
-// openRoot is the directory a file path resolves in: the workdir for
-// relative paths, the writable root for absolute ones. os.Root keeps every
-// lookup inside it, so a symlink the sandboxed command planted cannot make
-// evalsid read or write host files.
+// openRoot is the directory a file path resolves in: the writable root for
+// absolute paths and, with an image, for relative ones too (the workdir is
+// resolved inside it, so a symlink planted as the workdir or its parents
+// cannot leave it). os.Root keeps every lookup inside, so a symlink the
+// sandboxed command planted cannot make evalsid read or write host files.
 func (b *hostBackend) openRoot(name string) (*os.Root, string, error) {
 	if path.IsAbs(name) {
 		if b.root == "" {
@@ -207,6 +208,10 @@ func (b *hostBackend) openRoot(name string) (*os.Root, string, error) {
 	rel, err := relPath(name)
 	if err != nil {
 		return nil, "", err
+	}
+	if b.root != "" {
+		r, err := os.OpenRoot(b.root)
+		return r, path.Join(strings.TrimPrefix(path.Clean("/"+b.sp.Workdir), "/"), rel), err
 	}
 	r, err := os.OpenRoot(b.work)
 	return r, rel, err

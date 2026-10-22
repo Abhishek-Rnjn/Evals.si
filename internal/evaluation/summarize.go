@@ -94,10 +94,11 @@ func clusterOf(r *evalsiv1alpha1.Record, key, recordID string) string {
 	if r != nil {
 		if v, ok := r.GetMetadata()[key]; ok {
 			if s, isString := v.GetKind().(*structpb.Value_StringValue); isString {
-				return s.StringValue
+				return "s:" + s.StringValue
 			}
+			// Typed apart from strings: "1" and 1 are different clusters.
 			raw, _ := protojson.Marshal(v)
-			return string(raw)
+			return "j:" + string(raw)
 		}
 	}
 	return "\x00record:" + recordID
@@ -245,14 +246,15 @@ func summarizeMetric(key string, in Instance, spec *evalsiv1alpha1.MetricSpec, v
 	if !ok {
 		return sum, nil
 	}
+	// Dropped before clipping, which would hide an infinite bound.
+	if math.IsNaN(iv.Low) || math.IsNaN(iv.High) || math.IsInf(iv.Low, 0) || math.IsInf(iv.High, 0) {
+		return sum, nil
+	}
 	if typ == evalsiv1alpha1.ScoreType_SCORE_TYPE_PASSED {
 		lo, hi := 0.0, 1.0
 		iv = iv.Clipped(&lo, &hi)
 	} else if spec != nil {
 		iv = iv.Clipped(spec.Min, spec.Max)
-	}
-	if math.IsNaN(iv.Low) || math.IsNaN(iv.High) {
-		return sum, nil
 	}
 	sum.Ci = &evalsiv1alpha1.ConfidenceInterval{Low: iv.Low, High: iv.High, Level: iv.Level, Method: iv.Method}
 	return sum, nil

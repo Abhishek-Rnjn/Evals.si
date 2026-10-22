@@ -302,3 +302,12 @@ def test_followup_budget_increase_retains_uncertain_reservations_and_caps_next_a
     with pytest.raises(BudgetExhausted):
         raised.reserve(body)
     assert raised.snapshot() == before
+
+
+def test_from_prior_adopts_the_prior_rates(tmp_path):
+    prior = Ledger()
+    prior.input_rate, prior.output_rate = 4.4, 11.0
+    path = tmp_path / "prior.json"
+    path.write_text(json.dumps(prior.snapshot()))
+    carried = Ledger.from_prior(path)
+    assert (carried.input_rate, carried.output_rate) == (4.4, 11.0)

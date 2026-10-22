@@ -209,7 +209,7 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
         from evalsi_harness import HarnessContext, load_harness
         from evalsi_harness.trust import Trust
 
-        harness = self._harnesses.get(run_id)
+        harness = self._harnesses.get(run_id or "_")
         if harness is not None:
             return harness
         while len(self._harnesses) >= 8:
@@ -275,6 +275,8 @@ class EvaluatorPlugin(pb_grpc.EvaluatorPluginServiceServicer):
     async def aclose(self) -> None:
         for harness in self._harnesses.values():
             await harness.aclose()
+        if self._closing:
+            await asyncio.gather(*self._closing)
         if self._sandboxes is not None:
             await self._sandboxes.aclose()
         for target in self._targets.values():

@@ -280,6 +280,9 @@ func (c *Client) download(ctx context.Context, bucket string, objects []Object, 
 	}
 	defer os.RemoveAll(tmp)
 	for _, o := range objects {
+		if o.Size == 0 && strings.HasSuffix(o.Key, "/") {
+			continue // a folder marker; a file of that name would block the keys below it
+		}
 		rel := strings.TrimPrefix(strings.TrimPrefix(o.Key, base), "/")
 		if base == "." || base == "" {
 			rel = o.Key

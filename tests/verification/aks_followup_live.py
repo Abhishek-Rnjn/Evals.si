@@ -208,17 +208,18 @@ async def execute(args: argparse.Namespace) -> int:
                 "incremental_estimated_usd": ledger.charged - before,
                 "new_http_attempts": len(ledger.attempts) - before_attempts,
             }
-            if changed_approver:
-                if "same hooks" not in outcome.error or result["new_http_attempts"]:
-                    raise AssertionError(
-                        "changed approver was not rejected before a provider request"
-                    )
+            rejected = (
+                changed_approver
+                and "same hooks" in (outcome.error or "")
+                and not result["new_http_attempts"]
+            )
+            if rejected:
                 result["expected_rejection"] = True
             if outcome.record is not None:
                 saved = outcome.record
                 directory = args.output / name
                 directory.mkdir(exist_ok=True)
-                (directory / f"{record.id}.{trial}.{mode}.json").write_text(
+                (directory / f"{record.id}.{trial}.{result['mode']}.json").write_text(
                     json.dumps(saved.to_dict(), indent=2)
                 )
                 result.update(
@@ -232,6 +233,8 @@ async def execute(args: argparse.Namespace) -> int:
                 json.dumps({k: v for k, v in result.items() if k not in ("hitl", "approvals")}),
                 flush=True,
             )
+            if changed_approver and not rejected:
+                raise AssertionError("changed approver was not rejected before a provider request")
             return result
 
         profiles = [("refund-baseline", None), ("refund-approval", GATE)]
@@ -307,6 +310,7 @@ async def execute(args: argparse.Namespace) -> int:
                     and r["mode"] == "record"
                 )
                 replay["hitl_matches"] = replay.get("hitl") == source.get("hitl")
+                (args.output / "results.json").write_text(json.dumps(rows, indent=2))
                 if not replay["hitl_matches"]:
                     raise AssertionError("replay changed the approval transcript")
                 if replay["new_http_attempts"]:

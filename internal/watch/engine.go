@@ -72,6 +72,39 @@ type item struct {
 	pend    store.WatchPending
 }
 
+// pendingKey identifies one accepted trace revision awaiting acknowledgement.
+type pendingKey struct {
+	project, trace, stream, recordHash, snapshotHash string
+	revision, scoreRevision                          int64
+}
+
+func keyOf(it item) pendingKey {
+	p := it.pending()
+	return pendingKey{p.Project, p.TraceID, p.Stream, p.RecordHash, p.SnapshotHash, p.Revision, p.ScoreRevision}
+}
+
+// handoff is one policy's finished evaluation of one trace, and how far
+// delivering it has got.
+type handoff struct {
+	c                        *compiled // a changed policy evaluates afresh
+	scores                   map[string]float64
+	results                  []*evalsiv1alpha1.EvaluationResult
+	stored, handed, promoted bool
+	failures                 int
+	retryAt                  time.Time
+}
+
+const (
+	maxHandoffBackoff = time.Minute
+	// Entries normally go with their acknowledgement; this bounds the rest.
+	maxHandoffs = 10000
+)
+
+func (h *handoff) failed(now time.Time) {
+	h.failures++
+	h.retryAt = now.Add(min(time.Second<<min(h.failures, 6), maxHandoffBackoff))
+}
+
 type point struct {
 	at    time.Time
 	value float64
@@ -109,6 +142,10 @@ type Engine struct {
 	follower atomic.Bool
 	// Used only by Run's recovery loop; failed work must not starve later rows.
 	recoveryCursor store.WatchPending
+	// Evaluated traces whose results are not yet stored and handed off, per
+	// policy: a retry must not re-run paid evaluators or re-count statistics.
+	// Guarded by processing; an entry goes when its trace is acknowledged.
+	handoffs map[pendingKey]map[string]*handoff
 
 	TracesIngested atomic.Int64
 	TracesDropped  atomic.Int64
@@ -144,6 +181,7 @@ func New(ctx context.Context, st *store.Store, eval *evaluation.Service, opts Op
 		store: st, eval: eval, opts: opts, log: opts.Logger,
 		queue: make(chan item, opts.QueueSize), writes: make(chan ingest.Trace, opts.QueueSize), now: time.Now,
 		policies: map[string]*policyState{}, unavailable: map[string]string{},
+		handoffs: map[pendingKey]map[string]*handoff{},
 	}
 	e.leaderCtx, e.stopLeader = context.WithCancel(context.Background())
 	e.leaderLease = opts.Lease
@@ -596,6 +634,9 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 	if len(current) == 0 || ctx.Err() != nil {
 		return
 	}
+	if len(e.handoffs) > maxHandoffs {
+		clear(e.handoffs)
+	}
 	complete := true
 	for _, st := range e.snapshot() {
 		if !e.processPolicy(ctx, lease, st, current) {
@@ -609,6 +650,10 @@ func (e *Engine) process(ctx context.Context, batch []item) {
 		}
 		if err := e.store.AckWatchPendingBatch(ctx, lease, acks); err != nil && ctx.Err() == nil {
 			e.log.Error("acknowledging online trace", "err", err)
+		} else if err == nil {
+			for _, it := range current {
+				delete(e.handoffs, keyOf(it))
+			}
 		}
 	}
 }
@@ -620,14 +665,29 @@ func (e *Engine) processPolicy(ctx context.Context, lease store.PolicyLease, st 
 		item
 		scores  map[string]float64
 		results []*evalsiv1alpha1.EvaluationResult
+		// Set for a retry: evaluated and counted already.
+		h     *handoff
+		fresh bool
 	}
 	var sampled []*candidate
 	var seen, matched int64
+	now := e.now()
 	for _, it := range batch {
 		if it.info.Project != c.policy.GetProject() {
 			continue // policies only see their own project's traces
 		}
 		if len(it.only) > 0 && !slices.Contains(it.only, c.policy.GetName()) {
+			continue
+		}
+		if h := e.handoffs[keyOf(it)][c.policy.GetName()]; h != nil && h.c == c {
+			if h.stored && h.handed && h.promoted {
+				continue // delivered; the batch waits on another policy
+			}
+			if now.Before(h.retryAt) {
+				complete = false
+				continue
+			}
+			sampled = append(sampled, &candidate{item: it, scores: h.scores, results: h.results, h: h})
 			continue
 		}
 		seen++
@@ -641,10 +701,11 @@ func (e *Engine) processPolicy(ctx context.Context, lease store.PolicyLease, st 
 		}
 	}
 	var errored int64
+	stagesFailed := false
 	for _, stg := range c.stages {
 		var todo []*candidate
 		for _, cand := range sampled {
-			if eval(stg.when, activation(cand.info, cand.scores)) {
+			if cand.h == nil && eval(stg.when, activation(cand.info, cand.scores)) {
 				todo = append(todo, cand)
 			}
 		}
@@ -660,6 +721,7 @@ func (e *Engine) processPolicy(ctx context.Context, lease store.PolicyLease, st 
 			errored += int64(len(todo))
 			e.log.Warn("online evaluation failed", "policy", c.policy.GetName(), "err", err)
 			complete = false
+			stagesFailed = true
 			break // later stages depend on this one's scores
 		}
 		// RunRecords orders results by record, then instance.
@@ -679,33 +741,59 @@ func (e *Engine) processPolicy(ctx context.Context, lease store.PolicyLease, st 
 	if ctx.Err() != nil {
 		return false
 	}
-	now := e.now()
-	var evaluated, promoted int64
+	var evaluated, promoted, fresh int64
 	for _, cand := range sampled {
-		if len(cand.results) == 0 {
-			continue
-		}
-		evaluated++
-		if err := e.store.PutWatchResults(ctx, lease, cand.pending(), c.policy.GetName(), cand.results); err != nil {
-			if errors.Is(err, store.ErrWatchStale) || ctx.Err() != nil {
-				return false
+		h := cand.h
+		if h == nil {
+			fresh++
+			if len(cand.results) == 0 {
+				continue
 			}
-			e.StoreErrors.Add(1)
-			e.log.Error("storing trace results", "trace", cand.record.GetId(), "err", err)
-			complete = false
-			continue
+			evaluated++
+			h = &handoff{c: c, scores: cand.scores, results: cand.results, promoted: c.promote == nil}
+			cand.h = h
+			cand.fresh = true
+			if !stagesFailed {
+				k := keyOf(cand.item)
+				if e.handoffs[k] == nil {
+					e.handoffs[k] = map[string]*handoff{}
+				}
+				e.handoffs[k][c.policy.GetName()] = h
+			}
 		}
-		if e.opts.OnResults != nil {
-			if err := e.opts.OnResults(ctx, c.policy.GetName(), cand.record, cand.info, cand.results); err != nil {
+		if !h.stored {
+			if err := e.store.PutWatchResults(ctx, lease, cand.pending(), c.policy.GetName(), cand.results); err != nil {
+				if errors.Is(err, store.ErrWatchStale) || ctx.Err() != nil {
+					return false
+				}
+				e.StoreErrors.Add(1)
+				e.log.Error("storing trace results", "trace", cand.record.GetId(), "err", err)
+				h.failed(now)
 				complete = false
-				e.log.Warn("online result handoff failed", "policy", c.policy.GetName(), "err", err)
+				continue
+			}
+			h.stored = true
+		}
+		if !h.handed {
+			h.handed = true
+			if e.opts.OnResults != nil {
+				if err := e.opts.OnResults(ctx, c.policy.GetName(), cand.record, cand.info, cand.results); err != nil {
+					h.handed = false
+					h.failed(now)
+					complete = false
+					e.log.Warn("online result handoff failed", "policy", c.policy.GetName(), "err", err)
+				}
 			}
 		}
-		if c.promote != nil && eval(c.promote, activation(cand.info, cand.scores)) {
-			if err := e.promoteRecord(c.policy.GetProject(), c.policy.GetPromote().GetDataset(), cand.record, cand.scores); err != nil {
-				e.log.Error("promoting trace", "trace", cand.record.GetId(), "err", err)
-			} else {
-				promoted++
+		if !h.promoted {
+			h.promoted = true
+			if eval(c.promote, activation(cand.info, cand.scores)) {
+				if err := e.promoteRecord(c.policy.GetProject(), c.policy.GetPromote().GetDataset(), cand.record, cand.scores); err != nil {
+					h.promoted = false
+					e.log.Error("promoting trace", "trace", cand.record.GetId(), "err", err)
+				} else {
+					promoted++
+				}
 			}
 		}
 	}
@@ -716,11 +804,14 @@ func (e *Engine) processPolicy(ctx context.Context, lease store.PolicyLease, st 
 	e.mu.Lock()
 	st.seen += seen
 	st.matched += matched
-	st.sampled += int64(len(sampled))
+	st.sampled += fresh
 	st.evaluated += evaluated
 	st.promoted += promoted
 	st.errored += errored
 	for _, cand := range sampled {
+		if !cand.fresh {
+			continue
+		}
 		for metric, v := range cand.scores {
 			st.windows[metric] = append(st.windows[metric], point{at: now, value: v})
 		}

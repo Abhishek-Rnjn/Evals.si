@@ -592,3 +592,50 @@ def test_closing_survives_a_failing_token_refresh() -> None:
         assert transport.client.is_closed
 
     go(body())
+
+
+# --- stdio line limits -------------------------------------------------------------
+
+_BIG_LINE_SERVER = """
+import sys, json
+for line in sys.stdin:
+    m = json.loads(line)
+    if "id" not in m:
+        continue
+    if m["method"] == "tools/call":
+        r = {"content": [{"type": "text", "text": "x" * 200000}]}
+    elif m["method"] == "initialize":
+        r = {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}}
+    else:
+        r = {}
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": m["id"], "result": r}) + "\\n")
+    sys.stdout.flush()
+"""
+
+
+def test_a_stdio_reply_over_64kib_is_read() -> None:
+    async def body() -> None:
+        client = await MCPClient.connect(command=[sys.executable, "-c", _BIG_LINE_SERVER])
+        try:
+            result = await client.call_tool("big", {})
+            assert len(result.content) == 200000
+            assert not result.is_error
+        finally:
+            await client.aclose()
+
+    go(body())
+
+
+def test_a_stdio_reply_over_the_limit_is_an_mcp_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("evalsi_harness.mcp._STDIO_LINE_LIMIT", 100_000)
+
+    async def body() -> None:
+        client = await MCPClient.connect(command=[sys.executable, "-c", _BIG_LINE_SERVER])
+        try:
+            result = await client.call_tool("big", {})
+            assert result.is_error
+            assert "over" in result.content
+        finally:
+            await client.aclose()
+
+    go(body())

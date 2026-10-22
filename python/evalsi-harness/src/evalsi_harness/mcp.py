@@ -200,6 +200,9 @@ class _HTTPTransport:
             await self.client.aclose()
 
 
+_STDIO_LINE_LIMIT = 64 * 1024 * 1024
+
+
 class _StdioTransport:
     def __init__(self, process: asyncio.subprocess.Process, name: str) -> None:
         self.process = process
@@ -214,6 +217,7 @@ class _StdioTransport:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
             env={**os.environ, **env},
+            limit=_STDIO_LINE_LIMIT,
         )
         return cls(process, command[0])
 
@@ -228,7 +232,13 @@ class _StdioTransport:
             if "id" not in message:
                 return None
             while True:
-                line = await self.process.stdout.readline()
+                try:
+                    line = await self.process.stdout.readline()
+                except ValueError as e:  # a line over the limit leaves the stream unusable
+                    self.process.kill()
+                    raise MCPError(
+                        f"MCP server {self.name} sent a line over {_STDIO_LINE_LIMIT} bytes"
+                    ) from e
                 if not line:
                     raise MCPError(f"MCP server {self.name} exited")
                 try:

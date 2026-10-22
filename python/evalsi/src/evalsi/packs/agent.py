@@ -104,7 +104,7 @@ def tool_call_accuracy(record: Record) -> list[Score]:
     actual = _trajectory(record).tool_uses()
     unused = list(actual)
     missing: list[str] = []
-    for exp in expected:
+    for exp in sorted(expected, key=lambda e: not e[1]):
         hit = next((a for a in unused if _matches(exp, a)), None)
         if hit is None:
             missing.append(exp[0])

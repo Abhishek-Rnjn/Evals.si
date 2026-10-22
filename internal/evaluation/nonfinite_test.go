@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 )
@@ -168,5 +169,37 @@ func TestSummarizeTreatsAnUnemittedDeclaredOutputAsNotReached(t *testing.T) {
 		if s == nil || s.GetN() != want.n || math.Abs(s.GetMean()-want.mean) > 1e-12 || s.GetErrors() != 0 {
 			t.Errorf("%s = %v, want n=%d mean=%v", name, s, want.n, want.mean)
 		}
+	}
+}
+
+// "1", 1 and true are different cluster values, as in the Python SDK.
+func TestClusterOfKeepsTypesApart(t *testing.T) {
+	vals := []*structpb.Value{
+		structpb.NewStringValue("1"), structpb.NewNumberValue(1),
+		structpb.NewStringValue("true"), structpb.NewBoolValue(true),
+		structpb.NewStringValue("null"), structpb.NewNullValue(),
+	}
+	seen := map[string]bool{}
+	for _, v := range vals {
+		r := &evalsiv1alpha1.Record{Metadata: map[string]*structpb.Value{"k": v}}
+		seen[clusterOf(r, "k", "id")] = true
+	}
+	if len(seen) != len(vals) {
+		t.Errorf("got %d distinct clusters for %d typed values", len(seen), len(vals))
+	}
+}
+
+// A CI that overflows is dropped rather than reported as +-Inf/NaN.
+func TestSummarizeDropsNonFiniteCI(t *testing.T) {
+	num := func(id string, x float64) scored {
+		return scored{recordID: id, score: &evalsiv1alpha1.Score{Name: "m", Value: &evalsiv1alpha1.Score_Number{Number: x}}}
+	}
+	in := Instance{Name: "e", Manifest: &evalsiv1alpha1.EvaluatorManifest{Name: "acme/e"}}
+	sum, err := summarizeMetric("m", in, nil, []scored{num("a", 1.7e308), num("b", -1.7e308), num("c", 1.7e308)}, nil, 0.95, "", "auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.GetCi() != nil {
+		t.Errorf("non-finite CI kept: %v", sum.GetCi())
 	}
 }

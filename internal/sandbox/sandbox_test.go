@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 
 func rung(t *testing.T, name string) *Sandbox {
 	t.Helper()
-	s, err := New(Config{Ladder: []string{name}, MinIsolation: "none"})
+	s, err := New(Config{Ladder: []string{name}, MinIsolation: "none", AllowLocalImages: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -179,39 +179,44 @@ class GrpcHarness:
         async with self._lock:
             if self._stub is not None:
                 return self._stub
-            address = self.address
-            if self.command:
-                self._dir = Path(tempfile.mkdtemp(prefix="evalsi-harness-"))
-                address = f"unix://{self._dir / 'harness.sock'}"
-                self._process = await asyncio.create_subprocess_exec(
-                    *self.command, env={**os.environ, "EVALSI_HARNESS_LISTEN": address}
+            try:
+                address = self.address
+                if self.command:
+                    self._dir = Path(tempfile.mkdtemp(prefix="evalsi-harness-"))
+                    address = f"unix://{self._dir / 'harness.sock'}"
+                    self._process = await asyncio.create_subprocess_exec(
+                        *self.command, env={**os.environ, "EVALSI_HARNESS_LISTEN": address}
+                    )
+                self._channel = aio.insecure_channel(address)
+                stub = pb_grpc.HarnessServiceStub(self._channel)
+                for _ in range(100):
+                    try:
+                        resp = await stub.Describe(pb.DescribeRequest(), timeout=5)
+                        break
+                    except grpc.aio.AioRpcError as exc:
+                        if self._process is not None and self._process.returncode is not None:
+                            raise TaskError(
+                                f"harness command exited with {self._process.returncode}"
+                            ) from exc
+                        if not self.command:
+                            raise TaskError(f"harness at {address}: {exc.details()}") from exc
+                        await asyncio.sleep(0.1)
+                else:
+                    raise TaskError(f"harness command did not start serving on {address}")
+                m = resp.manifest
+                self._manifest = HarnessManifest(
+                    name=m.name,
+                    version=m.version,
+                    description=m.description,
+                    task_formats=list(m.task_formats),
+                    uses_sandbox=m.uses_sandbox,
+                    capabilities=list(m.capabilities),
                 )
-            self._channel = aio.insecure_channel(address)
-            stub = pb_grpc.HarnessServiceStub(self._channel)
-            for _ in range(100):
-                try:
-                    resp = await stub.Describe(pb.DescribeRequest(), timeout=5)
-                    break
-                except grpc.aio.AioRpcError as exc:
-                    if self._process is not None and self._process.returncode is not None:
-                        raise TaskError(
-                            f"harness command exited with {self._process.returncode}"
-                        ) from exc
-                    if not self.command:
-                        raise TaskError(f"harness at {address}: {exc.details()}") from exc
-                    await asyncio.sleep(0.1)
-            else:
-                raise TaskError(f"harness command did not start serving on {address}")
-            m = resp.manifest
-            self._manifest = HarnessManifest(
-                name=m.name,
-                version=m.version,
-                description=m.description,
-                task_formats=list(m.task_formats),
-                uses_sandbox=m.uses_sandbox,
-                capabilities=list(m.capabilities),
-            )
-            self._stub = stub
+                self._stub = stub
+            except BaseException:
+                await self.aclose()
+                self._process = self._channel = self._dir = None
+                raise
             return stub
 
     def describe(self) -> HarnessManifest:

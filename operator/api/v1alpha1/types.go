@@ -162,7 +162,10 @@ type TraceSource struct {
 // TraceSourceStatus mirrors the source's status in the API.
 type TraceSourceStatus struct {
 	// The source's name in the API.
-	Name               string `json:"name,omitempty"`
+	Name string `json:"name,omitempty"`
+	// The project the source was last applied to, so a move to another
+	// project (a label edit) removes it from this one.
+	Project            string `json:"project,omitempty"`
 	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
 	// A digest of the project and labels last applied to the API, so a
 	// label-only edit (which leaves the generation alone) is applied too.

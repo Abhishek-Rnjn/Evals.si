@@ -165,3 +165,22 @@ def test_manifest_and_table() -> None:
         "errors",
     ]
     assert "exact-match" in table
+
+
+def test_cluster_keys_are_typed() -> None:
+    from evalsi.results import _cluster_of
+
+    values: list[Any] = ["1", 1, "true", True, "[1]", [1], "null", None]
+    keys = {_cluster_of(Record(id="r", metadata={"k": v}), "k", "r") for v in values}
+    assert len(keys) == len(values)
+
+
+def test_non_finite_interval_is_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+    import math
+
+    from evalsi import results
+    from evalsi.stats import Interval
+
+    monkeypatch.setattr(results, "interval", lambda *a, **k: Interval(math.nan, 1.0, 0.95, "t"))
+    summary = evalsi.evaluate(ROWS, ["length"]).metric("length")
+    assert summary.ci is None

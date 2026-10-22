@@ -366,6 +366,7 @@ func TestImageRoots(t *testing.T) {
 	s := rung(t, "bwrap")
 	s.cfg.CacheDir = t.TempDir()
 	s.images = newImageStore(filepath.Join(s.cfg.CacheDir, "images"))
+	s.images.allowLocal = true
 	ref := testImage(t)
 
 	sess := open(t, s, &Spec{Image: ref})

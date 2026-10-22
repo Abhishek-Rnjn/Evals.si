@@ -112,3 +112,27 @@ func TestAgreementWithAMetric(t *testing.T) {
 		t.Errorf("score agreement %v", s)
 	}
 }
+
+func TestAlphaIntervalNumericallyStable(t *testing.T) {
+	for _, v := range []float64{0.1, 0.7, 1e8 + 0.3} {
+		if a, ok := alphaInterval([][]float64{{v, v}, {v, v}, {v, v, v}}); ok {
+			t.Errorf("identical scores %v: alpha %v, want undefined", v, a)
+		}
+	}
+	// Shifting every score by a large constant must not change alpha.
+	base := [][]float64{{1, 2}, {2, 4}, {3, 3}, {5, 4}}
+	want, ok := alphaInterval(base)
+	if !ok {
+		t.Fatal("base alpha undefined")
+	}
+	shifted := make([][]float64, len(base))
+	for i, u := range base {
+		for _, x := range u {
+			shifted[i] = append(shifted[i], x+1e8)
+		}
+	}
+	got, ok := alphaInterval(shifted)
+	if !ok || math.Abs(got-want) > 1e-6 {
+		t.Errorf("shifted alpha = %v (ok=%v), want %v", got, ok, want)
+	}
+}

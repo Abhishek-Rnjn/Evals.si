@@ -337,6 +337,11 @@ def data_quality(
     for r in records:
         for field, given in schema.items():
             rule = given if isinstance(given, dict) else {"type": given}
+            kind = rule.get("type")
+            if kind and kind not in _TYPES:
+                raise ValueError(
+                    f"schema {field}: unknown type {kind!r}; use one of {', '.join(_TYPES)}"
+                )
             # Metadata as stored: "00123" is a string, and "30" is not a number.
             value = field_value(r, field, coerce=False)
             if value is None or value == "":

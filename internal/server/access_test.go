@@ -745,7 +745,7 @@ func TestPermissionMatrix(t *testing.T) {
 			t.Errorf("%s creating a run in %s: err = %v", who, project, err)
 		}
 	}
-	if _, err := runsAs("runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "nope", Spec: runSpec("qwen3")})); codeOf(err) != connect.CodeInvalidArgument {
+	if _, err := runsAs("runner").CreateRun(ctx, connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Project: "nope", Spec: runSpec("qwen3")})); codeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("unknown project: %v", err)
 	}
 

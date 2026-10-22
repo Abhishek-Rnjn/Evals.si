@@ -577,7 +577,8 @@ func (g *gate) project(name string) (string, error) {
 		return authz.DefaultProject, nil
 	}
 	if g.engine.Enabled() && !g.engine.ProjectExists(name) {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", name))
+		// Indistinguishable from a project the caller may not use.
+		return "", connect.NewError(connect.CodePermissionDenied, fmt.Errorf("project %q is not allowed (or it does not exist)", name))
 	}
 	return name, nil
 }
@@ -1000,14 +1001,18 @@ func boundRejected(next http.Handler) http.Handler {
 
 // handlerOptions are the options of every Connect handler behind the gate.
 func (g *gate) handlerOptions() connect.HandlerOption {
-	return connect.WithHandlerOptions(connect.WithInterceptors(g.interceptor()), connect.WithReadMaxBytes(MaxMessageBytes))
+	return connect.WithHandlerOptions(connect.WithInterceptors(g.interceptor()), connect.WithReadMaxBytes(MaxMessageBytes), connect.WithCodec(connectJSONCodec{}))
 }
 
 func (g *gate) datasetUploadTargets(config *evalsiv1alpha1.DatasetUploadConfig) ([]target, error) {
 	if err := datasets.ValidateUpload(config); err != nil {
 		return nil, err
 	}
-	return []target{{project: config.GetProject(), name: "dataset/" + config.GetName(), resource: map[string]any{"dataset": map[string]any{"name": config.GetName()}}}}, nil
+	project, err := g.project(config.GetProject())
+	if err != nil {
+		return nil, err
+	}
+	return []target{{project: project, name: "dataset/" + config.GetName(), resource: map[string]any{"dataset": map[string]any{"name": config.GetName()}}}}, nil
 }
 
 func restoreResourceNumbers(value any) any {
