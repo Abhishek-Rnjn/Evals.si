@@ -76,6 +76,8 @@ func agentResource(spec *evalsiv1alpha1.RunSpec) map[string]any {
 		kind = "http"
 	case a.GetCli() != nil:
 		kind = "cli"
+	case a.GetAcp() != nil:
+		kind = "acp"
 	}
 	harness := "builtin"
 	if spec.GetHarness().GetExternal() != nil {

@@ -276,6 +276,19 @@ func (m *Manager) validate(ctx context.Context, project string, spec *evalsiv1al
 	if spec.GetTrials() < 0 {
 		return nil, invalid("spec.trials cannot be negative")
 	}
+	if spec.GetSweep() != nil {
+		// Each variant is validated as a run of its own.
+		if err := m.validateSweep(ctx, project, spec); err != nil {
+			return nil, err
+		}
+		if err := validateTargetOptions(spec.GetTarget(), "spec.target"); err != nil {
+			return nil, err
+		}
+		if err := validateGates(spec); err != nil {
+			return nil, err
+		}
+		return insts, nil
+	}
 	if authz.AgentRun(spec) {
 		if err := m.validateAgent(spec); err != nil {
 			return nil, err
@@ -571,6 +584,13 @@ func (m *Manager) CreateRun(ctx context.Context, req *connect.Request[evalsiv1al
 	}
 	if req.Msg.GetValidateOnly() {
 		return connect.NewResponse(&evalsiv1alpha1.CreateRunResponse{}), nil
+	}
+	if spec.GetSweep() != nil {
+		resp, err := m.createSweep(ctx, req.Msg, insts)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(resp), nil
 	}
 	project := projectOr(req.Msg.GetProject())
 	if err := m.checkQuota(ctx, project, 1); err != nil {

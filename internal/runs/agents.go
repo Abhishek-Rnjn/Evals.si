@@ -37,6 +37,17 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 		if b := strings.ToUpper(agent.GetA2A().GetBinding()); b != "" && b != "JSONRPC" && b != "HTTP+JSON" {
 			return invalid("spec.target.agent.a2a.binding %q is not JSONRPC or HTTP+JSON", agent.GetA2A().GetBinding())
 		}
+		if p := agent.GetA2A().GetPushPort(); p < 0 || p > 65535 {
+			return invalid("spec.target.agent.a2a.push_port must be from 0 to 65535")
+		}
+		if u := agent.GetA2A().GetPushUrl(); u != "" {
+			if pu, err := url.Parse(u); err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" {
+				return invalid("spec.target.agent.a2a.push_url must be an http(s) URL")
+			}
+		}
+		if (agent.GetA2A().GetPushUrl() != "" || agent.GetA2A().GetPushPort() != 0) && !agent.GetA2A().GetPushNotifications() {
+			return invalid("spec.target.agent.a2a.push_url and push_port need push_notifications")
+		}
 	case agent.GetMcp() != nil:
 		if agent.GetMcp().GetUrl() == "" {
 			return invalid("spec.target.agent.mcp.url is required")
@@ -62,8 +73,16 @@ func (m *Manager) validateAgent(spec *evalsiv1alpha1.RunSpec) error {
 		if f := agent.GetCli().GetOutputFormat(); !cliOutputFormats[f] {
 			return invalid("spec.target.agent.cli.output_format %q is not one of dsh-json, claude-stream-json, codex-json, gemini-json, pi-json", f)
 		}
+	case agent.GetAcp() != nil:
+		// Like a CLI agent, an ACP agent runs in the task's sandbox.
+		if len(agent.GetAcp().GetCommand()) == 0 {
+			return invalid("spec.target.agent.acp.command is required")
+		}
+		if t := agent.GetAcp().GetTimeout(); t != nil && t.AsDuration() < 0 {
+			return invalid("spec.target.agent.acp.timeout cannot be negative")
+		}
 	case agent != nil:
-		return invalid("spec.target.agent needs one of a2a, mcp, responses, http or cli")
+		return invalid("spec.target.agent needs one of a2a, mcp, responses, http, cli or acp")
 	case builtin && !replay:
 		t := spec.GetTarget()
 		switch {

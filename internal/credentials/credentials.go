@@ -404,6 +404,10 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 		for _, inside := range sortedKeys(a.GetCli().GetEnvFrom()) {
 			uses = append(uses, Use{Env: a.GetCli().GetEnvFrom()[inside], Field: "spec.target.agent.cli.env_from." + inside, Sandbox: true})
 		}
+	case a.GetAcp() != nil:
+		for _, inside := range sortedKeys(a.GetAcp().GetEnvFrom()) {
+			uses = append(uses, Use{Env: a.GetAcp().GetEnvFrom()[inside], Field: "spec.target.agent.acp.env_from." + inside, Sandbox: true})
+		}
 	}
 	for _, s := range spec.GetHarness().GetBuiltin().GetTools().GetMcp() {
 		uses = append(uses, headerUses("MCP server "+s.GetName()+" headers_env", s.GetHeadersEnv(), s.GetUrl())...)

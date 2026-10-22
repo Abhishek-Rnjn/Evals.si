@@ -21,6 +21,7 @@ message AgentTarget {
     ResponsesAgent responses = 3;
     HTTPAgent http = 4;
     CLIAgent cli = 5;
+    ACPAgent acp = 6;
   }
 }
 
@@ -40,6 +41,19 @@ message A2AAgent {
   // are POST {url}/v1/message:send, POST {url}/v1/message:stream and
   // GET {url}/v1/tasks/{id}.
   string binding = 5;
+  // Ask the agent to push task updates to a webhook the harness runs, with
+  // pushNotificationConfig on the request, instead of holding a stream open
+  // or polling. Each task state the agent pushes becomes a step. The agent's
+  // card must declare pushNotifications; if no update arrives within the
+  // timeout, the harness falls back to polling (tasks/get). Used instead of
+  // stream when both are set.
+  bool push_notifications = 6;
+  // The base URL the agent reaches the harness's receiver at. Default
+  // http://127.0.0.1:<port>, which only suits an agent on the worker's host.
+  string push_url = 7;
+  // The local port the receiver binds (on all interfaces when push_url is
+  // set, loopback otherwise); 0 picks a free one.
+  int32 push_port = 8;
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -126,6 +140,34 @@ message CLIAgent {
   // --json`), "gemini-json" (`gemini --output-format stream-json`) or
   // "pi-json" (`pi --mode json`).
   string output_format = 6;
+}
+
+// An agent that speaks the Agent Client Protocol (ACP, protocol version 1):
+// JSON-RPC over the stdio of a command run inside the task's sandbox, in its
+// workdir. The harness is the client: it creates a session, sends the
+// instruction as a prompt, turns session/update notifications into steps, and
+// serves the agent's requests (file reads and writes in the sandbox,
+// terminals, permission requests). Permission requests are decided by
+// approval, with the semantics of the built-in ApprovalGate hook, and
+// recorded as hitl_request and hitl_resolved steps and policy events.
+message ACPAgent {
+  repeated string command = 1;
+  // Commands run once in the environment before the agent (installing it).
+  repeated string install = 2;
+  // Variable in the sandbox -> variable on the worker it is copied from.
+  map<string, string> env_from = 3;
+  // Hosts the agent may reach (its model API), through the egress proxy.
+  repeated string allow_hosts = 4;
+  // For the whole conversation; default 10 minutes.
+  google.protobuf.Duration timeout = 5;
+  // Answers permission requests, in the shape of the ApprovalGate hook's
+  // config: rules (tool, path, command globs and an action of allow, ask or
+  // deny) and an approver script with a default. A request no rule matches
+  // is allowed; an "ask" goes to the approver, whose default is deny.
+  google.protobuf.Struct approval = 6;
+  // Offer the agent terminal/* (commands the agent runs through the
+  // harness, as background processes in the sandbox). Off by default.
+  bool terminals = 7;
 }
 
 // Harness drives the agent through a task.

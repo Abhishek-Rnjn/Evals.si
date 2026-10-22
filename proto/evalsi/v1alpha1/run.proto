@@ -32,6 +32,32 @@ message RunSpec {
   Harness harness = 9;
   // Where agent tasks run; records may override it in metadata["environment"].
   Environment environment = 10;
+  // Runs the same task over several harness configurations: the server stores
+  // one run per variant (see HarnessSweep).
+  HarnessSweep sweep = 11;
+}
+
+// HarnessSweep makes harness configuration an experiment variable, as the
+// target's model is: it expands into one run per variant over the same
+// dataset, evaluators and trials, with the target, environment and budget of
+// the spec. Each run is named "<name>/<variant>" and labelled
+// evalsi.sweep=<sweep id> and evalsi.variant=<variant>; compare them with
+// CompareRuns, which pairs them by record and trial. The first variant is the
+// natural baseline. It applies to the built-in agent only (not to a
+// bring-your-own agent or an external harness).
+message HarnessSweep {
+  repeated HarnessVariant variants = 1;
+}
+
+message HarnessVariant {
+  // A label of letters, digits, dots, dashes and underscores, unique in the sweep.
+  string name = 1;
+  // The built-in harness fields this variant sets (profile, tools, context,
+  // hooks, ...). Each field that is set replaces that field of
+  // spec.harness.builtin as a whole; the rest is inherited. A profile and a
+  // tool list cannot be combined, so a variant that sets a profile also
+  // needs tools set to an empty object when the base lists tools.
+  BuiltinHarness harness = 2;
 }
 
 message Target {
