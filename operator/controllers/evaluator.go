@@ -1,8 +1,13 @@
 package controllers
 
 import (
+	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +21,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
 )
@@ -73,6 +79,17 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		configMap = r.WorkerConfigMap
 	}
 
+	// A changed worker config rolls the pods, as for a SandboxClass.
+	var configHash string
+	if configMap != "" {
+		cm := &corev1.ConfigMap{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: ev.Namespace, Name: configMap}, cm); err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		} else if err == nil {
+			configHash = configMapHash(cm)
+		}
+	}
+
 	dep := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ev.Namespace}}
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, dep, func() error {
 		dep.Labels = labels
@@ -92,6 +109,10 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 		pod := &dep.Spec.Template
 		pod.Labels = labels
+		pod.Annotations = nil
+		if configHash != "" {
+			pod.Annotations = map[string]string{"evals.si/config-hash": configHash}
+		}
 		pod.Spec.ServiceAccountName = ev.Spec.ServiceAccountName
 		pod.Spec.NodeSelector = ev.Spec.NodeSelector
 		pod.Spec.Tolerations = ev.Spec.Tolerations
@@ -128,6 +149,8 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	scaling := metav1.Condition{Type: "Autoscaling", Status: metav1.ConditionFalse, Reason: "NotRequested"}
 	if ev.Spec.Autoscaling != nil {
 		scaling = r.scaledObject(ctx, ev, name, pools)
+	} else if err := r.deleteScaledObject(ctx, ev.Namespace, name); err != nil {
+		return ctrl.Result{}, err
 	}
 	ev.Status.ReadyReplicas = dep.Status.ReadyReplicas
 	ev.Status.ObservedGeneration = ev.Generation
@@ -215,12 +238,59 @@ func (r *EvaluatorReconciler) scaledObject(ctx context.Context, ev *v1.Evaluator
 		}
 		return controllerutil.SetControllerReference(ev, so, r.Scheme())
 	})
-	if err != nil && !apierrors.IsNotFound(err) {
+	if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+		return metav1.Condition{Type: "Autoscaling", Status: metav1.ConditionFalse, Reason: "KEDAMissing", Message: "KEDA's ScaledObject is not installed"}
+	}
+	if err != nil {
 		return metav1.Condition{Type: "Autoscaling", Status: metav1.ConditionFalse, Reason: "Error", Message: err.Error()}
 	}
 	return metav1.Condition{Type: "Autoscaling", Status: metav1.ConditionTrue, Reason: "KEDA", Message: fmt.Sprintf("%d to %d replicas on the backlog of %s", a.MinReplicas, a.MaxReplicas, strings.Join(pools, ", "))}
 }
 
+// deleteScaledObject removes the ScaledObject left from when the Evaluator
+// autoscaled; with KEDA absent there is none.
+func (r *EvaluatorReconciler) deleteScaledObject(ctx context.Context, namespace, name string) error {
+	if _, err := r.RESTMapper().RESTMapping(scaledObjectGVK.GroupKind(), scaledObjectGVK.Version); err != nil {
+		return nil
+	}
+	so := &unstructured.Unstructured{}
+	so.SetGroupVersionKind(scaledObjectGVK)
+	so.SetName(name)
+	so.SetNamespace(namespace)
+	if err := r.Delete(ctx, so); err != nil && !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+		return err
+	}
+	return nil
+}
+
+func configMapHash(cm *corev1.ConfigMap) string {
+	h := sha256.New()
+	for _, k := range slices.Sorted(maps.Keys(cm.Data)) {
+		fmt.Fprintf(h, "%q=%q\x00", k, cm.Data[k])
+	}
+	for _, k := range slices.Sorted(maps.Keys(cm.BinaryData)) {
+		fmt.Fprintf(h, "b%q=%x\x00", k, cm.BinaryData[k])
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// evaluatorsOfConfigMap queues the Evaluators whose workers mount the ConfigMap.
+func (r *EvaluatorReconciler) evaluatorsOfConfigMap(ctx context.Context, obj client.Object) []ctrl.Request {
+	evs := &v1.EvaluatorList{}
+	if err := r.List(ctx, evs, client.InNamespace(obj.GetNamespace())); err != nil {
+		return nil
+	}
+	var out []ctrl.Request
+	for _, ev := range evs.Items {
+		if cm := cmp.Or(ev.Spec.ConfigMap, r.WorkerConfigMap); cm == obj.GetName() {
+			out = append(out, ctrl.Request{NamespacedName: client.ObjectKeyFromObject(&ev)})
+		}
+	}
+	return out
+}
+
 func (r *EvaluatorReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).For(&v1.Evaluator{}).Owns(&appsv1.Deployment{}).Named("evaluator").Complete(r)
+	return ctrl.NewControllerManagedBy(mgr).For(&v1.Evaluator{}).Owns(&appsv1.Deployment{}).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.evaluatorsOfConfigMap)).
+		Named("evaluator").Complete(r)
 }
