@@ -161,7 +161,7 @@ The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milesto
 
 The plan for strengthening the agent harness through M2 and GA is in [HARNESS-ROADMAP.md](HARNESS-ROADMAP.md).
 
-The latest release is **v0.3.0** ([release](https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.3.0), [changelog](../CHANGELOG.md#030---2026-10-19)); see [Releases](PRD.md#releases).
+The latest release is **v0.3.1** ([release](https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.3.1), [changelog](../CHANGELOG.md#031---2026-10-22), [record](verification/README.md#v031-release-record-2026-10-22)); see [Releases](PRD.md#releases).
 
 The completed checkpoint from `verify/eks-leftovers@42d8127` is now included
 in PR #85. See the [EKS run](verification/EKS-2026-10-17.md) and

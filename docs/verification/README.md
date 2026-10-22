@@ -534,6 +534,65 @@ Not checked:
 - A chart install from the OCI charts on a cluster, an upgrade from the v0.1.0 charts (the CHANGELOG's upgrade notes are untested on a cluster), an import of the published bundle, and the arm64 images.
 - The bundled `bwrap` running a sandbox from an installed arm64 wheel (the amd64 wheel's sandbox runs in CI's `release-check`).
 
+## v0.3.1 release record (2026-10-22)
+
+Tag `v0.3.1` points at `2100d4091c4dac84dafa6902d842010fd951b502` (the merge of
+PR #140). The tag run is
+[39756785220](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/39756785220);
+the `release` environment approved the build and the `pypi` and `pypi-harness`
+environments the two PyPI uploads. All 14 jobs passed and the GitHub release was
+published at 10:10 UTC; nothing was fixed or done by hand.
+
+The version was cut from `main`, not from a `release-0.3` branch as
+[RELEASING](../RELEASING.md) describes for patches, so it carries the new
+features and the breaking changes in the [changelog](../../CHANGELOG.md#031---2026-10-22)'s
+upgrade notes. The first candidate commit (`7c05dd6`, the merge of PR #139)
+passed its release dry run ([39739664291](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/39739664291))
+but was not tagged: `main`'s `kubernetes` job had failed since PR #138, because
+the operator's webhook and project creation did not recognise the API's new
+answer for a missing project. PR #140 fixed that before the tag.
+
+Gates on this exact commit before the tag:
+
+| Gate | Result |
+|------|--------|
+| CI on the merge to `main`, [run 452](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/39745034270) | All 26 jobs passed, including `kubernetes` (kind with Landlock, the bundle install, `kubectl apply matches evalsi run -f`, the namespace-only install under Pod Security restricted, ending `=== passed`), `rlframeworks`, `trainers`, `taubench`, `mcp-agent` and `release-check` |
+| Release dry run, [run 39745039941](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/39745039941) | Passed, with the seven expected artifacts (both binaries, both wheel sets, Python distributions, charts, bundle); the amd64 platform wheel installed and its bundled `evalsid` ran |
+
+What the tag run published:
+
+| Artifact | Where |
+|----------|-------|
+| Images | `ghcr.io/abhishek-rnjn/evalsi:0.3.1` and `evalsi-collector:0.3.1` (also `latest`), signed; the `evalsi` image has an attested SPDX SBOM |
+| Charts | `oci://ghcr.io/abhishek-rnjn/charts/{evalsi,evalsi-crds,evalsi-sandboxd}:0.3.1`, signed |
+| Python | PyPI `evalsi` 0.3.1 (pure wheel, sdist, `manylinux_2_17_x86_64` and `manylinux_2_17_aarch64` platform wheels) and `evalsi-harness` 0.3.1 (wheel and sdist) |
+| Release assets | 14 files: the Linux amd64 and arm64 archives, the three `evalsi` wheels and sdist, the `evalsi-harness` wheel and sdist, the three charts, the amd64 bundle, `evalsi-0.3.1.spdx.json` and `SHA256SUMS` |
+
+Checked after publication, from a Linux amd64 container with Python 3.12:
+
+- `pip index versions` lists 0.3.1 for both packages. For Linux amd64, pip
+  picked `evalsi-0.3.1-py3-none-manylinux_2_17_x86_64.whl`; its SHA-256 and the
+  `evalsi-harness` wheel's equal the GitHub release assets' digests.
+- `evalsi[server]==0.3.1` and `evalsi-harness==0.3.1` installed into a clean
+  environment and both report 0.3.1. `evalsi evalsid-path` found the bundled
+  `evalsi/_bin/evalsid`, which printed `evalsid 0.3.1 (api evalsi.v1alpha1)`.
+  `evalsi doctor` reported every check OK, with sandbox `bwrap, landlock`.
+- `evalsi init` created the offline starter; `run.yaml` exited 0,
+  `regressed.yaml` exited 3, and `evalsi report` wrote the HTML report.
+
+A maintainer checked after publication, from their own machine:
+
+- `SHA256SUMS` verified every release file.
+- `scripts/verify-release.sh 0.3.1` verified the signatures of both images and
+  the three charts, and the `evalsi` image's SBOM attestation, against the
+  release workflow's identity at `v0.3.1`.
+
+Not checked:
+
+- A chart install from the published OCI charts, an upgrade from the 0.3.0
+  charts (the upgrade notes are untested on a cluster), an import of the
+  published bundle, the arm64 images and the arm64 wheel.
+
 ## Multi-service environments (2026-10-17)
 
 The pod-native service lifecycle passed a bounded local kind/Calico check:
