@@ -463,6 +463,20 @@ sandbox:
 
 An image is used only when the registry holds a signature by one of the keys, on the image or on the index its tag points to (`cosign sign --key cosign.key <image>`). Signatures must be in cosign's `.sig` tag format, which is cosign 2's default. Verification is offline, with no transparency log. For an air-gapped registry, copy signatures with `cosign copy`. The pod rung's images are pulled by the kubelet, so enforce signatures there with your cluster's admission policy.
 
+**Keyless signatures.** Images signed with `cosign sign` without a key (a short-lived Fulcio certificate, logged in Rekor) are accepted for the identities you list, with a sigstore trusted root that names the Fulcio CAs and Rekor keys to trust:
+
+```yaml
+sandbox:
+  image_signatures:
+    trusted_root: /etc/evalsi/trusted_root.json   # file or JSON text; `cosign trusted-root create`, or the public-good root from the Sigstore TUF repository
+    keyless:                                      # any one identity suffices; each needs an issuer and a subject, exact or *_regexp
+      - issuer: https://token.actions.githubusercontent.com
+        subject_regexp: '^https://github\.com/acme/images/\.github/workflows/release\.yml@refs/tags/v.*$'
+    # keys: [...]                                 # may be set too: either kind of signature passes
+```
+
+Two formats are read: the `.sig` tag with `dev.sigstore.cosign/certificate` and `/bundle` annotations (cosign 2), and a sigstore bundle stored as an OCI 1.1 referrer of the image (cosign 3's default; registries without the referrers API are read through the `sha256-<digest>` fallback tag). A signature passes when the certificate chains to the trusted root and was valid when it was logged, the log entry's signed entry timestamp, or inclusion proof with signed checkpoint, verifies against the root's Rekor keys, the signature matches the image digest, and the certificate's issuer and subject match an identity. Verification is offline: the server never calls Fulcio or Rekor, so keep the trusted root current (a rotated Fulcio CA or Rekor key needs a new file; it is read at start). Signed certificate timestamps (CT log) are not required. Rekor v2 (tile-based) entries are handled by the verification library but have not been exercised here.
+
 **Local images.** Image references that read host paths (`dir:`, `oci-layout:`, `docker-archive:`) are refused, because a spec can name `dir:/`. Set `sandbox.allow_local_images: true` to accept them, for example on a developer machine. With `image_signatures`, its `allow_local` decides instead.
 
 To enable Firecracker:
