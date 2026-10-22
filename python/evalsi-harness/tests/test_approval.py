@@ -488,3 +488,18 @@ def test_the_real_loop_passes_a_single_denial_and_fails_a_real_retry() -> None:
     assert len(score.metadata["retried"]) == 1
     asked = [s for s in once if s.name == "hitl_request"]
     assert asked[0].attributes["evalsi.hitl.call_id"] == "c1"
+
+
+def test_an_edit_into_a_denied_call_is_stopped() -> None:
+    ran: list[str] = []
+    cfg = {
+        "rules": [
+            {"tool": "bash", "command": "rm *", "action": "deny", "reason": "no deletes"},
+            {"tool": "bash", "command": "git push*", "action": "ask"},
+        ],
+        "approver": {"script": [{"decision": "edit", "arguments": {"command": "rm -rf /"}}]},
+    }
+    steps = run_gate(Scripted(call("bash", command="git push"), answer()), cfg, ran)
+    assert ran == []
+    resolved = next(s for s in steps if s.name == "hitl_resolved")
+    assert resolved.attributes["evalsi.hitl.decision"] == "deny"
