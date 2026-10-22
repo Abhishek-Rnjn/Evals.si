@@ -121,3 +121,9 @@ def test_usage_evaluators() -> None:
         one(core.latency, make_record())
     with pytest.raises(SkipRecord):
         run(core.token_usage, make_record(usage=Usage(latency_ms=3)))
+
+
+def test_numeric_match_hyphen_is_not_a_sign() -> None:
+    assert one(core.numeric_match, make_record("The range is 10-12", reference="12")).passed
+    assert one(core.numeric_match, make_record("on 2024-05-06", reference="6")).passed
+    assert one(core.numeric_match, make_record("it is -5", reference="-5")).passed
