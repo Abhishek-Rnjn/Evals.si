@@ -33,6 +33,7 @@ from evalsi_harness.browser import BrowserConfig, BrowserSession, browser_tools
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
 from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
+from evalsi_harness.desktop import Computer, DesktopConfig, XvfbDisplay, computer_tool
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.hooks import Hooks, load_hooks
@@ -415,6 +416,12 @@ class BuiltinHarness:
                 "and act on the refs it gives; use browser_screenshot when layout matters."
                 + (f" It opens at {start}." if start else "")
             )
+        if "computer" in c.tools.builtin:
+            cfg = DesktopConfig.from_metadata(live.task.record.metadata)
+            notes.append(
+                f"You have a {cfg.width}x{cfg.height} desktop (the computer tool). Take a "
+                "screenshot to see it, then click, type and press keys by pixel position."
+            )
         if "delegate" in c.tools.builtin:
             notes.append(
                 "For work that would fill your context with output you do not need to keep "
@@ -541,7 +548,9 @@ class BuiltinHarness:
         builtin = self._builtin_names(live)
         if "browser" in builtin:
             tools += self._browser_tools(live)
-        builtin = [n for n in builtin if n != "browser"]
+        if "computer" in builtin:
+            tools += self._computer_tools(live)
+        builtin = [n for n in builtin if n not in ("browser", "computer")]
         if builtin:
             if not use_sandbox or live.env is None:
                 raise TaskError("tools.builtin needs the sandbox tools and an environment")
@@ -614,9 +623,26 @@ class BuiltinHarness:
             config = BrowserConfig.from_metadata(live.task.record.metadata)
         except ValueError as exc:
             raise TaskError(f"tools.builtin: {exc}") from exc
+        # The browser runs on the worker, outside the sandbox: a server must trust it.
+        self.ctx.trust.check_command(["evalsi-browser"], "the browser toolset")
         session = BrowserSession(config)
         live.closers.append(session.aclose)
         return browser_tools(session)
+
+    def _computer_tools(self, live: LiveTask) -> list[Tool]:
+        """The ``computer`` toolset over an Xvfb display on the worker, configured by the
+        record's ``metadata.desktop``. The display starts on the first call and stops with
+        the task."""
+        try:
+            config = DesktopConfig.from_metadata(live.task.record.metadata)
+        except ValueError as exc:
+            raise TaskError(f"tools.builtin: {exc}") from exc
+        self.ctx.trust.check_command(["evalsi-desktop"], "the computer toolset")
+        for argv in config.launch:
+            self.ctx.trust.check_command(argv, "metadata.desktop.launch")
+        display = XvfbDisplay(config)
+        live.closers.append(display.aclose)
+        return [computer_tool(Computer(display, config))]
 
     def _escalation_tool(self, live: LiveTask) -> Tool:
         allowed = set(self.config.escalation.allow)
