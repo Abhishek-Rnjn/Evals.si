@@ -46,14 +46,22 @@ func alphaNominal(units [][]string) (float64, bool) {
 
 // alphaInterval is Krippendorff's alpha for interval values (squared differences).
 func alphaInterval(units [][]float64) (float64, bool) {
-	// Sum over ordered pairs i != j of (x_i - x_j)^2 = 2m*Σx² - 2(Σx)².
+	// Sum over ordered pairs i != j of (x_i - x_j)^2 = 2m*Σ(x-mean)². Centering
+	// (on the first value, then the mean) avoids the cancellation of the
+	// expanded form 2m*Σx² - 2(Σx)², which turns identical scores into noise.
 	pairSq := func(xs []float64) float64 {
-		var s, s2 float64
+		ref := xs[0]
+		var s float64
 		for _, x := range xs {
-			s += x
-			s2 += x * x
+			s += x - ref
 		}
-		return 2*float64(len(xs))*s2 - 2*s*s
+		mean := s / float64(len(xs))
+		var ss float64
+		for _, x := range xs {
+			d := x - ref - mean
+			ss += d * d
+		}
+		return 2 * float64(len(xs)) * ss
 	}
 	var all []float64
 	disagree := 0.0
@@ -69,8 +77,8 @@ func alphaInterval(units [][]float64) (float64, bool) {
 		return 0, false
 	}
 	expected := pairSq(all) / (n * (n - 1))
-	if expected == 0 {
-		return 0, false
+	if !(expected > 0) {
+		return 0, false // no variation at all (centering makes this exact): alpha is undefined
 	}
 	return 1 - (disagree/n)/expected, true
 }
