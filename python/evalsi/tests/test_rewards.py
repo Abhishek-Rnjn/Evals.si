@@ -270,3 +270,18 @@ def test_server_spec_and_results() -> None:
         )
     with pytest.raises(EvaluatorConfigError, match="server judge"):
         rewards.load({"judge": "local", "components": ["llm-judge"]})
+
+
+@pytest.mark.parametrize("value", [math.inf, -math.inf, math.nan])
+def test_non_finite_component_value_is_an_error(value: float) -> None:
+    from evalsi import Outcome
+    from evalsi.rewards import _component_result
+    from evalsi.rewards.spec import Component
+
+    got = _component_result(
+        Component(ref="x"),
+        Outcome.SCORED,
+        [Score(name="m", number=value)],
+        "",
+    )
+    assert got.status == "error"
