@@ -155,6 +155,25 @@ Naming `delegate` in `tools.builtin` gives the agent a tool that starts a sub-ag
 
 Its spend is the parent's: tokens, spend and wall-clock time come out of what the parent has left (a `delegate` with nothing left is an error the agent sees), and `agent.subagents` and `agent.subagent_steps` total them. Its steps are on the trajectory under a `subagent` step that hangs from the `delegate` call, so a multi-agent run reads as a tree. Hooks apply to the sub-agent's tool calls too. Its model and tool calls are recorded in order with the parent's, so a replay reproduces them; `delegate` calls in one turn therefore run one after another.
 
+### A database as the environment
+
+`environment.database` gives a task a SQLite backend instead of (or beside) a sandbox: a `schema` and `seed` of SQL, `tools` that are one parameterized statement each (`sql` with `:name` parameters, a JSON Schema in `parameters`, `mode: read` or `write`, optional `min_rows` and `max_rows` for writes) and `assertions` (`name`, a read-only `sql` query, and the `expect`ed rows as a list of rows, or one value). The harness builds the database in memory for each trial, offers the tools to the agent, and grades the final state with the assertions, one test each. Read tools can only SELECT, write tools can never change the schema, and arguments are validated against the schema and bound, never spliced into SQL. Every write attempt is recorded, applied or not: on its tool step as `evalsi.tool.db_write` and in `metadata.database` with digests of the start and end state. Declarations are checked when the task is read (bad SQL, a read tool that writes, duplicate names). A task with only a database creates no sandbox; with an image, setup or a command checker it has both, and both must pass. See [decision 0032](../decisions/0032-database-tool-environment.md) for the limits.
+
+```yaml
+environment:
+  database:
+    schema: "CREATE TABLE accounts (id TEXT PRIMARY KEY, balance INTEGER NOT NULL);"
+    seed: "INSERT INTO accounts VALUES ('a', 100), ('b', 0);"
+    tools:
+      - {name: get_balance, sql: "SELECT balance FROM accounts WHERE id = :id",
+         parameters: {type: object, properties: {id: {type: string}}, required: [id]}}
+      - {name: withdraw, mode: write, min_rows: 1,
+         sql: "UPDATE accounts SET balance = balance - :amount WHERE id = :id",
+         parameters: {type: object, properties: {id: {type: string}, amount: {type: integer, minimum: 1}}, required: [id, amount]}}
+    assertions:
+      - {name: a-debited, sql: "SELECT balance FROM accounts WHERE id = 'a'", expect: 70}
+```
+
 ### Messages from the user mid-run
 
 `harness.builtin.interjections` is a list of `{at_step, message}`. Each message is delivered as a user message once the agent has made `at_step` model calls, at the start of the next call (after that call's tool results; with Anthropic it joins the same user turn), and it is a `user-interjection` step on the trajectory, so an evaluator can score whether the agent took a correction or a new constraint into account. A message still due when the agent tries to finish is read before it can. They are scripted, not generated: replays and comparisons see the same words at the same points, and a recording replays only with the same messages. With a context strategy, the messages are repeated on every call after they arrive, so clearing or summarizing history cannot lose them. Built-in agent only (a CLI agent runs to completion), and sub-agents are not interrupted.

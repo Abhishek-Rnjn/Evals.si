@@ -82,6 +82,52 @@ class CheckerConfig:
 
 
 @dataclass
+class DatabaseToolConfig:
+    name: str
+    sql: str
+    description: str = ""
+    parameters: dict[str, Any] = field(default_factory=dict)
+    mode: str = "read"
+    min_rows: int = 0
+    max_rows: int = 0
+
+
+@dataclass
+class DatabaseAssertion:
+    name: str
+    sql: str
+    expect: Any = None
+
+
+@dataclass
+class DatabaseConfig:
+    """A SQLite tool environment (see dbenv.py)."""
+
+    schema: str = ""
+    seed: str = ""
+    tools: list[DatabaseToolConfig] = field(default_factory=list)
+    assertions: list[DatabaseAssertion] = field(default_factory=list)
+
+
+@dataclass
+class BuildStageConfig:
+    """An earlier stage of a multi-stage build (see stages.py)."""
+
+    name: str
+    image: str
+    files: dict[str, str] = field(default_factory=dict)
+    setup: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class StageCopy:
+    stage: str
+    source: str
+    destination: str
+
+
+@dataclass
 class EnvironmentConfig:
     image: str = ""
     files: dict[str, str] = field(default_factory=dict)
@@ -96,6 +142,21 @@ class EnvironmentConfig:
     command_timeout_s: float = 120.0
     services: list[ServiceSpec] = field(default_factory=list)
     service_lifetime_s: float = 0.0
+    stages: list[BuildStageConfig] = field(default_factory=list)
+    copy_from: list[StageCopy] = field(default_factory=list)
+    database: DatabaseConfig | None = None
+
+    @property
+    def needs_sandbox(self) -> bool:
+        """A task with only a database has no use for a sandbox."""
+        return self.database is None or bool(
+            self.image
+            or self.files
+            or self.setup
+            or self.services
+            or self.stages
+            or self.checker is not None
+        )
 
     def key(self) -> str:
         """Identifies environments that can share one setup snapshot."""
@@ -109,6 +170,8 @@ class EnvironmentConfig:
             "env": self.env,
             "services": [asdict(s) for s in self.services],
             "service_lifetime_s": self.service_lifetime_s,
+            "stages": [asdict(s) for s in self.stages],
+            "copy_from": [asdict(c) for c in self.copy_from],
         }
         return hashlib.sha256(json.dumps(built, sort_keys=True).encode()).hexdigest()[:16]
 
@@ -126,6 +189,9 @@ _ENV_FIELDS = {
     "command_timeout",
     "services",
     "service_lifetime",
+    "stages",
+    "copy_from",
+    "database",
 }
 
 
@@ -205,6 +271,8 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         service_lifetime = seconds(data.get("service_lifetime"), 0)
     except (TypeError, ValueError, AttributeError) as exc:
         raise TaskError(f"invalid environment services: {exc}") from exc
+    database = _database(data.get("database"), record.id)
+    stages, copies = _stages(data, record.id)
     if checker is not None:
         from evalsi_harness import isolate
 
@@ -213,6 +281,9 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         except ValueError as exc:
             raise TaskError(f"checker: {exc}") from exc
     return EnvironmentConfig(
+        stages=stages,
+        copy_from=copies,
+        database=database,
         services=services,
         service_lifetime_s=service_lifetime,
         image=str(data.get("image", "")),
@@ -226,6 +297,76 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         env={str(k): str(v) for k, v in (data.get("env") or {}).items()},
         command_timeout_s=seconds(data.get("command_timeout"), 120.0),
     )
+
+
+def _database(raw: Any, record_id: str) -> DatabaseConfig | None:
+    if not raw:
+        return None
+    if not isinstance(raw, Mapping):
+        raise TaskError(f"record {record_id}: environment.database must be a mapping")
+    try:
+        config = DatabaseConfig(
+            schema=str(raw.get("schema") or ""),
+            seed=str(raw.get("seed") or ""),
+            tools=[
+                DatabaseToolConfig(
+                    name=str(t.get("name", "")),
+                    sql=str(t.get("sql", "")),
+                    description=str(t.get("description", "")),
+                    parameters=dict(t.get("parameters") or {}),
+                    mode=str(t.get("mode") or "read"),
+                    min_rows=int(t.get("min_rows") or 0),
+                    max_rows=int(t.get("max_rows") or 0),
+                )
+                for t in raw.get("tools") or []
+            ],
+            assertions=[
+                DatabaseAssertion(str(a.get("name", "")), str(a.get("sql", "")), a.get("expect"))
+                for a in raw.get("assertions") or []
+            ],
+        )
+        from evalsi_harness import dbenv
+
+        dbenv.validate(config)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise TaskError(f"environment.database: {exc}") from exc
+    return config
+
+
+def _stages(
+    data: Mapping[str, Any], record_id: str
+) -> tuple[list[BuildStageConfig], list[StageCopy]]:
+    try:
+        stages = [
+            BuildStageConfig(
+                name=str(s.get("name", "")),
+                image=str(s.get("image", "")),
+                files={str(k): str(v) for k, v in (s.get("files") or {}).items()},
+                setup=[str(c) for c in s.get("setup") or []],
+                env={str(k): str(v) for k, v in (s.get("env") or {}).items()},
+            )
+            for s in data.get("stages") or []
+        ]
+        copies = [
+            StageCopy(
+                str(c.get("stage", "")), str(c.get("source", "")), str(c.get("destination", ""))
+            )
+            for c in data.get("copy_from") or []
+        ]
+    except (TypeError, AttributeError) as exc:
+        raise TaskError(f"record {record_id}: invalid stages or copy_from: {exc}") from exc
+    names = [s.name for s in stages]
+    for s in stages:
+        if not s.name or not s.image:
+            raise TaskError("every build stage needs a name and an image")
+    if len(set(names)) != len(names):
+        raise TaskError("build stage names must be unique")
+    for c in copies:
+        if c.stage not in names:
+            raise TaskError(f"copy_from names an unknown stage {c.stage!r}")
+        if not c.source.startswith("/") or not c.destination:
+            raise TaskError("copy_from needs an absolute source and a destination")
+    return stages, copies
 
 
 @dataclass

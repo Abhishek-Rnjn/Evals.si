@@ -31,6 +31,7 @@ from evalsi_harness._version import __version__
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
 from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
+from evalsi_harness.dbenv import Database, DatabaseTool
 from evalsi_harness.diffcheck import run_diff_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
@@ -169,6 +170,8 @@ class LiveTask:
     # setup): naming one of these is probing. One the sandbox already had may be run.
     checker_hidden: list[str] = field(default_factory=list)
     diff_baseline: str | None = None
+    # The task's SQLite tool environment, when it declares one (see dbenv.py).
+    db: Database | None = None
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -211,6 +214,13 @@ async def _absent(env: TaskEnvironment, paths: list[str]) -> list[str]:
         if result.exit_code == 1:
             out.append(path)
     return out
+
+
+def _closer(fn: Callable[[], None]) -> Callable[[], Awaitable[None]]:
+    async def close() -> None:
+        fn()
+
+    return close
 
 
 def _agent_kind(task: Task) -> str:
@@ -268,7 +278,7 @@ class BuiltinHarness:
 
     async def setup(self, task: Task) -> str:
         env = None
-        if task.environment is not None:
+        if task.environment is not None and task.environment.needs_sandbox:
             extra: list[str] = []
             if _agent_kind(task) == "cli":
                 cli = task.spec.target.agent.cli
@@ -283,6 +293,14 @@ class BuiltinHarness:
             )
         handle = secrets.token_hex(8)
         live = LiveTask(task, env)
+        if task.environment is not None and task.environment.database is not None:
+            try:
+                live.db = Database(task.environment.database)
+            except Exception as exc:  # validated when the task was read; a failure is ours
+                self._live[handle] = live
+                await self.teardown(handle)
+                raise TaskError(f"environment.database: {exc}") from exc
+            live.closers.append(_closer(live.db.close))
         if env is not None:
             live.isolation = env.isolation.to_dict()
             live.closers.append(env.sandbox.destroy)
@@ -525,6 +543,9 @@ class BuiltinHarness:
     async def _tools(self, live: LiveTask) -> list[Tool]:
         tools: list[Tool] = []
         cfg = self.config.tools
+        if live.db is not None and live.task.environment is not None:
+            assert live.task.environment.database is not None
+            tools += [DatabaseTool(live.db, t) for t in live.task.environment.database.tools]
         use_sandbox = cfg.sandbox if cfg.HasField("sandbox") else live.env is not None
         if use_sandbox:
             if live.env is None:
@@ -718,7 +739,9 @@ class BuiltinHarness:
             raise TaskError(f"harness.builtin.recording: {exc}") from exc
 
     def _reexecute_tool(self, live: LiveTask, tool: Tool) -> bool:
-        return tool.spec.name in {"bash", "write_file", *MUTATING}
+        return tool.spec.name in {"bash", "write_file", *MUTATING} or getattr(
+            tool, "reexecute", False
+        )
 
     async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:
         task = live.task
@@ -788,9 +811,34 @@ class BuiltinHarness:
 
     async def check(self, handle: str) -> TaskCheck | None:
         live = self._get(handle)
-        env_config = live.task.environment
         if live.env is not None:
             live.diff = await capture_diff(live.env)
+        if live.db is not None:
+            return await self._check_database(live)
+        return await self._check_sandbox(live)
+
+    async def _check_database(self, live: LiveTask) -> TaskCheck | None:
+        """The database's assertions, and the sandbox checker too when the task has both."""
+        assert live.db is not None
+        check = live.db.check()
+        env_config = live.task.environment
+        if check.error or live.env is None or env_config is None or env_config.checker is None:
+            return check
+        sandbox = await self._check_sandbox(live)
+        if sandbox is None or sandbox.error:
+            return sandbox
+        score = None
+        if check.score is not None and sandbox.score is not None:
+            score = min(check.score, sandbox.score)
+        return TaskCheck(
+            passed=check.passed and sandbox.passed,
+            score=score,
+            tests={**check.tests, **sandbox.tests},
+            details="; ".join(d for d in (check.details, sandbox.details) if d),
+        )
+
+    async def _check_sandbox(self, live: LiveTask) -> TaskCheck | None:
+        env_config = live.task.environment
         if live.env is None or env_config is None or env_config.checker is None:
             return None
         parser = env_config.checker.parser
@@ -867,6 +915,8 @@ class BuiltinHarness:
             out["checker_files"] = sorted(live.checker_hidden)
         if live.checker_isolation:
             out["checker_isolation"] = live.checker_isolation
+        if live.db is not None:
+            out["database"] = live.db.summary()
         return out
 
     async def teardown(self, handle: str) -> None:
