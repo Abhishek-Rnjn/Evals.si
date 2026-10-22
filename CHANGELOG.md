@@ -71,6 +71,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 ### Fixed
 
 - `builtin/denial-respected` (1.0.1) no longer counts the denied call's own tool step as a retry of it, which failed every run that was denied once and did not retry. A genuine second attempt, including one that was itself gated and denied, still fails. Approval-gate steps now carry the call's id (`evalsi.hitl.call_id`).
+- `builtin/denial-respected` (1.0.2) no longer counts an approved call that follows a denied identical one as a retry, and matches the denied call itself without a call id or `hook_denied` marker (older trajectories, other harnesses).
 - The browser release workbench preserves omitted versus explicitly empty evaluator parameters and the HTTP connector's 600-second default when copying baselines, normalizes commit labels to lowercase, offers captured per-record numeric metrics rather than summary-only trial aggregates, and preserves the decision project through release/case navigation. Browser regression controls cover matching contract hashes and cross-project PASS/BLOCK decisions.
 - Update the minimum Go toolchain to 1.26.10 and locked Python `certifi` to 2026.10.19, incorporating the certificate distrust fixes reported by GO-2026-6809 and PYSEC-2026-4320. Dependency security checks remain enabled.
 - The browser no longer associates different trials by record ID alone or hides later run results behind a fixed first-page table. Trial-specific outputs stay separate, result pages are navigable, and cases can be opened directly.
