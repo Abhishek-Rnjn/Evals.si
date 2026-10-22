@@ -288,6 +288,12 @@ def _add_harness_tools(sub: Any) -> None:
         default=0.0,
         help="with --harm: a per-task difference this small or smaller counts as unchanged",
     )
+    attr.add_argument(
+        "--alpha",
+        type=float,
+        default=0.05,
+        help="with --harm: the level for the per-task tests after the Holm correction",
+    )
     attr.set_defaults(func=_cmd_ablate_attribute)
 
 
@@ -1175,7 +1181,9 @@ def _cmd_ablate_attribute(args: argparse.Namespace) -> int:
             load(args.base), full, variants, args.metric, level=args.confidence
         )
         harms = (
-            ablation.harm_check(full, variants, args.metric, min_effect=args.min_effect)
+            ablation.harm_check(
+                full, variants, args.metric, min_effect=args.min_effect, alpha=args.alpha
+            )
             if args.harm
             else None
         )

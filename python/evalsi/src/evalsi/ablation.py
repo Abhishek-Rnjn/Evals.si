@@ -393,12 +393,131 @@ class TaskEffect:
 
 
 @dataclass
+class TaskTest:
+    """One task's own test: are the full harness's trials and the revert variant's
+    trials on this task different by more than chance? ``p`` is the raw two-sided
+    p-value and ``p_adjusted`` the Holm-adjusted one across every task tested for the
+    component, so reading the whole list at ``alpha`` keeps the chance of any false
+    alarm at ``alpha``."""
+
+    record: str
+    method: str  # "fisher" for pass/fail trials, "permutation" otherwise
+    full_n: int
+    variant_n: int
+    full_mean: float
+    variant_mean: float
+    p: float
+    p_adjusted: float = 1.0
+    # Full minus variant in the metric's direction (positive is an improvement).
+    effect: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+# Above this many ways to split the trials, the permutation test samples instead.
+EXACT_SPLITS = 50_000
+PERMUTATION_SAMPLES = 20_000
+
+
+def fisher_p(a: int, n: int, b: int, m: int) -> float:
+    """Two-sided Fisher exact test of ``a`` passes in ``n`` trials against ``b`` in
+    ``m``: the probability, with the margins fixed, of a table no more likely than
+    the one observed. Computed in integers, so ties are exact."""
+    passes, total = a + b, n + m
+    if total == 0 or passes in (0, total) or n == 0 or m == 0:
+        return 1.0
+
+    def weight(k: int) -> int:  # the table's probability times C(total, n)
+        return math.comb(passes, k) * math.comb(total - passes, n - k)
+
+    observed = weight(a)
+    lo, hi = max(0, passes - m), min(n, passes)
+    tail = sum(w for k in range(lo, hi + 1) if (w := weight(k)) <= observed)
+    return min(1.0, tail / math.comb(total, n))
+
+
+def permutation_p(xs: Sequence[float], ys: Sequence[float], *, seed: str = "") -> float:
+    """Two-sided two-sample permutation test on the difference of means: the share of
+    ways to split the pooled trials into groups of these sizes whose difference is at
+    least the observed one. Exact (every split) up to ``EXACT_SPLITS`` splits, else a
+    seeded Monte Carlo estimate, ``(hits + 1) / (samples + 1)``."""
+    import itertools
+    import random
+
+    n, m = len(xs), len(ys)
+    if n == 0 or m == 0:
+        return 1.0
+    pooled = [*xs, *ys]
+    total = sum(pooled)
+    observed = abs(sum(xs) / n - sum(ys) / m)
+    eps = 1e-9 * max(1.0, observed)
+
+    def diff(group_sum: float) -> float:
+        return abs(group_sum / n - (total - group_sum) / m)
+
+    if math.comb(n + m, n) <= EXACT_SPLITS:
+        hits = splits = 0
+        for chosen in itertools.combinations(range(n + m), n):
+            splits += 1
+            if diff(sum(pooled[i] for i in chosen)) >= observed - eps:
+                hits += 1
+        return hits / splits
+    rng = random.Random(hashlib.sha256(seed.encode()).hexdigest())
+    hits = 0
+    for _ in range(PERMUTATION_SAMPLES):
+        if diff(sum(rng.sample(pooled, n))) >= observed - eps:
+            hits += 1
+    return (hits + 1) / (PERMUTATION_SAMPLES + 1)
+
+
+def holm(ps: Sequence[float]) -> list[float]:
+    """Holm-Bonferroni adjusted p-values, in the order given."""
+    order = sorted(range(len(ps)), key=lambda i: ps[i])
+    out = [1.0] * len(ps)
+    running = 0.0
+    for rank, i in enumerate(order):
+        running = max(running, min(1.0, (len(ps) - rank) * ps[i]))
+        out[i] = running
+    return out
+
+
+def task_test(
+    record: str, full: Sequence[float], variant: Sequence[float], sign: float
+) -> TaskTest:
+    """The per-task test for one record's trials (all of them, paired or not)."""
+    binary = all(v in (0.0, 1.0) for v in (*full, *variant))
+    if binary:
+        method = "fisher"
+        p = fisher_p(int(sum(full)), len(full), int(sum(variant)), len(variant))
+    else:
+        method = "permutation"
+        p = permutation_p(full, variant, seed=record)
+    fm, vm = sum(full) / len(full), sum(variant) / len(variant)
+    return TaskTest(record, method, len(full), len(variant), fm, vm, p, effect=sign * (fm - vm))
+
+
+@dataclass
 class Harm:
     component: str
     name: str
     helped: list[TaskEffect] = field(default_factory=list)
     hurt: list[TaskEffect] = field(default_factory=list)
     unchanged: int = 0
+    # The per-task tests (Holm-adjusted across this component's tasks), and the level
+    # at which ``significant_hurt`` and ``significant_helped`` read them.
+    tests: list[TaskTest] = field(default_factory=list)
+    alpha: float = 0.05
+
+    @property
+    def significant_hurt(self) -> list[str]:
+        """Tasks the edit hurt by more than chance, after the multiple-comparison
+        correction."""
+        return [t.record for t in self.tests if t.p_adjusted < self.alpha and t.effect < 0]
+
+    @property
+    def significant_helped(self) -> list[str]:
+        return [t.record for t in self.tests if t.p_adjusted < self.alpha and t.effect > 0]
 
     @property
     def compared(self) -> int:
@@ -428,6 +547,8 @@ class Harm:
         out["mixed"] = self.mixed
         out["sign_p"] = self.sign_p
         out["compared"] = self.compared
+        out["significant_hurt"] = self.significant_hurt
+        out["significant_helped"] = self.significant_helped
         return out
 
 
@@ -444,6 +565,7 @@ def harm_check(
     metric: str,
     *,
     min_effect: float = 0.0,
+    alpha: float = 0.05,
 ) -> list[Harm]:
     """Per component, which tasks the edit helped and which it hurt: for each record the
     full adopted harness minus the component's revert variant, averaged over trials, in the
@@ -453,9 +575,19 @@ def harm_check(
     or harm. ``Harm.sign_p`` adds an exact sign test across the tasks that changed. Neither
     can show that a single task's change is more than noise, and a handful of tasks gives a
     sign test almost no power (5 helped and 0 hurt is p = 0.0625), so read this as where to
-    look, not as a verdict."""
+    look, not as a verdict.
+
+    ``Harm.tests`` is the per-task test: for each record, every trial of the full
+    harness against every trial of the variant (Fisher's exact test when the metric
+    is pass/fail, an exact permutation test on the means otherwise), with the p-values
+    Holm-adjusted across the component's tasks. ``significant_hurt`` lists the tasks
+    whose adjusted p is below ``alpha`` and whose change is a loss. It needs several
+    trials per task to say anything: with 3 pass/fail trials a side the smallest
+    possible p is 0.1, with 5 it is about 0.008, before the correction."""
     if not math.isfinite(min_effect) or min_effect < 0:
         raise AblationError("min_effect must be a finite number, not negative")
+    if not 0 < alpha < 1:
+        raise AblationError("alpha must be between 0 and 1")
     datasets = {_dataset(d) for d in (full, *variants.values())} - {""}
     if len(datasets) > 1:
         raise AblationError("the results files were not run on the same dataset")
@@ -469,7 +601,8 @@ def harm_check(
             per_record.setdefault(key.rsplit("#", 1)[0], []).append(
                 sign * (full_vals[key] - base_vals[key])
             )
-        harm = Harm(component, _group_name(component))
+        harm = Harm(component, _group_name(component), alpha=alpha)
+        harm.tests = _task_tests(full_vals, base_vals, sign)
         for rid in sorted(per_record):
             effect = sum(per_record[rid]) / len(per_record[rid])
             if effect > min_effect:
@@ -483,8 +616,35 @@ def harm_check(
     return out
 
 
+def _by_record(values: Mapping[str, float]) -> dict[str, list[float]]:
+    out: dict[str, list[float]] = {}
+    for key, value in values.items():
+        out.setdefault(key.rsplit("#", 1)[0], []).append(value)
+    return out
+
+
+def _task_tests(
+    full_vals: Mapping[str, float], variant_vals: Mapping[str, float], sign: float
+) -> list[TaskTest]:
+    full, variant = _by_record(full_vals), _by_record(variant_vals)
+    tests = [task_test(r, full[r], variant[r], sign) for r in sorted(set(full) & set(variant))]
+    for t, adjusted in zip(tests, holm([t.p for t in tests]), strict=True):
+        t.p_adjusted = adjusted
+    return tests
+
+
 def harm_table(rows: Sequence[Harm]) -> str:
-    head = ["component", "name", "helped", "hurt", "same", "sign p", "verdict", "most hurt"]
+    head = [
+        "component",
+        "name",
+        "helped",
+        "hurt",
+        "same",
+        "sign p",
+        "sig hurt",
+        "verdict",
+        "most hurt",
+    ]
     lines = [head]
     for h in rows:
         worst = ", ".join(f"{t.record} ({t.effect:+.2f})" for t in h.hurt[:3]) or "-"
@@ -503,6 +663,7 @@ def harm_table(rows: Sequence[Harm]) -> str:
                 str(len(h.hurt)),
                 str(h.unchanged),
                 "-" if p is None else f"{p:.3f}",
+                ", ".join(h.significant_hurt[:3]) or "-",
                 verdict,
                 worst,
             ]

@@ -343,6 +343,68 @@ def test_trials_of_one_record_are_averaged() -> None:
     assert harms[0].helped[0].effect == pytest.approx(0.5)
 
 
+def _trial_results(per_record: dict[str, list[float]]) -> dict[str, Any]:
+    data = run([0.0])
+    data["results"] = [
+        {
+            "record_id": rid,
+            "evaluator": "task-success",
+            "outcome": "scored",
+            "trial": k,
+            "scores": [{"name": "task-success", "number": v}],
+        }
+        for rid, values in per_record.items()
+        for k, v in enumerate(values)
+    ]
+    return data
+
+
+def test_fisher_permutation_and_holm_match_hand_computed_values() -> None:
+    # 5/5 against 0/5: one table as extreme each way, 2 / C(10, 5).
+    assert ablation.fisher_p(5, 5, 0, 5) == pytest.approx(2 / 252)
+    assert ablation.fisher_p(3, 3, 0, 3) == pytest.approx(0.1)  # the floor with 3 trials a side
+    assert ablation.fisher_p(1, 1, 0, 1) == 1.0  # one trial a side cannot show anything
+    assert ablation.fisher_p(2, 4, 2, 4) == 1.0
+    # Same split as continuous values: the permutation test agrees with Fisher here.
+    assert ablation.permutation_p([1.0] * 5, [0.0] * 5) == pytest.approx(2 / 252)
+    assert ablation.permutation_p([0.9, 0.8, 0.7], [0.1, 0.2, 0.3]) == pytest.approx(0.1)
+    assert ablation.permutation_p([0.5, 0.5], [0.5, 0.5]) == 1.0
+    assert ablation.holm([0.01, 0.04, 0.03]) == pytest.approx([0.03, 0.06, 0.06])
+    # Too many splits to enumerate: a seeded sample, the same each time.
+    big_a, big_b = [0.9] * 12 + [0.1] * 3, [0.1] * 12 + [0.9] * 3
+    p = ablation.permutation_p(big_a, big_b, seed="t")
+    assert p == ablation.permutation_p(big_a, big_b, seed="t")
+    assert 0 < p < 0.01
+
+
+def test_the_per_task_test_flags_only_a_task_hurt_beyond_chance() -> None:
+    full = _trial_results(
+        {"hurt": [0.0] * 6, "noisy": [1, 0, 1, 0, 1, 0], "same": [1.0] * 6, "helped": [1.0] * 6}
+    )
+    variant = _trial_results(
+        {"hurt": [1.0] * 6, "noisy": [0, 1, 0, 1, 1, 0], "same": [1.0] * 6, "helped": [0.0] * 6}
+    )
+    (harm,) = ablation.harm_check(full, {"c1": variant}, M)
+    tests = {t.record: t for t in harm.tests}
+    assert tests["hurt"].method == "fisher"
+    assert tests["hurt"].p == pytest.approx(2 / 924)
+    # Holm across the four tasks: the two clear ones stay below 0.05.
+    assert tests["hurt"].p_adjusted == pytest.approx(4 * 2 / 924)
+    assert tests["noisy"].p_adjusted == 1.0
+    assert harm.significant_hurt == ["hurt"]
+    assert harm.significant_helped == ["helped"]
+    data = harm.to_dict()
+    assert data["significant_hurt"] == ["hurt"]
+    assert data["tests"][0]["record"] == "helped"
+    assert "hurt" in ablation.harm_table([harm]).splitlines()[1]
+    # One trial a side: the task changed, but no per-task test can say so.
+    (single,) = ablation.harm_check(run([1.0, 0.0]), {"c1": run([0.0, 1.0])}, M)
+    assert single.hurt
+    assert single.significant_hurt == []
+    with pytest.raises(ablation.AblationError, match="alpha"):
+        ablation.harm_check(full, {"c1": variant}, M, alpha=1.5)
+
+
 def test_the_cli_plans_by_unit_and_prints_the_harm_table(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
