@@ -446,3 +446,12 @@ def test_invalid_judge_answer_is_not_cached(tmp_path: Path) -> None:
         with pytest.raises(JudgeError, match="invalid score"):
             asyncio.run(rubric_score(make_record("a", "a"), "x", ctx, label="x"))
     assert len(backend.calls) == 2
+
+
+@pytest.mark.parametrize(
+    "response", [httpx.Response(200, text="<html>"), httpx.Response(200, json=[1])]
+)
+def test_openai_compatible_malformed_200_is_a_judge_error(response: httpx.Response) -> None:
+    judge = openai_judge(lambda request: response)
+    with pytest.raises(JudgeError, match="judge returned a non-"):
+        asyncio.run(judge.complete_json(**SCHEMA_ARGS))

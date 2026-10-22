@@ -143,8 +143,8 @@ class Client:
             timeout=httpx.USE_CLIENT_DEFAULT if timeout is None else timeout,
         )
         if response.status_code != 200:
-            raise _error(response.json() if response.content else {}, response.status_code)
-        out: dict[str, Any] = response.json()
+            raise _error(_json_body(response), response.status_code)
+        out: dict[str, Any] = _json_body(response, ok=True)
         return out
 
     def _run(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -163,7 +163,7 @@ class Client:
         ) as response:
             if response.status_code != 200:
                 response.read()
-                raise _error(response.json() if response.content else {}, response.status_code)
+                raise _error(_json_body(response), response.status_code)
             buffer = b""
             for chunk in response.iter_bytes():
                 buffer += chunk
@@ -171,13 +171,19 @@ class Client:
                     flags, size = struct.unpack(">BI", buffer[:5])
                     if len(buffer) < 5 + size:
                         break
-                    message = json.loads(buffer[5 : 5 + size] or b"{}")
+                    try:
+                        message = json.loads(buffer[5 : 5 + size] or b"{}")
+                    except ValueError as exc:
+                        raise ServerError("malformed_stream", "stream frame is not JSON") from exc
                     buffer = buffer[5 + size :]
                     if flags & END_STREAM:
                         if "error" in message:
                             raise _error(message["error"], 200)
                         return
                     yield message
+            if buffer:
+                raise ServerError("truncated_stream", "stream ended inside a frame")
+            raise ServerError("truncated_stream", "stream ended without an end-of-stream frame")
 
     # --- evaluation ---
 
@@ -919,6 +925,21 @@ class Client:
 
     def whoami(self) -> dict[str, Any]:
         return self.auth_call("WhoAmI")
+
+
+def _json_body(response: httpx.Response, *, ok: bool = False) -> dict[str, Any]:
+    """The response's JSON object; a proxy's HTML or an empty error body is a ServerError."""
+    if not response.content and not ok:
+        return {}
+    snippet = response.text.strip()[:300]
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        return body
+    code = "invalid_response" if ok else f"http_{response.status_code}"
+    raise ServerError(code, f"HTTP {response.status_code}: non-JSON body: {snippet}")
 
 
 def _error(body: dict[str, Any], status: int) -> ServerError:
