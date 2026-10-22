@@ -1,0 +1,11 @@
+task:
+  incidents: 300
+  seed: evalsi-live-horizon-20261021
+context:
+  strategy: compact
+  window_tokens: 8000
+  trigger: 0.60
+  target: 0.30
+  keep_recent: 2
+  keep_turns: 2
+  summary_max_tokens: 512

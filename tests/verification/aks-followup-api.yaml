@@ -1,0 +1,6 @@
+listen: 0.0.0.0:8081
+data_dir: /work/workbench-state
+worker:
+  command: [/work/venv/bin/python, -m, evalsi]
+  start_timeout: 60s
+sinks: []

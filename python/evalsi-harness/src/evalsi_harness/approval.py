@@ -137,6 +137,7 @@ class ApprovalGate:
         ctx.emit(
             "hitl_request",
             request=self.requests,
+            call_id=call.id,
             tool=call.name,
             arguments=json.dumps(args, sort_keys=True, default=str),
             rule=rule,
@@ -147,6 +148,7 @@ class ApprovalGate:
         ctx.emit(
             "hitl_resolved",
             request=self.requests,
+            call_id=call.id,
             tool=call.name,
             arguments=json.dumps(final, sort_keys=True, default=str),
             decision=decision,

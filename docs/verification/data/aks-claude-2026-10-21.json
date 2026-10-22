@@ -1,0 +1,111 @@
+{
+  "date": "2026-10-21",
+  "branch": "verification/live-k8s-claude-2026-10-21",
+  "checkout": "5d7510fca5bcfc7881b4f31206da3f2c6aeb8d4f",
+  "report": "../AKS-CLAUDE-2026-10-21.md",
+  "scope": "Current SDK/harness against real AKS pods and configured Claude gateway; not EKS, full Helm deployment, direct-provider or production certification",
+  "environment": {
+    "cluster_provider": "AKS",
+    "ready_nodes": 6,
+    "architecture": "amd64",
+    "kubernetes": "v1.36.4",
+    "kernel": "6.8.0-1070-azure",
+    "gpu_advertised": false,
+    "host_kvm_probed": false,
+    "test_namespace_ambient_enrolled": false,
+    "kata_runtimeclass_present": true,
+    "kata_matching_nodes": 0,
+    "claude_transport": "configured HTTPS gateway, not direct api.anthropic.com",
+    "smoke_response_model": "claude-opus-5-5",
+    "sandbox_server_version": "0.3.0",
+    "sandbox_server_digest": "sha256:c8d210562ada07c2fe294b6da9e7d68a8f1e2cd7fb435ba4a1fa7e7609c6e6da",
+    "python_image_digest": "sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f"
+  },
+  "harness_initial_batch": {
+    "entrypoint": "pytest.main from stdin",
+    "selected": 16,
+    "passed": 15,
+    "failed": 1,
+    "deselected": 13,
+    "seconds": 448.74,
+    "exit_code": 1,
+    "failure": "multiprocessing spawn cannot import <stdin>; interruption test child exited before intended SIGKILL"
+  },
+  "harness_resume_rerun": {
+    "entrypoint": "python -m pytest",
+    "test": "test_killed_harness_process_resumes_on_fresh_pod",
+    "passed": 1,
+    "seconds": 21.51,
+    "exit_code": 0,
+    "model": "scripted"
+  },
+  "live_task_profiles": [
+    {"profile": "minimal", "stream": false, "status": "passed", "seconds": 37.46},
+    {"profile": "standard", "stream": true, "status": "passed", "seconds": 22.78},
+    {"profile": "code-mode", "stream": false, "status": "passed", "seconds": 25.40}
+  ],
+  "live_context_controls": [
+    {"strategy": "clear-tool-results", "status": "passed", "seconds": 65.67},
+    {"strategy": "compact", "status": "passed", "seconds": 103.05},
+    {"strategy": "fresh-rounds", "status": "passed", "seconds": 55.76},
+    {"strategy": "evidence-state", "status": "passed", "seconds": 69.76}
+  ],
+  "signed_thinking_controls": [
+    {"stream": false, "status": "passed", "cache_write_tokens": 11192, "thinking_blocks": 1, "input_tokens": 11196, "output_tokens": 701, "seconds": 9.379},
+    {"stream": true, "status": "passed", "cache_write_tokens": 11193, "thinking_blocks": 1, "input_tokens": 11197, "output_tokens": 716, "seconds": 9.457}
+  ],
+  "judge_controls": {
+    "passed": 6,
+    "correct_answer_min_score": 0.75,
+    "wrong_or_injected_answer_max_score": 0.25,
+    "human_calibrated": false
+  },
+  "harness_cache_controls": [
+    {"stream": false, "status": "failed", "initial_cache_write_positive": true, "repeat_cache_read_tokens": [0, 0, 0]},
+    {"stream": true, "status": "failed", "initial_cache_write_positive": true, "repeat_cache_read_tokens": [0, 0, 0]}
+  ],
+  "native_sdk_cache_control": {
+    "status": "failed",
+    "exit_code": 1,
+    "same_gateway_and_model": true,
+    "requests": [
+      {"input_tokens": 12, "cache_write_tokens": 11102, "cache_read_tokens": 0, "output_tokens": 4},
+      {"input_tokens": 12, "cache_write_tokens": 11102, "cache_read_tokens": 0, "output_tokens": 4},
+      {"input_tokens": 12, "cache_write_tokens": 11102, "cache_read_tokens": 0, "output_tokens": 4}
+    ],
+    "root_cause": "unresolved; symptom also occurs outside harness"
+  },
+  "cluster_controls": {
+    "baseline_canary_connection": "connected",
+    "after_selected_pod_deny_all_egress": "connected",
+    "network_policy_enforcement": "failed",
+    "kata_pod": "blocked: Unschedulable after 20-second PodScheduled wait",
+    "pod_uid": 65532,
+    "effective_capabilities": 0,
+    "no_new_privileges": true,
+    "seccomp_filtering": true,
+    "service_account_token_present": false,
+    "cgroup_writable": false,
+    "kvm_visible_in_hardened_control_pod": false,
+    "cluster_dns": "passed",
+    "sandbox_isolation": {"driver": "pod", "level": "namespaced", "enforcement": "partial"},
+    "valid_service_allocation": "refused: services require enforced pod NetworkPolicy",
+    "missing_client_certificate": "rejected: TLS certificate_required / gRPC UNAVAILABLE"
+  },
+  "cleanup": {
+    "namespace": "evalsi-verify-20261021",
+    "trial_pods_remaining_before_cleanup": 0,
+    "namespace_deleted": true,
+    "port_forward_stopped": true,
+    "temporary_provider_settings_and_tls_removed": true,
+    "shared_platform_configuration_modified": false,
+    "provider_token_deployed_to_cluster": false
+  },
+  "limits": [
+    "Existing test functions for provider-only controls were called directly, not counted as an additional pytest suite.",
+    "Distinct existing test cases passed after corrected invocation: 24; the original failed batch remains failed.",
+    "No 300-step/200k-token quality, human-labelled calibration, GPU training, Kata execution, host KVM or 10k concurrent-trial claim.",
+    "Historical 20 October results retain their own versions, platforms and limits.",
+    "No new full-suite, full Helm installation or direct Anthropic upstream certification."
+  ]
+}

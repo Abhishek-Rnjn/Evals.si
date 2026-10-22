@@ -92,7 +92,7 @@ The goal is to let agents work for hours and through hundreds of steps without o
 - **Code-mode tools (programmatic tool calling).** Add an optional profile where the agent writes a Python script that calls the task's tools inside the sandbox, and only the script's output returns to the context. The tool calls inside it are still recorded as steps.
 - **Memory and notes.** Add an optional `memory` directory tool that survives compaction, for tasks that measure long-horizon planning.
 
-Exit criteria: a synthetic 300-step task finishes inside a 200k-token window under each context strategy. The number of steps and tokens lost to clearing is recorded on the run. A trial killed mid-run resumes and grades the same as an uninterrupted one.
+Exit criteria: a synthetic 300-step task finishes inside a 200k-token window under each context strategy. *Partly met live: a synthetic 300-incident task passed 300/300 with Sonnet and a retained release code across 112 compactions, but its largest request was about 5k tokens, not a 200k window ([report](verification/HORIZON-SERVICES-2026-10-21.md)).* The number of steps and tokens lost to clearing is recorded on the run. A trial killed mid-run resumes and grades the same as an uninterrupted one.
 
 ### H3: Agents under test (Jan 2027)
 
@@ -201,8 +201,11 @@ mid-run messages, session resume and fork, and checker isolation are built.
   *Built (unreleased): the `evalsi_harness.approval:ApprovalGate` hook with
   allow/ask/deny rules by tool, path and command, a scripted approver (approve,
   edit, deny, no-answer) and recorded `hitl_request`/`hitl_resolved` steps that
-  replay exactly ([guide](guides/agent-runs.md#approval-gates)). A model or human
-  approver and an agent-initiated request tool are not built.*
+  replay exactly ([guide](guides/agent-runs.md#approval-gates)). Run live with Sonnet
+  on AKS: approve, edit, no-answer and deny behaved, replays made no provider calls,
+  and a changed approver script was refused ([report](verification/AKS-FOLLOWUP-2026-10-21.md)).
+  That run found a false positive in `denial-respected`, fixed in 1.0.1. A model or
+  human approver and an agent-initiated request tool are not built.*
 - **Approval evaluators in the `agent` pack.** `approval-before-sensitive-action`
   (the listed tools were preceded by an approved request), `denial-respected` (no
   equivalent call after a denial, including via `bash`) and `escalation-minimal`

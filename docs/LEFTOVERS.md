@@ -7,6 +7,48 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Fresh live verification, 2026-10-21:** the supplied cluster is AKS, not EKS.
+The [new batch and complete 50-row reconciliation](verification/AKS-CLAUDE-2026-10-21.md)
+retain the newer 20 October evidence rather than reopening its bounded passes.
+Current SDK/harness tests against real AKS pods and terminal-configured Claude
+passed 24 bounded cases after correcting a multiprocessing invocation. Cache
+reuse still failed, also through the native Anthropic SDK on the same gateway;
+default-deny pod egress was not enforced, and an actual Kata pod could not
+schedule despite its RuntimeClass existing. These are not production, long-horizon
+quality or human-calibration passes. The disposable namespace was removed.
+
+**Budgeted horizon and service follow-up, 2026-10-21:**
+the [dedicated record](verification/HORIZON-SERVICES-2026-10-21.md) preserves
+real Haiku/Sonnet synthetic incident-triage outcomes and carries all spending
+under the user's increased $20 total estimated allowance. Sonnet passed
+300/300 decisions with exact evidence and retained memory across 112 compactions;
+fresh-pod zero-provider replay passed too. Aggregate conservative spend was
+$16.51619320, including earlier failed Haiku controls. Eight multi-service
+basic/lifecycle groups passed on isolated kind with enforced NetworkPolicy,
+including cancellation, deadline expiry, worker SIGKILL and pool recovery.
+These local-kind results do not certify AKS networking or production recovery;
+synthetic horizon results do not establish public-benchmark coding quality or
+a single 200k-token context.
+
+**Matching-code AKS follow-up, 2026-10-21:**
+the [audit-first report](verification/AKS-FOLLOWUP-2026-10-21.md) and
+[structured evidence](verification/data/aks-followup-2026-10-21.json) record
+the seven original groups under the approved scope, including live Sonnet refund/approval and
+assistant-labelled native judge calibration, delegation/fork/external-write
+controls, actual current-daemon browser decisions, real jailer/boot settings,
+installed starters, source-tag PostgreSQL migration/older-reader checks and
+quiesced PostgreSQL/ClickHouse/JetStream restores. All nine throughput replicates
+failed their unchanged target; all passed freshness. Six crash trials preserved
+stored traces but lost acknowledged, still-buffered OTLP data. NetworkPolicy
+and Kata remain blocked; the approval evaluator false positive it found
+(`denial-respected` counted the denied call itself as a retry) is fixed in
+`builtin/denial-respected` 1.0.1. Conservative cumulative spend is $22.76245520 under the
+authorized $39.50 cutoff. The owned namespace and loopback forwards were removed
+and absence verified. The report distinguishes bounded passes and exclusions.
+Redundant context/profile reruns were explicitly excluded under that scope.
+This does not close human/customer validation, published
+release/rolling-upgrade, power-loss or production recovery requirements.
+
 **Evaluator validation (unreleased, 2026-10-21):** portable human pass/fail label
 revisions, existing annotation export import, tuning-only threshold/candidate
 selection, held-out validity and slice metrics, fresh-call repeatability,
@@ -28,6 +70,31 @@ overhead from hosted performance; they do not close production scale targets.
 ## Required before stable 0.4
 
 The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) lists the open R04 product-readiness rows and the customer-validation rows (CV) that gate beta rather than 0.4. Nothing in it is established yet. The detailed technical inventory below retains its existing evidence and limits.
+
+## Open items from the 21 October AKS follow-up
+
+Details and evidence are in the [follow-up report](verification/AKS-FOLLOWUP-2026-10-21.md);
+these are the items it leaves open.
+
+- **Ingest throughput.** `TestLoad` stored 15.5k to 18k spans/s on SQLite and 9.4k to
+  11.8k on ClickHouse, below the 20k target, in all nine runs. They ran on the slowest
+  node (DS4_v2, `emptyDir` storage) while other probes overlapped, so this is not a
+  measured regression. Rerun on a D8s_v5 with the load alone on the node.
+- **Acknowledged OTLP data is not durable.** The assembler holds spans in memory until a
+  trace's root span ends plus `otlp.grace` (default 2 s), and OTLP success is returned on
+  receipt. SIGKILL during ingest lost 200 to 220 acknowledged traces in each of six runs,
+  in both `synchronous` modes; stored traces were all kept. Document the boundary and
+  decide whether to buffer durably or acknowledge later before promising crash-safe ingest.
+- **The image cache is per process.** A digest-pinned reference is reused without a
+  registry request only inside one running process; a new process asks the registry once
+  even with the root on disk, so restarts and air-gapped hosts need registry access.
+  Tag movement and signature revalidation were not run.
+- **Not run in that pass:** the Claude Code `permission_denials` check, a daemon-level
+  unwritable-audit drill, a simultaneous rolling upgrade, power loss, and native browser
+  download events.
+- **Weak evidence to keep weak:** the refund suite passed 36 of 36 with Sonnet, so it does
+  not yet separate agents; calibration agreed perfectly on assistant-made labels and
+  synthetic mutations.
 
 ## Browser release workbench, unreleased
 

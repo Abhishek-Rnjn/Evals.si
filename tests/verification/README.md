@@ -16,6 +16,115 @@ is attempted. The bubblewrap check only tests bare namespace creation. Evals.si'
 rlimits, mount rules and functional isolation require its actual sandbox tests.
 No token values, kubeconfig contents or secret files are included in the output.
 
+## Budgeted live Claude long-horizon task
+
+Measured outcomes, failed controls and aggregate spending are recorded in the
+[dated verification report](../../docs/verification/HORIZON-SERVICES-2026-10-21.md).
+
+The opt-in [runner](long_horizon.py) uses the real `AgentLoop`, compaction and
+model cassette with [300 synthetic incident decisions](long-horizon.yaml).
+The [task/checker](horizon_task.py) runs in a real pod sandbox. Each decision
+classifies current API/database/queue observations under an ordered runbook,
+quotes evidence, and advances to the next incident. A release code from the
+first incident must survive compactions until the last. Distractor logs include
+untrusted instructions. This is not a public benchmark, a coding task, actual
+production remediation or human-calibrated quality evidence.
+
+Use a new owned pool and the SDK's `EVALSI_SANDBOX_ADDR=tls://...`,
+`EVALSI_SANDBOX_TLS_CA`, `_CERT`, `_KEY` and `_SERVER_NAME` configuration.
+The process requires the user's HTTPS `ANTHROPIC_BASE_URL`,
+`ANTHROPIC_AUTH_TOKEN` and `ANTHROPIC_DEFAULT_HAIKU_MODEL` (or
+`ANTHROPIC_DEFAULT_SONNET_MODEL` for Sonnet 5.5); these remain on the
+client, not in sandbox files or the cluster.
+
+```sh
+python/.venv/bin/python tests/verification/long_horizon.py \
+  --output /private/new-long-horizon-output
+python/.venv/bin/python tests/verification/long_horizon.py \
+  --replay /private/new-long-horizon-output/cassette.jsonl \
+  --output /private/new-replay-output
+python/.venv/bin/python -m pytest tests/verification/test_long_horizon.py -q
+```
+
+For the [Sonnet profile](long-horizon-sonnet.yaml), use
+`--model-family sonnet --config tests/verification/long-horizon-sonnet.yaml
+--completion-guard`. This uses a 6k compaction target and the standard bounded
+`on_stop` hook to remind the agent if it stops before all incidents are submitted.
+It supplies the current incident, not gold answers. The hook allows at most three
+continuations. Include the same flags when replaying that cassette.
+
+Replay has no live model or provider HTTP client and needs no Claude credential;
+it reexecutes the recorded decisions in a fresh real pod with the same context
+configuration. It still requires the pool's mutual-TLS credentials.
+
+The output directory must be new/empty. It retains a model cassette, decisions,
+per-HTTP-attempt accounting and summary, including on an error. Do not commit
+private provider settings or arbitrary real application data alongside it.
+For another paid attempt under the **same** allowance, supply
+`--prior-budget /private/previous-output/budget.json`; this carries every
+settled charge and uncertain reservation forward rather than resetting spend.
+The request transport reserves estimated spend **before every HTTP attempt**,
+including automatic retries and compaction calls. Failed/ambiguous attempts
+retain their reservation. Ordinary model turns are limited to 1,024 tokens and
+summaries to 512. Usage omissions stop the run rather than becoming
+zero cost. By default, the ledger refuses a request that would exceed $14.50,
+including $0.001 reserved for the smoke check. After explicit user authorization
+to increase the total budget to $20, use `--budget-limit 19.5` on a new run or
+paid cassette resume with `--prior-budget`; this changes the cutoff without
+resetting any spending. The loop separately applies the selected cutoff to
+trajectory estimates.
+
+For the AKS follow-up's explicitly authorized $40 cumulative budget, the cutoff
+was initially $36 and subsequently raised by the user to **$39.50**. Use
+`--budget-limit 39.5 --prior-budget /private/latest-output/budget.json` for
+subsequent runs. Never reset the ledger or discard failed reservations.
+
+Rates are deliberately conservative for published Haiku pricing: $2.20 per
+million input tokens **including all cache tokens at that same rate**, and
+$5.50 per million output tokens.
+For Sonnet 5.5, the respective conservative rates are $4.40 and $11 per million.
+Historical attempts retain their original rates and charges when changing models.
+The pre-request reservation uses serialized
+UTF-8 request bytes plus 4,096 tokens of overhead; it is an estimate, not a
+provider tokenizer measurement. These controls are **not a gateway-side invoice
+cap**. Confirm the user's acceptance of the pricing basis or require a real
+provider-enforced spending limit before making a strict billing promise.
+See [published pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+
+The task-specific summary profile asks for at most 120 words, preserving the
+approved release code and current incident ID. A failed initial control with
+unconstrained 512-token summaries must remain a failure, not be erased by a rerun.
+
+Report aggregate input separately from peak per-request input: 300 turns or
+more than 200k **cumulative** tokens do not prove a single 200k-token context.
+The configured 8k compaction window is an approximate management target, not
+a hard tokenizer-enforced input limit. A passing task requires all 300
+decisions, >=95% correct actions, exact observation quotes, retained release
+code, >=300 model steps and normal completion; retain failed outcomes too.
+
+## Multi-service task files and failure controls
+
+The maintained [API/Redis task](../../examples/multi-service/run.yaml) and
+[Terminal-Bench-format fixture](../../examples/multi-service/terminal-bench)
+are exercised by [the basic and lifecycle runner](../../deploy/e2e/services.py).
+Use its `--cases basic,lifecycle` selection to run service crash/startup
+failure, startup/setup cancellation, deadline expiry, SDK-worker SIGKILL and
+pool-process SIGKILL/recovery controls without a model token.
+
+Do **not** set `network_policy_enforced: true` merely to make a test start.
+The canary and actual cross-trial denial must pass. On the supplied AKS
+cluster, unenforced policy blocks safe multi-service trials.
+
+An isolated alternative uses the [single-node kind configuration](services-kind.yaml)
+with default CNI disabled and Calico 3.30.3, and the existing
+[pool/RBAC/NetworkPolicy manifest](../../deploy/e2e/services-pool.yaml).
+The [scratch fixture image](services.Dockerfile) expects cross-built Linux
+`horizon-evalsid` and `horizon-evalsi-guest` binaries in its build context.
+Use a uniquely named owned cluster, ephemeral TLS and its own kubeconfig.
+Never run the pool-kill test on a shared/customer cluster: its runner checks
+the Docker node's kind-cluster label against `EVALSI_SERVICES_KIND_CLUSTER`.
+Local-kind passes are Kubernetes evidence, not AKS networking certification.
+
 ## Real Firecracker
 
 Use a Linux KVM host with Firecracker, `mkfs.ext4`, a compatible guest kernel
