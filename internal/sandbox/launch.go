@@ -81,7 +81,7 @@ func limits(req *Resources, spec *launchSpec) {
 
 // launch runs the launcher with spec and waits, enforcing the wall-clock
 // timeout on the whole process group.
-func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, stdin []byte, timeout time.Duration, stdout, stderr io.Writer) *ExecResult {
+func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, stdin io.Reader, timeout time.Duration, stdout, stderr io.Writer) *ExecResult {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
@@ -94,7 +94,9 @@ func (s *Sandbox) launch(ctx context.Context, spec *launchSpec, stdin []byte, ti
 	}
 	cmd := exec.CommandContext(ctx, s.cfg.Launcher, "sandbox-exec")
 	cmd.Env = []string{specEnv + "=" + string(raw)}
-	cmd.Stdin = bytes.NewReader(stdin)
+	// An *os.File (a background process's stdin pipe) is handed to the
+	// command as is; anything else is copied in.
+	cmd.Stdin = stdin
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	var lease *cgroupLease
