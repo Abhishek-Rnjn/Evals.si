@@ -1,8 +1,8 @@
 # From production failure to release decision
 
-This unreleased workflow connects **production failure → approved regression
-suite → candidate comparison → release decision**. Use a matching source SDK,
-server and worker; published 0.3.0 does not include these APIs or commands.
+This workflow, added in 0.3.1, connects **production failure → approved regression
+suite → candidate comparison → release decision**. Use a matching 0.3.1 or newer
+SDK, server and worker; published 0.3.0 does not include these APIs or commands.
 
 A release decision checks one explicit baseline and one candidate against a
 reviewed policy and the complete approved held-out suite. It saves the result

@@ -15,7 +15,7 @@ const ogImage = `${site}${base === "/" ? "" : base}/og.png`;
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 
 const guides = [
-  "onboarding", "dataset-snapshots", "judge-calibration", "failure-inbox", "dataset-catalog", "release-decisions", "release-workbench", "agent-runs", "built-in-harness", "gate-an-agent-in-ci", "support-refund-suite", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
+  "onboarding", "dataset-snapshots", "judge-calibration", "failure-inbox", "dataset-catalog", "release-decisions", "release-workbench", "agent-runs", "built-in-harness", "enterprise-deployment", "gate-an-agent-in-ci", "support-refund-suite", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-harness",
   "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2",
 ];
@@ -45,7 +45,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" } },
       ],
       favicon: "/favicon.svg",
-      description: "Evals.si (pip install evalsi): evaluate AI before you ship, while it runs and as you train it. Agents, RAG pipelines, LLMs and models, with CI gates, live trace scoring and RL rewards. Self-hosted and open source.",
+      description: "Evals.si (pip install evalsi): evaluate AI before you ship, while it runs and as you train it. Agents, RAG pipelines, LLMs and models, with CI gates, release decisions, live trace scoring, a built-in agent harness and RL rewards. Self-hosted and open source.",
       social: [{ icon: "github", label: "GitHub", href: repo }],
       customCss: ["./src/styles/theme.css"],
       components: {
@@ -58,6 +58,8 @@ export default defineConfig({
         { label: "Start here", items: [
           { label: "Overview", slug: "docs" },
           { label: "Get started", slug: "docs/get-started" },
+          { label: "Built-in agent harness", slug: "docs/guides/built-in-harness" },
+          { label: "Release decisions", slug: "docs/guides/release-decisions" },
         ] },
         { label: "Releases", items: [
           { label: "Changelog", slug: "docs/changelog" },

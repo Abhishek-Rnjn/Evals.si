@@ -5,7 +5,7 @@ The failure inbox connects ingested traces to the
 assigns it, edits sensitive data and expected behavior, reviews a particular
 revision, then exports approved cases into a pinned regression suite.
 
-This feature is unreleased and requires matching source builds of the server
+This feature was added in 0.3.1 and needs a matching 0.3.1 or newer server
 and SDK. It is absent from published 0.3.0. Capture and export do not invoke an
 agent, replay tools or modify the production application.
 
@@ -150,6 +150,6 @@ approve labels, send assignment notifications, provide semantic deduplication,
 enforce independent review of inbox cases, or implement
 backup erasure/legal holds. The roadmap keeps those acceptance limits open.
 
-Approved cases can now be published directly into the unreleased [shared dataset
+Approved cases can now be published directly into the [shared dataset
 catalog](dataset-catalog.md). Dataset approval requires a distinct authenticated
 publisher and approver; this does not change inbox-case review rules.

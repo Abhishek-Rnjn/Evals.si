@@ -1,8 +1,8 @@
 # Configure and investigate a release check in the browser
 
-The unreleased **Release workbench** at `/ui/#/workbench` configures regression
-runs and release policies through forms. Use matching source builds of evalsid,
-the Python worker and SDK. Published 0.3.0 does not include this workflow.
+The **Release workbench** at `/ui/#/workbench`, added in 0.3.1, configures regression
+runs and release policies through forms. Use matching 0.3.1 or newer builds of
+evalsid, the Python worker and SDK. Published 0.3.0 does not include this workflow.
 
 ## Configure a candidate
 

@@ -1,6 +1,6 @@
 # Validate an evaluator against human judgements
 
-**Unreleased.** `evalsi calibrate` measures whether an evaluator agrees with human
+**Added in 0.3.1.** `evalsi calibrate` measures whether an evaluator agrees with human
 pass/fail judgements on fixed recorded outputs. Compare evaluator versions,
 judge models, prompts and thresholds before using their scores as evidence about
 an AI system. No target model or agent is run during calibration.

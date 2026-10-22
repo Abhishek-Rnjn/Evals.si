@@ -1,6 +1,6 @@
 # Synthetic incident to shared approved regression suite
 
-This unreleased example uses the source SDK/server. All data is synthetic; the
+This example uses the source SDK/server (the feature needs 0.3.1 or newer). All data is synthetic; the
 candidate is a scripted HTTP fixture, not a real agent or a refund application.
 It needs no model API keys and makes no live business calls.
 
