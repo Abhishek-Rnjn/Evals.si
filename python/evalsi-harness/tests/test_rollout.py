@@ -208,8 +208,14 @@ def test_a_rung_that_cannot_snapshot_cancels_instead_of_pretending() -> None:
         assert t.status == CANCELLED
         assert not t.resumable
         assert "cannot snapshot" in t.error
+        # Not resumable from a snapshot, but its turns are kept: it can be replayed
+        # (see test_rollout_replay.py). One that never started has nothing to resume.
+        assert t.replayable
+        never = await pool.run([(record(id="x"), SPEC)])
+        assert never[0].status == CANCELLED
+        assert not never[0].replayable
         with pytest.raises(ValueError, match="paused"):
-            await pool.run(resume=[t])
+            await pool.run(resume=never)
         await pool.aclose()
 
     run(go())
