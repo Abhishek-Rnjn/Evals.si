@@ -57,11 +57,9 @@ func (g *gate) addReleaseRules(rules map[string]accessRule) {
 	}}
 	rules[evalsiv1alpha1connect.ReleaseServiceCreateReleaseDecisionProcedure] = accessRule{action: "releases.create", resolve: func(ctx context.Context, msg any) ([]target, error) {
 		r := msg.(*pb.CreateReleaseDecisionRequest)
-		run, err := g.store.GetRun(ctx, r.GetCandidate().GetRunId())
-		if err != nil {
-			return nil, err
-		}
-		primary, err := g.runTargets(ctx, run.GetId())
+		// A missing candidate is a target no one holds, like a forbidden one.
+		candidate := r.GetCandidate().GetRunId()
+		primary, err := g.runTargets(ctx, candidate)
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +67,7 @@ func (g *gate) addReleaseRules(rules map[string]accessRule) {
 		readable := primary[0]
 		readable.action = "releases.read"
 		out = append(out, readable)
-		for _, id := range []string{r.GetBaseline().GetRunId(), run.GetId()} {
+		for _, id := range []string{r.GetBaseline().GetRunId(), candidate} {
 			targets, err := g.runTargets(ctx, id)
 			if err != nil {
 				return nil, err

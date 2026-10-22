@@ -55,7 +55,7 @@ func registerDatasetUpload(mux *http.ServeMux, dependencies deps) {
 			case spools <- struct{}{}:
 				defer func() { <-spools }()
 			default:
-				datasetHTTPError(writer, connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload capacity is busy; retry later")))
+				datasetHTTPError(writer, datasets.Busy())
 				return
 			}
 			spool, checksum, readErr := spoolDatasetUpload(request.Body)
@@ -165,7 +165,14 @@ func datasetHTTPError(writer http.ResponseWriter, err error) {
 	case connect.CodePermissionDenied:
 		code = http.StatusForbidden
 	case connect.CodeResourceExhausted:
+		// Size limits are 413; rate limiting and a busy server carry a
+		// Retry-After and are 429.
 		code = http.StatusRequestEntityTooLarge
+		var failure *connect.Error
+		if errors.As(err, &failure) && failure.Meta().Get("Retry-After") != "" {
+			code = http.StatusTooManyRequests
+			writer.Header().Set("Retry-After", failure.Meta().Get("Retry-After"))
+		}
 	case connect.CodeFailedPrecondition:
 		code = http.StatusConflict
 	case connect.CodeAlreadyExists:
@@ -174,7 +181,7 @@ func datasetHTTPError(writer http.ResponseWriter, err error) {
 		code = http.StatusServiceUnavailable
 	}
 	message := http.StatusText(code)
-	if code == http.StatusBadRequest || code == http.StatusRequestEntityTooLarge {
+	if code == http.StatusBadRequest || code == http.StatusRequestEntityTooLarge || code == http.StatusTooManyRequests {
 		var failure *connect.Error
 		if errors.As(err, &failure) {
 			message = failure.Message()

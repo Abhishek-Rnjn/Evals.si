@@ -212,8 +212,9 @@ func newJWTProvider(p Provider, client *http.Client) (*jwtProvider, error) {
 	if p.ClockSkew != "" {
 		jp.skew, _ = time.ParseDuration(p.ClockSkew)
 	}
-	if len(jp.required) == 0 {
-		jp.required = []string{"exp"}
+	// exp is always required: a token without it would never expire.
+	if !slices.Contains(jp.required, "exp") {
+		jp.required = append([]string{"exp"}, jp.required...)
 	}
 	return jp, nil
 }

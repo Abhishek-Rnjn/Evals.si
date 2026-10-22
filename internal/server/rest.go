@@ -221,7 +221,11 @@ func restHandler(handlers map[string]http.Handler) (http.Handler, error) {
 		services = append(services, vanguard.NewServiceWithSchema(schema, handlers[name],
 			vanguard.WithTargetProtocols(vanguard.ProtocolConnect)))
 	}
-	return vanguard.NewTranscoder(services, vanguard.WithRules(restRules()...))
+	t, err := vanguard.NewTranscoder(services, vanguard.WithRules(restRules()...), vanguard.WithCodec(newRESTJSONCodec))
+	if err != nil {
+		return nil, err
+	}
+	return unknownQueryParam(t), nil
 }
 
 // restSchema is the service without its client-streaming methods, which REST
