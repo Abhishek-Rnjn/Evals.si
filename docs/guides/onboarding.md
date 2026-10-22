@@ -1,12 +1,11 @@
 # Guided setup and the GitHub gate action
 
-`evalsi doctor` and `evalsi init` are **unreleased**; they are not in PyPI 0.3.0.
-Use this checkout until the next package release:
+`evalsi doctor` and `evalsi init` were added in 0.3.1; PyPI 0.3.0 does not have them.
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install -e './python/evalsi[server]' -e ./python/evalsi-harness
+python -m pip install 'evalsi[server]>=0.3.1' 'evalsi-harness>=0.3.1'
 evalsi doctor
 evalsi init my-evals
 cd my-evals
@@ -14,7 +13,7 @@ evalsi run -f run.yaml --output results.json
 evalsi report results.json -o report.html
 ```
 
-Run the install from the repository root. On Windows, activate with
+On Windows, activate with
 `.venv\Scripts\Activate.ps1`. Recorded-output scoring works without a server,
 sandbox, model or API key. `init` only writes a **new** directory and refuses
 existing directories, files and symlinks. All starter cases are synthetic.
@@ -73,9 +72,9 @@ provider API calls and do not print credentials or raw subprocess errors.
 ## Maintained GitHub Action
 
 The root [action definition](../../action.yml) wraps the existing run engine and
-works with **published 0.3.0**; the two new CLI commands are not required at runtime.
-After merging this implementation, use an immutable commit containing the action
-in place of `ACTION_COMMIT`. The existing v0.3.0 tag predates the action.
+works with **published 0.3.0 and later**; the `doctor` and `init` commands are not
+required at runtime. Use an immutable commit containing the action, such as the
+`v0.3.1` tag's commit, in place of `ACTION_COMMIT`. The v0.3.0 tag predates the action.
 
 ```yaml
 name: Agent evaluation
@@ -92,7 +91,7 @@ jobs:
         with:
           spec: run.yaml
           working-directory: my-evals
-          version: '0.3.0'
+          version: '0.3.1'
 ```
 
 Check in the starter's `run.yaml` and dataset, then adapt them to your application.

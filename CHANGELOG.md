@@ -62,7 +62,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Changed
 
-- The homepage describes the product around one decision, "can we safely ship this agent change?", with the connect / failures-to-tests / release-decision workflow and its audiences. It gains a "What's new" section for the unreleased work above (marked as not in 0.3.0), an `evalsi-harness` section listing what the built-in harness provides and what is not built, and a release-decision code tab. The docs overview, sidebar and site metadata follow, and the enterprise deployment guide is on the site.
+- The homepage describes the product around one decision, "can we safely ship this agent change?", with the connect / failures-to-tests / release-decision workflow and its audiences. It gains a "New in 0.3.1" section, an `evalsi-harness` section listing what the built-in harness provides and what is not built, and a release-decision code tab. The docs overview, sidebar and site metadata follow, and the enterprise deployment guide is on the site. Guides, examples and the README describe the 0.3.1 features as released instead of unreleased, and installation examples pin 0.3.1.
 - The load test's `OnlineFreshness` polls concurrently and reports `freshness_poll_p95_ms`, so a slow read path no longer inflates the freshness it measures.
 - The release-workbench guide is in the website sidebar.
 - The sandbox image store reuses an unpacked root without asking the registry only for digest-pinned refs, and only within one running process; tags are resolved every time, and a restarted process asks the registry once even for a pinned ref.

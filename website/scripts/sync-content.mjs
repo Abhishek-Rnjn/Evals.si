@@ -149,9 +149,7 @@ It is built around one decision: **can we safely ship this agent change?** Conne
 - [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.
 - [Operations](${BASE}/docs/guides/operations/): upgrade policy, backup and restore, runbooks and reference cluster values.
 
-## From production failure to release decision
-
-On \`main\` and coming in the next release; published 0.3.0 does not include these.
+## New in 0.3.1: from production failure to release decision
 
 - [Failure inbox](${BASE}/docs/guides/failure-inbox/): turn production traces into approved, redacted regression cases.
 - [Dataset snapshots](${BASE}/docs/guides/dataset-snapshots/) and the [dataset catalog](${BASE}/docs/guides/dataset-catalog/): pinned, reviewed, versioned suites.

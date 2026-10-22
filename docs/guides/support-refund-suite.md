@@ -1,9 +1,9 @@
 # A support and refund starter suite
 
-This unreleased starter suite evaluates a tool-using support agent on order
+This starter suite, added in 0.3.1, evaluates a tool-using support agent on order
 refunds. It is a set of twelve editable tasks plus **state-based assertions**:
 deterministic checks of the business system's final state, so a judge is never
-the only evidence that a refund was correct. Run it from a source checkout with
+the only evidence that a refund was correct. Run it with 0.3.1 or newer and
 `evalsid` on `PATH` (see the [agent runs quick start](agent-runs.md#quick-start)):
 published 0.3.0 does not include the `state-assertion` evaluator.
 

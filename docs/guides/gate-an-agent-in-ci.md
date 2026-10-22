@@ -188,8 +188,8 @@ If your datasets, judges and keys live on an Evals.si server, run the same spec 
 
 ## Enforce a baseline-aware release decision
 
-The unreleased [release-decision workflow](release-decisions.md) extends the
+The [release-decision workflow](release-decisions.md) extends the
 maintained Action with server-backed catalog pins, reviewed baseline/policy
 identities, paired regression and critical-case gates, and a distinct
-insufficient-evidence outcome. Published 0.3.0 and embedded baseline comparisons
+insufficient-evidence outcome; it needs 0.3.1 or newer. Published 0.3.0 and embedded baseline comparisons
 retain their documented behavior.

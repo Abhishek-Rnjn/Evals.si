@@ -184,7 +184,7 @@ const audiences = [
   { name: "Model and training teams", text: "The same evaluators as RL rewards and checkpoint checks, and the same agent tasks as Gymnasium, NeMo Gym, OpenEnv and verifiers environments." },
 ];
 
-// Unreleased work on main (CHANGELOG.md, [Unreleased]); 0.3.0 does not have it.
+// New in 0.3.1 (CHANGELOG.md).
 const whatsNew = [
   { name: "Release decisions", text: "A pinned baseline, a reviewed policy and paired confidence intervals decide PASS, BLOCK or INSUFFICIENT; insufficient evidence never passes.", href: "/docs/guides/release-decisions/" },
   { name: "Browser release workbench", text: "Configure runs on approved suites, build release policies through forms, and export the CLI command or Action step.", href: "/docs/guides/release-workbench/" },
@@ -310,7 +310,7 @@ const extras = [
         <a href={doc("/docs/guides/release-decisions/")} class="animate-fade-up inline-block">
           <AnimatedGradientText>
             <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
-            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">From production failure to release decision, on main</span>
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">New in 0.3.1: from production failure to release decision</span>
             <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
           </AnimatedGradientText>
         </a>
@@ -414,9 +414,9 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
     <!-- What's new -->
     <section class="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
       <div class="mx-auto mb-12 max-w-2xl text-center">
-        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">What's new</p>
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">New in 0.3.1</p>
         <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">From production failure to release decision</h2>
-        <p class="mt-4 text-neutral-600 dark:text-neutral-400">On <code class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-sm dark:bg-white/10">main</code> and coming in the next release; published 0.3.0 does not include these yet. See the <a class="font-medium text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-300" href={doc("/docs/changelog/")}>changelog</a>.</p>
+        <p class="mt-4 text-neutral-600 dark:text-neutral-400">Upgrade with <code class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-sm dark:bg-white/10">pip install -U evalsi evalsi-harness</code>, and the server and charts to the same version. Everything else that changed is in the <a class="font-medium text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-300" href={doc("/docs/changelog/")}>changelog</a>.</p>
       </div>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {whatsNew.map((n) => (

@@ -1,6 +1,6 @@
 # Synthetic production failure to enforced release decision
 
-This example exercises the complete unreleased workflow with two synthetic refund
+This example exercises the complete release-decision workflow (0.3.1 or newer) with two synthetic refund
 incidents and a scripted HTTP agent. It uses no paid model or live business tool.
 Use the SDK/server/worker from this checkout; published 0.3.0 lacks the feature.
 

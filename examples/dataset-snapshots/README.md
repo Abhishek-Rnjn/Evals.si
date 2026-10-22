@@ -3,8 +3,8 @@
 These **synthetic recorded outputs** demonstrate refunds, authorization and
 duplicate prevention. They do not execute a real agent or establish a real
 business policy. The expected decisions are example labels for review.
-Requires the unreleased snapshot commands from this checkout; PyPI 0.3.0 does
-not include the importer. No model or API key is needed.
+Requires the snapshot commands, added in 0.3.1; PyPI 0.3.0 does not include
+the importer. No model or API key is needed.
 
 From the repository root:
 
