@@ -489,7 +489,7 @@ def ndcg(ranked: Sequence[str], gains: dict[str, float], k: int) -> float:
     ],
 )
 def ranking(record: Record, *, k: int = 10) -> list[Score]:
-    ranked = _ranked(record.output)
+    ranked = list(dict.fromkeys(_ranked(record.output)))
     gains = _gains(record.reference)
     if not gains:
         raise SkipRecord("the reference names no relevant items")
