@@ -70,6 +70,32 @@ func (service *Service) Put(ctx context.Context, config *evalsiv1alpha1.DatasetU
 	if err != nil {
 		return nil, err
 	}
+	return service.put(ctx, config, source, size)
+}
+
+// PutSpooled stores an upload the caller already spooled to a file (the keyed
+// HTTP upload, which fingerprints it first): the file is validated in place,
+// not copied again, and takes no upload slot of its own, since the caller
+// holds one for the spool. The file is not closed or removed.
+func (service *Service) PutSpooled(ctx context.Context, config *evalsiv1alpha1.DatasetUploadConfig, spool *os.File) (*evalsiv1alpha1.UploadDatasetResponse, error) {
+	if err := ValidateUpload(config); err != nil {
+		return nil, err
+	}
+	if service.Root == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("dataset uploads need datasets_dir"))
+	}
+	size, err := spool.Seek(0, io.SeekEnd)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return service.put(ctx, config, spool, size)
+}
+
+// put validates source (size bytes, read at any offset) and publishes it.
+func (service *Service) put(ctx context.Context, config *evalsiv1alpha1.DatasetUploadConfig, source *os.File, size int64) (*evalsiv1alpha1.UploadDatasetResponse, error) {
 	if size > MaxUploadBytes {
 		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload exceeds 64 MiB"))
 	}

@@ -68,7 +68,7 @@ func registerDatasetUpload(mux *http.ServeMux, dependencies deps) {
 			keyed := datasetUploadRequest{Request: connect.NewRequest(&evalsiv1alpha1.ImportDatasetRequest{Config: config, Uri: "sha256:" + checksum})}
 			keyed.Header().Set("Idempotency-Key", key)
 			response, callErr := dependencies.gate.idempotent(ctx, keyed, func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
-				uploaded, err := dependencies.datasets.Put(ctx, config, spool)
+				uploaded, err := dependencies.datasets.PutSpooled(ctx, config, spool)
 				if err != nil {
 					return nil, err
 				}
