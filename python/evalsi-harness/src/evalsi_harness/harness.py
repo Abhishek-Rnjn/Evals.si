@@ -29,6 +29,7 @@ from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness import workspace
 from evalsi_harness._version import __version__
+from evalsi_harness.browser import BrowserConfig, BrowserSession, browser_tools
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
 from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
@@ -407,6 +408,13 @@ class BuiltinHarness:
                 "functions. Do a whole step of work in one script (look, filter, change, check) "
                 "and print only what you need to see."
             )
+        if "browser" in c.tools.builtin:
+            start = BrowserConfig.from_metadata(live.task.record.metadata).start_url
+            notes.append(
+                "You have a web browser (the browser_* tools). Read pages with browser_snapshot "
+                "and act on the refs it gives; use browser_screenshot when layout matters."
+                + (f" It opens at {start}." if start else "")
+            )
         if "delegate" in c.tools.builtin:
             notes.append(
                 "For work that would fill your context with output you do not need to keep "
@@ -531,6 +539,9 @@ class BuiltinHarness:
             if self.profile is None or self.profile.escalation:
                 tools.append(self._escalation_tool(live))
         builtin = self._builtin_names(live)
+        if "browser" in builtin:
+            tools += self._browser_tools(live)
+        builtin = [n for n in builtin if n != "browser"]
         if builtin:
             if not use_sandbox or live.env is None:
                 raise TaskError("tools.builtin needs the sandbox tools and an environment")
@@ -595,6 +606,17 @@ class BuiltinHarness:
             seed = f"{live.task.id}:{live.task.trial}"
             tools = [FaultyTool(t, faults, seed) for t in tools]
         return tools
+
+    def _browser_tools(self, live: LiveTask) -> list[Tool]:
+        """The ``browser`` toolset, configured by the record's ``metadata.browser``. The
+        browser opens on the first call and closes with the task."""
+        try:
+            config = BrowserConfig.from_metadata(live.task.record.metadata)
+        except ValueError as exc:
+            raise TaskError(f"tools.builtin: {exc}") from exc
+        session = BrowserSession(config)
+        live.closers.append(session.aclose)
+        return browser_tools(session)
 
     def _escalation_tool(self, live: LiveTask) -> Tool:
         allowed = set(self.config.escalation.allow)

@@ -282,7 +282,7 @@ const maxHooks = 8
 var harnessProfiles = []string{"minimal", "standard", "code-mode"}
 
 // builtinTools are the optional built-in tools a spec may list.
-var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search", "delegate", "tool_search", "code_mode"}
+var builtinTools = []string{"edit_file", "glob", "grep", "apply_patch", "memory", "session_search", "delegate", "tool_search", "code_mode", "browser", "computer"}
 
 // minContextWindow is the smallest window a strategy can work in: below it the
 // summary and the kept turns alone would not fit.
