@@ -626,7 +626,8 @@ func (r *runner) cycle(ctx context.Context, conn Connector) error {
 		if err := r.commit(ctx, st, startedBackfill); err != nil {
 			return err
 		}
-		if res.Next == "" || len(res.Infos) == 0 {
+		// An empty page can still have later ones; a repeated cursor would loop.
+		if res.Next == "" || res.Next == cursor {
 			break
 		}
 		cursor = res.Next
