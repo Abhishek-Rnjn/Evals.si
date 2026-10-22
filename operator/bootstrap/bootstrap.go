@@ -242,7 +242,7 @@ func sameRoles(have map[string]*evalsiv1alpha1.RoleList, want map[string][]strin
 
 // apiKey makes sure the key exists and its value is in its Secret. A key's
 // value is shown once, so a key whose Secret is gone is replaced by a new one
-// (the old one is revoked), named <name>-r2, -r3...: revoked names stay taken.
+// (the old one is revoked), as is a key that has expired, named <name>-r2, -r3...: revoked names stay taken.
 func (r *Runner) apiKey(ctx context.Context, k APIKey) error {
 	field := k.Secret.Key
 	if field == "" {
@@ -262,7 +262,9 @@ func (r *Runner) apiKey(ctx context.Context, k APIKey) error {
 	}
 	if found && len(data[field]) > 0 {
 		have := byName[ann[KeyNameAnnotation]]
-		if have != nil && !have.GetRevoked() {
+		// An expired TTL key is as good as gone: replace it.
+		expired := have.GetExpiresAt().IsValid() && !have.GetExpiresAt().AsTime().After(time.Now())
+		if have != nil && !have.GetRevoked() && !expired {
 			if !sameRoles(have.GetRoles(), k.Roles) {
 				r.Log.Warn("the key's roles differ from the values, and a key's roles cannot change; rename the key in the values to replace it",
 					"key", have.GetName())
@@ -276,9 +278,9 @@ func (r *Runner) apiKey(ctx context.Context, k APIKey) error {
 	for n := 2; byName[name] != nil; n++ {
 		if old := byName[name]; !old.GetRevoked() {
 			if _, err := r.API.Auth.RevokeAPIKey(ctx, connect.NewRequest(&evalsiv1alpha1.RevokeAPIKeyRequest{Name: name})); err != nil {
-				return fmt.Errorf("api key %s: revoking %s, whose Secret is gone: %w", k.Name, name, err)
+				return fmt.Errorf("api key %s: revoking %s, that cannot be used: %w", k.Name, name, err)
 			}
-			r.Log.Info("revoked a key whose Secret is gone", "key", name)
+			r.Log.Info("revoked a key whose Secret is gone or that expired", "key", name)
 		}
 		name = k.Name + "-r" + strconv.Itoa(n)
 	}
