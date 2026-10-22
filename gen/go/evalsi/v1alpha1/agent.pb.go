@@ -1690,15 +1690,16 @@ func (x *BuiltinHarness) GetInterjections() []*Interjection {
 type Interjection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Delivered once the agent has made this many model calls (at least 1).
-	// With an event (on), the earliest step it may fire at (0: any).
+	// With an event, the earliest step it may fire at (0: any).
 	AtStep  int32  `protobuf:"varint,1,opt,name=at_step,json=atStep,proto3" json:"at_step,omitempty"`
 	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	// Deliver on an event instead of a step count: "tool_call" (after a tool
+	// Deliver on an event (so named because on is a boolean in YAML 1.1) instead
+	// of a step count: "tool_call" (after a tool
 	// call whose name matches the glob match, and whose JSON arguments match the
 	// regular expression pattern when it is set), "file_write" (after a tool
 	// call that writes a path matching the glob match: write_file, edit_file,
 	// apply_patch) or "stop" (the first time the agent tries to finish).
-	On            string `protobuf:"bytes,3,opt,name=on,proto3" json:"on,omitempty"`
+	Event         string `protobuf:"bytes,3,opt,name=event,proto3" json:"event,omitempty"`
 	Match         string `protobuf:"bytes,4,opt,name=match,proto3" json:"match,omitempty"`
 	Pattern       string `protobuf:"bytes,5,opt,name=pattern,proto3" json:"pattern,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1749,9 +1750,9 @@ func (x *Interjection) GetMessage() string {
 	return ""
 }
 
-func (x *Interjection) GetOn() string {
+func (x *Interjection) GetEvent() string {
 	if x != nil {
-		return x.On
+		return x.Event
 	}
 	return ""
 }
@@ -3272,11 +3273,11 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateSteps\x12\x18\n" +
 	"\aprofile\x18\r \x01(\tR\aprofile\x12C\n" +
 	"\rinterjections\x18\x0e \x03(\v2\x1d.evalsi.v1alpha1.InterjectionR\rinterjectionsB\x16\n" +
-	"\x14_parallel_tool_calls\"\x81\x01\n" +
+	"\x14_parallel_tool_calls\"\x87\x01\n" +
 	"\fInterjection\x12\x17\n" +
 	"\aat_step\x18\x01 \x01(\x05R\x06atStep\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12\x0e\n" +
-	"\x02on\x18\x03 \x01(\tR\x02on\x12\x14\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
+	"\x05event\x18\x03 \x01(\tR\x05event\x12\x14\n" +
 	"\x05match\x18\x04 \x01(\tR\x05match\x12\x18\n" +
 	"\apattern\x18\x05 \x01(\tR\apattern\"O\n" +
 	"\x04Hook\x12\x16\n" +

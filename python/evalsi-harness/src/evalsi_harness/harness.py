@@ -27,6 +27,7 @@ from evalsi.run import target_config
 from evalsi.sandbox import SandboxError
 from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
+from evalsi_harness import interject
 from evalsi_harness._version import __version__
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
@@ -349,6 +350,7 @@ class BuiltinHarness:
                         queue.put_nowait,
                         timeout_s=self._wall_clock(),
                         user=self._user_simulator(live.task),
+                        interjections=self._parsed_interjections(),
                     )
                 else:
                     final = await self._run_loop(live, queue.put_nowait)
@@ -514,9 +516,18 @@ class BuiltinHarness:
             return {}
         return {t.model: _doubled(t.max_tokens) for t in [spec.target, *spec.target.fallbacks]}
 
+    def _parsed_interjections(self) -> list[interject.Interjection]:
+        try:
+            return interject.from_proto(self.config.interjections)
+        except ValueError as exc:
+            raise TaskError(f"harness.builtin.interjections: {exc}") from exc
+
     def _loop_config(self, live: LiveTask) -> LoopConfig:
         c = self.config
         system = self._system(live)
+        parsed = self._parsed_interjections()
+        timed = [j for j in parsed if not j.timed_by_event]
+        events = [j for j in parsed if j.timed_by_event]
         return LoopConfig(
             max_steps=c.max_steps or 30,
             max_tokens=c.budget.tokens,
@@ -532,9 +543,8 @@ class BuiltinHarness:
             if "delegate" in self.config.tools.builtin
             else 0,
             context=self._context(live),
-            interjections=sorted(
-                ((j.at_step, j.message) for j in c.interjections), key=lambda j: j[0]
-            ),
+            interjections=sorted(((j.at_step, j.message) for j in timed), key=lambda j: j[0]),
+            event_interjections=events,
             **self._cache_prices(live),
             parallel=c.parallel_tool_calls if c.HasField("parallel_tool_calls") else True,
             system=system,
@@ -724,7 +734,10 @@ class BuiltinHarness:
                     **(
                         {
                             "interjections": [
-                                [j.at_step, j.message] for j in self.config.interjections
+                                [j.at_step, j.message, j.event, j.match, j.pattern]
+                                if j.event
+                                else [j.at_step, j.message]
+                                for j in self.config.interjections
                             ]
                         }
                         if self.config.interjections

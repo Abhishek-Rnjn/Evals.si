@@ -31,6 +31,7 @@ from evalsi.v1alpha1 import agent_pb2
 from evalsi_harness.environment import TaskEnvironment
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
 from evalsi_harness.formats import parse_output
+from evalsi_harness.interject import Interjection, call_matches
 from evalsi_harness.task import Task, TaskError
 
 DEFAULT_TIMEOUT_S = 600.0
@@ -857,6 +858,18 @@ class CLIConnector:
     async def send(self, text: str) -> AgentReply:
         placed = any("{instruction}" in a for a in self.cfg.command)
         argv = [a.replace("{instruction}", text) for a in self.cfg.command]
+        return await self._run(argv, text, placed)
+
+    async def resume(self, message: str, session_id: str) -> AgentReply:
+        """Deliver a follow-up by running ``resume_command`` (see interject_cli)."""
+        placed = any("{message}" in a for a in self.cfg.resume_command)
+        argv = [
+            a.replace("{message}", message).replace("{session}", session_id)
+            for a in self.cfg.resume_command
+        ]
+        return await self._run(argv, message, placed)
+
+    async def _run(self, argv: list[str], text: str, placed: bool) -> AgentReply:
         extra = {}
         for inside, outside in self.cfg.env_from.items():
             value = os.environ.get(outside)
@@ -917,7 +930,11 @@ class CLIConnector:
             steps=steps,
             usage=usage,
             finished=True,
-            extra={"exit_code": result.exit_code, "cli_outcome": result.outcome},
+            extra={
+                "exit_code": result.exit_code,
+                "cli_outcome": result.outcome,
+                **({"session_id": parsed.session_id} if parsed and parsed.session_id else {}),
+            },
         )
 
     async def aclose(self) -> None:
@@ -940,6 +957,145 @@ def connector_for(task: Task, env: TaskEnvironment | None) -> RemoteAgent:
     raise TaskError("target.agent needs one of a2a, mcp, responses, http or cli")
 
 
+def _add_usage(total: Usage, part: Usage) -> None:
+    total.input_tokens = (total.input_tokens or 0) + (part.input_tokens or 0)
+    total.output_tokens = (total.output_tokens or 0) + (part.output_tokens or 0)
+    if part.cost_usd is not None:  # unknown stays unknown, zero is a price
+        total.cost_usd = (total.cost_usd or 0.0) + part.cost_usd
+
+
+MAX_RESUMES = 10
+
+
+def _interjection_step(j: Interjection, trigger: str, *, delivered: bool, reason: str = "") -> Step:
+    return Step(
+        type="user",
+        name="user-interjection",
+        output=Content(text=j.message),
+        error="" if delivered else f"undeliverable: {reason}",
+        span_id=span_id(),
+        attributes={
+            "evalsi.interjection.on": j.on or "step",
+            "evalsi.interjection.trigger": trigger,
+            "evalsi.interjection.delivered": delivered,
+            # A CLI agent runs to completion: its trigger is seen in what it reported,
+            # and the message reaches it in a follow-up run, never mid-run.
+            "evalsi.interjection.timing": "after-run",
+            **({"evalsi.interjection.at_step": j.at_step} if j.at_step else {}),
+        },
+    )
+
+
+def _triggered(j: Interjection, steps: list[Step]) -> str:
+    """What in a run's steps triggers ``j`` (empty when nothing does)."""
+    if j.on == "stop":
+        return "the agent exited"
+    if not j.on:
+        calls = sum(s.type == "llm" for s in steps)
+        return f"{calls} model calls seen" if calls >= j.at_step else ""
+    for n, step in enumerate(steps, 1):
+        if step.type != "tool":
+            continue
+        calls = sum(s.type == "llm" for s in steps[:n])
+        if calls < j.at_step:
+            continue
+        args = step.input.as_text() if step.input is not None else ""
+        if call_matches(j, step.name, args):
+            return f"{step.name} {j.on.replace('_', ' ')}"
+    return ""
+
+
+async def interject_cli(  # noqa: PLR0915
+    agent: CLIConnector, first: AgentReply, items: list[Interjection], emit: Emit
+) -> tuple[AgentReply, dict[str, Any]]:
+    """Deliver the interjections a CLI agent's run triggered, in follow-up runs.
+
+    A CLI agent cannot be interrupted, so each interjection is judged against the
+    steps the run reported, and delivered by ``cli.resume_command`` (with
+    ``{message}`` and ``{session}`` filled in) when it was triggered. The follow-up
+    run's steps join the trajectory after a ``user-interjection`` step. One that
+    cannot be delivered (no ``resume_command``, no session id to resume, a
+    structured-output reader that reported no steps, a follow-up that failed) is
+    recorded as such, with the reason, never dropped. Returns the last run's reply and
+    the counts and usage to add to the run.
+    """
+    resume = list(agent.cfg.resume_command)
+    uses_session = any("{session}" in a for a in resume)
+    steps = list(first.steps)
+    reply = first
+    pending = list(items)
+    delivered = undeliverable = resumes = 0
+    usage = Usage()
+
+    async def undeliver(j: Interjection, trigger: str, reason: str) -> None:
+        nonlocal undeliverable
+        undeliverable += 1
+        emit(StepEvent(_interjection_step(j, trigger, delivered=False, reason=reason)))
+
+    if not any(s.type in ("llm", "tool") for s in first.steps):
+        for j in [j for j in pending if j.on != "stop"]:
+            pending.remove(j)
+            await undeliver(j, "", "the output format reported no steps to time it by")
+    while pending:
+        due = None
+        for j in pending:
+            if j.on != "stop" and (trigger := _triggered(j, steps)):
+                due = (j, trigger)
+                break
+        if due is None:
+            stops = [j for j in pending if j.on == "stop"]
+            if not stops:
+                break  # what is left never triggered
+            due = (stops[0], "the agent exited")
+        j, trigger = due
+        pending.remove(j)
+        reason = ""
+        if not resume:
+            reason = "the agent has no resume_command, so it cannot be messaged after it starts"
+        elif (
+            uses_session and not reply.extra.get("session_id") and not first.extra.get("session_id")
+        ):
+            reason = "the agent's output named no session to resume"
+        elif resumes >= MAX_RESUMES:
+            reason = f"more than {MAX_RESUMES} follow-up runs"
+        if reason:
+            await undeliver(j, trigger, reason)
+            continue
+        session = str(reply.extra.get("session_id") or first.extra.get("session_id") or "")
+        resumes += 1
+        try:
+            follow = await agent.resume(j.message, session)
+        except TaskError as exc:
+            await undeliver(j, trigger, str(exc))
+            continue
+        failed = follow.extra.get("exit_code")
+        if failed:
+            # The message may have arrived, but the run it started did not finish: the
+            # answer stays the first run's.
+            await undeliver(j, trigger, f"the follow-up run exited {failed}")
+        else:
+            delivered += 1
+            emit(StepEvent(_interjection_step(j, trigger, delivered=True)))
+        for step in follow.steps:
+            emit(StepEvent(step))
+        steps.extend(follow.steps)
+        _add_usage(usage, follow.usage)
+        if not failed:
+            reply = AgentReply(
+                follow.text,
+                steps=reply.steps,
+                usage=reply.usage,
+                finished=True,
+                extra={**reply.extra, **follow.extra},
+            )
+    return reply, {
+        "usage": usage,
+        "interjections": delivered,
+        "interjections_undeliverable": undeliverable,
+        "interjections_unfired": len(pending),
+    }
+
+
 async def drive_agent(
     task: Task,
     env: TaskEnvironment | None,
@@ -947,6 +1103,7 @@ async def drive_agent(
     *,
     timeout_s: float = 0.0,
     user: Any = None,
+    interjections: list[Interjection] | None = None,
 ) -> FinalEvent:
     """Gives a bring-your-own agent the task, and the simulated user's turns if any."""
     agent = connector_for(task, env)
@@ -962,10 +1119,11 @@ async def drive_agent(
                 turns += 1
                 for step in reply.steps:
                     emit(StepEvent(step))
-                usage.input_tokens = (usage.input_tokens or 0) + (reply.usage.input_tokens or 0)
-                usage.output_tokens = (usage.output_tokens or 0) + (reply.usage.output_tokens or 0)
-                if reply.usage.cost_usd is not None:  # unknown stays unknown, zero is a price
-                    usage.cost_usd = (usage.cost_usd or 0.0) + reply.usage.cost_usd
+                _add_usage(usage, reply.usage)
+                if interjections and isinstance(agent, CLIConnector) and turns == 1:
+                    reply, interjected = await interject_cli(agent, reply, interjections, emit)
+                    _add_usage(usage, interjected.pop("usage"))
+                    reply.extra.update(interjected)
                 conversation.append({"role": "assistant", "content": reply.text})
                 if user is None or reply.finished:
                     break

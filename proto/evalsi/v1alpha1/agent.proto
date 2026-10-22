@@ -324,15 +324,16 @@ message BuiltinHarness {
 // A scripted message from the simulated user, mid-run.
 message Interjection {
   // Delivered once the agent has made this many model calls (at least 1).
-  // With an event (on), the earliest step it may fire at (0: any).
+  // With an event, the earliest step it may fire at (0: any).
   int32 at_step = 1;
   string message = 2;
-  // Deliver on an event instead of a step count: "tool_call" (after a tool
+  // Deliver on an event (so named because on is a boolean in YAML 1.1) instead
+  // of a step count: "tool_call" (after a tool
   // call whose name matches the glob match, and whose JSON arguments match the
   // regular expression pattern when it is set), "file_write" (after a tool
   // call that writes a path matching the glob match: write_file, edit_file,
   // apply_patch) or "stop" (the first time the agent tries to finish).
-  string on = 3;
+  string event = 3;
   string match = 4;
   string pattern = 5;
 }

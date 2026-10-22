@@ -976,16 +976,17 @@ class Interjection(_message.Message):
 
     AT_STEP_FIELD_NUMBER: _builtins.int
     MESSAGE_FIELD_NUMBER: _builtins.int
-    ON_FIELD_NUMBER: _builtins.int
+    EVENT_FIELD_NUMBER: _builtins.int
     MATCH_FIELD_NUMBER: _builtins.int
     PATTERN_FIELD_NUMBER: _builtins.int
     at_step: _builtins.int
     """Delivered once the agent has made this many model calls (at least 1).
-    With an event (on), the earliest step it may fire at (0: any).
+    With an event, the earliest step it may fire at (0: any).
     """
     message: _builtins.str
-    on: _builtins.str
-    """Deliver on an event instead of a step count: "tool_call" (after a tool
+    event: _builtins.str
+    """Deliver on an event (so named because on is a boolean in YAML 1.1) instead
+    of a step count: "tool_call" (after a tool
     call whose name matches the glob match, and whose JSON arguments match the
     regular expression pattern when it is set), "file_write" (after a tool
     call that writes a path matching the glob match: write_file, edit_file,
@@ -998,11 +999,11 @@ class Interjection(_message.Message):
         *,
         at_step: _builtins.int = ...,
         message: _builtins.str = ...,
-        on: _builtins.str = ...,
+        event: _builtins.str = ...,
         match: _builtins.str = ...,
         pattern: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["at_step", b"at_step", "match", b"match", "message", b"message", "on", b"on", "pattern", b"pattern"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["at_step", b"at_step", "event", b"event", "match", b"match", "message", b"message", "pattern", b"pattern"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Interjection: _TypeAlias = Interjection  # noqa: Y015
