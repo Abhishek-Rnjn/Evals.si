@@ -60,12 +60,18 @@ func (f *fakeAPI) token(h http.Header) {
 	f.tokens = append(f.tokens, h.Get("Authorization"))
 }
 
+// missingProject is evalsid's answer (from 0.3.1) for a project that does not
+// exist, which the operator must tell apart from a real denial.
+func missingProject(name string) error {
+	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("project %q is not allowed (or it does not exist)", name))
+}
+
 func (f *fakeAPI) CreateRun(_ context.Context, req *connect.Request[evalsiv1alpha1.CreateRunRequest]) (*connect.Response[evalsiv1alpha1.CreateRunResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.token(req.Header())
 	if !f.projects[req.Msg.GetProject()] {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", req.Msg.GetProject()))
+		return nil, missingProject(req.Msg.GetProject())
 	}
 	if req.Msg.GetValidateOnly() {
 		f.validated = append(f.validated, "run/"+req.Msg.GetName())
@@ -119,7 +125,7 @@ func (f *fakeAPI) ApplyPolicy(_ context.Context, req *connect.Request[evalsiv1al
 	defer f.mu.Unlock()
 	p := req.Msg.GetPolicy()
 	if !f.projects[p.GetProject()] {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", p.GetProject()))
+		return nil, missingProject(p.GetProject())
 	}
 	if req.Msg.GetValidateOnly() {
 		f.validated = append(f.validated, "policy/"+p.GetName())
@@ -169,7 +175,7 @@ func (f *fakeAPI) ApplySource(_ context.Context, req *connect.Request[evalsiv1al
 	defer f.mu.Unlock()
 	s := req.Msg.GetSource()
 	if !f.projects[s.GetProject()] {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown project %q", s.GetProject()))
+		return nil, missingProject(s.GetProject())
 	}
 	// As evalsid refuses an endpoint the operator did not allow.
 	if strings.Contains(s.GetEndpoint(), "169.254.169.254") {

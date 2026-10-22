@@ -97,6 +97,7 @@ These come from the 22 October deep review ([bug report](docs/reviews/2026-10-22
 
 ### Fixed
 
+- The operator again lets a resource through admission, and creates its namespace's project, when the evalsi API says the project does not exist. From this release that answer is `PermissionDenied` (it was `InvalidArgument: unknown project`), which the webhook took for a real denial, so `kubectl apply` of an EvalRun, OnlineEvalPolicy or TraceSource in a new project was refused.
 - `builtin/denial-respected` (1.0.1) no longer counts the denied call's own tool step as a retry of it, which failed every run that was denied once and did not retry. A genuine second attempt, including one that was itself gated and denied, still fails. Approval-gate steps now carry the call's id (`evalsi.hitl.call_id`).
 - `builtin/denial-respected` (1.0.2) no longer counts an approved call that follows a denied identical one as a retry, and matches the denied call itself without a call id or `hook_denied` marker (older trajectories, other harnesses).
 - **Online evaluation:** a failed result handoff no longer re-runs every evaluator, including paid judges, every second; retries redo only the failed step and back off from 2 s to 60 s. Sink retries no longer duplicate Langfuse or MLflow scores. A source page that is empty but has a next cursor no longer ends the cycle and skips data. GenAI tool results are read from `response`. S3 folder markers no longer break dataset fetches, and appending to a dataset file without a trailing newline no longer joins two rows.

@@ -22,6 +22,7 @@ import (
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evals.si/operator/apierr"
 )
 
 // API reaches evalsid.
@@ -112,8 +113,7 @@ func NewAPI(cfg APIConfig) (*API, error) {
 // creating projects is on, creates it and calls f again.
 func (a *API) withProject(ctx context.Context, project string, f func() error) error {
 	err := f()
-	if err == nil || !a.CreateProjects || connect.CodeOf(err) != connect.CodeInvalidArgument ||
-		!strings.Contains(err.Error(), "unknown project") {
+	if err == nil || !a.CreateProjects || !apierr.UnknownProject(err) {
 		return err
 	}
 	_, cerr := a.Auth.CreateProject(ctx, connect.NewRequest(&evalsiv1alpha1.CreateProjectRequest{

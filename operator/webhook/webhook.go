@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -25,6 +24,7 @@ import (
 
 	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
 	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evals.si/operator/apierr"
 	"github.com/abhishek-rnjn/evals.si/operator/spec"
 )
 
@@ -173,8 +173,9 @@ func remoteVerdict(err error) admission.Response {
 		return admission.Allowed("")
 	}
 	switch code := connect.CodeOf(err); {
-	case code == connect.CodePermissionDenied,
-		code == connect.CodeInvalidArgument && !strings.Contains(err.Error(), "unknown project"):
+	case apierr.UnknownProject(err):
+		return admission.Allowed("").WithWarnings("not checked against the evalsi API: " + err.Error())
+	case code == connect.CodePermissionDenied, code == connect.CodeInvalidArgument:
 		msg := err.Error()
 		var ce *connect.Error
 		if errors.As(err, &ce) {

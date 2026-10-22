@@ -2,7 +2,10 @@ package webhook
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"connectrpc.com/connect"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,5 +34,23 @@ func TestUpdateOfDeletingObjectAllowed(t *testing.T) {
 	}})
 	if !resp.Allowed {
 		t.Errorf("finalizer removal on a deleting object denied: %v", resp.Result.Message)
+	}
+}
+
+// The controller creates a namespace's project after admission, so the API
+// saying the project does not exist must not deny the resource. Servers from
+// 0.3.1 say it with PermissionDenied, which a real denial also uses.
+func TestRemoteVerdictAllowsMissingProject(t *testing.T) {
+	missing := connect.NewError(connect.CodePermissionDenied, errors.New(`project "e2e" is not allowed (or it does not exist)`))
+	if resp := remoteVerdict(missing); !resp.Allowed || len(resp.Warnings) == 0 {
+		t.Errorf("missing project: allowed=%v warnings=%v, want allowed with a warning", resp.Allowed, resp.Warnings)
+	}
+	legacy := connect.NewError(connect.CodeInvalidArgument, errors.New(`unknown project "e2e"`))
+	if resp := remoteVerdict(legacy); !resp.Allowed {
+		t.Errorf("legacy unknown project denied: %v", resp.Result.Message)
+	}
+	forbidden := connect.NewError(connect.CodePermissionDenied, errors.New(`runs.create on run/parity in project "e2e" is not allowed (or it does not exist)`))
+	if resp := remoteVerdict(forbidden); resp.Allowed {
+		t.Error("a forbidden run in an existing project was allowed")
 	}
 }
