@@ -434,3 +434,12 @@ def test_label_probabilities_refuse_more_labels_than_top_logprobs() -> None:
     with pytest.raises(ValueError, match="at most 20 answers"):
         asyncio.run(session.label_probabilities("p", labels))
     assert backend.calls == []
+
+
+@pytest.mark.parametrize(
+    "response", [httpx.Response(200, text="<html>"), httpx.Response(200, json=[1])]
+)
+def test_openai_compatible_malformed_200_is_a_judge_error(response: httpx.Response) -> None:
+    judge = openai_judge(lambda request: response)
+    with pytest.raises(JudgeError, match="judge returned a non-"):
+        asyncio.run(judge.complete_json(**SCHEMA_ARGS))
