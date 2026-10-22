@@ -453,3 +453,15 @@ def test_a_server_worker_only_runs_trusted_commands_and_python(
     with pytest.raises(TaskError):
         load_harness(spec_of({"harness": {"external": {"command": {"argv": ["./harness"]}}}}), ctx)
     assert not Trust().restricted
+
+
+def test_a_harness_command_that_never_serves_is_terminated_on_connect_failure() -> None:
+    async def body() -> None:
+        harness = GrpcHarness(command=[sys.executable, "-c", "import time; time.sleep(60)"])
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(harness._connect(), 1)
+        process = harness._process
+        assert process is None  # released, not left to leak into the next setup()
+        assert harness._stub is None
+
+    asyncio.run(body())
