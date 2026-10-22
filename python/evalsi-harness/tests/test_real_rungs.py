@@ -345,3 +345,71 @@ async def _stop_on_pod_cancels() -> None:
 def test_a_stopped_rollout_on_the_pod_rung_cancels_cleanly(config: Any) -> None:
     config("pod")
     asyncio.run(_stop_on_pod_cancels())
+
+
+async def _background(rung: str) -> None:
+    from evalsi.sandbox.client import SandboxSpec
+    from evalsi_harness.environment import TaskEnvironment
+    from evalsi_harness.task import EnvironmentConfig
+    from evalsi_harness.toolset import extra_tools
+
+    async with await connect() as client:
+        if not {r["driver"]: r["available"] for r in await client.probe()}.get(rung):
+            if os.environ.get("EVALSI_REQUIRE_SANDBOX"):
+                pytest.fail(f"the {rung} rung is not available on this host")
+            pytest.skip(f"the {rung} rung is not available on this host")
+        sandbox = await client.create(SandboxSpec(min_isolation=MIN_ISOLATION[rung]))
+        async with sandbox:
+            assert sandbox.isolation.driver == rung
+            tools = {
+                t.spec.name: t
+                for t in extra_tools(
+                    TaskEnvironment(sandbox, EnvironmentConfig()), ["background", "shell"]
+                )
+            }
+            # A background process outlives the call that started it, and its work is
+            # visible to later commands.
+            started = await tools["process_start"].call(
+                {"command": "echo ready; while true; do date +%s%N > tick.txt; sleep 0.2; done"}
+            )
+            assert not started.is_error, started.content
+            pid = started.metadata["process_id"]
+            ready = await tools["process_output"].call({"id": pid, "wait_s": 10})
+            assert "ready" in ready.content
+            await asyncio.sleep(0.6)
+            first = (await sandbox.exec(["cat", "tick.txt"])).stdout
+            await asyncio.sleep(0.6)
+            assert (await sandbox.exec(["cat", "tick.txt"])).stdout != first
+            assert [p.running for p in await sandbox.list_processes()] == [True]
+            assert (await sandbox.kill_process(pid)).killed
+            # The persistent shell keeps a server and its client in one network
+            # namespace, which separate commands do not share on every rung.
+            server = (
+                'python3 -c "import http.server as h; '
+                "h.HTTPServer(('127.0.0.1', 8765), h.SimpleHTTPRequestHandler).serve_forever()\""
+            )
+            fetch = (
+                'python3 -c "import urllib.request as u; '
+                "print(u.urlopen('http://127.0.0.1:8765/page.txt').read().decode())\""
+            )
+            shell = tools["shell"]
+            await shell.call({"command": "echo served > page.txt"})
+            await shell.call({"command": f"{server} >/dev/null 2>&1 &"})
+            got = None
+            for _ in range(20):
+                got = await shell.call({"command": fetch})
+                if not got.is_error:
+                    break
+                await asyncio.sleep(0.5)
+            assert got is not None
+            if rung == "landlock":
+                # Landlock's TCP rules refuse loopback connections except the egress proxy.
+                assert got.is_error
+            else:
+                assert got.content.startswith("served"), got.content
+
+
+@pytest.mark.parametrize("rung", RUNGS)
+def test_a_background_process_survives_between_calls(config: Any, rung: str) -> None:
+    config(rung)
+    asyncio.run(_background(rung))

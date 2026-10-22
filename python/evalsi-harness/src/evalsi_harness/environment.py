@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import shlex
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -22,6 +22,8 @@ from evalsi.sandbox.client import (
     EgressEvent,
     ExecResult,
     Isolation,
+    ProcessInfo,
+    ProcessOutput,
     SandboxSpec,
     SnapshotsUnsupported,
 )
@@ -49,6 +51,35 @@ class SandboxLike(Protocol):
     async def read_files(self, paths: Sequence[str], max_bytes: int = ...) -> dict[str, bytes]: ...
 
     async def services(self, *, include_logs: bool = ...) -> list[dict[str, Any]]: ...
+
+    async def start_process(
+        self,
+        command: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = ...,
+        cwd: str = ...,
+        timeout_s: float = ...,
+        buffer_bytes: int = ...,
+        stdin: bool = ...,
+    ) -> ProcessInfo: ...
+
+    async def list_processes(self) -> list[ProcessInfo]: ...
+
+    async def read_process(
+        self,
+        process_id: str,
+        *,
+        stdout_offset: int = ...,
+        stderr_offset: int = ...,
+        max_bytes: int = ...,
+        wait_s: float = ...,
+    ) -> ProcessOutput: ...
+
+    async def write_process(
+        self, process_id: str, data: bytes | str = ..., *, close: bool = ...
+    ) -> None: ...
+
+    async def kill_process(self, process_id: str) -> ProcessInfo: ...
 
     async def snapshot(self) -> str: ...
 

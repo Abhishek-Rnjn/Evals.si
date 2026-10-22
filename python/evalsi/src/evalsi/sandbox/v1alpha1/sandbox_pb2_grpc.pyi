@@ -54,6 +54,16 @@ class SandboxServiceStub:
     Restore: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.RestoreRequest, _sandbox_pb2.RestoreResponse]
     Stats: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.StatsRequest, _sandbox_pb2.StatsResponse]
     """Resource use and the egress log, which safety evaluators use as evidence."""
+    StartProcess: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.StartProcessRequest, _sandbox_pb2.StartProcessResponse]
+    """Background processes: a command that outlives the call that started it,
+    in the same sandbox and under the same confinement and limits as Exec.
+    Output is kept in bounded buffers and read by offset. They are killed
+    when the sandbox is destroyed.
+    """
+    ListProcesses: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.ListProcessesRequest, _sandbox_pb2.ListProcessesResponse]
+    ReadProcess: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.ReadProcessRequest, _sandbox_pb2.ReadProcessResponse]
+    WriteProcess: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.WriteProcessRequest, _sandbox_pb2.WriteProcessResponse]
+    KillProcess: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.KillProcessRequest, _sandbox_pb2.KillProcessResponse]
     Destroy: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.DestroyRequest, _sandbox_pb2.DestroyResponse]
     DeleteSnapshot: _grpc.UnaryUnaryMultiCallable[_sandbox_pb2.DeleteSnapshotRequest, _sandbox_pb2.DeleteSnapshotResponse]
 
@@ -83,6 +93,16 @@ class SandboxServiceAsyncStub(SandboxServiceStub):
     Restore: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.RestoreRequest, _sandbox_pb2.RestoreResponse]  # type: ignore[assignment]
     Stats: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.StatsRequest, _sandbox_pb2.StatsResponse]  # type: ignore[assignment]
     """Resource use and the egress log, which safety evaluators use as evidence."""
+    StartProcess: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.StartProcessRequest, _sandbox_pb2.StartProcessResponse]  # type: ignore[assignment]
+    """Background processes: a command that outlives the call that started it,
+    in the same sandbox and under the same confinement and limits as Exec.
+    Output is kept in bounded buffers and read by offset. They are killed
+    when the sandbox is destroyed.
+    """
+    ListProcesses: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.ListProcessesRequest, _sandbox_pb2.ListProcessesResponse]  # type: ignore[assignment]
+    ReadProcess: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.ReadProcessRequest, _sandbox_pb2.ReadProcessResponse]  # type: ignore[assignment]
+    WriteProcess: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.WriteProcessRequest, _sandbox_pb2.WriteProcessResponse]  # type: ignore[assignment]
+    KillProcess: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.KillProcessRequest, _sandbox_pb2.KillProcessResponse]  # type: ignore[assignment]
     Destroy: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.DestroyRequest, _sandbox_pb2.DestroyResponse]  # type: ignore[assignment]
     DeleteSnapshot: _aio.UnaryUnaryMultiCallable[_sandbox_pb2.DeleteSnapshotRequest, _sandbox_pb2.DeleteSnapshotResponse]  # type: ignore[assignment]
 
@@ -157,6 +177,46 @@ class SandboxServiceServicer(metaclass=_abc_1.ABCMeta):
         context: _ServicerContext,
     ) -> _typing.Union[_sandbox_pb2.StatsResponse, _abc.Awaitable[_sandbox_pb2.StatsResponse]]:
         """Resource use and the egress log, which safety evaluators use as evidence."""
+
+    @_abc_1.abstractmethod
+    def StartProcess(
+        self,
+        request: _sandbox_pb2.StartProcessRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_sandbox_pb2.StartProcessResponse, _abc.Awaitable[_sandbox_pb2.StartProcessResponse]]:
+        """Background processes: a command that outlives the call that started it,
+        in the same sandbox and under the same confinement and limits as Exec.
+        Output is kept in bounded buffers and read by offset. They are killed
+        when the sandbox is destroyed.
+        """
+
+    @_abc_1.abstractmethod
+    def ListProcesses(
+        self,
+        request: _sandbox_pb2.ListProcessesRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_sandbox_pb2.ListProcessesResponse, _abc.Awaitable[_sandbox_pb2.ListProcessesResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def ReadProcess(
+        self,
+        request: _sandbox_pb2.ReadProcessRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_sandbox_pb2.ReadProcessResponse, _abc.Awaitable[_sandbox_pb2.ReadProcessResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def WriteProcess(
+        self,
+        request: _sandbox_pb2.WriteProcessRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_sandbox_pb2.WriteProcessResponse, _abc.Awaitable[_sandbox_pb2.WriteProcessResponse]]: ...
+
+    @_abc_1.abstractmethod
+    def KillProcess(
+        self,
+        request: _sandbox_pb2.KillProcessRequest,
+        context: _ServicerContext,
+    ) -> _typing.Union[_sandbox_pb2.KillProcessResponse, _abc.Awaitable[_sandbox_pb2.KillProcessResponse]]: ...
 
     @_abc_1.abstractmethod
     def Destroy(

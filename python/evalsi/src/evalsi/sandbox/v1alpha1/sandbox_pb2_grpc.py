@@ -83,6 +83,31 @@ class SandboxServiceStub:
                 request_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StatsRequest.SerializeToString,
                 response_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StatsResponse.FromString,
                 _registered_method=True)
+        self.StartProcess = channel.unary_unary(
+                '/evalsi.sandbox.v1alpha1.SandboxService/StartProcess',
+                request_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StartProcessRequest.SerializeToString,
+                response_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StartProcessResponse.FromString,
+                _registered_method=True)
+        self.ListProcesses = channel.unary_unary(
+                '/evalsi.sandbox.v1alpha1.SandboxService/ListProcesses',
+                request_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ListProcessesRequest.SerializeToString,
+                response_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ListProcessesResponse.FromString,
+                _registered_method=True)
+        self.ReadProcess = channel.unary_unary(
+                '/evalsi.sandbox.v1alpha1.SandboxService/ReadProcess',
+                request_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ReadProcessRequest.SerializeToString,
+                response_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ReadProcessResponse.FromString,
+                _registered_method=True)
+        self.WriteProcess = channel.unary_unary(
+                '/evalsi.sandbox.v1alpha1.SandboxService/WriteProcess',
+                request_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.WriteProcessRequest.SerializeToString,
+                response_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.WriteProcessResponse.FromString,
+                _registered_method=True)
+        self.KillProcess = channel.unary_unary(
+                '/evalsi.sandbox.v1alpha1.SandboxService/KillProcess',
+                request_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.KillProcessRequest.SerializeToString,
+                response_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.KillProcessResponse.FromString,
+                _registered_method=True)
         self.Destroy = channel.unary_unary(
                 '/evalsi.sandbox.v1alpha1.SandboxService/Destroy',
                 request_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.DestroyRequest.SerializeToString,
@@ -159,6 +184,40 @@ class SandboxServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def StartProcess(self, request, context):
+        """Background processes: a command that outlives the call that started it,
+        in the same sandbox and under the same confinement and limits as Exec.
+        Output is kept in bounded buffers and read by offset. They are killed
+        when the sandbox is destroyed.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListProcesses(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReadProcess(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def WriteProcess(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def KillProcess(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Destroy(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -213,6 +272,31 @@ def add_SandboxServiceServicer_to_server(servicer, server):
                     servicer.Stats,
                     request_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StatsRequest.FromString,
                     response_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StatsResponse.SerializeToString,
+            ),
+            'StartProcess': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartProcess,
+                    request_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StartProcessRequest.FromString,
+                    response_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StartProcessResponse.SerializeToString,
+            ),
+            'ListProcesses': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListProcesses,
+                    request_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ListProcessesRequest.FromString,
+                    response_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ListProcessesResponse.SerializeToString,
+            ),
+            'ReadProcess': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReadProcess,
+                    request_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ReadProcessRequest.FromString,
+                    response_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ReadProcessResponse.SerializeToString,
+            ),
+            'WriteProcess': grpc.unary_unary_rpc_method_handler(
+                    servicer.WriteProcess,
+                    request_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.WriteProcessRequest.FromString,
+                    response_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.WriteProcessResponse.SerializeToString,
+            ),
+            'KillProcess': grpc.unary_unary_rpc_method_handler(
+                    servicer.KillProcess,
+                    request_deserializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.KillProcessRequest.FromString,
+                    response_serializer=evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.KillProcessResponse.SerializeToString,
             ),
             'Destroy': grpc.unary_unary_rpc_method_handler(
                     servicer.Destroy,
@@ -450,6 +534,141 @@ class SandboxService:
             '/evalsi.sandbox.v1alpha1.SandboxService/Stats',
             evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StatsRequest.SerializeToString,
             evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StatsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StartProcess(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.sandbox.v1alpha1.SandboxService/StartProcess',
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StartProcessRequest.SerializeToString,
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.StartProcessResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListProcesses(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.sandbox.v1alpha1.SandboxService/ListProcesses',
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ListProcessesRequest.SerializeToString,
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ListProcessesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReadProcess(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.sandbox.v1alpha1.SandboxService/ReadProcess',
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ReadProcessRequest.SerializeToString,
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.ReadProcessResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def WriteProcess(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.sandbox.v1alpha1.SandboxService/WriteProcess',
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.WriteProcessRequest.SerializeToString,
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.WriteProcessResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def KillProcess(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/evalsi.sandbox.v1alpha1.SandboxService/KillProcess',
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.KillProcessRequest.SerializeToString,
+            evalsi_dot_sandbox_dot_v1alpha1_dot_sandbox__pb2.KillProcessResponse.FromString,
             options,
             channel_credentials,
             insecure,

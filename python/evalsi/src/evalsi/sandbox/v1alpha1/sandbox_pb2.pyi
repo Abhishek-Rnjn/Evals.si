@@ -821,3 +821,317 @@ class DeleteSnapshotResponse(_message.Message):
     ) -> None: ...
 
 Global___DeleteSnapshotResponse: _TypeAlias = DeleteSnapshotResponse  # noqa: Y015
+
+@_typing.final
+class StartProcessRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class EnvEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    SANDBOX_ID_FIELD_NUMBER: _builtins.int
+    COMMAND_FIELD_NUMBER: _builtins.int
+    ENV_FIELD_NUMBER: _builtins.int
+    CWD_FIELD_NUMBER: _builtins.int
+    TIMEOUT_FIELD_NUMBER: _builtins.int
+    BUFFER_BYTES_FIELD_NUMBER: _builtins.int
+    STDIN_FIELD_NUMBER: _builtins.int
+    sandbox_id: _builtins.str
+    cwd: _builtins.str
+    """Relative to the workdir; default: the workdir."""
+    buffer_bytes: _builtins.int
+    """Bytes of each output stream kept (the newest); default 1 MiB, at most 16."""
+    stdin: _builtins.bool
+    """Keep stdin open for WriteProcess; otherwise the process reads EOF."""
+    @_builtins.property
+    def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    @_builtins.property
+    def timeout(self) -> _duration_pb2.Duration:
+        """Wall-clock limit; default one hour, at most 24."""
+
+    def __init__(
+        self,
+        *,
+        sandbox_id: _builtins.str = ...,
+        command: _abc.Iterable[_builtins.str] | None = ...,
+        env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        cwd: _builtins.str = ...,
+        timeout: _duration_pb2.Duration | None = ...,
+        buffer_bytes: _builtins.int = ...,
+        stdin: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["buffer_bytes", b"buffer_bytes", "command", b"command", "cwd", b"cwd", "env", b"env", "sandbox_id", b"sandbox_id", "stdin", b"stdin", "timeout", b"timeout"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___StartProcessRequest: _TypeAlias = StartProcessRequest  # noqa: Y015
+
+@_typing.final
+class ProcessInfo(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROCESS_ID_FIELD_NUMBER: _builtins.int
+    COMMAND_FIELD_NUMBER: _builtins.int
+    STARTED_FIELD_NUMBER: _builtins.int
+    RUNNING_FIELD_NUMBER: _builtins.int
+    KILLED_FIELD_NUMBER: _builtins.int
+    RESULT_FIELD_NUMBER: _builtins.int
+    STDOUT_BYTES_FIELD_NUMBER: _builtins.int
+    STDERR_BYTES_FIELD_NUMBER: _builtins.int
+    process_id: _builtins.str
+    running: _builtins.bool
+    killed: _builtins.bool
+    """Ended because it was killed (KillProcess or the sandbox's end)."""
+    stdout_bytes: _builtins.int
+    """Bytes each stream has produced so far, kept or not."""
+    stderr_bytes: _builtins.int
+    @_builtins.property
+    def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def started(self) -> _timestamp_pb2.Timestamp: ...
+    @_builtins.property
+    def result(self) -> Global___ExecResult:
+        """Set once it has ended."""
+
+    def __init__(
+        self,
+        *,
+        process_id: _builtins.str = ...,
+        command: _abc.Iterable[_builtins.str] | None = ...,
+        started: _timestamp_pb2.Timestamp | None = ...,
+        running: _builtins.bool = ...,
+        killed: _builtins.bool = ...,
+        result: Global___ExecResult | None = ...,
+        stdout_bytes: _builtins.int = ...,
+        stderr_bytes: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["result", b"result", "started", b"started"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "killed", b"killed", "process_id", b"process_id", "result", b"result", "running", b"running", "started", b"started", "stderr_bytes", b"stderr_bytes", "stdout_bytes", b"stdout_bytes"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ProcessInfo: _TypeAlias = ProcessInfo  # noqa: Y015
+
+@_typing.final
+class StartProcessResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROCESS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def process(self) -> Global___ProcessInfo: ...
+    def __init__(
+        self,
+        *,
+        process: Global___ProcessInfo | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["process", b"process"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["process", b"process"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___StartProcessResponse: _TypeAlias = StartProcessResponse  # noqa: Y015
+
+@_typing.final
+class ListProcessesRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SANDBOX_ID_FIELD_NUMBER: _builtins.int
+    sandbox_id: _builtins.str
+    def __init__(
+        self,
+        *,
+        sandbox_id: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["sandbox_id", b"sandbox_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ListProcessesRequest: _TypeAlias = ListProcessesRequest  # noqa: Y015
+
+@_typing.final
+class ListProcessesResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROCESSES_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def processes(self) -> _containers.RepeatedCompositeFieldContainer[Global___ProcessInfo]: ...
+    def __init__(
+        self,
+        *,
+        processes: _abc.Iterable[Global___ProcessInfo] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["processes", b"processes"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ListProcessesResponse: _TypeAlias = ListProcessesResponse  # noqa: Y015
+
+@_typing.final
+class ReadProcessRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SANDBOX_ID_FIELD_NUMBER: _builtins.int
+    PROCESS_ID_FIELD_NUMBER: _builtins.int
+    STDOUT_OFFSET_FIELD_NUMBER: _builtins.int
+    STDERR_OFFSET_FIELD_NUMBER: _builtins.int
+    MAX_BYTES_FIELD_NUMBER: _builtins.int
+    WAIT_FIELD_NUMBER: _builtins.int
+    sandbox_id: _builtins.str
+    process_id: _builtins.str
+    stdout_offset: _builtins.int
+    """Where the last read stopped (0 at first)."""
+    stderr_offset: _builtins.int
+    max_bytes: _builtins.int
+    """At most this many bytes per stream; default: the buffer size."""
+    @_builtins.property
+    def wait(self) -> _duration_pb2.Duration:
+        """Block until there is output past the offsets or the process ends, up to
+        this long (at most 30 seconds).
+        """
+
+    def __init__(
+        self,
+        *,
+        sandbox_id: _builtins.str = ...,
+        process_id: _builtins.str = ...,
+        stdout_offset: _builtins.int = ...,
+        stderr_offset: _builtins.int = ...,
+        max_bytes: _builtins.int = ...,
+        wait: _duration_pb2.Duration | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["wait", b"wait"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["max_bytes", b"max_bytes", "process_id", b"process_id", "sandbox_id", b"sandbox_id", "stderr_offset", b"stderr_offset", "stdout_offset", b"stdout_offset", "wait", b"wait"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ReadProcessRequest: _TypeAlias = ReadProcessRequest  # noqa: Y015
+
+@_typing.final
+class ReadProcessResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    STDOUT_FIELD_NUMBER: _builtins.int
+    STDERR_FIELD_NUMBER: _builtins.int
+    STDOUT_OFFSET_FIELD_NUMBER: _builtins.int
+    STDERR_OFFSET_FIELD_NUMBER: _builtins.int
+    STDOUT_DROPPED_FIELD_NUMBER: _builtins.int
+    STDERR_DROPPED_FIELD_NUMBER: _builtins.int
+    PROCESS_FIELD_NUMBER: _builtins.int
+    stdout: _builtins.bytes
+    stderr: _builtins.bytes
+    stdout_offset: _builtins.int
+    """Pass these to the next read."""
+    stderr_offset: _builtins.int
+    stdout_dropped: _builtins.int
+    """Bytes the buffer dropped between the requested offset and the oldest
+    byte it still has.
+    """
+    stderr_dropped: _builtins.int
+    @_builtins.property
+    def process(self) -> Global___ProcessInfo: ...
+    def __init__(
+        self,
+        *,
+        stdout: _builtins.bytes = ...,
+        stderr: _builtins.bytes = ...,
+        stdout_offset: _builtins.int = ...,
+        stderr_offset: _builtins.int = ...,
+        stdout_dropped: _builtins.int = ...,
+        stderr_dropped: _builtins.int = ...,
+        process: Global___ProcessInfo | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["process", b"process"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["process", b"process", "stderr", b"stderr", "stderr_dropped", b"stderr_dropped", "stderr_offset", b"stderr_offset", "stdout", b"stdout", "stdout_dropped", b"stdout_dropped", "stdout_offset", b"stdout_offset"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ReadProcessResponse: _TypeAlias = ReadProcessResponse  # noqa: Y015
+
+@_typing.final
+class WriteProcessRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SANDBOX_ID_FIELD_NUMBER: _builtins.int
+    PROCESS_ID_FIELD_NUMBER: _builtins.int
+    DATA_FIELD_NUMBER: _builtins.int
+    CLOSE_FIELD_NUMBER: _builtins.int
+    sandbox_id: _builtins.str
+    process_id: _builtins.str
+    data: _builtins.bytes
+    close: _builtins.bool
+    """Close stdin after writing (the process then reads EOF)."""
+    def __init__(
+        self,
+        *,
+        sandbox_id: _builtins.str = ...,
+        process_id: _builtins.str = ...,
+        data: _builtins.bytes = ...,
+        close: _builtins.bool = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["close", b"close", "data", b"data", "process_id", b"process_id", "sandbox_id", b"sandbox_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___WriteProcessRequest: _TypeAlias = WriteProcessRequest  # noqa: Y015
+
+@_typing.final
+class WriteProcessResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+Global___WriteProcessResponse: _TypeAlias = WriteProcessResponse  # noqa: Y015
+
+@_typing.final
+class KillProcessRequest(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SANDBOX_ID_FIELD_NUMBER: _builtins.int
+    PROCESS_ID_FIELD_NUMBER: _builtins.int
+    sandbox_id: _builtins.str
+    process_id: _builtins.str
+    def __init__(
+        self,
+        *,
+        sandbox_id: _builtins.str = ...,
+        process_id: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["process_id", b"process_id", "sandbox_id", b"sandbox_id"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___KillProcessRequest: _TypeAlias = KillProcessRequest  # noqa: Y015
+
+@_typing.final
+class KillProcessResponse(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    PROCESS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def process(self) -> Global___ProcessInfo: ...
+    def __init__(
+        self,
+        *,
+        process: Global___ProcessInfo | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["process", b"process"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["process", b"process"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___KillProcessResponse: _TypeAlias = KillProcessResponse  # noqa: Y015
