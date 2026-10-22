@@ -109,3 +109,31 @@ func newRetentionHarness(t *testing.T, mutate func(*Options)) *harness {
 	t.Cleanup(func() { _ = st.Close() })
 	return newHarnessWith(t, st, dir, mutate)
 }
+
+// A run interrupted by a restart is marked ERROR; it gets a finish time so
+// retention does not age a long-lived, just-interrupted run from CreatedAt.
+func TestRetentionKeepsRunInterruptedByRestart(t *testing.T) {
+	now := time.Date(2026, 10, 12, 12, 0, 0, 0, time.UTC)
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "db", "evalsi.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	run := &evalsiv1alpha1.Run{Id: "resumed", Project: "p", Status: evalsiv1alpha1.RunStatus_RUN_STATUS_RUNNING,
+		CreatedAt: timestamppb.New(now.Add(-60 * 24 * time.Hour)), StartedAt: timestamppb.New(now.Add(-time.Minute))}
+	if err := st.CreateRun(ctx, run, []*evalsiv1alpha1.Record{{Id: "r"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarnessWith(t, st, dir, func(o *Options) {
+		o.Now = func() time.Time { return now }
+		o.Retention = config.Runs{Retention: "720h"}
+	})
+	if _, _, err := h.m.retainOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.GetRun(ctx, "resumed"); err != nil {
+		t.Fatalf("resumable run interrupted a minute ago was deleted by retention: %v", err)
+	}
+}

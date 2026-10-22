@@ -178,6 +178,7 @@ func genAIMessages(raw string, systemRole bool) []*evalsiv1alpha1.Message {
 		Parts []struct {
 			Type      string          `json:"type"`
 			Content   json.RawMessage `json:"content"`
+			Response  json.RawMessage `json:"response"`
 			Name      string          `json:"name"`
 			ID        string          `json:"id"`
 			Arguments json.RawMessage `json:"arguments"`
@@ -201,7 +202,12 @@ func genAIMessages(raw string, systemRole bool) []*evalsiv1alpha1.Message {
 			case "tool_call":
 				msg.ToolCalls = append(msg.ToolCalls, &evalsiv1alpha1.ToolCall{Id: p.ID, Name: p.Name, Arguments: string(p.Arguments)})
 			case "tool_call_response":
-				texts = append(texts, rawText(p.Content))
+				// The semconv schema names the result "response" (any JSON value).
+				result := p.Response
+				if len(result) == 0 {
+					result = p.Content
+				}
+				texts = append(texts, rawText(result))
 				msg.ToolCallId = p.ID
 			}
 		}

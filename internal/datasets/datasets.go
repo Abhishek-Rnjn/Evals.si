@@ -114,6 +114,13 @@ func Append(ctx context.Context, root string, objects *objstore.Client, project,
 		return "", 0, err
 	}
 	defer f.Close()
+	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+		// A hand-edited file may lack its final newline; the first new row
+		// would otherwise be glued onto the last existing one.
+		if _, err := f.Write([]byte{'\n'}); err != nil {
+			return "", 0, err
+		}
+	}
 	for _, row := range add {
 		if _, err := f.Write(append(row, '\n')); err != nil {
 			return "", 0, err
@@ -170,6 +177,9 @@ func appendObject(ctx context.Context, objects *objstore.Client, loc objstore.Lo
 			return 0, nil
 		}
 		var add []byte
+		if len(data) > 0 && data[len(data)-1] != '\n' {
+			add = append(add, '\n')
+		}
 		for _, row := range rows {
 			add = append(append(add, row...), '\n')
 		}
