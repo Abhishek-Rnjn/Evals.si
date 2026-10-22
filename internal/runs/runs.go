@@ -346,6 +346,9 @@ func validateTargetOptions(t *evalsiv1alpha1.Target, field string) error {
 			return invalid("%s.thinking is for anthropic targets", field)
 		}
 	}
+	if err := validateH1bOptions(t, field); err != nil {
+		return err
+	}
 	if len(t.GetFallbacks()) > maxFallbacks {
 		return invalid("%s.fallbacks can hold at most %d models", field, maxFallbacks)
 	}
@@ -362,6 +365,74 @@ func validateTargetOptions(t *evalsiv1alpha1.Target, field string) error {
 			return invalid("%s cannot have fallbacks of its own", name)
 		}
 		if err := validateTargetOptions(f, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateH1bOptions checks a target's frontier-model options (reasoning
+// handoff, token trace, server tools, stream resume) and its compaction and
+// sub-agent models.
+func validateH1bOptions(t *evalsiv1alpha1.Target, field string) error {
+	switch t.GetReasoningHandoff() {
+	case "", "drop", "summarize-as-text":
+	default:
+		return invalid("%s.reasoning_handoff must be drop or summarize-as-text", field)
+	}
+	switch t.GetTokenTraceServer() {
+	case "", "vllm", "sglang":
+	default:
+		return invalid("%s.token_trace_server must be vllm or sglang", field)
+	}
+	if t.GetTokenTraceServer() != "" && !t.GetTokenTrace() {
+		return invalid("%s.token_trace_server needs token_trace", field)
+	}
+	if t.GetTokenTrace() && (t.GetConnector() != "openai-compatible" || t.GetApi() == "responses") {
+		return invalid("%s.token_trace is for openai-compatible chat-completions targets", field)
+	}
+	if t.GetStreamResumeAttempts() < 0 {
+		return invalid("%s.stream_resume_attempts cannot be negative", field)
+	}
+	switch t.GetStreamResumeMode() {
+	case "", "retry":
+	case "prefill":
+		if t.GetConnector() != "anthropic" {
+			return invalid("%s.stream_resume_mode prefill is for anthropic targets", field)
+		}
+	default:
+		return invalid("%s.stream_resume_mode must be retry or prefill", field)
+	}
+	if len(t.GetServerTools()) > 0 && t.GetConnector() != "anthropic" {
+		return invalid("%s.server_tools are for anthropic targets", field)
+	}
+	for i, st := range t.GetServerTools() {
+		f := st.GetFields()
+		if f["type"].GetStringValue() == "" || f["name"].GetStringValue() == "" {
+			return invalid("%s.server_tools[%d] needs a type and a name", field, i)
+		}
+	}
+	roles := []struct {
+		name string
+		m    *evalsiv1alpha1.Target
+	}{{"compaction_model", t.GetCompactionModel()}, {"subagent_model", t.GetSubagentModel()}}
+	for _, r := range roles {
+		m := r.m
+		if m == nil {
+			continue
+		}
+		name := field + "." + r.name
+		switch {
+		case m.GetConnector() != "openai-compatible" && m.GetConnector() != "anthropic":
+			return invalid("%s.connector must be openai-compatible or anthropic", name)
+		case m.GetModel() == "":
+			return invalid("%s.model is required", name)
+		case m.GetConnector() == "openai-compatible" && m.GetBaseUrl() == "":
+			return invalid("%s.base_url is required for openai-compatible", name)
+		case m.GetCompactionModel() != nil || m.GetSubagentModel() != nil:
+			return invalid("%s cannot name compaction or sub-agent models of its own", name)
+		}
+		if err := validateTargetOptions(m, name); err != nil {
 			return err
 		}
 	}

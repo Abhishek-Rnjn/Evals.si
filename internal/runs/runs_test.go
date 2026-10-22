@@ -579,6 +579,27 @@ func TestCreateRunValidatesModelOptions(t *testing.T) {
 		"cannot have fallbacks of its own": anthropic(fb(&evalsiv1alpha1.Target{
 			Connector: "anthropic", Model: "f", Fallbacks: []*evalsiv1alpha1.Target{{Connector: "anthropic", Model: "g"}},
 		})),
+		"reasoning_handoff must be": anthropic(func(tg *evalsiv1alpha1.Target) { tg.ReasoningHandoff = "keep" }),
+		"token_trace_server must be": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.TokenTraceServer = "tgi"
+		}),
+		"token_trace is for openai-compatible": anthropic(func(tg *evalsiv1alpha1.Target) { tg.TokenTrace = true }),
+		"prefill is for anthropic": {
+			Target: &evalsiv1alpha1.Target{
+				Connector: "openai-compatible", Model: "m", BaseUrl: "http://x/v1", StreamResumeMode: "prefill",
+			},
+			Dataset:    inline("easy"),
+			Evaluators: refs("exact-match"),
+		},
+		"server_tools[0] needs a type": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.ServerTools = []*structpb.Struct{{Fields: map[string]*structpb.Value{"name": structpb.NewStringValue("x")}}}
+		}),
+		"compaction_model.model is required": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.CompactionModel = &evalsiv1alpha1.Target{Connector: "anthropic"}
+		}),
+		"subagent_model.base_url is required": anthropic(func(tg *evalsiv1alpha1.Target) {
+			tg.SubagentModel = &evalsiv1alpha1.Target{Connector: "openai-compatible", Model: "s"}
+		}),
 	}
 	for want, spec := range cases {
 		_, err := h.m.CreateRun(context.Background(), connect.NewRequest(&evalsiv1alpha1.CreateRunRequest{Spec: spec}))

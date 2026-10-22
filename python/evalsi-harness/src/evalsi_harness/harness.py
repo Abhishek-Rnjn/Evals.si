@@ -507,6 +507,7 @@ class BuiltinHarness:
     def _loop_config(self, live: LiveTask) -> LoopConfig:
         c = self.config
         system = self._system(live)
+        cache = self._cache_prices(live)
         return LoopConfig(
             max_steps=c.max_steps or 30,
             max_tokens=c.budget.tokens,
@@ -525,7 +526,8 @@ class BuiltinHarness:
             interjections=sorted(
                 ((j.at_step, j.message) for j in c.interjections), key=lambda j: j[0]
             ),
-            **self._cache_prices(live),
+            cache_read_mult=cache.get("cache_read_mult", 1.0),
+            cache_write_mult=cache.get("cache_write_mult", 1.0),
             model_prices={
                 name: (p.input_per_mtok, p.output_per_mtok) for name, p in c.model_pricing.items()
             },

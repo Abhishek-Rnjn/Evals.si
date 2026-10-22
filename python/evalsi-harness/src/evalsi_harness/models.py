@@ -130,7 +130,8 @@ def token_trace(payload: dict[str, Any], choice: dict[str, Any]) -> TokenTrace:
     gets a trace that names the rest in ``missing``; ids and log-probabilities
     that disagree in length or value are an error."""
     message = choice.get("message") or {}
-    sglext = payload.get("sglext") if isinstance(payload.get("sglext"), dict) else {}
+    raw_ext = payload.get("sglext")
+    sglext: dict[str, Any] = raw_ext if isinstance(raw_ext, dict) else {}
     prompt = payload.get("prompt_token_ids")
     if prompt is None:
         prompt = choice.get("prompt_token_ids", message.get("prompt_token_ids"))
@@ -460,9 +461,7 @@ def with_cache_breakpoint(messages: list[dict[str, Any]]) -> list[dict[str, Any]
     """Marks the end of the conversation as a cache breakpoint, so the next
     call reads everything before it from the cache (system and tools carry
     their own). Messages are copied, never changed in place."""
-    if not messages or messages[-1]["role"] == "assistant":
-        # A paused turn being continued (or a prefill): the request ends with the
-        # model's own output, which is not marked.
+    if not messages:
         return messages
     last = dict(messages[-1])
     content = last["content"]
