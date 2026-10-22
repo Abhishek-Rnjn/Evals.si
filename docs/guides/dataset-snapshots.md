@@ -1,11 +1,9 @@
 # Reviewable, pinned dataset snapshots
 
-This is the first PROD-04 dataset-lifecycle slice. It is **unreleased**: install
-the SDK from this checkout as described in [guided setup](onboarding.md). Published
-0.3.0 does not include the `snapshot://` importer. The maintained GitHub Action
-must use a compatible installation (`install: 'false'` after installing this
-checkout), or a future published version that includes it; its default 0.3.0
-installation cannot load snapshots.
+This is the first PROD-04 dataset-lifecycle slice, added in 0.3.1: install 0.3.1
+or newer as described in [guided setup](onboarding.md). Published 0.3.0 does not
+include the `snapshot://` importer, so the maintained GitHub Action must install
+0.3.1 or newer (`version: '0.3.1'`) to load snapshots.
 
 A snapshot is one portable JSON file containing a named version, explicit record
 IDs, an owner, tags, a held-out/tuning label, source-byte digest, original records

@@ -1,6 +1,6 @@
 # Synthetic incident to regression gate
 
-This unreleased example uses the source SDK/server. Every case and identifier
+This example uses the source SDK/server (the feature needs 0.3.1 or newer). Every case and identifier
 is synthetic. The corrected candidate is a scripted HTTP fixture, not a model
 or a real refund application.
 

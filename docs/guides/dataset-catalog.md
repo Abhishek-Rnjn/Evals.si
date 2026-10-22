@@ -3,7 +3,7 @@
 The shared dataset catalog lets a team publish a regression suite once, review
 its exact content and start runs against an approved digest. It advances PROD-04
 and connects the [failure inbox](failure-inbox.md) to recurring server runs.
-This is **unreleased**: use the SDK, server and worker from this checkout.
+It was added in 0.3.1: use a matching 0.3.1 or newer SDK, server and worker.
 Published 0.3.0 packages do not contain these commands or APIs.
 
 ## Publish, review and run

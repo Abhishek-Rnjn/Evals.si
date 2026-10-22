@@ -16,7 +16,7 @@ evalsid serves a small UI at `/ui/`, for example
 - **guardrails;**
 - **the evaluator catalog**, with each evaluator's tier and runtime.
 
-The unreleased inbox and dataset screens also write through the same authorized
+The inbox and dataset screens (0.3.1 and newer) also write through the same authorized
 API as the CLI. The [release workbench](release-workbench.md) configures supported recorded/model/HTTP-agent runs and release policies. Advanced run configurations and applying online policies or guardrails go through the CLI or API.
 
 ## Signing in

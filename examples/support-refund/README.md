@@ -17,8 +17,8 @@ The [guide](../../docs/guides/support-refund-suite.md) explains the design.
 | [`build.py`](build.py) | Builds `tasks.jsonl` and `run.yaml` from the files above |
 | [`run.yaml`](run.yaml), [`tasks.jsonl`](tasks.jsonl) | Generated: the run spec and the tasks |
 
-This is unreleased: it needs the `state-assertion` evaluator, which published
-0.3.0 does not have, so run it from a source checkout (Linux, with `go` and
+It needs the `state-assertion` evaluator, added in 0.3.1 (published 0.3.0 does
+not have it). The commands below run it from a source checkout (Linux, with `go` and
 `bubblewrap`; the [agent runs quick start](../../docs/guides/agent-runs.md#quick-start)
 has the same setup):
 

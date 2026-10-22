@@ -1,7 +1,7 @@
 # Human annotation
 
 For versioned label sets, tuning/held-out evaluator comparisons and fresh-call
-repeatability, export these queue answers into the unreleased
+repeatability, export these queue answers into the
 [judge calibration workflow](judge-calibration.md).
 
 Human annotation answers two questions that automated metrics can't answer

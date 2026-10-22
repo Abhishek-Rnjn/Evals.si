@@ -76,10 +76,10 @@ citation-accuracy  2  0.500  [0.095, 0.905]        0       0
 
 The second answer cites passage `[4]`, but only two passages were retrieved. Add a judge and the `faithfulness`, `answer-relevance`, `context-precision` and `context-recall` metrics tell you whether retrieval or generation is at fault ([guide](docs/guides/evaluate-rag.md)).
 
-For the unreleased setup commands and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
-For unreleased dataset version review and digest-pinned runs, see [dataset snapshots](docs/guides/dataset-snapshots.md).
-Validate the evaluator itself with unreleased [judge calibration](docs/guides/judge-calibration.md): freeze human labels, select prompts/models/thresholds on tuning cases, then measure held-out validity and fresh-call repeatability. Try the [offline example](examples/judge-calibration/README.md).
-Turn production incidents into reviewed regression cases with the unreleased [failure inbox](docs/guides/failure-inbox.md), then share [approved immutable dataset versions](docs/guides/dataset-catalog.md) and pin them in server runs. Compare a candidate with a reviewed baseline using [enforced release decisions](docs/guides/release-decisions.md), or configure and investigate the check in the unreleased [browser release workbench](docs/guides/release-workbench.md). Start an agent suite from the unreleased [support and refund starter](docs/guides/support-refund-suite.md): synthetic tasks graded on the final state of a simulated shop.
+For the setup commands (0.3.1) and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
+For dataset version review and digest-pinned runs, see [dataset snapshots](docs/guides/dataset-snapshots.md).
+Validate the evaluator itself with [judge calibration](docs/guides/judge-calibration.md): freeze human labels, select prompts/models/thresholds on tuning cases, then measure held-out validity and fresh-call repeatability. Try the [offline example](examples/judge-calibration/README.md).
+Turn production incidents into reviewed regression cases with the [failure inbox](docs/guides/failure-inbox.md), then share [approved immutable dataset versions](docs/guides/dataset-catalog.md) and pin them in server runs. Compare a candidate with a reviewed baseline using [enforced release decisions](docs/guides/release-decisions.md), or configure and investigate the check in the [browser release workbench](docs/guides/release-workbench.md). Start an agent suite from the [support and refund starter](docs/guides/support-refund-suite.md): synthetic tasks graded on the final state of a simulated shop.
 
 Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
 
@@ -310,7 +310,7 @@ See the [Kubernetes guide](docs/guides/kubernetes.md).
 | [Trace redaction](docs/guides/trace-sources.md#trace-redaction) | Mask credential keys on push and pull before storage and evaluation; configurable key globs, regexes and opt-in PII classes |
 | [MCP for coding agents](docs/guides/mcp.md) | `evalsi mcp` lets an agent run a suite before and after its change and see what regressed |
 | [Human annotation](docs/guides/annotation.md) | Queues with rubrics, annotator agreement, and judge calibration against human labels |
-| [Evaluator validation](docs/guides/judge-calibration.md) | Frozen human labels, tuning/held-out judge comparisons, false positives/negatives, repeatability and portable reports (unreleased) |
+| [Evaluator validation](docs/guides/judge-calibration.md) | Frozen human labels, tuning/held-out judge comparisons, false positives/negatives, repeatability and portable reports |
 | [Fine-tuning and RL](docs/guides/fine-tuning.md) | Evaluators as rewards for TRL, verl and OpenRLHF; every checkpoint checked against the base model |
 | [Web UI](docs/guides/web-ui.md) | Runs, comparisons, policies, annotation queues, guardrails and the catalog, read through the API |
 | Reports and analytics | `evalsi report` (HTML or Markdown), `evalsi analyze` (DuckDB over runs), sinks to MLflow, OpenTelemetry, Langfuse and Phoenix, a Grafana dashboard |
@@ -354,7 +354,7 @@ The Go server owns the API, runs, ingest, policies, auth and storage; evaluators
 
 ## Project status
 
-Evals.si is pre-1.0 (the latest release is `0.3.0`). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
+Evals.si is pre-1.0 (the latest release is `0.3.1`). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
 
 What is verified, in short:
 - **Kubernetes:** end-to-end on kind in every CI run (amd64, with Landlock), AKS and an Istio ambient cluster with KVM nodes. [Bounded EKS checks](docs/verification/EKS-2026-10-12.md) passed live KEDA, separate-host NATS broker recovery, pool isolation, application recovery, second-release coexistence, mounted Python/Wasm and managed alert firing/delivery/resolution. Stock admission is blocked by the control-plane/Calico path; an isolated trusted host-network workaround passed. M4 and GKE remain unverified.
