@@ -155,7 +155,7 @@ def _add_eval(sub: Any) -> None:
         metavar="EVALUATOR.KEY=VALUE",
         help="evaluator param; VALUE is parsed as JSON when possible (repeatable)",
     )
-    ev.add_argument("--limit", type=int, help="evaluate only the first N records")
+    ev.add_argument("--limit", type=_non_negative_int, help="evaluate only the first N records")
     ev.add_argument("--concurrency", type=int, default=16)
 
     _add_judge_args(ev)
@@ -475,6 +475,13 @@ def _add_judge_args(parser: argparse.ArgumentParser) -> None:
     judge.add_argument("--no-cache", action="store_true", help="do not reuse judge responses")
 
 
+def _non_negative_int(text: str) -> int:
+    value = int(text)
+    if value < 0:
+        raise argparse.ArgumentTypeError(f"must be 0 or more, got {value}")
+    return value
+
+
 def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
@@ -638,7 +645,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         print(f"\n{skipped} evaluation(s) skipped; --output records why.", file=sys.stderr)
     if args.output and not args.quiet:
         print(f"\nfull results: {os.path.abspath(args.output)}", file=sys.stderr)
-    return 0
+    return 1 if result.all_errored else 0
 
 
 def _cmd_catalog(args: argparse.Namespace) -> int:
