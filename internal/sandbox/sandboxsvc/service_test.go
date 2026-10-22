@@ -152,3 +152,63 @@ func TestServiceFailsClosed(t *testing.T) {
 		t.Fatalf("allowlist without hosts: %v", err)
 	}
 }
+
+func TestServiceBackgroundProcesses(t *testing.T) {
+	c := client(t, "bwrap", "landlock")
+	ctx := context.Background()
+	created, err := c.Create(ctx, connect.NewRequest(&sandboxv1alpha1.CreateRequest{Spec: &sandboxv1alpha1.SandboxSpec{}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Msg.GetSandboxId()
+	started, err := c.StartProcess(ctx, connect.NewRequest(&sandboxv1alpha1.StartProcessRequest{
+		SandboxId: id, Command: []string{"sh", "-c", "echo ready; echo oops >&2; while read l; do echo echo:$l; done"}, Stdin: true,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := started.Msg.GetProcess().GetProcessId()
+	read := func(so, se int64, want string) *sandboxv1alpha1.ReadProcessResponse {
+		t.Helper()
+		var got strings.Builder
+		for range 20 {
+			r, err := c.ReadProcess(ctx, connect.NewRequest(&sandboxv1alpha1.ReadProcessRequest{
+				SandboxId: id, ProcessId: pid, StdoutOffset: so, StderrOffset: se, Wait: durationpb.New(time.Second),
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got.Write(r.Msg.GetStdout())
+			so, se = r.Msg.GetStdoutOffset(), r.Msg.GetStderrOffset()
+			if strings.Contains(got.String(), want) {
+				r.Msg.Stdout = []byte(got.String())
+				return r.Msg
+			}
+		}
+		t.Fatalf("never saw %q in %q", want, got.String())
+		return nil
+	}
+	first := read(0, 0, "ready")
+	if _, err := c.WriteProcess(ctx, connect.NewRequest(&sandboxv1alpha1.WriteProcessRequest{SandboxId: id, ProcessId: pid, Data: []byte("hi\n")})); err != nil {
+		t.Fatal(err)
+	}
+	read(first.GetStdoutOffset(), first.GetStderrOffset(), "echo:hi")
+	// A foreground command runs alongside it.
+	if out, _, res := exec(t, c, id, "echo", "fg"); out != "fg\n" || res.GetExitCode() != 0 {
+		t.Fatalf("foreground %q %v", out, res)
+	}
+	list, err := c.ListProcesses(ctx, connect.NewRequest(&sandboxv1alpha1.ListProcessesRequest{SandboxId: id}))
+	if err != nil || len(list.Msg.GetProcesses()) != 1 || !list.Msg.GetProcesses()[0].GetRunning() {
+		t.Fatalf("list %v %v", list, err)
+	}
+	killed, err := c.KillProcess(ctx, connect.NewRequest(&sandboxv1alpha1.KillProcessRequest{SandboxId: id, ProcessId: pid}))
+	if err != nil || killed.Msg.GetProcess().GetRunning() || !killed.Msg.GetProcess().GetKilled() {
+		t.Fatalf("kill %v %v", killed, err)
+	}
+	if _, err := c.ReadProcess(ctx, connect.NewRequest(&sandboxv1alpha1.ReadProcessRequest{SandboxId: id, ProcessId: "proc_99"})); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("unknown process: %v", err)
+	}
+	if _, err := c.Destroy(ctx, connect.NewRequest(&sandboxv1alpha1.DestroyRequest{SandboxId: id})); err != nil {
+		t.Fatal(err)
+	}
+}
