@@ -1123,7 +1123,7 @@ func (ex *execution) save(ctx context.Context, batch []store.Result) error {
 	for _, r := range batch {
 		ex.keys[store.Key{RecordIdx: r.RecordIdx, Trial: r.Trial, EvalIdx: r.EvalIdx}] = true
 		ex.addJudgeUsage(r.Result)
-		if r.EvalIdx >= 0 && r.EvalIdx < len(ex.insts) && ex.insts[r.EvalIdx].Manifest.GetScheduling().GetPool() == "sandbox" {
+		if r.EvalIdx >= 0 && r.EvalIdx < len(ex.insts) && evaluation.Metered(ex.insts[r.EvalIdx]) {
 			ex.addSandbox(r.Result.GetDuration().AsDuration())
 		}
 		ex.m.publish(ex.a, &evalsiv1alpha1.WatchRunResponse{Event: &evalsiv1alpha1.WatchRunResponse_Result{Result: r.Result}})

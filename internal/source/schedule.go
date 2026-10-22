@@ -288,7 +288,7 @@ func (r *runner) collectComplete(ctx context.Context, connector Connector, selec
 	return traces, nil
 }
 
-var errLeaseLost =errors.New("scheduled source lease was lost")
+var errLeaseLost = errors.New("scheduled source lease was lost")
 
 // reportLeaseLoss says why a cycle stopped when its lease was lost: the pull
 // then fails with a bare context.Canceled, which looks like a shutdown.

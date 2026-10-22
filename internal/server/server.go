@@ -45,6 +45,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
+	"github.com/abhishek-rnjn/evals.si/internal/quota"
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
@@ -141,6 +142,10 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		return err
 	}
 	defer st.Close()
+	// Sandbox time of online policies, guardrails and rewards counts toward
+	// sandbox_seconds_per_day (runs meter their own).
+	meter := quota.NewSandboxMeter(st, cfg.Quotas, log)
+	svc.UseSandboxMeter(meter)
 	exports, err := sinks.New(cfg.Sinks, nil, log)
 	if err != nil {
 		return err
@@ -296,6 +301,8 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	go func() { defer wg.Done(); pruneIdempotency(bg, st, log) }()
 	limits := newLimiter(cfg, log)
 	wg.Add(1)
+	go func() { defer wg.Done(); meter.Run(bg) }()
+	wg.Add(1)
 	go func() { defer wg.Done(); limits.runShared(bg, st) }()
 	if cfg.Reload != nil {
 		wg.Add(1)
@@ -333,6 +340,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	}
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, svc.EffectiveJudge, log)
 	g.limits = limits
+	g.sandbox = meter
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
 	if cfg.Rewards.SharedCache {
 		rewardSvc.UseSharedCache(st, log)
