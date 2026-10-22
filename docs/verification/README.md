@@ -580,12 +580,15 @@ Checked after publication, from a Linux amd64 container with Python 3.12:
 - `evalsi init` created the offline starter; `run.yaml` exited 0,
   `regressed.yaml` exited 3, and `evalsi report` wrote the HTML report.
 
+A maintainer checked after publication, from their own machine:
+
+- `SHA256SUMS` verified every release file.
+- `scripts/verify-release.sh 0.3.1` verified the signatures of both images and
+  the three charts, and the `evalsi` image's SBOM attestation, against the
+  release workflow's identity at `v0.3.1`.
+
 Not checked:
 
-- `SHA256SUMS` against the downloaded release files and
-  `scripts/verify-release.sh 0.3.1` (signatures and the SBOM attestation): the
-  container that ran the checks above cannot reach GHCR or the release
-  downloads. A maintainer should run both and record the result here.
 - A chart install from the published OCI charts, an upgrade from the 0.3.0
   charts (the upgrade notes are untested on a cluster), an import of the
   published bundle, the arm64 images and the arm64 wheel.
