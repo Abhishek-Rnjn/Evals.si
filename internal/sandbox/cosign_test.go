@@ -16,6 +16,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -164,6 +166,20 @@ func TestSignaturePolicyConfig(t *testing.T) {
 	}
 }
 
+func cosignMajor(t *testing.T, bin string) int {
+	t.Helper()
+	out, err := exec.Command(bin, "version").CombinedOutput()
+	if err != nil {
+		t.Fatalf("cosign version: %v\n%s", err, out)
+	}
+	m := regexp.MustCompile(`GitVersion:\s+v?(\d+)\.`).FindSubmatch(out)
+	if m == nil {
+		t.Fatalf("cosign version: no GitVersion in\n%s", out)
+	}
+	n, _ := strconv.Atoi(string(m[1]))
+	return n
+}
+
 // Signatures made by the cosign CLI verify (when cosign is installed).
 func TestImageSignaturesFromCosign(t *testing.T) {
 	bin, err := exec.LookPath("cosign")
@@ -181,6 +197,9 @@ func TestImageSignaturesFromCosign(t *testing.T) {
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("cosign %v: %v\n%s", args, err, out)
 		}
+	}
+	if cosignMajor(t, bin) >= 3 {
+		t.Skip("cosign v3 stores signatures as OCI referrer bundles, not the .sig tags this verifier reads, and rejects --tlog-upload=false")
 	}
 	run("generate-key-pair")
 	run("sign", "--key", "cosign.key", "--tlog-upload=false", "--allow-http-registry", repo+"@"+digest.String())

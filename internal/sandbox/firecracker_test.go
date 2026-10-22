@@ -369,6 +369,9 @@ cd "$root" && exec "$exe" --api-sock api.sock
 // Under the jailer, which chowns the VM root, a kernel or snapshot must not
 // share its inode with the source every other VM uses.
 func TestFirecrackerPlaceCopiesUnderTheJailer(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("place copies with GNU cp; Firecracker runs only on Linux")
+	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "vmlinux")
 	if err := os.WriteFile(src, []byte("kernel"), 0o644); err != nil {
