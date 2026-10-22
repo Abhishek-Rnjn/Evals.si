@@ -309,6 +309,10 @@ message BuiltinHarness {
   // agent's at_step-th call (or when the agent tries to finish with one still
   // due), recorded as a "user-interjection" step. Built-in agent only.
   repeated Interjection interjections = 14;
+  // Prices by model name, for models other than the run's main one (a
+  // compaction or sub-agent model, a fallback). A model not listed is priced
+  // at `pricing`.
+  map<string, Pricing> model_pricing = 15;
 }
 
 // A scripted message from the simulated user, mid-run.

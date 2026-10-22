@@ -1,7 +1,8 @@
 """``delegate``: hand a subtask to a sub-agent and keep only its report.
 
 The sub-agent starts from a clean context with the parent's tools (but cannot
-delegate itself, so there is one level), runs on the same model, and its
+delegate itself, so there is one level), runs on the parent's model or the
+target's ``subagent_model`` (named on its step, priced by its own name), and its
 budget is taken out of what the parent has left. Everything it reads and
 tries stays in its own conversation; the parent's context grows by the
 report alone, which is what lets a long task get through token-heavy
@@ -80,8 +81,9 @@ class DelegateTool:
         # Imported here: the loop module imports this one.
         from evalsi_harness.loop import AgentLoop
 
+        model = loop.subagent_model or loop.model
         sub = AgentLoop(
-            loop.model,
+            model,
             loop.sub_tools(),
             replace(
                 loop.config,
@@ -101,6 +103,7 @@ class DelegateTool:
             ),
             loop.emit,
             hooks=loop.hooks,
+            compaction_model=loop.compaction_model,
         )
         started = time.perf_counter()
         handoff = span_id()
@@ -137,6 +140,11 @@ class DelegateTool:
                         "evalsi.subagent.steps": sub.state.steps,
                         "evalsi.subagent.tool_calls": sub.state.tool_calls,
                         "evalsi.subagent.stop_reason": final.stop_reason,
+                        "evalsi.subagent.model": model.name,
+                        # Its spend by model, as the parent's cost counts it.
+                        "evalsi.subagent.spend": {
+                            name: tokens for name, tokens in sorted(sub.state.spend.items())
+                        },
                     },
                 )
             )

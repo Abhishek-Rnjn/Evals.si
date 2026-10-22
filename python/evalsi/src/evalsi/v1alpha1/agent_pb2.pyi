@@ -862,6 +862,26 @@ Global___EscalationPolicy: _TypeAlias = EscalationPolicy  # noqa: Y015
 class BuiltinHarness(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class ModelPricingEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___Pricing: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___Pricing | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     MAX_STEPS_FIELD_NUMBER: _builtins.int
     BUDGET_FIELD_NUMBER: _builtins.int
     PRICING_FIELD_NUMBER: _builtins.int
@@ -876,6 +896,7 @@ class BuiltinHarness(_message.Message):
     DELEGATE_STEPS_FIELD_NUMBER: _builtins.int
     PROFILE_FIELD_NUMBER: _builtins.int
     INTERJECTIONS_FIELD_NUMBER: _builtins.int
+    MODEL_PRICING_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
@@ -925,6 +946,13 @@ class BuiltinHarness(_message.Message):
         due), recorded as a "user-interjection" step. Built-in agent only.
         """
 
+    @_builtins.property
+    def model_pricing(self) -> _containers.MessageMap[_builtins.str, Global___Pricing]:
+        """Prices by model name, for models other than the run's main one (a
+        compaction or sub-agent model, a fallback). A model not listed is priced
+        at `pricing`.
+        """
+
     def __init__(
         self,
         *,
@@ -942,10 +970,11 @@ class BuiltinHarness(_message.Message):
         delegate_steps: _builtins.int = ...,
         profile: _builtins.str = ...,
         interjections: _abc.Iterable[Global___Interjection] | None = ...,
+        model_pricing: _abc.Mapping[_builtins.str, Global___Pricing] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "interjections", b"interjections", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "profile", b"profile", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "interjections", b"interjections", "max_steps", b"max_steps", "model_pricing", b"model_pricing", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "profile", b"profile", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015

@@ -55,6 +55,18 @@ def is_agent_run(spec: run_pb2.RunSpec) -> bool:
     return spec.HasField("harness") or (spec.HasField("target") and spec.target.HasField("agent"))
 
 
+def _whole_numbers(value: Any) -> Any:
+    """A Struct holds every number as a double; a whole one goes back to an int, so a
+    server tool's ``max_uses: 5`` reaches the provider as 5, not 5.0."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {k: _whole_numbers(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_whole_numbers(v) for v in value]
+    return value
+
+
 def target_config(target: run_pb2.Target) -> TargetConfig:
     return TargetConfig(
         connector=target.connector,
@@ -72,6 +84,12 @@ def target_config(target: run_pb2.Target) -> TargetConfig:
         api=target.api,
         fallbacks=tuple(target_config(f) for f in target.fallbacks),
         fallback_after=target.fallback_after,
+        token_trace=target.token_trace,
+        token_trace_server=target.token_trace_server,
+        reasoning_handoff=target.reasoning_handoff,
+        server_tools=tuple(_whole_numbers(from_struct(t)) for t in target.server_tools),
+        stream_resume_attempts=target.stream_resume_attempts,
+        stream_resume_mode=target.stream_resume_mode,
     )
 
 

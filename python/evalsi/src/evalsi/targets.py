@@ -31,6 +31,9 @@ CONNECTORS = ("openai-compatible", "anthropic")
 RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 
 
+REASONING_HANDOFFS = ("", "drop", "summarize-as-text")
+
+
 class TargetError(RuntimeError):
     """The target failed for one record."""
 
@@ -67,10 +70,18 @@ class TargetConfig:
     api: str = ""  # openai-compatible: "" or "chat-completions", or "responses"
     fallbacks: tuple[TargetConfig, ...] = ()
     fallback_after: int = 0
-    # openai-compatible chat completions on a vLLM server: ask for the token IDs
-    # and log-probabilities of every turn (for RL rollouts). Set by code that
-    # builds the client (a trainer); not part of a run spec.
+    # openai-compatible chat completions on a vLLM or SGLang server: ask for the
+    # token IDs and log-probabilities of every turn (for RL rollouts); the run
+    # spec's target.token_trace, or set by code that builds the client.
     token_trace: bool = False
+    token_trace_server: str = ""  # "" or "vllm", or "sglang"
+    # Built-in agent: "" or "drop", or "summarize-as-text" (see proto Target).
+    reasoning_handoff: str = ""
+    # anthropic: server tool definitions passed through as they are.
+    server_tools: tuple[dict[str, Any], ...] = ()
+    # Streaming: tries again after a stream that breaks mid-response, and how.
+    stream_resume_attempts: int = 0
+    stream_resume_mode: str = ""  # "" or "retry", or "prefill" (anthropic)
 
     def __post_init__(self) -> None:
         if self.connector not in CONNECTORS:
@@ -95,8 +106,30 @@ class TargetConfig:
             raise ValueError("thinking enabled needs thinking_budget above 0 and below max_tokens")
         if self.token_trace and (self.connector != "openai-compatible" or self.api == "responses"):
             raise ValueError("token_trace is for openai-compatible chat-completions targets")
-        if self.max_concurrency < 0 or self.fallback_after < 0:
-            raise ValueError("max_concurrency and fallback_after cannot be negative")
+        if self.token_trace_server not in ("", "vllm", "sglang"):
+            raise ValueError(
+                f"token_trace_server must be vllm or sglang, not {self.token_trace_server!r}"
+            )
+        if self.reasoning_handoff not in REASONING_HANDOFFS:
+            raise ValueError(
+                f"reasoning_handoff must be drop or summarize-as-text, "
+                f"not {self.reasoning_handoff!r}"
+            )
+        if self.server_tools and self.connector != "anthropic":
+            raise ValueError("server_tools are for anthropic targets")
+        for tool in self.server_tools:
+            if not isinstance(tool, dict) or not tool.get("type") or not tool.get("name"):
+                raise ValueError("each server tool needs a type and a name")
+        if self.stream_resume_mode not in ("", "retry", "prefill"):
+            raise ValueError(
+                f"stream_resume_mode must be retry or prefill, not {self.stream_resume_mode!r}"
+            )
+        if self.stream_resume_mode == "prefill" and self.connector != "anthropic":
+            raise ValueError("stream_resume_mode prefill is for anthropic targets")
+        if self.max_concurrency < 0 or self.fallback_after < 0 or self.stream_resume_attempts < 0:
+            raise ValueError(
+                "max_concurrency, fallback_after and stream_resume_attempts cannot be negative"
+            )
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -119,6 +152,11 @@ class TargetConfig:
                     "fallbacks": [f.describe() for f in self.fallbacks],
                     "fallback_after": self.fallback_after,
                     "token_trace": self.token_trace,
+                    "token_trace_server": self.token_trace_server,
+                    "reasoning_handoff": self.reasoning_handoff,
+                    "server_tools": list(self.server_tools),
+                    "stream_resume_attempts": self.stream_resume_attempts,
+                    "stream_resume_mode": self.stream_resume_mode,
                 }.items()
                 if v
             },

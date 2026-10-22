@@ -28,6 +28,7 @@ from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
 from evalsi_harness.evidence import EvidenceState, EvidenceTool
 from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
 from evalsi_harness.models import (
+    OWN_BLOCKS,
     ChatModel,
     ModelError,
     ModelTurn,
@@ -84,6 +85,13 @@ class LoopConfig:
     interjections: list[tuple[int, str]] = field(default_factory=list)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
+    # A turn paused by the provider (Anthropic's pause_turn, a server tool loop at
+    # its limit) is continued at most this many times in a row.
+    max_pause_continues: int = 5
+    # Prices by model name (input, output per million tokens) for the models that
+    # are not priced by input_per_mtok and output_per_mtok: a compaction or
+    # sub-agent model, or a fallback. Spend is counted per model.
+    model_prices: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -99,6 +107,8 @@ class LoopState:
     subagent_steps: int = 0
     reasoning_tokens: int = 0
     truncation_retries: int = 0
+    # Tokens by the model that used them: input, output, cache reads, cache writes.
+    spend: dict[str, list[int]] = field(default_factory=dict)
 
 
 def _add(total: Usage, part: Usage) -> None:
@@ -117,8 +127,13 @@ class AgentLoop:
         user: UserSimulator | None = None,
         hooks: Hooks | None = None,
         progress: Callable[[], Awaitable[str]] | None = None,
+        compaction_model: ChatModel | None = None,
+        subagent_model: ChatModel | None = None,
     ) -> None:
         self.archive = Archive()
+        # Models for other roles than the agent's own turns; None: the agent's model.
+        self.compaction_model = compaction_model
+        self.subagent_model = subagent_model
         # What a sub-agent gets is what the caller passed: the tools added below are bound
         # to this loop (its archive, its budget), and a sub-agent builds its own.
         self._base_tools = list(tools)
@@ -168,10 +183,22 @@ class AgentLoop:
                 json.dumps([(t.spec.name, t.spec.description, t.spec.input_schema) for t in tools])
             ),
             bill=self._bill,
+            summarizer=compaction_model,
         )
 
     def cost(self) -> float:
         u, c, st = self.state.usage, self.config, self.state
+        if c.model_prices:
+            # Each model's tokens at its own prices (the main ones for a model not listed).
+            total = 0.0
+            for name, (inp, out, read, write) in st.spend.items():
+                pin, pout = c.model_prices.get(name, (c.input_per_mtok, c.output_per_mtok))
+                total += (
+                    (inp - read - write + read * c.cache_read_mult + write * c.cache_write_mult)
+                    * pin
+                    + out * pout
+                ) / 1e6
+            return total
         plain = (u.input_tokens or 0) - st.cache_read_tokens - st.cache_write_tokens
         return (
             (
@@ -221,6 +248,28 @@ class AgentLoop:
                 "cache_write_tokens": self.state.cache_write_tokens,
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
+                # Spend by model, when more than one model worked on the task.
+                **(
+                    {
+                        "models": {
+                            name: dict(
+                                zip(
+                                    (
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "cache_read_tokens",
+                                        "cache_write_tokens",
+                                    ),
+                                    tokens,
+                                    strict=True,
+                                )
+                            )
+                            for name, tokens in sorted(self.state.spend.items())
+                        }
+                    }
+                    if len(self.state.spend) > 1
+                    else {}
+                ),
                 **({"interjections": len(self.delivered)} if self.config.interjections else {}),
                 # What the model was shown, by the rule its requests use.
                 "tools_offered": sorted({t.name for t in self._specs()}),
@@ -309,6 +358,10 @@ class AgentLoop:
         self.state.cache_read_tokens += sub.state.cache_read_tokens
         self.state.cache_write_tokens += sub.state.cache_write_tokens
         self.state.reasoning_tokens += sub.state.reasoning_tokens
+        for name, tokens in sub.state.spend.items():
+            mine = self.state.spend.setdefault(name, [0, 0, 0, 0])
+            for i, n in enumerate(tokens):
+                mine[i] += n
         self.state.subagents += 1
         self.state.subagent_steps += sub.state.steps
 
@@ -375,6 +428,7 @@ class AgentLoop:
 
     async def _loop(self, messages: list[dict[str, Any]], started: float) -> FinalEvent:
         last_text = ""
+        pauses = 0
         while True:
             if reason := self._over_budget(started):
                 return self._final(last_text, reason)
@@ -407,7 +461,17 @@ class AgentLoop:
             messages.append(turn.as_message())
             self.archive.add(messages[-1])
             if turn.stop_reason == "pause_turn" and not turn.tool_calls:
-                continue  # the API asks for the turn to be resumed as it stands
+                # A server tool loop the API paused: send the turn back as it stands (its
+                # content verbatim, no new user message) and the server carries on.
+                pauses += 1
+                if pauses > self.config.max_pause_continues:
+                    return self._final(
+                        turn.text,
+                        "budget",
+                        error=f"the turn was still paused after {pauses - 1} continuations",
+                    )
+                continue
+            pauses = 0
             if turn.tool_calls:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
@@ -508,6 +572,11 @@ class AgentLoop:
         self.state.cache_read_tokens += turn.cache_read_tokens
         self.state.cache_write_tokens += turn.cache_write_tokens
         self.state.reasoning_tokens += turn.reasoning_tokens
+        spent = self.state.spend.setdefault(turn.model or self.model.name, [0, 0, 0, 0])
+        spent[0] += turn.usage.input_tokens or 0
+        spent[1] += turn.usage.output_tokens or 0
+        spent[2] += turn.cache_read_tokens
+        spent[3] += turn.cache_write_tokens
 
     async def _call_model(
         self, messages: list[dict[str, Any]], specs: list[Any], system: str
@@ -584,6 +653,23 @@ class AgentLoop:
                 ),
                 **(
                     {"evalsi.model.switched_from": turn.switched_from} if turn.switched_from else {}
+                ),
+                **({"gen_ai.response.model": turn.response_model} if turn.response_model else {}),
+                **(
+                    {"evalsi.model.system_fingerprint": turn.system_fingerprint}
+                    if turn.system_fingerprint
+                    else {}
+                ),
+                **({"evalsi.reasoning.handoff": turn.handoff} if turn.handoff else {}),
+                **({"evalsi.stream.resumes": turn.stream_resumes} if turn.stream_resumes else {}),
+                **(
+                    {
+                        "evalsi.server_tools.blocks": sum(
+                            1 for b in turn.raw_content if b.get("type") not in OWN_BLOCKS
+                        )
+                    }
+                    if turn.raw_content
+                    else {}
                 ),
             },
         )

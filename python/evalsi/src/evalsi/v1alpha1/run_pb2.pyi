@@ -185,6 +185,14 @@ class Target(_message.Message):
     API_FIELD_NUMBER: _builtins.int
     FALLBACKS_FIELD_NUMBER: _builtins.int
     FALLBACK_AFTER_FIELD_NUMBER: _builtins.int
+    TOKEN_TRACE_FIELD_NUMBER: _builtins.int
+    TOKEN_TRACE_SERVER_FIELD_NUMBER: _builtins.int
+    REASONING_HANDOFF_FIELD_NUMBER: _builtins.int
+    COMPACTION_MODEL_FIELD_NUMBER: _builtins.int
+    SUBAGENT_MODEL_FIELD_NUMBER: _builtins.int
+    SERVER_TOOLS_FIELD_NUMBER: _builtins.int
+    STREAM_RESUME_ATTEMPTS_FIELD_NUMBER: _builtins.int
+    STREAM_RESUME_MODE_FIELD_NUMBER: _builtins.int
     connector: _builtins.str
     """"openai-compatible" or "anthropic". For an agent run without an agent
     below, the model the built-in reference agent uses.
@@ -213,6 +221,32 @@ class Target(_message.Message):
     api: _builtins.str
     """openai-compatible only: "chat-completions" (default) or "responses"."""
     fallback_after: _builtins.int
+    token_trace: _builtins.bool
+    """openai-compatible chat completions on a vLLM or SGLang server: ask for the
+    token IDs and log-probabilities of every turn and record them (for RL
+    rollouts and trainers).
+    """
+    token_trace_server: _builtins.str
+    """With token_trace: the server's field names, "vllm" (default) or "sglang"."""
+    reasoning_handoff: _builtins.str
+    """Built-in agent: what happens to one provider's reasoning when the
+    conversation moves to another (a fallback): "drop" (default; the blocks are
+    removed) or "summarize-as-text" (the readable reasoning, Anthropic thinking
+    text or a Responses reasoning summary, is carried as plain text in the
+    assistant message; signed and encrypted blocks are dropped, since no other
+    provider can verify them). Each conversion is recorded on the step.
+    """
+    stream_resume_attempts: _builtins.int
+    """Streaming: a stream that breaks mid-response is tried again up to this many
+    times (0: a broken stream is an error). The partial output is kept on the
+    step's record; a tool call cut off mid-arguments is discarded, never merged.
+    """
+    stream_resume_mode: _builtins.str
+    """"retry" (default: request the turn again) or "prefill" (anthropic only:
+    send the partial text back as the start of the reply and ask the model to
+    continue it; older models only, the current ones refuse a prefill, and
+    never with thinking on, where it falls back to retry).
+    """
     @_builtins.property
     def agent(self) -> _agent_pb2.AgentTarget:
         """A bring-your-own agent instead of a model."""
@@ -230,6 +264,23 @@ class Target(_message.Message):
         conversation moves with the agent; thinking blocks are dropped when the
         provider changes. Each switch is recorded on the step. A fallback's own
         fallbacks are ignored.
+        """
+
+    @_builtins.property
+    def compaction_model(self) -> Global___Target:
+        """Built-in agent: the model that writes compaction summaries (context
+        strategy "compact") and the model delegate sub-agents run on. Unset: this
+        target. Their own fallbacks are ignored; harness.builtin.model_pricing
+        prices them by model name.
+        """
+
+    @_builtins.property
+    def subagent_model(self) -> Global___Target: ...
+    @_builtins.property
+    def server_tools(self) -> _containers.RepeatedCompositeFieldContainer[_struct_pb2.Struct]:
+        """anthropic: server tools passed through as tool definitions, for example
+        {type: web_search_20260209, name: web_search, max_uses: 5}. A turn the API
+        pauses (stop reason pause_turn) is continued by sending its content back.
         """
 
     def __init__(
@@ -250,10 +301,18 @@ class Target(_message.Message):
         api: _builtins.str = ...,
         fallbacks: _abc.Iterable[Global___Target] | None = ...,
         fallback_after: _builtins.int = ...,
+        token_trace: _builtins.bool = ...,
+        token_trace_server: _builtins.str = ...,
+        reasoning_handoff: _builtins.str = ...,
+        compaction_model: Global___Target | None = ...,
+        subagent_model: Global___Target | None = ...,
+        server_tools: _abc.Iterable[_struct_pb2.Struct] | None = ...,
+        stream_resume_attempts: _builtins.int = ...,
+        stream_resume_mode: _builtins.str = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "temperature", b"temperature", "thinking", b"thinking"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "compaction_model", b"compaction_model", "subagent_model", b"subagent_model", "temperature", b"temperature", "thinking", b"thinking"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "api", b"api", "api_key_env", b"api_key_env", "base_url", b"base_url", "connector", b"connector", "effort", b"effort", "fallback_after", b"fallback_after", "fallbacks", b"fallbacks", "max_concurrency", b"max_concurrency", "max_tokens", b"max_tokens", "model", b"model", "stream", b"stream", "system_prompt", b"system_prompt", "temperature", b"temperature", "thinking", b"thinking"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_temperature", b"_temperature", "agent", b"agent", "api", b"api", "api_key_env", b"api_key_env", "base_url", b"base_url", "compaction_model", b"compaction_model", "connector", b"connector", "effort", b"effort", "fallback_after", b"fallback_after", "fallbacks", b"fallbacks", "max_concurrency", b"max_concurrency", "max_tokens", b"max_tokens", "model", b"model", "reasoning_handoff", b"reasoning_handoff", "server_tools", b"server_tools", "stream", b"stream", "stream_resume_attempts", b"stream_resume_attempts", "stream_resume_mode", b"stream_resume_mode", "subagent_model", b"subagent_model", "system_prompt", b"system_prompt", "temperature", b"temperature", "thinking", b"thinking", "token_trace", b"token_trace", "token_trace_server", b"token_trace_server"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__temperature: _TypeAlias = _typing.Literal["temperature"]  # noqa: Y015
     _WhichOneofArgType__temperature: _TypeAlias = _typing.Literal["_temperature", b"_temperature"]  # noqa: Y015

@@ -1537,6 +1537,10 @@ type BuiltinHarness struct {
 	// agent's at_step-th call (or when the agent tries to finish with one still
 	// due), recorded as a "user-interjection" step. Built-in agent only.
 	Interjections []*Interjection `protobuf:"bytes,14,rep,name=interjections,proto3" json:"interjections,omitempty"`
+	// Prices by model name, for models other than the run's main one (a
+	// compaction or sub-agent model, a fallback). A model not listed is priced
+	// at `pricing`.
+	ModelPricing  map[string]*Pricing `protobuf:"bytes,15,rep,name=model_pricing,json=modelPricing,proto3" json:"model_pricing,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1665,6 +1669,13 @@ func (x *BuiltinHarness) GetProfile() string {
 func (x *BuiltinHarness) GetInterjections() []*Interjection {
 	if x != nil {
 		return x.Interjections
+	}
+	return nil
+}
+
+func (x *BuiltinHarness) GetModelPricing() map[string]*Pricing {
+	if x != nil {
+		return x.ModelPricing
 	}
 	return nil
 }
@@ -2679,7 +2690,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\x12\x17\n" +
 	"\afork_as\x18\x04 \x01(\tR\x06forkAs\"(\n" +
 	"\x10EscalationPolicy\x12\x14\n" +
-	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xeb\x05\n" +
+	"\x05allow\x18\x01 \x03(\tR\x05allow\"\x9e\a\n" +
 	"\x0eBuiltinHarness\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x124\n" +
 	"\x06budget\x18\x02 \x01(\v2\x1c.evalsi.v1alpha1.AgentBudgetR\x06budget\x122\n" +
@@ -2697,7 +2708,11 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x05hooks\x18\v \x03(\v2\x15.evalsi.v1alpha1.HookR\x05hooks\x12%\n" +
 	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateSteps\x12\x18\n" +
 	"\aprofile\x18\r \x01(\tR\aprofile\x12C\n" +
-	"\rinterjections\x18\x0e \x03(\v2\x1d.evalsi.v1alpha1.InterjectionR\rinterjectionsB\x16\n" +
+	"\rinterjections\x18\x0e \x03(\v2\x1d.evalsi.v1alpha1.InterjectionR\rinterjections\x12V\n" +
+	"\rmodel_pricing\x18\x0f \x03(\v21.evalsi.v1alpha1.BuiltinHarness.ModelPricingEntryR\fmodelPricing\x1aY\n" +
+	"\x11ModelPricingEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12.\n" +
+	"\x05value\x18\x02 \x01(\v2\x18.evalsi.v1alpha1.PricingR\x05value:\x028\x01B\x16\n" +
 	"\x14_parallel_tool_calls\"A\n" +
 	"\fInterjection\x12\x17\n" +
 	"\aat_step\x18\x01 \x01(\x05R\x06atStep\x12\x18\n" +
@@ -2800,7 +2815,7 @@ func file_evalsi_v1alpha1_agent_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_agent_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	(*AgentTarget)(nil),         // 0: evalsi.v1alpha1.AgentTarget
 	(*A2AAgent)(nil),            // 1: evalsi.v1alpha1.A2AAgent
@@ -2836,12 +2851,13 @@ var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	nil,                         // 31: evalsi.v1alpha1.MCPServer.HeadersEnvEntry
 	nil,                         // 32: evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
 	nil,                         // 33: evalsi.v1alpha1.MockTool.ResponsesEntry
-	nil,                         // 34: evalsi.v1alpha1.Checker.FilesEntry
-	nil,                         // 35: evalsi.v1alpha1.Environment.FilesEntry
-	nil,                         // 36: evalsi.v1alpha1.Environment.EnvEntry
-	nil,                         // 37: evalsi.v1alpha1.EnvironmentService.EnvEntry
-	(*durationpb.Duration)(nil), // 38: google.protobuf.Duration
-	(*structpb.Struct)(nil),     // 39: google.protobuf.Struct
+	nil,                         // 34: evalsi.v1alpha1.BuiltinHarness.ModelPricingEntry
+	nil,                         // 35: evalsi.v1alpha1.Checker.FilesEntry
+	nil,                         // 36: evalsi.v1alpha1.Environment.FilesEntry
+	nil,                         // 37: evalsi.v1alpha1.Environment.EnvEntry
+	nil,                         // 38: evalsi.v1alpha1.EnvironmentService.EnvEntry
+	(*durationpb.Duration)(nil), // 39: google.protobuf.Duration
+	(*structpb.Struct)(nil),     // 40: google.protobuf.Struct
 }
 var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	1,  // 0: evalsi.v1alpha1.AgentTarget.a2a:type_name -> evalsi.v1alpha1.A2AAgent
@@ -2850,21 +2866,21 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	4,  // 3: evalsi.v1alpha1.AgentTarget.http:type_name -> evalsi.v1alpha1.HTTPAgent
 	5,  // 4: evalsi.v1alpha1.AgentTarget.cli:type_name -> evalsi.v1alpha1.CLIAgent
 	27, // 5: evalsi.v1alpha1.A2AAgent.headers_env:type_name -> evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
-	38, // 6: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
+	39, // 6: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
 	28, // 7: evalsi.v1alpha1.MCPAgent.headers_env:type_name -> evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
-	38, // 8: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
-	38, // 9: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
+	39, // 8: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
+	39, // 9: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
 	29, // 10: evalsi.v1alpha1.HTTPAgent.headers_env:type_name -> evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
-	38, // 11: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
+	39, // 11: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
 	30, // 12: evalsi.v1alpha1.CLIAgent.env_from:type_name -> evalsi.v1alpha1.CLIAgent.EnvFromEntry
-	38, // 13: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
+	39, // 13: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
 	17, // 14: evalsi.v1alpha1.Harness.builtin:type_name -> evalsi.v1alpha1.BuiltinHarness
 	21, // 15: evalsi.v1alpha1.Harness.external:type_name -> evalsi.v1alpha1.ExternalHarness
-	38, // 16: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
+	39, // 16: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
 	31, // 17: evalsi.v1alpha1.MCPServer.headers_env:type_name -> evalsi.v1alpha1.MCPServer.HeadersEnvEntry
 	32, // 18: evalsi.v1alpha1.MCPServer.tool_timeout_s:type_name -> evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
 	10, // 19: evalsi.v1alpha1.MCPServer.oauth:type_name -> evalsi.v1alpha1.MCPOAuth
-	39, // 20: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
+	40, // 20: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
 	33, // 21: evalsi.v1alpha1.MockTool.responses:type_name -> evalsi.v1alpha1.MockTool.ResponsesEntry
 	9,  // 22: evalsi.v1alpha1.Tools.mcp:type_name -> evalsi.v1alpha1.MCPServer
 	11, // 23: evalsi.v1alpha1.Tools.mocks:type_name -> evalsi.v1alpha1.MockTool
@@ -2878,25 +2894,27 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	20, // 31: evalsi.v1alpha1.BuiltinHarness.context:type_name -> evalsi.v1alpha1.ContextManagement
 	19, // 32: evalsi.v1alpha1.BuiltinHarness.hooks:type_name -> evalsi.v1alpha1.Hook
 	18, // 33: evalsi.v1alpha1.BuiltinHarness.interjections:type_name -> evalsi.v1alpha1.Interjection
-	39, // 34: evalsi.v1alpha1.Hook.config:type_name -> google.protobuf.Struct
-	22, // 35: evalsi.v1alpha1.ExternalHarness.command:type_name -> evalsi.v1alpha1.CommandHarness
-	39, // 36: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
-	34, // 37: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
-	38, // 38: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
-	35, // 39: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
-	38, // 40: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
-	23, // 41: evalsi.v1alpha1.Environment.sandbox:type_name -> evalsi.v1alpha1.SandboxPolicy
-	24, // 42: evalsi.v1alpha1.Environment.checker:type_name -> evalsi.v1alpha1.Checker
-	36, // 43: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
-	38, // 44: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
-	26, // 45: evalsi.v1alpha1.Environment.services:type_name -> evalsi.v1alpha1.EnvironmentService
-	38, // 46: evalsi.v1alpha1.Environment.service_lifetime:type_name -> google.protobuf.Duration
-	37, // 47: evalsi.v1alpha1.EnvironmentService.env:type_name -> evalsi.v1alpha1.EnvironmentService.EnvEntry
-	48, // [48:48] is the sub-list for method output_type
-	48, // [48:48] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	34, // 34: evalsi.v1alpha1.BuiltinHarness.model_pricing:type_name -> evalsi.v1alpha1.BuiltinHarness.ModelPricingEntry
+	40, // 35: evalsi.v1alpha1.Hook.config:type_name -> google.protobuf.Struct
+	22, // 36: evalsi.v1alpha1.ExternalHarness.command:type_name -> evalsi.v1alpha1.CommandHarness
+	40, // 37: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
+	35, // 38: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
+	39, // 39: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
+	36, // 40: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
+	39, // 41: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
+	23, // 42: evalsi.v1alpha1.Environment.sandbox:type_name -> evalsi.v1alpha1.SandboxPolicy
+	24, // 43: evalsi.v1alpha1.Environment.checker:type_name -> evalsi.v1alpha1.Checker
+	37, // 44: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
+	39, // 45: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
+	26, // 46: evalsi.v1alpha1.Environment.services:type_name -> evalsi.v1alpha1.EnvironmentService
+	39, // 47: evalsi.v1alpha1.Environment.service_lifetime:type_name -> google.protobuf.Duration
+	38, // 48: evalsi.v1alpha1.EnvironmentService.env:type_name -> evalsi.v1alpha1.EnvironmentService.EnvEntry
+	8,  // 49: evalsi.v1alpha1.BuiltinHarness.ModelPricingEntry.value:type_name -> evalsi.v1alpha1.Pricing
+	50, // [50:50] is the sub-list for method output_type
+	50, // [50:50] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_agent_proto_init() }
@@ -2928,7 +2946,7 @@ func file_evalsi_v1alpha1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_agent_proto_rawDesc), len(file_evalsi_v1alpha1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   38,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
