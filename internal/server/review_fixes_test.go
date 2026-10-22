@@ -3,8 +3,10 @@ package server
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 	"github.com/abhishek-rnjn/evals.si/internal/auth"
 	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 )
 
 func (s *testServer) rest(t *testing.T, cred, method, path, body string) (int, string, http.Header) {
@@ -105,5 +108,23 @@ func TestUnknownProjectIsPermissionDenied(t *testing.T) {
 	code, body, _ := s.rest(t, s.keys["owner"], "POST", "/v1alpha1/datasets/test/upload?project=ghost&format=jsonl", "{}\n")
 	if code != http.StatusForbidden {
 		t.Errorf("upload to unknown project = %d %s, want 403", code, body)
+	}
+}
+
+func TestDatasetHTTPErrorResourceExhausted(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err        error
+		code       int
+		retryAfter string
+	}{
+		"rate limited": {rateLimited("api", 3*time.Second), http.StatusTooManyRequests, "3"},
+		"busy":         {datasets.Busy(), http.StatusTooManyRequests, "1"},
+		"size limit":   {connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload exceeds 64 MiB")), http.StatusRequestEntityTooLarge, ""},
+	} {
+		rec := httptest.NewRecorder()
+		datasetHTTPError(rec, tc.err)
+		if rec.Code != tc.code || rec.Header().Get("Retry-After") != tc.retryAfter {
+			t.Errorf("%s: %d Retry-After=%q, want %d %q", name, rec.Code, rec.Header().Get("Retry-After"), tc.code, tc.retryAfter)
+		}
 	}
 }

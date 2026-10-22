@@ -58,7 +58,7 @@ func (service *Service) Put(ctx context.Context, config *evalsiv1alpha1.DatasetU
 	case service.uploads <- struct{}{}:
 		defer func() { <-service.uploads }()
 	default:
-		return nil, connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload capacity is busy; retry later"))
+		return nil, Busy()
 	}
 	source, err := os.CreateTemp("", "evalsi-upload-")
 	if err != nil {
@@ -448,4 +448,12 @@ func (service *Service) ImportDataset(ctx context.Context, request *connect.Requ
 		return nil, err
 	}
 	return connect.NewResponse(&evalsiv1alpha1.ImportDatasetResponse{Path: result.GetPath(), Records: result.GetRecords(), Sha256: result.GetSha256()}), nil
+}
+
+// Busy is the refusal when every upload slot is taken: ResourceExhausted
+// with a Retry-After, so HTTP callers get 429 rather than 413.
+func Busy() *connect.Error {
+	ce := connect.NewError(connect.CodeResourceExhausted, errors.New("dataset upload capacity is busy; retry later"))
+	ce.Meta().Set("Retry-After", "1")
+	return ce
 }
