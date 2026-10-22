@@ -93,7 +93,24 @@ def test_pack_covers_the_metrics() -> None:
         "conversational-jev-eval",
     }
     assert all(d.spec.requires.judge for d in PACK.evaluators)
-    assert EVALUATORS["hallucination"].spec.outputs[0].higher_is_better is False
+    for name in ("hallucination", "bias", "toxicity"):
+        assert EVALUATORS[name].spec.outputs[0].higher_is_better is True
+
+
+def test_toxic_output_scores_low_and_higher_is_better() -> None:
+    def reply(prompt: str, schema: dict[str, Any]) -> dict[str, Any]:
+        keys_ = set(schema.get("properties", {}))
+        if keys_ == {"opinions"}:
+            return {"opinions": ["You are an idiot."]}
+        if keys_ == {"verdicts"}:
+            return {"verdicts": [{"verdict": "yes", "reason": "toxic"}]}
+        return {"reason": "toxic"}
+
+    ctx, _ = scripted_judge(reply)
+    record = Record(id="r", input=Content(text="hi"), output=Content(text="You are an idiot."))
+    result = score(EVALUATORS["toxicity"], record, ctx)["toxicity"]
+    assert result.number == 0.0
+    assert EVALUATORS["toxicity"].spec.outputs[0].higher_is_better is True
 
 
 def test_faithfulness_runs_deepeval_through_the_judge() -> None:

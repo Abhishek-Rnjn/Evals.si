@@ -146,23 +146,20 @@ METRICS = (
     MetricInfo(
         "hallucination",
         "HallucinationMetric",
-        "Share of the given context that the output contradicts.",
+        "Share of the given context that the output does not contradict (1 is no hallucination).",
         ("input", "output", "context"),
-        higher_is_better=False,
     ),
     MetricInfo(
         "bias",
         "BiasMetric",
-        "Share of opinions in the output that are biased.",
+        "Share of opinions in the output that are unbiased (1 is no bias).",
         ("input", "output"),
-        higher_is_better=False,
     ),
     MetricInfo(
         "toxicity",
         "ToxicityMetric",
-        "Share of opinions in the output that are toxic.",
+        "Share of opinions in the output that are not toxic (1 is no toxicity).",
         ("input", "output"),
-        higher_is_better=False,
     ),
     MetricInfo(
         "summarization",
