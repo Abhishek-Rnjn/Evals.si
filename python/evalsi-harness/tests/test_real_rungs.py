@@ -345,3 +345,31 @@ async def _stop_on_pod_cancels() -> None:
 def test_a_stopped_rollout_on_the_pod_rung_cancels_cleanly(config: Any) -> None:
     config("pod")
     asyncio.run(_stop_on_pod_cancels())
+
+
+DIFF_CHECK: dict[str, Any] = {"isolation": "diff", "protect": ["tests/**"]}
+REWRITE_TESTS = "printf 'print(1)\\n' > tests/test_calc.py"
+
+
+@pytest.mark.parametrize("rung", RUNGS)
+def test_diff_checking_passes_an_honest_fix_and_catches_edited_tests(
+    config: Any, rung: str
+) -> None:
+    """Grading the agent's diff in a fresh sandbox: the fix is applied, an edit to
+    the protected tests is rejected and recorded, and a shim never arrives."""
+    config(rung)
+    honest = play(f"{FIX}; {SHIM}", rung, checker={**DIFF_CHECK, "outputs": ["calc.py"]})
+    assert honest.error == "", honest.error
+    ran_on(honest, rung)
+    assert honest.record is not None
+    assert honest.record.check is not None
+    assert honest.record.check.passed
+    assert honest.record.metadata["checker_isolation"]["modified"] == ["calc.py"]
+    cheat = play(REWRITE_TESTS, rung, checker=DIFF_CHECK)
+    assert cheat.error == "", cheat.error
+    assert cheat.record is not None
+    assert cheat.record.check is not None
+    assert not cheat.record.check.passed
+    rejected = cheat.record.metadata["checker_isolation"]["rejected"]
+    assert [r["path"] for r in rejected] == ["tests/test_calc.py"]
+    assert "checker_diff_rejected" in [p["kind"] for p in cheat.record.metadata["policy_events"]]

@@ -73,9 +73,12 @@ class CheckerConfig:
     protect: list[str] = field(default_factory=list)
     on_change: str = "fail"
     # "shared" runs the checker in the agent's sandbox. "clean" runs it in a fresh
-    # one that receives only the files under ``outputs`` (see isolate.py).
+    # one that receives only the files under ``outputs`` (see isolate.py); "diff"
+    # in a fresh one that receives the agent's diff (see diffcheck.py).
     isolation: str = "shared"
     outputs: list[str] = field(default_factory=list)
+    # With "diff": globs whose changes are never applied (see diffcheck.py).
+    exclude: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -187,6 +190,7 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
             on_change=str(raw_checker.get("on_change") or "fail"),
             isolation=str(raw_checker.get("isolation") or "shared"),
             outputs=[str(p) for p in raw_checker.get("outputs") or []],
+            exclude=[str(p) for p in raw_checker.get("exclude") or []],
         )
         from evalsi_harness.protect import MODES, validate_patterns
 

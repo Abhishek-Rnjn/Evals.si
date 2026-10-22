@@ -31,6 +31,7 @@ from evalsi_harness._version import __version__
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
 from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
+from evalsi_harness.diffcheck import run_diff_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.hooks import Hooks, load_hooks
@@ -161,7 +162,7 @@ class LiveTask:
     # The checker's protected files as the trial began, and the policy events the
     # check produced (they arrive after the agent's stream has ended).
     protect: Baseline | None = None
-    late_events: list[PolicyEvent] = field(default_factory=list)
+    late_events: list[PolicyEvent | StepEvent] = field(default_factory=list)
     protect_result: dict[str, Any] = field(default_factory=dict)
     checker_isolation: dict[str, Any] = field(default_factory=dict)
     # Checker files that did not exist when the agent started (after the image and
@@ -287,8 +288,14 @@ class BuiltinHarness:
             live.closers.append(env.sandbox.destroy)
         self._live[handle] = live
         checker = task.environment.checker if task.environment else None
-        if env is not None and checker is not None and checker.protect:
-            # Per trial, after the environment's files and installs are in place.
+        if (
+            env is not None
+            and checker is not None
+            and checker.protect
+            and checker.isolation != "diff"
+        ):
+            # Per trial, after the environment's files and installs are in place. Diff
+            # isolation rejects protected paths from the diff instead.
             try:
                 live.protect = await Baseline.take(env, checker.protect, checker.on_change)
             except ProtectError as exc:
@@ -799,6 +806,13 @@ class BuiltinHarness:
             )
             live.checker_isolation = info
             return check
+        if env_config.checker.isolation == "diff":
+            graded = await run_diff_checker(
+                await self._environments(), live.env, env_config.checker, live.task
+            )
+            live.checker_isolation = graded.info
+            live.late_events.extend(graded.events)
+            return graded.check
         return await run_checker(live.env, env_config.checker, live.task)
 
     async def _protected(self, live: LiveTask) -> TaskCheck | None:
@@ -833,7 +847,7 @@ class BuiltinHarness:
             | {p: "created" for p in changes.created},
         )
 
-    def late_events(self, handle: str) -> list[PolicyEvent]:
+    def late_events(self, handle: str) -> list[PolicyEvent | StepEvent]:
         """Policy events raised after the agent finished (by the check)."""
         return list(self._get(handle).late_events)
 

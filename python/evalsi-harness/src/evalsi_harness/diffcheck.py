@@ -151,9 +151,8 @@ def _parse_files(out: str) -> dict[str, Entry]:
         if not line:
             continue
         escaped = line.startswith("\\")  # GNU sha256sum escapes odd names
-        if escaped:
-            line = line[1:]
-        digest, sep, name = line.partition("  ")
+        body = line[1:] if escaped else line
+        digest, sep, name = body.partition("  ")
         if not sep or len(digest) != 64:
             raise ProtectError(f"sha256sum printed an unreadable line: {line[:120]!r}")
         name = _unescape(name) if escaped else name
@@ -185,7 +184,13 @@ async def inventory(env: TaskEnvironment, method: str) -> Inventory:
         chunk = regular[start : start + 500]
         listed = await _exec(
             env,
-            ["sh", "-c", 'for f; do [ -x "$f" ] && printf "%s\\0" "$f"; done; exit 0', "sh", *chunk],
+            [
+                "sh",
+                "-c",
+                'for f; do [ -x "$f" ] && printf "%s\\0" "$f"; done; exit 0',
+                "sh",
+                *chunk,
+            ],
             "could not read file modes",
         )
         for name in listed.split("\0"):
@@ -243,8 +248,8 @@ def compare(base: Inventory, now: Inventory, checker: CheckerConfig, workdir: st
                     break
             if not reason and checker.outputs and not _selected([path], checker.outputs):
                 reason = "outside the declared outputs"
-            entry = now.entries.get(path)
-            if not reason and kind != "deleted" and entry is not None and not entry.regular:
+            current = now.entries.get(path)
+            if not reason and kind != "deleted" and current is not None and not current.regular:
                 reason = "not a regular file (a symlink or special file)"
         if reason:
             changes.rejected.append((path, f"{kind}, {reason}"))
@@ -265,8 +270,9 @@ def _unified(path: str, old: bytes | None, new: bytes | None) -> str:
         fromfile="/dev/null" if old is None else f"a/{path}",
         tofile="/dev/null" if new is None else f"b/{path}",
     )
-    return "".join(line if line.endswith("\n") else line + "\n\\ No newline at end of file\n"
-                   for line in lines)
+    return "".join(
+        line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines
+    )
 
 
 _LINKED = """for d in "$@"; do
@@ -335,7 +341,9 @@ async def _graded(
         _, blobs = await _read(agent_env, written, keep=True)
         _, olds = await _read(fresh, [*changes.modified, *changes.deleted], keep=True)
     except ProtectError as exc:
-        return DiffResult(TaskCheck(passed=False, error=f"the agent's diff could not be taken: {exc}"))
+        return DiffResult(
+            TaskCheck(passed=False, error=f"the agent's diff could not be taken: {exc}")
+        )
     info.update(changes.to_dict())
     events: list[PolicyEvent | StepEvent] = []
     for path, reason in changes.rejected[:MAX_REJECTED_EVENTS]:
@@ -386,6 +394,6 @@ async def _graded(
     plain = [p for p in changes.modified if not now.entries[p].executable]
     if executable:
         await _exec(fresh, ["chmod", "a+x", "--", *executable], "could not set execute bits")
-    if plain and base.method:
+    if plain:
         await _exec(fresh, ["chmod", "a-x", "--", *plain], "could not clear execute bits")
     return DiffResult(await run_checker(fresh, checker, task), info, events)
