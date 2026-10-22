@@ -75,6 +75,7 @@ func initMain() {
 		{"sysfs", "/sys", "sysfs", unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC, ""},
 		{"devtmpfs", "/dev", "devtmpfs", unix.MS_NOSUID, "mode=0755"},
 		{"devpts", "/dev/pts", "devpts", unix.MS_NOSUID | unix.MS_NOEXEC, ""},
+		{"cgroup2", "/sys/fs/cgroup", "cgroup2", unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC, ""},
 		{"tmpfs", "/tmp", "tmpfs", unix.MS_NOSUID | unix.MS_NODEV, "mode=1777"},
 		{"tmpfs", "/run", "tmpfs", unix.MS_NOSUID | unix.MS_NODEV, "mode=0755"},
 	} {
@@ -257,6 +258,7 @@ func limit(args []string) int {
 		}
 	}
 	set(unix.RLIMIT_NPROC, n(args[1]))
+	limitPids(n(args[1]))
 	set(unix.RLIMIT_FSIZE, n(args[2])<<20)
 	set(unix.RLIMIT_CPU, n(args[3]))
 	set(unix.RLIMIT_AS, n(args[0])<<20)
@@ -264,6 +266,41 @@ func limit(args []string) int {
 		uintptr(unsafe.Pointer(&argvp[0])), uintptr(unsafe.Pointer(&envp[0])))
 	fmt.Fprintf(os.Stderr, "sandbox: %s: %v\n", argv[0], errno)
 	return 126
+}
+
+// limitPids puts this process, and so the command it execs and everything
+// that command starts, in a pids cgroup. RLIMIT_NPROC never binds uid 0
+// (the kernel exempts the initial user outright), and commands run as root,
+// so the rlimit alone leaves root commands unlimited. It does nothing when
+// the guest has no writable cgroup v2 with the pids controller (the kernel
+// lacks it, or a pod's cgroup is not delegated); the rlimit still applies
+// to non-root commands then.
+func limitPids(max uint64) {
+	if max == 0 {
+		return
+	}
+	const base = "/sys/fs/cgroup"
+	// Earlier commands' groups are empty by now; rmdir fails on busy ones.
+	if old, err := filepath.Glob(filepath.Join(base, "evalsi-*")); err == nil {
+		for _, d := range old {
+			_ = os.Remove(d)
+		}
+	}
+	// A domain controller first: enabling only pids, on a group that already
+	// has processes, would make the children threaded groups that cannot
+	// take a process.
+	for _, c := range []string{"+memory", "+pids"} {
+		_ = os.WriteFile(filepath.Join(base, "cgroup.subtree_control"), []byte(c), 0o644)
+	}
+	dir := filepath.Join(base, "evalsi-"+strconv.Itoa(os.Getpid()))
+	if os.Mkdir(dir, 0o755) != nil {
+		return
+	}
+	e1 := os.WriteFile(filepath.Join(dir, "pids.max"), []byte(strconv.FormatUint(max, 10)), 0o644)
+	e2 := os.WriteFile(filepath.Join(dir, "cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0o644)
+	if e1 != nil || e2 != nil {
+		_ = os.Remove(dir)
+	}
 }
 
 // install is `evalsi-guest install DIR`: it copies itself to DIR, which is how

@@ -74,7 +74,7 @@ func fakeVMs(t *testing.T, mutate func(*FirecrackerConfig)) (*Sandbox, string) {
 	}
 	work := filepath.Join(dir, "work")
 	_ = os.MkdirAll(work, 0o700)
-	s, err := New(Config{Ladder: []string{"firecracker"}, MinIsolation: "none", Firecracker: fc, CacheDir: filepath.Join(dir, "cache"), WorkDir: work})
+	s, err := New(Config{Ladder: []string{"firecracker"}, MinIsolation: "none", AllowLocalImages: true, Firecracker: fc, CacheDir: filepath.Join(dir, "cache"), WorkDir: work})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,6 +369,9 @@ cd "$root" && exec "$exe" --api-sock api.sock
 // Under the jailer, which chowns the VM root, a kernel or snapshot must not
 // share its inode with the source every other VM uses.
 func TestFirecrackerPlaceCopiesUnderTheJailer(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("place copies with GNU cp; Firecracker runs only on Linux")
+	}
 	dir := t.TempDir()
 	src := filepath.Join(dir, "vmlinux")
 	if err := os.WriteFile(src, []byte("kernel"), 0o644); err != nil {

@@ -208,6 +208,15 @@ def _raise(exc: grpc.aio.AioRpcError) -> None:
     raise SandboxError(f"sandbox service: {exc.code().name}: {detail}") from exc
 
 
+class ReadFilesResult(dict[str, bytes]):
+    """Files by path, as :meth:`Sandbox.read_files` returns them, plus what
+    was not delivered: ``missing`` paths (absent, or a symlink or special
+    file) and ``truncated`` when ``max_bytes`` ran out."""
+
+    missing: list[str]
+    truncated: bool
+
+
 class Sandbox:
     """One live sandbox. Use as an async context manager to destroy it."""
 
@@ -302,15 +311,20 @@ class Sandbox:
         except grpc.aio.AioRpcError as exc:
             _raise(exc)
 
-    async def read_files(self, paths: Sequence[str], max_bytes: int = 0) -> dict[str, bytes]:
-        """Files by path (directories are read recursively); missing paths are absent."""
+    async def read_files(self, paths: Sequence[str], max_bytes: int = 0) -> ReadFilesResult:
+        """Files by path (directories are read recursively). Paths that were
+        not read are listed in ``.missing``; ``.truncated`` is set when
+        ``max_bytes`` cut the read short."""
         try:
             resp = await self.client.stub.ReadFiles(
                 pb.ReadFilesRequest(sandbox_id=self.id, paths=list(paths), max_bytes=max_bytes)
             )
         except grpc.aio.AioRpcError as exc:
             _raise(exc)
-        return {f.path: f.content for f in resp.files}
+        result = ReadFilesResult((f.path, f.content) for f in resp.files)
+        result.missing = list(resp.missing)
+        result.truncated = resp.truncated
+        return result
 
     async def snapshot(self) -> str:
         try:

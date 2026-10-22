@@ -148,7 +148,12 @@ async def _run_local(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    out, err = await proc.communicate(json.dumps(request).encode())
+    try:
+        out, err = await proc.communicate(json.dumps(request).encode())
+    except asyncio.CancelledError:
+        proc.kill()
+        await proc.wait()
+        raise
     if proc.returncode != 0:
         raise SandboxError(f"evalsid sandbox run failed: {err.decode(errors='replace').strip()}")
     try:
