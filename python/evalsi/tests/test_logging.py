@@ -102,7 +102,9 @@ def test_inflight_logging_counts_against_memory_and_record_cap() -> None:
     [httpx.Response(503), httpx.Response(200, json={"partialSuccess": {"rejectedSpans": "1"}})],
 )
 def test_logging_errors_are_not_successes(reply: httpx.Response) -> None:
-    logger = Logger("http://localhost", transport=httpx.MockTransport(lambda request: reply))
+    logger = Logger(
+        "http://localhost", max_attempts=1, transport=httpx.MockTransport(lambda request: reply)
+    )
     future = logger.log("a", "b")
     with pytest.raises(LogError):
         future.result(timeout=5)
@@ -129,7 +131,7 @@ def test_a_failed_batch_is_reported_once_and_logging_recovers() -> None:
     def send(request: httpx.Request) -> httpx.Response:
         return replies.pop(0)
 
-    logger = Logger("http://localhost", transport=httpx.MockTransport(send))
+    logger = Logger("http://localhost", max_attempts=1, transport=httpx.MockTransport(send))
     first = logger.log("a", "b")
     with pytest.raises(LogError):
         first.result(timeout=5)
@@ -144,7 +146,7 @@ def test_a_failed_batch_is_reported_once_and_logging_recovers() -> None:
 def test_reconfiguring_after_a_failed_batch_does_not_raise() -> None:
     from evalsi import logging as evalsi_logging
 
-    failing = httpx.MockTransport(lambda request: httpx.Response(503))
+    failing = httpx.MockTransport(lambda request: httpx.Response(400))
     ok = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
     try:
         old = evalsi_logging.configure_logging("http://localhost", transport=failing)
