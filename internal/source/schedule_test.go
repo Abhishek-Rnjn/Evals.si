@@ -35,7 +35,7 @@ func (runs *scheduledRuns) CreateScheduledRun(ctx context.Context, id string, re
 		return nil, err
 	}
 	runs.calls++
-	run := &evalsiv1alpha1.Run{Id: id, Name: request.GetName(), Project: request.GetProject(), Status: evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING, CreatedAt: timestamppb.New(epoch), Spec: request.GetSpec()}
+	run := &evalsiv1alpha1.Run{Id: id, Name: request.GetName(), Project: request.GetProject(), Status: evalsiv1alpha1.RunStatus_RUN_STATUS_PENDING, CreatedAt: timestamppb.New(epoch), Spec: request.GetSpec(), Labels: request.GetLabels()}
 	return run, runs.store.CreateRun(ctx, run, request.GetSpec().GetDataset().GetInline().GetRecords())
 }
 

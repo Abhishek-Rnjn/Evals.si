@@ -133,56 +133,81 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) (err e
 		}
 		r.compiled = true
 	}
-	start, cursor := next.Add(-config.GetWindow().AsDuration()), ""
+	start := next.Add(-config.GetWindow().AsDuration())
 	var records []*evalsiv1alpha1.Record
-	snapshotBytes := 0
-	seen, cursors := map[string]bool{}, map[string]bool{}
-	for {
-		page, err := connector.List(ctx, ListRequest{Since: start, Cursor: cursor, Limit: r.m.opts.PageSize})
+	snapshotBytes, skipped := 0, 0
+	seen := map[string]bool{}
+	// scan lists the whole window once and takes the traces not yet seen.
+	scan := func() (added int, err error) {
+		cursor, cursors := "", map[string]bool{}
+		for {
+			page, err := connector.List(ctx, ListRequest{Since: start, Cursor: cursor, Limit: r.m.opts.PageSize})
+			if err != nil {
+				return added, err
+			}
+			var selected []Info
+			for _, trace := range page.Infos {
+				if trace.Started.Before(start) || !trace.Started.Before(next) || seen[trace.ID] {
+					continue
+				}
+				if trace.InProgress {
+					return added, errors.New("scheduled window contains an in-progress trace; waiting within starting_deadline")
+				}
+				seen[trace.ID] = true
+				selected = append(selected, trace)
+			}
+			if len(seen) > limit {
+				return added, errors.New("scheduled window exceeds max_records; narrow the window before retrying")
+			}
+			traces, err := r.collectComplete(ctx, connector, selected)
+			if err != nil {
+				return added, err
+			}
+			if len(traces) < len(selected) {
+				r.log.Warn("scheduled traces still missing after asking again; skipping",
+					"skipped", len(selected)-len(traces), "trace_ids", missingTraceIDs(selected, traces, 10))
+				skipped += len(selected) - len(traces)
+			}
+			if err := sleep(ctx, time.Duration(float64(len(traces))/float64(rate)*float64(time.Second))); err != nil {
+				return added, err
+			}
+			for _, trace := range traces {
+				trace = r.m.opts.Redactor.Trace(trace)
+				record, _ := ingest.ToRecord(trace)
+				snapshotBytes += proto.Size(record)
+				if snapshotBytes > 64<<20 {
+					return added, errors.New("scheduled snapshot exceeds 64 MiB; narrow the window before retrying")
+				}
+				records = append(records, record)
+			}
+			added += len(selected)
+			if page.Next == "" {
+				return added, nil
+			}
+			if cursors[page.Next] {
+				return added, errors.New("connector repeated a page cursor")
+			}
+			cursors[page.Next], cursor = true, page.Next
+		}
+	}
+	// A connector that returns a short page without an error cannot be told
+	// from one with nothing more, so the window is listed again until a pass
+	// finds nothing new (at most verifyPasses). Traces only a later pass
+	// returned were lost by an earlier one; if the last pass still finds
+	// some, the window is recorded as incomplete.
+	unstable := false
+	for pass := 1; pass <= verifyPasses; pass++ {
+		added, err := scan()
 		if err != nil {
 			return err
 		}
-		var selected []Info
-		for _, trace := range page.Infos {
-			if trace.Started.Before(start) || !trace.Started.Before(next) || seen[trace.ID] {
-				continue
-			}
-			if trace.InProgress {
-				return errors.New("scheduled window contains an in-progress trace; waiting within starting_deadline")
-			}
-			seen[trace.ID] = true
-			selected = append(selected, trace)
+		if pass > 1 && added > 0 {
+			r.log.Warn("a later listing of the scheduled window returned traces an earlier one did not", "pass", pass, "traces", added)
+			unstable = pass == verifyPasses
 		}
-		if len(seen) > limit {
-			return errors.New("scheduled window exceeds max_records; narrow the window before retrying")
-		}
-		traces, err := r.collect(ctx, connector, selected)
-		if err != nil {
-			return err
-		}
-		if len(traces) < len(selected) {
-			r.log.Warn("scheduled traces disappeared before fetch; skipping",
-				"skipped", len(selected)-len(traces), "trace_ids", missingTraceIDs(selected, traces, 10))
-		}
-		if err := sleep(ctx, time.Duration(float64(len(traces))/float64(rate)*float64(time.Second))); err != nil {
-			return err
-		}
-		for _, trace := range traces {
-			trace = r.m.opts.Redactor.Trace(trace)
-			record, _ := ingest.ToRecord(trace)
-			snapshotBytes += proto.Size(record)
-			if snapshotBytes > 64<<20 {
-				return errors.New("scheduled snapshot exceeds 64 MiB; narrow the window before retrying")
-			}
-			records = append(records, record)
-		}
-		if page.Next == "" {
+		if pass > 1 && added == 0 {
 			break
 		}
-		if cursors[page.Next] {
-			return errors.New("connector repeated a page cursor")
-		}
-		cursors[page.Next], cursor = true, page.Next
 	}
 	if len(records) > 0 {
 		raw, err := (proto.MarshalOptions{Deterministic: true}).Marshal(config)
@@ -196,9 +221,19 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) (err e
 		if err := r.alive(ctx); err != nil {
 			return err
 		}
+		labels := map[string]string{"source": r.src.GetName(), "scheduled": "true", "window_end": next.Format(time.RFC3339)}
+		// A window the store did not give up completely says so on its run:
+		// listed traces it never returned (deleted, or lost), and a listing
+		// that kept finding more.
+		if skipped > 0 {
+			labels["incomplete_traces"] = fmt.Sprint(skipped)
+		}
+		if unstable {
+			labels["listing_unstable"] = "true"
+		}
 		run, err := r.m.opts.Runs.CreateScheduledRun(ctx, id, &evalsiv1alpha1.CreateRunRequest{
 			Name: fmt.Sprintf("%s-%s", r.src.GetName(), next.Format("20060102T150405Z")), Project: r.src.GetProject(), Spec: spec,
-			Labels: map[string]string{"source": r.src.GetName(), "scheduled": "true", "window_end": next.Format(time.RFC3339)},
+			Labels: labels,
 		})
 		if err != nil {
 			return err
@@ -211,7 +246,49 @@ func (r *runner) scheduledCycle(ctx context.Context, connector Connector) (err e
 	return r.saveSchedule(ctx, status)
 }
 
-var errLeaseLost = errors.New("scheduled source lease was lost")
+// verifyPasses bounds how often a scheduled window is listed to find traces
+// an earlier listing missed, and refetchTries how often traces a store listed
+// but did not return are asked for again.
+const (
+	verifyPasses = 3
+	refetchTries = 2
+)
+
+// collectComplete is collect, asking again (refetchTries times, after
+// RefetchWait, doubling) for listed traces the store did not return: a trace
+// deleted since it was listed stays missing, one a store dropped from a
+// partial answer comes back.
+func (r *runner) collectComplete(ctx context.Context, connector Connector, selected []Info) ([]ingest.Trace, error) {
+	traces, err := r.collect(ctx, connector, selected)
+	if err != nil {
+		return nil, err
+	}
+	wait := r.m.opts.RefetchWait
+	for try := 0; try < refetchTries && len(traces) < len(selected); try++ {
+		have := make(map[string]bool, len(traces))
+		for _, trace := range traces {
+			have[sourceID(trace)] = true
+		}
+		var missing []Info
+		for _, info := range selected {
+			if !have[info.ID] {
+				missing = append(missing, info)
+			}
+		}
+		if err := sleep(ctx, wait); err != nil {
+			return nil, err
+		}
+		wait *= 2
+		more, err := r.collect(ctx, connector, missing)
+		if err != nil {
+			return nil, err
+		}
+		traces = append(traces, more...)
+	}
+	return traces, nil
+}
+
+var errLeaseLost =errors.New("scheduled source lease was lost")
 
 // reportLeaseLoss says why a cycle stopped when its lease was lost: the pull
 // then fails with a bare context.Canceled, which looks like a shutdown.
