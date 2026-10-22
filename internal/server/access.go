@@ -1001,7 +1001,7 @@ func boundRejected(next http.Handler) http.Handler {
 
 // handlerOptions are the options of every Connect handler behind the gate.
 func (g *gate) handlerOptions() connect.HandlerOption {
-	return connect.WithHandlerOptions(connect.WithInterceptors(g.interceptor()), connect.WithReadMaxBytes(MaxMessageBytes))
+	return connect.WithHandlerOptions(connect.WithInterceptors(g.interceptor()), connect.WithReadMaxBytes(MaxMessageBytes), connect.WithCodec(connectJSONCodec{}))
 }
 
 func (g *gate) datasetUploadTargets(config *evalsiv1alpha1.DatasetUploadConfig) ([]target, error) {
