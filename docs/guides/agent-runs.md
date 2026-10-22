@@ -254,9 +254,15 @@ The built-in agent calls `spec.target`. Besides `connector`, `model`, `base_url`
 | `max_concurrency: N` | at most N concurrent model calls to this endpoint and key from one worker process |
 | `fallbacks: [target, ...]`, `fallback_after: N` | models to switch to, in order, when the current one fails N times in a row (default 2; each failure is already retried with backoff). The run stays on the new model, the step records `evalsi.model.switched_from`, and reasoning blocks from another model are dropped from the conversation, since a provider only accepts its own. A fallback needs its own credential grant |
 
+| `reasoning_handoff: drop \| summarize-as-text` | what happens to one provider's reasoning when a fallback moves the conversation to another. `drop` (default) removes it. `summarize-as-text` carries the readable part (Anthropic thinking text, a Responses reasoning summary) as plain text, marked as carried-over reasoning, in the assistant message; signed and encrypted blocks and redacted thinking are dropped either way, since no other provider can verify them. Anthropic server tool blocks are dropped. Every conversion is on the `llm` step as `evalsi.reasoning.handoff` (rule, messages, blocks dropped, characters carried) and in the cassette, so a replay is exact |
+| `compaction_model`, `subagent_model: target` | models for the `compact` summaries and for `delegate` sub-agents, built like the main model (their own fallbacks are ignored). The `context:compact` step names the summary model, the `subagent` step names its model (`evalsi.subagent.model`), and calls to them are recorded in the same cassette in call order. Spend is counted per model: give `harness.builtin.model_pricing: {model-name: {input_per_mtok, output_per_mtok}}` for prices that differ from `pricing`; `agent.models` totals tokens by model when more than one worked |
+| `server_tools: [{type, name, ...}]` | Anthropic server tool definitions passed through as given (for example `{type: web_search_20260209, name: web_search, max_uses: 5}`). The provider runs them; their blocks come back in the response and are sent back verbatim. A `pause_turn` stop (the server's loop reached its limit) is continued by resending the assistant content, with no extra user message, at most 5 times in a row |
+| `stream_resume_attempts: N`, `stream_resume_mode: retry \| prefill` | when a stream breaks mid-response (connection drop, error event, no stop reason), try again up to N times (default 0: an error). `retry` asks for the turn again; `prefill` (Anthropic, models that accept a prefill, thinking off) sends the partial text back as the start of the reply and joins the continuation. A tool call cut off mid-arguments is never completed or merged: it is discarded and requested again. Each resume is on the step as `evalsi.stream.resumes` |
+| `token_trace: true`, `token_trace_server: vllm \| sglang` | openai-compatible chat completions: record each turn's prompt and completion token IDs and log-probabilities (see [fine-tuning](fine-tuning.md)). `sglang` is coded against SGLang's documented OpenAI-compatible fields (`return_token_ids`; `prompt_token_ids` and `response_token_ids` per choice; on a stream `sglext.input_ids` and `sglext.output_ids`) and has not been run against a live server |
+
 Calls honour `retry-after` and retry HTTP 429, 5xx and 529 with jitter. Anthropic prompts are cached (breakpoints on the system prompt, the tools and the end of the conversation), and `max_usd` prices cached tokens: at a tenth of the input price for reads and 1.25 times for writes on Anthropic, at full price elsewhere, so a spend budget is an upper bound. `budget.tokens` counts the whole prompt, cached tokens included.
 
-A turn cut off by `max_tokens` is tried once more with twice the limit (up to 128k); if it is cut off again, or the provider refuses the higher limit, the run ends with stop reason `budget`, not `completed`, and is still checked. The retry is on by default and spends the extra tokens. A refusal ends the run as `refusal`, and `pause_turn` is resumed.
+A turn cut off by `max_tokens` is tried once more with twice the limit (up to 128k); if it is cut off again, or the provider refuses the higher limit, the run ends with stop reason `budget`, not `completed`, and is still checked. The retry is on by default and spends the extra tokens. A refusal ends the run as `refusal`, and `pause_turn` is resumed (see `server_tools` above).
 
 `harness.external` runs another harness over the [harness protocol](../../proto/evalsi/harness/v1alpha1/harness.proto) (`Describe`, `Setup`, `Run` streaming trajectory events, `Check`, `Teardown`). It can be a gRPC `address`, a `command` serving it on a socket, or a Python class (`python: module:Class`). The benchmark harnesses below are Python classes.
 
@@ -526,6 +532,21 @@ canary passes; other sandbox backends reject service tasks. The checker still
 runs in the agent's sandbox, as it does for existing task environments.
 
 ## Report score stability and plan trials
+
+**The determinism record and comparing a replay.** Every built-in-harness run writes
+`metadata.determinism` on its record: the seeds the harness uses (simulated user, fault
+injection) and the temperature; for each model the name asked for and the `model`
+the provider answered with (and OpenAI's `system_fingerprint`); the harness version,
+profile (`name@version`) and context strategy; the Python, harness and SDK versions and the
+MCP servers' own reported names and versions; and the sandbox image's name, the digest the
+sandbox reported (empty where the rung reports none) and its isolation. To check a replay
+or rerun against its recording, save both with `--output` and run
+`evalsi determinism recorded.json --against replay.json`. Records are paired by id and trial;
+each pair is `identical` or `diverged` at the first step that differs (type, name, input,
+output, error, the model asked for and answering, the finish reason; timings, span ids and
+tool-call ids are ignored), with the fields that differed, and `determinism_changes` lists what
+moved in the two records (a provider's snapshot, a version, an image digest). The command
+exits 1 if any pair diverged or a recorded run is missing from the replay.
 
 Save a repeated-trial run with `evalsi run -f run.yaml --output results.json`,
 then run `evalsi determinism results.json --margin 0.05 --confidence 0.95`.

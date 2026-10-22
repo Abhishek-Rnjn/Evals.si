@@ -7,9 +7,10 @@ observations of one fixed case, not a power calculation for model comparisons.
 
 from __future__ import annotations
 
+import json
 import math
 from collections import Counter, defaultdict
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from statistics import NormalDist, fmean, variance
 from typing import Any
 
@@ -297,4 +298,177 @@ def trial_advice(
             "margin, at the confidence. A report, not a setting: the default trials and "
             "gates are unchanged."
         ),
+    }
+
+
+# --- replay against a recorded trajectory ----------------------------------------------
+
+# What of a step decides whether a replay reproduced it. Timing, span ids and token
+# counts are not part of it; the attributes listed are (the model asked for and
+# answering, and why it stopped; call ids are the provider's and new every time).
+_STEP_ATTRIBUTES = (
+    "gen_ai.request.model",
+    "gen_ai.response.model",
+    "gen_ai.response.finish_reasons",
+)
+
+
+def _text(value: Any) -> Any:
+    """A step's input or output as comparable text (a message list as its JSON)."""
+    if not isinstance(value, Mapping):
+        return value
+    if value.get("text") is not None:
+        return value["text"]
+    messages = value.get("messages")
+    if isinstance(messages, list):
+        # Tool call ids are the provider's, new on every call: what was asked of the
+        # tool is compared, not what the call was named.
+        value = {
+            **value,
+            "messages": [
+                {
+                    **m,
+                    "tool_calls": [
+                        {k: v for k, v in c.items() if k != "id"} for c in m.get("tool_calls") or []
+                    ],
+                }
+                if isinstance(m, Mapping) and m.get("tool_calls")
+                else m
+                for m in messages
+            ],
+        }
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+def _step_view(step: Mapping[str, Any]) -> dict[str, Any]:
+    attrs = step.get("attributes") or {}
+    return {
+        "type": step.get("type", ""),
+        "name": step.get("name", ""),
+        "input": _text(step.get("input")),
+        "output": _text(step.get("output")),
+        "error": step.get("error", ""),
+        **{k: attrs[k] for k in _STEP_ATTRIBUTES if k in attrs},
+    }
+
+
+def step_differences(
+    recorded: Mapping[str, Any], replayed: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """The fields in which two steps differ, each with both values."""
+    a, b = _step_view(recorded), _step_view(replayed)
+    return [
+        {"field": key, "recorded": a.get(key), "replayed": b.get(key)}
+        for key in a.keys() | b.keys()
+        if a.get(key) != b.get(key)
+    ]
+
+
+def first_divergence(
+    recorded: Sequence[Mapping[str, Any]], replayed: Sequence[Mapping[str, Any]]
+) -> dict[str, Any] | None:
+    """The first step at which a replay differs from the recorded trajectory and what
+    differed, or None when they match step for step. A replay that stops early, or
+    goes on past the recording, diverges at the first step one of them lacks."""
+    for index, (a, b) in enumerate(zip(recorded, replayed, strict=False)):
+        diffs = step_differences(a, b)
+        if diffs:
+            return {
+                "step": index,
+                "type": a.get("type", ""),
+                "name": a.get("name", ""),
+                "differences": sorted(diffs, key=lambda d: str(d["field"])),
+            }
+    if len(recorded) != len(replayed):
+        recorded_longer = len(recorded) > len(replayed)
+        index = min(len(recorded), len(replayed))
+        step = (recorded if recorded_longer else replayed)[index]
+        return {
+            "step": index,
+            "type": step.get("type", ""),
+            "name": step.get("name", ""),
+            "differences": [
+                {
+                    "field": "step",
+                    "recorded": "present" if recorded_longer else "missing",
+                    "replayed": "missing" if recorded_longer else "present",
+                }
+            ],
+        }
+    return None
+
+
+def _flatten(value: Any, prefix: str = "") -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            out.update(_flatten(item, f"{prefix}.{key}" if prefix else str(key)))
+        return out
+    return {prefix: value}
+
+
+def record_changes(
+    recorded: Mapping[str, Any], replayed: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """What differs between two runs' determinism records (a model snapshot that moved,
+    a tool version, an image digest), by dotted path."""
+    a, b = _flatten(recorded), _flatten(replayed)
+    return [
+        {"path": path, "recorded": a.get(path), "replayed": b.get(path)}
+        for path in sorted(a.keys() | b.keys())
+        if a.get(path) != b.get(path)
+    ]
+
+
+def _by_run(data: Mapping[str, Any]) -> dict[tuple[str, int], Mapping[str, Any]]:
+    records = data.get("records")
+    if not isinstance(records, list):
+        raise ValueError("results must hold a records array from `evalsi run --output`")
+    out: dict[tuple[str, int], Mapping[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, Mapping):
+            raise ValueError("each record must be an object")
+        trial = ((record.get("provenance") or {}).get("run") or {}).get("trial", 0) or 0
+        key = (str(record.get("id", "")), int(trial))
+        if key in out:
+            raise ValueError(f"duplicate record {key[0]!r} trial {key[1]}")
+        out[key] = record
+    return out
+
+
+def compare_runs(recorded: Mapping[str, Any], replayed: Mapping[str, Any]) -> dict[str, Any]:
+    """Compares a replay's results with the recorded run's (two ``evalsi run --output``
+    files), record by record and trial by trial. Each pair is ``identical`` or
+    ``diverged`` at a named step with the fields that differ, and carries what changed in
+    the runs' determinism records (``metadata.determinism``): the usual reason a
+    replay that should match does not. Records only one side has are listed."""
+    a, b = _by_run(recorded), _by_run(replayed)
+    runs: list[dict[str, Any]] = []
+    for key in sorted(a.keys() & b.keys()):
+        ra, rb = a[key], b[key]
+        steps_a = list((ra.get("trajectory") or {}).get("steps") or [])
+        steps_b = list((rb.get("trajectory") or {}).get("steps") or [])
+        divergence = first_divergence(steps_a, steps_b)
+        changes = record_changes(
+            (ra.get("metadata") or {}).get("determinism") or {},
+            (rb.get("metadata") or {}).get("determinism") or {},
+        )
+        run: dict[str, Any] = {
+            "record_id": key[0],
+            "trial": key[1],
+            "status": "identical" if divergence is None else "diverged",
+            "recorded_steps": len(steps_a),
+            "replayed_steps": len(steps_b),
+        }
+        if divergence is not None:
+            run["first_divergence"] = divergence
+        if changes:
+            run["determinism_changes"] = changes
+        runs.append(run)
+    return {
+        "runs": runs,
+        "identical": sum(1 for r in runs if r["status"] == "identical"),
+        "diverged": sum(1 for r in runs if r["status"] == "diverged"),
+        "only_recorded": sorted(f"{i}#{t}" for i, t in a.keys() - b.keys()),
+        "only_replayed": sorted(f"{i}#{t}" for i, t in b.keys() - a.keys()),
     }
