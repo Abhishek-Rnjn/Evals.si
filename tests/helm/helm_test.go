@@ -755,3 +755,36 @@ func TestSandboxPoolsOfTwoReleasesAreIsolated(t *testing.T) {
 		}
 	}
 }
+
+// The cluster-wide operator role grants everything the generated role does
+// (what the controllers' kubebuilder markers ask for).
+func TestClusterOperatorRoleCoversGeneratedRole(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "operator", "config", "rbac", "role.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want object
+	if err := yaml.Unmarshal(raw, &want); err != nil {
+		t.Fatal(err)
+	}
+	got := find(t, render(t, "evalsi-crds", "operator.allNamespaces=true", "operator.sandboxClasses=true"), "ClusterRole", "evalsi-operator")
+	granted := func(group, resource, verb string) bool {
+		for _, r := range got.Rules {
+			if slices.Contains(r.APIGroups, group) && slices.Contains(r.Resources, resource) && slices.Contains(r.Verbs, verb) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, r := range want.Rules {
+		for _, group := range r.APIGroups {
+			for _, resource := range r.Resources {
+				for _, verb := range r.Verbs {
+					if !granted(group, resource, verb) {
+						t.Errorf("ClusterRole lacks %s %s/%s", verb, group, resource)
+					}
+				}
+			}
+		}
+	}
+}
