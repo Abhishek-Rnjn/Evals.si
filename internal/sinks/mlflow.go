@@ -286,6 +286,11 @@ func (m *mlflowSink) ExportTrace(ctx context.Context, t *Trace) error {
 			continue
 		}
 		for _, s := range r.GetScores() {
+			// MLflow assigns assessment IDs, so a retry would post it again.
+			sent := r.GetEvaluatorRef() + "\x00" + metricName(r, s)
+			if t.sent[sent] {
+				continue
+			}
 			source := "CODE"
 			if _, judged := s.GetMetadata()["judge_model"]; judged {
 				source = "LLM_JUDGE"
@@ -309,6 +314,7 @@ func (m *mlflowSink) ExportTrace(ctx context.Context, t *Trace) error {
 			if err != nil {
 				return err
 			}
+			t.markSent(sent)
 		}
 	}
 	return nil

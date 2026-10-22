@@ -60,6 +60,17 @@ type Trace struct {
 	Policy     string
 	Results    []*evalsiv1alpha1.EvaluationResult
 	Time       time.Time
+
+	// Scores a sink already delivered, so a retried export does not post them
+	// again. Each queued export has its own copy, so this is never shared.
+	sent map[string]bool
+}
+
+func (t *Trace) markSent(key string) {
+	if t.sent == nil {
+		t.sent = map[string]bool{}
+	}
+	t.sent[key] = true
 }
 
 // Sink is one destination.
@@ -168,7 +179,9 @@ func (d *Dispatcher) Trace(t *Trace) {
 		return
 	}
 	for _, s := range d.sinks {
-		d.enqueue(job{sink: s, trace: t})
+		own := *t
+		own.sent = nil
+		d.enqueue(job{sink: s, trace: &own})
 	}
 }
 
