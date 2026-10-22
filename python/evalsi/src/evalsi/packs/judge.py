@@ -165,10 +165,16 @@ async def rubric_score(
     prompt = build_prompt(record, rubric_text)
     if extra_sections:
         prompt = prompt.replace("<response>", extra_sections + "\n\n<response>", 1)
-    response = await ctx.judge.complete_json(system=SYSTEM_PROMPT, prompt=prompt, schema=SCHEMA)
-    raw = response.data.get("score")
-    if isinstance(raw, bool) or not isinstance(raw, int | float) or not 1 <= raw <= 5:
-        raise JudgeError(f"judge returned an invalid score: {raw!r}")
+
+    def check(data: dict[str, Any]) -> None:
+        raw = data.get("score")
+        if isinstance(raw, bool) or not isinstance(raw, int | float) or not 1 <= raw <= 5:
+            raise JudgeError(f"judge returned an invalid score: {raw!r}")
+
+    response = await ctx.judge.complete_json(
+        system=SYSTEM_PROMPT, prompt=prompt, schema=SCHEMA, validate=check
+    )
+    raw = response.data["score"]
     return Score(
         number=(float(raw) - 1.0) / 4.0,
         explanation=str(response.data.get("reasoning", "")),
