@@ -7,6 +7,7 @@ when it will start the Go daemon (``evalsid``).
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import inspect
 import json
@@ -317,6 +318,28 @@ def _add_harness2(sub: Any) -> None:
     h2c.add_argument("--confidence", type=float, default=0.95)
     h2c.add_argument("--format", choices=["table", "json"], default="table")
     h2c.set_defaults(func=_cmd_harness2_calibrate)
+    h2f = h2_sub.add_parser(
+        "follow",
+        help="tail a running CLI agent's event log into the ingest, so it is scored live",
+    )
+    h2f.add_argument("log", help="the file the agent writes its event stream to")
+    h2f.add_argument(
+        "--format",
+        required=True,
+        help="event format: codex-json, opencode-json, claude-stream-json, gemini-json, pi-json",
+    )
+    h2f.add_argument("--task-id", required=True, help="evalsi.task_id on the trace")
+    h2f.add_argument("--trial", type=int, default=0)
+    h2f.add_argument("--run-id", default="")
+    h2f.add_argument("--agent", default="agent", help="the agent's name on the trace")
+    h2f.add_argument("--poll", type=float, default=1.0, help="seconds between reads of the log")
+    h2f.add_argument(
+        "--idle",
+        type=float,
+        default=30.0,
+        help="finish after this many seconds without new output (0: send what is there and stop)",
+    )
+    h2f.set_defaults(func=_cmd_harness2_follow)
 
     delete = sub.add_parser("delete-run", help="delete a finished server run and its stored data")
     delete.add_argument("id")
@@ -1110,6 +1133,37 @@ def _cmd_harness2_import(args: argparse.Namespace) -> int:
         return 2
     for path in written:
         print(path)
+    return 0
+
+
+def _cmd_harness2_follow(args: argparse.Namespace) -> int:
+    try:
+        from evalsi_harness import otel, tail
+    except ImportError:
+        print("error: needs the agent harness: pip install evalsi-harness", file=sys.stderr)
+        return 2
+    if not otel.endpoint():
+        print(
+            "error: set OTEL_EXPORTER_OTLP_ENDPOINT (and OTEL_EXPORTER_OTLP_HEADERS with an "
+            "ingest key, if auth is on)",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        follower = tail.Follower(args.format, args.task_id, args.trial, args.run_id, args.agent)
+        done = asyncio.run(
+            tail.follow(
+                args.log,
+                follower,
+                poll_s=args.poll,
+                idle_s=args.idle,
+                on_flush=lambda n: print(f"sent {n} step(s)", file=sys.stderr),
+            )
+        )
+    except (OSError, tail.FollowError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(done.trace_id)
     return 0
 
 
