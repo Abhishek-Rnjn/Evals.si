@@ -27,8 +27,7 @@ from evalsi.run import target_config
 from evalsi.sandbox import SandboxError
 from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
-from evalsi_harness import determinism
-from evalsi_harness import workspace
+from evalsi_harness import determinism, workspace
 from evalsi_harness._version import __version__
 from evalsi_harness.browser import BrowserConfig, BrowserSession, browser_tools
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
