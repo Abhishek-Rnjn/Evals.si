@@ -228,6 +228,13 @@ def test_the_receiver_checks_token_path_and_size() -> None:
         assert int((await reader.readline()).split()[1]) == 401
         writer.close()
         assert receiver.rejected == 2
+        # Headers are bounded in total before any is kept, token or not.
+        reader, writer = await asyncio.open_connection("127.0.0.1", receiver.port)
+        flood = "".join(f"X-{i}: {'v' * 40}\r\n" for i in range(2000))
+        writer.write(f"POST /other HTTP/1.1\r\nHost: x\r\n{flood}\r\n".encode())
+        await writer.drain()
+        assert int((await reader.readline()).split()[1]) == 431
+        writer.close()
         await receiver.aclose()
 
     asyncio.run(go())

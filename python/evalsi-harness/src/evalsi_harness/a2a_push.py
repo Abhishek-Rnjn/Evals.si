@@ -21,6 +21,8 @@ import secrets
 from typing import Any
 
 MAX_BODY = 1 << 20
+# The request line and headers together; checked before any header is kept.
+MAX_HEADERS = 16 << 10
 MAX_QUEUED = 1000
 TOKEN_HEADER = "x-a2a-notification-token"
 
@@ -59,9 +61,14 @@ class PushReceiver:
             status = await asyncio.wait_for(self._handle(reader), 10)
         except (TimeoutError, ConnectionError, asyncio.IncompleteReadError, ValueError):
             status = 400
-        reason = {200: "OK", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found"}.get(
-            status, "Payload Too Large" if status == 413 else "Error"
-        )
+        reason = {
+            200: "OK",
+            400: "Bad Request",
+            401: "Unauthorized",
+            404: "Not Found",
+            413: "Payload Too Large",
+            431: "Request Header Fields Too Large",
+        }.get(status, "Error")
         body = b"{}"
         try:
             writer.write(
@@ -76,12 +83,17 @@ class PushReceiver:
             writer.close()
 
     async def _handle(self, reader: asyncio.StreamReader) -> int:
-        request = (await reader.readline()).decode("latin-1").split()
+        raw = await reader.readline()
+        seen = len(raw)
+        request = raw.decode("latin-1").split()
         if len(request) < 2 or request[0] != "POST":
             return 400
         headers: dict[str, str] = {}
-        while (line := (await reader.readline()).decode("latin-1").strip()) != "":
-            name, _, value = line.partition(":")
+        while (raw := await reader.readline()).strip() != b"":
+            seen += len(raw)
+            if seen > MAX_HEADERS:
+                return 431
+            name, _, value = raw.decode("latin-1").strip().partition(":")
             headers[name.strip().lower()] = value.strip()
         if request[1] != self._path:
             return 404
