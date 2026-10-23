@@ -1369,6 +1369,7 @@ class Environment(_message.Message):
     STAGES_FIELD_NUMBER: _builtins.int
     COPY_FROM_FIELD_NUMBER: _builtins.int
     DATABASE_FIELD_NUMBER: _builtins.int
+    VOLUMES_FIELD_NUMBER: _builtins.int
     image: _builtins.str
     """OCI image for the root filesystem; empty: the host's system directories."""
     setup_network: _builtins.str
@@ -1423,6 +1424,12 @@ class Environment(_message.Message):
         state that grade it. See DatabaseEnvironment.
         """
 
+    @_builtins.property
+    def volumes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Bubblewrap services only: named volumes of the agent's sandbox, shared
+        with the services that name them, as "name:/path" or "name:/path:ro".
+        """
+
     def __init__(
         self,
         *,
@@ -1441,10 +1448,11 @@ class Environment(_message.Message):
         stages: _abc.Iterable[Global___BuildStage] | None = ...,
         copy_from: _abc.Iterable[Global___StageCopy] | None = ...,
         database: Global___DatabaseEnvironment | None = ...,
+        volumes: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "database", b"database", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "setup_timeout", b"setup_timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "copy_from", b"copy_from", "database", b"database", "env", b"env", "files", b"files", "image", b"image", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "services", b"services", "setup", b"setup", "setup_allow_hosts", b"setup_allow_hosts", "setup_network", b"setup_network", "setup_timeout", b"setup_timeout", "stages", b"stages"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "copy_from", b"copy_from", "database", b"database", "env", b"env", "files", b"files", "image", b"image", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "services", b"services", "setup", b"setup", "setup_allow_hosts", b"setup_allow_hosts", "setup_network", b"setup_network", "setup_timeout", b"setup_timeout", "stages", b"stages", "volumes", b"volumes"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Environment: _TypeAlias = Environment  # noqa: Y015
@@ -1730,13 +1738,19 @@ class EnvironmentService(_message.Message):
     WORKDIR_MOUNT_FIELD_NUMBER: _builtins.int
     VOLUMES_FIELD_NUMBER: _builtins.int
     WORKDIR_FIELD_NUMBER: _builtins.int
+    IMAGE_ENTRYPOINT_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """DNS label, also a loopback hostname inside this trial."""
     image: _builtins.str
     port: _builtins.int
-    """TCP readiness port, unique within the trial; 7070 is reserved."""
+    """TCP readiness port, unique within the trial; 7070 is reserved. The pod
+    backend needs one (1024 or above). On bubblewrap it is optional: without
+    a port or ready_command a service is ready once it has stayed up a second.
+    """
     memory_mb: _builtins.int
-    """Required limits; CPU in millicores, memory in MiB."""
+    """Required limits; CPU in millicores, memory in MiB. On the bubblewrap
+    backend memory is an rlimit and CPU is not enforced.
+    """
     cpu_millis: _builtins.int
     setup_network: _builtins.str
     """"deny" (default) or "allow"."""
@@ -1749,10 +1763,17 @@ class EnvironmentService(_message.Message):
     same files. Off by default: services otherwise share no files with it.
     """
     workdir: _builtins.str
-    """The service's working directory; default: /."""
+    """The service's working directory; default: the image's, else /."""
+    image_entrypoint: _builtins.bool
+    """Run the image's ENTRYPOINT with command as its arguments (the image's CMD
+    when command is empty), as docker does, instead of command being the whole
+    argv. Needed for images whose entrypoint script does the setup.
+    """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Explicit argv; image entrypoints are not implicitly executed."""
+        """Explicit argv; image entrypoints are not implicitly executed (see
+        image_entrypoint).
+        """
 
     @_builtins.property
     def env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
@@ -1788,7 +1809,9 @@ class EnvironmentService(_message.Message):
 
     @_builtins.property
     def volumes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Named volumes shared with other services, as "name:/path"."""
+        """Named volumes shared with other services, as "name:/path" or
+        "name:/path:ro".
+        """
 
     def __init__(
         self,
@@ -1811,8 +1834,9 @@ class EnvironmentService(_message.Message):
         workdir_mount: _builtins.str = ...,
         volumes: _abc.Iterable[_builtins.str] | None = ...,
         workdir: _builtins.str = ...,
+        image_entrypoint: _builtins.bool = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["aliases", b"aliases", "command", b"command", "cpu_millis", b"cpu_millis", "depends_on", b"depends_on", "env", b"env", "files", b"files", "image", b"image", "memory_mb", b"memory_mb", "name", b"name", "oneshot", b"oneshot", "port", b"port", "ports", b"ports", "ready_command", b"ready_command", "setup", b"setup", "setup_network", b"setup_network", "volumes", b"volumes", "workdir", b"workdir", "workdir_mount", b"workdir_mount"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["aliases", b"aliases", "command", b"command", "cpu_millis", b"cpu_millis", "depends_on", b"depends_on", "env", b"env", "files", b"files", "image", b"image", "image_entrypoint", b"image_entrypoint", "memory_mb", b"memory_mb", "name", b"name", "oneshot", b"oneshot", "port", b"port", "ports", b"ports", "ready_command", b"ready_command", "setup", b"setup", "setup_network", b"setup_network", "volumes", b"volumes", "workdir", b"workdir", "workdir_mount", b"workdir_mount"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___EnvironmentService: _TypeAlias = EnvironmentService  # noqa: Y015

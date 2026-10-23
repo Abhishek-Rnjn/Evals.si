@@ -203,7 +203,7 @@ func TestBwrapServicesRefuseWhatTheyCannotKeep(t *testing.T) {
 	}
 	withFiles := serving("web", 8107, "/tmp")
 	withFiles.Files = map[string]string{"a": "b"}
-	if err := d.supportsServices(servicesSpec(nil, withFiles)); err == nil || !strings.Contains(err.Error(), "need an image") {
+	if err := d.supportsServices(servicesSpec(nil, withFiles)); err == nil || !strings.Contains(err.Error(), "needs an image") {
 		t.Fatalf("files without an image: %v", err)
 	}
 	// The pod backend does not take the extra fields, rather than ignoring them.

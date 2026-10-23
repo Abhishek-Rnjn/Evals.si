@@ -489,6 +489,9 @@ message Environment {
   // per trial, named SQL tools the agent calls, and assertions over the final
   // state that grade it. See DatabaseEnvironment.
   DatabaseEnvironment database = 15;
+  // Bubblewrap services only: named volumes of the agent's sandbox, shared
+  // with the services that name them, as "name:/path" or "name:/path:ro".
+  repeated string volumes = 16;
 }
 
 // BuildStage is one earlier stage of a multi-stage build.
@@ -563,14 +566,18 @@ message EnvironmentService {
   // DNS label, also a loopback hostname inside this trial.
   string name = 1;
   string image = 2;
-  // Explicit argv; image entrypoints are not implicitly executed.
+  // Explicit argv; image entrypoints are not implicitly executed (see
+  // image_entrypoint).
   repeated string command = 3;
   map<string, string> env = 4;
-  // TCP readiness port, unique within the trial; 7070 is reserved.
+  // TCP readiness port, unique within the trial; 7070 is reserved. The pod
+  // backend needs one (1024 or above). On bubblewrap it is optional: without
+  // a port or ready_command a service is ready once it has stayed up a second.
   int32 port = 5;
   // Services that must be ready first. Cycles are invalid.
   repeated string depends_on = 6;
-  // Required limits; CPU in millicores, memory in MiB.
+  // Required limits; CPU in millicores, memory in MiB. On the bubblewrap
+  // backend memory is an rlimit and CPU is not enforced.
   int32 memory_mb = 7;
   int32 cpu_millis = 8;
   // More ports the service listens on, reachable by its name like port.
@@ -594,8 +601,13 @@ message EnvironmentService {
   // Mount the agent's workdir at this path in the service, so both see the
   // same files. Off by default: services otherwise share no files with it.
   string workdir_mount = 16;
-  // Named volumes shared with other services, as "name:/path".
+  // Named volumes shared with other services, as "name:/path" or
+  // "name:/path:ro".
   repeated string volumes = 17;
-  // The service's working directory; default: /.
+  // The service's working directory; default: the image's, else /.
   string workdir = 18;
+  // Run the image's ENTRYPOINT with command as its arguments (the image's CMD
+  // when command is empty), as docker does, instead of command being the whole
+  // argv. Needed for images whose entrypoint script does the setup.
+  bool image_entrypoint = 19;
 }

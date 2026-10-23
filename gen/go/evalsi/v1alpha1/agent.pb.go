@@ -2387,7 +2387,10 @@ type Environment struct {
 	// A database-backed tool environment: a SQLite database the harness builds
 	// per trial, named SQL tools the agent calls, and assertions over the final
 	// state that grade it. See DatabaseEnvironment.
-	Database      *DatabaseEnvironment `protobuf:"bytes,15,opt,name=database,proto3" json:"database,omitempty"`
+	Database *DatabaseEnvironment `protobuf:"bytes,15,opt,name=database,proto3" json:"database,omitempty"`
+	// Bubblewrap services only: named volumes of the agent's sandbox, shared
+	// with the services that name them, as "name:/path" or "name:/path:ro".
+	Volumes       []string `protobuf:"bytes,16,rep,name=volumes,proto3" json:"volumes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2523,6 +2526,13 @@ func (x *Environment) GetCopyFrom() []*StageCopy {
 func (x *Environment) GetDatabase() *DatabaseEnvironment {
 	if x != nil {
 		return x.Database
+	}
+	return nil
+}
+
+func (x *Environment) GetVolumes() []string {
+	if x != nil {
+		return x.Volumes
 	}
 	return nil
 }
@@ -2919,14 +2929,18 @@ type EnvironmentService struct {
 	// DNS label, also a loopback hostname inside this trial.
 	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Image string `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
-	// Explicit argv; image entrypoints are not implicitly executed.
+	// Explicit argv; image entrypoints are not implicitly executed (see
+	// image_entrypoint).
 	Command []string          `protobuf:"bytes,3,rep,name=command,proto3" json:"command,omitempty"`
 	Env     map[string]string `protobuf:"bytes,4,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// TCP readiness port, unique within the trial; 7070 is reserved.
+	// TCP readiness port, unique within the trial; 7070 is reserved. The pod
+	// backend needs one (1024 or above). On bubblewrap it is optional: without
+	// a port or ready_command a service is ready once it has stayed up a second.
 	Port int32 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`
 	// Services that must be ready first. Cycles are invalid.
 	DependsOn []string `protobuf:"bytes,6,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
-	// Required limits; CPU in millicores, memory in MiB.
+	// Required limits; CPU in millicores, memory in MiB. On the bubblewrap
+	// backend memory is an rlimit and CPU is not enforced.
 	MemoryMb  int32 `protobuf:"varint,7,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
 	CpuMillis int32 `protobuf:"varint,8,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
 	// More ports the service listens on, reachable by its name like port.
@@ -2950,12 +2964,17 @@ type EnvironmentService struct {
 	// Mount the agent's workdir at this path in the service, so both see the
 	// same files. Off by default: services otherwise share no files with it.
 	WorkdirMount string `protobuf:"bytes,16,opt,name=workdir_mount,json=workdirMount,proto3" json:"workdir_mount,omitempty"`
-	// Named volumes shared with other services, as "name:/path".
+	// Named volumes shared with other services, as "name:/path" or
+	// "name:/path:ro".
 	Volumes []string `protobuf:"bytes,17,rep,name=volumes,proto3" json:"volumes,omitempty"`
-	// The service's working directory; default: /.
-	Workdir       string `protobuf:"bytes,18,opt,name=workdir,proto3" json:"workdir,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The service's working directory; default: the image's, else /.
+	Workdir string `protobuf:"bytes,18,opt,name=workdir,proto3" json:"workdir,omitempty"`
+	// Run the image's ENTRYPOINT with command as its arguments (the image's CMD
+	// when command is empty), as docker does, instead of command being the whole
+	// argv. Needed for images whose entrypoint script does the setup.
+	ImageEntrypoint bool `protobuf:"varint,19,opt,name=image_entrypoint,json=imageEntrypoint,proto3" json:"image_entrypoint,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *EnvironmentService) Reset() {
@@ -3112,6 +3131,13 @@ func (x *EnvironmentService) GetWorkdir() string {
 		return x.Workdir
 	}
 	return ""
+}
+
+func (x *EnvironmentService) GetImageEntrypoint() bool {
+	if x != nil {
+		return x.ImageEntrypoint
+	}
+	return false
 }
 
 var File_evalsi_v1alpha1_agent_proto protoreflect.FileDescriptor
@@ -3328,7 +3354,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9d\a\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb7\a\n" +
 	"\vEnvironment\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12=\n" +
 	"\x05files\x18\x02 \x03(\v2'.evalsi.v1alpha1.Environment.FilesEntryR\x05files\x12\x14\n" +
@@ -3345,7 +3371,8 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x123\n" +
 	"\x06stages\x18\r \x03(\v2\x1b.evalsi.v1alpha1.BuildStageR\x06stages\x127\n" +
 	"\tcopy_from\x18\x0e \x03(\v2\x1a.evalsi.v1alpha1.StageCopyR\bcopyFrom\x12@\n" +
-	"\bdatabase\x18\x0f \x01(\v2$.evalsi.v1alpha1.DatabaseEnvironmentR\bdatabase\x1a8\n" +
+	"\bdatabase\x18\x0f \x01(\v2$.evalsi.v1alpha1.DatabaseEnvironmentR\bdatabase\x12\x18\n" +
+	"\avolumes\x18\x10 \x03(\tR\avolumes\x1a8\n" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -3391,7 +3418,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x11DatabaseAssertion\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03sql\x18\x02 \x01(\tR\x03sql\x12.\n" +
-	"\x06expect\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\x06expect\"\xc2\x05\n" +
+	"\x06expect\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\x06expect\"\xed\x05\n" +
 	"\x12EnvironmentService\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x18\n" +
@@ -3413,7 +3440,8 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\aoneshot\x18\x0f \x01(\bR\aoneshot\x12#\n" +
 	"\rworkdir_mount\x18\x10 \x01(\tR\fworkdirMount\x12\x18\n" +
 	"\avolumes\x18\x11 \x03(\tR\avolumes\x12\x18\n" +
-	"\aworkdir\x18\x12 \x01(\tR\aworkdir\x1a6\n" +
+	"\aworkdir\x18\x12 \x01(\tR\aworkdir\x12)\n" +
+	"\x10image_entrypoint\x18\x13 \x01(\bR\x0fimageEntrypoint\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a8\n" +

@@ -144,6 +144,13 @@ func (d *bwrapDriver) launch(b *hostBackend, e *Exec) (*launchSpec, error) {
 		}
 		args = append(args, bind, b.work, sp.Workdir)
 	}
+	if b.group != nil {
+		vol, err := b.group.volumeArgs(sp.Volumes)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, vol...)
+	}
 	cwd := sp.Workdir
 	if e.Cwd != "" {
 		cwd = path.Join(sp.Workdir, e.Cwd)

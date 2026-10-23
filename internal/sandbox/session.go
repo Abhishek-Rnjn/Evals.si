@@ -58,6 +58,9 @@ type Spec struct {
 	IdleTimeout     time.Duration `json:"idle_timeout,omitempty"`
 	Services        []ServiceSpec `json:"services,omitempty"`
 	ServiceLifetime time.Duration `json:"service_lifetime,omitempty"`
+	// Named volumes of this sandbox shared with the services that name them
+	// ("name:/path" or "name:/path:ro"); bubblewrap services only.
+	Volumes []string `json:"volumes,omitempty"`
 }
 
 func (sp *Spec) defaults() {
@@ -77,6 +80,23 @@ func (sp *Spec) Validate() error {
 	sp.defaults()
 	if err := ValidateServices(sp.Services, sp.ServiceLifetime); err != nil {
 		return err
+	}
+	if len(sp.Volumes) > 0 && len(sp.Services) == 0 {
+		return errors.New("volumes are shared with services, and this sandbox has none")
+	}
+	for _, v := range sp.Volumes {
+		_, dest, _, err := parseVolume(v)
+		if err != nil {
+			return err
+		}
+		if !path.IsAbs(dest) || path.Clean(dest) != dest || dest == "/" {
+			return fmt.Errorf("volume path %q must be a clean absolute path below /", dest)
+		}
+		for _, reserved := range []string{"/proc", "/dev", "/tmp", "/sys", "/etc"} {
+			if dest == reserved || strings.HasPrefix(dest, reserved+"/") {
+				return fmt.Errorf("volume path %q is inside %s", dest, reserved)
+			}
+		}
 	}
 	if _, err := ParseLevel(sp.MinIsolation); err != nil {
 		return err

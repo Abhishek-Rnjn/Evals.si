@@ -39,6 +39,10 @@ func NetNS(stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, launcherPrefix+"loopback: %v\n", err)
 		return exitLauncherFailure
 	}
+	// Services bind ports below 1024 (80, 443) with no capability: the sysctl
+	// belongs to this network namespace. Best effort; a service on such a port
+	// fails its readiness check if it cannot be set.
+	_ = os.WriteFile("/proc/sys/net/ipv4/ip_unprivileged_port_start", []byte("0"), 0o644)
 	fmt.Fprintln(stdout, "ready")
 	_, _ = io.Copy(io.Discard, stdin)
 	return 0

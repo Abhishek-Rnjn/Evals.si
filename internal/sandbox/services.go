@@ -35,6 +35,9 @@ type ServiceSpec struct {
 	WorkdirMount string            `json:"workdir_mount,omitempty"`
 	Volumes      []string          `json:"volumes,omitempty"`
 	Workdir      string            `json:"workdir,omitempty"`
+	// Run the image's ENTRYPOINT with Command as its arguments (its CMD when Command
+	// is empty), as docker does, instead of Command being the whole argv.
+	ImageEntrypoint bool `json:"image_entrypoint,omitempty"`
 }
 
 // bwrapOnly names the fields only the bubblewrap backend supports, for a
@@ -69,7 +72,7 @@ func ServicesFromProto(items []*evalsiv1alpha1.EnvironmentService) []ServiceSpec
 			Port: int(s.GetPort()), DependsOn: s.GetDependsOn(), MemoryMB: int(s.GetMemoryMb()), CPUMillis: int(s.GetCpuMillis()),
 			Ports: intsFrom(s.GetPorts()), ReadyCommand: s.GetReadyCommand(), Aliases: s.GetAliases(), Files: s.GetFiles(),
 			Setup: s.GetSetup(), SetupNetwork: s.GetSetupNetwork(), Oneshot: s.GetOneshot(), WorkdirMount: s.GetWorkdirMount(),
-			Volumes: s.GetVolumes(), Workdir: s.GetWorkdir(),
+			Volumes: s.GetVolumes(), Workdir: s.GetWorkdir(), ImageEntrypoint: s.GetImageEntrypoint(),
 		})
 	}
 	return out
@@ -114,18 +117,19 @@ func ValidateServices(services []ServiceSpec, lifetime time.Duration) error {
 			return fmt.Errorf("duplicate service name %q", s.Name)
 		}
 		names[s.Name] = true
-		if len(s.Command) == 0 || s.Command[0] == "" {
+		if (len(s.Command) == 0 && !s.ImageEntrypoint) || (len(s.Command) > 0 && s.Command[0] == "") {
 			return fmt.Errorf("service %s requires a command", s.Name)
 		}
-		// A one-shot service never listens, so it needs no port; any other needs one
-		// (the readiness check), and every port is unique within the sandbox.
+		// Every port is unique within the sandbox. A service needs a readiness port on
+		// the pod backend (which says so); on bubblewrap it may have none, or a
+		// ready_command, or be one-shot.
 		all := append([]int{}, s.Ports...)
-		if s.Port != 0 || !s.Oneshot {
+		if s.Port != 0 {
 			all = append([]int{s.Port}, all...)
 		}
 		for _, port := range all {
-			if port < 1024 || port > 65535 || ports[port] {
-				return fmt.Errorf("service %s requires unique ports from 1024 to 65535 (7070 is reserved)", s.Name)
+			if port < 1 || port > 65535 || ports[port] {
+				return fmt.Errorf("service %s requires unique ports from 1 to 65535 (7070 is reserved)", s.Name)
 			}
 			ports[port] = true
 		}
@@ -214,6 +218,18 @@ func (ss *Session) Services(ctx context.Context, logs bool) ([]ServiceStatus, er
 	return nil, nil
 }
 
+// parseVolume splits "name:/path" or "name:/path:ro".
+func parseVolume(v string) (name, dest string, ro bool, err error) {
+	parts := strings.Split(v, ":")
+	if len(parts) == 3 && parts[2] == "ro" {
+		ro, parts = true, parts[:2]
+	}
+	if len(parts) != 2 || !volumeName.MatchString(parts[0]) {
+		return "", "", false, fmt.Errorf("volume %q must be name:/path or name:/path:ro", v)
+	}
+	return parts[0], parts[1], ro, nil
+}
+
 func validateServiceExtras(s *ServiceSpec) error {
 	absClean := func(what, p string) error {
 		if !path.IsAbs(p) || path.Clean(p) != p || p == "/" {
@@ -232,9 +248,9 @@ func validateServiceExtras(s *ServiceSpec) error {
 		}
 	}
 	for _, v := range s.Volumes {
-		name, dest, ok := strings.Cut(v, ":")
-		if !ok || !volumeName.MatchString(name) {
-			return fmt.Errorf("service %s: volume %q must be name:/path", s.Name, v)
+		_, dest, _, err := parseVolume(v)
+		if err != nil {
+			return fmt.Errorf("service %s: %w", s.Name, err)
 		}
 		if err := absClean("volume path", dest); err != nil {
 			return err

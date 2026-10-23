@@ -79,6 +79,8 @@ type serviceProc struct {
 	ready atomic.Bool
 }
 
+type fileBind struct{ src, dest string }
+
 type serviceGroup struct {
 	b       *hostBackend
 	d       *bwrapDriver
@@ -87,9 +89,11 @@ type serviceGroup struct {
 	hosts   string
 	dir     string
 	procs   []*serviceProc
-	timer   *time.Timer
-	expired atomic.Bool
-	closed  sync.Once
+	// Files that sit inside a mounted volume, bound over it from the host, by service.
+	fileBinds map[string][]fileBind
+	timer     *time.Timer
+	expired   atomic.Bool
+	closed    sync.Once
 }
 
 func (d *bwrapDriver) supportsServices(sp *Spec) error {
@@ -103,8 +107,15 @@ func (d *bwrapDriver) supportsServices(sp *Spec) error {
 		return errors.New("services on bubblewrap need network: deny (their private network has no route out)")
 	}
 	for _, s := range sp.Services {
-		if s.Image == "" && (len(s.Files) > 0 || len(s.Setup) > 0) {
-			return fmt.Errorf("service %s: files and setup need an image", s.Name)
+		if s.Image == "" && len(s.Setup) > 0 {
+			return fmt.Errorf("service %s: setup needs an image", s.Name)
+		}
+		if s.Image == "" {
+			for name := range s.Files {
+				if !under(path.Clean("/"+name), s.mountPoints()) {
+					return fmt.Errorf("service %s: file %q needs an image (only files inside a volume or the workdir mount can be placed without one)", s.Name, name)
+				}
+			}
 		}
 	}
 	return nil
@@ -123,7 +134,7 @@ func newServiceGroup(ctx context.Context, b *hostBackend, d *bwrapDriver) (*serv
 	if err != nil {
 		return nil, err
 	}
-	g := &serviceGroup{b: b, d: d, holder: holder, nsenter: nsenter, dir: filepath.Join(b.dir, "svc")}
+	g := &serviceGroup{b: b, d: d, holder: holder, nsenter: nsenter, dir: filepath.Join(b.dir, "svc"), fileBinds: map[string][]fileBind{}}
 	fail := func(err error) (*serviceGroup, error) {
 		g.close()
 		return nil, err
@@ -247,33 +258,99 @@ func (g *serviceGroup) env(s ServiceSpec) ([]string, error) {
 
 // prepareRoot gives a service its private root: a copy of its image, with its files.
 func (g *serviceGroup) prepareRoot(ctx context.Context, s ServiceSpec) (string, error) {
-	if s.Image == "" {
-		return "", nil
-	}
-	img, err := g.b.sb.images.get(ctx, s.Image)
-	if err != nil {
-		return "", err
-	}
 	if err := os.MkdirAll(filepath.Join(g.dir, s.Name), 0o700); err != nil {
 		return "", err
 	}
-	root := filepath.Join(g.dir, s.Name, "root")
-	if err := copyTree(ctx, img.Root, root); err != nil {
-		return "", fmt.Errorf("service %s: copying the image root: %w", s.Name, err)
-	}
-	if err := ensureFile(root, "etc/hosts"); err != nil {
-		return "", fmt.Errorf("service %s: %w", s.Name, err)
-	}
-	for name, content := range s.Files {
-		rel := strings.TrimPrefix(path.Clean("/"+name), "/")
-		if !path.IsAbs(name) && s.Workdir != "" {
-			rel = strings.TrimPrefix(path.Join(s.Workdir, name), "/")
+	root := ""
+	if s.Image != "" {
+		img, err := g.b.sb.images.get(ctx, s.Image)
+		if err != nil {
+			return "", err
 		}
-		if err := writeRootFile(root, rel, []byte(content)); err != nil {
+		root = filepath.Join(g.dir, s.Name, "root")
+		if err := copyTree(ctx, img.Root, root); err != nil {
+			return "", fmt.Errorf("service %s: copying the image root: %w", s.Name, err)
+		}
+		if err := ensureFile(root, "etc/hosts"); err != nil {
+			return "", fmt.Errorf("service %s: %w", s.Name, err)
+		}
+	}
+	mounts := s.mountPoints()
+	names := make([]string, 0, len(s.Files))
+	for name := range s.Files {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for i, name := range names {
+		abs := path.Clean("/" + name)
+		if !path.IsAbs(name) && s.Workdir != "" {
+			abs = path.Join(s.Workdir, name)
+		}
+		content := []byte(s.Files[name])
+		if under(abs, mounts) {
+			// The path is inside a volume or the mounted workdir, which hides the
+			// image's root there: bind the file over the mount from the host, as
+			// docker does for a file mounted into a volume.
+			dir := filepath.Join(g.dir, s.Name, "files")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return "", err
+			}
+			src := filepath.Join(dir, strconv.Itoa(i))
+			if err := os.WriteFile(src, content, 0o644); err != nil {
+				return "", err
+			}
+			g.fileBinds[s.Name] = append(g.fileBinds[s.Name], fileBind{src, abs})
+			continue
+		}
+		if err := writeRootFile(root, strings.TrimPrefix(abs, "/"), content); err != nil {
 			return "", fmt.Errorf("service %s: file %q: %w", s.Name, name, err)
 		}
 	}
 	return root, nil
+}
+
+// mountPoints are the paths where a volume or the agent's workdir is mounted in s.
+func (s ServiceSpec) mountPoints() []string {
+	var out []string
+	if s.WorkdirMount != "" {
+		out = append(out, s.WorkdirMount)
+	}
+	for _, v := range s.Volumes {
+		if _, dest, _, err := parseVolume(v); err == nil {
+			out = append(out, dest)
+		}
+	}
+	return out
+}
+
+func under(p string, dirs []string) bool {
+	for _, d := range dirs {
+		if p == d || strings.HasPrefix(p, d+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// volumeArgs are the binds of named volumes, from the group's host directories.
+func (g *serviceGroup) volumeArgs(volumes []string) ([]string, error) {
+	var args []string
+	for _, v := range volumes {
+		name, dest, ro, err := parseVolume(v)
+		if err != nil {
+			return nil, err
+		}
+		dir, err := g.volumeDir(name)
+		if err != nil {
+			return nil, err
+		}
+		bind := "--bind"
+		if ro {
+			bind = "--ro-bind"
+		}
+		args = append(args, bind, dir, dest)
+	}
+	return args, nil
 }
 
 // bwrapArgs is the bubblewrap command line for one process of service s.
@@ -300,15 +377,20 @@ func (g *serviceGroup) bwrapArgs(s ServiceSpec, root string, hostNet bool, comma
 	if s.WorkdirMount != "" {
 		args = append(args, "--bind", g.b.work, s.WorkdirMount)
 	}
-	for _, v := range s.Volumes {
-		name, dest, _ := strings.Cut(v, ":")
-		dir, err := g.volumeDir(name)
-		if err != nil {
-			return nil, err
-		}
-		args = append(args, "--bind", dir, dest)
+	vol, err := g.volumeArgs(s.Volumes)
+	if err != nil {
+		return nil, err
+	}
+	args = append(args, vol...)
+	for _, fb := range g.fileBinds[s.Name] {
+		args = append(args, "--ro-bind", fb.src, fb.dest)
 	}
 	wd := s.Workdir
+	if wd == "" && s.Image != "" {
+		if img, err := g.b.sb.images.get(context.Background(), s.Image); err == nil {
+			wd = img.WorkingDir
+		}
+	}
 	if wd == "" {
 		wd = "/"
 	}
@@ -354,7 +436,11 @@ func (g *serviceGroup) start(ctx context.Context, s ServiceSpec) (*serviceProc, 
 			return nil, fmt.Errorf("service %s: setup %q failed (%s, exit %d): %s", s.Name, line, res.Outcome, res.ExitCode, tail(out.String()+res.Error))
 		}
 	}
-	spec, err := g.launchSpec(s, root, false, s.Command)
+	command, err := g.command(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+	spec, err := g.launchSpec(s, root, false, command)
 	if err != nil {
 		return nil, err
 	}
@@ -385,6 +471,30 @@ func (g *serviceGroup) start(ctx context.Context, s ServiceSpec) (*serviceProc, 
 	return p, nil
 }
 
+// command is the service's argv: its command, or with image_entrypoint the image's
+// ENTRYPOINT followed by the command (the image's CMD when there is none).
+func (g *serviceGroup) command(ctx context.Context, s ServiceSpec) ([]string, error) {
+	if !s.ImageEntrypoint {
+		return s.Command, nil
+	}
+	if s.Image == "" {
+		return nil, fmt.Errorf("service %s: image_entrypoint needs an image", s.Name)
+	}
+	img, err := g.b.sb.images.get(ctx, s.Image)
+	if err != nil {
+		return nil, err
+	}
+	args := s.Command
+	if len(args) == 0 {
+		args = img.Cmd
+	}
+	argv := append(append([]string{}, img.Entrypoint...), args...)
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("service %s: the image has no entrypoint or command and none was given", s.Name)
+	}
+	return argv, nil
+}
+
 func tail(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) > 800 {
@@ -395,6 +505,7 @@ func tail(s string) string {
 
 func (g *serviceGroup) waitReady(ctx context.Context, p *serviceProc) error {
 	s := p.spec
+	started := time.Now()
 	deadline := time.NewTimer(serviceStartTimeout)
 	defer deadline.Stop()
 	tick := time.NewTicker(readyPoll)
@@ -410,6 +521,11 @@ func (g *serviceGroup) waitReady(ctx context.Context, p *serviceProc) error {
 		default:
 		}
 		if !s.Oneshot && g.probe(ctx, p) {
+			p.ready.Store(true)
+			return nil
+		}
+		if !s.Oneshot && s.Port == 0 && len(s.ReadyCommand) == 0 && time.Since(started) > time.Second {
+			// Nothing to check: it is ready once it has stayed up for a second.
 			p.ready.Store(true)
 			return nil
 		}
@@ -435,6 +551,9 @@ func (g *serviceGroup) probe(ctx context.Context, p *serviceProc) bool {
 		}
 		res := g.b.sb.launch(ctx, spec, nil, 10*time.Second, nil, nil)
 		return res.Outcome == OutcomeExit && res.ExitCode == 0
+	}
+	if s.Port == 0 {
+		return false
 	}
 	pctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

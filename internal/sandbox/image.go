@@ -33,6 +33,11 @@ type imageRoot struct {
 	// The image's working directory and user, informational.
 	WorkingDir string `json:"working_dir,omitempty"`
 	User       string `json:"user,omitempty"`
+	// The image's ENTRYPOINT and CMD. CommandKnown is false for an unpack cached
+	// by an older release, which had not kept them.
+	Entrypoint   []string `json:"entrypoint,omitempty"`
+	Cmd          []string `json:"cmd,omitempty"`
+	CommandKnown bool     `json:"command_known,omitempty"`
 }
 
 // imageStore unpacks OCI images into root filesystems, cached by digest:
@@ -97,7 +102,7 @@ func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
 		if fi, err := os.Stat(abs); err != nil || !fi.IsDir() {
 			return nil, fmt.Errorf("image %s: not a directory", ref)
 		}
-		return &imageRoot{Ref: ref, Digest: "dir:" + abs, Root: abs, Env: []string{"PATH=" + sandboxPath}}, nil
+		return &imageRoot{Ref: ref, Digest: "dir:" + abs, Root: abs, Env: []string{"PATH=" + sandboxPath}, CommandKnown: true}, nil
 	}
 	// A digest names fixed content, so its unpacked root can be reused
 	// without asking the registry again; a tag can move and is resolved
@@ -130,6 +135,14 @@ func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
 	defer st.lock(key)()
 	dir := filepath.Join(st.dir, key)
 	if info, err := readImageInfo(dir); err == nil {
+		if !info.CommandKnown {
+			if cfg, err := img.ConfigFile(); err == nil {
+				info.Entrypoint, info.Cmd, info.CommandKnown = cfg.Config.Entrypoint, cfg.Config.Cmd, true
+				if raw, err := json.MarshalIndent(info, "", "  "); err == nil {
+					_ = os.WriteFile(filepath.Join(dir, "image.json"), raw, 0o600)
+				}
+			}
+		}
 		info.Root = filepath.Join(dir, "root")
 		st.remember(pinned, ref, info)
 		return info, nil
@@ -152,7 +165,8 @@ func (st *imageStore) get(ctx context.Context, ref string) (*imageRoot, error) {
 	if err != nil {
 		return nil, fmt.Errorf("image %s: unpacking: %w", ref, err)
 	}
-	info := &imageRoot{Ref: ref, Digest: digest.String(), Env: cfg.Config.Env, WorkingDir: cfg.Config.WorkingDir, User: cfg.Config.User}
+	info := &imageRoot{Ref: ref, Digest: digest.String(), Env: cfg.Config.Env, WorkingDir: cfg.Config.WorkingDir, User: cfg.Config.User,
+		Entrypoint: cfg.Config.Entrypoint, Cmd: cfg.Config.Cmd, CommandKnown: true}
 	raw, _ := json.MarshalIndent(info, "", "  ")
 	if err := os.WriteFile(filepath.Join(tmp, "image.json"), raw, 0o600); err != nil {
 		return nil, err

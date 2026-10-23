@@ -100,6 +100,9 @@ message SandboxSpec {
   bool read_only_root = 10;
   repeated evalsi.v1alpha1.EnvironmentService services = 11;
   google.protobuf.Duration service_lifetime = 12;
+  // Bubblewrap services only: named volumes of this sandbox shared with the
+  // services that name them, "name:/path" or "name:/path:ro".
+  repeated string volumes = 13;
 }
 
 message CreateRequest {

@@ -235,6 +235,7 @@ class SandboxSpec(_message.Message):
     READ_ONLY_ROOT_FIELD_NUMBER: _builtins.int
     SERVICES_FIELD_NUMBER: _builtins.int
     SERVICE_LIFETIME_FIELD_NUMBER: _builtins.int
+    VOLUMES_FIELD_NUMBER: _builtins.int
     image: _builtins.str
     """An OCI image reference (registry, "oci-layout:<dir>[@ref]",
     "docker-archive:<file>" or "dir:<unpacked root>"). It becomes the root
@@ -272,6 +273,12 @@ class SandboxSpec(_message.Message):
     def services(self) -> _containers.RepeatedCompositeFieldContainer[_agent_pb2.EnvironmentService]: ...
     @_builtins.property
     def service_lifetime(self) -> _duration_pb2.Duration: ...
+    @_builtins.property
+    def volumes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Bubblewrap services only: named volumes of this sandbox shared with the
+        services that name them, "name:/path" or "name:/path:ro".
+        """
+
     def __init__(
         self,
         *,
@@ -287,10 +294,11 @@ class SandboxSpec(_message.Message):
         read_only_root: _builtins.bool = ...,
         services: _abc.Iterable[_agent_pb2.EnvironmentService] | None = ...,
         service_lifetime: _duration_pb2.Duration | None = ...,
+        volumes: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["idle_timeout", b"idle_timeout", "network", b"network", "resources", b"resources", "service_lifetime", b"service_lifetime"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["env", b"env", "files", b"files", "idle_timeout", b"idle_timeout", "image", b"image", "min_isolation", b"min_isolation", "mode", b"mode", "network", b"network", "read_only_root", b"read_only_root", "resources", b"resources", "service_lifetime", b"service_lifetime", "services", b"services", "workdir", b"workdir"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["env", b"env", "files", b"files", "idle_timeout", b"idle_timeout", "image", b"image", "min_isolation", b"min_isolation", "mode", b"mode", "network", b"network", "read_only_root", b"read_only_root", "resources", b"resources", "service_lifetime", b"service_lifetime", "services", b"services", "volumes", b"volumes", "workdir", b"workdir"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___SandboxSpec: _TypeAlias = SandboxSpec  # noqa: Y015

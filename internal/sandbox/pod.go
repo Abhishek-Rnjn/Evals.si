@@ -347,6 +347,17 @@ func (d *podDriver) supports(sp *Spec) error {
 		if f := s.bwrapOnly(); f != "" {
 			return fmt.Errorf("service %s: %s is supported on the bubblewrap rung only", s.Name, f)
 		}
+		if s.Port < 1024 {
+			return fmt.Errorf("service %s requires a readiness port from 1024 to 65535 on the pod backend", s.Name)
+		}
+		for _, p := range s.Ports {
+			if p < 1024 {
+				return fmt.Errorf("service %s: ports below 1024 are not supported on the pod backend", s.Name)
+			}
+		}
+	}
+	if len(sp.Volumes) > 0 {
+		return errors.New("volumes are supported on the bubblewrap rung only")
 	}
 	if len(sp.Services) > 0 && (os.Getenv("POD_NAME") == "" || os.Getenv("POD_UID") == "") {
 		return errors.New("services require pool POD_NAME and POD_UID for lifecycle ownership")

@@ -134,6 +134,7 @@ func SpecFromProto(p *sandboxv1alpha1.SandboxSpec) *sandbox.Spec {
 		},
 		Env: p.GetEnv(), Files: p.GetFiles(), Workdir: p.GetWorkdir(), IdleTimeout: p.GetIdleTimeout().AsDuration(),
 	}
+	sp.Volumes = p.GetVolumes()
 	sp.Services = sandbox.ServicesFromProto(p.GetServices())
 	sp.ServiceLifetime = p.GetServiceLifetime().AsDuration()
 	return sp
