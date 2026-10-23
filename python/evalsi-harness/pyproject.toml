@@ -40,6 +40,10 @@ harbor = "evalsi_harness.benchmarks.harbor:load_harbor"
 terminal-bench = "evalsi_harness.benchmarks.harbor:load_terminal_bench"
 lab = "evalsi_harness.benchmarks.lab:load_lab"
 jobbench = "evalsi_harness.benchmarks.jobbench:load_jobbench"
+webarena = "evalsi_harness.benchmarks.webarena:load_webarena"
+gaia = "evalsi_harness.benchmarks.gaia:load_gaia"
+officeqa = "evalsi_harness.benchmarks.longdoc:load_officeqa"
+aa-lcr = "evalsi_harness.benchmarks.longdoc:load_aalcr"
 
 [project.urls]
 Homepage = "https://evalsi.dev/"

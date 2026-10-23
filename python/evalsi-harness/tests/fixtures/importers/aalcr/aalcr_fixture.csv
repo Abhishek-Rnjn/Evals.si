@@ -1,0 +1,3 @@
+document_category,document_set_id,question_id,question,answer,data_source_filenames,data_source_urls,input_tokens
+Fixture Reports,set-1,q-1,Which fixture company grew fastest?,Acme Fixtures,report_a.txt;report_b.txt,https://fixture.invalid/a;https://fixture.invalid/b,1200
+Fixture Reports,set-1,q-2,Which fixture company is oldest?,Bolt Fixtures,report_a.txt,https://fixture.invalid/a,600

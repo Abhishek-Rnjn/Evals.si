@@ -1,0 +1,3 @@
+{"task_id": "fixture-0001", "Question": "How many rows does the attached table have?", "Level": 1, "Final answer": "3", "file_name": "table.csv", "file_path": "fixture/table.csv", "Annotator Metadata": {"Steps": "SECRET STEPS", "Number of steps": "2"}}
+{"task_id": "fixture-0002", "Question": "Name the capital of the invented land of Zorbia.", "Level": 2, "Final answer": "Zorbtown", "file_name": "", "file_path": "", "Annotator Metadata": {"Steps": "SECRET STEPS"}}
+{"task_id": "fixture-0003", "Question": "A test-split style question with no answer.", "Level": 3, "Final answer": "?", "file_name": "", "file_path": "", "Annotator Metadata": {}}

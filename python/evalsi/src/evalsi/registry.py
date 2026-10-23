@@ -37,6 +37,7 @@ class Pack:
 def _builtin_packs() -> list[Pack]:
     from evalsi.packs import (
         agent,
+        answers,
         code,
         core,
         finetune,
@@ -54,6 +55,7 @@ def _builtin_packs() -> list[Pack]:
         core.PACK,
         judge.PACK,
         rubric.PACK,
+        answers.PACK,
         text.PACK,
         rag.PACK,
         safety.PACK,

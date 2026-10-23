@@ -27,8 +27,9 @@ not filtered or snapshotted. Treat a page as hostile input: it can write anythin
 into the snapshot the model reads.
 
 Options come from the record: ``metadata.browser`` is ``{"start_url", "allow_hosts",
-"viewport": [w, h], "timeout_s", "max_snapshot_chars"}``. The first tool call opens
-the browser at ``start_url``. Playwright is an optional install
+"viewport": [w, h], "timeout_s", "max_snapshot_chars", "storage_state"}``
+(``storage_state`` is the path of a Playwright storage-state file, for a logged-in
+session). The first tool call opens the browser at ``start_url``. Playwright is an optional install
 (``pip install 'evalsi-harness[browser]'``, then the browsers, or point
 ``PLAYWRIGHT_BROWSERS_PATH`` at an existing install, or ``EVALSI_BROWSER_EXECUTABLE`` at a
 Chromium binary); a missing install is a clear error on the first call. Chromium
@@ -98,6 +99,8 @@ class BrowserConfig:
     viewport: tuple[int, int] = (1024, 768)
     timeout_s: float = DEFAULT_TIMEOUT_S
     max_snapshot_chars: int = MAX_SNAPSHOT_CHARS
+    # A Playwright storage-state file (cookies, local storage) for a logged-in session.
+    storage_state: str = ""
 
     @classmethod
     def from_metadata(cls, metadata: Mapping[str, Any]) -> BrowserConfig:
@@ -123,6 +126,7 @@ class BrowserConfig:
             viewport=(width, height),
             timeout_s=float(data.get("timeout_s") or DEFAULT_TIMEOUT_S),
             max_snapshot_chars=max(1000, min(limit, 200_000)),
+            storage_state=str(data.get("storage_state") or ""),
         )
 
 
@@ -169,9 +173,17 @@ class BrowserSession:
             await self.aclose()
             raise BrowserUnavailable(f"the browser did not start: {_first_line(exc)}") from None
         width, height = self.config.viewport
-        self._context = await self._browser.new_context(
-            viewport={"width": width, "height": height}, service_workers="block"
-        )
+        options: dict[str, Any] = {
+            "viewport": {"width": width, "height": height},
+            "service_workers": "block",
+        }
+        if self.config.storage_state:
+            options["storage_state"] = self.config.storage_state
+        try:
+            self._context = await self._browser.new_context(**options)
+        except Exception as exc:
+            await self.aclose()
+            raise BrowserUnavailable(f"the browser context failed: {_first_line(exc)}") from None
         await self._context.route("**/*", self._route)
         self._context.set_default_timeout(self.timeout_ms)
         self._context.on("page", self._opened)
