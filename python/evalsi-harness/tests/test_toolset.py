@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from evalsi_harness import background
 from evalsi_harness.environment import TaskEnvironment
 from evalsi_harness.task import EnvironmentConfig
 from evalsi_harness.testing import LocalSandboxClient
@@ -273,8 +274,16 @@ def test_extra_tools_by_name_in_order_and_unknown_names_are_refused() -> None:
         assert [t.spec.name for t in tools] == ["grep", "edit_file"]
         with pytest.raises(ValueError, match="unknown built-in tool"):
             extra_tools(env, ["rm"])
-        assert set(NAMES) == {"edit_file", "glob", "grep", "apply_patch", "memory"}
-        assert {"edit_file", "apply_patch", "memory"} == MUTATING
+        assert set(NAMES) == {
+            "edit_file",
+            "glob",
+            "grep",
+            "apply_patch",
+            "memory",
+            "background",
+            "shell",
+        }
+        assert {"edit_file", "apply_patch", "memory", *background.MUTATING} == MUTATING
 
     with_env({}, body)
 

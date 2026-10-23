@@ -125,6 +125,9 @@ def _event_step(name: str, parent: str, attributes: dict[str, Any]) -> Step:
     )
 
 
+event_step = _event_step  # for the ACP connector, which records approvals as hooks do
+
+
 def _step(hook: str, event: str, parent: str, **attributes: Any) -> Step:
     decision = {k: v for k, v in attributes.items() if v not in (None, "")}
     return Step(

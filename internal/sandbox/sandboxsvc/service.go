@@ -272,6 +272,86 @@ func (s *Service) Stats(ctx context.Context, req *connect.Request[sandboxv1alpha
 	return connect.NewResponse(out), nil
 }
 
+func processInfo(st sandbox.ProcessStatus) *sandboxv1alpha1.ProcessInfo {
+	info := &sandboxv1alpha1.ProcessInfo{
+		ProcessId: st.ID, Command: st.Command, Started: timestamppb.New(st.Started), Running: st.Running, Killed: st.Killed,
+		StdoutBytes: st.StdoutBytes, StderrBytes: st.StderrBytes,
+	}
+	if r := st.Result; r != nil {
+		info.Result = &sandboxv1alpha1.ExecResult{
+			Outcome: outcomes[r.Outcome], ExitCode: int32(r.ExitCode), Duration: durationpb.New(r.Duration),
+			Truncated: r.Truncated, Denials: r.Denials, Error: r.Error,
+		}
+	}
+	return info
+}
+
+func (s *Service) StartProcess(_ context.Context, req *connect.Request[sandboxv1alpha1.StartProcessRequest]) (*connect.Response[sandboxv1alpha1.StartProcessResponse], error) {
+	sess, err := s.m.Get(req.Msg.GetSandboxId())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	st, err := sess.StartProcess(&sandbox.ProcessSpec{
+		Command: req.Msg.GetCommand(), Env: req.Msg.GetEnv(), Cwd: req.Msg.GetCwd(), Timeout: req.Msg.GetTimeout().AsDuration(),
+		BufferBytes: int(req.Msg.GetBufferBytes()), Stdin: req.Msg.GetStdin(),
+	})
+	if err != nil {
+		return nil, toErr(err)
+	}
+	return connect.NewResponse(&sandboxv1alpha1.StartProcessResponse{Process: processInfo(st)}), nil
+}
+
+func (s *Service) ListProcesses(_ context.Context, req *connect.Request[sandboxv1alpha1.ListProcessesRequest]) (*connect.Response[sandboxv1alpha1.ListProcessesResponse], error) {
+	sess, err := s.m.Get(req.Msg.GetSandboxId())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	out := &sandboxv1alpha1.ListProcessesResponse{}
+	for _, st := range sess.Processes() {
+		out.Processes = append(out.Processes, processInfo(st))
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (s *Service) ReadProcess(ctx context.Context, req *connect.Request[sandboxv1alpha1.ReadProcessRequest]) (*connect.Response[sandboxv1alpha1.ReadProcessResponse], error) {
+	sess, err := s.m.Get(req.Msg.GetSandboxId())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	m := req.Msg
+	out, err := sess.ProcessOutput(ctx, m.GetProcessId(), m.GetStdoutOffset(), m.GetStderrOffset(), int(m.GetMaxBytes()), m.GetWait().AsDuration())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	return connect.NewResponse(&sandboxv1alpha1.ReadProcessResponse{
+		Stdout: out.Stdout, Stderr: out.Stderr, StdoutOffset: out.StdoutOffset, StderrOffset: out.StderrOffset,
+		StdoutDropped: out.StdoutDropped, StderrDropped: out.StderrDropped, Process: processInfo(out.Status),
+	}), nil
+}
+
+func (s *Service) WriteProcess(_ context.Context, req *connect.Request[sandboxv1alpha1.WriteProcessRequest]) (*connect.Response[sandboxv1alpha1.WriteProcessResponse], error) {
+	sess, err := s.m.Get(req.Msg.GetSandboxId())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	if err := sess.WriteProcessStdin(req.Msg.GetProcessId(), req.Msg.GetData(), req.Msg.GetClose()); err != nil {
+		return nil, toErr(err)
+	}
+	return connect.NewResponse(&sandboxv1alpha1.WriteProcessResponse{}), nil
+}
+
+func (s *Service) KillProcess(_ context.Context, req *connect.Request[sandboxv1alpha1.KillProcessRequest]) (*connect.Response[sandboxv1alpha1.KillProcessResponse], error) {
+	sess, err := s.m.Get(req.Msg.GetSandboxId())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	st, err := sess.KillProcess(req.Msg.GetProcessId())
+	if err != nil {
+		return nil, toErr(err)
+	}
+	return connect.NewResponse(&sandboxv1alpha1.KillProcessResponse{Process: processInfo(st)}), nil
+}
+
 func (s *Service) Destroy(_ context.Context, req *connect.Request[sandboxv1alpha1.DestroyRequest]) (*connect.Response[sandboxv1alpha1.DestroyResponse], error) {
 	if err := s.m.Destroy(req.Msg.GetSandboxId()); err != nil {
 		return nil, toErr(err)

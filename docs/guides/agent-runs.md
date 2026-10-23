@@ -37,7 +37,8 @@ A run spec becomes an agent run when it has `target.agent` or `harness`. To run 
 
 | Kind | Spec | How it is driven |
 |---|---|---|
-| A2A | `a2a: {url, headers_env, timeout, stream, binding}` | `message/send`, following the task until it settles, over JSON-RPC or, with `binding: HTTP+JSON`, A2A 0.3's REST binding (`POST {url}/v1/message:send`, `GET {url}/v1/tasks/{id}`, `POST {url}/v1/message:stream`; `url` is the interface's base URL); with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events; push notifications are not used) |
+| A2A | `a2a: {url, headers_env, timeout, stream, binding, push_notifications, push_url, push_port}` | `message/send`, following the task until it settles, over JSON-RPC or, with `binding: HTTP+JSON`, A2A 0.3's REST binding (`POST {url}/v1/message:send`, `GET {url}/v1/tasks/{id}`, `POST {url}/v1/message:stream`; `url` is the interface's base URL); with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events); with `push_notifications: true`, see [A2A push notifications](#a2a-push-notifications) |
+| ACP | `acp: {command, install, env_from, allow_hosts, timeout, approval, terminals}` | the [Agent Client Protocol](#acp-agents): JSON-RPC over the stdio of a command that runs **inside the task's sandbox**; session updates become steps and permission requests are decided by `approval` |
 | MCP | `mcp: {url, tool, argument}` | the agent is a tool on an MCP server; each message is one call |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses`; later turns continue with `previous_response_id` |
 | HTTP | `http: {url, method, body_template, output_path, messages_path, trajectory_path, usage_path, stop_reason_path, stream, delta_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`, `{{trial}}`, `{{session_id}}`); the answer at `output_path`, its steps at `messages_path` (OpenAI messages) or `trajectory_path` (Evals.si steps, for tool, handoff and guardrail steps the agent reports itself), its token usage at `usage_path`, and why it stopped at `stop_reason_path` (anything but `completed`, such as `awaiting_human`, is kept as the run's stop reason). With `stream: true` the response is server-sent events, each a JSON object: the answer, messages and usage come from the last event that has them, steps at `trajectory_path` are collected from every event that has them (at least one must), and with `delta_path` the text chunks are joined into the answer when no event has `output_path`. Key the agent's thread on `{{session_id}}`, not `{{task_id}}`: the task id is the same in every trial, so trials sharing it share one conversation |
@@ -52,6 +53,31 @@ A CLI agent:
 - has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events, `claude-stream-json` Claude Code's `--output-format stream-json --verbose` (sub-agent messages hang under the call that started them, and the run's cost is kept), `codex-json` `codex exec --json`, `gemini-json` `gemini --output-format stream-json`, `pi-json` `pi --mode json` and `opencode-json` `opencode run --format json`, each into model-call and tool-call steps with token counts. A stream with none of the format's events is an error on the run, so a wrong format is not read as an agent that did nothing. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
 
 Setup uses the environment's `setup_network`. When `install` needs a package index, set `environment: {setup_network: allow}` in the spec.
+
+### A2A push notifications
+
+`a2a: {push_notifications: true}` sends the message without blocking and names a webhook in `pushNotificationConfig`; the worker runs the receiver (a small HTTP server, with a per-conversation token the agent must send in `X-A2A-Notification-Token`), and each task state the agent pushes is a step (`a2a.update: push` on the step). It is used instead of `stream` when both are set.
+
+- `push_url` is the base URL the agent reaches the receiver at, and `push_port` the port it binds. Without them the receiver listens on loopback only (`http://127.0.0.1:<port>`), which suits an agent on the worker's host; for an agent elsewhere, set both and make the port reachable. The receiver listens on every interface when `push_url` is set: put it behind your network policy.
+- Pushes are not trusted to arrive. After `5s` without one the harness polls `tasks/get` (the step says `a2a.update: poll`), and at a terminal state it reads the task once more for its artifacts. A push with the wrong token is refused with 401 and counted, not used.
+- An agent that answers that push is not supported gets the plain send-and-poll path, so one spec works against both kinds of agent.
+- `metadata.agent` records `a2a_push_updates` and `a2a_poll_updates`, so a run where every update came from polling is visible as that.
+
+### ACP agents
+
+[ACP](https://agentclientprotocol.com) is how editors drive coding agents: JSON-RPC 2.0 over the agent process's stdio, one object per line. An `acp` target runs the command in the task's sandbox with its stdin open (the sandbox's [background process API](built-in-harness.md#background-processes-and-a-persistent-shell), so it works on every rung that has one) and acts as the *client*. The connector implements **protocol version 1**: `initialize` (an agent that answers another version is refused), `session/new` (with the workdir as `cwd` and no MCP servers), `session/prompt`, and, from the agent, `session/update`, `session/request_permission`, `fs/read_text_file`, `fs/write_text_file` and, with `terminals: true`, `terminal/create`, `output`, `wait_for_exit`, `kill` and `release`. Not implemented: authentication methods, `session/load`, session modes, non-text prompt content and the unstable extensions.
+
+| ACP | on the trajectory |
+|---|---|
+| `agent_message_chunk` | one `llm` step per run of chunks; the joined text is the answer |
+| `agent_thought_chunk` | an `acp:thought` step |
+| `tool_call`, `tool_call_update` | one `tool` step per call, named by its title, with `acp.kind`, `acp.status` and the output from the updates (`failed` sets the step's error) |
+| `plan` | an `acp:plan` step |
+| `session/request_permission` | an `acp_permission` policy event (granted or not), and `hitl_request` / `hitl_resolved` steps when an `ask` rule sent it to the approver |
+
+`approval` has the shape of the [approval gate](#approval-gates)'s config (`rules`, `approver.script`, `approver.default`) and the same semantics: first matching rule wins, no rule means allow, `deny` stops without asking, `ask` goes to the scripted approver. The ACP tool kind stands for a built-in tool in the rules (`execute` is `bash`, `edit`, `delete` and `move` are `write_file`, `read` is `read_file`), `command` matches the call's `rawInput.command` and `path` its `rawInput.path` or first location. An `edit` decision cannot be returned to an ACP agent, so it counts as a denial. The agent gets a `reject_once` option when denied (or `cancelled` if it offered none).
+
+The agent's `fs/*` requests are served in the sandbox under the workdir, and a terminal is a background process under the sandbox's limits (stdout and stderr are returned together, stdout first). A turn that ends with `end_turn` leaves the session open, so a user simulator can send the next prompt; any other stop reason (`refusal`, `max_tokens`, ...) ends the run with that stop reason.
 
 With a user simulator, every agent kind holds a multi-turn conversation. Remote agents (A2A, MCP, Responses, HTTP) do their work outside the sandbox. A task's environment is still created and checked, so a remote agent that works through, say, MCP tools on the same task gets the same grading.
 
@@ -99,7 +125,7 @@ Notes on environments:
 | `instructions` | appended to the system prompt |
 | `tools.mcp` | MCP servers (streamable HTTP, or stdio commands) whose tools the agent gets |
 | `tools.mocks` | canned tools: one `response`, or `responses` keyed by arguments |
-| `tools.builtin` | more built-in tools, by name: `edit_file` (replace exact text; fails if the text is missing or not unique, keeps a script executable), `glob`, `grep` (extended regular expressions, binary files skipped) and `apply_patch` (a unified diff, checked first and applied all or nothing, through `git apply` or `patch`), `memory` (notes under `.evalsi-memory/` that survive context management: list, read, write, append, delete) `session_search` (search the run's unabridged history for some text, including tool output that was cleared or summarized, and read an entry back in full) `delegate` (hand a self-contained subtask to a sub-agent and keep only its report; see [Sub-agents](#sub-agents)) `tool_search` (the MCP tools start unloaded; see [MCP servers](#mcp-servers)) and `code_mode` (the agent acts through scripts; see [Code mode](#code-mode)). Off by default, so a comparison between models uses the same toolset unless a spec lists them; `edit_file`, `apply_patch` and `memory` run again on replay, like `bash`; naming `memory` or `session_search` also adds a line about it to the system prompt |
+| `tools.builtin` | more built-in tools, by name: `edit_file` (replace exact text; fails if the text is missing or not unique, keeps a script executable), `glob`, `grep` (extended regular expressions, binary files skipped) and `apply_patch` (a unified diff, checked first and applied all or nothing, through `git apply` or `patch`), `memory` (notes under `.evalsi-memory/` that survive context management: list, read, write, append, delete) `session_search` (search the run's unabridged history for some text, including tool output that was cleared or summarized, and read an entry back in full) `delegate` (hand a self-contained subtask to a sub-agent and keep only its report; see [Sub-agents](#sub-agents)) `tool_search` (the MCP tools start unloaded; see [MCP servers](#mcp-servers)) and `code_mode` (the agent acts through scripts; see [Code mode](#code-mode)) `background` (five tools to start, read, write to, list and kill processes that outlive a call) and `shell` (one persistent shell; both in [the built-in harness guide](built-in-harness.md#background-processes-and-a-persistent-shell)). Off by default, so a comparison between models uses the same toolset unless a spec lists them; `edit_file`, `apply_patch`, `memory`, `shell` and the mutating process tools run again on replay, like `bash`; naming `memory` or `session_search` also adds a line about it to the system prompt |
 | `tools.faults` | deterministic fault injection (`error`, `timeout`, `malformed`, `prompt-injection`) per tool, at a rate |
 | `user_simulator: {persona, goal, max_turns, judge}` | an LLM user for multi-turn tasks, speaking through a judge |
 | `recording: {mode, dir, branch_at_step, fork_as}` | a session log of model calls and tool I/O, written as it happens. `record` starts one; `replay` serves it (sandbox commands and edits run again, so the environment is rebuilt), and with `branch_at_step: N` replays N turns and then continues live; `resume` continues an interrupted trial (replay its log, then run live and append to it; a trial with no log starts one); `fork` replays the first `branch_at_step` turns of a log and goes live into a new log that names its parent. See [Sessions](#sessions-resume-and-fork) |
@@ -179,6 +205,25 @@ evalsi matrix standard.json minimal.json code-mode.json --metric task-success
 ```
 
 Each file is a cell with its harness, model, score and interval, and beside the score what it cost per task: model calls, tokens and dollars, and the score per thousand tokens. Every cell after the first is compared with the first, paired by record and trial, so the difference carries its own interval and is starred when it excludes zero. `--tuned-on NAME` (a results file name, a run name or a dataset hash) splits the cells into `tuned` and `held-out`, so a profile tuned on one benchmark is also read on others. Cost columns show `-` when the results lack the figure. `--mechanisms` adds, per cell, which optional tools were offered and in how many tasks the trajectories show them called, and whether the context strategy cleared or compacted anything, with `(never ran)` for a mechanism that ran in no task: a gain credited to a change whose mechanism never executed (a window that never filled, a tool the model never called) is not evidence the change helped.
+
+### Sweeping harness configurations on the server
+
+`evalsi matrix` compares harness configurations you ran yourself. To have the server run them, declare them in the spec:
+
+```yaml
+spec:
+  target: {connector: anthropic, model: claude-sonnet-4-5}
+  harness: {builtin: {max_steps: 40}}          # shared by every variant
+  sweep:
+    variants:
+      - {name: baseline, harness: {}}                      # inherits everything
+      - {name: minimal,  harness: {profile: minimal, tools: {}}}
+      - {name: compact,  harness: {context: {strategy: compact, window_tokens: 50000}}}
+```
+
+The server expands this into **one run per variant**, over the same dataset snapshot, evaluators, trials, target, environment and budget, each named `<name>/<variant>` and labelled `evalsi.sweep=<sweep id>` and `evalsi.variant=<variant>`. A variant's `harness` is a partial `harness.builtin`: each field it sets replaces that field of the spec's as a whole (so `tools: {}` clears the base's tool list, which a profile needs, since a profile owns the toolset), and the rest is inherited. Every expanded spec is validated as a run of its own before anything is stored, and an error names the variant. A sweep is refused with a bring-your-own agent or an external harness, with more than 16 variants, and when two variants record into one directory. Each variant counts against the project's run quota.
+
+`evalsi run --server URL -f run.yaml` creates the runs, waits for them and prints one row per variant and metric with its interval (`--no-wait` prints the run ids); the first variant is the baseline. Compare any two with `CompareRuns` (`evalsi compare`), which pairs them by record and trial. The API returns every run in `CreateRunResponse.sweep_runs`. An embedded run (`evalsi run` without `--server`) refuses a sweep.
 
 ### The agent's own setup
 

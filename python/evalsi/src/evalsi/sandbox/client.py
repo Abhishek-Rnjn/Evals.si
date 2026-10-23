@@ -185,6 +185,55 @@ class ExecResult:
 
 
 @dataclass
+class ProcessInfo:
+    """A background process in a sandbox (see :meth:`Sandbox.start_process`)."""
+
+    id: str
+    command: list[str]
+    running: bool
+    # Ended because it was killed (by ``kill_process`` or the sandbox's end).
+    killed: bool = False
+    # How it ended; ``None`` while it runs.
+    exit_code: int | None = None
+    outcome: str = ""
+    stdout_bytes: int = 0
+    stderr_bytes: int = 0
+
+    @classmethod
+    def from_proto(cls, info: pb.ProcessInfo) -> ProcessInfo:
+        ended = info.HasField("result")
+        return cls(
+            id=info.process_id,
+            command=list(info.command),
+            running=info.running,
+            killed=info.killed,
+            exit_code=info.result.exit_code if ended else None,
+            outcome=_OUTCOME.get(info.result.outcome, "runner_failure") if ended else "",
+            stdout_bytes=info.stdout_bytes,
+            stderr_bytes=info.stderr_bytes,
+        )
+
+
+@dataclass
+class ProcessOutput:
+    """New output of a background process since the offsets it was read with.
+    Pass ``stdout_offset`` and ``stderr_offset`` to the next read. ``*_dropped``
+    counts bytes the process's bounded buffer overwrote before they were read."""
+
+    stdout: str
+    stderr: str
+    stdout_offset: int
+    stderr_offset: int
+    process: ProcessInfo
+    stdout_dropped: int = 0
+    stderr_dropped: int = 0
+    # The bytes behind ``stdout``, for a reader that must not split a UTF-8
+    # character across reads (``stdout`` decodes each read on its own).
+    stdout_raw: bytes = b""
+    stderr_raw: bytes = b""
+
+
+@dataclass
 class EgressEvent:
     host: str
     port: int
@@ -297,6 +346,103 @@ class Sandbox:
             truncated=result.truncated,
             denials=list(result.denials),
         )
+
+    async def start_process(
+        self,
+        command: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = None,
+        cwd: str = "",
+        timeout_s: float = 0.0,
+        buffer_bytes: int = 0,
+        stdin: bool = False,
+    ) -> ProcessInfo:
+        """Start a command that outlives this call, in the same sandbox, under the
+        same confinement and limits as :meth:`exec`. Its output is kept in bounded
+        buffers (``buffer_bytes`` per stream, default 1 MiB) for ``read_process``;
+        ``stdin=True`` keeps its stdin open for ``write_process``. ``timeout_s`` is
+        its wall-clock limit (default one hour). It dies with the sandbox."""
+        request = pb.StartProcessRequest(
+            sandbox_id=self.id,
+            command=list(command),
+            env=dict(env or {}),
+            cwd=cwd,
+            timeout=_duration(timeout_s),
+            buffer_bytes=buffer_bytes,
+            stdin=stdin,
+        )
+        try:
+            resp = await self.client.stub.StartProcess(request)
+        except grpc.aio.AioRpcError as exc:
+            _raise(exc)
+        return ProcessInfo.from_proto(resp.process)
+
+    async def list_processes(self) -> list[ProcessInfo]:
+        try:
+            resp = await self.client.stub.ListProcesses(pb.ListProcessesRequest(sandbox_id=self.id))
+        except grpc.aio.AioRpcError as exc:
+            _raise(exc)
+        return [ProcessInfo.from_proto(p) for p in resp.processes]
+
+    async def read_process(
+        self,
+        process_id: str,
+        *,
+        stdout_offset: int = 0,
+        stderr_offset: int = 0,
+        max_bytes: int = 0,
+        wait_s: float = 0.0,
+    ) -> ProcessOutput:
+        """Output from the given offsets. With ``wait_s`` (at most 30), blocks until
+        there is more output or the process ends."""
+        request = pb.ReadProcessRequest(
+            sandbox_id=self.id,
+            process_id=process_id,
+            stdout_offset=stdout_offset,
+            stderr_offset=stderr_offset,
+            max_bytes=max_bytes,
+            wait=_duration(wait_s),
+        )
+        try:
+            resp = await self.client.stub.ReadProcess(request)
+        except grpc.aio.AioRpcError as exc:
+            _raise(exc)
+        return ProcessOutput(
+            stdout=resp.stdout.decode(errors="replace"),
+            stderr=resp.stderr.decode(errors="replace"),
+            stdout_offset=resp.stdout_offset,
+            stderr_offset=resp.stderr_offset,
+            process=ProcessInfo.from_proto(resp.process),
+            stdout_dropped=resp.stdout_dropped,
+            stderr_dropped=resp.stderr_dropped,
+            stdout_raw=bytes(resp.stdout),
+            stderr_raw=bytes(resp.stderr),
+        )
+
+    async def write_process(
+        self, process_id: str, data: bytes | str = b"", *, close: bool = False
+    ) -> None:
+        """Write to a process's stdin (it must have been started with ``stdin=True``);
+        ``close=True`` then closes it, so the process reads EOF."""
+        request = pb.WriteProcessRequest(
+            sandbox_id=self.id,
+            process_id=process_id,
+            data=data.encode() if isinstance(data, str) else data,
+            close=close,
+        )
+        try:
+            await self.client.stub.WriteProcess(request)
+        except grpc.aio.AioRpcError as exc:
+            _raise(exc)
+
+    async def kill_process(self, process_id: str) -> ProcessInfo:
+        try:
+            resp = await self.client.stub.KillProcess(
+                pb.KillProcessRequest(sandbox_id=self.id, process_id=process_id)
+            )
+        except grpc.aio.AioRpcError as exc:
+            _raise(exc)
+        return ProcessInfo.from_proto(resp.process)
 
     async def write_files(self, files: Mapping[str, bytes | str], mode: int = 0) -> None:
         request = pb.WriteFilesRequest(

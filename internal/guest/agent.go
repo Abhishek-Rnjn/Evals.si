@@ -140,7 +140,7 @@ func (a *Agent) openRoot() (*os.Root, error) {
 
 type capWriter struct {
 	mu        *sync.Mutex
-	stream    *connect.ServerStream[guestv1alpha1.ExecResponse]
+	send      func(chunk []byte, stderr bool) error
 	stderr    bool
 	limit, n  int
 	truncated bool
@@ -157,12 +157,8 @@ func (w *capWriter) Write(p []byte) (int, error) {
 		chunk, w.truncated = chunk[:room], true
 	}
 	w.n += len(chunk)
-	resp := &guestv1alpha1.ExecResponse{Event: &guestv1alpha1.ExecResponse_Stdout{Stdout: append([]byte(nil), chunk...)}}
-	if w.stderr {
-		resp.Event = &guestv1alpha1.ExecResponse_Stderr{Stderr: append([]byte(nil), chunk...)}
-	}
 	w.mu.Lock()
-	err := w.stream.Send(resp)
+	err := w.send(append([]byte(nil), chunk...), w.stderr)
 	w.mu.Unlock()
 	if err != nil {
 		return 0, err
@@ -172,8 +168,79 @@ func (w *capWriter) Write(p []byte) (int, error) {
 
 func (a *Agent) Exec(ctx context.Context, req *connect.Request[guestv1alpha1.ExecRequest], stream *connect.ServerStream[guestv1alpha1.ExecResponse]) error {
 	m := req.Msg
+	mu := &sync.Mutex{}
+	send := func(chunk []byte, stderr bool) error {
+		if stderr {
+			return stream.Send(&guestv1alpha1.ExecResponse{Event: &guestv1alpha1.ExecResponse_Stderr{Stderr: chunk}})
+		}
+		return stream.Send(&guestv1alpha1.ExecResponse{Event: &guestv1alpha1.ExecResponse_Stdout{Stdout: chunk}})
+	}
+	res, err := a.run(ctx, m, strings.NewReader(string(m.GetStdin())), mu, send)
+	if err != nil {
+		return err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return stream.Send(&guestv1alpha1.ExecResponse{Event: &guestv1alpha1.ExecResponse_Result{Result: res}})
+}
+
+// ExecInteractive runs a command whose stdin stays open: the first message
+// starts it, later ones write to or close its stdin. Ending the call (the
+// client cancelling) kills the command's process group.
+func (a *Agent) ExecInteractive(ctx context.Context, stream *connect.BidiStream[guestv1alpha1.ExecInteractiveRequest, guestv1alpha1.ExecInteractiveResponse]) error {
+	first, err := stream.Receive()
+	if err != nil {
+		return err
+	}
+	start := first.GetStart()
+	if start == nil {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("the first message must start a command"))
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		for {
+			msg, err := stream.Receive()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					cancel() // the caller went away: kill the command
+				}
+				return
+			}
+			switch ev := msg.GetEvent().(type) {
+			case *guestv1alpha1.ExecInteractiveRequest_Stdin:
+				if _, err := pw.Write(ev.Stdin); err != nil {
+					return
+				}
+			case *guestv1alpha1.ExecInteractiveRequest_CloseStdin:
+				return
+			}
+		}
+	}()
+	mu := &sync.Mutex{}
+	send := func(chunk []byte, stderr bool) error {
+		if stderr {
+			return stream.Send(&guestv1alpha1.ExecInteractiveResponse{Event: &guestv1alpha1.ExecInteractiveResponse_Stderr{Stderr: chunk}})
+		}
+		return stream.Send(&guestv1alpha1.ExecInteractiveResponse{Event: &guestv1alpha1.ExecInteractiveResponse_Stdout{Stdout: chunk}})
+	}
+	res, err := a.run(ctx, start, pr, mu, send)
+	pr.Close()
+	if err != nil {
+		return err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return stream.Send(&guestv1alpha1.ExecInteractiveResponse{Event: &guestv1alpha1.ExecInteractiveResponse_Result{Result: res}})
+}
+
+// run executes one command with resource limits, a wall-clock timeout that
+// kills the process group, and capped output sent through send.
+func (a *Agent) run(ctx context.Context, m *guestv1alpha1.ExecRequest, stdin io.Reader, mu *sync.Mutex, send func([]byte, bool) error) (*guestv1alpha1.ExecResult, error) {
 	if len(m.GetCommand()) == 0 {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("empty command"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("empty command"))
 	}
 	cwd := m.GetCwd()
 	if cwd == "" {
@@ -181,7 +248,7 @@ func (a *Agent) Exec(ctx context.Context, req *connect.Request[guestv1alpha1.Exe
 	}
 	dir, err := a.host(cwd)
 	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	timeout := m.GetTimeout().AsDuration()
 	if timeout <= 0 {
@@ -203,10 +270,9 @@ func (a *Agent) Exec(ctx context.Context, req *connect.Request[guestv1alpha1.Exe
 		cmd.Path = p
 	}
 	cmd.Dir = dir
-	cmd.Stdin = strings.NewReader(string(m.GetStdin()))
-	mu := &sync.Mutex{}
-	out := &capWriter{mu: mu, stream: stream, limit: limit}
-	errw := &capWriter{mu: mu, stream: stream, stderr: true, limit: limit}
+	cmd.Stdin = stdin
+	out := &capWriter{mu: mu, send: send, limit: limit}
+	errw := &capWriter{mu: mu, send: send, stderr: true, limit: limit}
 	cmd.Stdout, cmd.Stderr = out, errw
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
@@ -241,9 +307,7 @@ func (a *Agent) Exec(ctx context.Context, req *connect.Request[guestv1alpha1.Exe
 		res.ExitCode, res.Error = 126, runErr.Error()
 	}
 	res.Truncated = out.truncated || errw.truncated
-	mu.Lock()
-	defer mu.Unlock()
-	return stream.Send(&guestv1alpha1.ExecResponse{Event: &guestv1alpha1.ExecResponse_Result{Result: res}})
+	return res, nil
 }
 
 // mergeEnv is base with overrides applied, as KEY=VALUE pairs.

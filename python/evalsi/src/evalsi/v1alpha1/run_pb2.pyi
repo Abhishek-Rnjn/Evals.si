@@ -113,6 +113,7 @@ class RunSpec(_message.Message):
     BUDGET_FIELD_NUMBER: _builtins.int
     HARNESS_FIELD_NUMBER: _builtins.int
     ENVIRONMENT_FIELD_NUMBER: _builtins.int
+    SWEEP_FIELD_NUMBER: _builtins.int
     judge: _builtins.str
     """Judge name for judge evaluators; the server's default when empty."""
     trials: _builtins.int
@@ -145,6 +146,12 @@ class RunSpec(_message.Message):
     def environment(self) -> _agent_pb2.Environment:
         """Where agent tasks run; records may override it in metadata["environment"]."""
 
+    @_builtins.property
+    def sweep(self) -> Global___HarnessSweep:
+        """Runs the same task over several harness configurations: the server stores
+        one run per variant (see HarnessSweep).
+        """
+
     def __init__(
         self,
         *,
@@ -158,13 +165,71 @@ class RunSpec(_message.Message):
         budget: Global___Budget | None = ...,
         harness: _agent_pb2.Harness | None = ...,
         environment: _agent_pb2.Environment | None = ...,
+        sweep: Global___HarnessSweep | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "harness", b"harness", "summary", b"summary", "target", b"target"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "harness", b"harness", "summary", b"summary", "sweep", b"sweep", "target", b"target"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "evaluators", b"evaluators", "gates", b"gates", "harness", b"harness", "judge", b"judge", "summary", b"summary", "target", b"target", "trials", b"trials"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["budget", b"budget", "dataset", b"dataset", "environment", b"environment", "evaluators", b"evaluators", "gates", b"gates", "harness", b"harness", "judge", b"judge", "summary", b"summary", "sweep", b"sweep", "target", b"target", "trials", b"trials"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___RunSpec: _TypeAlias = RunSpec  # noqa: Y015
+
+@_typing.final
+class HarnessSweep(_message.Message):
+    """HarnessSweep makes harness configuration an experiment variable, as the
+    target's model is: it expands into one run per variant over the same
+    dataset, evaluators and trials, with the target, environment and budget of
+    the spec. Each run is named "<name>/<variant>" and labelled
+    evalsi.sweep=<sweep id> and evalsi.variant=<variant>; compare them with
+    CompareRuns, which pairs them by record and trial. The first variant is the
+    natural baseline. It applies to the built-in agent only (not to a
+    bring-your-own agent or an external harness).
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    VARIANTS_FIELD_NUMBER: _builtins.int
+    @_builtins.property
+    def variants(self) -> _containers.RepeatedCompositeFieldContainer[Global___HarnessVariant]: ...
+    def __init__(
+        self,
+        *,
+        variants: _abc.Iterable[Global___HarnessVariant] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["variants", b"variants"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___HarnessSweep: _TypeAlias = HarnessSweep  # noqa: Y015
+
+@_typing.final
+class HarnessVariant(_message.Message):
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    HARNESS_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    """A label of letters, digits, dots, dashes and underscores, unique in the sweep."""
+    @_builtins.property
+    def harness(self) -> _agent_pb2.BuiltinHarness:
+        """The built-in harness fields this variant sets (profile, tools, context,
+        hooks, ...). Each field that is set replaces that field of
+        spec.harness.builtin as a whole; the rest is inherited. A profile and a
+        tool list cannot be combined, so a variant that sets a profile also
+        needs tools set to an empty object when the base lists tools.
+        """
+
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        harness: _agent_pb2.BuiltinHarness | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["harness", b"harness"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["harness", b"harness", "name", b"name"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___HarnessVariant: _TypeAlias = HarnessVariant  # noqa: Y015
 
 @_typing.final
 class Target(_message.Message):

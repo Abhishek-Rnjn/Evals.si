@@ -51,6 +51,21 @@ const (
 	SandboxServiceRestoreProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/Restore"
 	// SandboxServiceStatsProcedure is the fully-qualified name of the SandboxService's Stats RPC.
 	SandboxServiceStatsProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/Stats"
+	// SandboxServiceStartProcessProcedure is the fully-qualified name of the SandboxService's
+	// StartProcess RPC.
+	SandboxServiceStartProcessProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/StartProcess"
+	// SandboxServiceListProcessesProcedure is the fully-qualified name of the SandboxService's
+	// ListProcesses RPC.
+	SandboxServiceListProcessesProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/ListProcesses"
+	// SandboxServiceReadProcessProcedure is the fully-qualified name of the SandboxService's
+	// ReadProcess RPC.
+	SandboxServiceReadProcessProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/ReadProcess"
+	// SandboxServiceWriteProcessProcedure is the fully-qualified name of the SandboxService's
+	// WriteProcess RPC.
+	SandboxServiceWriteProcessProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/WriteProcess"
+	// SandboxServiceKillProcessProcedure is the fully-qualified name of the SandboxService's
+	// KillProcess RPC.
+	SandboxServiceKillProcessProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/KillProcess"
 	// SandboxServiceDestroyProcedure is the fully-qualified name of the SandboxService's Destroy RPC.
 	SandboxServiceDestroyProcedure = "/evalsi.sandbox.v1alpha1.SandboxService/Destroy"
 	// SandboxServiceDeleteSnapshotProcedure is the fully-qualified name of the SandboxService's
@@ -72,6 +87,15 @@ type SandboxServiceClient interface {
 	Restore(context.Context, *connect.Request[v1alpha1.RestoreRequest]) (*connect.Response[v1alpha1.RestoreResponse], error)
 	// Resource use and the egress log, which safety evaluators use as evidence.
 	Stats(context.Context, *connect.Request[v1alpha1.StatsRequest]) (*connect.Response[v1alpha1.StatsResponse], error)
+	// Background processes: a command that outlives the call that started it,
+	// in the same sandbox and under the same confinement and limits as Exec.
+	// Output is kept in bounded buffers and read by offset. They are killed
+	// when the sandbox is destroyed.
+	StartProcess(context.Context, *connect.Request[v1alpha1.StartProcessRequest]) (*connect.Response[v1alpha1.StartProcessResponse], error)
+	ListProcesses(context.Context, *connect.Request[v1alpha1.ListProcessesRequest]) (*connect.Response[v1alpha1.ListProcessesResponse], error)
+	ReadProcess(context.Context, *connect.Request[v1alpha1.ReadProcessRequest]) (*connect.Response[v1alpha1.ReadProcessResponse], error)
+	WriteProcess(context.Context, *connect.Request[v1alpha1.WriteProcessRequest]) (*connect.Response[v1alpha1.WriteProcessResponse], error)
+	KillProcess(context.Context, *connect.Request[v1alpha1.KillProcessRequest]) (*connect.Response[v1alpha1.KillProcessResponse], error)
 	Destroy(context.Context, *connect.Request[v1alpha1.DestroyRequest]) (*connect.Response[v1alpha1.DestroyResponse], error)
 	DeleteSnapshot(context.Context, *connect.Request[v1alpha1.DeleteSnapshotRequest]) (*connect.Response[v1alpha1.DeleteSnapshotResponse], error)
 }
@@ -135,6 +159,36 @@ func NewSandboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sandboxServiceMethods.ByName("Stats")),
 			connect.WithClientOptions(opts...),
 		),
+		startProcess: connect.NewClient[v1alpha1.StartProcessRequest, v1alpha1.StartProcessResponse](
+			httpClient,
+			baseURL+SandboxServiceStartProcessProcedure,
+			connect.WithSchema(sandboxServiceMethods.ByName("StartProcess")),
+			connect.WithClientOptions(opts...),
+		),
+		listProcesses: connect.NewClient[v1alpha1.ListProcessesRequest, v1alpha1.ListProcessesResponse](
+			httpClient,
+			baseURL+SandboxServiceListProcessesProcedure,
+			connect.WithSchema(sandboxServiceMethods.ByName("ListProcesses")),
+			connect.WithClientOptions(opts...),
+		),
+		readProcess: connect.NewClient[v1alpha1.ReadProcessRequest, v1alpha1.ReadProcessResponse](
+			httpClient,
+			baseURL+SandboxServiceReadProcessProcedure,
+			connect.WithSchema(sandboxServiceMethods.ByName("ReadProcess")),
+			connect.WithClientOptions(opts...),
+		),
+		writeProcess: connect.NewClient[v1alpha1.WriteProcessRequest, v1alpha1.WriteProcessResponse](
+			httpClient,
+			baseURL+SandboxServiceWriteProcessProcedure,
+			connect.WithSchema(sandboxServiceMethods.ByName("WriteProcess")),
+			connect.WithClientOptions(opts...),
+		),
+		killProcess: connect.NewClient[v1alpha1.KillProcessRequest, v1alpha1.KillProcessResponse](
+			httpClient,
+			baseURL+SandboxServiceKillProcessProcedure,
+			connect.WithSchema(sandboxServiceMethods.ByName("KillProcess")),
+			connect.WithClientOptions(opts...),
+		),
 		destroy: connect.NewClient[v1alpha1.DestroyRequest, v1alpha1.DestroyResponse](
 			httpClient,
 			baseURL+SandboxServiceDestroyProcedure,
@@ -160,6 +214,11 @@ type sandboxServiceClient struct {
 	snapshot       *connect.Client[v1alpha1.SnapshotRequest, v1alpha1.SnapshotResponse]
 	restore        *connect.Client[v1alpha1.RestoreRequest, v1alpha1.RestoreResponse]
 	stats          *connect.Client[v1alpha1.StatsRequest, v1alpha1.StatsResponse]
+	startProcess   *connect.Client[v1alpha1.StartProcessRequest, v1alpha1.StartProcessResponse]
+	listProcesses  *connect.Client[v1alpha1.ListProcessesRequest, v1alpha1.ListProcessesResponse]
+	readProcess    *connect.Client[v1alpha1.ReadProcessRequest, v1alpha1.ReadProcessResponse]
+	writeProcess   *connect.Client[v1alpha1.WriteProcessRequest, v1alpha1.WriteProcessResponse]
+	killProcess    *connect.Client[v1alpha1.KillProcessRequest, v1alpha1.KillProcessResponse]
 	destroy        *connect.Client[v1alpha1.DestroyRequest, v1alpha1.DestroyResponse]
 	deleteSnapshot *connect.Client[v1alpha1.DeleteSnapshotRequest, v1alpha1.DeleteSnapshotResponse]
 }
@@ -204,6 +263,31 @@ func (c *sandboxServiceClient) Stats(ctx context.Context, req *connect.Request[v
 	return c.stats.CallUnary(ctx, req)
 }
 
+// StartProcess calls evalsi.sandbox.v1alpha1.SandboxService.StartProcess.
+func (c *sandboxServiceClient) StartProcess(ctx context.Context, req *connect.Request[v1alpha1.StartProcessRequest]) (*connect.Response[v1alpha1.StartProcessResponse], error) {
+	return c.startProcess.CallUnary(ctx, req)
+}
+
+// ListProcesses calls evalsi.sandbox.v1alpha1.SandboxService.ListProcesses.
+func (c *sandboxServiceClient) ListProcesses(ctx context.Context, req *connect.Request[v1alpha1.ListProcessesRequest]) (*connect.Response[v1alpha1.ListProcessesResponse], error) {
+	return c.listProcesses.CallUnary(ctx, req)
+}
+
+// ReadProcess calls evalsi.sandbox.v1alpha1.SandboxService.ReadProcess.
+func (c *sandboxServiceClient) ReadProcess(ctx context.Context, req *connect.Request[v1alpha1.ReadProcessRequest]) (*connect.Response[v1alpha1.ReadProcessResponse], error) {
+	return c.readProcess.CallUnary(ctx, req)
+}
+
+// WriteProcess calls evalsi.sandbox.v1alpha1.SandboxService.WriteProcess.
+func (c *sandboxServiceClient) WriteProcess(ctx context.Context, req *connect.Request[v1alpha1.WriteProcessRequest]) (*connect.Response[v1alpha1.WriteProcessResponse], error) {
+	return c.writeProcess.CallUnary(ctx, req)
+}
+
+// KillProcess calls evalsi.sandbox.v1alpha1.SandboxService.KillProcess.
+func (c *sandboxServiceClient) KillProcess(ctx context.Context, req *connect.Request[v1alpha1.KillProcessRequest]) (*connect.Response[v1alpha1.KillProcessResponse], error) {
+	return c.killProcess.CallUnary(ctx, req)
+}
+
 // Destroy calls evalsi.sandbox.v1alpha1.SandboxService.Destroy.
 func (c *sandboxServiceClient) Destroy(ctx context.Context, req *connect.Request[v1alpha1.DestroyRequest]) (*connect.Response[v1alpha1.DestroyResponse], error) {
 	return c.destroy.CallUnary(ctx, req)
@@ -228,6 +312,15 @@ type SandboxServiceHandler interface {
 	Restore(context.Context, *connect.Request[v1alpha1.RestoreRequest]) (*connect.Response[v1alpha1.RestoreResponse], error)
 	// Resource use and the egress log, which safety evaluators use as evidence.
 	Stats(context.Context, *connect.Request[v1alpha1.StatsRequest]) (*connect.Response[v1alpha1.StatsResponse], error)
+	// Background processes: a command that outlives the call that started it,
+	// in the same sandbox and under the same confinement and limits as Exec.
+	// Output is kept in bounded buffers and read by offset. They are killed
+	// when the sandbox is destroyed.
+	StartProcess(context.Context, *connect.Request[v1alpha1.StartProcessRequest]) (*connect.Response[v1alpha1.StartProcessResponse], error)
+	ListProcesses(context.Context, *connect.Request[v1alpha1.ListProcessesRequest]) (*connect.Response[v1alpha1.ListProcessesResponse], error)
+	ReadProcess(context.Context, *connect.Request[v1alpha1.ReadProcessRequest]) (*connect.Response[v1alpha1.ReadProcessResponse], error)
+	WriteProcess(context.Context, *connect.Request[v1alpha1.WriteProcessRequest]) (*connect.Response[v1alpha1.WriteProcessResponse], error)
+	KillProcess(context.Context, *connect.Request[v1alpha1.KillProcessRequest]) (*connect.Response[v1alpha1.KillProcessResponse], error)
 	Destroy(context.Context, *connect.Request[v1alpha1.DestroyRequest]) (*connect.Response[v1alpha1.DestroyResponse], error)
 	DeleteSnapshot(context.Context, *connect.Request[v1alpha1.DeleteSnapshotRequest]) (*connect.Response[v1alpha1.DeleteSnapshotResponse], error)
 }
@@ -287,6 +380,36 @@ func NewSandboxServiceHandler(svc SandboxServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sandboxServiceMethods.ByName("Stats")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sandboxServiceStartProcessHandler := connect.NewUnaryHandler(
+		SandboxServiceStartProcessProcedure,
+		svc.StartProcess,
+		connect.WithSchema(sandboxServiceMethods.ByName("StartProcess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sandboxServiceListProcessesHandler := connect.NewUnaryHandler(
+		SandboxServiceListProcessesProcedure,
+		svc.ListProcesses,
+		connect.WithSchema(sandboxServiceMethods.ByName("ListProcesses")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sandboxServiceReadProcessHandler := connect.NewUnaryHandler(
+		SandboxServiceReadProcessProcedure,
+		svc.ReadProcess,
+		connect.WithSchema(sandboxServiceMethods.ByName("ReadProcess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sandboxServiceWriteProcessHandler := connect.NewUnaryHandler(
+		SandboxServiceWriteProcessProcedure,
+		svc.WriteProcess,
+		connect.WithSchema(sandboxServiceMethods.ByName("WriteProcess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	sandboxServiceKillProcessHandler := connect.NewUnaryHandler(
+		SandboxServiceKillProcessProcedure,
+		svc.KillProcess,
+		connect.WithSchema(sandboxServiceMethods.ByName("KillProcess")),
+		connect.WithHandlerOptions(opts...),
+	)
 	sandboxServiceDestroyHandler := connect.NewUnaryHandler(
 		SandboxServiceDestroyProcedure,
 		svc.Destroy,
@@ -317,6 +440,16 @@ func NewSandboxServiceHandler(svc SandboxServiceHandler, opts ...connect.Handler
 			sandboxServiceRestoreHandler.ServeHTTP(w, r)
 		case SandboxServiceStatsProcedure:
 			sandboxServiceStatsHandler.ServeHTTP(w, r)
+		case SandboxServiceStartProcessProcedure:
+			sandboxServiceStartProcessHandler.ServeHTTP(w, r)
+		case SandboxServiceListProcessesProcedure:
+			sandboxServiceListProcessesHandler.ServeHTTP(w, r)
+		case SandboxServiceReadProcessProcedure:
+			sandboxServiceReadProcessHandler.ServeHTTP(w, r)
+		case SandboxServiceWriteProcessProcedure:
+			sandboxServiceWriteProcessHandler.ServeHTTP(w, r)
+		case SandboxServiceKillProcessProcedure:
+			sandboxServiceKillProcessHandler.ServeHTTP(w, r)
 		case SandboxServiceDestroyProcedure:
 			sandboxServiceDestroyHandler.ServeHTTP(w, r)
 		case SandboxServiceDeleteSnapshotProcedure:
@@ -360,6 +493,26 @@ func (UnimplementedSandboxServiceHandler) Restore(context.Context, *connect.Requ
 
 func (UnimplementedSandboxServiceHandler) Stats(context.Context, *connect.Request[v1alpha1.StatsRequest]) (*connect.Response[v1alpha1.StatsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.sandbox.v1alpha1.SandboxService.Stats is not implemented"))
+}
+
+func (UnimplementedSandboxServiceHandler) StartProcess(context.Context, *connect.Request[v1alpha1.StartProcessRequest]) (*connect.Response[v1alpha1.StartProcessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.sandbox.v1alpha1.SandboxService.StartProcess is not implemented"))
+}
+
+func (UnimplementedSandboxServiceHandler) ListProcesses(context.Context, *connect.Request[v1alpha1.ListProcessesRequest]) (*connect.Response[v1alpha1.ListProcessesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.sandbox.v1alpha1.SandboxService.ListProcesses is not implemented"))
+}
+
+func (UnimplementedSandboxServiceHandler) ReadProcess(context.Context, *connect.Request[v1alpha1.ReadProcessRequest]) (*connect.Response[v1alpha1.ReadProcessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.sandbox.v1alpha1.SandboxService.ReadProcess is not implemented"))
+}
+
+func (UnimplementedSandboxServiceHandler) WriteProcess(context.Context, *connect.Request[v1alpha1.WriteProcessRequest]) (*connect.Response[v1alpha1.WriteProcessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.sandbox.v1alpha1.SandboxService.WriteProcess is not implemented"))
+}
+
+func (UnimplementedSandboxServiceHandler) KillProcess(context.Context, *connect.Request[v1alpha1.KillProcessRequest]) (*connect.Response[v1alpha1.KillProcessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.sandbox.v1alpha1.SandboxService.KillProcess is not implemented"))
 }
 
 func (UnimplementedSandboxServiceHandler) Destroy(context.Context, *connect.Request[v1alpha1.DestroyRequest]) (*connect.Response[v1alpha1.DestroyResponse], error) {

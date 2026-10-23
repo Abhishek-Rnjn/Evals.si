@@ -40,6 +40,7 @@ class AgentTarget(_message.Message):
     RESPONSES_FIELD_NUMBER: _builtins.int
     HTTP_FIELD_NUMBER: _builtins.int
     CLI_FIELD_NUMBER: _builtins.int
+    ACP_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def a2a(self) -> Global___A2AAgent: ...
     @_builtins.property
@@ -50,6 +51,8 @@ class AgentTarget(_message.Message):
     def http(self) -> Global___HTTPAgent: ...
     @_builtins.property
     def cli(self) -> Global___CLIAgent: ...
+    @_builtins.property
+    def acp(self) -> Global___ACPAgent: ...
     def __init__(
         self,
         *,
@@ -58,12 +61,13 @@ class AgentTarget(_message.Message):
         responses: Global___ResponsesAgent | None = ...,
         http: Global___HTTPAgent | None = ...,
         cli: Global___CLIAgent | None = ...,
+        acp: Global___ACPAgent | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "acp", b"acp", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "acp", b"acp", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_kind: _TypeAlias = _typing.Literal["a2a", "mcp", "responses", "http", "cli"]  # noqa: Y015
+    _WhichOneofReturnType_kind: _TypeAlias = _typing.Literal["a2a", "mcp", "responses", "http", "cli", "acp"]  # noqa: Y015
     _WhichOneofArgType_kind: _TypeAlias = _typing.Literal["kind", b"kind"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType_kind) -> _WhichOneofReturnType_kind | None: ...
 
@@ -97,6 +101,9 @@ class A2AAgent(_message.Message):
     TIMEOUT_FIELD_NUMBER: _builtins.int
     STREAM_FIELD_NUMBER: _builtins.int
     BINDING_FIELD_NUMBER: _builtins.int
+    PUSH_NOTIFICATIONS_FIELD_NUMBER: _builtins.int
+    PUSH_URL_FIELD_NUMBER: _builtins.int
+    PUSH_PORT_FIELD_NUMBER: _builtins.int
     url: _builtins.str
     stream: _builtins.bool
     """Use message/stream (server-sent events) instead of message/send and
@@ -108,6 +115,22 @@ class A2AAgent(_message.Message):
     binding of A2A 0.3, where url is the interface's base URL and the calls
     are POST {url}/v1/message:send, POST {url}/v1/message:stream and
     GET {url}/v1/tasks/{id}.
+    """
+    push_notifications: _builtins.bool
+    """Ask the agent to push task updates to a webhook the harness runs, with
+    pushNotificationConfig on the request, instead of holding a stream open
+    or polling. Each task state the agent pushes becomes a step. The agent's
+    card must declare pushNotifications; if no update arrives within the
+    timeout, the harness falls back to polling (tasks/get). Used instead of
+    stream when both are set.
+    """
+    push_url: _builtins.str
+    """The base URL the agent reaches the harness's receiver at. Default
+    http://127.0.0.1:<port>, which only suits an agent on the worker's host.
+    """
+    push_port: _builtins.int
+    """The local port the receiver binds (on all interfaces when push_url is
+    set, loopback otherwise); 0 picks a free one.
     """
     @_builtins.property
     def headers_env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
@@ -125,10 +148,13 @@ class A2AAgent(_message.Message):
         timeout: _duration_pb2.Duration | None = ...,
         stream: _builtins.bool = ...,
         binding: _builtins.str = ...,
+        push_notifications: _builtins.bool = ...,
+        push_url: _builtins.str = ...,
+        push_port: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["binding", b"binding", "headers_env", b"headers_env", "stream", b"stream", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["binding", b"binding", "headers_env", b"headers_env", "push_notifications", b"push_notifications", "push_port", b"push_port", "push_url", b"push_url", "stream", b"stream", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___A2AAgent: _TypeAlias = A2AAgent  # noqa: Y015
@@ -399,6 +425,92 @@ class CLIAgent(_message.Message):
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CLIAgent: _TypeAlias = CLIAgent  # noqa: Y015
+
+@_typing.final
+class ACPAgent(_message.Message):
+    """An agent that speaks the Agent Client Protocol (ACP, protocol version 1):
+    JSON-RPC over the stdio of a command run inside the task's sandbox, in its
+    workdir. The harness is the client: it creates a session, sends the
+    instruction as a prompt, turns session/update notifications into steps, and
+    serves the agent's requests (file reads and writes in the sandbox,
+    terminals, permission requests). Permission requests are decided by
+    approval, with the semantics of the built-in ApprovalGate hook, and
+    recorded as hitl_request and hitl_resolved steps and policy events.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class EnvFromEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    COMMAND_FIELD_NUMBER: _builtins.int
+    INSTALL_FIELD_NUMBER: _builtins.int
+    ENV_FROM_FIELD_NUMBER: _builtins.int
+    ALLOW_HOSTS_FIELD_NUMBER: _builtins.int
+    TIMEOUT_FIELD_NUMBER: _builtins.int
+    APPROVAL_FIELD_NUMBER: _builtins.int
+    TERMINALS_FIELD_NUMBER: _builtins.int
+    terminals: _builtins.bool
+    """Offer the agent terminal/* (commands the agent runs through the
+    harness, as background processes in the sandbox). Off by default.
+    """
+    @_builtins.property
+    def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def install(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Commands run once in the environment before the agent (installing it)."""
+
+    @_builtins.property
+    def env_from(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Variable in the sandbox -> variable on the worker it is copied from."""
+
+    @_builtins.property
+    def allow_hosts(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Hosts the agent may reach (its model API), through the egress proxy."""
+
+    @_builtins.property
+    def timeout(self) -> _duration_pb2.Duration:
+        """For the whole conversation; default 10 minutes."""
+
+    @_builtins.property
+    def approval(self) -> _struct_pb2.Struct:
+        """Answers permission requests, in the shape of the ApprovalGate hook's
+        config: rules (tool, path, command globs and an action of allow, ask or
+        deny) and an approver script with a default. A request no rule matches
+        is allowed; an "ask" goes to the approver, whose default is deny.
+        """
+
+    def __init__(
+        self,
+        *,
+        command: _abc.Iterable[_builtins.str] | None = ...,
+        install: _abc.Iterable[_builtins.str] | None = ...,
+        env_from: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        allow_hosts: _abc.Iterable[_builtins.str] | None = ...,
+        timeout: _duration_pb2.Duration | None = ...,
+        approval: _struct_pb2.Struct | None = ...,
+        terminals: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["approval", b"approval", "timeout", b"timeout"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["allow_hosts", b"allow_hosts", "approval", b"approval", "command", b"command", "env_from", b"env_from", "install", b"install", "terminals", b"terminals", "timeout", b"timeout"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ACPAgent: _TypeAlias = ACPAgent  # noqa: Y015
 
 @_typing.final
 class Harness(_message.Message):

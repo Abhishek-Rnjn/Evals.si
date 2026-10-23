@@ -12,6 +12,11 @@ service GuestAgentService {
   rpc Health(HealthRequest) returns (HealthResponse);
   // Streams output as it is produced, then one result.
   rpc Exec(ExecRequest) returns (stream ExecResponse);
+  // Exec with a stdin that stays open: the first message starts the command
+  // (ExecRequest.stdin is ignored), later ones write to its stdin or close
+  // it. Output and the result stream back as for Exec. Ending the call
+  // kills the command, which is how a background process is stopped.
+  rpc ExecInteractive(stream ExecInteractiveRequest) returns (stream ExecInteractiveResponse);
   rpc WriteFiles(WriteFilesRequest) returns (WriteFilesResponse);
   rpc ReadFiles(ReadFilesRequest) returns (ReadFilesResponse);
   // After a snapshot restore: new entropy and the host's clock, so clones
@@ -45,6 +50,23 @@ message ExecRequest {
   google.protobuf.Duration timeout = 5;
   int32 output_limit_bytes = 6;
   Limits limits = 7;
+}
+
+message ExecInteractiveRequest {
+  oneof event {
+    ExecRequest start = 1;
+    bytes stdin = 2;
+    // Close the command's stdin.
+    bool close_stdin = 3;
+  }
+}
+
+message ExecInteractiveResponse {
+  oneof event {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    ExecResult result = 3;
+  }
 }
 
 message ExecResult {

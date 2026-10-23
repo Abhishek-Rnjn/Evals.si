@@ -12,7 +12,7 @@ import inspect
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Any
 
@@ -720,7 +720,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     run_file = load_spec(args.file)
     if args.server:
+        if run_file.spec.HasField("sweep"):
+            return _sweep_on_server(args, run_file)
         return _run_on_server(args, run_file)
+    if run_file.spec.HasField("sweep"):
+        print(
+            "error: spec.sweep expands on the server: use --server (or run the variants "
+            "yourself, one --output each, and compare them with `evalsi matrix`)",
+            file=sys.stderr,
+        )
+        return 2
 
     import asyncio
 
@@ -913,6 +922,73 @@ def _cmd_gate(args: argparse.Namespace) -> int:
         idempotency_key=gate_key(run_file.project, run_file.name, args.release),
         release=args.release,
     )
+
+
+def _sweep_on_server(args: argparse.Namespace, run_file: Any) -> int:
+    """A spec with ``sweep``: the server stores one run per harness variant. Wait for
+    them all and print one row per variant and metric, so configurations read like
+    models do in a matrix."""
+    from evalsi.client import ServerError
+    from evalsi.runspec import spec_to_dict
+
+    with server_client(args) as client:
+        try:
+            runs = client.create_sweep(
+                spec_to_dict(run_file.spec),
+                name=run_file.name,
+                project=run_file.project,
+                labels=run_file.labels,
+            )
+            if args.no_wait:
+                for run in runs:
+                    print(run["id"])
+                return 0
+            done = []
+            for first in runs:
+                latest = first
+                for event in client.watch_run(first["id"]):
+                    if "run" in event:
+                        latest = event["run"]
+                done.append(latest)
+        except ServerError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+    if args.format == "json":
+        print(json.dumps(done, indent=2))
+    else:
+        print(sweep_table(done))
+    statuses = {r.get("status", "") for r in done}
+    if statuses == {"RUN_STATUS_SUCCEEDED"}:
+        return 0
+    return EXIT_GATES_FAILED if "RUN_STATUS_FAILED" in statuses else 1
+
+
+def sweep_table(runs: Sequence[Mapping[str, Any]]) -> str:
+    """One row per (variant, metric) with the mean and its interval; the first variant
+    is the baseline."""
+    rows = [("variant", "metric", "n", "mean", "95% interval", "status")]
+    for run in runs:
+        variant = str(run.get("labels", {}).get("evalsi.variant", run.get("name", "")))
+        status = str(run.get("status", "")).removeprefix("RUN_STATUS_").lower()
+        summaries = run.get("summaries") or [None]
+        for s in summaries:
+            if s is None:
+                rows.append((variant, "-", "-", "-", "-", status))
+                continue
+            summary = summary_from_json(s)
+            ci = summary.ci
+            rows.append(
+                (
+                    variant,
+                    summary.metric,
+                    str(summary.n),
+                    "-" if summary.mean is None else f"{summary.mean:.3f}",
+                    f"[{ci.low:.3f}, {ci.high:.3f}]" if ci else "-",
+                    status,
+                )
+            )
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    return "\n".join("  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)) for r in rows)
 
 
 def _run_on_server(

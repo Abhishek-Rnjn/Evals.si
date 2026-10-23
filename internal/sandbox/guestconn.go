@@ -5,6 +5,7 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -114,29 +115,36 @@ func (vm *guestConn) run(ctx context.Context, e *Exec, stdout, stderr io.Writer,
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout+30*time.Second)
 	defer cancel()
-	stream, err := vm.guest.Exec(ctx, connect.NewRequest(&guestv1alpha1.ExecRequest{
+	req := &guestv1alpha1.ExecRequest{
 		Command: e.Command, Stdin: e.Stdin, Env: vm.env(e), Cwd: cwd, Timeout: durationpb.New(timeout),
 		OutputLimitBytes: int32(e.OutputLimit), Limits: limits,
-	}))
-	if err != nil {
-		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: "guest agent: " + err.Error()}
 	}
-	defer stream.Close()
 	var result *guestv1alpha1.ExecResult
-	for stream.Receive() {
-		switch ev := stream.Msg().GetEvent().(type) {
-		case *guestv1alpha1.ExecResponse_Stdout:
-			_, _ = stdout.Write(ev.Stdout)
-		case *guestv1alpha1.ExecResponse_Stderr:
-			_, _ = stderr.Write(ev.Stderr)
-		case *guestv1alpha1.ExecResponse_Result:
-			result = ev.Result
+	var streamErr error
+	if e.StdinStream != nil {
+		result, streamErr = vm.runInteractive(ctx, req, e.StdinStream, stdout, stderr)
+	} else {
+		stream, err := vm.guest.Exec(ctx, connect.NewRequest(req))
+		if err != nil {
+			return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: "guest agent: " + err.Error()}
 		}
+		defer stream.Close()
+		for stream.Receive() {
+			switch ev := stream.Msg().GetEvent().(type) {
+			case *guestv1alpha1.ExecResponse_Stdout:
+				_, _ = stdout.Write(ev.Stdout)
+			case *guestv1alpha1.ExecResponse_Stderr:
+				_, _ = stderr.Write(ev.Stderr)
+			case *guestv1alpha1.ExecResponse_Result:
+				result = ev.Result
+			}
+		}
+		streamErr = stream.Err()
 	}
 	if result == nil {
 		msg := "the guest agent ended the command without a result"
-		if err := stream.Err(); err != nil {
-			msg = "guest agent: " + err.Error()
+		if streamErr != nil {
+			msg = "guest agent: " + streamErr.Error()
 		}
 		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: msg}
 	}
@@ -148,6 +156,63 @@ func (vm *guestConn) run(ctx context.Context, e *Exec, stdout, stderr io.Writer,
 		res.Outcome, res.ExitCode, res.Error = OutcomeTimeout, -1, "timed out after "+timeout.String()
 	}
 	return res
+}
+
+// runInteractive runs a command through ExecInteractive, copying stdin (the
+// read end of a pipe) to it until the pipe closes, which closes the command's
+// stdin. Cancelling ctx ends the call, and the guest kills the command.
+func (vm *guestConn) runInteractive(ctx context.Context, req *guestv1alpha1.ExecRequest, stdin io.Reader, stdout, stderr io.Writer) (*guestv1alpha1.ExecResult, error) {
+	stream := vm.guest.ExecInteractive(ctx)
+	defer stream.CloseResponse()
+	if err := stream.Send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_Start{Start: req}}); err != nil {
+		return nil, err
+	}
+	go func() {
+		buf := make([]byte, 32<<10)
+		for {
+			n, err := stdin.Read(buf)
+			if n > 0 {
+				chunk := append([]byte(nil), buf[:n]...)
+				if stream.Send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_Stdin{Stdin: chunk}}) != nil {
+					return
+				}
+			}
+			if err != nil {
+				_ = stream.Send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_CloseStdin{CloseStdin: true}})
+				_ = stream.CloseRequest()
+				return
+			}
+		}
+	}()
+	// A cancelled call must not wait for the guest: closing both ends ends it.
+	finished := make(chan struct{})
+	defer close(finished)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = stream.CloseRequest()
+			_ = stream.CloseResponse()
+		case <-finished:
+		}
+	}()
+	var result *guestv1alpha1.ExecResult
+	for {
+		msg, err := stream.Receive()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				err = nil
+			}
+			return result, err
+		}
+		switch ev := msg.GetEvent().(type) {
+		case *guestv1alpha1.ExecInteractiveResponse_Stdout:
+			_, _ = stdout.Write(ev.Stdout)
+		case *guestv1alpha1.ExecInteractiveResponse_Stderr:
+			_, _ = stderr.Write(ev.Stderr)
+		case *guestv1alpha1.ExecInteractiveResponse_Result:
+			result = ev.Result
+		}
+	}
 }
 
 // guestPath maps a sandbox file path to an absolute guest path.

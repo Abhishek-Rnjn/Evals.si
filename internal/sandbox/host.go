@@ -187,7 +187,7 @@ func (b *hostBackend) exec(ctx context.Context, e *Exec, stdout, stderr io.Write
 		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: err.Error()}
 	}
 	sniff := &capped{limit: 64 << 10, keep: true}
-	res := b.sb.launch(ctx, spec, e.Stdin, e.Timeout, stdout, io.MultiWriter(stderr, sniff))
+	res := b.sb.launch(ctx, spec, e.stdin(), e.Timeout, stdout, io.MultiWriter(stderr, sniff))
 	classify(b.kind.name(), res, sniff.String())
 	return res
 }
