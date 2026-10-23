@@ -269,16 +269,17 @@ class BuiltinHarness:
         env = None
         if task.environment is not None:
             extra: list[str] = []
-            if _agent_kind(task) == "cli":
-                cli = task.spec.target.agent.cli
+            if _agent_kind(task) in ("cli", "acp"):
+                cli = getattr(task.spec.target.agent, _agent_kind(task))
                 extra = list(cli.allow_hosts)
                 task.environment.setup = [*task.environment.setup, *cli.install]
             env = await (await self._environments()).acquire(
                 task.environment, extra_allow_hosts=extra
             )
-        elif _agent_kind(task) == "cli":
+        elif _agent_kind(task) in ("cli", "acp"):
             raise TaskError(
-                "a CLI agent runs inside the task's sandbox, so the run needs an environment"
+                f"a {_agent_kind(task).upper()} agent runs inside the task's sandbox, "
+                "so the run needs an environment"
             )
         handle = secrets.token_hex(8)
         live = LiveTask(task, env)

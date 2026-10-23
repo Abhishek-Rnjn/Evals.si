@@ -227,6 +227,10 @@ class ProcessOutput:
     process: ProcessInfo
     stdout_dropped: int = 0
     stderr_dropped: int = 0
+    # The bytes behind ``stdout``, for a reader that must not split a UTF-8
+    # character across reads (``stdout`` decodes each read on its own).
+    stdout_raw: bytes = b""
+    stderr_raw: bytes = b""
 
 
 @dataclass
@@ -411,6 +415,8 @@ class Sandbox:
             process=ProcessInfo.from_proto(resp.process),
             stdout_dropped=resp.stdout_dropped,
             stderr_dropped=resp.stderr_dropped,
+            stdout_raw=bytes(resp.stdout),
+            stderr_raw=bytes(resp.stderr),
         )
 
     async def write_process(

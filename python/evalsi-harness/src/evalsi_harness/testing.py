@@ -302,6 +302,8 @@ class LocalSandbox:
             stdout_offset=stdout_offset + len(out),
             stderr_offset=stderr_offset + len(err),
             process=p.info(),
+            stdout_raw=out,
+            stderr_raw=err,
         )
 
     async def write_process(

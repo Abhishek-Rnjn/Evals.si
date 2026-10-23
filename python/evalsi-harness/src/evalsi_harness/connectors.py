@@ -1,5 +1,5 @@
-"""Bring-your-own agents: A2A, MCP, OpenAI Responses-compatible, HTTP and
-command-line agents run inside the task's sandbox.
+"""Bring-your-own agents: A2A, MCP, OpenAI Responses-compatible, HTTP,
+command-line and ACP (``acp.py``) agents run inside the task's sandbox.
 
 Every connector is a conversation: ``send`` gives the agent a user message
 and returns its reply with whatever trajectory the protocol exposes. A
@@ -1058,7 +1058,11 @@ def connector_for(task: Task, env: TaskEnvironment | None) -> RemoteAgent:
         return HTTPConnector(agent.http, task)
     if kind == "cli":
         return CLIConnector(agent.cli, env)
-    raise TaskError("target.agent needs one of a2a, mcp, responses, http or cli")
+    if kind == "acp":
+        from evalsi_harness.acp import ACPConnector
+
+        return ACPConnector(agent.acp, env)
+    raise TaskError("target.agent needs one of a2a, mcp, responses, http, cli or acp")
 
 
 async def drive_agent(

@@ -413,3 +413,29 @@ async def _background(rung: str) -> None:
 def test_a_background_process_survives_between_calls(config: Any, rung: str) -> None:
     config(rung)
     asyncio.run(_background(rung))
+
+
+@pytest.mark.parametrize("rung", RUNGS)
+def test_an_acp_agent_runs_over_stdio_in_the_pinned_rung(config: Any, rung: str) -> None:
+    """The ACP connector on a real rung: the agent's stdio is a background process of
+    the sandbox, and its file and terminal requests are served in the same sandbox."""
+    config(rung)
+    agent = (Path(__file__).parent / "fixtures" / "fake_acp_agent.py").read_text()
+    spec = spec_of(
+        {
+            "target": {"agent": {"acp": {"command": ["python3", "agent.py"], "terminals": True}}},
+            "environment": {
+                "files": {"agent.py": agent, "notes.txt": "hello notes\n"},
+                "sandbox": {"min_isolation": MIN_ISOLATION[rung]},
+            },
+        }
+    )
+    outcome = asyncio.run(_play(spec, rung))
+    assert outcome.error == "", outcome.error
+    ran_on(outcome, rung)
+    assert outcome.record is not None
+    assert outcome.record.output is not None
+    assert outcome.record.output.as_text().endswith("Done: wrote out.txt. café ✓")
+    tool = next(s for s in outcome.record.trajectory.steps if s.name == "Run tests")  # type: ignore[union-attr]
+    assert tool.output is not None
+    assert "terminal said 'from-terminal' exit 0" in tool.output.as_text()

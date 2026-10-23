@@ -26,7 +26,7 @@ class StepEvent:
 
 @dataclass
 class PolicyEvent:
-    # "denial", "egress_denied" or "escalation_request".
+    # "denial", "egress_denied", "escalation_request" or "acp_permission".
     kind: str
     detail: str
     granted: bool = False
