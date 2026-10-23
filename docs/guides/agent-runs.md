@@ -430,7 +430,12 @@ The multi-turn categories (`multi_turn_base`, `multi_turn_miss_func`, `multi_tur
 - BFCL's multi-turn checker grades every turn's end state and results.
 - A call runs only when it names a function offered at that step, with its JSON arguments as Python literals, because BFCL executes calls as code.
 
-Memory, web-search and format-sensitivity categories are not supported.
+The agentic categories use the same loop on one question and check the model's last message without tool calls against BFCL's expected answers (ignoring case and punctuation):
+
+- `web_search_base` and `web_search_no_snippet` give the model BFCL's search and page-fetch tools. They need `SERPAPI_API_KEY` and network access on the worker; `no_snippet` hides result snippets.
+- `memory_kv`, `memory_vector` and `memory_rec_sum` give it BFCL's memory tools for a scenario (student, customer, finance, healthcare or notetaker). Before the first question of a scenario, the harness replays BFCL's prerequisite conversations with the target model, which writes memory as it goes. This happens once per target model, backend and scenario in a harness process, and takes dozens of model calls. If it fails, every question of the scenario fails with that error, where BFCL would continue with empty memory. `memory_vector` loads a sentence-transformers model, downloaded on first use.
+
+Format-sensitivity categories are not supported. The memory and web-search paths are tested with a scripted model and, for web search, a canned search API; they have not been run against a live model or SerpAPI.
 
 ## From production to regression tests
 
