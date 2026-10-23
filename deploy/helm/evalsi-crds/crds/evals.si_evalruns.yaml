@@ -848,6 +848,10 @@ spec:
                         items:
                           type: string
                         type: array
+                      exclude:
+                        items:
+                          type: string
+                        type: array
                       files:
                         additionalProperties:
                           type: string
@@ -882,6 +886,75 @@ spec:
                     description: 'A duration: "250ms", "30s", "10m", "1.5h", or a
                       number of seconds.'
                     x-kubernetes-int-or-string: true
+                  copy_from:
+                    items:
+                      properties:
+                        destination:
+                          type: string
+                        source:
+                          type: string
+                        stage:
+                          type: string
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    type: array
+                  copyFrom:
+                    items:
+                      properties:
+                        destination:
+                          type: string
+                        source:
+                          type: string
+                        stage:
+                          type: string
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    type: array
+                  database:
+                    properties:
+                      assertions:
+                        items:
+                          properties:
+                            expect:
+                              x-kubernetes-preserve-unknown-fields: true
+                            name:
+                              type: string
+                            sql:
+                              type: string
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type: array
+                      schema:
+                        type: string
+                      seed:
+                        type: string
+                      tools:
+                        items:
+                          properties:
+                            description:
+                              type: string
+                            max_rows:
+                              type: integer
+                            maxRows:
+                              type: integer
+                            min_rows:
+                              type: integer
+                            minRows:
+                              type: integer
+                            mode:
+                              type: string
+                            name:
+                              type: string
+                            parameters:
+                              type: object
+                              x-kubernetes-preserve-unknown-fields: true
+                            sql:
+                              type: string
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        type: array
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   env:
                     additionalProperties:
                       type: string
@@ -935,6 +1008,10 @@ spec:
                   services:
                     items:
                       properties:
+                        aliases:
+                          items:
+                            type: string
+                          type: array
                         command:
                           items:
                             type: string
@@ -955,16 +1032,56 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        files:
+                          additionalProperties:
+                            type: string
+                          type: object
                         image:
                           type: string
+                        image_entrypoint:
+                          type: boolean
+                        imageEntrypoint:
+                          type: boolean
                         memory_mb:
                           type: integer
                         memoryMb:
                           type: integer
                         name:
                           type: string
+                        oneshot:
+                          type: boolean
                         port:
                           type: integer
+                        ports:
+                          items:
+                            type: integer
+                          type: array
+                        ready_command:
+                          items:
+                            type: string
+                          type: array
+                        readyCommand:
+                          items:
+                            type: string
+                          type: array
+                        setup:
+                          items:
+                            type: string
+                          type: array
+                        setup_network:
+                          type: string
+                        setupNetwork:
+                          type: string
+                        volumes:
+                          items:
+                            type: string
+                          type: array
+                        workdir:
+                          type: string
+                        workdir_mount:
+                          type: string
+                        workdirMount:
+                          type: string
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
                     type: array
@@ -992,6 +1109,56 @@ spec:
                     description: 'A duration: "250ms", "30s", "10m", "1.5h", or a
                       number of seconds.'
                     x-kubernetes-int-or-string: true
+                  stages:
+                    items:
+                      properties:
+                        copy_from:
+                          items:
+                            properties:
+                              destination:
+                                type: string
+                              source:
+                                type: string
+                              stage:
+                                type: string
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          type: array
+                        copyFrom:
+                          items:
+                            properties:
+                              destination:
+                                type: string
+                              source:
+                                type: string
+                              stage:
+                                type: string
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          type: array
+                        env:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        files:
+                          additionalProperties:
+                            type: string
+                          type: object
+                        image:
+                          type: string
+                        name:
+                          type: string
+                        setup:
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    type: array
+                  volumes:
+                    items:
+                      type: string
+                    type: array
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
               evaluators:
@@ -1111,7 +1278,13 @@ spec:
                               type: integer
                             atStep:
                               type: integer
+                            event:
+                              type: string
+                            match:
+                              type: string
                             message:
+                              type: string
+                            pattern:
                               type: string
                           type: object
                           x-kubernetes-preserve-unknown-fields: true
@@ -1395,6 +1568,14 @@ spec:
                             type: string
                           outputFormat:
                             type: string
+                          resume_command:
+                            items:
+                              type: string
+                            type: array
+                          resumeCommand:
+                            items:
+                              type: string
+                            type: array
                           timeout:
                             description: 'A duration: "250ms", "30s", "10m", "1.5h",
                               or a number of seconds.'

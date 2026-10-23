@@ -431,8 +431,9 @@ The adapter needs tau2's `data/` directory (`TAU2_DATA_DIR` or `data_dir=`). Use
 Both formats are read directly; no Docker daemon and no Harbor install are needed.
 
 - **The Dockerfile is translated, not built.** `FROM` is the image; `RUN` steps become the snapshotted setup, with `WORKDIR`, `ENV`, `ARG` and `SHELL` applied as Docker would; `COPY` and `ADD` of local files are placed in the image root. Binary files are carried base64-encoded and decoded in the sandbox.
-- **Refused, with the reason:** multi-stage builds, remote `ADD`, `RUN --mount`, tasks with several compose services, Harbor multi-step tasks, and verifiers that run in a separate environment.
-- **Coverage:** of Terminal-Bench 1's 241 tasks, 219 import.
+- **Multi-stage builds** are supported: the last stage is the image, and each earlier stage it copies from (`COPY --from=build`, or from another image such as `COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /bin/`) is built in a sandbox of its own and the named files are taken out (`stages` and `copy_from` in the environment, up to 256 MiB in all). A stage nothing copies from is never built; `COPY --from` of a glob is refused. `COPY <<EOT` heredocs, `ENTRYPOINT`/`CMD` (for services built from a Dockerfile), build args and `target` are handled too, and `RUN --mount=type=cache` is ignored.
+- **Refused, with the reason:** remote `ADD`, `FROM scratch`, `RUN --mount` of anything but a cache, Harbor multi-step tasks, verifiers that run in a separate environment, and the Compose settings listed in [the Compose section of the services example](../../examples/multi-service/README.md).
+- **Coverage:** of Terminal-Bench 1's 241 tasks (the pinned checkout `d28711d`), 240 import; `catch-me-if-you-can` starts a server in the agent's own container, which a sandbox that runs one command at a time cannot keep. Importing is not running: a task whose tests install packages needs them in the image, because a sandbox with services has no network.
 - **Prebuilt image:** `image=<ref>` replaces the translation. Use it when a task depends on the order of `COPY` and `RUN`, since copied files exist before the first `RUN`.
 - **Network:** a task's network setting is respected. Harbor's default is public, so `network=deny` tightens it.
 
@@ -546,7 +547,8 @@ state for every trial. Failed or restarted services are infrastructure errors.
 See the [API/Redis example](../../examples/multi-service/README.md) for a runnable
 spec, requirements, inspection and the supported Terminal-Bench Compose subset.
 This requires Kubernetes native sidecars and an enforced NetworkPolicy whose
-canary passes; other sandbox backends reject service tasks. The checker still
+canary passes, or the bubblewrap rung (see the example for what it adds and
+lacks); the Landlock and Firecracker rungs reject service tasks. The checker still
 runs in the agent's sandbox, as it does for existing task environments.
 
 ## Report score stability and plan trials
