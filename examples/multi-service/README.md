@@ -20,7 +20,7 @@ entrypoint. They inherit no agent environment or files.
 Requirements: Kubernetes 1.29+ with native sidecars enabled, matching upgraded
 server/workers/CRDs, the pod backend, `network_policy_enforced: true`, a passing
 network canary, and pool `POD_NAME`/`POD_UID` supplied by the chart/operator.
-The local or bubblewrap backend refuses this task. Pick `service_lifetime` to
+The local, Landlock and Firecracker backends refuse this task; the bubblewrap rung runs it too (below). Pick `service_lifetime` to
 cover image startup, setup, the agent and checker; the deadline terminates the
 whole pod. A service crash or restart is an infrastructure error.
 
@@ -40,13 +40,51 @@ an oracle `solution.sh`. Import it with
 It is a format fixture, not an upstream benchmark result. The supported
 multi-service Compose subset is:
 
-- `client`: only `build: .` and an optional `depends_on` list. The existing
-  Dockerfile translator prepares the agent image and workdir.
-- Services: `image`, explicit `entrypoint` argv, optional `command` argv,
-  string-valued `environment`, list `depends_on`, optional `expose` matching
-  the readiness port, and `x-evalsi: {port, memory_mb, cpu_millis}`.
-- No mounts, persistent volumes, privilege flags, published ports, custom
-  networks, sidecar builds, shell-form commands or Compose interpolation.
+- The agent's container is `client`, or the service whose image is
+  `${T_BENCH_TASK_DOCKER_CLIENT_IMAGE_NAME}`. Its build can be in any context
+  with any Dockerfile, build args and target; its `environment`, bind-mounted
+  files of the task and `extra_hosts` are kept, and its command may only idle
+  (or add host names with `echo '127.0.0.1 name' >> /etc/hosts`).
+- Services: `image` or `build`, `command` and `entrypoint` by Docker's rules,
+  `environment` and `env_file`, `depends_on` with `service_started`,
+  `service_healthy` and `service_completed_successfully`, `healthcheck` (the
+  readiness check), `ports`/`expose`, bind-mounted files of the task, named
+  volumes (shared between services, and with the client's workdir),
+  `working_dir`, `hostname`, `container_name`, `links`, `extra_hosts` to
+  loopback, `deploy`/`mem_limit`/`cpus`, and `$VAR`, `${VAR:-x}` interpolation
+  (an undefined variable is an error). A start command that installs packages
+  first (`sh -c "pip install x && python app.py"`) has the installs moved into
+  the service's setup (bubblewrap only), since a running service has no network.
+- Refused, with the reason: `privileged`, `cap_add`, `devices`, `network_mode`,
+  `pid`, `ipc`, `sysctls`; bind mounts of host paths outside the task;
+  `extends`, `profiles`, `configs`, `secrets`; services on networks that share
+  none; two services listening on one port (they share a loopback); a
+  multi-stage Dockerfile for a service; binary files bound into a service.
+  `restart`, `user`, `ulimits` and the like are dropped and listed in
+  `metadata.terminal_bench.compose_ignored`.
+
+## Services on the bubblewrap rung
+
+A sandbox with `services` on the bubblewrap rung (no cluster needed) is a
+process group on a private network: a holder process in new user and network
+namespaces has only loopback, and every service and every command the agent
+runs joins it through `nsenter` before its own bubblewrap sandbox starts.
+Services reach each other and the agent by name (a generated `/etc/hosts`
+maps names and aliases to loopback). Each service has a private copy of its
+image's root, its own environment and none of the agent's files or
+credentials; start order follows `depends_on`; a service is ready when its
+`ready_command` exits 0, or its port accepts a connection, or, with neither,
+when it has stayed up for a second; `oneshot` services must exit 0 first.
+Logs are the last 16 KiB per service (`services(include_logs=True)`).
+Memory, file size and processes are rlimits; `cpu_millis` is validated but not
+enforced. A service that exits, or whose `service_lifetime` ends, is an
+infrastructure error at the next command. Requirements: user namespaces,
+`nsenter` (util-linux), `network: deny` (the private network has no route
+out), and an image or none (the host's system directories, read-only). Not
+supported: snapshots of a sandbox with services, `allowlist` or `allow`
+networking, services that need to start as root (an image whose entrypoint
+drops privileges, such as `postgres`, may fail), and several services bound to
+the same port (e.g. three MinIO nodes on 9000).
 
 To run the standalone Kubernetes lifecycle check locally:
 

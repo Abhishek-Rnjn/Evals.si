@@ -439,3 +439,31 @@ def test_an_acp_agent_runs_over_stdio_in_the_pinned_rung(config: Any, rung: str)
     tool = next(s for s in outcome.record.trajectory.steps if s.name == "Run tests")  # type: ignore[union-attr]
     assert tool.output is not None
     assert "terminal said 'from-terminal' exit 0" in tool.output.as_text()
+
+
+DIFF_CHECK: dict[str, Any] = {"isolation": "diff", "protect": ["tests/**"]}
+REWRITE_TESTS = "printf 'print(1)\\n' > tests/test_calc.py"
+
+
+@pytest.mark.parametrize("rung", RUNGS)
+def test_diff_checking_passes_an_honest_fix_and_catches_edited_tests(
+    config: Any, rung: str
+) -> None:
+    """Grading the agent's diff in a fresh sandbox: the fix is applied, an edit to
+    the protected tests is rejected and recorded, and a shim never arrives."""
+    config(rung)
+    honest = play(f"{FIX}; {SHIM}", rung, checker={**DIFF_CHECK, "outputs": ["calc.py"]})
+    assert honest.error == "", honest.error
+    ran_on(honest, rung)
+    assert honest.record is not None
+    assert honest.record.check is not None
+    assert honest.record.check.passed
+    assert honest.record.metadata["checker_isolation"]["modified"] == ["calc.py"]
+    cheat = play(REWRITE_TESTS, rung, checker=DIFF_CHECK)
+    assert cheat.error == "", cheat.error
+    assert cheat.record is not None
+    assert cheat.record.check is not None
+    assert not cheat.record.check.passed
+    rejected = cheat.record.metadata["checker_isolation"]["rejected"]
+    assert [r["path"] for r in rejected] == ["tests/test_calc.py"]
+    assert "checker_diff_rejected" in [p["kind"] for p in cheat.record.metadata["policy_events"]]

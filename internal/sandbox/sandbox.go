@@ -457,10 +457,6 @@ func (s *Sandbox) pick(ctx context.Context, sp *Spec) (driver, error) {
 	want = max(want, s.min)
 	var reasons []string
 	for _, d := range s.drivers {
-		if len(sp.Services) > 0 && d.name() != "pod" {
-			reasons = append(reasons, d.name()+": services require the pod backend")
-			continue
-		}
 		if d.level() < want {
 			reasons = append(reasons, fmt.Sprintf("%s: level %s is below %s", d.name(), d.level(), want))
 			continue

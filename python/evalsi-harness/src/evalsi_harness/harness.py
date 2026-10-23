@@ -27,13 +27,15 @@ from evalsi.run import target_config
 from evalsi.sandbox import SandboxError
 from evalsi.types import TaskCheck
 from evalsi.v1alpha1 import agent_pb2
-from evalsi_harness import determinism, workspace
+from evalsi_harness import determinism, interject, workspace
 from evalsi_harness._version import __version__
 from evalsi_harness.browser import BrowserConfig, BrowserSession, browser_tools
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
 from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
 from evalsi_harness.desktop import Computer, DesktopConfig, XvfbDisplay, computer_tool
+from evalsi_harness.dbenv import Database, DatabaseTool
+from evalsi_harness.diffcheck import run_diff_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
 from evalsi_harness.hooks import Hooks, load_hooks
@@ -173,7 +175,7 @@ class LiveTask:
     # The checker's protected files as the trial began, and the policy events the
     # check produced (they arrive after the agent's stream has ended).
     protect: Baseline | None = None
-    late_events: list[PolicyEvent] = field(default_factory=list)
+    late_events: list[PolicyEvent | StepEvent] = field(default_factory=list)
     protect_result: dict[str, Any] = field(default_factory=dict)
     checker_isolation: dict[str, Any] = field(default_factory=dict)
     # Checker files that did not exist when the agent started (after the image and
@@ -186,6 +188,8 @@ class LiveTask:
     mcp_servers: list[tuple[str, Any]] = field(default_factory=list)
     # The files under metadata.grading.workspace.paths, for a judge (workspace.py).
     workspace_files: dict[str, Any] | None = None
+    # The task's SQLite tool environment, when it declares one (see dbenv.py).
+    db: Database | None = None
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
@@ -228,6 +232,13 @@ async def _absent(env: TaskEnvironment, paths: list[str]) -> list[str]:
         if result.exit_code == 1:
             out.append(path)
     return out
+
+
+def _closer(fn: Callable[[], None]) -> Callable[[], Awaitable[None]]:
+    async def close() -> None:
+        fn()
+
+    return close
 
 
 def _agent_kind(task: Task) -> str:
@@ -285,7 +296,7 @@ class BuiltinHarness:
 
     async def setup(self, task: Task) -> str:
         env = None
-        if task.environment is not None:
+        if task.environment is not None and task.environment.needs_sandbox:
             extra: list[str] = []
             if _agent_kind(task) in ("cli", "acp"):
                 cli = getattr(task.spec.target.agent, _agent_kind(task))
@@ -301,13 +312,27 @@ class BuiltinHarness:
             )
         handle = secrets.token_hex(8)
         live = LiveTask(task, env)
+        if task.environment is not None and task.environment.database is not None:
+            try:
+                live.db = Database(task.environment.database)
+            except Exception as exc:  # validated when the task was read; a failure is ours
+                self._live[handle] = live
+                await self.teardown(handle)
+                raise TaskError(f"environment.database: {exc}") from exc
+            live.closers.append(_closer(live.db.close))
         if env is not None:
             live.isolation = env.isolation.to_dict()
             live.closers.append(env.sandbox.destroy)
         self._live[handle] = live
         checker = task.environment.checker if task.environment else None
-        if env is not None and checker is not None and checker.protect:
-            # Per trial, after the environment's files and installs are in place.
+        if (
+            env is not None
+            and checker is not None
+            and checker.protect
+            and checker.isolation != "diff"
+        ):
+            # Per trial, after the environment's files and installs are in place. Diff
+            # isolation rejects protected paths from the diff instead.
             try:
                 live.protect = await Baseline.take(env, checker.protect, checker.on_change)
             except ProtectError as exc:
@@ -343,6 +368,7 @@ class BuiltinHarness:
                         queue.put_nowait,
                         timeout_s=self._wall_clock(),
                         user=self._user_simulator(live.task),
+                        interjections=self._parsed_interjections(),
                     )
                 else:
                     final = await self._run_loop(live, queue.put_nowait)
@@ -527,10 +553,19 @@ class BuiltinHarness:
         ]
         return {t.model: _doubled(t.max_tokens) for t in ordered}
 
+    def _parsed_interjections(self) -> list[interject.Interjection]:
+        try:
+            return interject.from_proto(self.config.interjections)
+        except ValueError as exc:
+            raise TaskError(f"harness.builtin.interjections: {exc}") from exc
+
     def _loop_config(self, live: LiveTask) -> LoopConfig:
         c = self.config
         system = self._system(live)
         cache = self._cache_prices(live)
+        parsed = self._parsed_interjections()
+        timed = [j for j in parsed if not j.timed_by_event]
+        events = [j for j in parsed if j.timed_by_event]
         return LoopConfig(
             max_steps=c.max_steps or 30,
             max_tokens=c.budget.tokens,
@@ -546,9 +581,8 @@ class BuiltinHarness:
             if "delegate" in self.config.tools.builtin
             else 0,
             context=self._context(live),
-            interjections=sorted(
-                ((j.at_step, j.message) for j in c.interjections), key=lambda j: j[0]
-            ),
+            interjections=sorted(((j.at_step, j.message) for j in timed), key=lambda j: j[0]),
+            event_interjections=events,
             cache_read_mult=cache.get("cache_read_mult", 1.0),
             cache_write_mult=cache.get("cache_write_mult", 1.0),
             model_prices={
@@ -561,6 +595,9 @@ class BuiltinHarness:
     async def _tools(self, live: LiveTask) -> list[Tool]:
         tools: list[Tool] = []
         cfg = self.config.tools
+        if live.db is not None and live.task.environment is not None:
+            assert live.task.environment.database is not None
+            tools += [DatabaseTool(live.db, t) for t in live.task.environment.database.tools]
         use_sandbox = cfg.sandbox if cfg.HasField("sandbox") else live.env is not None
         if use_sandbox:
             if live.env is None:
@@ -773,7 +810,10 @@ class BuiltinHarness:
                     **(
                         {
                             "interjections": [
-                                [j.at_step, j.message] for j in self.config.interjections
+                                [j.at_step, j.message, j.event, j.match, j.pattern]
+                                if j.event
+                                else [j.at_step, j.message]
+                                for j in self.config.interjections
                             ]
                         }
                         if self.config.interjections
@@ -802,7 +842,9 @@ class BuiltinHarness:
         return model
 
     def _reexecute_tool(self, live: LiveTask, tool: Tool) -> bool:
-        return tool.spec.name in {"bash", "write_file", *MUTATING}
+        return tool.spec.name in {"bash", "write_file", *MUTATING} or getattr(
+            tool, "reexecute", False
+        )
 
     async def _run_loop(self, live: LiveTask, emit: Callable[[Event], None]) -> FinalEvent:
         task = live.task
@@ -883,7 +925,6 @@ class BuiltinHarness:
 
     async def check(self, handle: str) -> TaskCheck | None:
         live = self._get(handle)
-        env_config = live.task.environment
         if live.env is not None:
             live.diff = await capture_diff(live.env)
             # Before the checker, which may change or remove the agent's files.
@@ -893,6 +934,32 @@ class BuiltinHarness:
                 raise TaskError(str(exc)) from exc
             if wanted:
                 live.workspace_files = await workspace.collect(live.env, wanted)
+        if live.db is not None:
+            return await self._check_database(live)
+        return await self._check_sandbox(live)
+
+    async def _check_database(self, live: LiveTask) -> TaskCheck | None:
+        """The database's assertions, and the sandbox checker too when the task has both."""
+        assert live.db is not None
+        check = live.db.check()
+        env_config = live.task.environment
+        if check.error or live.env is None or env_config is None or env_config.checker is None:
+            return check
+        sandbox = await self._check_sandbox(live)
+        if sandbox is None or sandbox.error:
+            return sandbox
+        score = None
+        if check.score is not None and sandbox.score is not None:
+            score = min(check.score, sandbox.score)
+        return TaskCheck(
+            passed=check.passed and sandbox.passed,
+            score=score,
+            tests={**check.tests, **sandbox.tests},
+            details="; ".join(d for d in (check.details, sandbox.details) if d),
+        )
+
+    async def _check_sandbox(self, live: LiveTask) -> TaskCheck | None:
+        env_config = live.task.environment
         if live.env is None or env_config is None or env_config.checker is None:
             return None
         parser = env_config.checker.parser
@@ -908,6 +975,13 @@ class BuiltinHarness:
             )
             live.checker_isolation = info
             return check
+        if env_config.checker.isolation == "diff":
+            graded = await run_diff_checker(
+                await self._environments(), live.env, env_config.checker, live.task
+            )
+            live.checker_isolation = graded.info
+            live.late_events.extend(graded.events)
+            return graded.check
         return await run_checker(live.env, env_config.checker, live.task)
 
     async def _protected(self, live: LiveTask) -> TaskCheck | None:
@@ -942,7 +1016,7 @@ class BuiltinHarness:
             | {p: "created" for p in changes.created},
         )
 
-    def late_events(self, handle: str) -> list[PolicyEvent]:
+    def late_events(self, handle: str) -> list[PolicyEvent | StepEvent]:
         """Policy events raised after the agent finished (by the check)."""
         return list(self._get(handle).late_events)
 
@@ -965,6 +1039,8 @@ class BuiltinHarness:
         out["determinism"] = self._determinism(live)
         if live.workspace_files is not None:
             out["workspace_files"] = live.workspace_files
+        if live.db is not None:
+            out["database"] = live.db.summary()
         return out
 
     def _determinism(self, live: LiveTask) -> dict[str, Any]:

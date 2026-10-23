@@ -376,7 +376,7 @@ class LocalSandbox:
 
     async def write_files(self, files: Mapping[str, bytes | str], mode: int = 0) -> None:
         for name, content in files.items():
-            path = self.root / name
+            path = self.root / name.lstrip("/")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode() if isinstance(content, str) else content)
             if mode:
@@ -385,7 +385,7 @@ class LocalSandbox:
     async def read_files(self, paths: Sequence[str], max_bytes: int = 0) -> dict[str, bytes]:
         out: dict[str, bytes] = {}
         for name in paths:
-            path = self.root / name
+            path = self.root / name.lstrip("/")
             if path.is_file():
                 out[name] = path.read_bytes()
             elif path.is_dir():

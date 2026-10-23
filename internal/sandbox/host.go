@@ -60,6 +60,8 @@ type hostBackend struct {
 	work  string
 	tmp   string
 	proxy *egressProxy
+	// The sandbox's services and their private network (bubblewrap only).
+	group *serviceGroup
 }
 
 func (p *processRung) open(ctx context.Context, sp *Spec, dir, from string) (backend, error) {
@@ -128,6 +130,21 @@ func (p *processRung) open(ctx context.Context, sp *Spec, dir, from string) (bac
 		}
 		b.proxy = proxy
 	}
+	if len(sp.Services) > 0 {
+		d, ok := p.kind.(*bwrapDriver)
+		if !ok {
+			return nil, errors.New("services are only supported on the bubblewrap and pod rungs")
+		}
+		if from != "" {
+			return nil, errors.New("a sandbox with services cannot be restored from a snapshot: service state is never kept")
+		}
+		g, err := newServiceGroup(ctx, b, d)
+		if err != nil {
+			_ = b.close()
+			return nil, err
+		}
+		b.group = g
+	}
 	return b, nil
 }
 
@@ -182,13 +199,31 @@ func (b *hostBackend) proxyAddrInside() string {
 }
 
 func (b *hostBackend) exec(ctx context.Context, e *Exec, stdout, stderr io.Writer) *ExecResult {
+	failure := func(err error) *ExecResult {
+		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: err.Error()}
+	}
+	if b.group != nil {
+		if err := b.group.check(); err != nil {
+			return failure(err)
+		}
+	}
 	spec, err := b.kind.launch(b, e)
 	if err != nil {
-		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: err.Error()}
+		return failure(err)
+	}
+	if b.group != nil {
+		// Join the services' network first; bubblewrap then keeps to it.
+		spec.Argv = append(b.group.holder.nsenterArgs(b.group.nsenter), spec.Argv...)
 	}
 	sniff := &capped{limit: 64 << 10, keep: true}
 	res := b.sb.launch(ctx, spec, e.stdin(), e.Timeout, stdout, io.MultiWriter(stderr, sniff))
 	classify(b.kind.name(), res, sniff.String())
+	if b.group != nil && res.Outcome != OutcomeRunnerFailure {
+		// A crashed service is an infrastructure failure, never the command's score.
+		if err := b.group.check(); err != nil {
+			return failure(err)
+		}
+	}
 	return res
 }
 
@@ -339,6 +374,9 @@ func readOne(root *os.Root, rel, name string, maxBytes int64, total *int64, out 
 }
 
 func (b *hostBackend) snapshot(ctx context.Context, dir string) error {
+	if b.group != nil {
+		return errors.New("a sandbox with services cannot be snapshotted: service state is never kept")
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -356,6 +394,9 @@ func (b *hostBackend) egress() []EgressEvent {
 }
 
 func (b *hostBackend) close() error {
+	if b.group != nil {
+		b.group.close()
+	}
 	if b.proxy != nil {
 		b.proxy.Close()
 	}

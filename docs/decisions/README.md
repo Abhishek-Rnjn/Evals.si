@@ -37,6 +37,9 @@ Short records of decisions that shape the code. Each one says what was decided, 
 | [0031](0031-evaluator-calibration.md) | Pinned human-labelled evaluator validation, isolated tuning and held-out scoring, uncached repeatability and group uncertainty | Accepted, implemented (unreleased) |
 | [0038](0038-quality-scores-for-routing.md) | Per-group quality report (JSON endpoint and Prometheus gauges) from stored online scores, for routing decisions made outside Evals.si | Accepted, implemented (unreleased) |
 | [0037](0037-online-sandbox-time-quota.md) | Sandbox-time quota also meters online policies, guardrail checks, Wasm evaluators and reward rollouts, refusing new work when a project is at its quota | Accepted, implemented (unreleased) |
+| [0032](0032-browser-desktop-and-image-results.md) | Browser and desktop tools on the harness host, images on tool results and steps, trust gate for restricted workers | Accepted, implemented (unreleased) |
+| [0034](0034-database-tool-environment.md) | A database-backed tool environment (SQLite SQL tools and final-state assertions) declared in the task spec | Accepted, implemented (unreleased) |
+| [0035](0035-service-groups-on-bubblewrap-and-broader-compose.md) | Service groups on bubblewrap through a shared network namespace, a broader Compose importer, multi-stage builds | Accepted, implemented (unreleased) |
 | [0036](0036-shared-rate-limits.md) | Opt-in rate limits shared across replicas through database windows synced off the request path, per-replica fallback, live reload of rates | Accepted, implemented (unreleased) |
 
 | [0030](0030-browser-release-workbench.md) | Browser release configuration and reviewed pins over existing services; trial-correct, read-only paired case investigation | Implemented, unreleased |

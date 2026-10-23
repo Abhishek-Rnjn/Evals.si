@@ -452,8 +452,11 @@ type SandboxSpec struct {
 	ReadOnlyRoot    bool                           `protobuf:"varint,10,opt,name=read_only_root,json=readOnlyRoot,proto3" json:"read_only_root,omitempty"`
 	Services        []*v1alpha1.EnvironmentService `protobuf:"bytes,11,rep,name=services,proto3" json:"services,omitempty"`
 	ServiceLifetime *durationpb.Duration           `protobuf:"bytes,12,opt,name=service_lifetime,json=serviceLifetime,proto3" json:"service_lifetime,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Bubblewrap services only: named volumes of this sandbox shared with the
+	// services that name them, "name:/path" or "name:/path:ro".
+	Volumes       []string `protobuf:"bytes,13,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SandboxSpec) Reset() {
@@ -566,6 +569,13 @@ func (x *SandboxSpec) GetServices() []*v1alpha1.EnvironmentService {
 func (x *SandboxSpec) GetServiceLifetime() *durationpb.Duration {
 	if x != nil {
 		return x.ServiceLifetime
+	}
+	return nil
+}
+
+func (x *SandboxSpec) GetVolumes() []string {
+	if x != nil {
+		return x.Volumes
 	}
 	return nil
 }
@@ -2610,7 +2620,7 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\tmax_procs\x18\x02 \x01(\x05R\bmaxProcs\x12\x1e\n" +
 	"\vmax_file_mb\x18\x03 \x01(\x05R\tmaxFileMb\x12\x1f\n" +
 	"\vcpu_seconds\x18\x04 \x01(\x05R\n" +
-	"cpuSeconds\"\xdf\x05\n" +
+	"cpuSeconds\"\xf9\x05\n" +
 	"\vSandboxSpec\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12#\n" +
 	"\rmin_isolation\x18\x02 \x01(\tR\fminIsolation\x12\x12\n" +
@@ -2624,7 +2634,8 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\x0eread_only_root\x18\n" +
 	" \x01(\bR\freadOnlyRoot\x12?\n" +
 	"\bservices\x18\v \x03(\v2#.evalsi.v1alpha1.EnvironmentServiceR\bservices\x12D\n" +
-	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x1a6\n" +
+	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x12\x18\n" +
+	"\avolumes\x18\r \x03(\tR\avolumes\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a8\n" +

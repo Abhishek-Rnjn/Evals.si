@@ -27,6 +27,7 @@ from evalsi_harness.context import (
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
 from evalsi_harness.evidence import EvidenceState, EvidenceTool
 from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
+from evalsi_harness.interject import Interjection, call_matches
 from evalsi_harness.models import (
     OWN_BLOCKS,
     ChatModel,
@@ -83,6 +84,8 @@ class LoopConfig:
     context: ContextConfig = field(default_factory=ContextConfig)
     # Scripted user messages, (after this many model calls, text), in order.
     interjections: list[tuple[int, str]] = field(default_factory=list)
+    # The same, timed by an event (a tool call, a file write, an attempt to stop).
+    event_interjections: list[Interjection] = field(default_factory=list)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
     # A turn paused by the provider (Anthropic's pause_turn, a server tool loop at
@@ -169,6 +172,9 @@ class AgentLoop:
         self.hooks = hooks or Hooks()
         self.stop_continues = 0
         self.delivered: list[str] = []
+        self._timed_delivered = 0  # of config.interjections, which are in order
+        self._fired: set[int] = set()  # of config.event_interjections, delivered
+        self._triggered: list[tuple[int, str]] = []  # (index, why), due next call
         # fresh-rounds: reads the notes a round leaves for the next.
         self.progress = progress
         self._round_start = 0
@@ -274,7 +280,11 @@ class AgentLoop:
                     if len(self.state.spend) > 1
                     else {}
                 ),
-                **({"interjections": len(self.delivered)} if self.config.interjections else {}),
+                **(
+                    {"interjections": len(self.delivered)}
+                    if self.config.interjections or self.config.event_interjections
+                    else {}
+                ),
                 # What the model was shown, by the rule its requests use.
                 "tools_offered": sorted({t.name for t in self._specs()}),
                 **(
@@ -483,7 +493,7 @@ class AgentLoop:
             if turn.tool_calls:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
-            if self._interject(messages):
+            if self._interject(messages, stopping=True):
                 continue  # a message came in while the agent was working: it reads it
             if self.user is None:
                 final = await self._finish(turn.text, messages)
@@ -512,32 +522,75 @@ class AgentLoop:
             messages.append({"role": "user", "content": reply.message})
             self.archive.add(messages[-1])
 
-    def _interject(self, messages: list[dict[str, Any]]) -> bool:
-        """Deliver the scripted user messages that are due, in order. True if any were."""
+    def _interject(self, messages: list[dict[str, Any]], *, stopping: bool = False) -> bool:
+        """Deliver the scripted user messages that are due, in order: those timed by a
+        step count, then those an event triggered. ``stopping``: the agent is trying to
+        finish, which is the event a ``stop`` interjection waits for. True if any were."""
         sent = False
         due = self.config.interjections
-        while len(self.delivered) < len(due) and due[len(self.delivered)][0] <= self.state.steps:
-            at_step, text = due[len(self.delivered)]
-            self.delivered.append(text)
-            messages.append({"role": "user", "content": text})
-            self.archive.add(messages[-1])
-            self.emit(
-                StepEvent(
-                    Step(
-                        type="user",
-                        name="user-interjection",
-                        output=Content(text=text),
-                        span_id=span_id(),
-                        parent_span_id=self.root,
-                        attributes={
-                            "evalsi.interjection.at_step": at_step,
-                            "evalsi.interjection.delivered_at": self.state.steps,
-                        },
-                    )
-                )
+        while (
+            self._timed_delivered < len(due) and due[self._timed_delivered][0] <= self.state.steps
+        ):
+            at_step, text = due[self._timed_delivered]
+            self._timed_delivered += 1
+            self._deliver(messages, text, {"evalsi.interjection.at_step": at_step})
+            sent = True
+        if stopping:
+            for i, j in enumerate(self.config.event_interjections):
+                if j.on == "stop" and i not in self._fired and self.state.steps >= j.at_step:
+                    self._triggered.append((i, "the agent tried to finish"))
+        for i, why in self._triggered:
+            j = self.config.event_interjections[i]
+            if i in self._fired:
+                continue
+            self._fired.add(i)
+            self._deliver(
+                messages,
+                j.message,
+                {
+                    "evalsi.interjection.on": j.on,
+                    "evalsi.interjection.trigger": why,
+                    **({"evalsi.interjection.at_step": j.at_step} if j.at_step else {}),
+                },
             )
             sent = True
+        self._triggered = []
         return sent
+
+    def _deliver(
+        self, messages: list[dict[str, Any]], text: str, attributes: dict[str, Any]
+    ) -> None:
+        self.delivered.append(text)
+        messages.append({"role": "user", "content": text})
+        self.archive.add(messages[-1])
+        self.emit(
+            StepEvent(
+                Step(
+                    type="user",
+                    name="user-interjection",
+                    output=Content(text=text),
+                    span_id=span_id(),
+                    parent_span_id=self.root,
+                    attributes={
+                        **attributes,
+                        "evalsi.interjection.delivered_at": self.state.steps,
+                    },
+                )
+            )
+        )
+
+    def _watch_call(self, call: ToolCallRequest, result: ToolResult) -> None:
+        """Note the event interjections a finished tool call triggers. A failed call
+        changed nothing and does not count as a file write."""
+        for i, j in enumerate(self.config.event_interjections):
+            if j.on == "stop" or i in self._fired or any(i == t for t, _ in self._triggered):
+                continue
+            if self.state.steps < j.at_step:
+                continue
+            if j.on == "file_write" and result.is_error:
+                continue
+            if call_matches(j, call.name, call.arguments):
+                self._triggered.append((i, f"{call.name} {j.on.replace('_', ' ')}"))
 
     def _interjection_reminder(self) -> list[dict[str, Any]]:
         """With a context strategy, history can be cleared or summarized, and the user's
@@ -721,6 +774,7 @@ class AgentLoop:
             self.state.tool_calls += 1
             self.emit(StepEvent(step))
             self._emit_images(step, result)
+            self._watch_call(call, result)
             messages.append(
                 {
                     "role": "tool",

@@ -60,16 +60,40 @@ class SnapshotsUnsupported(SandboxError):
 
 @dataclass
 class ServiceSpec:
-    """Private per-trial pod sidecar. Limits and a TCP readiness port are required."""
+    """A private per-trial service: a pod sidecar, or a process group on bubblewrap.
+
+    Limits and a TCP readiness port are required (a ``oneshot`` service has no port).
+    The fields after ``depends_on`` are for the bubblewrap rung; the pod rung refuses
+    them (``ports`` and ``aliases`` it takes) rather than ignoring them."""
 
     name: str
     image: str
     command: list[str]
-    port: int
     memory_mb: int
     cpu_millis: int
+    port: int = 0
     env: dict[str, str] = field(default_factory=dict)
     depends_on: list[str] = field(default_factory=list)
+    # More ports the service listens on, and more host names for it.
+    ports: list[int] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
+    # A readiness check run in the service (exit 0: ready), instead of a TCP connect to port.
+    ready_command: list[str] = field(default_factory=list)
+    # Files placed in the service's filesystem before it starts, and commands run once in
+    # it before then (a service built from a Dockerfile); setup_network is "deny" or "allow".
+    files: dict[str, str] = field(default_factory=dict)
+    setup: list[str] = field(default_factory=list)
+    setup_network: str = ""
+    # Runs to completion (exit 0) before its dependents start, instead of staying up.
+    oneshot: bool = False
+    # Mounts the agent's workdir at this path in the service, so both see the same files.
+    workdir_mount: str = ""
+    # Named volumes shared with other services, as "name:/path".
+    volumes: list[str] = field(default_factory=list)
+    workdir: str = ""
+    # Run the image's ENTRYPOINT with ``command`` as its arguments (the image's CMD when
+    # empty), as docker does, instead of ``command`` being the whole argv.
+    image_entrypoint: bool = False
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ServiceSpec:
@@ -85,6 +109,17 @@ class ServiceSpec:
             cpu_millis=self.cpu_millis,
             env=self.env,
             depends_on=self.depends_on,
+            ports=self.ports,
+            ready_command=self.ready_command,
+            aliases=self.aliases,
+            files=self.files,
+            setup=self.setup,
+            setup_network=self.setup_network,
+            oneshot=self.oneshot,
+            workdir_mount=self.workdir_mount,
+            volumes=self.volumes,
+            workdir=self.workdir,
+            image_entrypoint=self.image_entrypoint,
         )
 
 
@@ -107,6 +142,8 @@ class SandboxSpec:
     idle_timeout_s: float = 0.0
     services: list[ServiceSpec] = field(default_factory=list)
     service_lifetime_s: float = 0.0
+    # Named volumes shared with the services that name them ("name:/path[:ro]"); bubblewrap only.
+    volumes: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> SandboxSpec:
@@ -134,6 +171,7 @@ class SandboxSpec:
             files={k: v.encode() if isinstance(v, str) else v for k, v in self.files.items()},
             workdir=self.workdir,
             services=[s.to_proto() for s in self.services],
+            volumes=self.volumes,
             service_lifetime=_duration(self.service_lifetime_s),
         )
         if self.idle_timeout_s:
