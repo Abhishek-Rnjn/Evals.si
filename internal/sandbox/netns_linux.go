@@ -138,5 +138,7 @@ func (h *netnsHolder) close() {
 // nsenterArgs is the command prefix that runs what follows inside the holder's
 // user and network namespaces.
 func (h *netnsHolder) nsenterArgs(nsenter string) []string {
-	return []string{nsenter, "--user", "--net", "--target", strconv.Itoa(h.pid), "--"}
+	// --preserve-credentials: the holder's user namespace denies setgroups, which
+	// nsenter would otherwise call after joining it.
+	return []string{nsenter, "--user", "--net", "--preserve-credentials", "--target", strconv.Itoa(h.pid), "--"}
 }

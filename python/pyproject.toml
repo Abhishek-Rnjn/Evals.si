@@ -59,9 +59,9 @@ files = ["evalsi/src", "evalsi/tests", "evalsi-harness/src", "evalsi-harness/tes
 module = ["datasets", "datasets.*", "jsonschema", "jsonschema.*", "sympy", "sympy.*", "math_verify", "torch", "lightning", "lightning.*", "transformers", "transformers.*", "trl", "trl.*", "fsspec", "fsspec.*"]
 ignore_missing_imports = true
 
-# The environment specs the envspecs adapters target are optional installs.
+# The environment specs the envspecs adapters target, and the browser extra's Playwright, are optional installs.
 [[tool.mypy.overrides]]
-module = ["openenv", "openenv.*", "verifiers", "verifiers.*", "gymnasium", "gymnasium.*", "nemo_gym", "nemo_gym.*", "resources_servers", "resources_servers.*", "fastapi", "fastapi.*"]
+module = ["openenv", "openenv.*", "verifiers", "verifiers.*", "gymnasium", "gymnasium.*", "nemo_gym", "nemo_gym.*", "resources_servers", "resources_servers.*", "fastapi", "fastapi.*", "playwright", "playwright.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
