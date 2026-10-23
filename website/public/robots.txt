@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://evalsi.dev/sitemap-index.xml
