@@ -86,7 +86,7 @@ func intsFrom(in []int32) []int {
 	return out
 }
 
-var aliasName = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`)
+var aliasName = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$`)
 var volumeName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,39}$`)
 
 var serviceName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)

@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import Any
 
 from evalsi.types import TaskCheck
+from evalsi_harness.benchmarks.compose import load_compose
 from evalsi_harness.benchmarks.dockerfile import (
     Build,
     TaskFormatError,
@@ -354,7 +355,8 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
     parser = config.get("parser_name") or "pytest"
     if parser != "pytest":
         raise TaskFormatError(f"parser {parser!r} is not supported (only pytest)")
-    services = _compose_services(d / "docker-compose.yaml")
+    compose = load_compose(d, d.name)
+    services = compose.services if compose else []
     instruction = config.get("instruction") or ""
     if not instruction:
         descriptions = config.get("descriptions") or []
@@ -365,18 +367,29 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
     if not (d / "run-tests.sh").is_file():
         raise TaskFormatError("no run-tests.sh")
     build = None
-    image = options.get("image") or ""
+    image = options.get("image") or (compose.client_image if compose else "")
     if not image:
-        dockerfile = d / "Dockerfile"
+        # The client's build is where Compose says (a subdirectory, a named Dockerfile,
+        # build args, a target stage), else the Dockerfile at the task's root.
+        spec = compose.client if compose else None
+        dockerfile = spec.dockerfile if spec else d / "Dockerfile"
         if not dockerfile.is_file():
             raise TaskFormatError("no Dockerfile")
-        build = translate_dockerfile(dockerfile.read_text(), d)
+        build = translate_dockerfile(
+            dockerfile.read_text(),
+            spec.context if spec else d,
+            build_args=spec.args if spec else None,
+            target=spec.target if spec else "",
+        )
         image = build.image
     workdir = (
         options.get("workdir")
+        or (compose.workdir if compose else "")
         or (build.workdir if build and build.workdir not in ("", "/") else "")
         or DEFAULT_WORKDIR
     )
+    if compose:
+        compose.finalize(workdir)
     tests: dict[str, str] = {}
     if (d / "tests").is_dir():
         tests, tests_exec = _tree(d / "tests", "/tests")
@@ -386,6 +399,10 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
     files: dict[str, str] = {}
     if options.get("oracle", "").lower() in ("1", "true", "yes") and (d / "solution.sh").is_file():
         files["/solution/solution.sh"] = _text(d / "solution.sh")
+    if compose:
+        files.update(compose.files)
+        if compose.setup and build is not None:
+            build.setup.extend(compose.setup)
     checker = {
         "command": [
             "sh",
@@ -407,6 +424,7 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
                 "tags": config.get("tags") or [],
                 "agent_timeout_sec": config.get("max_agent_timeout_sec"),
                 "ignored_dockerfile_instructions": build.ignored if build else [],
+                **({"compose_ignored": compose.ignored} if compose and compose.ignored else {}),
             },
             "environment": {
                 **(
@@ -414,14 +432,17 @@ def _tb_task(d: Path, options: dict[str, str]) -> dict[str, Any]:
                     if services
                     else {}
                 ),
+                **({"volumes": compose.volumes} if compose and compose.volumes else {}),
                 **_environment(
                     build=build,
                     image=image,
                     workdir=workdir,
-                    network=_network(options.get("network"), ""),
-                    env={"TEST_DIR": "/tests"},
+                    # Services share a private network with no way out, so the agent has
+                    # none either unless the options say otherwise.
+                    network=_network(options.get("network"), "no-network" if services else ""),
+                    env={"TEST_DIR": "/tests", **(compose.env if compose else {})},
                     files=files,
-                    executable=[],
+                    executable=list(compose.executable) if compose else [],
                     checker=checker,
                     setup_timeout=None,
                     git=_flag(options.get("git")),
@@ -580,78 +601,3 @@ __all__ = [
     "score_from_payload",
     "translate_dockerfile",
 ]
-
-
-def _compose_services(path: Path) -> list[dict[str, Any]]:
-    """An explicit, fail-closed subset; never silently discard Docker privileges."""
-    import yaml
-
-    if not path.is_file():
-        return []
-    doc = yaml.safe_load(path.read_text()) or {}
-    if not isinstance(doc, dict):
-        raise TaskFormatError("Compose document must be a mapping")
-    services = doc.get("services") or {}
-    if not isinstance(services, dict):
-        raise TaskFormatError("Compose services must be a mapping")
-    if len(services) <= 1:
-        return []
-    if set(doc) - {"services", "version", "name"}:
-        raise TaskFormatError("multi-service Compose networks/volumes/extensions are unsupported")
-    if "client" not in services:
-        raise TaskFormatError("multi-service Compose needs the agent service named client")
-    # The existing importer builds the client from Dockerfile. Do not claim
-    # support for client networking, mounts or execution overrides.
-    client = services["client"]
-    if not isinstance(client, dict) or set(client) - {"build", "depends_on"}:
-        raise TaskFormatError("multi-service Compose client supports only build and depends_on")
-    if client.get("build", ".") != ".":
-        raise TaskFormatError("multi-service Compose client build must be '.'")
-    client_deps = client.get("depends_on") or []
-    if not isinstance(client_deps, list) or any(d not in services for d in client_deps):
-        raise TaskFormatError("client depends_on must list existing services")
-    out = []
-    allowed = {"image", "entrypoint", "command", "environment", "depends_on", "expose", "x-evalsi"}
-    for name, config in services.items():
-        if name == "client":
-            continue
-        if not isinstance(config, dict):
-            raise TaskFormatError(f"service {name}: configuration must be a mapping")
-        unknown = set(config) - allowed
-        if unknown:
-            raise TaskFormatError(f"service {name}: unsupported Compose fields {sorted(unknown)}")
-        entrypoint = config.get("entrypoint")
-        command = config.get("command", [])
-        if not isinstance(entrypoint, list) or not entrypoint or not isinstance(command, list):
-            raise TaskFormatError(
-                f"service {name}: explicit entrypoint argv and command argv are required"
-            )
-        limits = config.get("x-evalsi") or {}
-        if set(limits) != {"port", "memory_mb", "cpu_millis"}:
-            raise TaskFormatError(
-                f"service {name}: x-evalsi requires port, memory_mb and cpu_millis"
-            )
-        exposed = config.get("expose", [])
-        if exposed and [str(p) for p in exposed] != [str(limits["port"])]:
-            raise TaskFormatError(f"service {name}: expose must match the readiness port")
-        deps = config.get("depends_on") or []
-        if not isinstance(deps, list) or any(d == "client" or d not in services for d in deps):
-            raise TaskFormatError(f"service {name}: depends_on must be a list")
-        env = config.get("environment") or {}
-        if not isinstance(env, dict) or any(not isinstance(v, str) for v in env.values()):
-            raise TaskFormatError(
-                f"service {name}: environment must contain explicit string values"
-            )
-        if re.search(r"\$(?:[A-Za-z_{$]|\d)", json.dumps(config)):
-            raise TaskFormatError(f"service {name}: Compose interpolation is unsupported")
-        out.append(
-            {
-                "name": name,
-                "image": config.get("image", ""),
-                "command": entrypoint + command,
-                "env": env,
-                "depends_on": deps,
-                **limits,
-            }
-        )
-    return out

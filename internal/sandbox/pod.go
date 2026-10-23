@@ -347,6 +347,11 @@ func (d *podDriver) supports(sp *Spec) error {
 		if f := s.bwrapOnly(); f != "" {
 			return fmt.Errorf("service %s: %s is supported on the bubblewrap rung only", s.Name, f)
 		}
+		for _, a := range s.Aliases {
+			if strings.Contains(a, "_") {
+				return fmt.Errorf("service %s: the host name %q has an underscore, which a pod's hosts file cannot hold", s.Name, a)
+			}
+		}
 		if s.Port < 1024 {
 			return fmt.Errorf("service %s requires a readiness port from 1024 to 65535 on the pod backend", s.Name)
 		}

@@ -133,7 +133,7 @@ def test_unsupported_tasks_say_why(tmp_path: Path) -> None:
     fixtures.write(tmp_path)
     task = tmp_path / "terminal-bench" / "hello"
     (task / "docker-compose.yaml").write_text("services:\n  client: {}\n  db: {}\n")
-    with pytest.raises(TaskFormatError, match="hello: service db: explicit entrypoint"):
+    with pytest.raises(TaskFormatError, match="hello: service db has neither image nor build"):
         load_terminal_bench(str(task))
     harbor = tmp_path / "harbor" / "hello"
     (harbor / "steps").mkdir()

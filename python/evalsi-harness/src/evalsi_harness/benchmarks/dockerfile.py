@@ -89,6 +89,9 @@ IGNORED = {
     "ONBUILD",
 }
 
+# What an image's PATH is when its Dockerfile appends to it (``ENV PATH=/x:$PATH``).
+DEFAULT_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 # RUN flags that only speed a build up.
 HARMLESS_MOUNTS = ("type=cache", "type=tmpfs")
 
@@ -183,7 +186,10 @@ def _json_or_words(rest: str) -> list[str]:
 def _exec_or_shell(rest: str) -> list[str]:
     """ENTRYPOINT and CMD: the exec form as given, the shell form run by ``sh -c``."""
     if rest.startswith("["):
-        return _json_or_words(rest)
+        try:
+            return _json_or_words(rest)
+        except TaskFormatError:
+            pass  # Docker reads a form that is not valid JSON as the shell form
     return ["/bin/sh", "-c", rest]
 
 
@@ -193,6 +199,8 @@ class _Scope:
 
     named: dict[str, Build] = field(default_factory=dict)
     ordered: list[Build] = field(default_factory=list)
+    # ARG values given at build time (Compose's build.args), which beat the defaults.
+    build_args: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -202,7 +210,7 @@ class _Block:
     instructions: list[tuple[str, str, str | None]]
 
 
-def _blocks(text: str) -> tuple[list[_Block], dict[str, str]]:
+def _blocks(text: str, build_args: dict[str, str]) -> tuple[list[_Block], dict[str, str]]:
     """The Dockerfile split into stages, and the ARGs declared before the first FROM."""
     args: dict[str, str] = {}
     blocks: list[_Block] = []
@@ -216,7 +224,7 @@ def _blocks(text: str) -> tuple[list[_Block], dict[str, str]]:
         elif not blocks:
             if word == "ARG":
                 for k, v in _pairs(rest, legacy=False).items():
-                    args.setdefault(k, _expand(v, args))
+                    args.setdefault(k, build_args.get(k, _expand(v, args)))
             else:
                 raise TaskFormatError("the Dockerfile has no FROM")
         else:
@@ -226,10 +234,18 @@ def _blocks(text: str) -> tuple[list[_Block], dict[str, str]]:
     return blocks, args
 
 
-def translate_dockerfile(text: str, context: Path) -> Build:
-    """A Dockerfile as an image, setup commands and files (see the module docs)."""
-    blocks, global_args = _blocks(text)
-    scope = _Scope()
+def translate_dockerfile(
+    text: str,
+    context: Path,
+    *,
+    build_args: dict[str, str] | None = None,
+    target: str = "",
+) -> Build:
+    """A Dockerfile as an image, setup commands and files (see the module docs).
+    ``build_args`` are ARG values given at build time, and ``target`` the stage to stop at
+    (the last, by default)."""
+    blocks, global_args = _blocks(text, build_args or {})
+    scope = _Scope(build_args=build_args or {})
     done, by_index = scope.named, scope.ordered
     for block in blocks:
         base = done.get(block.image)
@@ -242,7 +258,11 @@ def translate_dockerfile(text: str, context: Path) -> Build:
         if block.name:
             done[block.name] = build
         by_index.append(build)
-    target = by_index[-1]
+        if target and block.name == target:
+            break
+    if target and target not in done:
+        raise TaskFormatError(f"the Dockerfile has no stage named {target}")
+    final = done[target] if target else by_index[-1]
     needed: dict[str, BuildStage] = {}
     order: list[BuildStage] = []
 
@@ -262,10 +282,10 @@ def translate_dockerfile(text: str, context: Path) -> Build:
         )
         order.append(needed[ref])
 
-    for c in target.copies:
+    for c in final.copies:
         need(c.stage)
-    target.stages = order
-    return target
+    final.stages = order
+    return final
 
 
 def _stage_key(ref: str, done: dict[str, Build], by_index: list[Build]) -> str:
@@ -291,10 +311,10 @@ def _apply(
     workdir = build.workdir
     shell: list[str] = []
     for word, rest, body in block.instructions:
-        variables = {**args, **build.env}
+        variables = {"PATH": DEFAULT_PATH, **args, **build.env}
         if word == "ARG":
             for k, v in _pairs(rest, legacy=False).items():
-                args.setdefault(k, _expand(v, variables))
+                args.setdefault(k, scope.build_args.get(k, _expand(v, variables)))
         elif word == "ENV":
             for k, v in _pairs(rest, legacy=True).items():
                 build.env[k] = _expand(v, variables)
@@ -404,11 +424,12 @@ def _copy(
             if not source.startswith("/"):
                 from_src = str(PurePosixPath(stage_workdir or "/") / source)
             from_into = str(base / dest)
-            if dest.endswith("/") or len(sources) > 1:
+            if dest.endswith("/") or dest in (".", "..") or len(sources) > 1:
                 from_into = from_into.rstrip("/") + "/"
             build.copies.append(StageCopyRef(stage, str(PurePosixPath(from_src)), from_into))
         return
-    dest_dir = dest.endswith("/") or len(sources) > 1
+    # "." and ".." name directories too, as in Docker.
+    dest_dir = dest.endswith("/") or dest in (".", "..") or len(sources) > 1
     target = base / dest
     root = context.resolve()
     for source in sources:
