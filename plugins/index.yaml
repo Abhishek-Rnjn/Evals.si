@@ -25,6 +25,11 @@ plugins:
     tier: native
     kind: native
     description: Judge grading against the rubric a LAB or JobBench task carries.
+  - name: answers
+    version: bundled
+    tier: native
+    kind: native
+    description: Answer checks for the WebArena, GAIA and OfficeQA benchmarks.
   - name: text
     version: bundled
     tier: native
