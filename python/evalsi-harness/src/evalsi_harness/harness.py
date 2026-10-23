@@ -33,8 +33,8 @@ from evalsi_harness.browser import BrowserConfig, BrowserSession, browser_tools
 from evalsi_harness.cassette import Cassette, CassetteModel, CassetteTool, CassetteUserSimulator
 from evalsi_harness.checker import run_checker
 from evalsi_harness.context import PROGRESS_NOTE, ROUND_DONE, ContextConfig, context_config
-from evalsi_harness.desktop import Computer, DesktopConfig, XvfbDisplay, computer_tool
 from evalsi_harness.dbenv import Database, DatabaseTool
+from evalsi_harness.desktop import Computer, DesktopConfig, XvfbDisplay, computer_tool
 from evalsi_harness.diffcheck import run_diff_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.events import Event, FinalEvent, PolicyEvent, StepEvent
@@ -592,7 +592,7 @@ class BuiltinHarness:
             system=system,
         )
 
-    async def _tools(self, live: LiveTask) -> list[Tool]:
+    async def _tools(self, live: LiveTask) -> list[Tool]:  # noqa: PLR0915
         tools: list[Tool] = []
         cfg = self.config.tools
         if live.db is not None and live.task.environment is not None:
