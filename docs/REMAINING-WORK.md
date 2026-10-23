@@ -15,6 +15,8 @@ validation. These manual, small-fixture operating checks do not close ENT-09's
 CI, rolling-upgrade, managed/off-site recovery or production RPO/RTO requirements.
 Real-human judge calibration and customer usability remain open.
 
+**23 October update:** the rows for H1-b, H2-a, H3-a, H4-a to H4-d, H5-c, H6-a, H7-a and SM-1 to SM-10 are built (unreleased). Every one was tested offline with fakes, fixtures, local servers or real bubblewrap and Landlock sandboxes; what each still needs is in its row.
+
 **Kind** says what unblocks a row:
 
 - **Code**: can be built and tested in this repository.
@@ -88,21 +90,21 @@ The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) maps its R04 (stable 0.4) an
 | ID | Priority | Item | What is left | Kind | Source |
 |---|---|---|---|---|---|
 | H1-a | H1 | Frontier-model exit test | A recorded multi-step `fix-calc` run with thinking on Anthropic and an OpenAI reasoning model that replays exactly; native Responses and thinking-plus-tool roundtrip; direct prompt-cache reads failed in both modes | Infra | Harness roadmap, LEFTOVERS |
-| H1-b | H1 | Frontier-model gaps | Moving reasoning between providers (dropped today by rule); a separate model for compaction or sub-agents; `pause_turn` with server-side tools; resuming a broken stream's partial output | Code | Harness roadmap |
-| H2-a | H2 | Persistent background processes | A long-lived shell per sandbox in `evalsid`, so a server started in one call survives the next | Code | Harness roadmap, LEFTOVERS |
+| H1-b | H1 | Frontier-model gaps | Built 2026-10-23 (reasoning handoff, compaction and sub-agent models, `pause_turn` with server tools, stream resume), tested over mock transports; none has run against a live provider. Left: live verification; `prefill` resume only helps older Claude models | Infra | Harness roadmap |
+| H2-a | H2 | Persistent background processes | Built: `evalsid` process API and the `background` and `shell` tools. Real on bubblewrap and Landlock; pod only against a fake cluster; Firecracker not run (no KVM). Left: a real-cluster pod run and Firecracker verification | Infra | Harness roadmap, LEFTOVERS |
 | H2-b | H2 | Long-horizon verification | Live-model 300-step and context-quality runs; external side-effect idempotency; `evidence-state` quote check is a text match | Infra | Harness roadmap, LEFTOVERS |
-| H3-a | H3 | Agents-under-test gaps | ACP connector (needs interactive exec in the sandbox); A2A push notifications; a server-side sweep over harness configurations | Code | Harness roadmap |
+| H3-a | H3 | Agents-under-test gaps | Built: ACP connector (protocol 1, fake-agent fixture on bubblewrap and Landlock), A2A push notifications (fake server), server-side harness sweep (one run per variant). Left: real ACP and A2A agents; ACP auth, `session/load`, modes and MCP passthrough | Infra | Harness roadmap |
 | H3-b | H3 | Agents-under-test verification | Readers for Codex, Gemini CLI and pi against real output; profile comparison on a live model; the live CLI kind check with a key; transfer experiments | Infra | Harness roadmap, LEFTOVERS |
-| H4-a | H4 | Clean checker from the agent's diff | Run the checker on a clean copy with only the agent's diff applied; clean checking on the pod and Firecracker rungs | Code, Infra | Harness roadmap, LEFTOVERS |
-| H4-b | H4 | Multi-service environments | Service groups on bubblewrap and Firecracker; unrestricted Compose; multi-stage builds; a multi-service Terminal-Bench task on the bubblewrap and pod rungs | Code, Infra | Harness roadmap, LEFTOVERS |
-| H4-c | H4 | Browser, desktop and long-document environments | Browser and desktop environments; WebArena/BrowserGym and GAIA importers; OfficeQA Pro and AA-LCR importers | Code | Harness roadmap, LEFTOVERS |
-| H4-d | H4 | Other environment gaps | A domain-neutral database tool environment (a design question); interjections timed by event and for CLI agents | Code, People | Harness roadmap, LEFTOVERS |
+| H4-a | H4 | Clean checker from the agent's diff | Built: `checker.isolation: diff`, tested on bubblewrap and Landlock. Left: clean and diff checking on the pod and Firecracker rungs (untested) | Infra | Harness roadmap, LEFTOVERS |
+| H4-b | H4 | Multi-service environments | Built: bubblewrap service groups, a Compose importer accepting 240 of 241 pinned Terminal-Bench tasks, multi-stage builds. Left: Firecracker service groups (the guest agent cannot keep a background process); a multi-service task end to end on the pod rung and with real images; services that must start as root; stage copies over 256 MiB | Code, Infra | Harness roadmap, LEFTOVERS |
+| H4-c | H4 | Browser, desktop and long-document environments | Built: `browser` and `computer` toolsets (on the harness host), images on steps, and WebArena, GAIA, OfficeQA and AA-LCR importers with scorers. Left: sandbox-resident browser and desktop; hosted WebArena sites; the full OfficeQA corpus image; GAIA and AA-LCR formats checked against the real data (written from memory); runs on real benchmark tasks with a model | Infra | Harness roadmap, LEFTOVERS |
+| H4-d | H4 | Other environment gaps | Built: SQLite database tool environment (decision 0034), interjections by event and for CLI agents. Left: database tools in the RL gym; non-SQLite domains | Code | Harness roadmap, LEFTOVERS |
 | H5-a | H5 | Rigor signals on real data | False-positive rates of `trial-tampering`, `harness-edit-weakened-guardrail` and `contamination-fetch` on real runs; `sitecustomize.py` shim blind spot; variance advice on real multi-trial results | Infra | LEFTOVERS |
 | H5-b | H5 | Judge calibration | Human-labelled checks for `evidence-stage-judge`, `rubric-grade` and `calibrate`; broader deployed-judge injection coverage | People, Infra | LEFTOVERS |
-| H5-c | H5 | Determinism record | A per-run record of seeds, model snapshots, tool versions and image digests; a replay that names the step where it diverged | Code | LEFTOVERS |
-| H6-a | H6 | RL gaps | A run-spec field for `token_trace`; SGLang token fields; cancel and resume of rollouts on the pod rung | Code | Harness roadmap |
+| H5-c | H5 | Determinism record | Built: `metadata.determinism` and `evalsi determinism --against`. Left: real image digests on rungs that report them | Infra | LEFTOVERS |
+| H6-a | H6 | RL gaps | Built: `target.token_trace` in the run spec, SGLang token fields, replay-based resume on rungs that cannot snapshot. Left: all verified only with fakes; SGLang pinned only to `main` of 2026-10-22 | Infra | Harness roadmap |
 | H6-b | H6 | RL verification | A trainer running a real step in CI; trainer-backed OpenEnv, verifiers, Gymnasium and NeMo Gym; current OpenRLHF 0.11.2; live vLLM token IDs; measured rollout and reward throughput at the §12 scale; whether step-level rewards help | Infra | Harness roadmap, LEFTOVERS |
-| H7-a | H7 | Harness² gaps | OpenCode trajectory reader; a per-task significance test for ablation harm; a LAB/JobBench grader that sees workspace files; live scoring of executor telemetry | Code | Harness roadmap, LEFTOVERS |
+| H7-a | H7 | Harness² gaps | Built: OpenCode reader (real 1.19.3 fixtures), per-task harm test, workspace-file grading, `harness2 follow`. Left: judge calibration; `follow` against a live server with a policy; per-task harm needs several trials | Infra | Harness roadmap, LEFTOVERS |
 | H7-b | H7 | Harness² verification | The Propose-Probe-Compose go/no-go spike; the `runs/` layout and `score.json` fields against a pinned release; a full Codex or OpenCode task under the egress allowlist | Infra | Harness roadmap, LEFTOVERS |
 
 ## Infrastructure verification
@@ -129,16 +131,16 @@ The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) maps its R04 (stable 0.4) an
 
 | ID | Priority | Item | What is left | Kind | Source |
 |---|---|---|---|---|---|
-| SM-1 | - | Webhook URLs to internal addresses | Apply the trace-source address guard with an allow list; decide the default | Code, People | LEFTOVERS |
-| SM-2 | - | Rate limits | A limit shared across replicas; live reload of settings | Code | LEFTOVERS |
-| SM-3 | - | Keyed dataset upload | Stop writing it to disk twice and taking two upload slots | Code | LEFTOVERS |
-| SM-4 | - | `evalsi.log()` retries | Retry a failed batch, sending an `Idempotency-Key` | Code | LEFTOVERS |
-| SM-5 | - | Scheduled-window partial pages | A connector returning a partial page without an error loses traces from that window | Code | LEFTOVERS |
-| SM-6 | - | Keyless image signatures | Verify Fulcio/Rekor keyless signatures and the bundle-as-referrer format | Code | LEFTOVERS |
-| SM-7 | - | Sandbox-time quota coverage | Meter online policy evaluation, guardrails, Wasm evaluators and reward rollouts | Code | LEFTOVERS |
-| SM-8 | - | Feeding scores back into agentgateway | Quality-aware routing; depends on the gateway's extension points | Code, People | LEFTOVERS |
-| SM-9 | - | BFCL categories | Memory and web-search categories | Code | LEFTOVERS |
-| SM-10 | - | τ-bench user | tau2's own LiteLLM user instead of Evals.si's simulated user | Code | LEFTOVERS |
+| SM-1 | - | Webhook URLs to internal addresses | Done: the guard is on by default with `webhooks.allow_hosts` (see the CHANGELOG upgrade note). Left: delivery to a real in-cluster receiver under the new default | Infra | LEFTOVERS |
+| SM-2 | - | Rate limits | Built (decision 0036): shared windows in the database and live reload. Left: Postgres and real multi-replica runs | Infra | LEFTOVERS |
+| SM-3 | - | Keyed dataset upload | Done: validated from the spool file, one write and one slot | Code | LEFTOVERS |
+| SM-4 | - | `evalsi.log()` retries | Done: retries with backoff, `Retry-After` and a stable `Idempotency-Key` | Code | LEFTOVERS |
+| SM-5 | - | Scheduled-window partial pages | Done: windows re-list and missing traces are re-fetched, runs are labelled. A connector that silently omits the same traces on every pass is still undetectable | Code | LEFTOVERS |
+| SM-6 | - | Keyless image signatures | Built with sigstore-go against a stand-in CA. Left: real Fulcio, Rekor and cosign-produced signatures; the trusted root must be supplied as a file | Infra | LEFTOVERS |
+| SM-7 | - | Sandbox-time quota coverage | Built (decision 0037). Left: an end-to-end retry after a quota refusal | Code | LEFTOVERS |
+| SM-8 | - | Feeding scores back into agentgateway | The Evals.si side is built (decision 0038): `GET /v1alpha1/quality`, gauges and a recipe. Left: native quality-aware routing in the gateway, which depends on its extension points | People | LEFTOVERS |
+| SM-9 | - | BFCL categories | Done. Left: live SerpAPI web search, the vector memory backend and a live-model run | Infra | LEFTOVERS |
+| SM-10 | - | τ-bench user | Done as an option (`user=tau2`). Left: a run with a real LiteLLM user model | Infra | LEFTOVERS |
 
 ## Deliberately not planned
 
