@@ -28,10 +28,45 @@ evalsi run -f agent-run.yaml
 | Hooks | Python classes at the loop's lifecycle points, instead of forking the loop | [Hooks](agent-runs.md#hooks) |
 | Fault injection | Errors, timeouts, malformed output and prompt injection per tool | [Harness options](agent-runs.md#harness-options) |
 | Grading | Checkers (exit code, JSON, JUnit, Python), clean checker isolation, reward-hacking signals, state assertions, citation grounding | [Grading](agent-runs.md#grading) |
-| Bring your own agent | A2A, MCP, OpenAI Responses, HTTP, or a CLI inside the sandbox, with readers for Claude Code, Codex, Gemini CLI and pi trajectories | [Agents](agent-runs.md#agents) |
-| Comparison | Harness × model matrices with cost beside the score and paired intervals | [Comparing harnesses](agent-runs.md#comparing-harnesses) |
+| Bring your own agent | A2A (with streaming or push notifications), MCP, OpenAI Responses, HTTP, ACP, or a CLI inside the sandbox, with readers for Claude Code, Codex, Gemini CLI and pi trajectories | [Agents](agent-runs.md#agents) |
+| Comparison | Harness × model matrices with cost beside the score and paired intervals; a `sweep` in the run spec makes the server run each harness configuration | [Comparing harnesses](agent-runs.md#comparing-harnesses), [Sweeping on the server](agent-runs.md#sweeping-harness-configurations-on-the-server) |
+| Background processes | A server started in one call is still there in the next: process tools and a persistent shell | [below](#background-processes-and-a-persistent-shell) |
 | Benchmarks | SWE-bench, τ-bench, Terminal-Bench, Harbor, BFCL | [Benchmarks](agent-runs.md#benchmarks) |
 | Training | The same tasks as OpenEnv, verifiers, Gymnasium and NeMo Gym environments, with step-level rewards | [Agent runs](agent-runs.md) |
+
+## Background processes and a persistent shell
+
+`bash` runs each command to completion, and the sandbox kills what a command leaves
+running. Two opt-in names under `tools.builtin` change that, for agents that start a
+dev server, a watcher or a long build:
+
+- `background` adds `process_start` (a shell command, optionally with `stdin: true`
+  and a `timeout_s`; returns an id at once), `process_output` (what the process wrote
+  since the last read, optionally waiting up to 30 s for more), `process_write`
+  (stdin, or close it), `process_list` and `process_kill`.
+- `shell` adds one tool that feeds commands to a single long-lived `sh`: `cd`,
+  exported variables and `command &` jobs survive between calls. A command that runs
+  past its timeout ends the shell and its jobs; the next call starts a fresh one.
+
+Both run under the sandbox's confinement and limits (a process is a command like any
+other: the same rung, rlimits and cgroup), are killed when the sandbox is destroyed
+(the trial ends, or the idle reaper takes it), and re-run on replay like `bash`. Output
+is kept in a ring buffer per stream (1 MiB by default, 16 MiB at most) read by offset,
+so a chatty process costs memory, never the run; the tools tell the agent when older
+output was dropped. At most 16 processes run in one sandbox.
+
+**Use `shell` to start a server and then talk to it.** Each command of the bubblewrap
+rung has its own network namespace, so a server started with `process_start` is not
+reachable from a later `bash` call; it is reachable from the same `shell`. (On the
+Landlock rung loopback TCP is refused whatever starts it.) `process_start` is for work
+whose files and output are what matters.
+
+The API is `SandboxService` `StartProcess`, `ListProcesses`, `ReadProcess`,
+`WriteProcess` and `KillProcess`; in Python, `Sandbox.start_process`, `read_process`,
+`write_process`, `list_processes` and `kill_process`. They are implemented on the
+bubblewrap and Landlock rungs by `evalsid` itself, and on the Firecracker and pod rungs
+through the guest agent's `ExecInteractive` call (a call that is cancelled kills the
+command). The same API carries an [ACP agent](agent-runs.md#acp-agents)'s stdio.
 
 ## Not built yet
 
