@@ -45,7 +45,10 @@ def _cmd_report(args: argparse.Namespace) -> int:
     if args.against:
         comparison = compare_runs(data, _load(args.against, "replay results"))
         print(json.dumps(comparison, indent=2, ensure_ascii=False))
-        return 1 if comparison["diverged"] or comparison["only_recorded"] else 0
+        diverged = (
+            comparison["diverged"] or comparison["only_recorded"] or comparison["only_replayed"]
+        )
+        return 1 if diverged else 0
     print(
         json.dumps(
             determinism_report(data, margin=args.margin, confidence=args.confidence), indent=2

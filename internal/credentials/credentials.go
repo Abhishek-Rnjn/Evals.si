@@ -387,6 +387,20 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 		}
 		uses = append(uses, u...)
 	}
+	// The compaction and sub-agent models are called with their own keys too.
+	for _, aux := range []struct {
+		field string
+		t     *evalsiv1alpha1.Target
+	}{{"spec.target.compaction_model", t.GetCompactionModel()}, {"spec.target.subagent_model", t.GetSubagentModel()}} {
+		if aux.t == nil {
+			continue
+		}
+		u, err := targetUse(aux.t, aux.field+".api_key_env")
+		if err != nil {
+			return nil, err
+		}
+		uses = append(uses, u...)
+	}
 	a := t.GetAgent()
 	switch {
 	case a.GetA2A() != nil:

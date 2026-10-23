@@ -206,3 +206,22 @@ def test_the_cli_compares_two_results_files_and_fails_on_divergence(
     out = json.loads(capsys.readouterr().out)
     assert out["runs"][0]["trial"] == 1
     assert out["runs"][0]["first_divergence"]["step"] == 0
+
+
+def test_the_cli_fails_when_the_replay_has_extra_records(tmp_path: Path) -> None:
+    def rec(*ids: str) -> dict[str, Any]:
+        return {
+            "records": [
+                {
+                    "id": i,
+                    "provenance": {"run": {"trial": 1}},
+                    "trajectory": {"steps": [{"type": "tool", "name": "bash"}]},
+                }
+                for i in ids
+            ]
+        }
+
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    a.write_text(json.dumps(rec("r")))
+    b.write_text(json.dumps(rec("r", "extra")))
+    assert main(["determinism", str(a), "--against", str(b)]) == 1

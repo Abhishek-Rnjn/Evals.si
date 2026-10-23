@@ -88,8 +88,10 @@ func (s *Service) RunRecordsFor(ctx context.Context, project, path string, insts
 			return nil, err
 		}
 	}
+	// RunRecords returns the results that did finish alongside an error, so work
+	// done before a sibling evaluator failed is still charged.
 	results, err := s.RunRecords(ctx, insts, records)
-	if metered && err == nil {
+	if metered {
 		s.meter.Charge(project, SandboxTime(insts, results))
 	}
 	return results, err
@@ -368,12 +370,18 @@ func (s *Service) RunRecords(ctx context.Context, insts []Instance, records []*e
 			})
 		}
 	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
+	err := g.Wait()
 	out := make([]*evalsiv1alpha1.EvaluationResult, 0, len(records)*len(recordLevel))
 	for _, row := range slots {
-		out = append(out, row...)
+		for _, r := range row {
+			if r != nil {
+				out = append(out, r)
+			}
+		}
+	}
+	if err != nil {
+		// The results that did finish, for callers that account for the work.
+		return out, err
 	}
 	return out, nil
 }

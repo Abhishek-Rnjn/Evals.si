@@ -107,3 +107,33 @@ func TestSandboxTimeCountsOnlyMeteredEvaluators(t *testing.T) {
 		t.Fatalf("SandboxTime = %v", got)
 	}
 }
+
+// failingFor times every evaluator but fails the one named.
+type failingFor struct {
+	timedWorker
+	name string
+}
+
+func (w *failingFor) Evaluate(ctx context.Context, req *pluginv1alpha1.EvaluateRequest) (*pluginv1alpha1.EvaluateResponse, error) {
+	if req.GetEvaluator() == "builtin/"+w.name {
+		return nil, errors.New("boom")
+	}
+	return w.timedWorker.Evaluate(ctx, req)
+}
+
+func TestRunRecordsForChargesWorkThatFinishedBeforeASiblingFailed(t *testing.T) {
+	// Parallelism 1 runs the evaluators in order, so the first has finished when
+	// the second fails; a retried request must not run for free.
+	svc := New(&failingFor{name: "guardrail"}, catalog.New(nil), nil, "", config.Evaluate{BatchSize: 10, Parallelism: 1, MaxRecords: 100})
+	meter := &recordingMeter{}
+	svc.UseSandboxMeter(meter)
+	recs := []*evalsiv1alpha1.Record{record("a", "x", "x", ""), record("b", "y", "y", "")}
+	insts := []Instance{inst("exact-match", "sandbox"), inst("guardrail", "sandbox")}
+	results, err := svc.RunRecordsFor(context.Background(), "p", "policy", insts, recs)
+	if err == nil {
+		t.Fatal("the failing evaluator did not fail the request")
+	}
+	if len(results) != 2 || meter.charged["p"] != 2*time.Second {
+		t.Fatalf("results %d, charged %v: want the finished evaluator's two results charged", len(results), meter.charged)
+	}
+}

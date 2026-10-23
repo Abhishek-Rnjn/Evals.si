@@ -325,7 +325,10 @@ class Client:
         """Create the runs of a spec with ``sweep``: one per harness variant, in order."""
         body = {"name": name, "project": project, "spec": spec, "labels": labels or {}}
         response = self.call("RunService", "CreateRun", body, idempotency_key=idempotency_key)
-        runs: list[dict[str, Any]] = response.get("sweep_runs") or [response["run"]]
+        # The server's JSON uses protojson's camelCase names; accept the proto spelling too.
+        runs: list[dict[str, Any]] = (
+            response.get("sweepRuns") or response.get("sweep_runs") or [response["run"]]
+        )
         return runs
 
     def log_run(

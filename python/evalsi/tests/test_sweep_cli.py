@@ -54,7 +54,7 @@ def test_create_sweep_returns_every_run(monkeypatch: pytest.MonkeyPatch) -> None
 
     def call(service: str, method: str, body: dict[str, Any], **_: Any) -> dict[str, Any]:
         seen.append(body)
-        return {"run": {"id": "r1"}, "sweep_runs": [{"id": "r1"}, {"id": "r2"}]}
+        return {"run": {"id": "r1"}, "sweepRuns": [{"id": "r1"}, {"id": "r2"}]}
 
     monkeypatch.setattr(client, "call", call)
     assert [r["id"] for r in client.create_sweep({"x": 1}, name="n")] == ["r1", "r2"]

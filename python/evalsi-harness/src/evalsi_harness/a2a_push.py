@@ -85,7 +85,9 @@ class PushReceiver:
             headers[name.strip().lower()] = value.strip()
         if request[1] != self._path:
             return 404
-        if not hmac.compare_digest(headers.get(TOKEN_HEADER, ""), self.token):
+        if not hmac.compare_digest(
+            headers.get(TOKEN_HEADER, "").encode("latin-1"), self.token.encode("utf-8")
+        ):
             self.rejected += 1
             return 401
         length = int(headers.get("content-length", "0"))

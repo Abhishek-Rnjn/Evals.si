@@ -218,6 +218,16 @@ def test_the_receiver_checks_token_path_and_size() -> None:
         assert await post(path, receiver.token, b"not json") == 400
         assert await post(path, receiver.token, b"[1]") == 400
         assert receiver.rejected == 1
+        # A token that is not ASCII is refused like any wrong one, not an unhandled error.
+        reader, writer = await asyncio.open_connection("127.0.0.1", receiver.port)
+        writer.write(
+            f"POST {path} HTTP/1.1\r\nHost: x\r\nX-A2A-Notification-Token: ".encode()
+            + b"\xff\xfe\r\nContent-Length: 2\r\n\r\n{}"
+        )
+        await writer.drain()
+        assert int((await reader.readline()).split()[1]) == 401
+        writer.close()
+        assert receiver.rejected == 2
         await receiver.aclose()
 
     asyncio.run(go())
