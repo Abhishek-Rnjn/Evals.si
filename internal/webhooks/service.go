@@ -113,9 +113,28 @@ func (s *Service) checkEndpoint(endpoint string) error {
 		return nil
 	}
 	if err := source.CheckEndpoint(endpoint, s.opts.AllowHosts); err != nil {
-		return errors.New(strings.NewReplacer("source.endpoint", "webhook.url", "sources.allow_hosts", "webhooks.allow_hosts").Replace(err.Error()))
+		return &blockedError{msg: strings.NewReplacer("source.endpoint", "webhook.url", "sources.allow_hosts", "webhooks.allow_hosts").Replace(err.Error()) + guardHint}
 	}
 	return nil
+}
+
+// guardHint names the switch, for a webhook saved before the guard was on.
+const guardHint = " (or set webhooks.ssrf_guard: false to turn the guard off)"
+
+// blockedError is the SSRF guard refusing a webhook's destination. A delivery
+// it refuses fails at once: retrying cannot help until the config changes.
+type blockedError struct{ msg string }
+
+func (e *blockedError) Error() string { return e.msg }
+
+// guardError rewords a refusal the guarded transport made at dial time (the
+// URL's name resolving to an internal address) for webhooks.
+func guardError(err error) error {
+	var re *source.RefusedError
+	if errors.As(err, &re) {
+		return &blockedError{msg: re.Describe("webhook delivery", "webhooks.allow_hosts") + guardHint}
+	}
+	return err
 }
 
 // ListWebhooks lists a project's webhooks, without their secrets.

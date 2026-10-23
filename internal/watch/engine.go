@@ -716,7 +716,7 @@ func (e *Engine) processPolicy(ctx context.Context, lease store.PolicyLease, st 
 		for i, cand := range todo {
 			records[i] = cand.record
 		}
-		results, err := e.eval.RunRecords(ctx, stg.insts, records)
+		results, err := e.eval.RunRecordsFor(ctx, c.policy.GetProject(), "policy", stg.insts, records)
 		if err != nil {
 			errored += int64(len(todo))
 			e.log.Warn("online evaluation failed", "policy", c.policy.GetName(), "err", err)

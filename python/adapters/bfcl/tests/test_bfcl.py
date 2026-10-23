@@ -37,7 +37,7 @@ def test_the_importer_uses_bfcls_loaders() -> None:
     assert irrelevant["metadata"]["bfcl"]["ground_truth"] is None
     assert [r.id for r in load_records("bfcl://multiple?limit=2")] == ["multiple_0", "multiple_1"]
     with pytest.raises(ValueError, match="not supported"):
-        load("memory_kv")
+        load("format_sensitivity")
     with pytest.raises(ValueError, match="no entries"):
         load("simple_python", ids="nope")
 

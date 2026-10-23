@@ -85,6 +85,17 @@ unless auth.config turns them off, which contradicts asking for keys. */ -}}
 {{- with $v.sources.allowHosts }}{{ $_ := set $sources "allow_hosts" . }}{{ end }}
 {{- with $v.sources.maxRecordsPerSecond }}{{ $_ := set $sources "max_records_per_second" . }}{{ end }}
 {{- if $sources }}{{ $_ := set $server "sources" $sources }}{{ end }}
+{{- $hooks := dict }}
+{{- $hookHosts := list }}
+{{- range (default dict $v.webhooks).allowHosts }}{{ $hookHosts = append $hookHosts . }}{{ end }}
+{{- /* Webhooks the chart applies are the operator's own: their hosts are trusted. */ -}}
+{{- if $v.bootstrap.enabled }}{{ range $v.bootstrap.webhooks }}{{ with .url }}
+{{- $h := regexReplaceAll ":[0-9]+$" ((urlParse .).host | lower) "" | trimPrefix "[" | trimSuffix "]" }}
+{{- if and $h (not (has $h $hookHosts)) }}{{ $hookHosts = append $hookHosts $h }}{{ end }}
+{{- end }}{{ end }}{{ end }}
+{{- with $hookHosts }}{{ $_ := set $hooks "allow_hosts" . }}{{ end }}
+{{- if eq (toString (default dict $v.webhooks).ssrfGuard) "false" }}{{ $_ := set $hooks "ssrf_guard" false }}{{ end }}
+{{- if $hooks }}{{ $_ := set $server "webhooks" $hooks }}{{ end }}
 {{- $server = mergeOverwrite $server (deepCopy $v.server.config) }}
 {{- with (default dict $v.plugins).wasmDirs }}
 {{- $wasm := get $server "wasm" | default dict }}

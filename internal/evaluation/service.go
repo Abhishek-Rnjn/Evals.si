@@ -12,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
@@ -35,6 +36,63 @@ type Service struct {
 	opts         config.Evaluate
 	// Which worker variables evaluator params may name, per project.
 	credentials *credentials.Policy
+	meter       SandboxMeter
+}
+
+// SandboxMeter meters the sandbox time of work done outside a run (decision
+// 0037): Check refuses work from a project over its sandbox_seconds_per_day
+// (path names the kind of work: policy, guardrail or reward), Charge adds
+// the time the work took.
+type SandboxMeter interface {
+	Check(ctx context.Context, project, path string) error
+	Charge(project string, d time.Duration)
+}
+
+// UseSandboxMeter meters RunRecordsFor; nil meters nothing.
+func (s *Service) UseSandboxMeter(m SandboxMeter) { s.meter = m }
+
+// Metered reports whether an evaluator runs in the sandbox pool or as Wasm,
+// the work sandbox_seconds_per_day counts.
+func Metered(in Instance) bool {
+	pool := in.Manifest.GetScheduling().GetPool()
+	return pool == "sandbox" || pool == "wasm"
+}
+
+// SandboxTime is the time the metered evaluators among insts took, as their
+// results report it.
+func SandboxTime(insts []Instance, results []*evalsiv1alpha1.EvaluationResult) time.Duration {
+	metered := map[string]bool{}
+	for _, in := range insts {
+		if Metered(in) {
+			metered[in.Name] = true
+		}
+	}
+	var total time.Duration
+	for _, r := range results {
+		if metered[r.GetEvaluator()] {
+			total += r.GetDuration().AsDuration()
+		}
+	}
+	return total
+}
+
+// RunRecordsFor is RunRecords for work done on a project's behalf outside a
+// run: online policy evaluation, guardrail checks and reward rollouts. When
+// evaluators of the sandbox or Wasm kind are involved it first refuses a
+// project that is over its sandbox_seconds_per_day, then counts the time the
+// evaluators took.
+func (s *Service) RunRecordsFor(ctx context.Context, project, path string, insts []Instance, records []*evalsiv1alpha1.Record) ([]*evalsiv1alpha1.EvaluationResult, error) {
+	metered := s.meter != nil && slices.ContainsFunc(insts, Metered)
+	if metered {
+		if err := s.meter.Check(ctx, project, path); err != nil {
+			return nil, err
+		}
+	}
+	results, err := s.RunRecords(ctx, insts, records)
+	if metered && err == nil {
+		s.meter.Charge(project, SandboxTime(insts, results))
+	}
+	return results, err
 }
 
 // New builds a service over a worker whose evaluators are already described.

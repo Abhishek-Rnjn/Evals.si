@@ -22,28 +22,50 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+	"github.com/sigstore/sigstore-go/pkg/root"
 )
 
 // SignaturePolicy is sandbox.image_signatures: images must carry a cosign
-// signature made with one of the keys before a sandbox uses them.
+// signature made with one of the keys, or a keyless one by one of the
+// identities, before a sandbox uses them.
 //
-// Signatures are read in cosign's registry format (a "sha256-<digest>.sig"
-// tag beside the image, cosign 2's default) and verified offline against
-// the keys: no transparency log or certificate authority is consulted, so
-// the check works air-gapped (copy signatures with `cosign copy`).
+// Key signatures are read in cosign's registry format (a
+// "sha256-<digest>.sig" tag beside the image, cosign 2's default) and
+// verified offline against the keys: no transparency log or certificate
+// authority is consulted, so the check works air-gapped (copy signatures
+// with `cosign copy`).
+//
+// Keyless signatures (Fulcio certificates, logged in Rekor) are read from the
+// same `.sig` tag and from sigstore bundles stored as OCI 1.1 referrers of
+// the image, and are verified offline against the trusted root: no call to
+// Fulcio or Rekor is made, and the signed entry timestamp or inclusion proof
+// in the signature stands for the log (see cosign_keyless.go).
 type SignaturePolicy struct {
 	// PEM public keys (cosign.pub): files, or the PEM text itself.
-	Keys []string `json:"keys"`
+	Keys []string `json:"keys,omitempty"`
+	// Identities whose keyless signatures are accepted; needs TrustedRoot.
+	Keyless []KeylessIdentity `json:"keyless,omitempty"`
+	// A sigstore trusted root (trusted_root.json, as `cosign trusted-root
+	// create` writes, or the public-good one from the TUF repository): a
+	// file, or the JSON itself. It names the Fulcio CAs and Rekor keys to
+	// trust, so a private Sigstore deployment works the same way.
+	TrustedRoot string `json:"trusted_root,omitempty"`
 	// Allow images from local sources (oci-layout:, docker-archive:, dir:),
 	// which carry no registry signatures. Default: refused.
 	AllowLocal bool `json:"allow_local,omitempty"`
 }
 
 func (p *SignaturePolicy) validate() error {
-	if len(p.Keys) == 0 {
-		return errors.New("sandbox.image_signatures needs at least one key")
+	if len(p.Keys) == 0 && len(p.Keyless) == 0 {
+		return errors.New("sandbox.image_signatures needs at least one key or keyless identity")
 	}
-	_, err := p.publicKeys()
+	if len(p.Keyless) > 0 && p.TrustedRoot == "" {
+		return errors.New("sandbox.image_signatures.keyless needs trusted_root (a sigstore trusted_root.json)")
+	}
+	if _, err := p.publicKeys(); err != nil {
+		return err
+	}
+	_, err := newKeylessVerifier(p, nil)
 	return err
 }
 
@@ -76,17 +98,29 @@ type signatureVerifier struct {
 	policy *SignaturePolicy
 	keys   []crypto.PublicKey
 	opts   []remote.Option
+	// Set when the policy names keyless identities.
+	keyless *keylessVerifier
 
 	mu       sync.Mutex
 	verified map[string]bool
 }
 
 func newSignatureVerifier(p *SignaturePolicy, opts ...remote.Option) (*signatureVerifier, error) {
+	return newSignatureVerifierWithRoot(p, nil, opts...)
+}
+
+// newSignatureVerifierWithRoot is newSignatureVerifier with the trusted
+// material given (tests stand a virtual Sigstore in for trusted_root).
+func newSignatureVerifierWithRoot(p *SignaturePolicy, trusted root.TrustedMaterial, opts ...remote.Option) (*signatureVerifier, error) {
 	keys, err := p.publicKeys()
 	if err != nil {
 		return nil, err
 	}
-	return &signatureVerifier{policy: p, keys: keys, verified: map[string]bool{}, opts: opts}, nil
+	kv, err := newKeylessVerifier(p, trusted)
+	if err != nil {
+		return nil, err
+	}
+	return &signatureVerifier{policy: p, keys: keys, keyless: kv, verified: map[string]bool{}, opts: opts}, nil
 }
 
 const (
@@ -159,7 +193,22 @@ type simpleSigning struct {
 	} `json:"critical"`
 }
 
+// verifyDigest accepts digest if it has a signature by a trusted key, or a
+// keyless one by an allowed identity (in the `.sig` tag or a referrer bundle).
 func (v *signatureVerifier) verifyDigest(repo name.Repository, digest string, opts []remote.Option) error {
+	err := v.verifySigTag(repo, digest, opts)
+	if err == nil || v.keyless == nil {
+		return err
+	}
+	if rerr := v.verifyReferrers(repo, digest, opts); rerr != nil {
+		return errors.New(err.Error() + "; " + rerr.Error())
+	}
+	return nil
+}
+
+// verifySigTag reads the `.sig` tag of digest: key signatures, and keyless
+// ones when the policy has identities.
+func (v *signatureVerifier) verifySigTag(repo name.Repository, digest string, opts []remote.Option) error {
 	tag := repo.Tag(strings.Replace(digest, ":", "-", 1) + ".sig")
 	img, err := remote.Image(tag, opts...)
 	if err != nil {
@@ -176,6 +225,7 @@ func (v *signatureVerifier) verifyDigest(repo name.Repository, digest string, op
 	if len(m.Layers) > maxSignatureLayers {
 		return fmt.Errorf("signatures of %s: %d layers", digest, len(m.Layers))
 	}
+	var keylessErrs []string
 	for _, desc := range m.Layers {
 		sig, err := base64.StdEncoding.DecodeString(desc.Annotations[cosignSignatureAnnotation])
 		if err != nil || len(sig) == 0 || desc.Size > maxSignaturePayload {
@@ -195,16 +245,22 @@ func (v *signatureVerifier) verifyDigest(repo name.Repository, digest string, op
 		if err != nil || len(payload) > maxSignaturePayload {
 			continue
 		}
-		if !v.signedByKey(payload, sig) {
-			continue
+		if v.signedByKey(payload, sig) {
+			var ss simpleSigning
+			if json.Unmarshal(payload, &ss) == nil && ss.Critical.Type == "cosign container image signature" && ss.Critical.Image.Digest == digest {
+				return nil
+			}
 		}
-		var ss simpleSigning
-		if json.Unmarshal(payload, &ss) != nil || ss.Critical.Type != "cosign container image signature" {
-			continue
+		if v.keyless != nil && desc.Annotations[cosignCertificateAnnotation] != "" {
+			err := v.verifyLegacyKeyless(desc.Annotations, payload, sig, digest)
+			if err == nil {
+				return nil
+			}
+			keylessErrs = append(keylessErrs, err.Error())
 		}
-		if ss.Critical.Image.Digest == digest {
-			return nil
-		}
+	}
+	if len(keylessErrs) > 0 {
+		return fmt.Errorf("no signature on %s by a trusted key or allowed identity: %s", digest, strings.Join(keylessErrs, "; "))
 	}
 	return fmt.Errorf("no signature on %s by a trusted key", digest)
 }

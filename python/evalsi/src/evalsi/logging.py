@@ -8,6 +8,7 @@ import json
 import logging
 import math
 import os
+import random
 import secrets
 import threading
 import time
@@ -27,6 +28,9 @@ class LogError(RuntimeError):
 
 
 _warnings = logging.getLogger(__name__)
+
+# Statuses worth another try: throttled, or the server or a proxy unavailable.
+_RETRYABLE = frozenset({429, 502, 503, 504})
 
 
 def _finite(value: Any) -> Any:
@@ -66,9 +70,14 @@ class Logger:
         max_bytes: int = 8 << 20,
         timeout: float = 10.0,
         exit_timeout: float = 30.0,
+        max_attempts: int = 4,
+        retry_backoff: float = 0.5,
+        max_retry_wait: float = 30.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
-        if min(batch_size, max_records, max_bytes) < 1 or min(interval, timeout, exit_timeout) <= 0:
+        if min(batch_size, max_records, max_bytes, max_attempts) < 1 or (
+            min(interval, timeout, exit_timeout, max_retry_wait) <= 0 or retry_backoff < 0
+        ):
             raise ValueError("logging limits and timeouts must be positive")
         self.endpoint = endpoint.rstrip("/") + "/v1/traces"
         self.service = service
@@ -77,6 +86,15 @@ class Logger:
         self.max_records = max_records
         self.max_bytes = max_bytes
         self.exit_timeout = exit_timeout
+        # A failed batch is sent again up to max_attempts times in all, after
+        # retry_backoff * 2**n seconds (with jitter) or the server's
+        # Retry-After, at most max_retry_wait. Every try carries the same
+        # Idempotency-Key, so a batch the server took but whose answer was lost
+        # is not stored twice.
+        self.max_attempts = max_attempts
+        self.retry_backoff = retry_backoff
+        self.max_retry_wait = max_retry_wait
+        self._stopping = threading.Event()  # set by close: no more waiting to retry
         self._http = httpx.Client(
             auth=ServerAuth(endpoint, api_key=api_key, token=token),
             timeout=timeout,
@@ -184,26 +202,49 @@ class Logger:
                 self._condition.notify_all()
 
     def _send(self, spans: list[dict[str, Any]]) -> None:
-        response = self._http.post(
-            self.endpoint,
-            json={
-                "resourceSpans": [
-                    {
-                        "resource": {
-                            "attributes": [
-                                {"key": "service.name", "value": {"stringValue": self.service}}
-                            ]
-                        },
-                        "scopeSpans": [{"scope": {"name": "evalsi.sdk"}, "spans": spans}],
-                    }
-                ]
-            },
-        )
-        if response.status_code != 200:
-            raise LogError(f"OTLP export failed with HTTP {response.status_code}")
-        partial = response.json().get("partialSuccess", {})
-        if int(partial.get("rejectedSpans", 0)):
-            raise LogError("OTLP export partially rejected the batch")
+        body = {
+            "resourceSpans": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {"key": "service.name", "value": {"stringValue": self.service}}
+                        ]
+                    },
+                    "scopeSpans": [{"scope": {"name": "evalsi.sdk"}, "spans": spans}],
+                }
+            ]
+        }
+        # One key for every try of this batch (the server takes 1 to 128 visible
+        # ASCII characters); the body is the same each time, as it requires.
+        headers = {"Idempotency-Key": "evalsi-log-" + secrets.token_hex(16)}
+        for attempt in range(1, self.max_attempts + 1):
+            wait: float | None = None
+            try:
+                response = self._http.post(self.endpoint, json=body, headers=headers)
+            except httpx.TransportError as error:
+                failure = LogError(f"OTLP export failed: {type(error).__name__}")
+                wait = self._backoff(attempt, None)
+            else:
+                if response.status_code == 200:
+                    partial = response.json().get("partialSuccess", {})
+                    if int(partial.get("rejectedSpans", 0)):
+                        raise LogError("OTLP export partially rejected the batch")
+                    return
+                failure = LogError(f"OTLP export failed with HTTP {response.status_code}")
+                if response.status_code in _RETRYABLE:
+                    wait = self._backoff(attempt, response.headers.get("Retry-After"))
+            # A closing logger does not wait to retry: it must not hold exit.
+            if wait is None or attempt == self.max_attempts or self._stopping.is_set():
+                raise failure
+            if self._stopping.wait(wait):
+                raise failure
+
+    def _backoff(self, attempt: int, retry_after: str | None) -> float:
+        if retry_after is not None:
+            with contextlib.suppress(ValueError):
+                return float(min(max(float(retry_after), 0.0), self.max_retry_wait))
+        delay = self.retry_backoff * 2 ** (attempt - 1)
+        return float(min(delay * (0.5 + random.random() / 2), self.max_retry_wait))
 
     def flush(self, timeout: float | None = None) -> None:
         with self._condition:
@@ -224,6 +265,7 @@ class Logger:
                 return
             self._closed = True
             self._condition.notify_all()
+        self._stopping.set()
         self._thread.join(timeout)
         atexit.unregister(self._close_at_exit)
         if self._thread.is_alive():

@@ -445,7 +445,7 @@ The scoring code and the image are the same on every rung. That is how the Phase
 `TauBenchHarness` is the built-in harness with a tau2 domain around it:
 
 - **Tools and prompt:** the domain's tools run against a live tau2 environment, and the agent gets tau2's agent instruction and the domain policy.
-- **The user:** the Evals.si user simulator plays the task's persona and instructions, through the run's judge. tau2's own LiteLLM user simulator is not used, so provider keys stay with the judge config. Expect scores close to, but not identical with, tau2's leaderboard.
+- **The user:** the Evals.si user simulator plays the task's persona and instructions, through the run's judge. By default tau2's own LiteLLM user simulator is not used, so provider keys stay with the judge config, and scores are close to, but not identical with, tau2's leaderboard. Import with `taubench://airline?user=tau2` to use tau2's own `UserSimulator` instead: its prompts, tool calling and stop tokens, through tau2's LiteLLM wrapper, answering the agent's greeting as in tau2. That user is a model LiteLLM names (`user_llm=`, default `gpt-4.1`; `user_llm_args=` a JSON object, default `{"temperature": 0}`) with its own provider credentials in the worker's environment (for example `OPENAI_API_KEY`), not the run's judge. Recording and replay work with either user. The tau2 user path is tested with a scripted user model, not a live one.
 - **Recording:** replay restores the user's transcript, tool-call IDs and grading exchanges, and reapplies both agent and user actions to the fresh domain environment. Resume and fork continue from that state; a replay needs no user judge.
 - **Grading:** tau2's own evaluator on the conversation.
 - **Dual control (telecom):** the user has tools of their own: their phone. The simulated user then follows tau2's user prompt and guidelines through the run's judge. Each turn they either message the agent or call one of their tools against the same tau2 environment. Their calls are part of the conversation tau2 grades, so assertions on the device's state hold.
@@ -481,7 +481,12 @@ The multi-turn categories (`multi_turn_base`, `multi_turn_miss_func`, `multi_tur
 - BFCL's multi-turn checker grades every turn's end state and results.
 - A call runs only when it names a function offered at that step, with its JSON arguments as Python literals, because BFCL executes calls as code.
 
-Memory, web-search and format-sensitivity categories are not supported.
+The agentic categories use the same loop on one question and check the model's last message without tool calls against BFCL's expected answers (ignoring case and punctuation):
+
+- `web_search_base` and `web_search_no_snippet` give the model BFCL's search and page-fetch tools. They need `SERPAPI_API_KEY` and network access on the worker; `no_snippet` hides result snippets.
+- `memory_kv`, `memory_vector` and `memory_rec_sum` give it BFCL's memory tools for a scenario (student, customer, finance, healthcare or notetaker). Before the first question of a scenario, the harness replays BFCL's prerequisite conversations with the target model, which writes memory as it goes. This happens once per target model, backend and scenario in a harness process, and takes dozens of model calls. If it fails, every question of the scenario fails with that error, where BFCL would continue with empty memory. `memory_vector` loads a sentence-transformers model, downloaded on first use.
+
+Format-sensitivity categories are not supported. The memory and web-search paths are tested with a scripted model and, for web search, a canned search API; they have not been run against a live model or SerpAPI.
 
 ## From production to regression tests
 
@@ -513,6 +518,20 @@ sandbox:
 ```
 
 An image is used only when the registry holds a signature by one of the keys, on the image or on the index its tag points to (`cosign sign --key cosign.key <image>`). Signatures must be in cosign's `.sig` tag format, which is cosign 2's default. Verification is offline, with no transparency log. For an air-gapped registry, copy signatures with `cosign copy`. The pod rung's images are pulled by the kubelet, so enforce signatures there with your cluster's admission policy.
+
+**Keyless signatures.** Images signed with `cosign sign` without a key (a short-lived Fulcio certificate, logged in Rekor) are accepted for the identities you list, with a sigstore trusted root that names the Fulcio CAs and Rekor keys to trust:
+
+```yaml
+sandbox:
+  image_signatures:
+    trusted_root: /etc/evalsi/trusted_root.json   # file or JSON text; `cosign trusted-root create`, or the public-good root from the Sigstore TUF repository
+    keyless:                                      # any one identity suffices; each needs an issuer and a subject, exact or *_regexp
+      - issuer: https://token.actions.githubusercontent.com
+        subject_regexp: '^https://github\.com/acme/images/\.github/workflows/release\.yml@refs/tags/v.*$'
+    # keys: [...]                                 # may be set too: either kind of signature passes
+```
+
+Two formats are read: the `.sig` tag with `dev.sigstore.cosign/certificate` and `/bundle` annotations (cosign 2), and a sigstore bundle stored as an OCI 1.1 referrer of the image (cosign 3's default; registries without the referrers API are read through the `sha256-<digest>` fallback tag). A signature passes when the certificate chains to the trusted root and was valid when it was logged, the log entry's signed entry timestamp, or inclusion proof with signed checkpoint, verifies against the root's Rekor keys, the signature matches the image digest, and the certificate's issuer and subject match an identity. Verification is offline: the server never calls Fulcio or Rekor, so keep the trusted root current (a rotated Fulcio CA or Rekor key needs a new file; it is read at start). Signed certificate timestamps (CT log) are not required. Rekor v2 (tile-based) entries are handled by the verification library but have not been exercised here.
 
 **Local images.** Image references that read host paths (`dir:`, `oci-layout:`, `docker-archive:`) are refused, because a spec can name `dir:/`. Set `sandbox.allow_local_images: true` to accept them, for example on a developer machine. With `image_signatures`, its `allow_local` decides instead.
 
