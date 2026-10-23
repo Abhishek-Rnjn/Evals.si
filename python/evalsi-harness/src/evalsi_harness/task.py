@@ -73,9 +73,63 @@ class CheckerConfig:
     protect: list[str] = field(default_factory=list)
     on_change: str = "fail"
     # "shared" runs the checker in the agent's sandbox. "clean" runs it in a fresh
-    # one that receives only the files under ``outputs`` (see isolate.py).
+    # one that receives only the files under ``outputs`` (see isolate.py); "diff"
+    # in a fresh one that receives the agent's diff (see diffcheck.py).
     isolation: str = "shared"
     outputs: list[str] = field(default_factory=list)
+    # With "diff": globs whose changes are never applied (see diffcheck.py).
+    exclude: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DatabaseToolConfig:
+    name: str
+    sql: str
+    description: str = ""
+    parameters: dict[str, Any] = field(default_factory=dict)
+    mode: str = "read"
+    min_rows: int = 0
+    max_rows: int = 0
+
+
+@dataclass
+class DatabaseAssertion:
+    name: str
+    sql: str
+    expect: Any = None
+
+
+@dataclass
+class DatabaseConfig:
+    """A SQLite tool environment (see dbenv.py)."""
+
+    schema: str = ""
+    seed: str = ""
+    tools: list[DatabaseToolConfig] = field(default_factory=list)
+    assertions: list[DatabaseAssertion] = field(default_factory=list)
+
+
+@dataclass
+class StageCopy:
+    """A file or directory taken out of a build stage (``COPY --from``)."""
+
+    stage: str
+    source: str
+    destination: str
+
+
+@dataclass
+class BuildStageConfig:
+    """An earlier stage of a multi-stage build, built in a sandbox of its own (see
+    EnvironmentPool): its files and setup run in its image, after the files copied from
+    stages listed before it. The stages are not kept; only the files copied out are."""
+
+    name: str
+    image: str
+    files: dict[str, str] = field(default_factory=dict)
+    setup: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+    copy_from: list[StageCopy] = field(default_factory=list)
 
 
 @dataclass
@@ -93,6 +147,23 @@ class EnvironmentConfig:
     command_timeout_s: float = 120.0
     services: list[ServiceSpec] = field(default_factory=list)
     service_lifetime_s: float = 0.0
+    stages: list[BuildStageConfig] = field(default_factory=list)
+    copy_from: list[StageCopy] = field(default_factory=list)
+    database: DatabaseConfig | None = None
+    # Named volumes of the agent's sandbox shared with services (bubblewrap).
+    volumes: list[str] = field(default_factory=list)
+
+    @property
+    def needs_sandbox(self) -> bool:
+        """A task with only a database has no use for a sandbox."""
+        return self.database is None or bool(
+            self.image
+            or self.files
+            or self.setup
+            or self.services
+            or self.stages
+            or self.checker is not None
+        )
 
     def key(self) -> str:
         """Identifies environments that can share one setup snapshot."""
@@ -106,6 +177,9 @@ class EnvironmentConfig:
             "env": self.env,
             "services": [asdict(s) for s in self.services],
             "service_lifetime_s": self.service_lifetime_s,
+            "stages": [asdict(s) for s in self.stages],
+            "copy_from": [asdict(c) for c in self.copy_from],
+            "volumes": self.volumes,
         }
         return hashlib.sha256(json.dumps(built, sort_keys=True).encode()).hexdigest()[:16]
 
@@ -123,6 +197,10 @@ _ENV_FIELDS = {
     "command_timeout",
     "services",
     "service_lifetime",
+    "stages",
+    "copy_from",
+    "database",
+    "volumes",
 }
 
 
@@ -187,6 +265,7 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
             on_change=str(raw_checker.get("on_change") or "fail"),
             isolation=str(raw_checker.get("isolation") or "shared"),
             outputs=[str(p) for p in raw_checker.get("outputs") or []],
+            exclude=[str(p) for p in raw_checker.get("exclude") or []],
         )
         from evalsi_harness.protect import MODES, validate_patterns
 
@@ -201,6 +280,8 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         service_lifetime = seconds(data.get("service_lifetime"), 0)
     except (TypeError, ValueError, AttributeError) as exc:
         raise TaskError(f"invalid environment services: {exc}") from exc
+    database = _database(data.get("database"), record.id)
+    stages, copies = _stages(data, record.id)
     if checker is not None:
         from evalsi_harness import isolate
 
@@ -209,6 +290,10 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         except ValueError as exc:
             raise TaskError(f"checker: {exc}") from exc
     return EnvironmentConfig(
+        volumes=[str(v) for v in data.get("volumes") or []],
+        stages=stages,
+        copy_from=copies,
+        database=database,
         services=services,
         service_lifetime_s=service_lifetime,
         image=str(data.get("image", "")),
@@ -222,6 +307,86 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         env={str(k): str(v) for k, v in (data.get("env") or {}).items()},
         command_timeout_s=seconds(data.get("command_timeout"), 120.0),
     )
+
+
+def _database(raw: Any, record_id: str) -> DatabaseConfig | None:
+    if not raw:
+        return None
+    if not isinstance(raw, Mapping):
+        raise TaskError(f"record {record_id}: environment.database must be a mapping")
+    try:
+        config = DatabaseConfig(
+            schema=str(raw.get("schema") or ""),
+            seed=str(raw.get("seed") or ""),
+            tools=[
+                DatabaseToolConfig(
+                    name=str(t.get("name", "")),
+                    sql=str(t.get("sql", "")),
+                    description=str(t.get("description", "")),
+                    parameters=dict(t.get("parameters") or {}),
+                    mode=str(t.get("mode") or "read"),
+                    min_rows=int(t.get("min_rows") or 0),
+                    max_rows=int(t.get("max_rows") or 0),
+                )
+                for t in raw.get("tools") or []
+            ],
+            assertions=[
+                DatabaseAssertion(str(a.get("name", "")), str(a.get("sql", "")), a.get("expect"))
+                for a in raw.get("assertions") or []
+            ],
+        )
+        from evalsi_harness import dbenv
+
+        dbenv.validate(config)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise TaskError(f"environment.database: {exc}") from exc
+    return config
+
+
+def _copies(raw: Any) -> list[StageCopy]:
+    return [
+        StageCopy(str(c.get("stage", "")), str(c.get("source", "")), str(c.get("destination", "")))
+        for c in raw or []
+    ]
+
+
+def _stages(
+    data: Mapping[str, Any], record_id: str
+) -> tuple[list[BuildStageConfig], list[StageCopy]]:
+    try:
+        stages = [
+            BuildStageConfig(
+                name=str(s.get("name", "")),
+                image=str(s.get("image", "")),
+                files={str(k): str(v) for k, v in (s.get("files") or {}).items()},
+                setup=[str(c) for c in s.get("setup") or []],
+                env={str(k): str(v) for k, v in (s.get("env") or {}).items()},
+                copy_from=_copies(s.get("copy_from")),
+            )
+            for s in data.get("stages") or []
+        ]
+        copies = _copies(data.get("copy_from"))
+    except (TypeError, AttributeError) as exc:
+        raise TaskError(f"record {record_id}: invalid stages or copy_from: {exc}") from exc
+    seen: set[str] = set()
+    for s in stages:
+        if not s.name or not s.image:
+            raise TaskError("every build stage needs a name and an image")
+        if s.name in seen:
+            raise TaskError("build stage names must be unique")
+        for c in s.copy_from:
+            if c.stage not in seen:
+                raise TaskError(
+                    f"stage {s.name} copies from {c.stage!r}, which is not an earlier stage"
+                )
+        seen.add(s.name)
+    for c in copies:
+        if c.stage not in seen:
+            raise TaskError(f"copy_from names an unknown stage {c.stage!r}")
+    for c in [*copies, *(c for s in stages for c in s.copy_from)]:
+        if not c.source.startswith("/") or not c.destination:
+            raise TaskError("copy_from needs an absolute source and a destination")
+    return stages, copies
 
 
 @dataclass

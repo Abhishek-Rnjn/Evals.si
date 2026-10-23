@@ -60,6 +60,14 @@ sources:
   allowHosts: []          # [mlflow.studio.svc.cluster.local]
   maxRecordsPerSecond: 0  # the server's cap for a source that sets none (0: 200)
 
+# Webhook delivery (docs/guides/webhooks.md). A webhook URL must be https to
+# a public address unless its host is listed here (exact, or *.domain); the
+# hosts of bootstrap.webhooks are added for you. ssrfGuard: false turns the
+# check off (the behaviour before v0.4).
+webhooks:
+  ssrfGuard: true
+  allowHosts: []          # [studio.studio.svc, *.studio.svc.cluster.local]
+
 # An egress NetworkPolicy for the evalsid pods (off by default: turning it on
 # denies whatever it does not list). It allows DNS, every pod in the release's
 # namespace (Postgres, NATS, MinIO, workers, sandbox pools), and the rules

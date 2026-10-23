@@ -4,6 +4,7 @@ fault injection for robustness tests."""
 from __future__ import annotations
 
 import asyncio
+import base64
 import inspect
 import json
 import math
@@ -13,10 +14,21 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from evalsi.sandbox import SandboxError
+from evalsi.types import Content, Media, Step
 from evalsi_harness.environment import TaskEnvironment
+from evalsi_harness.events import span_id
 from evalsi_harness.models import ToolSpec
 
 OUTPUT_LIMIT = 16_000
+
+
+@dataclass
+class Image:
+    """An image a tool returned (a screenshot). The model sees it beside the text, and
+    the trajectory records it as a ``media`` step under the tool's step."""
+
+    media_type: str
+    data: bytes
 
 
 @dataclass
@@ -24,6 +36,33 @@ class ToolResult:
     content: str
     is_error: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
+    images: list[Image] = field(default_factory=list)
+
+
+MAX_STEP_IMAGE_BYTES = 1 << 20
+
+
+def image_blocks(images: list[Image]) -> list[dict[str, str]]:
+    """The images as the model-facing blocks a tool message carries: base64 data."""
+    return [{"media_type": i.media_type, "data": base64.b64encode(i.data).decode()} for i in images]
+
+
+def image_step(image: Image, parent: str) -> Step:
+    """The trajectory step for an image: a ``data:`` URI, or a note when it is too big
+    to keep (the model still saw it)."""
+    if len(image.data) > MAX_STEP_IMAGE_BYTES:
+        output = Content(text=f"[{image.media_type}, {len(image.data)} bytes, not recorded]")
+    else:
+        uri = f"data:{image.media_type};base64,{base64.b64encode(image.data).decode()}"
+        output = Content(media=Media(uri=uri, media_type=image.media_type))
+    return Step(
+        type="generic",
+        name="image",
+        output=output,
+        span_id=span_id(),
+        parent_span_id=parent,
+        attributes={"evalsi.media.type": image.media_type, "evalsi.media.bytes": len(image.data)},
+    )
 
 
 class Tool(Protocol):

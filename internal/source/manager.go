@@ -43,7 +43,10 @@ type Options struct {
 	PageSize int
 	// The cap on pulled traces per second for a source that sets none.
 	MaxRate int
-	Now     func() time.Time
+	// How long a scheduled window waits before it asks again for traces a
+	// store listed but did not return (default 2s, doubling per try).
+	RefetchWait time.Duration
+	Now         func() time.Time
 }
 
 // Manager runs one runner per source. It runs only on the replica that holds
@@ -76,6 +79,9 @@ func New(st *store.Store, ing Ingester, opts Options) *Manager {
 	}
 	if opts.MaxRate <= 0 {
 		opts.MaxRate = 200
+	}
+	if opts.RefetchWait <= 0 {
+		opts.RefetchWait = 2 * time.Second
 	}
 	if opts.Now == nil {
 		opts.Now = time.Now

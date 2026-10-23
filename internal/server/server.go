@@ -45,6 +45,8 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
 	"github.com/abhishek-rnjn/evals.si/internal/mcp"
 	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
+	"github.com/abhishek-rnjn/evals.si/internal/quality"
+	"github.com/abhishek-rnjn/evals.si/internal/quota"
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/runs"
 	"github.com/abhishek-rnjn/evals.si/internal/sinks"
@@ -141,6 +143,10 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		return err
 	}
 	defer st.Close()
+	// Sandbox time of online policies, guardrails and rewards counts toward
+	// sandbox_seconds_per_day (runs meter their own).
+	meter := quota.NewSandboxMeter(st, cfg.Quotas, log)
+	svc.UseSandboxMeter(meter)
 	exports, err := sinks.New(cfg.Sinks, nil, log)
 	if err != nil {
 		return err
@@ -169,7 +175,7 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	auditConfig(ctx, auditor, "config.load", map[string]any{"sections": configSections(cfg)})
 	creds.OnDenied(func(ctx context.Context, d credentials.Denial) { auditDenial(ctx, auditor, d) })
 	hooks := webhooks.New(st, webhooks.Options{
-		SSRFGuard: cfg.Webhooks.SSRFGuard, AllowHosts: cfg.Webhooks.AllowHosts,
+		SSRFGuard: cfg.Webhooks.GuardEnabled(), AllowHosts: cfg.Webhooks.AllowHosts,
 		Logger: log, MaxAttempts: cfg.Webhooks.MaxAttempts,
 		Timeout: optDuration(cfg.Webhooks.Timeout), Retention: optDuration(cfg.Webhooks.Retention),
 	})
@@ -294,9 +300,20 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	go func() { defer wg.Done(); retain(bg, st, config.Duration(cfg.Traces.Retention), log) }()
 	go func() { defer wg.Done(); auditor.Retain(bg, cfg.Audit.RetentionDuration()) }()
 	go func() { defer wg.Done(); pruneIdempotency(bg, st, log) }()
+	var qualityExports *quality.Exporter
+	if len(cfg.QualityExports) > 0 {
+		qualityExports = quality.NewExporter(cfg.QualityExports, st, watcher.TraceScores, log)
+		wg.Add(1)
+		go func() { defer wg.Done(); qualityExports.Run(bg) }()
+	}
+	limits := newLimiter(cfg, log)
+	wg.Add(1)
+	go func() { defer wg.Done(); meter.Run(bg) }()
+	wg.Add(1)
+	go func() { defer wg.Done(); limits.runShared(bg, st) }()
 	if cfg.Reload != nil {
 		wg.Add(1)
-		go func() { defer wg.Done(); reloadCredentials(bg, cfg, creds, watcher, auditor, log) }()
+		go func() { defer wg.Done(); reloadConfig(bg, cfg, creds, watcher, limits, auditor, log) }()
 	}
 	defer func() {
 		close(stopAssembler) // flushes buffered traces into the engine
@@ -329,13 +346,14 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 		go func() { defer wg.Done(); reconcileAuthz(bg, engine, log) }()
 	}
 	g := newGate(engine, auditor, st, watcher, authSvc, svc.RunsCode, svc.EffectiveJudge, log)
-	g.limits = newLimiter(cfg, log)
+	g.limits = limits
+	g.sandbox = meter
 	rewardSvc := rewards.New(svc, cfg.Rewards, cfg.Quotas)
 	if cfg.Rewards.SharedCache {
 		rewardSvc.UseSharedCache(st, log)
 		go pruneRewardCache(ctx, st, cfg.Rewards.SharedCacheTTL, log)
 	}
-	d := deps{datasets: &datasets.Service{Root: cfg.DatasetsDir, Objects: objects}, redactor: redactor, sources: sourceSvc, svc: svc, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, webhooks: hooks, mcp: cfg.MCP, ui: cfg.UI, log: log}
+	d := deps{datasets: &datasets.Service{Root: cfg.DatasetsDir, Objects: objects}, redactor: redactor, sources: sourceSvc, svc: svc, quality: qualityExports, rewards: rewardSvc, runs: runManager, watcher: watcher, store: st, assembler: assembler, worker: worker, authn: authn, gate: g, authSvc: authSvc, webhooks: hooks, mcp: cfg.MCP, ui: cfg.UI, log: log}
 	if cl != nil {
 		d.forward = cl.PublishSpans
 	}
@@ -532,6 +550,8 @@ type deps struct {
 	authSvc   *authz.Service
 	webhooks  *webhooks.Service
 	sources   *source.Service
+	// Per-group quality gauges (decision 0038); nil without quality_exports.
+	quality *quality.Exporter
 	// In a cluster, received spans go to the span stream.
 	forward ingest.Forward
 	mcp     mcp.Config
@@ -580,6 +600,7 @@ func Handler(d deps) http.Handler {
 	gated := d.gate.handlerOptions()
 	mux := http.NewServeMux()
 	registerDatasetUpload(mux, d)
+	registerQuality(mux, d)
 	log := d.log
 	if log == nil {
 		log = slog.Default()
@@ -633,7 +654,7 @@ func Handler(d deps) http.Handler {
 	// (LLM traffic) and the ExtMcp processor service (MCP traffic, gRPC).
 	mux.Handle("POST /guardrails/{project}/{guardrail}/{phase}", guard.Webhook(d.gate.authorizeGuardrail))
 	mux.Handle(ext_mcpconnect.NewExtMcpHandler(guard.ExtMcp(), gated))
-	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.webhooks.WriteMetrics, d.sources.WriteMetrics, d.svc.Credentials().WriteMetrics, d.gate.WriteMetrics)))
+	mux.Handle("GET /metrics", d.gate.guardHTTP("metrics.read", false, watch.MetricsHandler(d.watcher, d.assembler, d.rewards.WriteMetrics, d.runs.WriteMetrics, guard.WriteMetrics, d.webhooks.WriteMetrics, d.sources.WriteMetrics, d.svc.Credentials().WriteMetrics, d.gate.WriteMetrics, d.quality.WriteMetrics)))
 	services := []string{
 		evalsiv1alpha1connect.EvaluationServiceName,
 		evalsiv1alpha1connect.CatalogServiceName,

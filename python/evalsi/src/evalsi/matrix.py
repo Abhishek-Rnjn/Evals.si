@@ -274,6 +274,7 @@ OPTIONAL_TOOLS = (
     "glob",
     "grep",
     "apply_patch",
+    "process_start",
     "memory",
     "session_search",
     "delegate",

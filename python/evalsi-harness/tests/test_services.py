@@ -123,7 +123,7 @@ def test_multi_service_terminal_bench_import(tmp_path: Path) -> None:
     (task / "docker-compose.yaml").write_text(yaml.safe_dump(doc))
     [row] = load_terminal_bench(str(task))
     env = row["metadata"]["environment"]
-    assert env["services"] == [asdict(service())]
+    assert [ServiceSpec.from_dict(x) for x in env["services"]] == [service()]
     assert env["service_lifetime"] == "3600s"
 
 
@@ -142,20 +142,20 @@ def test_terminal_bench_service_lifetime_outlasts_task_limits(tmp_path: Path) ->
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
+    ("field", "value", "message"),
     [
-        ("privileged", True),
-        ("volumes", ["/:/host"]),
-        ("network_mode", "host"),
-        ("ports", ["6379:6379"]),
-        ("build", "."),
+        ("privileged", True, "privileged is not supported"),
+        ("volumes", ["/:/host"], "host path"),
+        ("network_mode", "host", "network_mode"),
     ],
 )
-def test_compose_does_not_drop_unsupported_options(tmp_path: Path, field: str, value: Any) -> None:
+def test_compose_does_not_drop_unsupported_options(
+    tmp_path: Path, field: str, value: Any, message: str
+) -> None:
     task, doc = compose_fixture(tmp_path)
     doc["services"]["db"][field] = value
     (task / "docker-compose.yaml").write_text(yaml.safe_dump(doc))
-    with pytest.raises(TaskFormatError, match="unsupported Compose fields"):
+    with pytest.raises(TaskFormatError, match=message):
         load_terminal_bench(str(task))
 
 

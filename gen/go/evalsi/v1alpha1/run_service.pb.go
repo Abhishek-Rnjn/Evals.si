@@ -103,8 +103,11 @@ func (x *CreateRunRequest) GetValidateOnly() bool {
 }
 
 type CreateRunResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Run           *Run                   `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Run   *Run                   `protobuf:"bytes,1,opt,name=run,proto3" json:"run,omitempty"`
+	// With spec.sweep: every run the sweep created, in variant order; run is
+	// the first.
+	SweepRuns     []*Run `protobuf:"bytes,2,rep,name=sweep_runs,json=sweepRuns,proto3" json:"sweep_runs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -142,6 +145,13 @@ func (*CreateRunResponse) Descriptor() ([]byte, []int) {
 func (x *CreateRunResponse) GetRun() *Run {
 	if x != nil {
 		return x.Run
+	}
+	return nil
+}
+
+func (x *CreateRunResponse) GetSweepRuns() []*Run {
+	if x != nil {
+		return x.SweepRuns
 	}
 	return nil
 }
@@ -2058,9 +2068,11 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\rvalidate_only\x18\x05 \x01(\bR\fvalidateOnly\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\";\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
 	"\x11CreateRunResponse\x12&\n" +
-	"\x03run\x18\x01 \x01(\v2\x14.evalsi.v1alpha1.RunR\x03run\"\x1f\n" +
+	"\x03run\x18\x01 \x01(\v2\x14.evalsi.v1alpha1.RunR\x03run\x123\n" +
+	"\n" +
+	"sweep_runs\x18\x02 \x03(\v2\x14.evalsi.v1alpha1.RunR\tsweepRuns\"\x1f\n" +
 	"\rGetRunRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"8\n" +
 	"\x0eGetRunResponse\x12&\n" +
@@ -2287,73 +2299,74 @@ var file_evalsi_v1alpha1_run_service_proto_depIdxs = []int32{
 	37, // 0: evalsi.v1alpha1.CreateRunRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
 	33, // 1: evalsi.v1alpha1.CreateRunRequest.labels:type_name -> evalsi.v1alpha1.CreateRunRequest.LabelsEntry
 	38, // 2: evalsi.v1alpha1.CreateRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	38, // 3: evalsi.v1alpha1.GetRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	38, // 4: evalsi.v1alpha1.ListRunsResponse.runs:type_name -> evalsi.v1alpha1.Run
-	38, // 5: evalsi.v1alpha1.WatchRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	39, // 6: evalsi.v1alpha1.WatchRunResponse.progress:type_name -> evalsi.v1alpha1.Progress
-	40, // 7: evalsi.v1alpha1.WatchRunResponse.result:type_name -> evalsi.v1alpha1.EvaluationResult
-	38, // 8: evalsi.v1alpha1.CancelRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	38, // 9: evalsi.v1alpha1.ResumeRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	38, // 10: evalsi.v1alpha1.ArchiveRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	40, // 11: evalsi.v1alpha1.ListRunResultsResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	41, // 12: evalsi.v1alpha1.ListRunResultsResponse.records:type_name -> evalsi.v1alpha1.Record
-	19, // 13: evalsi.v1alpha1.ListRunResultsResponse.records_by_trial:type_name -> evalsi.v1alpha1.RunRecordEvidence
-	41, // 14: evalsi.v1alpha1.RunRecordEvidence.record:type_name -> evalsi.v1alpha1.Record
-	19, // 15: evalsi.v1alpha1.GetRecordEvidenceResponse.evidence:type_name -> evalsi.v1alpha1.RunRecordEvidence
-	40, // 16: evalsi.v1alpha1.GetRecordEvidenceResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	34, // 17: evalsi.v1alpha1.SliceRunsRequest.labels:type_name -> evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
-	23, // 18: evalsi.v1alpha1.SliceRunsResponse.rows:type_name -> evalsi.v1alpha1.SliceRow
-	42, // 19: evalsi.v1alpha1.MetricComparison.diff_ci:type_name -> evalsi.v1alpha1.ConfidenceInterval
-	25, // 20: evalsi.v1alpha1.CompareRunsResponse.comparisons:type_name -> evalsi.v1alpha1.MetricComparison
-	37, // 21: evalsi.v1alpha1.CreateShadowReplayRequest.candidate:type_name -> evalsi.v1alpha1.RunSpec
-	35, // 22: evalsi.v1alpha1.CreateShadowReplayRequest.labels:type_name -> evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
-	38, // 23: evalsi.v1alpha1.CreateShadowReplayResponse.baseline:type_name -> evalsi.v1alpha1.Run
-	38, // 24: evalsi.v1alpha1.CreateShadowReplayResponse.candidate:type_name -> evalsi.v1alpha1.Run
-	36, // 25: evalsi.v1alpha1.ImportRunRequest.labels:type_name -> evalsi.v1alpha1.ImportRunRequest.LabelsEntry
-	37, // 26: evalsi.v1alpha1.ImportRunRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
-	41, // 27: evalsi.v1alpha1.ImportRunRequest.records:type_name -> evalsi.v1alpha1.Record
-	40, // 28: evalsi.v1alpha1.ImportRunRequest.results:type_name -> evalsi.v1alpha1.EvaluationResult
-	43, // 29: evalsi.v1alpha1.ImportRunRequest.summaries:type_name -> evalsi.v1alpha1.MetricSummary
-	44, // 30: evalsi.v1alpha1.ImportRunRequest.started_at:type_name -> google.protobuf.Timestamp
-	44, // 31: evalsi.v1alpha1.ImportRunRequest.finished_at:type_name -> google.protobuf.Timestamp
-	45, // 32: evalsi.v1alpha1.ImportRunRequest.target_usage:type_name -> evalsi.v1alpha1.Usage
-	45, // 33: evalsi.v1alpha1.ImportRunRequest.judge_usage:type_name -> evalsi.v1alpha1.Usage
-	38, // 34: evalsi.v1alpha1.ImportRunResponse.run:type_name -> evalsi.v1alpha1.Run
-	0,  // 35: evalsi.v1alpha1.RunService.CreateRun:input_type -> evalsi.v1alpha1.CreateRunRequest
-	2,  // 36: evalsi.v1alpha1.RunService.GetRun:input_type -> evalsi.v1alpha1.GetRunRequest
-	4,  // 37: evalsi.v1alpha1.RunService.ListRuns:input_type -> evalsi.v1alpha1.ListRunsRequest
-	6,  // 38: evalsi.v1alpha1.RunService.WatchRun:input_type -> evalsi.v1alpha1.WatchRunRequest
-	8,  // 39: evalsi.v1alpha1.RunService.CancelRun:input_type -> evalsi.v1alpha1.CancelRunRequest
-	10, // 40: evalsi.v1alpha1.RunService.ResumeRun:input_type -> evalsi.v1alpha1.ResumeRunRequest
-	12, // 41: evalsi.v1alpha1.RunService.DeleteRun:input_type -> evalsi.v1alpha1.DeleteRunRequest
-	14, // 42: evalsi.v1alpha1.RunService.ArchiveRun:input_type -> evalsi.v1alpha1.ArchiveRunRequest
-	16, // 43: evalsi.v1alpha1.RunService.ListRunResults:input_type -> evalsi.v1alpha1.ListRunResultsRequest
-	18, // 44: evalsi.v1alpha1.RunService.GetRecordEvidence:input_type -> evalsi.v1alpha1.GetRecordEvidenceRequest
-	21, // 45: evalsi.v1alpha1.RunService.CompareRuns:input_type -> evalsi.v1alpha1.CompareRunsRequest
-	22, // 46: evalsi.v1alpha1.RunService.SliceRuns:input_type -> evalsi.v1alpha1.SliceRunsRequest
-	27, // 47: evalsi.v1alpha1.RunService.PromoteResults:input_type -> evalsi.v1alpha1.PromoteResultsRequest
-	29, // 48: evalsi.v1alpha1.RunService.CreateShadowReplay:input_type -> evalsi.v1alpha1.CreateShadowReplayRequest
-	31, // 49: evalsi.v1alpha1.RunService.ImportRun:input_type -> evalsi.v1alpha1.ImportRunRequest
-	1,  // 50: evalsi.v1alpha1.RunService.CreateRun:output_type -> evalsi.v1alpha1.CreateRunResponse
-	3,  // 51: evalsi.v1alpha1.RunService.GetRun:output_type -> evalsi.v1alpha1.GetRunResponse
-	5,  // 52: evalsi.v1alpha1.RunService.ListRuns:output_type -> evalsi.v1alpha1.ListRunsResponse
-	7,  // 53: evalsi.v1alpha1.RunService.WatchRun:output_type -> evalsi.v1alpha1.WatchRunResponse
-	9,  // 54: evalsi.v1alpha1.RunService.CancelRun:output_type -> evalsi.v1alpha1.CancelRunResponse
-	11, // 55: evalsi.v1alpha1.RunService.ResumeRun:output_type -> evalsi.v1alpha1.ResumeRunResponse
-	13, // 56: evalsi.v1alpha1.RunService.DeleteRun:output_type -> evalsi.v1alpha1.DeleteRunResponse
-	15, // 57: evalsi.v1alpha1.RunService.ArchiveRun:output_type -> evalsi.v1alpha1.ArchiveRunResponse
-	17, // 58: evalsi.v1alpha1.RunService.ListRunResults:output_type -> evalsi.v1alpha1.ListRunResultsResponse
-	20, // 59: evalsi.v1alpha1.RunService.GetRecordEvidence:output_type -> evalsi.v1alpha1.GetRecordEvidenceResponse
-	26, // 60: evalsi.v1alpha1.RunService.CompareRuns:output_type -> evalsi.v1alpha1.CompareRunsResponse
-	24, // 61: evalsi.v1alpha1.RunService.SliceRuns:output_type -> evalsi.v1alpha1.SliceRunsResponse
-	28, // 62: evalsi.v1alpha1.RunService.PromoteResults:output_type -> evalsi.v1alpha1.PromoteResultsResponse
-	30, // 63: evalsi.v1alpha1.RunService.CreateShadowReplay:output_type -> evalsi.v1alpha1.CreateShadowReplayResponse
-	32, // 64: evalsi.v1alpha1.RunService.ImportRun:output_type -> evalsi.v1alpha1.ImportRunResponse
-	50, // [50:65] is the sub-list for method output_type
-	35, // [35:50] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	38, // 3: evalsi.v1alpha1.CreateRunResponse.sweep_runs:type_name -> evalsi.v1alpha1.Run
+	38, // 4: evalsi.v1alpha1.GetRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	38, // 5: evalsi.v1alpha1.ListRunsResponse.runs:type_name -> evalsi.v1alpha1.Run
+	38, // 6: evalsi.v1alpha1.WatchRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	39, // 7: evalsi.v1alpha1.WatchRunResponse.progress:type_name -> evalsi.v1alpha1.Progress
+	40, // 8: evalsi.v1alpha1.WatchRunResponse.result:type_name -> evalsi.v1alpha1.EvaluationResult
+	38, // 9: evalsi.v1alpha1.CancelRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	38, // 10: evalsi.v1alpha1.ResumeRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	38, // 11: evalsi.v1alpha1.ArchiveRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	40, // 12: evalsi.v1alpha1.ListRunResultsResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	41, // 13: evalsi.v1alpha1.ListRunResultsResponse.records:type_name -> evalsi.v1alpha1.Record
+	19, // 14: evalsi.v1alpha1.ListRunResultsResponse.records_by_trial:type_name -> evalsi.v1alpha1.RunRecordEvidence
+	41, // 15: evalsi.v1alpha1.RunRecordEvidence.record:type_name -> evalsi.v1alpha1.Record
+	19, // 16: evalsi.v1alpha1.GetRecordEvidenceResponse.evidence:type_name -> evalsi.v1alpha1.RunRecordEvidence
+	40, // 17: evalsi.v1alpha1.GetRecordEvidenceResponse.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	34, // 18: evalsi.v1alpha1.SliceRunsRequest.labels:type_name -> evalsi.v1alpha1.SliceRunsRequest.LabelsEntry
+	23, // 19: evalsi.v1alpha1.SliceRunsResponse.rows:type_name -> evalsi.v1alpha1.SliceRow
+	42, // 20: evalsi.v1alpha1.MetricComparison.diff_ci:type_name -> evalsi.v1alpha1.ConfidenceInterval
+	25, // 21: evalsi.v1alpha1.CompareRunsResponse.comparisons:type_name -> evalsi.v1alpha1.MetricComparison
+	37, // 22: evalsi.v1alpha1.CreateShadowReplayRequest.candidate:type_name -> evalsi.v1alpha1.RunSpec
+	35, // 23: evalsi.v1alpha1.CreateShadowReplayRequest.labels:type_name -> evalsi.v1alpha1.CreateShadowReplayRequest.LabelsEntry
+	38, // 24: evalsi.v1alpha1.CreateShadowReplayResponse.baseline:type_name -> evalsi.v1alpha1.Run
+	38, // 25: evalsi.v1alpha1.CreateShadowReplayResponse.candidate:type_name -> evalsi.v1alpha1.Run
+	36, // 26: evalsi.v1alpha1.ImportRunRequest.labels:type_name -> evalsi.v1alpha1.ImportRunRequest.LabelsEntry
+	37, // 27: evalsi.v1alpha1.ImportRunRequest.spec:type_name -> evalsi.v1alpha1.RunSpec
+	41, // 28: evalsi.v1alpha1.ImportRunRequest.records:type_name -> evalsi.v1alpha1.Record
+	40, // 29: evalsi.v1alpha1.ImportRunRequest.results:type_name -> evalsi.v1alpha1.EvaluationResult
+	43, // 30: evalsi.v1alpha1.ImportRunRequest.summaries:type_name -> evalsi.v1alpha1.MetricSummary
+	44, // 31: evalsi.v1alpha1.ImportRunRequest.started_at:type_name -> google.protobuf.Timestamp
+	44, // 32: evalsi.v1alpha1.ImportRunRequest.finished_at:type_name -> google.protobuf.Timestamp
+	45, // 33: evalsi.v1alpha1.ImportRunRequest.target_usage:type_name -> evalsi.v1alpha1.Usage
+	45, // 34: evalsi.v1alpha1.ImportRunRequest.judge_usage:type_name -> evalsi.v1alpha1.Usage
+	38, // 35: evalsi.v1alpha1.ImportRunResponse.run:type_name -> evalsi.v1alpha1.Run
+	0,  // 36: evalsi.v1alpha1.RunService.CreateRun:input_type -> evalsi.v1alpha1.CreateRunRequest
+	2,  // 37: evalsi.v1alpha1.RunService.GetRun:input_type -> evalsi.v1alpha1.GetRunRequest
+	4,  // 38: evalsi.v1alpha1.RunService.ListRuns:input_type -> evalsi.v1alpha1.ListRunsRequest
+	6,  // 39: evalsi.v1alpha1.RunService.WatchRun:input_type -> evalsi.v1alpha1.WatchRunRequest
+	8,  // 40: evalsi.v1alpha1.RunService.CancelRun:input_type -> evalsi.v1alpha1.CancelRunRequest
+	10, // 41: evalsi.v1alpha1.RunService.ResumeRun:input_type -> evalsi.v1alpha1.ResumeRunRequest
+	12, // 42: evalsi.v1alpha1.RunService.DeleteRun:input_type -> evalsi.v1alpha1.DeleteRunRequest
+	14, // 43: evalsi.v1alpha1.RunService.ArchiveRun:input_type -> evalsi.v1alpha1.ArchiveRunRequest
+	16, // 44: evalsi.v1alpha1.RunService.ListRunResults:input_type -> evalsi.v1alpha1.ListRunResultsRequest
+	18, // 45: evalsi.v1alpha1.RunService.GetRecordEvidence:input_type -> evalsi.v1alpha1.GetRecordEvidenceRequest
+	21, // 46: evalsi.v1alpha1.RunService.CompareRuns:input_type -> evalsi.v1alpha1.CompareRunsRequest
+	22, // 47: evalsi.v1alpha1.RunService.SliceRuns:input_type -> evalsi.v1alpha1.SliceRunsRequest
+	27, // 48: evalsi.v1alpha1.RunService.PromoteResults:input_type -> evalsi.v1alpha1.PromoteResultsRequest
+	29, // 49: evalsi.v1alpha1.RunService.CreateShadowReplay:input_type -> evalsi.v1alpha1.CreateShadowReplayRequest
+	31, // 50: evalsi.v1alpha1.RunService.ImportRun:input_type -> evalsi.v1alpha1.ImportRunRequest
+	1,  // 51: evalsi.v1alpha1.RunService.CreateRun:output_type -> evalsi.v1alpha1.CreateRunResponse
+	3,  // 52: evalsi.v1alpha1.RunService.GetRun:output_type -> evalsi.v1alpha1.GetRunResponse
+	5,  // 53: evalsi.v1alpha1.RunService.ListRuns:output_type -> evalsi.v1alpha1.ListRunsResponse
+	7,  // 54: evalsi.v1alpha1.RunService.WatchRun:output_type -> evalsi.v1alpha1.WatchRunResponse
+	9,  // 55: evalsi.v1alpha1.RunService.CancelRun:output_type -> evalsi.v1alpha1.CancelRunResponse
+	11, // 56: evalsi.v1alpha1.RunService.ResumeRun:output_type -> evalsi.v1alpha1.ResumeRunResponse
+	13, // 57: evalsi.v1alpha1.RunService.DeleteRun:output_type -> evalsi.v1alpha1.DeleteRunResponse
+	15, // 58: evalsi.v1alpha1.RunService.ArchiveRun:output_type -> evalsi.v1alpha1.ArchiveRunResponse
+	17, // 59: evalsi.v1alpha1.RunService.ListRunResults:output_type -> evalsi.v1alpha1.ListRunResultsResponse
+	20, // 60: evalsi.v1alpha1.RunService.GetRecordEvidence:output_type -> evalsi.v1alpha1.GetRecordEvidenceResponse
+	26, // 61: evalsi.v1alpha1.RunService.CompareRuns:output_type -> evalsi.v1alpha1.CompareRunsResponse
+	24, // 62: evalsi.v1alpha1.RunService.SliceRuns:output_type -> evalsi.v1alpha1.SliceRunsResponse
+	28, // 63: evalsi.v1alpha1.RunService.PromoteResults:output_type -> evalsi.v1alpha1.PromoteResultsResponse
+	30, // 64: evalsi.v1alpha1.RunService.CreateShadowReplay:output_type -> evalsi.v1alpha1.CreateShadowReplayResponse
+	32, // 65: evalsi.v1alpha1.RunService.ImportRun:output_type -> evalsi.v1alpha1.ImportRunResponse
+	51, // [51:66] is the sub-list for method output_type
+	36, // [36:51] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_run_service_proto_init() }

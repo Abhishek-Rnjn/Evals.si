@@ -30,16 +30,32 @@ from typing import Any
 
 from evalsi.types import Content, Message, Step, ToolCall, Usage
 from evalsi_harness.events import span_id
-from evalsi_harness.readers import Parsed, parse_claude, parse_codex, parse_gemini, parse_pi
+from evalsi_harness.readers import (
+    Parsed,
+    parse_claude,
+    parse_codex,
+    parse_gemini,
+    parse_opencode,
+    parse_pi,
+)
 
 _READERS = {
     "claude-stream-json": parse_claude,
     "codex-json": parse_codex,
     "gemini-json": parse_gemini,
     "pi-json": parse_pi,
+    "opencode-json": parse_opencode,
 }
 
-FORMATS = ("", "dsh-json", "claude-stream-json", "codex-json", "gemini-json", "pi-json")
+FORMATS = (
+    "",
+    "dsh-json",
+    "claude-stream-json",
+    "codex-json",
+    "gemini-json",
+    "pi-json",
+    "opencode-json",
+)
 
 
 ParsedRun = Parsed

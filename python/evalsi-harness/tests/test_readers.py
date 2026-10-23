@@ -208,6 +208,60 @@ def test_pi_messages_and_cost() -> None:
     assert tool.output.as_text() == "def add(a,b): return a-b"
 
 
+def test_opencode_recorded_run() -> None:
+    # Recorded from opencode 1.19.3 against a scripted chat-completions server.
+    run = read("opencode-json", "opencode-1.19.3-fix-calc.jsonl")
+    assert run.error == ""
+    assert run.answer == "Fixed add in calc.js."
+    assert run.session_id == "ses_e9c6e047effezvvsHi0zqLwVPx"
+    assert kinds(run) == [
+        ("llm", "opencode"),
+        ("tool", "bash"),
+        ("llm", "opencode"),
+        ("tool", "edit"),
+        ("llm", "opencode"),
+    ]
+    assert run.tools == ["bash", "edit"]
+    # Three model calls of 200 fresh + 1000 cached input tokens and 30 output each.
+    assert (run.usage.input_tokens, run.usage.output_tokens) == (3600, 90)
+    assert run.usage.cost_usd == 0
+    llm, bash = run.steps[0], run.steps[1]
+    assert bash.parent_span_id == llm.span_id
+    assert llm.output is not None
+    assert llm.output.messages is not None
+    (call,) = llm.output.messages[0].tool_calls
+    assert (call.id, call.name) == ("call_1", "bash")
+    assert json.loads(call.arguments)["command"] == "cat calc.js"
+    assert bash.output is not None
+    assert "return a - b" in bash.output.as_text()
+    assert bash.duration_ms == 513
+    assert bash.attributes["opencode.title"] == "cat calc.js"
+    assert run.steps[-1].attributes["opencode.finish_reason"] == "stop"
+
+
+def test_opencode_tool_error_and_api_error() -> None:
+    run = read("opencode-json", "opencode-1.19.3-tool-and-api-error.jsonl")
+    assert run.error == "context window exceeded (scripted)"
+    assert run.answer == ""
+    tool = next(s for s in run.steps if s.type == "tool")
+    assert tool.name == "read"
+    assert tool.error == "File not found: /workspace/missing.js"
+
+
+def test_opencode_partial_stream_and_reasoning() -> None:
+    lines = [
+        {"type": "step_start", "sessionID": "s", "part": {"type": "step-start"}},
+        {"type": "reasoning", "sessionID": "s", "part": {"type": "reasoning", "text": "hmm"}},
+        {"type": "text", "sessionID": "s", "part": {"type": "text", "text": "half done"}},
+        {"type": "text", "part": {"type": "text", "text": "ignored", "synthetic": True}},
+    ]
+    run = parse_output("opencode-json", "\n".join(json.dumps(x) for x in lines))
+    assert run is not None
+    assert run.answer == "half done"  # no step_finish arrived
+    assert run.steps[0].attributes["opencode.reasoning"] == "hmm"
+    assert run.usage.input_tokens is None
+
+
 @pytest.mark.parametrize("fmt", [f for f in FORMATS if f not in ("", "dsh-json")])
 def test_the_wrong_format_is_an_error_not_an_empty_run(fmt: str) -> None:
     run = parse_output(fmt, "just some text the agent printed\n")

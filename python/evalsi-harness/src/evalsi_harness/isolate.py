@@ -28,16 +28,24 @@ from evalsi_harness.environment import EnvironmentPool, TaskEnvironment
 from evalsi_harness.protect import ProtectError, _listing, _read, _selected, validate_patterns
 from evalsi_harness.task import CheckerConfig, Task
 
-ISOLATIONS = ("shared", "clean")
+ISOLATIONS = ("shared", "clean", "diff")
 
 
 def validate(checker: CheckerConfig, *, has_services: bool = False) -> None:
     """Raise ValueError when the checker's isolation settings do not hold together."""
     if checker.isolation not in ISOLATIONS:
         raise ValueError(f"isolation must be one of {', '.join(ISOLATIONS)}")
+    if checker.exclude and checker.isolation != "diff":
+        raise ValueError("exclude applies only with isolation: diff")
     if checker.isolation == "shared":
         if checker.outputs:
-            raise ValueError("outputs apply only with isolation: clean")
+            raise ValueError("outputs apply only with isolation: clean or diff")
+        return
+    if checker.isolation == "diff":
+        validate_patterns(checker.outputs)
+        validate_patterns(checker.exclude)
+        if has_services:
+            raise ValueError("isolation: diff does not support services")
         return
     if not checker.outputs:
         raise ValueError("isolation: clean needs outputs, the files the checker may see")

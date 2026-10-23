@@ -37,7 +37,8 @@ A run spec becomes an agent run when it has `target.agent` or `harness`. To run 
 
 | Kind | Spec | How it is driven |
 |---|---|---|
-| A2A | `a2a: {url, headers_env, timeout, stream, binding}` | `message/send`, following the task until it settles, over JSON-RPC or, with `binding: HTTP+JSON`, A2A 0.3's REST binding (`POST {url}/v1/message:send`, `GET {url}/v1/tasks/{id}`, `POST {url}/v1/message:stream`; `url` is the interface's base URL); with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events; push notifications are not used) |
+| A2A | `a2a: {url, headers_env, timeout, stream, binding, push_notifications, push_url, push_port}` | `message/send`, following the task until it settles, over JSON-RPC or, with `binding: HTTP+JSON`, A2A 0.3's REST binding (`POST {url}/v1/message:send`, `GET {url}/v1/tasks/{id}`, `POST {url}/v1/message:stream`; `url` is the interface's base URL); with `stream: true`, `message/stream` over server-sent events, where every task state the agent reports (`submitted`, `working`, `input-required`, `completed`, ...) is a step with its message and artifact chunks are joined into the answer (`timeout` is then the longest silence between events); with `push_notifications: true`, see [A2A push notifications](#a2a-push-notifications) |
+| ACP | `acp: {command, install, env_from, allow_hosts, timeout, approval, terminals}` | the [Agent Client Protocol](#acp-agents): JSON-RPC over the stdio of a command that runs **inside the task's sandbox**; session updates become steps and permission requests are decided by `approval` |
 | MCP | `mcp: {url, tool, argument}` | the agent is a tool on an MCP server; each message is one call |
 | OpenAI Responses | `responses: {base_url, model, api_key_env}` | `POST <base_url>/responses`; later turns continue with `previous_response_id` |
 | HTTP | `http: {url, method, body_template, output_path, messages_path, trajectory_path, usage_path, stop_reason_path, stream, delta_path}` | a JSON body from the template (`{{input}}`, `{{messages}}`, `{{task_id}}`, `{{trial}}`, `{{session_id}}`); the answer at `output_path`, its steps at `messages_path` (OpenAI messages) or `trajectory_path` (Evals.si steps, for tool, handoff and guardrail steps the agent reports itself), its token usage at `usage_path`, and why it stopped at `stop_reason_path` (anything but `completed`, such as `awaiting_human`, is kept as the run's stop reason). With `stream: true` the response is server-sent events, each a JSON object: the answer, messages and usage come from the last event that has them, steps at `trajectory_path` are collected from every event that has them (at least one must), and with `delta_path` the text chunks are joined into the answer when no event has `output_path`. Key the agent's thread on `{{session_id}}`, not `{{task_id}}`: the task id is the same in every trial, so trials sharing it share one conversation |
@@ -49,9 +50,34 @@ A CLI agent:
 - has `install` commands run once, during setup;
 - receives only the environment variables named in `env_from`, a map from the name in the sandbox to the worker's variable (`env_from: {ANTHROPIC_API_KEY: AGENT_ANTHROPIC_KEY}`), for its own model credentials;
 - can reach only `allow_hosts`, through the egress proxy (name the port too: `host:8000`);
-- has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events, `claude-stream-json` Claude Code's `--output-format stream-json --verbose` (sub-agent messages hang under the call that started them, and the run's cost is kept), `codex-json` `codex exec --json`, `gemini-json` `gemini --output-format stream-json` and `pi-json` `pi --mode json`, each into model-call and tool-call steps with token counts. A stream with none of the format's events is an error on the run, so a wrong format is not read as an agent that did nothing. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
+- has a trajectory when `output_format` names a format its output is in: `dsh-json` reads DeepSeek Harness's `--json` run events, `claude-stream-json` Claude Code's `--output-format stream-json --verbose` (sub-agent messages hang under the call that started them, and the run's cost is kept), `codex-json` `codex exec --json`, `gemini-json` `gemini --output-format stream-json`, `pi-json` `pi --mode json` and `opencode-json` `opencode run --format json`, each into model-call and tool-call steps with token counts. A stream with none of the format's events is an error on the run, so a wrong format is not read as an agent that did nothing. Without it, the agent's standard output is its answer and the run has no steps. Node-based agents reserve a large address range, so give them `sandbox: {memory_mb: 4096}`; see [the demos](../../examples/demo/README.md).
 
 Setup uses the environment's `setup_network`. When `install` needs a package index, set `environment: {setup_network: allow}` in the spec.
+
+### A2A push notifications
+
+`a2a: {push_notifications: true}` sends the message without blocking and names a webhook in `pushNotificationConfig`; the worker runs the receiver (a small HTTP server, with a per-conversation token the agent must send in `X-A2A-Notification-Token`), and each task state the agent pushes is a step (`a2a.update: push` on the step). It is used instead of `stream` when both are set.
+
+- `push_url` is the base URL the agent reaches the receiver at, and `push_port` the port it binds. Without them the receiver listens on loopback only (`http://127.0.0.1:<port>`), which suits an agent on the worker's host; for an agent elsewhere, set both and make the port reachable. The receiver listens on every interface when `push_url` is set: put it behind your network policy.
+- Pushes are not trusted to arrive. After `5s` without one the harness polls `tasks/get` (the step says `a2a.update: poll`), and at a terminal state it reads the task once more for its artifacts. A push with the wrong token is refused with 401 and counted, not used.
+- An agent that answers that push is not supported gets the plain send-and-poll path, so one spec works against both kinds of agent.
+- `metadata.agent` records `a2a_push_updates` and `a2a_poll_updates`, so a run where every update came from polling is visible as that.
+
+### ACP agents
+
+[ACP](https://agentclientprotocol.com) is how editors drive coding agents: JSON-RPC 2.0 over the agent process's stdio, one object per line. An `acp` target runs the command in the task's sandbox with its stdin open (the sandbox's [background process API](built-in-harness.md#background-processes-and-a-persistent-shell), so it works on every rung that has one) and acts as the *client*. The connector implements **protocol version 1**: `initialize` (an agent that answers another version is refused), `session/new` (with the workdir as `cwd` and no MCP servers), `session/prompt`, and, from the agent, `session/update`, `session/request_permission`, `fs/read_text_file`, `fs/write_text_file` and, with `terminals: true`, `terminal/create`, `output`, `wait_for_exit`, `kill` and `release`. Not implemented: authentication methods, `session/load`, session modes, non-text prompt content and the unstable extensions.
+
+| ACP | on the trajectory |
+|---|---|
+| `agent_message_chunk` | one `llm` step per run of chunks; the joined text is the answer |
+| `agent_thought_chunk` | an `acp:thought` step |
+| `tool_call`, `tool_call_update` | one `tool` step per call, named by its title, with `acp.kind`, `acp.status` and the output from the updates (`failed` sets the step's error) |
+| `plan` | an `acp:plan` step |
+| `session/request_permission` | an `acp_permission` policy event (granted or not), and `hitl_request` / `hitl_resolved` steps when an `ask` rule sent it to the approver |
+
+`approval` has the shape of the [approval gate](#approval-gates)'s config (`rules`, `approver.script`, `approver.default`) and the same semantics: first matching rule wins, no rule means allow, `deny` stops without asking, `ask` goes to the scripted approver. The ACP tool kind stands for a built-in tool in the rules (`execute` is `bash`, `edit`, `delete` and `move` are `write_file`, `read` is `read_file`), `command` matches the call's `rawInput.command` and `path` its `rawInput.path` or first location. An `edit` decision cannot be returned to an ACP agent, so it counts as a denial. The agent gets a `reject_once` option when denied (or `cancelled` if it offered none).
+
+The agent's `fs/*` requests are served in the sandbox under the workdir, and a terminal is a background process under the sandbox's limits (stdout and stderr are returned together, stdout first). A turn that ends with `end_turn` leaves the session open, so a user simulator can send the next prompt; any other stop reason (`refusal`, `max_tokens`, ...) ends the run with that stop reason.
 
 With a user simulator, every agent kind holds a multi-turn conversation. Remote agents (A2A, MCP, Responses, HTTP) do their work outside the sandbox. A task's environment is still created and checked, so a remote agent that works through, say, MCP tools on the same task gets the same grading.
 
@@ -87,6 +113,7 @@ Notes on environments:
 - **Writable root.** An image root is a private writable copy unless `read_only_root` is set.
 - **Protected files.** `checker.protect` lists globs, relative to the workdir, of files the checker relies on. Their contents are hashed when each trial starts and compared before the checker runs. A file modified, deleted, or created under a pattern is a change; it appears as a `sandbox.protected_file_modified` guardrail step and in `metadata.policy_events`, and `metadata.protected_files` lists what changed. With `on_change: fail` the trial fails (a failed check, not an error) without running the checker, since the state it would grade cannot be trusted; with `restore` the originals are written back and new files removed, and the checker then grades what the agent really did. This covers the workdir only: a `sitecustomize.py` on the Python path, a shim earlier on `PATH` or the installed packages are outside it (`sandbox.read_only_root` closes those), and symlinks are never followed: a link under a pattern is inventoried with its target, a new or retargeted link is a change, a protected file swapped for a link counts as deleted, and `restore` removes links and directories standing where an original was before writing it back. For those, use a clean checker (next item). Up to 5,000 protected files and 500 links, 8 MiB per file and 64 MiB in all; a file over the limit makes the trial an error, never a pass.
 - **Clean checking.** With `checker.isolation: clean` and `checker.outputs` (globs relative to the workdir, such as `["solution/**", "calc.py"]`), the checker runs in a fresh sandbox built from the same environment, which the agent never ran in. Only the files under `outputs` are copied in from the agent's sandbox, so an edited test, a shim or an installed package cannot reach the grader unless a pattern in `outputs` names it. Keep `outputs` narrow: blanket patterns such as `**` are refused, and any file a pattern matches is copied as the agent left it. Files the agent deleted come back as the setup left them, symlinks are never copied, copied files lose their execute bit (run them through an interpreter), the gym (`TaskEnv`) honours clean checking, and `metadata.checker_isolation` lists what was copied. The check is an error when the outputs cannot be read in full (same limits as protected files). A pattern cannot be both an output and protected, and clean checking does not support `services`. Clean checking is tested on the bubblewrap and Landlock rungs; the pod and Firecracker rungs have not run it. The fresh sandbox needs its own sandbox slot while the agent's is still held, so a pool limited to one sandbox (`max_sandboxes: 1`) cannot run clean checking; a full pool makes the check an error, never a pass. If the agent's real work lands outside `outputs`, the checker does not see it and the task fails, so list everything a solution may change.
+- **Diff checking.** `checker.isolation: diff` grades the agent's diff instead of declared outputs. The harness builds a fresh sandbox (the setup state), lists the workdir in both sandboxes (with the version-control tool when the workdir is a repository, by hashing every file otherwise), and applies the added, modified and deleted files to the fresh one before the checker runs. A change is rejected, not applied, when its path matches `checker.protect`, a workdir path of `checker.files`, `checker.exclude`, or lies outside `checker.outputs` when that is set (optional here), or when it is a symlink or special file. Every rejected path becomes a `checker_diff_rejected` policy event, the applied diff (cut at 256 KiB) a `checker:diff` step, and both are in `metadata.checker_isolation` (`added`, `modified`, `deleted`, `rejected`, `diff`). An agent that edits the tests therefore fails when the original tests no longer pass, and is visible on the trajectory even when its fix passes. Only the workdir is diffed: installed packages and files elsewhere never arrive. Like clean checking it needs a second sandbox slot and does not support `services`. It is tested on the local stand-in and on real bubblewrap and Landlock sandboxes; it uses only exec and file reads and writes, so the pod and Firecracker rungs should run it, but that is untested (the real-rung test covers them when the CI variables for those rungs are set).
 - **Infrastructure errors are not scores.** A task whose environment fails (an image that does not pull, failing setup, a checker that cannot run) is reported as an error, never as a failed task.
 
 ## Harness options
@@ -99,7 +126,7 @@ Notes on environments:
 | `instructions` | appended to the system prompt |
 | `tools.mcp` | MCP servers (streamable HTTP, or stdio commands) whose tools the agent gets |
 | `tools.mocks` | canned tools: one `response`, or `responses` keyed by arguments |
-| `tools.builtin` | more built-in tools, by name: `edit_file` (replace exact text; fails if the text is missing or not unique, keeps a script executable), `glob`, `grep` (extended regular expressions, binary files skipped) and `apply_patch` (a unified diff, checked first and applied all or nothing, through `git apply` or `patch`), `memory` (notes under `.evalsi-memory/` that survive context management: list, read, write, append, delete) `session_search` (search the run's unabridged history for some text, including tool output that was cleared or summarized, and read an entry back in full) `delegate` (hand a self-contained subtask to a sub-agent and keep only its report; see [Sub-agents](#sub-agents)) `tool_search` (the MCP tools start unloaded; see [MCP servers](#mcp-servers)) and `code_mode` (the agent acts through scripts; see [Code mode](#code-mode)). Off by default, so a comparison between models uses the same toolset unless a spec lists them; `edit_file`, `apply_patch` and `memory` run again on replay, like `bash`; naming `memory` or `session_search` also adds a line about it to the system prompt |
+| `tools.builtin` | more built-in tools, by name: `edit_file` (replace exact text; fails if the text is missing or not unique, keeps a script executable), `glob`, `grep` (extended regular expressions, binary files skipped) and `apply_patch` (a unified diff, checked first and applied all or nothing, through `git apply` or `patch`), `memory` (notes under `.evalsi-memory/` that survive context management: list, read, write, append, delete) `session_search` (search the run's unabridged history for some text, including tool output that was cleared or summarized, and read an entry back in full) `delegate` (hand a self-contained subtask to a sub-agent and keep only its report; see [Sub-agents](#sub-agents)) `tool_search` (the MCP tools start unloaded; see [MCP servers](#mcp-servers)) and `code_mode` (the agent acts through scripts; see [Code mode](#code-mode)) `background` (five tools to start, read, write to, list and kill processes that outlive a call) and `shell` (one persistent shell; both in [the built-in harness guide](built-in-harness.md#background-processes-and-a-persistent-shell)). Off by default, so a comparison between models uses the same toolset unless a spec lists them; `edit_file`, `apply_patch`, `memory`, `shell` and the mutating process tools run again on replay, like `bash`; naming `memory` or `session_search` also adds a line about it to the system prompt |
 | `tools.faults` | deterministic fault injection (`error`, `timeout`, `malformed`, `prompt-injection`) per tool, at a rate |
 | `user_simulator: {persona, goal, max_turns, judge}` | an LLM user for multi-turn tasks, speaking through a judge |
 | `recording: {mode, dir, branch_at_step, fork_as}` | a session log of model calls and tool I/O, written as it happens. `record` starts one; `replay` serves it (sandbox commands and edits run again, so the environment is rebuilt), and with `branch_at_step: N` replays N turns and then continues live; `resume` continues an interrupted trial (replay its log, then run live and append to it; a trial with no log starts one); `fork` replays the first `branch_at_step` turns of a log and goes live into a new log that names its parent. See [Sessions](#sessions-resume-and-fork) |
@@ -154,9 +181,32 @@ Naming `delegate` in `tools.builtin` gives the agent a tool that starts a sub-ag
 
 Its spend is the parent's: tokens, spend and wall-clock time come out of what the parent has left (a `delegate` with nothing left is an error the agent sees), and `agent.subagents` and `agent.subagent_steps` total them. Its steps are on the trajectory under a `subagent` step that hangs from the `delegate` call, so a multi-agent run reads as a tree. Hooks apply to the sub-agent's tool calls too. Its model and tool calls are recorded in order with the parent's, so a replay reproduces them; `delegate` calls in one turn therefore run one after another.
 
+### A database as the environment
+
+`environment.database` gives a task a SQLite backend instead of (or beside) a sandbox: a `schema` and `seed` of SQL, `tools` that are one parameterized statement each (`sql` with `:name` parameters, a JSON Schema in `parameters`, `mode: read` or `write`, optional `min_rows` and `max_rows` for writes) and `assertions` (`name`, a read-only `sql` query, and the `expect`ed rows as a list of rows, or one value). The harness builds the database in memory for each trial, offers the tools to the agent, and grades the final state with the assertions, one test each. Read tools can only SELECT, write tools can never change the schema, and arguments are validated against the schema and bound, never spliced into SQL. Every write attempt is recorded, applied or not: on its tool step as `evalsi.tool.db_write` and in `metadata.database` with digests of the start and end state. Declarations are checked when the task is read (bad SQL, a read tool that writes, duplicate names). A task with only a database creates no sandbox; with an image, setup or a command checker it has both, and both must pass. See [decision 0032](../decisions/0034-database-tool-environment.md) for the limits.
+
+```yaml
+environment:
+  database:
+    schema: "CREATE TABLE accounts (id TEXT PRIMARY KEY, balance INTEGER NOT NULL);"
+    seed: "INSERT INTO accounts VALUES ('a', 100), ('b', 0);"
+    tools:
+      - {name: get_balance, sql: "SELECT balance FROM accounts WHERE id = :id",
+         parameters: {type: object, properties: {id: {type: string}}, required: [id]}}
+      - {name: withdraw, mode: write, min_rows: 1,
+         sql: "UPDATE accounts SET balance = balance - :amount WHERE id = :id",
+         parameters: {type: object, properties: {id: {type: string}, amount: {type: integer, minimum: 1}}, required: [id, amount]}}
+    assertions:
+      - {name: a-debited, sql: "SELECT balance FROM accounts WHERE id = 'a'", expect: 70}
+```
+
 ### Messages from the user mid-run
 
-`harness.builtin.interjections` is a list of `{at_step, message}`. Each message is delivered as a user message once the agent has made `at_step` model calls, at the start of the next call (after that call's tool results; with Anthropic it joins the same user turn), and it is a `user-interjection` step on the trajectory, so an evaluator can score whether the agent took a correction or a new constraint into account. A message still due when the agent tries to finish is read before it can. They are scripted, not generated: replays and comparisons see the same words at the same points, and a recording replays only with the same messages. With a context strategy, the messages are repeated on every call after they arrive, so clearing or summarizing history cannot lose them. Built-in agent only (a CLI agent runs to completion), and sub-agents are not interrupted.
+`harness.builtin.interjections` is a list of `{at_step, message}`. Each message is delivered as a user message once the agent has made `at_step` model calls, at the start of the next call (after that call's tool results; with Anthropic it joins the same user turn), and it is a `user-interjection` step on the trajectory, so an evaluator can score whether the agent took a correction or a new constraint into account. A message still due when the agent tries to finish is read before it can. They are scripted, not generated: replays and comparisons see the same words at the same points, and a recording replays only with the same messages. With a context strategy, the messages are repeated on every call after they arrive, so clearing or summarizing history cannot lose them. Sub-agents are not interrupted.
+
+An interjection can be timed by an event instead of a step: `{event: tool_call, match: bash, pattern: "pytest", message: ...}` (after a tool call whose name matches the glob `match` and whose JSON arguments match the regular expression `pattern`), `{event: file_write, match: "src/**", message: ...}` (after a tool call that wrote a matching path: `write_file`, `edit_file`, `apply_patch`; a shell command's writes cannot be told apart, and a failed write does not count) or `{event: stop, message: ...}` (the first time the agent tries to finish, so it works instead of stopping). An event fires once, at the start of the next model call; `at_step` on one is the earliest model call it may fire after. The key is `event`, not `on`, which YAML 1.1 reads as a boolean. Step- and event-timed messages mix, and the events are part of the replay guard.
+
+A CLI agent (`target.agent.cli`) cannot be interrupted, since it runs to completion. When it sets `resume_command` (for example `["claude", "-p", "--resume", "{session}", "{message}"]`, with `{message}` and `{session}`, the session id its output reader found, filled in), each interjection is judged against the steps its output format reported (`at_step` counts model calls, `tool_call` and `file_write` read the reported tool calls, `stop` is due once it exits) and delivered after the run by running that command in the sandbox. The follow-up run's steps join the trajectory after a `user-interjection` step marked `evalsi.interjection.timing: after-run`, its answer becomes the run's, and `metadata.agent` counts `interjections`, `interjections_undeliverable` and `interjections_unfired` (a trigger that never occurred). An interjection that cannot be delivered is recorded, not dropped: no `resume_command`, no session id in the output when the command needs one, a plain-text output that reports no steps to time a step or event by, or a follow-up that failed each give a `user-interjection` step with an `undeliverable: ...` error. The delivery is real only for agents with a resume mechanism; the message never reaches a CLI agent mid-run, and what the agent did between the trigger and its exit is not undone. Tested with fixture event streams and a stand-in resume command, not with a real Claude Code or Codex.
 
 ### Profiles: a harness a score can name
 
@@ -179,6 +229,25 @@ evalsi matrix standard.json minimal.json code-mode.json --metric task-success
 ```
 
 Each file is a cell with its harness, model, score and interval, and beside the score what it cost per task: model calls, tokens and dollars, and the score per thousand tokens. Every cell after the first is compared with the first, paired by record and trial, so the difference carries its own interval and is starred when it excludes zero. `--tuned-on NAME` (a results file name, a run name or a dataset hash) splits the cells into `tuned` and `held-out`, so a profile tuned on one benchmark is also read on others. Cost columns show `-` when the results lack the figure. `--mechanisms` adds, per cell, which optional tools were offered and in how many tasks the trajectories show them called, and whether the context strategy cleared or compacted anything, with `(never ran)` for a mechanism that ran in no task: a gain credited to a change whose mechanism never executed (a window that never filled, a tool the model never called) is not evidence the change helped.
+
+### Sweeping harness configurations on the server
+
+`evalsi matrix` compares harness configurations you ran yourself. To have the server run them, declare them in the spec:
+
+```yaml
+spec:
+  target: {connector: anthropic, model: claude-sonnet-4-5}
+  harness: {builtin: {max_steps: 40}}          # shared by every variant
+  sweep:
+    variants:
+      - {name: baseline, harness: {}}                      # inherits everything
+      - {name: minimal,  harness: {profile: minimal, tools: {}}}
+      - {name: compact,  harness: {context: {strategy: compact, window_tokens: 50000}}}
+```
+
+The server expands this into **one run per variant**, over the same dataset snapshot, evaluators, trials, target, environment and budget, each named `<name>/<variant>` and labelled `evalsi.sweep=<sweep id>` and `evalsi.variant=<variant>`. A variant's `harness` is a partial `harness.builtin`: each field it sets replaces that field of the spec's as a whole (so `tools: {}` clears the base's tool list, which a profile needs, since a profile owns the toolset), and the rest is inherited. Every expanded spec is validated as a run of its own before anything is stored, and an error names the variant. A sweep is refused with a bring-your-own agent or an external harness, with more than 16 variants, and when two variants record into one directory. Each variant counts against the project's run quota.
+
+`evalsi run --server URL -f run.yaml` creates the runs, waits for them and prints one row per variant and metric with its interval (`--no-wait` prints the run ids); the first variant is the baseline. Compare any two with `CompareRuns` (`evalsi compare`), which pairs them by record and trial. The API returns every run in `CreateRunResponse.sweep_runs`. An embedded run (`evalsi run` without `--server`) refuses a sweep.
 
 ### The agent's own setup
 
@@ -254,9 +323,15 @@ The built-in agent calls `spec.target`. Besides `connector`, `model`, `base_url`
 | `max_concurrency: N` | at most N concurrent model calls to this endpoint and key from one worker process |
 | `fallbacks: [target, ...]`, `fallback_after: N` | models to switch to, in order, when the current one fails N times in a row (default 2; each failure is already retried with backoff). The run stays on the new model, the step records `evalsi.model.switched_from`, and reasoning blocks from another model are dropped from the conversation, since a provider only accepts its own. A fallback needs its own credential grant |
 
+| `reasoning_handoff: drop \| summarize-as-text` | what happens to one provider's reasoning when a fallback moves the conversation to another. `drop` (default) removes it. `summarize-as-text` carries the readable part (Anthropic thinking text, a Responses reasoning summary) as plain text, marked as carried-over reasoning, in the assistant message; signed and encrypted blocks and redacted thinking are dropped either way, since no other provider can verify them. Anthropic server tool blocks are dropped. Every conversion is on the `llm` step as `evalsi.reasoning.handoff` (rule, messages, blocks dropped, characters carried) and in the cassette, so a replay is exact |
+| `compaction_model`, `subagent_model: target` | models for the `compact` summaries and for `delegate` sub-agents, built like the main model (their own fallbacks are ignored). The `context:compact` step names the summary model, the `subagent` step names its model (`evalsi.subagent.model`), and calls to them are recorded in the same cassette in call order. Spend is counted per model: give `harness.builtin.model_pricing: {model-name: {input_per_mtok, output_per_mtok}}` for prices that differ from `pricing`; `agent.models` totals tokens by model when more than one worked |
+| `server_tools: [{type, name, ...}]` | Anthropic server tool definitions passed through as given (for example `{type: web_search_20260209, name: web_search, max_uses: 5}`). The provider runs them; their blocks come back in the response and are sent back verbatim. A `pause_turn` stop (the server's loop reached its limit) is continued by resending the assistant content, with no extra user message, at most 5 times in a row |
+| `stream_resume_attempts: N`, `stream_resume_mode: retry \| prefill` | when a stream breaks mid-response (connection drop, error event, no stop reason), try again up to N times (default 0: an error). `retry` asks for the turn again; `prefill` (Anthropic, models that accept a prefill, thinking off) sends the partial text back as the start of the reply and joins the continuation. A tool call cut off mid-arguments is never completed or merged: it is discarded and requested again. Each resume is on the step as `evalsi.stream.resumes` |
+| `token_trace: true`, `token_trace_server: vllm \| sglang` | openai-compatible chat completions: record each turn's prompt and completion token IDs and log-probabilities (see [fine-tuning](fine-tuning.md)). `sglang` is coded against SGLang's documented OpenAI-compatible fields (`return_token_ids`; `prompt_token_ids` and `response_token_ids` per choice; on a stream `sglext.input_ids` and `sglext.output_ids`) and has not been run against a live server |
+
 Calls honour `retry-after` and retry HTTP 429, 5xx and 529 with jitter. Anthropic prompts are cached (breakpoints on the system prompt, the tools and the end of the conversation), and `max_usd` prices cached tokens: at a tenth of the input price for reads and 1.25 times for writes on Anthropic, at full price elsewhere, so a spend budget is an upper bound. `budget.tokens` counts the whole prompt, cached tokens included.
 
-A turn cut off by `max_tokens` is tried once more with twice the limit (up to 128k); if it is cut off again, or the provider refuses the higher limit, the run ends with stop reason `budget`, not `completed`, and is still checked. The retry is on by default and spends the extra tokens. A refusal ends the run as `refusal`, and `pause_turn` is resumed.
+A turn cut off by `max_tokens` is tried once more with twice the limit (up to 128k); if it is cut off again, or the provider refuses the higher limit, the run ends with stop reason `budget`, not `completed`, and is still checked. The retry is on by default and spends the extra tokens. A refusal ends the run as `refusal`, and `pause_turn` is resumed (see `server_tools` above).
 
 `harness.external` runs another harness over the [harness protocol](../../proto/evalsi/harness/v1alpha1/harness.proto) (`Describe`, `Setup`, `Run` streaming trajectory events, `Check`, `Teardown`). It can be a gRPC `address`, a `command` serving it on a socket, or a Python class (`python: module:Class`). The benchmark harnesses below are Python classes.
 
@@ -394,7 +469,7 @@ The scoring code and the image are the same on every rung. That is how the Phase
 `TauBenchHarness` is the built-in harness with a tau2 domain around it:
 
 - **Tools and prompt:** the domain's tools run against a live tau2 environment, and the agent gets tau2's agent instruction and the domain policy.
-- **The user:** the Evals.si user simulator plays the task's persona and instructions, through the run's judge. tau2's own LiteLLM user simulator is not used, so provider keys stay with the judge config. Expect scores close to, but not identical with, tau2's leaderboard.
+- **The user:** the Evals.si user simulator plays the task's persona and instructions, through the run's judge. By default tau2's own LiteLLM user simulator is not used, so provider keys stay with the judge config, and scores are close to, but not identical with, tau2's leaderboard. Import with `taubench://airline?user=tau2` to use tau2's own `UserSimulator` instead: its prompts, tool calling and stop tokens, through tau2's LiteLLM wrapper, answering the agent's greeting as in tau2. That user is a model LiteLLM names (`user_llm=`, default `gpt-4.1`; `user_llm_args=` a JSON object, default `{"temperature": 0}`) with its own provider credentials in the worker's environment (for example `OPENAI_API_KEY`), not the run's judge. Recording and replay work with either user. The tau2 user path is tested with a scripted user model, not a live one.
 - **Recording:** replay restores the user's transcript, tool-call IDs and grading exchanges, and reapplies both agent and user actions to the fresh domain environment. Resume and fork continue from that state; a replay needs no user judge.
 - **Grading:** tau2's own evaluator on the conversation.
 - **Dual control (telecom):** the user has tools of their own: their phone. The simulated user then follows tau2's user prompt and guidelines through the run's judge. Each turn they either message the agent or call one of their tools against the same tau2 environment. Their calls are part of the conversation tau2 grades, so assertions on the device's state hold.
@@ -407,8 +482,9 @@ The adapter needs tau2's `data/` directory (`TAU2_DATA_DIR` or `data_dir=`). Use
 Both formats are read directly; no Docker daemon and no Harbor install are needed.
 
 - **The Dockerfile is translated, not built.** `FROM` is the image; `RUN` steps become the snapshotted setup, with `WORKDIR`, `ENV`, `ARG` and `SHELL` applied as Docker would; `COPY` and `ADD` of local files are placed in the image root. Binary files are carried base64-encoded and decoded in the sandbox.
-- **Refused, with the reason:** multi-stage builds, remote `ADD`, `RUN --mount`, tasks with several compose services, Harbor multi-step tasks, and verifiers that run in a separate environment.
-- **Coverage:** of Terminal-Bench 1's 241 tasks, 219 import.
+- **Multi-stage builds** are supported: the last stage is the image, and each earlier stage it copies from (`COPY --from=build`, or from another image such as `COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /bin/`) is built in a sandbox of its own and the named files are taken out (`stages` and `copy_from` in the environment, up to 256 MiB in all). A stage nothing copies from is never built; `COPY --from` of a glob is refused. `COPY <<EOT` heredocs, `ENTRYPOINT`/`CMD` (for services built from a Dockerfile), build args and `target` are handled too, and `RUN --mount=type=cache` is ignored.
+- **Refused, with the reason:** remote `ADD`, `FROM scratch`, `RUN --mount` of anything but a cache, Harbor multi-step tasks, verifiers that run in a separate environment, and the Compose settings listed in [the Compose section of the services example](../../examples/multi-service/README.md).
+- **Coverage:** of Terminal-Bench 1's 241 tasks (the pinned checkout `d28711d`), 240 import; `catch-me-if-you-can` starts a server in the agent's own container, which a sandbox that runs one command at a time cannot keep. Importing is not running: a task whose tests install packages needs them in the image, because a sandbox with services has no network.
 - **Prebuilt image:** `image=<ref>` replaces the translation. Use it when a task depends on the order of `COPY` and `RUN`, since copied files exist before the first `RUN`.
 - **Network:** a task's network setting is respected. Harbor's default is public, so `network=deny` tightens it.
 
@@ -430,7 +506,12 @@ The multi-turn categories (`multi_turn_base`, `multi_turn_miss_func`, `multi_tur
 - BFCL's multi-turn checker grades every turn's end state and results.
 - A call runs only when it names a function offered at that step, with its JSON arguments as Python literals, because BFCL executes calls as code.
 
-Memory, web-search and format-sensitivity categories are not supported.
+The agentic categories use the same loop on one question and check the model's last message without tool calls against BFCL's expected answers (ignoring case and punctuation):
+
+- `web_search_base` and `web_search_no_snippet` give the model BFCL's search and page-fetch tools. They need `SERPAPI_API_KEY` and network access on the worker; `no_snippet` hides result snippets.
+- `memory_kv`, `memory_vector` and `memory_rec_sum` give it BFCL's memory tools for a scenario (student, customer, finance, healthcare or notetaker). Before the first question of a scenario, the harness replays BFCL's prerequisite conversations with the target model, which writes memory as it goes. This happens once per target model, backend and scenario in a harness process, and takes dozens of model calls. If it fails, every question of the scenario fails with that error, where BFCL would continue with empty memory. `memory_vector` loads a sentence-transformers model, downloaded on first use.
+
+Format-sensitivity categories are not supported. The memory and web-search paths are tested with a scripted model and, for web search, a canned search API; they have not been run against a live model or SerpAPI.
 
 ## From production to regression tests
 
@@ -462,6 +543,20 @@ sandbox:
 ```
 
 An image is used only when the registry holds a signature by one of the keys, on the image or on the index its tag points to (`cosign sign --key cosign.key <image>`). Signatures must be in cosign's `.sig` tag format, which is cosign 2's default. Verification is offline, with no transparency log. For an air-gapped registry, copy signatures with `cosign copy`. The pod rung's images are pulled by the kubelet, so enforce signatures there with your cluster's admission policy.
+
+**Keyless signatures.** Images signed with `cosign sign` without a key (a short-lived Fulcio certificate, logged in Rekor) are accepted for the identities you list, with a sigstore trusted root that names the Fulcio CAs and Rekor keys to trust:
+
+```yaml
+sandbox:
+  image_signatures:
+    trusted_root: /etc/evalsi/trusted_root.json   # file or JSON text; `cosign trusted-root create`, or the public-good root from the Sigstore TUF repository
+    keyless:                                      # any one identity suffices; each needs an issuer and a subject, exact or *_regexp
+      - issuer: https://token.actions.githubusercontent.com
+        subject_regexp: '^https://github\.com/acme/images/\.github/workflows/release\.yml@refs/tags/v.*$'
+    # keys: [...]                                 # may be set too: either kind of signature passes
+```
+
+Two formats are read: the `.sig` tag with `dev.sigstore.cosign/certificate` and `/bundle` annotations (cosign 2), and a sigstore bundle stored as an OCI 1.1 referrer of the image (cosign 3's default; registries without the referrers API are read through the `sha256-<digest>` fallback tag). A signature passes when the certificate chains to the trusted root and was valid when it was logged, the log entry's signed entry timestamp, or inclusion proof with signed checkpoint, verifies against the root's Rekor keys, the signature matches the image digest, and the certificate's issuer and subject match an identity. Verification is offline: the server never calls Fulcio or Rekor, so keep the trusted root current (a rotated Fulcio CA or Rekor key needs a new file; it is read at start). Signed certificate timestamps (CT log) are not required. Rekor v2 (tile-based) entries are handled by the verification library but have not been exercised here.
 
 **Local images.** Image references that read host paths (`dir:`, `oci-layout:`, `docker-archive:`) are refused, because a spec can name `dir:/`. Set `sandbox.allow_local_images: true` to accept them, for example on a developer machine. With `image_signatures`, its `allow_local` decides instead.
 
@@ -522,10 +617,26 @@ state for every trial. Failed or restarted services are infrastructure errors.
 See the [API/Redis example](../../examples/multi-service/README.md) for a runnable
 spec, requirements, inspection and the supported Terminal-Bench Compose subset.
 This requires Kubernetes native sidecars and an enforced NetworkPolicy whose
-canary passes; other sandbox backends reject service tasks. The checker still
+canary passes, or the bubblewrap rung (see the example for what it adds and
+lacks); the Landlock and Firecracker rungs reject service tasks. The checker still
 runs in the agent's sandbox, as it does for existing task environments.
 
 ## Report score stability and plan trials
+
+**The determinism record and comparing a replay.** Every built-in-harness run writes
+`metadata.determinism` on its record: the seeds the harness uses (simulated user, fault
+injection) and the temperature; for each model the name asked for and the `model`
+the provider answered with (and OpenAI's `system_fingerprint`); the harness version,
+profile (`name@version`) and context strategy; the Python, harness and SDK versions and the
+MCP servers' own reported names and versions; and the sandbox image's name, the digest the
+sandbox reported (empty where the rung reports none) and its isolation. To check a replay
+or rerun against its recording, save both with `--output` and run
+`evalsi determinism recorded.json --against replay.json`. Records are paired by id and trial;
+each pair is `identical` or `diverged` at the first step that differs (type, name, input,
+output, error, the model asked for and answering, the finish reason; timings, span ids and
+tool-call ids are ignored), with the fields that differed, and `determinism_changes` lists what
+moved in the two records (a provider's snapshot, a version, an image digest). The command
+exits 1 if any pair diverged or a recorded run is missing from the replay.
 
 Save a repeated-trial run with `evalsi run -f run.yaml --output results.json`,
 then run `evalsi determinism results.json --margin 0.05 --confidence 0.95`.

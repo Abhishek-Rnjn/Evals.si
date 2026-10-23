@@ -264,6 +264,203 @@ func (x *ExecRequest) GetLimits() *Limits {
 	return nil
 }
 
+type ExecInteractiveRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*ExecInteractiveRequest_Start
+	//	*ExecInteractiveRequest_Stdin
+	//	*ExecInteractiveRequest_CloseStdin
+	Event         isExecInteractiveRequest_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecInteractiveRequest) Reset() {
+	*x = ExecInteractiveRequest{}
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecInteractiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecInteractiveRequest) ProtoMessage() {}
+
+func (x *ExecInteractiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecInteractiveRequest.ProtoReflect.Descriptor instead.
+func (*ExecInteractiveRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ExecInteractiveRequest) GetEvent() isExecInteractiveRequest_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *ExecInteractiveRequest) GetStart() *ExecRequest {
+	if x != nil {
+		if x, ok := x.Event.(*ExecInteractiveRequest_Start); ok {
+			return x.Start
+		}
+	}
+	return nil
+}
+
+func (x *ExecInteractiveRequest) GetStdin() []byte {
+	if x != nil {
+		if x, ok := x.Event.(*ExecInteractiveRequest_Stdin); ok {
+			return x.Stdin
+		}
+	}
+	return nil
+}
+
+func (x *ExecInteractiveRequest) GetCloseStdin() bool {
+	if x != nil {
+		if x, ok := x.Event.(*ExecInteractiveRequest_CloseStdin); ok {
+			return x.CloseStdin
+		}
+	}
+	return false
+}
+
+type isExecInteractiveRequest_Event interface {
+	isExecInteractiveRequest_Event()
+}
+
+type ExecInteractiveRequest_Start struct {
+	Start *ExecRequest `protobuf:"bytes,1,opt,name=start,proto3,oneof"`
+}
+
+type ExecInteractiveRequest_Stdin struct {
+	Stdin []byte `protobuf:"bytes,2,opt,name=stdin,proto3,oneof"`
+}
+
+type ExecInteractiveRequest_CloseStdin struct {
+	// Close the command's stdin.
+	CloseStdin bool `protobuf:"varint,3,opt,name=close_stdin,json=closeStdin,proto3,oneof"`
+}
+
+func (*ExecInteractiveRequest_Start) isExecInteractiveRequest_Event() {}
+
+func (*ExecInteractiveRequest_Stdin) isExecInteractiveRequest_Event() {}
+
+func (*ExecInteractiveRequest_CloseStdin) isExecInteractiveRequest_Event() {}
+
+type ExecInteractiveResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*ExecInteractiveResponse_Stdout
+	//	*ExecInteractiveResponse_Stderr
+	//	*ExecInteractiveResponse_Result
+	Event         isExecInteractiveResponse_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExecInteractiveResponse) Reset() {
+	*x = ExecInteractiveResponse{}
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExecInteractiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExecInteractiveResponse) ProtoMessage() {}
+
+func (x *ExecInteractiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExecInteractiveResponse.ProtoReflect.Descriptor instead.
+func (*ExecInteractiveResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ExecInteractiveResponse) GetEvent() isExecInteractiveResponse_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *ExecInteractiveResponse) GetStdout() []byte {
+	if x != nil {
+		if x, ok := x.Event.(*ExecInteractiveResponse_Stdout); ok {
+			return x.Stdout
+		}
+	}
+	return nil
+}
+
+func (x *ExecInteractiveResponse) GetStderr() []byte {
+	if x != nil {
+		if x, ok := x.Event.(*ExecInteractiveResponse_Stderr); ok {
+			return x.Stderr
+		}
+	}
+	return nil
+}
+
+func (x *ExecInteractiveResponse) GetResult() *ExecResult {
+	if x != nil {
+		if x, ok := x.Event.(*ExecInteractiveResponse_Result); ok {
+			return x.Result
+		}
+	}
+	return nil
+}
+
+type isExecInteractiveResponse_Event interface {
+	isExecInteractiveResponse_Event()
+}
+
+type ExecInteractiveResponse_Stdout struct {
+	Stdout []byte `protobuf:"bytes,1,opt,name=stdout,proto3,oneof"`
+}
+
+type ExecInteractiveResponse_Stderr struct {
+	Stderr []byte `protobuf:"bytes,2,opt,name=stderr,proto3,oneof"`
+}
+
+type ExecInteractiveResponse_Result struct {
+	Result *ExecResult `protobuf:"bytes,3,opt,name=result,proto3,oneof"`
+}
+
+func (*ExecInteractiveResponse_Stdout) isExecInteractiveResponse_Event() {}
+
+func (*ExecInteractiveResponse_Stderr) isExecInteractiveResponse_Event() {}
+
+func (*ExecInteractiveResponse_Result) isExecInteractiveResponse_Event() {}
+
 type ExecResult struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	ExitCode    int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
@@ -280,7 +477,7 @@ type ExecResult struct {
 
 func (x *ExecResult) Reset() {
 	*x = ExecResult{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[4]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -292,7 +489,7 @@ func (x *ExecResult) String() string {
 func (*ExecResult) ProtoMessage() {}
 
 func (x *ExecResult) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[4]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -305,7 +502,7 @@ func (x *ExecResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecResult.ProtoReflect.Descriptor instead.
 func (*ExecResult) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{4}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ExecResult) GetExitCode() int32 {
@@ -371,7 +568,7 @@ type ExecResponse struct {
 
 func (x *ExecResponse) Reset() {
 	*x = ExecResponse{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[5]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -383,7 +580,7 @@ func (x *ExecResponse) String() string {
 func (*ExecResponse) ProtoMessage() {}
 
 func (x *ExecResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[5]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -396,7 +593,7 @@ func (x *ExecResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecResponse.ProtoReflect.Descriptor instead.
 func (*ExecResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{5}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ExecResponse) GetEvent() isExecResponse_Event {
@@ -467,7 +664,7 @@ type File struct {
 
 func (x *File) Reset() {
 	*x = File{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[6]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -479,7 +676,7 @@ func (x *File) String() string {
 func (*File) ProtoMessage() {}
 
 func (x *File) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[6]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -492,7 +689,7 @@ func (x *File) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use File.ProtoReflect.Descriptor instead.
 func (*File) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{6}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *File) GetPath() string {
@@ -527,7 +724,7 @@ type WriteFilesRequest struct {
 
 func (x *WriteFilesRequest) Reset() {
 	*x = WriteFilesRequest{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[7]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +736,7 @@ func (x *WriteFilesRequest) String() string {
 func (*WriteFilesRequest) ProtoMessage() {}
 
 func (x *WriteFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[7]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +749,7 @@ func (x *WriteFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFilesRequest.ProtoReflect.Descriptor instead.
 func (*WriteFilesRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{7}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WriteFilesRequest) GetFiles() []*File {
@@ -577,7 +774,7 @@ type WriteFilesResponse struct {
 
 func (x *WriteFilesResponse) Reset() {
 	*x = WriteFilesResponse{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[8]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -589,7 +786,7 @@ func (x *WriteFilesResponse) String() string {
 func (*WriteFilesResponse) ProtoMessage() {}
 
 func (x *WriteFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[8]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -602,7 +799,7 @@ func (x *WriteFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFilesResponse.ProtoReflect.Descriptor instead.
 func (*WriteFilesResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{8}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{10}
 }
 
 type ReadFilesRequest struct {
@@ -615,7 +812,7 @@ type ReadFilesRequest struct {
 
 func (x *ReadFilesRequest) Reset() {
 	*x = ReadFilesRequest{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[9]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -627,7 +824,7 @@ func (x *ReadFilesRequest) String() string {
 func (*ReadFilesRequest) ProtoMessage() {}
 
 func (x *ReadFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[9]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -640,7 +837,7 @@ func (x *ReadFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFilesRequest.ProtoReflect.Descriptor instead.
 func (*ReadFilesRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{9}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ReadFilesRequest) GetPaths() []string {
@@ -668,7 +865,7 @@ type ReadFilesResponse struct {
 
 func (x *ReadFilesResponse) Reset() {
 	*x = ReadFilesResponse{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[10]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -680,7 +877,7 @@ func (x *ReadFilesResponse) String() string {
 func (*ReadFilesResponse) ProtoMessage() {}
 
 func (x *ReadFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[10]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -693,7 +890,7 @@ func (x *ReadFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadFilesResponse.ProtoReflect.Descriptor instead.
 func (*ReadFilesResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{10}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ReadFilesResponse) GetFiles() []*File {
@@ -727,7 +924,7 @@ type RefreshRequest struct {
 
 func (x *RefreshRequest) Reset() {
 	*x = RefreshRequest{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[11]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -739,7 +936,7 @@ func (x *RefreshRequest) String() string {
 func (*RefreshRequest) ProtoMessage() {}
 
 func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[11]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -752,7 +949,7 @@ func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshRequest.ProtoReflect.Descriptor instead.
 func (*RefreshRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{11}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RefreshRequest) GetEntropy() []byte {
@@ -777,7 +974,7 @@ type RefreshResponse struct {
 
 func (x *RefreshResponse) Reset() {
 	*x = RefreshResponse{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[12]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -789,7 +986,7 @@ func (x *RefreshResponse) String() string {
 func (*RefreshResponse) ProtoMessage() {}
 
 func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[12]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -802,7 +999,7 @@ func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshResponse.ProtoReflect.Descriptor instead.
 func (*RefreshResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{12}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{14}
 }
 
 type StartEgressRequest struct {
@@ -817,7 +1014,7 @@ type StartEgressRequest struct {
 
 func (x *StartEgressRequest) Reset() {
 	*x = StartEgressRequest{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[13]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -829,7 +1026,7 @@ func (x *StartEgressRequest) String() string {
 func (*StartEgressRequest) ProtoMessage() {}
 
 func (x *StartEgressRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[13]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -842,7 +1039,7 @@ func (x *StartEgressRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartEgressRequest.ProtoReflect.Descriptor instead.
 func (*StartEgressRequest) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{13}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StartEgressRequest) GetListen() string {
@@ -869,7 +1066,7 @@ type StartEgressResponse struct {
 
 func (x *StartEgressResponse) Reset() {
 	*x = StartEgressResponse{}
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[14]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -881,7 +1078,7 @@ func (x *StartEgressResponse) String() string {
 func (*StartEgressResponse) ProtoMessage() {}
 
 func (x *StartEgressResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[14]
+	mi := &file_evalsi_guest_v1alpha1_guest_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -894,7 +1091,7 @@ func (x *StartEgressResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartEgressResponse.ProtoReflect.Descriptor instead.
 func (*StartEgressResponse) Descriptor() ([]byte, []int) {
-	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{14}
+	return file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *StartEgressResponse) GetListen() string {
@@ -925,7 +1122,18 @@ const file_evalsi_guest_v1alpha1_guest_proto_rawDesc = "" +
 	"\x03cwd\x18\x04 \x01(\tR\x03cwd\x123\n" +
 	"\atimeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12,\n" +
 	"\x12output_limit_bytes\x18\x06 \x01(\x05R\x10outputLimitBytes\x125\n" +
-	"\x06limits\x18\a \x01(\v2\x1d.evalsi.guest.v1alpha1.LimitsR\x06limits\"\x8b\x02\n" +
+	"\x06limits\x18\a \x01(\v2\x1d.evalsi.guest.v1alpha1.LimitsR\x06limits\"\x98\x01\n" +
+	"\x16ExecInteractiveRequest\x12:\n" +
+	"\x05start\x18\x01 \x01(\v2\".evalsi.guest.v1alpha1.ExecRequestH\x00R\x05start\x12\x16\n" +
+	"\x05stdin\x18\x02 \x01(\fH\x00R\x05stdin\x12!\n" +
+	"\vclose_stdin\x18\x03 \x01(\bH\x00R\n" +
+	"closeStdinB\a\n" +
+	"\x05event\"\x93\x01\n" +
+	"\x17ExecInteractiveResponse\x12\x18\n" +
+	"\x06stdout\x18\x01 \x01(\fH\x00R\x06stdout\x12\x18\n" +
+	"\x06stderr\x18\x02 \x01(\fH\x00R\x06stderr\x12;\n" +
+	"\x06result\x18\x03 \x01(\v2!.evalsi.guest.v1alpha1.ExecResultH\x00R\x06resultB\a\n" +
+	"\x05event\"\x8b\x02\n" +
 	"\n" +
 	"ExecResult\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x1b\n" +
@@ -965,10 +1173,11 @@ const file_evalsi_guest_v1alpha1_guest_proto_rawDesc = "" +
 	"\n" +
 	"vsock_port\x18\x02 \x01(\rR\tvsockPort\"-\n" +
 	"\x13StartEgressResponse\x12\x16\n" +
-	"\x06listen\x18\x01 \x01(\tR\x06listen2\xc0\x04\n" +
+	"\x06listen\x18\x01 \x01(\tR\x06listen2\xb6\x05\n" +
 	"\x11GuestAgentService\x12U\n" +
 	"\x06Health\x12$.evalsi.guest.v1alpha1.HealthRequest\x1a%.evalsi.guest.v1alpha1.HealthResponse\x12Q\n" +
-	"\x04Exec\x12\".evalsi.guest.v1alpha1.ExecRequest\x1a#.evalsi.guest.v1alpha1.ExecResponse0\x01\x12a\n" +
+	"\x04Exec\x12\".evalsi.guest.v1alpha1.ExecRequest\x1a#.evalsi.guest.v1alpha1.ExecResponse0\x01\x12t\n" +
+	"\x0fExecInteractive\x12-.evalsi.guest.v1alpha1.ExecInteractiveRequest\x1a..evalsi.guest.v1alpha1.ExecInteractiveResponse(\x010\x01\x12a\n" +
 	"\n" +
 	"WriteFiles\x12(.evalsi.guest.v1alpha1.WriteFilesRequest\x1a).evalsi.guest.v1alpha1.WriteFilesResponse\x12^\n" +
 	"\tReadFiles\x12'.evalsi.guest.v1alpha1.ReadFilesRequest\x1a(.evalsi.guest.v1alpha1.ReadFilesResponse\x12X\n" +
@@ -989,50 +1198,56 @@ func file_evalsi_guest_v1alpha1_guest_proto_rawDescGZIP() []byte {
 	return file_evalsi_guest_v1alpha1_guest_proto_rawDescData
 }
 
-var file_evalsi_guest_v1alpha1_guest_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_evalsi_guest_v1alpha1_guest_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_evalsi_guest_v1alpha1_guest_proto_goTypes = []any{
-	(*HealthRequest)(nil),       // 0: evalsi.guest.v1alpha1.HealthRequest
-	(*HealthResponse)(nil),      // 1: evalsi.guest.v1alpha1.HealthResponse
-	(*Limits)(nil),              // 2: evalsi.guest.v1alpha1.Limits
-	(*ExecRequest)(nil),         // 3: evalsi.guest.v1alpha1.ExecRequest
-	(*ExecResult)(nil),          // 4: evalsi.guest.v1alpha1.ExecResult
-	(*ExecResponse)(nil),        // 5: evalsi.guest.v1alpha1.ExecResponse
-	(*File)(nil),                // 6: evalsi.guest.v1alpha1.File
-	(*WriteFilesRequest)(nil),   // 7: evalsi.guest.v1alpha1.WriteFilesRequest
-	(*WriteFilesResponse)(nil),  // 8: evalsi.guest.v1alpha1.WriteFilesResponse
-	(*ReadFilesRequest)(nil),    // 9: evalsi.guest.v1alpha1.ReadFilesRequest
-	(*ReadFilesResponse)(nil),   // 10: evalsi.guest.v1alpha1.ReadFilesResponse
-	(*RefreshRequest)(nil),      // 11: evalsi.guest.v1alpha1.RefreshRequest
-	(*RefreshResponse)(nil),     // 12: evalsi.guest.v1alpha1.RefreshResponse
-	(*StartEgressRequest)(nil),  // 13: evalsi.guest.v1alpha1.StartEgressRequest
-	(*StartEgressResponse)(nil), // 14: evalsi.guest.v1alpha1.StartEgressResponse
-	(*durationpb.Duration)(nil), // 15: google.protobuf.Duration
+	(*HealthRequest)(nil),           // 0: evalsi.guest.v1alpha1.HealthRequest
+	(*HealthResponse)(nil),          // 1: evalsi.guest.v1alpha1.HealthResponse
+	(*Limits)(nil),                  // 2: evalsi.guest.v1alpha1.Limits
+	(*ExecRequest)(nil),             // 3: evalsi.guest.v1alpha1.ExecRequest
+	(*ExecInteractiveRequest)(nil),  // 4: evalsi.guest.v1alpha1.ExecInteractiveRequest
+	(*ExecInteractiveResponse)(nil), // 5: evalsi.guest.v1alpha1.ExecInteractiveResponse
+	(*ExecResult)(nil),              // 6: evalsi.guest.v1alpha1.ExecResult
+	(*ExecResponse)(nil),            // 7: evalsi.guest.v1alpha1.ExecResponse
+	(*File)(nil),                    // 8: evalsi.guest.v1alpha1.File
+	(*WriteFilesRequest)(nil),       // 9: evalsi.guest.v1alpha1.WriteFilesRequest
+	(*WriteFilesResponse)(nil),      // 10: evalsi.guest.v1alpha1.WriteFilesResponse
+	(*ReadFilesRequest)(nil),        // 11: evalsi.guest.v1alpha1.ReadFilesRequest
+	(*ReadFilesResponse)(nil),       // 12: evalsi.guest.v1alpha1.ReadFilesResponse
+	(*RefreshRequest)(nil),          // 13: evalsi.guest.v1alpha1.RefreshRequest
+	(*RefreshResponse)(nil),         // 14: evalsi.guest.v1alpha1.RefreshResponse
+	(*StartEgressRequest)(nil),      // 15: evalsi.guest.v1alpha1.StartEgressRequest
+	(*StartEgressResponse)(nil),     // 16: evalsi.guest.v1alpha1.StartEgressResponse
+	(*durationpb.Duration)(nil),     // 17: google.protobuf.Duration
 }
 var file_evalsi_guest_v1alpha1_guest_proto_depIdxs = []int32{
-	15, // 0: evalsi.guest.v1alpha1.ExecRequest.timeout:type_name -> google.protobuf.Duration
+	17, // 0: evalsi.guest.v1alpha1.ExecRequest.timeout:type_name -> google.protobuf.Duration
 	2,  // 1: evalsi.guest.v1alpha1.ExecRequest.limits:type_name -> evalsi.guest.v1alpha1.Limits
-	15, // 2: evalsi.guest.v1alpha1.ExecResult.duration:type_name -> google.protobuf.Duration
-	15, // 3: evalsi.guest.v1alpha1.ExecResult.cpu_time:type_name -> google.protobuf.Duration
-	4,  // 4: evalsi.guest.v1alpha1.ExecResponse.result:type_name -> evalsi.guest.v1alpha1.ExecResult
-	6,  // 5: evalsi.guest.v1alpha1.WriteFilesRequest.files:type_name -> evalsi.guest.v1alpha1.File
-	6,  // 6: evalsi.guest.v1alpha1.ReadFilesResponse.files:type_name -> evalsi.guest.v1alpha1.File
-	0,  // 7: evalsi.guest.v1alpha1.GuestAgentService.Health:input_type -> evalsi.guest.v1alpha1.HealthRequest
-	3,  // 8: evalsi.guest.v1alpha1.GuestAgentService.Exec:input_type -> evalsi.guest.v1alpha1.ExecRequest
-	7,  // 9: evalsi.guest.v1alpha1.GuestAgentService.WriteFiles:input_type -> evalsi.guest.v1alpha1.WriteFilesRequest
-	9,  // 10: evalsi.guest.v1alpha1.GuestAgentService.ReadFiles:input_type -> evalsi.guest.v1alpha1.ReadFilesRequest
-	11, // 11: evalsi.guest.v1alpha1.GuestAgentService.Refresh:input_type -> evalsi.guest.v1alpha1.RefreshRequest
-	13, // 12: evalsi.guest.v1alpha1.GuestAgentService.StartEgress:input_type -> evalsi.guest.v1alpha1.StartEgressRequest
-	1,  // 13: evalsi.guest.v1alpha1.GuestAgentService.Health:output_type -> evalsi.guest.v1alpha1.HealthResponse
-	5,  // 14: evalsi.guest.v1alpha1.GuestAgentService.Exec:output_type -> evalsi.guest.v1alpha1.ExecResponse
-	8,  // 15: evalsi.guest.v1alpha1.GuestAgentService.WriteFiles:output_type -> evalsi.guest.v1alpha1.WriteFilesResponse
-	10, // 16: evalsi.guest.v1alpha1.GuestAgentService.ReadFiles:output_type -> evalsi.guest.v1alpha1.ReadFilesResponse
-	12, // 17: evalsi.guest.v1alpha1.GuestAgentService.Refresh:output_type -> evalsi.guest.v1alpha1.RefreshResponse
-	14, // 18: evalsi.guest.v1alpha1.GuestAgentService.StartEgress:output_type -> evalsi.guest.v1alpha1.StartEgressResponse
-	13, // [13:19] is the sub-list for method output_type
-	7,  // [7:13] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	3,  // 2: evalsi.guest.v1alpha1.ExecInteractiveRequest.start:type_name -> evalsi.guest.v1alpha1.ExecRequest
+	6,  // 3: evalsi.guest.v1alpha1.ExecInteractiveResponse.result:type_name -> evalsi.guest.v1alpha1.ExecResult
+	17, // 4: evalsi.guest.v1alpha1.ExecResult.duration:type_name -> google.protobuf.Duration
+	17, // 5: evalsi.guest.v1alpha1.ExecResult.cpu_time:type_name -> google.protobuf.Duration
+	6,  // 6: evalsi.guest.v1alpha1.ExecResponse.result:type_name -> evalsi.guest.v1alpha1.ExecResult
+	8,  // 7: evalsi.guest.v1alpha1.WriteFilesRequest.files:type_name -> evalsi.guest.v1alpha1.File
+	8,  // 8: evalsi.guest.v1alpha1.ReadFilesResponse.files:type_name -> evalsi.guest.v1alpha1.File
+	0,  // 9: evalsi.guest.v1alpha1.GuestAgentService.Health:input_type -> evalsi.guest.v1alpha1.HealthRequest
+	3,  // 10: evalsi.guest.v1alpha1.GuestAgentService.Exec:input_type -> evalsi.guest.v1alpha1.ExecRequest
+	4,  // 11: evalsi.guest.v1alpha1.GuestAgentService.ExecInteractive:input_type -> evalsi.guest.v1alpha1.ExecInteractiveRequest
+	9,  // 12: evalsi.guest.v1alpha1.GuestAgentService.WriteFiles:input_type -> evalsi.guest.v1alpha1.WriteFilesRequest
+	11, // 13: evalsi.guest.v1alpha1.GuestAgentService.ReadFiles:input_type -> evalsi.guest.v1alpha1.ReadFilesRequest
+	13, // 14: evalsi.guest.v1alpha1.GuestAgentService.Refresh:input_type -> evalsi.guest.v1alpha1.RefreshRequest
+	15, // 15: evalsi.guest.v1alpha1.GuestAgentService.StartEgress:input_type -> evalsi.guest.v1alpha1.StartEgressRequest
+	1,  // 16: evalsi.guest.v1alpha1.GuestAgentService.Health:output_type -> evalsi.guest.v1alpha1.HealthResponse
+	7,  // 17: evalsi.guest.v1alpha1.GuestAgentService.Exec:output_type -> evalsi.guest.v1alpha1.ExecResponse
+	5,  // 18: evalsi.guest.v1alpha1.GuestAgentService.ExecInteractive:output_type -> evalsi.guest.v1alpha1.ExecInteractiveResponse
+	10, // 19: evalsi.guest.v1alpha1.GuestAgentService.WriteFiles:output_type -> evalsi.guest.v1alpha1.WriteFilesResponse
+	12, // 20: evalsi.guest.v1alpha1.GuestAgentService.ReadFiles:output_type -> evalsi.guest.v1alpha1.ReadFilesResponse
+	14, // 21: evalsi.guest.v1alpha1.GuestAgentService.Refresh:output_type -> evalsi.guest.v1alpha1.RefreshResponse
+	16, // 22: evalsi.guest.v1alpha1.GuestAgentService.StartEgress:output_type -> evalsi.guest.v1alpha1.StartEgressResponse
+	16, // [16:23] is the sub-list for method output_type
+	9,  // [9:16] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_guest_v1alpha1_guest_proto_init() }
@@ -1040,7 +1255,17 @@ func file_evalsi_guest_v1alpha1_guest_proto_init() {
 	if File_evalsi_guest_v1alpha1_guest_proto != nil {
 		return
 	}
+	file_evalsi_guest_v1alpha1_guest_proto_msgTypes[4].OneofWrappers = []any{
+		(*ExecInteractiveRequest_Start)(nil),
+		(*ExecInteractiveRequest_Stdin)(nil),
+		(*ExecInteractiveRequest_CloseStdin)(nil),
+	}
 	file_evalsi_guest_v1alpha1_guest_proto_msgTypes[5].OneofWrappers = []any{
+		(*ExecInteractiveResponse_Stdout)(nil),
+		(*ExecInteractiveResponse_Stderr)(nil),
+		(*ExecInteractiveResponse_Result)(nil),
+	}
+	file_evalsi_guest_v1alpha1_guest_proto_msgTypes[7].OneofWrappers = []any{
 		(*ExecResponse_Stdout)(nil),
 		(*ExecResponse_Stderr)(nil),
 		(*ExecResponse_Result)(nil),
@@ -1051,7 +1276,7 @@ func file_evalsi_guest_v1alpha1_guest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_guest_v1alpha1_guest_proto_rawDesc), len(file_evalsi_guest_v1alpha1_guest_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

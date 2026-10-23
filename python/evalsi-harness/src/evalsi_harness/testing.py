@@ -28,6 +28,8 @@ from evalsi.sandbox.client import (
     EgressEvent,
     ExecResult,
     Isolation,
+    ProcessInfo,
+    ProcessOutput,
     SandboxSpec,
     SnapshotsUnsupported,
 )
@@ -81,6 +83,8 @@ class ScriptedModelServer:
         # token) instead of a fixed 100, so context management has something real
         # to count.
         self.sized_usage = False
+        # The `model` the server names in its responses (a provider's dated snapshot).
+        self.served_model = ""
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -152,6 +156,8 @@ class ScriptedModelServer:
                         ],
                         "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": 20},
                     }
+                if outer.served_model:
+                    payload["model"] = outer.served_model
                 data = json.dumps(payload).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -178,6 +184,33 @@ class ScriptedModelServer:
         self.close()
 
 
+class _LocalProcess:
+    """A background process of the stand-in: output into unbounded buffers."""
+
+    def __init__(self, pid: str, command: Sequence[str], proc: asyncio.subprocess.Process) -> None:
+        self.id = pid
+        self.command = list(command)
+        self.proc = proc
+        self.out = bytearray()
+        self.err = bytearray()
+        self.killed = False
+        self.changed = asyncio.Event()
+        self.readers: list[asyncio.Task[None]] = []
+
+    def info(self) -> ProcessInfo:
+        code = self.proc.returncode
+        return ProcessInfo(
+            id=self.id,
+            command=self.command,
+            running=code is None,
+            killed=self.killed,
+            exit_code=code,
+            outcome="exit" if code is not None else "",
+            stdout_bytes=len(self.out),
+            stderr_bytes=len(self.err),
+        )
+
+
 class LocalSandbox:
     """Unconfined stand-in for a sandbox: a temporary directory. Tests only."""
 
@@ -193,6 +226,110 @@ class LocalSandbox:
             notes=["UNCONFINED: tests only"],
         )
         self.image_digest = ""
+        self._procs: dict[str, _LocalProcess] = {}
+
+    async def start_process(
+        self,
+        command: Sequence[str],
+        *,
+        env: Mapping[str, str] | None = None,
+        cwd: str = "",
+        timeout_s: float = 0.0,
+        buffer_bytes: int = 0,
+        stdin: bool = False,
+    ) -> ProcessInfo:
+        proc = await asyncio.create_subprocess_exec(
+            *command,
+            cwd=self.root / cwd if cwd else self.root,
+            stdin=asyncio.subprocess.PIPE if stdin else asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env={
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "HOME": str(self.root),
+                **self.spec.env,
+                **(env or {}),
+            },
+            start_new_session=True,
+        )
+        lp = _LocalProcess(f"proc_{len(self._procs) + 1}", command, proc)
+        self._procs[lp.id] = lp
+
+        async def pump(stream: asyncio.StreamReader | None, sink: bytearray) -> None:
+            while stream is not None and (chunk := await stream.read(4096)):
+                sink += chunk
+                lp.changed.set()
+
+        pumps = [
+            asyncio.ensure_future(pump(proc.stdout, lp.out)),
+            asyncio.ensure_future(pump(proc.stderr, lp.err)),
+        ]
+
+        async def reap() -> None:
+            await proc.wait()
+            await asyncio.gather(*pumps, return_exceptions=True)
+            lp.changed.set()
+
+        lp.readers = [*pumps, asyncio.ensure_future(reap())]
+        return lp.info()
+
+    def _proc(self, pid: str) -> _LocalProcess:
+        try:
+            return self._procs[pid]
+        except KeyError:
+            raise SandboxError(f"sandbox service: NOT_FOUND: process {pid!r}") from None
+
+    async def list_processes(self) -> list[ProcessInfo]:
+        return [p.info() for p in self._procs.values()]
+
+    async def read_process(
+        self,
+        process_id: str,
+        *,
+        stdout_offset: int = 0,
+        stderr_offset: int = 0,
+        max_bytes: int = 0,
+        wait_s: float = 0.0,
+    ) -> ProcessOutput:
+        p = self._proc(process_id)
+        if wait_s > 0 and len(p.out) <= stdout_offset and len(p.err) <= stderr_offset:
+            p.changed.clear()
+            if p.proc.returncode is None:
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(p.changed.wait(), wait_s)
+        limit = max_bytes or 1 << 20
+        out = bytes(p.out[stdout_offset : stdout_offset + limit])
+        err = bytes(p.err[stderr_offset : stderr_offset + limit])
+        return ProcessOutput(
+            stdout=out.decode(errors="replace"),
+            stderr=err.decode(errors="replace"),
+            stdout_offset=stdout_offset + len(out),
+            stderr_offset=stderr_offset + len(err),
+            process=p.info(),
+            stdout_raw=out,
+            stderr_raw=err,
+        )
+
+    async def write_process(
+        self, process_id: str, data: bytes | str = b"", *, close: bool = False
+    ) -> None:
+        p = self._proc(process_id)
+        if p.proc.stdin is None or p.proc.returncode is not None:
+            raise SandboxError(f"sandbox service: process {process_id} has no open stdin")
+        if data:
+            p.proc.stdin.write(data.encode() if isinstance(data, str) else data)
+            await p.proc.stdin.drain()
+        if close:
+            p.proc.stdin.close()
+
+    async def kill_process(self, process_id: str) -> ProcessInfo:
+        p = self._proc(process_id)
+        if p.proc.returncode is None:
+            p.killed = True
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(p.proc.pid, 9)
+            await p.proc.wait()
+        return p.info()
 
     async def services(self, *, include_logs: bool = False) -> list[dict[str, Any]]:
         return []
@@ -239,7 +376,7 @@ class LocalSandbox:
 
     async def write_files(self, files: Mapping[str, bytes | str], mode: int = 0) -> None:
         for name, content in files.items():
-            path = self.root / name
+            path = self.root / name.lstrip("/")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content.encode() if isinstance(content, str) else content)
             if mode:
@@ -248,7 +385,7 @@ class LocalSandbox:
     async def read_files(self, paths: Sequence[str], max_bytes: int = 0) -> dict[str, bytes]:
         out: dict[str, bytes] = {}
         for name in paths:
-            path = self.root / name
+            path = self.root / name.lstrip("/")
             if path.is_file():
                 out[name] = path.read_bytes()
             elif path.is_dir():
@@ -270,6 +407,11 @@ class LocalSandbox:
         return []
 
     async def destroy(self) -> None:
+        for p in self._procs.values():
+            if p.proc.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(p.proc.pid, 9)
+                await p.proc.wait()
         shutil.rmtree(self.root, ignore_errors=True)
 
 

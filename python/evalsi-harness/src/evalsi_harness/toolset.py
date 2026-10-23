@@ -17,14 +17,17 @@ import shlex
 from typing import Any
 
 from evalsi.sandbox import SandboxError
+from evalsi_harness import background
 from evalsi_harness.environment import TaskEnvironment
 from evalsi_harness.models import ToolSpec
 from evalsi_harness.tools import OUTPUT_LIMIT, Tool, ToolResult, _clip
 
 # The tools that change the sandbox. On replay these run again, as bash does,
 # so the replayed file tree is the recorded one and the checker grades it.
-MUTATING = frozenset({"edit_file", "apply_patch", "memory"})
-NAMES = ("edit_file", "glob", "grep", "apply_patch", "memory")
+MUTATING = frozenset({"edit_file", "apply_patch", "memory"}) | background.MUTATING
+# "background" is a group: process_start, process_output, process_write,
+# process_list and process_kill (see background.py).
+NAMES = ("edit_file", "glob", "grep", "apply_patch", "memory", "background", "shell")
 # Offered by the agent loop itself, which owns what they need.
 LOOP_NAMES = ("session_search", "delegate", "tool_search", "code_mode")
 MAX_LISTED = 500
@@ -488,4 +491,12 @@ def extra_tools(env: TaskEnvironment, names: list[str]) -> list[Tool]:
         "apply_patch": ApplyPatchTool(env),
         "memory": MemoryTool(env),
     }
-    return [made[n] for n in dict.fromkeys(names)]
+    tools: list[Tool] = []
+    for n in dict.fromkeys(names):
+        if n == "background":
+            tools += background.process_tools(env)
+        elif n == "shell":
+            tools += background.shell_tools(env)
+        else:
+            tools.append(made[n])
+    return tools

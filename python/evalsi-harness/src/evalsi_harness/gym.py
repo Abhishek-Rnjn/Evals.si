@@ -44,6 +44,7 @@ from evalsi.sandbox.client import SnapshotsUnsupported, connect
 from evalsi.types import Content, Record, Step
 from evalsi.v1alpha1 import run_pb2
 from evalsi_harness.checker import run_checker
+from evalsi_harness.diffcheck import run_diff_checker
 from evalsi_harness.environment import EnvironmentPool, SandboxClientLike, TaskEnvironment
 from evalsi_harness.isolate import run_clean_checker
 from evalsi_harness.process import ProcessContext, ProcessReward
@@ -361,6 +362,8 @@ class TaskEnv:
         checker = task.environment.checker
         if checker.isolation == "clean":
             check, _ = await run_clean_checker(await self._ensure_pool(), env, checker, task)
+        elif checker.isolation == "diff":
+            check = (await run_diff_checker(await self._ensure_pool(), env, checker, task)).check
         else:
             check = await run_checker(env, checker, task)
         info: dict[str, Any] = {

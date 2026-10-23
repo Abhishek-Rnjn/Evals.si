@@ -126,24 +126,40 @@ webhooks:
 
 A webhook makes the server send run results, and with `trace.scored` the summaries and scores of live traces, to a URL, and the server dials it from where it runs, so only admins get these permissions by default. On Kubernetes that means a webhook can reach in-cluster services by name: restrict who holds `webhooks.write`, and use egress NetworkPolicy if the server must not reach some of them. Rules can match `resource.webhook.name` and `resource.labels`.
 
-## Optional destination guard
+## Destination guard
 
-Set `webhooks.ssrf_guard: true` to require HTTPS public endpoints and reject
-private, loopback, link-local and metadata destinations, including names that
-resolve to those addresses. Each delivery is checked, so enabling the guard
-also protects previously stored webhooks. DNS answers are checked again at
-connection time and the transport dials a checked address. Redirects remain
-refused. When an operator configures an HTTP proxy, that proxy remains part of
-the trusted network boundary.
+Since v0.4 the server refuses a webhook URL unless it is HTTPS to a public
+address: private, loopback, link-local and metadata destinations are refused,
+including names that resolve to those addresses. Each delivery is checked, so
+the guard also covers webhooks saved before it was on. DNS answers are checked
+again at connection time and the transport dials a checked address. Redirects
+remain refused. When an operator configures an HTTP proxy, that proxy remains
+part of the trusted network boundary.
 
 For trusted internal receivers, list exact hosts or `*.domain` patterns under
-`webhooks.allow_hosts`. An exception permits HTTP and internal addresses for
-that host. The default is `ssrf_guard: false`, preserving existing installations.
-The option applies to WebhookService subscriptions, not policy alert URLs or
-third-party connector callbacks.
+`webhooks.allow_hosts` (`*.studio.svc.cluster.local` matches any name ending
+in `.studio.svc.cluster.local`, not the bare domain). An exception permits HTTP
+and internal addresses for that host. `webhooks.ssrf_guard: false` turns the
+guard off. The option applies to WebhookService subscriptions, not policy
+alert URLs or third-party connector callbacks.
 
 ```yaml
 webhooks:
-  ssrf_guard: true
-  allow_hosts: ["receiver.monitoring.svc.cluster.local"]
+  allow_hosts: ["receiver.monitoring.svc.cluster.local", "*.studio.svc.cluster.local"]
+  # ssrf_guard: false   # the behaviour before v0.4
 ```
+
+With the Helm chart, set `webhooks.allowHosts` (and `webhooks.ssrfGuard:
+false` to turn the guard off); the hosts of `bootstrap.webhooks` are allowed
+for you, since the chart's values are the operator's own.
+
+### Upgrading from v0.3
+
+The guard was opt-in before v0.4. After upgrading, a saved webhook whose URL is
+plain HTTP or an internal address (an in-cluster service name, a private IP)
+is refused: the server logs `webhook destination refused` for each at start,
+and each of its deliveries fails at once (no retries) with an error naming
+`webhooks.allow_hosts` and `webhooks.ssrf_guard: false`. Testing the webhook (`POST /v1alpha1/webhooks/{name}:test`)
+shows the same error. To keep such a webhook, list its host under
+`webhooks.allow_hosts` (or `webhooks.allowHosts` in the chart) and restart;
+deliveries that failed meanwhile are not resent.

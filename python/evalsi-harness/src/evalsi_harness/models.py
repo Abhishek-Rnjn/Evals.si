@@ -32,7 +32,7 @@ from evalsi_harness.modelhttp import (
     retry_after,
     stream_events,
 )
-from evalsi_harness.streaming import collect_anthropic, collect_chat
+from evalsi_harness.streaming import collect_anthropic, collect_chat, collect_resuming
 
 __all__ = ["MAX_RETRY_AFTER_S", "ModelError", "retry_after"]
 
@@ -89,6 +89,32 @@ TOKEN_TRACE_REQUEST: dict[str, Any] = {
     "return_token_ids": True,
 }
 
+# The same from an SGLang server, coded against its OpenAI-compatible protocol
+# (sglang main as of 2026-10-22, python/sglang/srt/entrypoints/openai/protocol.py
+# and serving_chat.py; not run against a live server). Without streaming,
+# ``return_token_ids`` adds ``prompt_token_ids`` and ``response_token_ids`` to each
+# choice. SGLang refuses ``return_token_ids`` on a stream; there the ids come in
+# the response's ``sglext`` block (``input_ids``, and ``output_ids`` per choice).
+# Log-probability entries carry the token's text, not its id.
+SGLANG_TOKEN_TRACE_REQUEST: dict[str, Any] = {
+    "logprobs": True,
+    "top_logprobs": 0,
+    "return_token_ids": True,
+}
+SGLANG_STREAM_TOKEN_TRACE_REQUEST: dict[str, Any] = {
+    "logprobs": True,
+    "top_logprobs": 0,
+    "return_input_ids_in_sglext": True,
+    "return_output_ids_in_sglext": True,
+}
+
+
+def token_trace_request(server: str, stream: bool) -> dict[str, Any]:
+    """The request fields that ask ``server`` ("vllm" or "sglang") for a turn's tokens."""
+    if server == "sglang":
+        return SGLANG_STREAM_TOKEN_TRACE_REQUEST if stream else SGLANG_TOKEN_TRACE_REQUEST
+    return TOKEN_TRACE_REQUEST
+
 
 def _int_list(value: Any, what: str) -> list[int]:
     if not isinstance(value, list) or not all(
@@ -104,9 +130,13 @@ def token_trace(payload: dict[str, Any], choice: dict[str, Any]) -> TokenTrace:
     gets a trace that names the rest in ``missing``; ids and log-probabilities
     that disagree in length or value are an error."""
     message = choice.get("message") or {}
+    raw_ext = payload.get("sglext")
+    sglext: dict[str, Any] = raw_ext if isinstance(raw_ext, dict) else {}
     prompt = payload.get("prompt_token_ids")
     if prompt is None:
         prompt = choice.get("prompt_token_ids", message.get("prompt_token_ids"))
+    if prompt is None:
+        prompt = sglext.get("input_ids")
     block = choice.get("logprobs")
     entries = block.get("content") if isinstance(block, dict) else None
     from_logprobs: list[int] = []
@@ -125,6 +155,13 @@ def token_trace(payload: dict[str, Any], choice: dict[str, Any]) -> TokenTrace:
                     f"a log-probability token is not token_id:<int>: {token!r}"
                 ) from exc
     returned = choice.get("token_ids")
+    if returned is None:
+        returned = choice.get("response_token_ids")  # SGLang
+    if returned is None and isinstance(sglext.get("output_ids"), list):
+        per_choice = sglext["output_ids"]
+        index = choice.get("index", 0) if isinstance(choice.get("index", 0), int) else 0
+        if 0 <= index < len(per_choice):
+            returned = per_choice[index]
     completion = _int_list(returned, "choice.token_ids") if returned is not None else from_logprobs
     if returned is not None and len(from_logprobs) == len(completion) and returned != from_logprobs:
         raise ModelError("the response's token_ids disagree with its log-probability tokens")
@@ -176,6 +213,18 @@ class ModelTurn:
     # them (``TargetConfig.token_trace``); None otherwise, and for a turn
     # served by a model that cannot (a fallback).
     tokens: TokenTrace | None = None
+    # The model as the provider named it in the response (a dated snapshot, say),
+    # and OpenAI's system_fingerprint: what a determinism record keeps.
+    response_model: str = ""
+    system_fingerprint: str = ""
+    # Anthropic: the response's content blocks exactly as returned, when they
+    # hold blocks this client has no field for (server tool calls and results).
+    # They are sent back as they are: a paused turn continues from them.
+    raw_content: list[dict[str, Any]] = field(default_factory=list)
+    # Another model's reasoning in the messages this turn was sent, and what was
+    # done with it (see fallback.py), and the broken streams this turn resumed.
+    handoff: dict[str, Any] = field(default_factory=dict)
+    stream_resumes: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def truncated(self) -> bool:
@@ -186,8 +235,11 @@ class ModelTurn:
         msg: Message = {"role": "assistant", "content": self.text}
         if self.thinking:
             msg["thinking_blocks"] = self.thinking
-            if self.model:
-                msg["thinking_by"] = self.model
+        if self.raw_content:
+            msg["anthropic_content"] = self.raw_content
+        if (self.thinking or self.raw_content) and self.model:
+            # Whose provider-specific blocks these are (see fallback.py).
+            msg["thinking_by"] = self.model
         if self.tool_calls:
             msg["tool_calls"] = [
                 {
@@ -257,7 +309,7 @@ class OpenAIChat:
         body: dict[str, Any] = {
             "model": self.config.model,
             "messages": ([{"role": "system", "content": system}] if system else [])
-            + [to_openai(m) for m in messages],
+            + [out for m in messages for out in to_openai_all(m)],
             "max_tokens": max_tokens or self.config.max_tokens,
         }
         if tools:
@@ -275,13 +327,14 @@ class OpenAIChat:
         if self.config.temperature is not None:
             body["temperature"] = self.config.temperature
         if self.config.token_trace:
-            body.update(TOKEN_TRACE_REQUEST)
+            body.update(token_trace_request(self.config.token_trace_server, self.config.stream))
         start = time.perf_counter()
+        resumes: list[dict[str, Any]] = []
         if self.config.stream:
             body["stream"] = True
             body["stream_options"] = {"include_usage": True}
-            payload = await collect_chat(
-                stream_events(self._client, self._url, body, self._headers, self._gate)
+            payload, resumes = await collect_resuming(
+                collect_chat, self._events, body, self.config.stream_resume_attempts
             )
         else:
             payload = await post_json(self._client, self._url, body, self._headers, self._gate)
@@ -317,17 +370,45 @@ class OpenAIChat:
             # A part of prompt_tokens, as in Anthropic's normalized total.
             cache_read_tokens=int(details.get("cached_tokens") or 0),
             tokens=token_trace(payload, choice) if self.config.token_trace else None,
+            response_model=str(payload.get("model") or ""),
+            system_fingerprint=str(payload.get("system_fingerprint") or ""),
+            stream_resumes=resumes,
         )
+
+    def _events(self, body: dict[str, Any]) -> Any:
+        return stream_events(self._client, self._url, body, self._headers, self._gate)
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
 
+# What an assistant message carries for its own provider only.
+PROVIDER_KEYS = frozenset({"thinking_blocks", "thinking_by", "anthropic_content"})
+
+
+def to_openai_all(message: Message) -> list[Message]:
+    """``to_openai`` plus, for a tool result that carries images, the user message that
+    shows them: chat-completions tool messages are text only."""
+    out = [to_openai(message)]
+    images = message.get("images") if message.get("role") == "tool" else None
+    if images:
+        parts: list[dict[str, Any]] = [{"type": "text", "text": "Image(s) from the tool result:"}]
+        parts += [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{i['media_type']};base64,{i['data']}"},
+            }
+            for i in images
+        ]
+        out.append({"role": "user", "content": parts})
+    return out
+
+
 def to_openai(message: Message) -> Message:
     """Drops the fields chat completions does not know (a tool result's is_error,
     an assistant turn's thinking_blocks)."""
-    if message.get("role") == "assistant" and "thinking_blocks" in message:
-        return {k: v for k, v in message.items() if k not in ("thinking_blocks", "thinking_by")}
+    if message.get("role") == "assistant" and PROVIDER_KEYS & message.keys():
+        return {k: v for k, v in message.items() if k not in PROVIDER_KEYS}
     if message.get("role") != "tool":
         return message
     content = message.get("content") or ""
@@ -343,11 +424,26 @@ def to_anthropic(messages: list[Message]) -> list[dict[str, Any]]:
     for msg in messages:
         role = msg["role"]
         if role == "tool":
-            block = {
+            block: dict[str, Any] = {
                 "type": "tool_result",
                 "tool_use_id": msg["tool_call_id"],
                 "content": msg.get("content") or "",
             }
+            if msg.get("images"):
+                block["content"] = [
+                    {"type": "text", "text": msg.get("content") or "(no text)"},
+                    *(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": i["media_type"],
+                                "data": i["data"],
+                            },
+                        }
+                        for i in msg["images"]
+                    ),
+                ]
             if msg.get("is_error"):
                 block["is_error"] = True
             if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list):
@@ -355,23 +451,32 @@ def to_anthropic(messages: list[Message]) -> list[dict[str, Any]]:
             else:
                 out.append({"role": "user", "content": [block]})
         elif role == "assistant":
-            blocks: list[dict[str, Any]] = list(msg.get("thinking_blocks") or [])
-            if msg.get("content"):
-                blocks.append({"type": "text", "text": msg["content"]})
-            for call in msg.get("tool_calls") or []:
-                try:
-                    args = json.loads(call["function"]["arguments"] or "{}")
-                except json.JSONDecodeError:
-                    args = {}
-                blocks.append(
-                    {
-                        "type": "tool_use",
-                        "id": call["id"],
-                        "name": call["function"]["name"],
-                        "input": args if isinstance(args, dict) else {},
-                    }
-                )
-            out.append({"role": "assistant", "content": blocks or ""})
+            blocks: list[dict[str, Any]]
+            if msg.get("anthropic_content"):
+                # Server tool calls and results: sent back exactly as they came.
+                blocks = list(msg["anthropic_content"])
+            else:
+                blocks = list(msg.get("thinking_blocks") or [])
+                if msg.get("content"):
+                    blocks.append({"type": "text", "text": msg["content"]})
+                for call in msg.get("tool_calls") or []:
+                    try:
+                        args = json.loads(call["function"]["arguments"] or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
+                    blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": call["id"],
+                            "name": call["function"]["name"],
+                            "input": args if isinstance(args, dict) else {},
+                        }
+                    )
+            if out and out[-1]["role"] == "assistant" and isinstance(out[-1]["content"], list):
+                # A turn the API paused (pause_turn) and its continuation are one turn.
+                out[-1]["content"].extend(blocks)
+            else:
+                out.append({"role": "assistant", "content": blocks or ""})
         elif role == "user":
             text = msg.get("content") or ""
             if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list):
@@ -440,11 +545,11 @@ class AnthropicChat:
         }
         if system:
             body["system"] = [{"type": "text", "text": system, "cache_control": EPHEMERAL}]
-        if tools:
+        if tools or self.config.server_tools:
             body["tools"] = [
                 {"name": t.name, "description": t.description, "input_schema": t.input_schema}
                 for t in tools
-            ]
+            ] + [dict(t) for t in self.config.server_tools]
             body["tools"][-1]["cache_control"] = EPHEMERAL
         if self.config.effort:
             body["output_config"] = {"effort": self.config.effort}
@@ -461,15 +566,24 @@ class AnthropicChat:
         if self.config.temperature is not None and not thinking_on:
             body["temperature"] = self.config.temperature
         start = time.perf_counter()
+        resumes: list[dict[str, Any]] = []
         if self.config.stream:
             body["stream"] = True
-            payload = await collect_anthropic(
-                stream_events(self._client, self._url, body, self._headers, self._gate)
+            payload, resumes = await collect_resuming(
+                collect_anthropic,
+                lambda sent: stream_events(
+                    self._client, self._url, sent, self._headers, self._gate
+                ),
+                body,
+                self.config.stream_resume_attempts,
+                # A prefill cannot follow thinking; the current models refuse one anyway.
+                prefill=self.config.stream_resume_mode == "prefill" and not thinking_on,
             )
         else:
             payload = await post_json(self._client, self._url, body, self._headers, self._gate)
         text, calls, thinking = [], [], []
-        for block in payload.get("content") or []:
+        content = payload.get("content") or []
+        for block in content:
             if block.get("type") in ("thinking", "redacted_thinking"):
                 thinking.append(block)
             elif block.get("type") == "text":
@@ -503,10 +617,46 @@ class AnthropicChat:
             thinking=thinking,
             cache_read_tokens=cache_read,
             cache_write_tokens=cache_write,
+            response_model=str(payload.get("model") or ""),
+            # Server tool calls and results have no field of their own: the whole
+            # content goes back as it came (and a paused turn continues from it).
+            raw_content=list(content)
+            if any(b.get("type") not in OWN_BLOCKS for b in content)
+            else [],
+            stream_resumes=resumes,
         )
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+# Anthropic content blocks the client maps to fields of its own.
+OWN_BLOCKS = frozenset({"text", "tool_use", "thinking", "redacted_thinking"})
+
+
+class NamedModel:
+    """A model for a role apart from the agent's own turns (compaction, sub-agents):
+    every turn it serves names it (``ModelTurn.model``), so the step, the spend and
+    a recording say which model it was, and a replay knows without the model."""
+
+    def __init__(self, inner: ChatModel) -> None:
+        self.inner = inner
+        self.name = inner.name
+
+    async def complete(
+        self,
+        messages: list[Message],
+        tools: list[ToolSpec],
+        *,
+        system: str = "",
+        max_tokens: int = 0,
+    ) -> ModelTurn:
+        turn = await self.inner.complete(messages, tools, system=system, max_tokens=max_tokens)
+        turn.model = turn.model or self.name
+        return turn
+
+    async def aclose(self) -> None:
+        await self.inner.aclose()
 
 
 def create_model(config: TargetConfig) -> ChatModel:
@@ -525,5 +675,6 @@ def create_model(config: TargetConfig) -> ChatModel:
         return FallbackModel(
             [model, *(create_model(replace(f, fallbacks=())) for f in config.fallbacks)],
             after=config.fallback_after or 2,
+            handoff=config.reasoning_handoff or "drop",
         )
     return model

@@ -28,8 +28,21 @@ sandbox rung that snapshots; on the others a stopped rollout is
 ``cancelled`` and cannot be continued, because the sandbox's state cannot be
 kept. Cancelling the ``run`` task itself destroys every episode's sandbox.
 
-Resuming continues the *same* conversation and sandbox state, so it is exact
-for a paused trajectory. It is not a replay: nothing is re-run.
+Resuming a paused trajectory continues the *same* conversation and sandbox
+state, so it is exact. It is not a replay: nothing is re-run.
+
+A rung that cannot snapshot cancels a stopped rollout instead, with its turns
+kept. Such a trajectory is still resumable by *replay*: a fresh sandbox is set
+up, the recorded turns' tool calls are run into it in order (the model is not
+called for them), and the rollout continues from the recorded conversation.
+That is deterministic re-execution, so it is only safe when running the same
+calls again gives the same state. A task that says otherwise is refused with
+:class:`ReplayRefused`, not replayed: a record's ``metadata["replay_safe"]``
+set to False, ``metadata["non_idempotent_tools"]`` naming a tool the trajectory
+used (or ``True``), or a sandbox with network access, whose calls may have had
+effects outside it (unless ``metadata["replay_safe"]`` is True). A replayed
+observation that differs from the recorded one is listed in
+``Trajectory.info["replay"]["diverged"]``; ``strict_replay`` makes it an error.
 """
 
 from __future__ import annotations
@@ -78,6 +91,11 @@ class Turn:
     model: str = ""
 
 
+class ReplayRefused(RuntimeError):
+    """Replaying a trajectory into a fresh sandbox is not safe, or did not
+    reproduce it (``strict_replay``): the message says why."""
+
+
 @dataclass
 class Trajectory:
     record_id: str
@@ -107,6 +125,19 @@ class Trajectory:
     def resumable(self) -> bool:
         return self.status == PAUSED and self.snapshot is not None
 
+    @property
+    def replayable(self) -> bool:
+        """Cancelled with its turns kept (its rung could not snapshot), so it can
+        be resumed by replaying them into a fresh sandbox. Whether that is safe is
+        decided when it is tried (:class:`ReplayRefused`)."""
+        return (
+            self.status == CANCELLED
+            and self.snapshot is None
+            and bool(self.turns)
+            and self.record is not None
+            and self.spec is not None
+        )
+
 
 def _record_id(record: Record | dict[str, Any] | None) -> str:
     if isinstance(record, Record):
@@ -129,18 +160,29 @@ async def rollout(
     max_tokens: int = 0,
     should_stop: Callable[[], bool] | None = None,
     resume: Trajectory | None = None,
+    strict_replay: bool = False,
 ) -> Trajectory:
-    """Play one episode. ``resume`` continues a paused trajectory (the task is
-    in it, so ``record`` and ``spec`` are not given). ``should_stop`` is asked
-    before every model call: when it says so the rollout pauses (or is
+    """Play one episode. ``resume`` continues a paused trajectory from its
+    snapshot, or a cancelled one by replaying it (see the module docstring; the
+    task is in it, so ``record`` and ``spec`` are not given). ``should_stop`` is
+    asked before every model call: when it says so the rollout pauses (or is
     cancelled, if its rung cannot snapshot)."""
+    replay: dict[str, Any] | None = None
     if resume is not None:
-        if not resume.resumable:
+        if not (resume.resumable or resume.replayable):
             raise ValueError(
-                f"only a paused trajectory with a snapshot can be resumed, not {resume.status!r}"
+                "only a paused trajectory with a snapshot, or a cancelled one with its turns, "
+                f"can be resumed, not {resume.status!r}"
             )
-        assert resume.snapshot is not None
-        instruction = await env.restore(resume.snapshot)
+        if resume.resumable:
+            assert resume.snapshot is not None
+            instruction = await env.restore(resume.snapshot)
+        else:
+            unsafe = unsafe_to_replay(resume)
+            if unsafe:
+                raise ReplayRefused(unsafe)
+            assert resume.record is not None
+            instruction = await env.reset(resume.record, resume.spec)
         traj = Trajectory(
             resume.record_id,
             turns=list(resume.turns),
@@ -149,6 +191,13 @@ async def rollout(
             record=resume.record,
             spec=resume.spec,
         )
+        if not resume.resumable:
+            try:
+                replay = await _replay(env, resume, strict_replay)
+            except BaseException:
+                await env.abort()
+                raise
+            traj.info = {"replay": replay}
     else:
         if record is None:
             raise ValueError("a new rollout needs a record")
@@ -185,13 +234,77 @@ async def rollout(
         raise
 
 
+def unsafe_to_replay(traj: Trajectory) -> str:
+    """Why replaying ``traj``'s tool calls into a fresh sandbox is not safe, or
+    an empty string when it is."""
+    assert traj.record is not None
+    meta = traj.record.metadata or {}
+    if meta.get("replay_safe") is False:
+        return f"record {traj.record_id} declares replay_safe: false, so its calls are not re-run"
+    declared = meta.get("non_idempotent_tools")
+    used = {c["name"] for t in traj.turns for c in t.tool_calls}
+    if declared is True or (isinstance(declared, list) and used & {str(n) for n in declared}):
+        names = sorted(used if declared is True else used & {str(n) for n in declared})
+        return (
+            f"record {traj.record_id} declares non-idempotent tools ({', '.join(names)}) that "
+            "this trajectory called, so replaying them would repeat their side effects"
+        )
+    if meta.get("replay_safe") is not True and traj.spec is not None:
+        network = ""
+        record_env = meta.get("environment")
+        if isinstance(record_env, dict):
+            network = str((record_env.get("sandbox") or {}).get("network") or "")
+        if not network and traj.spec.HasField("environment"):
+            network = traj.spec.environment.sandbox.network
+        if network and network != "deny":
+            return (
+                f"record {traj.record_id}'s sandbox has network access ({network}), so its calls "
+                "may have had effects outside it; set metadata replay_safe: true to replay anyway"
+            )
+    return ""
+
+
+async def _replay(env: gym.TaskEnv, recorded: Trajectory, strict: bool) -> dict[str, Any]:
+    """Run the recorded turns' tool calls into the fresh sandbox, in order. The
+    conversation and rewards stay as recorded; the observations are compared."""
+    diverged: list[dict[str, Any]] = []
+    steps = 0
+    for index, turn in enumerate(recorded.turns):
+        for position, call in enumerate(turn.tool_calls):
+            result = await env.step(gym.action_from(call["name"], call["arguments"]))
+            steps += 1
+            if result.done:
+                raise ReplayRefused(
+                    f"replaying turn {index} ended the episode before the recorded turns were done"
+                )
+            seen = turn.observations[position] if position < len(turn.observations) else None
+            if result.observation != seen:
+                diverged.append(
+                    {
+                        "turn": index,
+                        "call": call["name"],
+                        "recorded": seen,
+                        "replayed": result.observation,
+                    }
+                )
+                if strict:
+                    raise ReplayRefused(
+                        f"the replay diverged at turn {index}, call {call['name']!r}: "
+                        f"recorded {str(seen)[:200]!r}, replayed {result.observation[:200]!r}"
+                    )
+    return {"turns": len(recorded.turns), "steps": steps, "diverged": diverged}
+
+
 async def _pause(env: gym.TaskEnv, traj: Trajectory) -> Trajectory:
     try:
         traj.snapshot = await env.snapshot()
         traj.status = PAUSED
     except SnapshotsUnsupported:
         traj.status = CANCELLED
-        traj.error = "stopped; this sandbox rung cannot snapshot, so it cannot be resumed"
+        traj.error = (
+            "stopped; this sandbox rung cannot snapshot, so it can only be resumed by replaying "
+            "its tool calls into a fresh sandbox"
+        )
     await env.abort()
     return traj
 
@@ -204,7 +317,7 @@ async def _submit(env: gym.TaskEnv, traj: Trajectory) -> Trajectory:
 def _finish(traj: Trajectory, result: gym.StepResult) -> Trajectory:
     traj.status = DONE
     traj.reward = result.reward
-    traj.info = result.info
+    traj.info = {**traj.info, **result.info}  # keeps what a replay recorded
     if result.reward is None:
         traj.error = f"the task's checker could not run: {result.info.get('error')}"
     return traj
@@ -289,17 +402,23 @@ class RolloutPool:
         *,
         resume: Sequence[Trajectory] = (),
         max_tokens: int = 0,
+        strict_replay: bool = False,
     ) -> list[Trajectory]:
         """Run ``tasks`` (new rollouts) and ``resume`` (paused ones), at most
         ``concurrency`` at a time. Results are in order: tasks, then resumed."""
         for paused in resume:
-            if not paused.resumable:
+            if not (paused.resumable or paused.replayable):
                 raise ValueError(
-                    f"only a paused trajectory with a snapshot can be resumed, "
-                    f"not {paused.status!r}"
+                    "only a paused trajectory with a snapshot, or a cancelled one with its "
+                    f"turns, can be resumed, not {paused.status!r}"
                 )
-        jobs = [partial(self._one, record, spec, None, max_tokens) for record, spec in tasks]
-        jobs += [partial(self._one, None, None, paused, max_tokens) for paused in resume]
+        jobs = [
+            partial(self._one, record, spec, None, max_tokens, strict_replay)
+            for record, spec in tasks
+        ]
+        jobs += [
+            partial(self._one, None, None, paused, max_tokens, strict_replay) for paused in resume
+        ]
         # A failure in one rollout cancels the rest, which destroys their sandboxes.
         async with asyncio.TaskGroup() as group:
             running = [group.create_task(job()) for job in jobs]
@@ -311,6 +430,7 @@ class RolloutPool:
         spec: run_pb2.RunSpec | None,
         resume: Trajectory | None,
         max_tokens: int,
+        strict_replay: bool = False,
     ) -> Trajectory:
         async with self._slots:
             if self._stop.is_set():
@@ -333,7 +453,13 @@ class RolloutPool:
                         max_tokens=max_tokens,
                         should_stop=self._stop.is_set,
                         resume=resume,
+                        strict_replay=strict_replay,
                     )
+                except ReplayRefused as exc:
+                    # Replaying was not safe, or did not reproduce the recording: an
+                    # error that names why, with the trajectory left as it was.
+                    assert resume is not None
+                    return replace(resume, status=ERROR, error=f"not resumed: {exc}")
                 except (TaskError, SandboxError) as exc:
                     # This task's environment failed (its setup, say): that rollout is an
                     # error with no reward, and the others carry on.

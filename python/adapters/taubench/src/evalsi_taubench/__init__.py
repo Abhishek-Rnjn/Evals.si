@@ -34,6 +34,16 @@ agent and one of their tools, which runs against the same tau2 environment.
 Their tool calls are part of the conversation tau2 grades, so assertions on
 the device's end state hold.
 
+Option ``user=tau2`` replaces that simulator with tau2's own: its
+``UserSimulator`` (the same prompts, tool calling and stop tokens) through
+tau2's LiteLLM wrapper, so the user is a model LiteLLM names, with its own
+credentials (for example ``OPENAI_API_KEY``), not the run's judge. ``user_llm``
+picks the model (default tau2's ``gpt-4.1``) and ``user_llm_args`` is a JSON
+object of LiteLLM arguments (default ``{"temperature": 0}``). The conversation
+starts as in tau2: the user answers the agent's greeting. ``user=evalsi`` (the
+default) keeps the simulator described above. Recording and replay work with
+either; a recorded run replays without calling the user model.
+
 Not supported: tasks graded by natural-language assertions (tau2 grades
 those with its own LLM judge); the importer skips them.
 """
@@ -90,22 +100,46 @@ def load(domain: str, **options: str) -> list[dict[str, Any]]:
         if missing:
             raise ValueError(f"{domain}: no tasks {missing}")
         tasks = [t for t in tasks if t.id in wanted]
+    user = _user_option(options)
     rows = []
     for task in tasks:
         criteria = task.evaluation_criteria
         if criteria is not None and RewardType.NL_ASSERTION in criteria.reward_basis:
             continue
+        meta: dict[str, Any] = {"domain": domain, "task": task.model_dump(mode="json")}
+        if user is not None:
+            meta["user"] = user
         rows.append(
             {
                 "id": f"{domain}/{task.id}",
                 "input": str(task.user_scenario),
                 "reference": criteria.model_dump(mode="json") if criteria else None,
-                "metadata": {
-                    "taubench": {"domain": domain, "task": task.model_dump(mode="json")},
-                },
+                "metadata": {"taubench": meta},
             }
         )
     return rows
+
+
+def _user_option(options: dict[str, str]) -> dict[str, Any] | None:
+    """The ``user`` options as record metadata; None for the default simulator."""
+    kind = options.get("user", "evalsi")
+    if kind not in ("evalsi", "tau2"):
+        raise ValueError(f"user must be evalsi or tau2, got {kind!r}")
+    if kind == "evalsi":
+        if options.get("user_llm") or options.get("user_llm_args"):
+            raise ValueError("user_llm and user_llm_args apply to user=tau2")
+        return None
+    from tau2.config import DEFAULT_LLM_ARGS_USER, DEFAULT_LLM_USER
+
+    args: Any = dict(DEFAULT_LLM_ARGS_USER)
+    if options.get("user_llm_args"):
+        try:
+            args = json.loads(options["user_llm_args"])
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"user_llm_args is not JSON: {exc}") from exc
+        if not isinstance(args, dict):
+            raise ValueError("user_llm_args must be a JSON object")
+    return {"kind": "tau2", "llm": options.get("user_llm") or DEFAULT_LLM_USER, "llm_args": args}
 
 
 @dataclass
@@ -257,6 +291,18 @@ class TauBenchHarness(BuiltinHarness):
             return self._user_judge(us.judge)
 
         state = next((st for st in self._tau.values() if st.source is task), None)
+        wanted = task.record.metadata["taubench"].get("user")
+        if state is not None and isinstance(wanted, dict) and wanted.get("kind") == "tau2":
+            state.user = Tau2User(
+                env=state.env,
+                task=state.task,
+                history=state.history,
+                llm=str(wanted["llm"]),
+                llm_args=dict(wanted.get("llm_args") or {}),
+                max_turns=us.max_turns or 30,
+                seed=f"{task.id}#{task.trial}",
+            )
+            return state.user
         if state is not None and state.env.user_tools is not None:
             state.user = ToolUser(
                 judge,
@@ -564,6 +610,127 @@ class ToolUser(UserSimulator):
         rest = [m for ex in self.exchanges for m in ex] + self.pending
         self.exchanges, self.pending = [], []
         return rest
+
+
+class Tau2User(ToolUser):
+    """tau2's own user simulator: tau2's ``UserSimulator`` over its LiteLLM
+    wrapper. The conversation, its tool calls (in domains where the user has
+    tools) and the replay state are ToolUser's, so grading and recording work
+    as they do for the Evals.si simulator; only the user's turns come from tau2."""
+
+    def __init__(
+        self,
+        *,
+        env: Any,
+        task: Any,
+        history: list[Any],
+        llm: str,
+        llm_args: dict[str, Any],
+        max_turns: int,
+        seed: str,
+    ) -> None:
+        from tau2.user.user_simulator import UserSimulator as Tau2UserSimulator
+
+        # No judge: the user model is LiteLLM's. ToolUser's own __init__ would
+        # build the Evals.si prompt, which this user does not use.
+        def no_judge() -> Any:
+            raise TaskError("tau2's user does not use the run's judge")
+
+        UserSimulator.__init__(self, no_judge, persona="", goal="", max_turns=max_turns, seed=seed)
+        self.env = env
+        user_tools = env.get_user_tools() if env.user_tools is not None else None
+        self.tools = {t.name: t for t in user_tools or []}
+        self.sim = Tau2UserSimulator(
+            tools=user_tools,
+            instructions=task.user_scenario.instructions,
+            llm=llm,
+            llm_args=llm_args,
+        )
+        self.state = self.sim.get_init_state(message_history=_user_view(history))
+        self.transcript = []
+        self.seen = 0
+        self.exchanges = []
+        self.pending = []
+        self.calls = 0
+        self._replay_calls = []
+
+    async def reply(self, conversation: list[dict[str, Any]]) -> Any:
+        import asyncio
+
+        from tau2.data_model.message import AssistantMessage, MultiToolMessage, ToolMessage
+        from tau2.orchestrator.orchestrator import DEFAULT_FIRST_AGENT_MESSAGE
+
+        from evalsi.types import Usage
+        from evalsi_harness.user_sim import UserTurn
+
+        self.turns += 1
+        if self.turns > self.max_turns:
+            return UserTurn("", True, Usage())
+        fresh = [
+            (m.get("content") or "").strip()
+            for m in conversation[self.seen :]
+            if m["role"] == "assistant" and (m.get("content") or "").strip()
+        ]
+        self.seen = len(conversation)
+        for text in fresh:
+            self.transcript.append(f"AGENT: {text}")
+        # As in tau2, the first thing the user answers is the agent's greeting.
+        message: Any = (
+            AssistantMessage(role="assistant", content="\n".join(fresh))
+            if fresh
+            else DEFAULT_FIRST_AGENT_MESSAGE
+        )
+        usage = Usage(input_tokens=0, output_tokens=0)
+        for _ in range(MAX_USER_TOOL_CALLS + 1):
+            reply, self.state = await asyncio.to_thread(
+                self.sim.generate_next_message, message, self.state
+            )
+            used = reply.usage or {}
+            usage.input_tokens = (usage.input_tokens or 0) + int(used.get("prompt_tokens", 0))
+            usage.output_tokens = (usage.output_tokens or 0) + int(used.get("completion_tokens", 0))
+            if reply.is_tool_call():
+                results: list[ToolMessage] = []
+                for call in reply.tool_calls or []:
+                    results.append(self._tau2_call(call))
+                message = (
+                    results[0]
+                    if len(results) == 1
+                    else MultiToolMessage(role="tool", tool_messages=results)
+                )
+                continue
+            text = (reply.content or "").strip()
+            done = self.sim.is_stop(reply)
+            for token in _STOP_TOKENS:
+                text = text.replace(token, "").strip()
+            if text:
+                self.transcript.append(f"YOU: {text}")
+                self.exchanges.append(self.pending)
+                self.pending = []
+            return UserTurn(text, done, usage)
+        return UserTurn("", True, usage)
+
+    def _tau2_call(self, call: Any) -> Any:
+        """Runs a tool call tau2's user made, for the user and the grader."""
+        from tau2.data_model.message import UserMessage
+
+        self._replay_calls.append([call.name, json.dumps(call.arguments)])
+        self.calls += 1
+        result = self.env.get_response(call)
+        self.pending += [UserMessage(role="user", content=None, tool_calls=[call]), result]
+        self.transcript.append(
+            f"YOUR TOOL CALL {call.name}({json.dumps(call.arguments)}) -> {result.content}"
+        )
+        return result
+
+
+def _user_view(history: list[Any]) -> list[Any]:
+    """The task's initial messages as tau2's user simulator accepts them: what
+    was said, not the agent's tool traffic."""
+    return [
+        m
+        for m in history
+        if m.role in ("user", "assistant") and m.content and not getattr(m, "tool_calls", None)
+    ]
 
 
 def _to_check(info: Any, stop_reason: str) -> TaskCheck:

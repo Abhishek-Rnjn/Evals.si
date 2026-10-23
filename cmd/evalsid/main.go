@@ -67,6 +67,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "sandbox-exec":
 		// Internal: the launcher that confines itself, then executes the command.
 		return sandbox.Launch(stderr)
+	case "sandbox-netns":
+		// Internal: holds the private network of a sandbox with services.
+		return sandbox.NetNS(os.Stdin, stdout, stderr)
+	case "sandbox-probe":
+		// Internal: a TCP connect check, run inside a sandbox's private network.
+		return sandbox.Probe(args[1:], stderr)
 	case "sandbox-forward":
 		// Internal: relays a sandbox's loopback proxy port to the egress proxy.
 		return sandbox.Forward(args[1:], stderr)

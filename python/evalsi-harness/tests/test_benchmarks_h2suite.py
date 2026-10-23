@@ -308,3 +308,10 @@ def test_the_example_specs_load_and_use_an_allowlist(name: str) -> None:
 def test_the_codex_example_reads_codex_json() -> None:
     run = load_spec(str(EXAMPLES / "codex-sandboxed.yaml"))
     assert run.spec.target.agent.cli.output_format == "codex-json"
+
+
+def test_the_opencode_example_reads_opencode_json() -> None:
+    run = load_spec(str(EXAMPLES / "opencode-sandboxed.yaml"))
+    cli = run.spec.target.agent.cli
+    assert cli.output_format == "opencode-json"
+    assert list(cli.command)[-2:] == ["--format", "json"]

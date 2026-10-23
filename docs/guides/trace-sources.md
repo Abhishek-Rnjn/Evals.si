@@ -219,6 +219,17 @@ The window includes its start and excludes its end. A source waits for its
 previous run to finish; deadlines missed while paused, unavailable or busy are
 counted rather than accumulated without limit. In-progress or incomplete
 fetches do not advance the cursor; once their deadline passes they are missed.
+
+A store can return a short page without an error, which looks like the end of
+the window. So the window is listed again until a listing finds nothing new
+(up to three listings), and traces the store listed but did not return are
+asked for again twice before they are skipped. The run records what could not
+be settled in labels: `incomplete_traces` is the number of listed traces the
+store never returned (a deleted trace counts, and is named in the server log),
+and `listing_unstable: "true"` means the last listing still found traces the
+earlier ones had missed. A window the store lists consistently, from the
+start, cannot be told apart from a complete one: a connector that silently
+omits the same traces every time is not detectable here.
 Empty windows advance without a run. Scheduling starts after the source is
 applied, not from historical backfill. Reapplying keeps its stored cursor.
 

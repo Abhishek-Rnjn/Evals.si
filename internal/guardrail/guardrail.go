@@ -447,7 +447,7 @@ func (c *compiled) check(ctx context.Context, eval *evaluation.Service, in Input
 func (c *compiled) evaluate(ctx context.Context, eval *evaluation.Service, rec *evalsiv1alpha1.Record, in Input, content string, resp *evalsiv1alpha1.CheckResponse) (bool, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
-	results, err := eval.RunRecords(ctx, c.insts, []*evalsiv1alpha1.Record{rec})
+	results, err := eval.RunRecordsFor(ctx, c.g.GetProject(), "guardrail", c.insts, []*evalsiv1alpha1.Record{rec})
 	if err != nil {
 		if ctx.Err() != nil {
 			return false, "", fmt.Errorf("timed out after %s", c.timeout)

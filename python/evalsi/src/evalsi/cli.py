@@ -7,12 +7,13 @@ when it will start the Go daemon (``evalsid``).
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import inspect
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Any
 
@@ -288,6 +289,12 @@ def _add_harness_tools(sub: Any) -> None:
         default=0.0,
         help="with --harm: a per-task difference this small or smaller counts as unchanged",
     )
+    attr.add_argument(
+        "--alpha",
+        type=float,
+        default=0.05,
+        help="with --harm: the level for the per-task tests after the Holm correction",
+    )
     attr.set_defaults(func=_cmd_ablate_attribute)
 
 
@@ -311,6 +318,28 @@ def _add_harness2(sub: Any) -> None:
     h2c.add_argument("--confidence", type=float, default=0.95)
     h2c.add_argument("--format", choices=["table", "json"], default="table")
     h2c.set_defaults(func=_cmd_harness2_calibrate)
+    h2f = h2_sub.add_parser(
+        "follow",
+        help="tail a running CLI agent's event log into the ingest, so it is scored live",
+    )
+    h2f.add_argument("log", help="the file the agent writes its event stream to")
+    h2f.add_argument(
+        "--format",
+        required=True,
+        help="event format: codex-json, opencode-json, claude-stream-json, gemini-json, pi-json",
+    )
+    h2f.add_argument("--task-id", required=True, help="evalsi.task_id on the trace")
+    h2f.add_argument("--trial", type=int, default=0)
+    h2f.add_argument("--run-id", default="")
+    h2f.add_argument("--agent", default="agent", help="the agent's name on the trace")
+    h2f.add_argument("--poll", type=float, default=1.0, help="seconds between reads of the log")
+    h2f.add_argument(
+        "--idle",
+        type=float,
+        default=30.0,
+        help="finish after this many seconds without new output (0: send what is there and stop)",
+    )
+    h2f.set_defaults(func=_cmd_harness2_follow)
 
     delete = sub.add_parser("delete-run", help="delete a finished server run and its stored data")
     delete.add_argument("id")
@@ -714,7 +743,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     run_file = load_spec(args.file)
     if args.server:
+        if run_file.spec.HasField("sweep"):
+            return _sweep_on_server(args, run_file)
         return _run_on_server(args, run_file)
+    if run_file.spec.HasField("sweep"):
+        print(
+            "error: spec.sweep expands on the server: use --server (or run the variants "
+            "yourself, one --output each, and compare them with `evalsi matrix`)",
+            file=sys.stderr,
+        )
+        return 2
 
     import asyncio
 
@@ -907,6 +945,73 @@ def _cmd_gate(args: argparse.Namespace) -> int:
         idempotency_key=gate_key(run_file.project, run_file.name, args.release),
         release=args.release,
     )
+
+
+def _sweep_on_server(args: argparse.Namespace, run_file: Any) -> int:
+    """A spec with ``sweep``: the server stores one run per harness variant. Wait for
+    them all and print one row per variant and metric, so configurations read like
+    models do in a matrix."""
+    from evalsi.client import ServerError
+    from evalsi.runspec import spec_to_dict
+
+    with server_client(args) as client:
+        try:
+            runs = client.create_sweep(
+                spec_to_dict(run_file.spec),
+                name=run_file.name,
+                project=run_file.project,
+                labels=run_file.labels,
+            )
+            if args.no_wait:
+                for run in runs:
+                    print(run["id"])
+                return 0
+            done = []
+            for first in runs:
+                latest = first
+                for event in client.watch_run(first["id"]):
+                    if "run" in event:
+                        latest = event["run"]
+                done.append(latest)
+        except ServerError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+    if args.format == "json":
+        print(json.dumps(done, indent=2))
+    else:
+        print(sweep_table(done))
+    statuses = {r.get("status", "") for r in done}
+    if statuses == {"RUN_STATUS_SUCCEEDED"}:
+        return 0
+    return EXIT_GATES_FAILED if "RUN_STATUS_FAILED" in statuses else 1
+
+
+def sweep_table(runs: Sequence[Mapping[str, Any]]) -> str:
+    """One row per (variant, metric) with the mean and its interval; the first variant
+    is the baseline."""
+    rows = [("variant", "metric", "n", "mean", "95% interval", "status")]
+    for run in runs:
+        variant = str(run.get("labels", {}).get("evalsi.variant", run.get("name", "")))
+        status = str(run.get("status", "")).removeprefix("RUN_STATUS_").lower()
+        summaries = run.get("summaries") or [None]
+        for s in summaries:
+            if s is None:
+                rows.append((variant, "-", "-", "-", "-", status))
+                continue
+            summary = summary_from_json(s)
+            ci = summary.ci
+            rows.append(
+                (
+                    variant,
+                    summary.metric,
+                    str(summary.n),
+                    "-" if summary.mean is None else f"{summary.mean:.3f}",
+                    f"[{ci.low:.3f}, {ci.high:.3f}]" if ci else "-",
+                    status,
+                )
+            )
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    return "\n".join("  ".join(c.ljust(w) for c, w in zip(r, widths, strict=True)) for r in rows)
 
 
 def _run_on_server(
@@ -1107,6 +1212,37 @@ def _cmd_harness2_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_harness2_follow(args: argparse.Namespace) -> int:
+    try:
+        from evalsi_harness import otel, tail
+    except ImportError:
+        print("error: needs the agent harness: pip install evalsi-harness", file=sys.stderr)
+        return 2
+    if not otel.endpoint():
+        print(
+            "error: set OTEL_EXPORTER_OTLP_ENDPOINT (and OTEL_EXPORTER_OTLP_HEADERS with an "
+            "ingest key, if auth is on)",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        follower = tail.Follower(args.format, args.task_id, args.trial, args.run_id, args.agent)
+        done = asyncio.run(
+            tail.follow(
+                args.log,
+                follower,
+                poll_s=args.poll,
+                idle_s=args.idle,
+                on_flush=lambda n: print(f"sent {n} step(s)", file=sys.stderr),
+            )
+        )
+    except (OSError, tail.FollowError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(done.trace_id)
+    return 0
+
+
 def _cmd_harness2_calibrate(args: argparse.Namespace) -> int:
     from evalsi import harness2_calibration as cal
 
@@ -1175,7 +1311,9 @@ def _cmd_ablate_attribute(args: argparse.Namespace) -> int:
             load(args.base), full, variants, args.metric, level=args.confidence
         )
         harms = (
-            ablation.harm_check(full, variants, args.metric, min_effect=args.min_effect)
+            ablation.harm_check(
+                full, variants, args.metric, min_effect=args.min_effect, alpha=args.alpha
+            )
             if args.harm
             else None
         )

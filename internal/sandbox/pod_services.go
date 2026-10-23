@@ -19,6 +19,7 @@ func (d *podDriver) addServices(pod map[string]any, sp *Spec) {
 	hosts := make([]string, 0, len(ordered))
 	for _, s := range ordered {
 		hosts = append(hosts, s.Name)
+		hosts = append(hosts, s.Aliases...)
 		env := []map[string]string{}
 		keys := make([]string, 0, len(s.Env))
 		for k := range s.Env {
@@ -29,8 +30,8 @@ func (d *podDriver) addServices(pod map[string]any, sp *Spec) {
 			env = append(env, map[string]string{"name": k, "value": s.Env[k]})
 		}
 		limits := map[string]string{"memory": strconv.Itoa(s.MemoryMB) + "Mi", "cpu": strconv.Itoa(s.CPUMillis) + "m"}
-		init = append(init, map[string]any{
-			"name": "svc-" + s.Name, "image": s.Image, "command": s.Command,
+		container := map[string]any{
+			"name": "svc-" + s.Name, "image": s.Image,
 			"env": env, "restartPolicy": "Always",
 			"securityContext": map[string]any{"allowPrivilegeEscalation": false, "privileged": false, "capabilities": map[string]any{"drop": []string{"ALL"}}},
 			"resources":       map[string]any{"limits": limits, "requests": limits},
@@ -38,7 +39,15 @@ func (d *podDriver) addServices(pod map[string]any, sp *Spec) {
 			// One slow probe under load is not an outage: every command is
 			// gated on readiness, so a single miss would fail the trial.
 			"readinessProbe": map[string]any{"tcpSocket": map[string]any{"port": s.Port}, "periodSeconds": 1, "failureThreshold": 3},
-		})
+		}
+		switch {
+		case !s.ImageEntrypoint:
+			container["command"] = s.Command
+		case len(s.Command) > 0:
+			// Kubernetes args keep the image's ENTRYPOINT, as docker's command does.
+			container["args"] = s.Command
+		}
+		init = append(init, container)
 	}
 	pod["initContainers"] = init
 	pod["hostAliases"] = []map[string]any{{"ip": "127.0.0.1", "hostnames": hosts}}

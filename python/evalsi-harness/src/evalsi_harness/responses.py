@@ -17,7 +17,7 @@ from evalsi.targets import TargetConfig, api_key
 from evalsi.types import Usage
 from evalsi_harness.modelhttp import ModelError, gate_for, post_json, stream_events
 from evalsi_harness.models import Message, ModelTurn, ToolCallRequest, ToolSpec
-from evalsi_harness.streaming import collect_responses
+from evalsi_harness.streaming import collect_responses, collect_resuming
 
 
 def to_responses(messages: list[Message]) -> list[dict[str, Any]]:
@@ -95,14 +95,22 @@ class OpenAIResponses:
         if self.config.temperature is not None:
             body["temperature"] = self.config.temperature
         start = time.perf_counter()
+        resumes: list[dict[str, Any]] = []
         if self.config.stream:
             body["stream"] = True
-            payload = await collect_responses(
-                stream_events(self._client, self._url, body, self._headers, self._gate)
+            payload, resumes = await collect_resuming(
+                collect_responses,
+                lambda sent: stream_events(
+                    self._client, self._url, sent, self._headers, self._gate
+                ),
+                body,
+                self.config.stream_resume_attempts,
             )
         else:
             payload = await post_json(self._client, self._url, body, self._headers, self._gate)
-        return self._turn(payload, (time.perf_counter() - start) * 1000)
+        turn = self._turn(payload, (time.perf_counter() - start) * 1000)
+        turn.stream_resumes = resumes
+        return turn
 
     def _turn(self, payload: dict[str, Any], latency_ms: float) -> ModelTurn:
         if payload.get("error"):
@@ -154,6 +162,7 @@ class OpenAIResponses:
             reasoning_tokens=int(
                 (usage.get("output_tokens_details") or {}).get("reasoning_tokens") or 0
             ),
+            response_model=str(payload.get("model") or ""),
         )
 
     async def aclose(self) -> None:

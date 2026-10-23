@@ -4,6 +4,36 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Upgrade notes
+
+- **The webhook destination guard is on by default.** A webhook URL must be HTTPS to a public address unless its host is listed under `webhooks.allow_hosts` (exact or `*.domain`; Helm `webhooks.allowHosts`; hosts of `bootstrap.webhooks` are allowed automatically). Webhooks saved earlier whose URL is plain HTTP or an internal address (in-cluster service names, private IPs) now fail each delivery at once with an error naming the setting, and the server logs `webhook destination refused` at start. List their hosts and restart, or set `webhooks.ssrf_guard: false` for the old behaviour. Deliveries that failed meanwhile are not resent.
+
+### Added
+
+- **Built-in harness, models.** `reasoning_handoff` (`drop` or `summarize-as-text`) for reasoning moved between providers on a fallback, recorded on the step; `compaction_model` and `subagent_model` targets with `model_pricing`, spend counted per model; Anthropic `server_tools` passthrough with `pause_turn` continued by resending the assistant content (bounded); a broken stream can be resumed (`stream_resume_attempts`, `retry` or `prefill`) and a tool call cut mid-arguments is discarded, never merged.
+- **Token traces and rollouts.** `target.token_trace` and `target.token_trace_server` in the run spec; SGLang token IDs and log-probabilities are parsed (coded against SGLang `main` of 2026-10-22, tested with fake servers only). Rollouts cancelled on rungs that cannot snapshot resume by replaying their tool calls into a fresh sandbox, or are refused when replay is not safe.
+- **Determinism record.** Every built-in-harness run writes `metadata.determinism` (seeds, response model snapshots, tool versions, image digest when the rung reports one); `evalsi determinism recorded.json --against replay.json` names the first diverging step and exits 1.
+- **Background processes.** `SandboxService` gains `StartProcess`, `ListProcesses`, `ReadProcess`, `WriteProcess` and `KillProcess`: long-lived commands under the sandbox's confinement and limits, with bounded output buffers, killed when the sandbox is destroyed. Real on bubblewrap and Landlock; the pod rung runs through the guest agent's new `ExecInteractive` (tested against a fake cluster); Firecracker is not run. `tools.builtin: [background]` and `[shell]` (a persistent shell whose directory, variables and background jobs survive between calls) expose them to the built-in agent.
+- **ACP connector** (`target.agent.acp`, protocol version 1): session updates become steps and permission requests are decided by `ApprovalGate` semantics and recorded as `hitl_*` and policy events. **A2A push notifications** (`a2a.push_notifications`) with polling fallback. **`spec.sweep`** declares harness variants; the server expands it into one labelled run per variant, and `evalsi run --server` prints a table per variant.
+- **Checker from the agent's diff.** `checker.isolation: diff` runs the checker in a fresh sandbox with only the agent's diff applied; rejected paths (`protect`, checker files, `exclude`, `outputs`) are policy events and the applied diff is a step. Tested on bubblewrap and Landlock.
+- **Multi-service environments on bubblewrap** (shared private network, readiness, one-shot services, named volumes, workdir mounts, logs), a Terminal-Bench Compose importer that follows Docker's rules (240 of 241 tasks in the pinned checkout import, up from 219), and multi-stage Dockerfiles (decision 0035).
+- **Database tool environment** (`environment.database`): SQL tools, recorded writes and SQL assertions on the final state (decision 0034). Interjections can fire on a tool call, a file write or a stop attempt, and reach CLI agents through `cli.resume_command` or are recorded as undeliverable.
+- **Browser and desktop tools.** The `browser` toolset (Playwright, optional `evalsi-harness[browser]`) and the `computer` toolset (Xvfb and xdotool, Anthropic computer-use action names); tool results can carry images, which the model sees and the trajectory records as `media` steps. Both run on the harness host and are refused by restricted workers unless listed in `agents.trusted_commands` (decision 0032).
+- **Importers.** `webarena://`, `gaia://`, `officeqa://` and `aa-lcr://` read files you supply (no dataset content is vendored), with the `answers` evaluator pack (`webarena-string-match`, `webarena-url-match`, `gaia-match`, `officeqa-reward`). None has run against real benchmark questions with a model.
+- **Harness² gaps.** `output_format: opencode-json` reads `opencode run --format json` (pinned to 1.19.3); `evalsi ablate attribute --harm` adds a per-task Fisher/permutation test, Holm-corrected; `builtin/rubric-grade` also reads files the agent left under `output/` (still uncalibrated); `evalsi harness2 follow` tails a running CLI agent's event log into ingest as one OTLP trace.
+- **Rate limits** shared across replicas (`rate_limits.shared`, decision 0036) with a per-replica fallback and metrics, and live reload of rates, principals and `disabled`.
+- **`evalsi.log()` retries** failed batches with backoff, `Retry-After` and a stable `Idempotency-Key`.
+- **Keyless image signatures:** `sandbox.image_signatures.keyless` and `trusted_root` verify Fulcio and Rekor signatures (`.sig` tag and sigstore referrer bundles). Tested against a stand-in CA only.
+- **Online sandbox-time quota:** online policies, guardrails, Wasm evaluators and reward rollouts count toward `sandbox_seconds_per_day` (decision 0037).
+- **Quality scores for routing:** `GET /v1alpha1/quality` and `quality_exports` publish per-group quality, with an agentgateway recipe (decision 0038).
+- **Adapters:** BFCL `web_search_*` and `memory_*` categories; τ-bench `user=tau2` uses tau2's own LiteLLM user simulator.
+
+### Fixed
+
+- A keyed dataset upload is validated from its spool file instead of being written to disk twice and taking two upload slots.
+- Scheduled windows list again after a short page and ask again for traces a store listed but did not return; runs are labelled `incomplete_traces` or `listing_unstable`.
+- `COPY file .` in an imported Dockerfile made a file named after the directory instead of copying into it.
+
 ### Changed
 
 - The root GitHub Action installs evalsi and evalsi-harness 0.3.1 by default (was 0.3.0), and the `onboarding` CI job tests the action against published 0.3.1.

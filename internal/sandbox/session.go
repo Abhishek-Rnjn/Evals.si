@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -58,6 +59,9 @@ type Spec struct {
 	IdleTimeout     time.Duration `json:"idle_timeout,omitempty"`
 	Services        []ServiceSpec `json:"services,omitempty"`
 	ServiceLifetime time.Duration `json:"service_lifetime,omitempty"`
+	// Named volumes of this sandbox shared with the services that name them
+	// ("name:/path" or "name:/path:ro"); bubblewrap services only.
+	Volumes []string `json:"volumes,omitempty"`
 }
 
 func (sp *Spec) defaults() {
@@ -77,6 +81,23 @@ func (sp *Spec) Validate() error {
 	sp.defaults()
 	if err := ValidateServices(sp.Services, sp.ServiceLifetime); err != nil {
 		return err
+	}
+	if len(sp.Volumes) > 0 && len(sp.Services) == 0 {
+		return errors.New("volumes are shared with services, and this sandbox has none")
+	}
+	for _, v := range sp.Volumes {
+		_, dest, _, err := parseVolume(v)
+		if err != nil {
+			return err
+		}
+		if !path.IsAbs(dest) || path.Clean(dest) != dest || dest == "/" {
+			return fmt.Errorf("volume path %q must be a clean absolute path below /", dest)
+		}
+		for _, reserved := range []string{"/proc", "/dev", "/tmp", "/sys", "/etc"} {
+			if dest == reserved || strings.HasPrefix(dest, reserved+"/") {
+				return fmt.Errorf("volume path %q is inside %s", dest, reserved)
+			}
+		}
 	}
 	if _, err := ParseLevel(sp.MinIsolation); err != nil {
 		return err
@@ -152,6 +173,16 @@ type Exec struct {
 	OutputLimit int
 	// Relative to the workdir.
 	Cwd string
+	// Set instead of Stdin for a background process that keeps its stdin
+	// open: the read end of a pipe the session writes to.
+	StdinStream *os.File
+}
+
+func (e *Exec) stdin() io.Reader {
+	if e.StdinStream != nil {
+		return e.StdinStream
+	}
+	return bytes.NewReader(e.Stdin)
 }
 
 // ExecResult is how one command ended.
@@ -192,6 +223,8 @@ type Session struct {
 	cpu      time.Duration
 	maxRSS   int64
 	closed   bool
+
+	procs procTable
 }
 
 // Open creates a session on the strongest rung that can serve sp.
@@ -229,6 +262,13 @@ func (ss *Session) Isolation() Isolation { return ss.b.isolation() }
 // Exec runs a command, streaming its output to stdout and stderr (each
 // capped at e.OutputLimit) and reporting how it ended.
 func (ss *Session) Exec(ctx context.Context, e *Exec, stdout, stderr io.Writer) *ExecResult {
+	return ss.exec(ctx, e, stdout, stderr, false)
+}
+
+// exec runs one command. A background process does not count as activity
+// for the idle timeout while it runs, so a server left running does not keep
+// an abandoned sandbox alive; the idle reaper then kills it with the sandbox.
+func (ss *Session) exec(ctx context.Context, e *Exec, stdout, stderr io.Writer, background bool) *ExecResult {
 	if len(e.Command) == 0 {
 		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: "empty command"}
 	}
@@ -248,22 +288,30 @@ func (ss *Session) Exec(ctx context.Context, e *Exec, stdout, stderr io.Writer) 
 		ss.mu.Unlock()
 		return &ExecResult{Outcome: OutcomeRunnerFailure, ExitCode: -1, Error: "sandbox is closed"}
 	}
-	ss.running++
+	if !background {
+		ss.running++
+	}
 	ss.mu.Unlock()
 	before := len(ss.b.egress())
 	out, errw := &capped{w: stdout, limit: e.OutputLimit}, &capped{w: stderr, limit: e.OutputLimit}
 	res := ss.b.exec(ctx, e, out, errw)
 	res.Truncated = res.Truncated || out.truncated || errw.truncated
-	for _, ev := range ss.b.egress()[before:] {
-		if !ev.Allowed {
-			res.Denials = append(res.Denials, fmt.Sprintf("egress denied: %s:%d", ev.Host, ev.Port))
+	if !background {
+		// Over a background process's lifetime other commands run too, so
+		// refused egress cannot be pinned on it; the egress log has it all.
+		for _, ev := range ss.b.egress()[before:] {
+			if !ev.Allowed {
+				res.Denials = append(res.Denials, fmt.Sprintf("egress denied: %s:%d", ev.Host, ev.Port))
+			}
 		}
 	}
 	if len(res.Denials) > 0 && res.Outcome == OutcomeExit && res.ExitCode != 0 {
 		res.Outcome = OutcomeDenied
 	}
 	ss.mu.Lock()
-	ss.running--
+	if !background {
+		ss.running--
+	}
 	ss.execs++
 	ss.cpu += res.CPU
 	ss.maxRSS = max(ss.maxRSS, res.MaxRSS)
@@ -325,6 +373,8 @@ func (ss *Session) Close() error {
 	}
 	ss.closed = true
 	ss.mu.Unlock()
+	// Background processes first, while the backend can still reach them.
+	ss.killProcesses()
 	err := ss.b.close()
 	if rmErr := removeAll(ss.dir); err == nil {
 		err = rmErr

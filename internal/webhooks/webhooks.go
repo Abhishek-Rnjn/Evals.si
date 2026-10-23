@@ -405,6 +405,7 @@ func (s *Service) enqueue(ctx context.Context, ev event, events []string) error 
 // Run is the dispatcher: it sends due deliveries until ctx ends. Only the
 // replica holding the lease sends, so a delivery is not sent twice at once.
 func (s *Service) Run(ctx context.Context) {
+	s.warnBlocked(ctx)
 	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
 	defer func() {
@@ -479,7 +480,7 @@ func (s *Service) send(ctx context.Context, w *evalsiv1alpha1.Webhook, id, event
 		if errors.As(err, &ue) {
 			err = ue.Err
 		}
-		return 0, err
+		return 0, guardError(err)
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
@@ -487,6 +488,30 @@ func (s *Service) send(ctx context.Context, w *evalsiv1alpha1.Webhook, id, event
 		return resp.StatusCode, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return resp.StatusCode, nil
+}
+
+// warnBlocked logs each saved webhook whose URL the guard now refuses, once
+// at start: webhooks saved while the guard was off (the default before v0.4)
+// keep their URL, and their deliveries fail until the host is allowed.
+func (s *Service) warnBlocked(ctx context.Context) {
+	if !s.opts.SSRFGuard {
+		return
+	}
+	hooks, err := s.store.ListWebhooks(ctx, "")
+	if err != nil {
+		s.log.Warn("reading webhooks", "err", err)
+		return
+	}
+	for _, w := range hooks {
+		if err := s.checkEndpoint(w.GetUrl()); err != nil && !w.GetDisabled() {
+			s.log.Warn("webhook destination refused; its deliveries will fail", "project", w.GetProject(), "webhook", w.GetName(), "err", err)
+		}
+	}
+}
+
+func isBlocked(err error) bool {
+	var b *blockedError
+	return errors.As(err, &b)
 }
 
 func (s *Service) attempt(ctx context.Context, d *store.Delivery) {
@@ -510,7 +535,7 @@ func (s *Service) attempt(ctx context.Context, d *store.Delivery) {
 		switch {
 		case serr == nil:
 			d.State, d.Error, d.Delivered = store.DeliveryDelivered, "", s.opts.Now()
-		case d.Attempts >= s.opts.MaxAttempts:
+		case d.Attempts >= s.opts.MaxAttempts, isBlocked(serr):
 			d.State, d.Error = store.DeliveryFailed, serr.Error()
 		default:
 			d.Error, d.Next = serr.Error(), now.Add(s.opts.Backoff(d.Attempts))

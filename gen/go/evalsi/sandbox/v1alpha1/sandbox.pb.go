@@ -452,8 +452,11 @@ type SandboxSpec struct {
 	ReadOnlyRoot    bool                           `protobuf:"varint,10,opt,name=read_only_root,json=readOnlyRoot,proto3" json:"read_only_root,omitempty"`
 	Services        []*v1alpha1.EnvironmentService `protobuf:"bytes,11,rep,name=services,proto3" json:"services,omitempty"`
 	ServiceLifetime *durationpb.Duration           `protobuf:"bytes,12,opt,name=service_lifetime,json=serviceLifetime,proto3" json:"service_lifetime,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Bubblewrap services only: named volumes of this sandbox shared with the
+	// services that name them, "name:/path" or "name:/path:ro".
+	Volumes       []string `protobuf:"bytes,13,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SandboxSpec) Reset() {
@@ -566,6 +569,13 @@ func (x *SandboxSpec) GetServices() []*v1alpha1.EnvironmentService {
 func (x *SandboxSpec) GetServiceLifetime() *durationpb.Duration {
 	if x != nil {
 		return x.ServiceLifetime
+	}
+	return nil
+}
+
+func (x *SandboxSpec) GetVolumes() []string {
+	if x != nil {
+		return x.Volumes
 	}
 	return nil
 }
@@ -1871,6 +1881,721 @@ func (*DeleteSnapshotResponse) Descriptor() ([]byte, []int) {
 	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{27}
 }
 
+type StartProcessRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	Command   []string               `protobuf:"bytes,2,rep,name=command,proto3" json:"command,omitempty"`
+	Env       map[string]string      `protobuf:"bytes,3,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Relative to the workdir; default: the workdir.
+	Cwd string `protobuf:"bytes,4,opt,name=cwd,proto3" json:"cwd,omitempty"`
+	// Wall-clock limit; default one hour, at most 24.
+	Timeout *durationpb.Duration `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// Bytes of each output stream kept (the newest); default 1 MiB, at most 16.
+	BufferBytes int32 `protobuf:"varint,6,opt,name=buffer_bytes,json=bufferBytes,proto3" json:"buffer_bytes,omitempty"`
+	// Keep stdin open for WriteProcess; otherwise the process reads EOF.
+	Stdin         bool `protobuf:"varint,7,opt,name=stdin,proto3" json:"stdin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartProcessRequest) Reset() {
+	*x = StartProcessRequest{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProcessRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProcessRequest) ProtoMessage() {}
+
+func (x *StartProcessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProcessRequest.ProtoReflect.Descriptor instead.
+func (*StartProcessRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *StartProcessRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *StartProcessRequest) GetCommand() []string {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *StartProcessRequest) GetEnv() map[string]string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *StartProcessRequest) GetCwd() string {
+	if x != nil {
+		return x.Cwd
+	}
+	return ""
+}
+
+func (x *StartProcessRequest) GetTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.Timeout
+	}
+	return nil
+}
+
+func (x *StartProcessRequest) GetBufferBytes() int32 {
+	if x != nil {
+		return x.BufferBytes
+	}
+	return 0
+}
+
+func (x *StartProcessRequest) GetStdin() bool {
+	if x != nil {
+		return x.Stdin
+	}
+	return false
+}
+
+type ProcessInfo struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProcessId string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	Command   []string               `protobuf:"bytes,2,rep,name=command,proto3" json:"command,omitempty"`
+	Started   *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started,proto3" json:"started,omitempty"`
+	Running   bool                   `protobuf:"varint,4,opt,name=running,proto3" json:"running,omitempty"`
+	// Ended because it was killed (KillProcess or the sandbox's end).
+	Killed bool `protobuf:"varint,5,opt,name=killed,proto3" json:"killed,omitempty"`
+	// Set once it has ended.
+	Result *ExecResult `protobuf:"bytes,6,opt,name=result,proto3" json:"result,omitempty"`
+	// Bytes each stream has produced so far, kept or not.
+	StdoutBytes   int64 `protobuf:"varint,7,opt,name=stdout_bytes,json=stdoutBytes,proto3" json:"stdout_bytes,omitempty"`
+	StderrBytes   int64 `protobuf:"varint,8,opt,name=stderr_bytes,json=stderrBytes,proto3" json:"stderr_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessInfo) Reset() {
+	*x = ProcessInfo{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessInfo) ProtoMessage() {}
+
+func (x *ProcessInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessInfo.ProtoReflect.Descriptor instead.
+func (*ProcessInfo) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ProcessInfo) GetProcessId() string {
+	if x != nil {
+		return x.ProcessId
+	}
+	return ""
+}
+
+func (x *ProcessInfo) GetCommand() []string {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *ProcessInfo) GetStarted() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Started
+	}
+	return nil
+}
+
+func (x *ProcessInfo) GetRunning() bool {
+	if x != nil {
+		return x.Running
+	}
+	return false
+}
+
+func (x *ProcessInfo) GetKilled() bool {
+	if x != nil {
+		return x.Killed
+	}
+	return false
+}
+
+func (x *ProcessInfo) GetResult() *ExecResult {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *ProcessInfo) GetStdoutBytes() int64 {
+	if x != nil {
+		return x.StdoutBytes
+	}
+	return 0
+}
+
+func (x *ProcessInfo) GetStderrBytes() int64 {
+	if x != nil {
+		return x.StderrBytes
+	}
+	return 0
+}
+
+type StartProcessResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Process       *ProcessInfo           `protobuf:"bytes,1,opt,name=process,proto3" json:"process,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartProcessResponse) Reset() {
+	*x = StartProcessResponse{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartProcessResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartProcessResponse) ProtoMessage() {}
+
+func (x *StartProcessResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartProcessResponse.ProtoReflect.Descriptor instead.
+func (*StartProcessResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *StartProcessResponse) GetProcess() *ProcessInfo {
+	if x != nil {
+		return x.Process
+	}
+	return nil
+}
+
+type ListProcessesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProcessesRequest) Reset() {
+	*x = ListProcessesRequest{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProcessesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProcessesRequest) ProtoMessage() {}
+
+func (x *ListProcessesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProcessesRequest.ProtoReflect.Descriptor instead.
+func (*ListProcessesRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListProcessesRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+type ListProcessesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Processes     []*ProcessInfo         `protobuf:"bytes,1,rep,name=processes,proto3" json:"processes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListProcessesResponse) Reset() {
+	*x = ListProcessesResponse{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListProcessesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListProcessesResponse) ProtoMessage() {}
+
+func (x *ListProcessesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListProcessesResponse.ProtoReflect.Descriptor instead.
+func (*ListProcessesResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListProcessesResponse) GetProcesses() []*ProcessInfo {
+	if x != nil {
+		return x.Processes
+	}
+	return nil
+}
+
+type ReadProcessRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	ProcessId string                 `protobuf:"bytes,2,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	// Where the last read stopped (0 at first).
+	StdoutOffset int64 `protobuf:"varint,3,opt,name=stdout_offset,json=stdoutOffset,proto3" json:"stdout_offset,omitempty"`
+	StderrOffset int64 `protobuf:"varint,4,opt,name=stderr_offset,json=stderrOffset,proto3" json:"stderr_offset,omitempty"`
+	// At most this many bytes per stream; default: the buffer size.
+	MaxBytes int32 `protobuf:"varint,5,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
+	// Block until there is output past the offsets or the process ends, up to
+	// this long (at most 30 seconds).
+	Wait          *durationpb.Duration `protobuf:"bytes,6,opt,name=wait,proto3" json:"wait,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadProcessRequest) Reset() {
+	*x = ReadProcessRequest{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadProcessRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadProcessRequest) ProtoMessage() {}
+
+func (x *ReadProcessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadProcessRequest.ProtoReflect.Descriptor instead.
+func (*ReadProcessRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ReadProcessRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *ReadProcessRequest) GetProcessId() string {
+	if x != nil {
+		return x.ProcessId
+	}
+	return ""
+}
+
+func (x *ReadProcessRequest) GetStdoutOffset() int64 {
+	if x != nil {
+		return x.StdoutOffset
+	}
+	return 0
+}
+
+func (x *ReadProcessRequest) GetStderrOffset() int64 {
+	if x != nil {
+		return x.StderrOffset
+	}
+	return 0
+}
+
+func (x *ReadProcessRequest) GetMaxBytes() int32 {
+	if x != nil {
+		return x.MaxBytes
+	}
+	return 0
+}
+
+func (x *ReadProcessRequest) GetWait() *durationpb.Duration {
+	if x != nil {
+		return x.Wait
+	}
+	return nil
+}
+
+type ReadProcessResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Stdout []byte                 `protobuf:"bytes,1,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr []byte                 `protobuf:"bytes,2,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	// Pass these to the next read.
+	StdoutOffset int64 `protobuf:"varint,3,opt,name=stdout_offset,json=stdoutOffset,proto3" json:"stdout_offset,omitempty"`
+	StderrOffset int64 `protobuf:"varint,4,opt,name=stderr_offset,json=stderrOffset,proto3" json:"stderr_offset,omitempty"`
+	// Bytes the buffer dropped between the requested offset and the oldest
+	// byte it still has.
+	StdoutDropped int64        `protobuf:"varint,5,opt,name=stdout_dropped,json=stdoutDropped,proto3" json:"stdout_dropped,omitempty"`
+	StderrDropped int64        `protobuf:"varint,6,opt,name=stderr_dropped,json=stderrDropped,proto3" json:"stderr_dropped,omitempty"`
+	Process       *ProcessInfo `protobuf:"bytes,7,opt,name=process,proto3" json:"process,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadProcessResponse) Reset() {
+	*x = ReadProcessResponse{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadProcessResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadProcessResponse) ProtoMessage() {}
+
+func (x *ReadProcessResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadProcessResponse.ProtoReflect.Descriptor instead.
+func (*ReadProcessResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ReadProcessResponse) GetStdout() []byte {
+	if x != nil {
+		return x.Stdout
+	}
+	return nil
+}
+
+func (x *ReadProcessResponse) GetStderr() []byte {
+	if x != nil {
+		return x.Stderr
+	}
+	return nil
+}
+
+func (x *ReadProcessResponse) GetStdoutOffset() int64 {
+	if x != nil {
+		return x.StdoutOffset
+	}
+	return 0
+}
+
+func (x *ReadProcessResponse) GetStderrOffset() int64 {
+	if x != nil {
+		return x.StderrOffset
+	}
+	return 0
+}
+
+func (x *ReadProcessResponse) GetStdoutDropped() int64 {
+	if x != nil {
+		return x.StdoutDropped
+	}
+	return 0
+}
+
+func (x *ReadProcessResponse) GetStderrDropped() int64 {
+	if x != nil {
+		return x.StderrDropped
+	}
+	return 0
+}
+
+func (x *ReadProcessResponse) GetProcess() *ProcessInfo {
+	if x != nil {
+		return x.Process
+	}
+	return nil
+}
+
+type WriteProcessRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	ProcessId string                 `protobuf:"bytes,2,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	Data      []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	// Close stdin after writing (the process then reads EOF).
+	Close         bool `protobuf:"varint,4,opt,name=close,proto3" json:"close,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WriteProcessRequest) Reset() {
+	*x = WriteProcessRequest{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WriteProcessRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WriteProcessRequest) ProtoMessage() {}
+
+func (x *WriteProcessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WriteProcessRequest.ProtoReflect.Descriptor instead.
+func (*WriteProcessRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *WriteProcessRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *WriteProcessRequest) GetProcessId() string {
+	if x != nil {
+		return x.ProcessId
+	}
+	return ""
+}
+
+func (x *WriteProcessRequest) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *WriteProcessRequest) GetClose() bool {
+	if x != nil {
+		return x.Close
+	}
+	return false
+}
+
+type WriteProcessResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WriteProcessResponse) Reset() {
+	*x = WriteProcessResponse{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WriteProcessResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WriteProcessResponse) ProtoMessage() {}
+
+func (x *WriteProcessResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WriteProcessResponse.ProtoReflect.Descriptor instead.
+func (*WriteProcessResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{36}
+}
+
+type KillProcessRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SandboxId     string                 `protobuf:"bytes,1,opt,name=sandbox_id,json=sandboxId,proto3" json:"sandbox_id,omitempty"`
+	ProcessId     string                 `protobuf:"bytes,2,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KillProcessRequest) Reset() {
+	*x = KillProcessRequest{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KillProcessRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KillProcessRequest) ProtoMessage() {}
+
+func (x *KillProcessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KillProcessRequest.ProtoReflect.Descriptor instead.
+func (*KillProcessRequest) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *KillProcessRequest) GetSandboxId() string {
+	if x != nil {
+		return x.SandboxId
+	}
+	return ""
+}
+
+func (x *KillProcessRequest) GetProcessId() string {
+	if x != nil {
+		return x.ProcessId
+	}
+	return ""
+}
+
+type KillProcessResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Process       *ProcessInfo           `protobuf:"bytes,1,opt,name=process,proto3" json:"process,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KillProcessResponse) Reset() {
+	*x = KillProcessResponse{}
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KillProcessResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KillProcessResponse) ProtoMessage() {}
+
+func (x *KillProcessResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KillProcessResponse.ProtoReflect.Descriptor instead.
+func (*KillProcessResponse) Descriptor() ([]byte, []int) {
+	return file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *KillProcessResponse) GetProcess() *ProcessInfo {
+	if x != nil {
+		return x.Process
+	}
+	return nil
+}
+
 var File_evalsi_sandbox_v1alpha1_sandbox_proto protoreflect.FileDescriptor
 
 const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
@@ -1895,7 +2620,7 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\tmax_procs\x18\x02 \x01(\x05R\bmaxProcs\x12\x1e\n" +
 	"\vmax_file_mb\x18\x03 \x01(\x05R\tmaxFileMb\x12\x1f\n" +
 	"\vcpu_seconds\x18\x04 \x01(\x05R\n" +
-	"cpuSeconds\"\xdf\x05\n" +
+	"cpuSeconds\"\xf9\x05\n" +
 	"\vSandboxSpec\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12#\n" +
 	"\rmin_isolation\x18\x02 \x01(\tR\fminIsolation\x12\x12\n" +
@@ -1909,7 +2634,8 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\x0eread_only_root\x18\n" +
 	" \x01(\bR\freadOnlyRoot\x12?\n" +
 	"\bservices\x18\v \x03(\v2#.evalsi.v1alpha1.EnvironmentServiceR\bservices\x12D\n" +
-	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x1a6\n" +
+	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x12\x18\n" +
+	"\avolumes\x18\r \x03(\tR\avolumes\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a8\n" +
@@ -2012,7 +2738,68 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\x15DeleteSnapshotRequest\x12\x1f\n" +
 	"\vsnapshot_id\x18\x01 \x01(\tR\n" +
 	"snapshotId\"\x18\n" +
-	"\x16DeleteSnapshotResponse*v\n" +
+	"\x16DeleteSnapshotResponse\"\xcf\x02\n" +
+	"\x13StartProcessRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x18\n" +
+	"\acommand\x18\x02 \x03(\tR\acommand\x12G\n" +
+	"\x03env\x18\x03 \x03(\v25.evalsi.sandbox.v1alpha1.StartProcessRequest.EnvEntryR\x03env\x12\x10\n" +
+	"\x03cwd\x18\x04 \x01(\tR\x03cwd\x123\n" +
+	"\atimeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12!\n" +
+	"\fbuffer_bytes\x18\x06 \x01(\x05R\vbufferBytes\x12\x14\n" +
+	"\x05stdin\x18\a \x01(\bR\x05stdin\x1a6\n" +
+	"\bEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb1\x02\n" +
+	"\vProcessInfo\x12\x1d\n" +
+	"\n" +
+	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x18\n" +
+	"\acommand\x18\x02 \x03(\tR\acommand\x124\n" +
+	"\astarted\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\astarted\x12\x18\n" +
+	"\arunning\x18\x04 \x01(\bR\arunning\x12\x16\n" +
+	"\x06killed\x18\x05 \x01(\bR\x06killed\x12;\n" +
+	"\x06result\x18\x06 \x01(\v2#.evalsi.sandbox.v1alpha1.ExecResultR\x06result\x12!\n" +
+	"\fstdout_bytes\x18\a \x01(\x03R\vstdoutBytes\x12!\n" +
+	"\fstderr_bytes\x18\b \x01(\x03R\vstderrBytes\"V\n" +
+	"\x14StartProcessResponse\x12>\n" +
+	"\aprocess\x18\x01 \x01(\v2$.evalsi.sandbox.v1alpha1.ProcessInfoR\aprocess\"5\n" +
+	"\x14ListProcessesRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\"[\n" +
+	"\x15ListProcessesResponse\x12B\n" +
+	"\tprocesses\x18\x01 \x03(\v2$.evalsi.sandbox.v1alpha1.ProcessInfoR\tprocesses\"\xe8\x01\n" +
+	"\x12ReadProcessRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x1d\n" +
+	"\n" +
+	"process_id\x18\x02 \x01(\tR\tprocessId\x12#\n" +
+	"\rstdout_offset\x18\x03 \x01(\x03R\fstdoutOffset\x12#\n" +
+	"\rstderr_offset\x18\x04 \x01(\x03R\fstderrOffset\x12\x1b\n" +
+	"\tmax_bytes\x18\x05 \x01(\x05R\bmaxBytes\x12-\n" +
+	"\x04wait\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x04wait\"\x9d\x02\n" +
+	"\x13ReadProcessResponse\x12\x16\n" +
+	"\x06stdout\x18\x01 \x01(\fR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x02 \x01(\fR\x06stderr\x12#\n" +
+	"\rstdout_offset\x18\x03 \x01(\x03R\fstdoutOffset\x12#\n" +
+	"\rstderr_offset\x18\x04 \x01(\x03R\fstderrOffset\x12%\n" +
+	"\x0estdout_dropped\x18\x05 \x01(\x03R\rstdoutDropped\x12%\n" +
+	"\x0estderr_dropped\x18\x06 \x01(\x03R\rstderrDropped\x12>\n" +
+	"\aprocess\x18\a \x01(\v2$.evalsi.sandbox.v1alpha1.ProcessInfoR\aprocess\"}\n" +
+	"\x13WriteProcessRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x1d\n" +
+	"\n" +
+	"process_id\x18\x02 \x01(\tR\tprocessId\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x14\n" +
+	"\x05close\x18\x04 \x01(\bR\x05close\"\x16\n" +
+	"\x14WriteProcessResponse\"R\n" +
+	"\x12KillProcessRequest\x12\x1d\n" +
+	"\n" +
+	"sandbox_id\x18\x01 \x01(\tR\tsandboxId\x12\x1d\n" +
+	"\n" +
+	"process_id\x18\x02 \x01(\tR\tprocessId\"U\n" +
+	"\x13KillProcessResponse\x12>\n" +
+	"\aprocess\x18\x01 \x01(\v2$.evalsi.sandbox.v1alpha1.ProcessInfoR\aprocess*v\n" +
 	"\vNetworkMode\x12\x1c\n" +
 	"\x18NETWORK_MODE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11NETWORK_MODE_DENY\x10\x01\x12\x1a\n" +
@@ -2023,7 +2810,7 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\fOUTCOME_EXIT\x10\x01\x12\x12\n" +
 	"\x0eOUTCOME_DENIED\x10\x02\x12\x13\n" +
 	"\x0fOUTCOME_TIMEOUT\x10\x03\x12\x1a\n" +
-	"\x16OUTCOME_RUNNER_FAILURE\x10\x042\xcd\a\n" +
+	"\x16OUTCOME_RUNNER_FAILURE\x10\x042\xeb\v\n" +
 	"\x0eSandboxService\x12V\n" +
 	"\x05Probe\x12%.evalsi.sandbox.v1alpha1.ProbeRequest\x1a&.evalsi.sandbox.v1alpha1.ProbeResponse\x12Y\n" +
 	"\x06Create\x12&.evalsi.sandbox.v1alpha1.CreateRequest\x1a'.evalsi.sandbox.v1alpha1.CreateResponse\x12U\n" +
@@ -2033,7 +2820,12 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\tReadFiles\x12).evalsi.sandbox.v1alpha1.ReadFilesRequest\x1a*.evalsi.sandbox.v1alpha1.ReadFilesResponse\x12_\n" +
 	"\bSnapshot\x12(.evalsi.sandbox.v1alpha1.SnapshotRequest\x1a).evalsi.sandbox.v1alpha1.SnapshotResponse\x12\\\n" +
 	"\aRestore\x12'.evalsi.sandbox.v1alpha1.RestoreRequest\x1a(.evalsi.sandbox.v1alpha1.RestoreResponse\x12V\n" +
-	"\x05Stats\x12%.evalsi.sandbox.v1alpha1.StatsRequest\x1a&.evalsi.sandbox.v1alpha1.StatsResponse\x12\\\n" +
+	"\x05Stats\x12%.evalsi.sandbox.v1alpha1.StatsRequest\x1a&.evalsi.sandbox.v1alpha1.StatsResponse\x12k\n" +
+	"\fStartProcess\x12,.evalsi.sandbox.v1alpha1.StartProcessRequest\x1a-.evalsi.sandbox.v1alpha1.StartProcessResponse\x12n\n" +
+	"\rListProcesses\x12-.evalsi.sandbox.v1alpha1.ListProcessesRequest\x1a..evalsi.sandbox.v1alpha1.ListProcessesResponse\x12h\n" +
+	"\vReadProcess\x12+.evalsi.sandbox.v1alpha1.ReadProcessRequest\x1a,.evalsi.sandbox.v1alpha1.ReadProcessResponse\x12k\n" +
+	"\fWriteProcess\x12,.evalsi.sandbox.v1alpha1.WriteProcessRequest\x1a-.evalsi.sandbox.v1alpha1.WriteProcessResponse\x12h\n" +
+	"\vKillProcess\x12+.evalsi.sandbox.v1alpha1.KillProcessRequest\x1a,.evalsi.sandbox.v1alpha1.KillProcessResponse\x12\\\n" +
 	"\aDestroy\x12'.evalsi.sandbox.v1alpha1.DestroyRequest\x1a(.evalsi.sandbox.v1alpha1.DestroyResponse\x12q\n" +
 	"\x0eDeleteSnapshot\x12..evalsi.sandbox.v1alpha1.DeleteSnapshotRequest\x1a/.evalsi.sandbox.v1alpha1.DeleteSnapshotResponseB\xfb\x01\n" +
 	"\x1bcom.evalsi.sandbox.v1alpha1B\fSandboxProtoP\x01ZPgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1;sandboxv1alpha1\xa2\x02\x03ESX\xaa\x02\x17Evalsi.Sandbox.V1alpha1\xca\x02\x17Evalsi\\Sandbox\\V1alpha1\xe2\x02#Evalsi\\Sandbox\\V1alpha1\\GPBMetadata\xea\x02\x19Evalsi::Sandbox::V1alpha1b\x06proto3"
@@ -2051,7 +2843,7 @@ func file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescGZIP() []byte {
 }
 
 var file_evalsi_sandbox_v1alpha1_sandbox_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_evalsi_sandbox_v1alpha1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_evalsi_sandbox_v1alpha1_sandbox_proto_goTypes = []any{
 	(NetworkMode)(0),                    // 0: evalsi.sandbox.v1alpha1.NetworkMode
 	(Outcome)(0),                        // 1: evalsi.sandbox.v1alpha1.Outcome
@@ -2083,66 +2875,97 @@ var file_evalsi_sandbox_v1alpha1_sandbox_proto_goTypes = []any{
 	(*DestroyResponse)(nil),             // 27: evalsi.sandbox.v1alpha1.DestroyResponse
 	(*DeleteSnapshotRequest)(nil),       // 28: evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
 	(*DeleteSnapshotResponse)(nil),      // 29: evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
-	nil,                                 // 30: evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
-	nil,                                 // 31: evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
-	nil,                                 // 32: evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
-	(v1alpha1.IsolationLevel)(0),        // 33: evalsi.v1alpha1.IsolationLevel
-	(*durationpb.Duration)(nil),         // 34: google.protobuf.Duration
-	(*v1alpha1.EnvironmentService)(nil), // 35: evalsi.v1alpha1.EnvironmentService
-	(*v1alpha1.IsolationReport)(nil),    // 36: evalsi.v1alpha1.IsolationReport
-	(*timestamppb.Timestamp)(nil),       // 37: google.protobuf.Timestamp
+	(*StartProcessRequest)(nil),         // 30: evalsi.sandbox.v1alpha1.StartProcessRequest
+	(*ProcessInfo)(nil),                 // 31: evalsi.sandbox.v1alpha1.ProcessInfo
+	(*StartProcessResponse)(nil),        // 32: evalsi.sandbox.v1alpha1.StartProcessResponse
+	(*ListProcessesRequest)(nil),        // 33: evalsi.sandbox.v1alpha1.ListProcessesRequest
+	(*ListProcessesResponse)(nil),       // 34: evalsi.sandbox.v1alpha1.ListProcessesResponse
+	(*ReadProcessRequest)(nil),          // 35: evalsi.sandbox.v1alpha1.ReadProcessRequest
+	(*ReadProcessResponse)(nil),         // 36: evalsi.sandbox.v1alpha1.ReadProcessResponse
+	(*WriteProcessRequest)(nil),         // 37: evalsi.sandbox.v1alpha1.WriteProcessRequest
+	(*WriteProcessResponse)(nil),        // 38: evalsi.sandbox.v1alpha1.WriteProcessResponse
+	(*KillProcessRequest)(nil),          // 39: evalsi.sandbox.v1alpha1.KillProcessRequest
+	(*KillProcessResponse)(nil),         // 40: evalsi.sandbox.v1alpha1.KillProcessResponse
+	nil,                                 // 41: evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
+	nil,                                 // 42: evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
+	nil,                                 // 43: evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
+	nil,                                 // 44: evalsi.sandbox.v1alpha1.StartProcessRequest.EnvEntry
+	(v1alpha1.IsolationLevel)(0),        // 45: evalsi.v1alpha1.IsolationLevel
+	(*durationpb.Duration)(nil),         // 46: google.protobuf.Duration
+	(*v1alpha1.EnvironmentService)(nil), // 47: evalsi.v1alpha1.EnvironmentService
+	(*v1alpha1.IsolationReport)(nil),    // 48: evalsi.v1alpha1.IsolationReport
+	(*timestamppb.Timestamp)(nil),       // 49: google.protobuf.Timestamp
 }
 var file_evalsi_sandbox_v1alpha1_sandbox_proto_depIdxs = []int32{
-	33, // 0: evalsi.sandbox.v1alpha1.RungStatus.level:type_name -> evalsi.v1alpha1.IsolationLevel
+	45, // 0: evalsi.sandbox.v1alpha1.RungStatus.level:type_name -> evalsi.v1alpha1.IsolationLevel
 	3,  // 1: evalsi.sandbox.v1alpha1.ProbeResponse.rungs:type_name -> evalsi.sandbox.v1alpha1.RungStatus
 	0,  // 2: evalsi.sandbox.v1alpha1.NetworkPolicy.mode:type_name -> evalsi.sandbox.v1alpha1.NetworkMode
 	5,  // 3: evalsi.sandbox.v1alpha1.SandboxSpec.network:type_name -> evalsi.sandbox.v1alpha1.NetworkPolicy
 	6,  // 4: evalsi.sandbox.v1alpha1.SandboxSpec.resources:type_name -> evalsi.sandbox.v1alpha1.Resources
-	30, // 5: evalsi.sandbox.v1alpha1.SandboxSpec.env:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
-	31, // 6: evalsi.sandbox.v1alpha1.SandboxSpec.files:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
-	34, // 7: evalsi.sandbox.v1alpha1.SandboxSpec.idle_timeout:type_name -> google.protobuf.Duration
-	35, // 8: evalsi.sandbox.v1alpha1.SandboxSpec.services:type_name -> evalsi.v1alpha1.EnvironmentService
-	34, // 9: evalsi.sandbox.v1alpha1.SandboxSpec.service_lifetime:type_name -> google.protobuf.Duration
+	41, // 5: evalsi.sandbox.v1alpha1.SandboxSpec.env:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.EnvEntry
+	42, // 6: evalsi.sandbox.v1alpha1.SandboxSpec.files:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec.FilesEntry
+	46, // 7: evalsi.sandbox.v1alpha1.SandboxSpec.idle_timeout:type_name -> google.protobuf.Duration
+	47, // 8: evalsi.sandbox.v1alpha1.SandboxSpec.services:type_name -> evalsi.v1alpha1.EnvironmentService
+	46, // 9: evalsi.sandbox.v1alpha1.SandboxSpec.service_lifetime:type_name -> google.protobuf.Duration
 	7,  // 10: evalsi.sandbox.v1alpha1.CreateRequest.spec:type_name -> evalsi.sandbox.v1alpha1.SandboxSpec
-	36, // 11: evalsi.sandbox.v1alpha1.CreateResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
-	32, // 12: evalsi.sandbox.v1alpha1.ExecRequest.env:type_name -> evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
-	34, // 13: evalsi.sandbox.v1alpha1.ExecRequest.timeout:type_name -> google.protobuf.Duration
+	48, // 11: evalsi.sandbox.v1alpha1.CreateResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
+	43, // 12: evalsi.sandbox.v1alpha1.ExecRequest.env:type_name -> evalsi.sandbox.v1alpha1.ExecRequest.EnvEntry
+	46, // 13: evalsi.sandbox.v1alpha1.ExecRequest.timeout:type_name -> google.protobuf.Duration
 	1,  // 14: evalsi.sandbox.v1alpha1.ExecResult.outcome:type_name -> evalsi.sandbox.v1alpha1.Outcome
-	34, // 15: evalsi.sandbox.v1alpha1.ExecResult.duration:type_name -> google.protobuf.Duration
+	46, // 15: evalsi.sandbox.v1alpha1.ExecResult.duration:type_name -> google.protobuf.Duration
 	11, // 16: evalsi.sandbox.v1alpha1.ExecResponse.result:type_name -> evalsi.sandbox.v1alpha1.ExecResult
 	13, // 17: evalsi.sandbox.v1alpha1.WriteFilesRequest.files:type_name -> evalsi.sandbox.v1alpha1.File
 	13, // 18: evalsi.sandbox.v1alpha1.ReadFilesResponse.files:type_name -> evalsi.sandbox.v1alpha1.File
 	5,  // 19: evalsi.sandbox.v1alpha1.RestoreRequest.network:type_name -> evalsi.sandbox.v1alpha1.NetworkPolicy
-	36, // 20: evalsi.sandbox.v1alpha1.RestoreResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
-	37, // 21: evalsi.sandbox.v1alpha1.EgressEvent.time:type_name -> google.protobuf.Timestamp
-	34, // 22: evalsi.sandbox.v1alpha1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
+	48, // 20: evalsi.sandbox.v1alpha1.RestoreResponse.isolation:type_name -> evalsi.v1alpha1.IsolationReport
+	49, // 21: evalsi.sandbox.v1alpha1.EgressEvent.time:type_name -> google.protobuf.Timestamp
+	46, // 22: evalsi.sandbox.v1alpha1.StatsResponse.cpu_time:type_name -> google.protobuf.Duration
 	23, // 23: evalsi.sandbox.v1alpha1.StatsResponse.egress:type_name -> evalsi.sandbox.v1alpha1.EgressEvent
 	25, // 24: evalsi.sandbox.v1alpha1.StatsResponse.services:type_name -> evalsi.sandbox.v1alpha1.ServiceStatus
-	2,  // 25: evalsi.sandbox.v1alpha1.SandboxService.Probe:input_type -> evalsi.sandbox.v1alpha1.ProbeRequest
-	8,  // 26: evalsi.sandbox.v1alpha1.SandboxService.Create:input_type -> evalsi.sandbox.v1alpha1.CreateRequest
-	10, // 27: evalsi.sandbox.v1alpha1.SandboxService.Exec:input_type -> evalsi.sandbox.v1alpha1.ExecRequest
-	14, // 28: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:input_type -> evalsi.sandbox.v1alpha1.WriteFilesRequest
-	16, // 29: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:input_type -> evalsi.sandbox.v1alpha1.ReadFilesRequest
-	18, // 30: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:input_type -> evalsi.sandbox.v1alpha1.SnapshotRequest
-	20, // 31: evalsi.sandbox.v1alpha1.SandboxService.Restore:input_type -> evalsi.sandbox.v1alpha1.RestoreRequest
-	22, // 32: evalsi.sandbox.v1alpha1.SandboxService.Stats:input_type -> evalsi.sandbox.v1alpha1.StatsRequest
-	26, // 33: evalsi.sandbox.v1alpha1.SandboxService.Destroy:input_type -> evalsi.sandbox.v1alpha1.DestroyRequest
-	28, // 34: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:input_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
-	4,  // 35: evalsi.sandbox.v1alpha1.SandboxService.Probe:output_type -> evalsi.sandbox.v1alpha1.ProbeResponse
-	9,  // 36: evalsi.sandbox.v1alpha1.SandboxService.Create:output_type -> evalsi.sandbox.v1alpha1.CreateResponse
-	12, // 37: evalsi.sandbox.v1alpha1.SandboxService.Exec:output_type -> evalsi.sandbox.v1alpha1.ExecResponse
-	15, // 38: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:output_type -> evalsi.sandbox.v1alpha1.WriteFilesResponse
-	17, // 39: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:output_type -> evalsi.sandbox.v1alpha1.ReadFilesResponse
-	19, // 40: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:output_type -> evalsi.sandbox.v1alpha1.SnapshotResponse
-	21, // 41: evalsi.sandbox.v1alpha1.SandboxService.Restore:output_type -> evalsi.sandbox.v1alpha1.RestoreResponse
-	24, // 42: evalsi.sandbox.v1alpha1.SandboxService.Stats:output_type -> evalsi.sandbox.v1alpha1.StatsResponse
-	27, // 43: evalsi.sandbox.v1alpha1.SandboxService.Destroy:output_type -> evalsi.sandbox.v1alpha1.DestroyResponse
-	29, // 44: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:output_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
-	35, // [35:45] is the sub-list for method output_type
-	25, // [25:35] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	44, // 25: evalsi.sandbox.v1alpha1.StartProcessRequest.env:type_name -> evalsi.sandbox.v1alpha1.StartProcessRequest.EnvEntry
+	46, // 26: evalsi.sandbox.v1alpha1.StartProcessRequest.timeout:type_name -> google.protobuf.Duration
+	49, // 27: evalsi.sandbox.v1alpha1.ProcessInfo.started:type_name -> google.protobuf.Timestamp
+	11, // 28: evalsi.sandbox.v1alpha1.ProcessInfo.result:type_name -> evalsi.sandbox.v1alpha1.ExecResult
+	31, // 29: evalsi.sandbox.v1alpha1.StartProcessResponse.process:type_name -> evalsi.sandbox.v1alpha1.ProcessInfo
+	31, // 30: evalsi.sandbox.v1alpha1.ListProcessesResponse.processes:type_name -> evalsi.sandbox.v1alpha1.ProcessInfo
+	46, // 31: evalsi.sandbox.v1alpha1.ReadProcessRequest.wait:type_name -> google.protobuf.Duration
+	31, // 32: evalsi.sandbox.v1alpha1.ReadProcessResponse.process:type_name -> evalsi.sandbox.v1alpha1.ProcessInfo
+	31, // 33: evalsi.sandbox.v1alpha1.KillProcessResponse.process:type_name -> evalsi.sandbox.v1alpha1.ProcessInfo
+	2,  // 34: evalsi.sandbox.v1alpha1.SandboxService.Probe:input_type -> evalsi.sandbox.v1alpha1.ProbeRequest
+	8,  // 35: evalsi.sandbox.v1alpha1.SandboxService.Create:input_type -> evalsi.sandbox.v1alpha1.CreateRequest
+	10, // 36: evalsi.sandbox.v1alpha1.SandboxService.Exec:input_type -> evalsi.sandbox.v1alpha1.ExecRequest
+	14, // 37: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:input_type -> evalsi.sandbox.v1alpha1.WriteFilesRequest
+	16, // 38: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:input_type -> evalsi.sandbox.v1alpha1.ReadFilesRequest
+	18, // 39: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:input_type -> evalsi.sandbox.v1alpha1.SnapshotRequest
+	20, // 40: evalsi.sandbox.v1alpha1.SandboxService.Restore:input_type -> evalsi.sandbox.v1alpha1.RestoreRequest
+	22, // 41: evalsi.sandbox.v1alpha1.SandboxService.Stats:input_type -> evalsi.sandbox.v1alpha1.StatsRequest
+	30, // 42: evalsi.sandbox.v1alpha1.SandboxService.StartProcess:input_type -> evalsi.sandbox.v1alpha1.StartProcessRequest
+	33, // 43: evalsi.sandbox.v1alpha1.SandboxService.ListProcesses:input_type -> evalsi.sandbox.v1alpha1.ListProcessesRequest
+	35, // 44: evalsi.sandbox.v1alpha1.SandboxService.ReadProcess:input_type -> evalsi.sandbox.v1alpha1.ReadProcessRequest
+	37, // 45: evalsi.sandbox.v1alpha1.SandboxService.WriteProcess:input_type -> evalsi.sandbox.v1alpha1.WriteProcessRequest
+	39, // 46: evalsi.sandbox.v1alpha1.SandboxService.KillProcess:input_type -> evalsi.sandbox.v1alpha1.KillProcessRequest
+	26, // 47: evalsi.sandbox.v1alpha1.SandboxService.Destroy:input_type -> evalsi.sandbox.v1alpha1.DestroyRequest
+	28, // 48: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:input_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotRequest
+	4,  // 49: evalsi.sandbox.v1alpha1.SandboxService.Probe:output_type -> evalsi.sandbox.v1alpha1.ProbeResponse
+	9,  // 50: evalsi.sandbox.v1alpha1.SandboxService.Create:output_type -> evalsi.sandbox.v1alpha1.CreateResponse
+	12, // 51: evalsi.sandbox.v1alpha1.SandboxService.Exec:output_type -> evalsi.sandbox.v1alpha1.ExecResponse
+	15, // 52: evalsi.sandbox.v1alpha1.SandboxService.WriteFiles:output_type -> evalsi.sandbox.v1alpha1.WriteFilesResponse
+	17, // 53: evalsi.sandbox.v1alpha1.SandboxService.ReadFiles:output_type -> evalsi.sandbox.v1alpha1.ReadFilesResponse
+	19, // 54: evalsi.sandbox.v1alpha1.SandboxService.Snapshot:output_type -> evalsi.sandbox.v1alpha1.SnapshotResponse
+	21, // 55: evalsi.sandbox.v1alpha1.SandboxService.Restore:output_type -> evalsi.sandbox.v1alpha1.RestoreResponse
+	24, // 56: evalsi.sandbox.v1alpha1.SandboxService.Stats:output_type -> evalsi.sandbox.v1alpha1.StatsResponse
+	32, // 57: evalsi.sandbox.v1alpha1.SandboxService.StartProcess:output_type -> evalsi.sandbox.v1alpha1.StartProcessResponse
+	34, // 58: evalsi.sandbox.v1alpha1.SandboxService.ListProcesses:output_type -> evalsi.sandbox.v1alpha1.ListProcessesResponse
+	36, // 59: evalsi.sandbox.v1alpha1.SandboxService.ReadProcess:output_type -> evalsi.sandbox.v1alpha1.ReadProcessResponse
+	38, // 60: evalsi.sandbox.v1alpha1.SandboxService.WriteProcess:output_type -> evalsi.sandbox.v1alpha1.WriteProcessResponse
+	40, // 61: evalsi.sandbox.v1alpha1.SandboxService.KillProcess:output_type -> evalsi.sandbox.v1alpha1.KillProcessResponse
+	27, // 62: evalsi.sandbox.v1alpha1.SandboxService.Destroy:output_type -> evalsi.sandbox.v1alpha1.DestroyResponse
+	29, // 63: evalsi.sandbox.v1alpha1.SandboxService.DeleteSnapshot:output_type -> evalsi.sandbox.v1alpha1.DeleteSnapshotResponse
+	49, // [49:64] is the sub-list for method output_type
+	34, // [34:49] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_sandbox_v1alpha1_sandbox_proto_init() }
@@ -2161,7 +2984,7 @@ func file_evalsi_sandbox_v1alpha1_sandbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc), len(file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   31,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

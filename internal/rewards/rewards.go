@@ -239,7 +239,7 @@ func (s *Service) ScoreRewards(ctx context.Context, req *connect.Request[evalsiv
 	defer s.inflight.Release(weight)
 	s.waitNanos.Add(int64(time.Since(waited)))
 	started := time.Now()
-	results, err := s.score(ctx, msg.GetSpec(), comps, msg.GetRollouts())
+	results, err := s.score(ctx, msg.GetProject(), msg.GetSpec(), comps, msg.GetRollouts())
 	s.scoreNanos.Add(int64(time.Since(started)))
 	if err != nil {
 		s.failures.Add(1)
@@ -249,7 +249,7 @@ func (s *Service) ScoreRewards(ctx context.Context, req *connect.Request[evalsiv
 	return connect.NewResponse(&evalsiv1alpha1.ScoreRewardsResponse{Rewards: results}), nil
 }
 
-func (s *Service) score(ctx context.Context, spec *evalsiv1alpha1.RewardSpec, comps []component, rollouts []*evalsiv1alpha1.Record) ([]*evalsiv1alpha1.Reward, error) {
+func (s *Service) score(ctx context.Context, project string, spec *evalsiv1alpha1.RewardSpec, comps []component, rollouts []*evalsiv1alpha1.Record) ([]*evalsiv1alpha1.Reward, error) {
 	useCache := !spec.GetDisableCache() && s.cache != nil
 	results := make([][]*evalsiv1alpha1.RewardComponentResult, len(rollouts))
 	for i := range results {
@@ -298,7 +298,7 @@ func (s *Service) score(ctx context.Context, spec *evalsiv1alpha1.RewardSpec, co
 			for k, ri := range misses {
 				batch[k] = rollouts[ri]
 			}
-			got, err := s.eval.RunRecords(gctx, []evaluation.Instance{c.inst}, batch)
+			got, err := s.eval.RunRecordsFor(gctx, project, "reward", []evaluation.Instance{c.inst}, batch)
 			if err != nil {
 				return err
 			}

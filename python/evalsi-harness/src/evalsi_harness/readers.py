@@ -12,6 +12,12 @@ per call with its result, and token counts.
 * ``gemini-json``: ``gemini --output-format stream-json`` (a single
   ``--output-format json`` object is read as an answer with totals).
 * ``pi-json``: ``pi --mode json``. Whole messages arrive as ``message_end``.
+* ``opencode-json``: ``opencode run --format json``. One event per finished
+  *part* of the session's messages: ``step_start`` and ``step_finish`` around
+  each model call, ``text``, ``reasoning`` (only with ``--thinking``),
+  ``tool_use`` (a tool part once it completed or failed) and ``error``. Only
+  the main session's parts are printed, so a sub-agent's work shows only as its
+  ``task`` tool's output.
 
 A reader never raises on an event it does not know; it skips it. A stream with
 no recognizable event at all is an error on the run, so a wrong ``output_format``
@@ -19,8 +25,12 @@ is not mistaken for an agent that did nothing.
 
 Each reader was checked against the published type definitions of the package
 named in ``VERSIONS`` (Claude's agent SDK, Codex's SDK, Gemini CLI's core, pi's
-docs and types). The fixtures are written from those types, not captured from a
-CLI run; see docs/LEFTOVERS.md.
+docs and types; for OpenCode, the event writer of ``run`` in the published
+1.19.3 binary and the part types of ``@opencode-ai/sdk`` 1.19.3). The fixtures
+are written from those types, not captured from a CLI run (see
+docs/LEFTOVERS.md), except OpenCode's: those are the real output of
+``opencode run --format json`` 1.19.3 driven by a scripted chat-completions
+server, with the scratch path replaced by ``/workspace``.
 """
 
 from __future__ import annotations
@@ -39,6 +49,7 @@ VERSIONS = {
     "codex-json": "@openai/codex-sdk 0.162.1",
     "gemini-json": "@google/gemini-cli-core 0.64.0",
     "pi-json": "@mariozechner/pi-coding-agent 0.73.1",
+    "opencode-json": "opencode-ai 1.19.3",
 }
 
 # Bounds on what a hostile or runaway agent can make a reader hold.
@@ -636,4 +647,127 @@ def parse_pi(stdout: str) -> Parsed:  # noqa: PLR0915
                 done.error = done.output.as_text() or "the tool reported an error"
     run.answer = answer
     _unrecognized(run, "pi-json", evs, {"session", "message_end", "agent_start", "turn_start"})
+    return _finish(run, seen, tin, tout, cost if saw_cost else None)
+
+
+# --- OpenCode --------------------------------------------------------------------
+
+
+def _opencode_error(error: Any) -> str:
+    """OpenCode's named error, ``{"name", "data": {"message"}}``, as ``run`` reports it."""
+    if isinstance(error, dict):
+        data = error.get("data")
+        if isinstance(data, dict) and data.get("message"):
+            return str(data["message"])
+        return str(error.get("name") or "error")
+    return str(error or "error")
+
+
+def _opencode_message(step: Step) -> Message:
+    assert step.output is not None
+    assert step.output.messages is not None
+    return step.output.messages[0]
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def parse_opencode(stdout: str) -> Parsed:  # noqa: PLR0915
+    """Each line is ``{"type", "timestamp", "sessionID", "part"}`` (``"error"``
+    in place of ``"part"`` for an error). A model call runs from ``step_start``
+    to ``step_finish``, whose part carries the call's tokens, cost and finish
+    reason; the text and tool parts between them belong to it."""
+    run = Parsed(answer="")
+    evs = events(stdout)
+    current: Step | None = None
+    tin = tout = 0
+    seen = False
+    cost = 0.0
+    saw_cost = False
+    answer = ""
+
+    def step_now() -> Step:
+        nonlocal current
+        if current is None:
+            current = _llm("opencode", "", [], None)
+            run.steps.append(current)
+        return current
+
+    for e in evs:
+        kind = e.get("type")
+        if e.get("sessionID") and not run.session_id:
+            run.session_id = str(e["sessionID"])
+        part = _mapping(e.get("part"))
+        if kind == "step_start":
+            current = None
+            step_now()
+        elif kind == "text":
+            if part.get("synthetic") or part.get("ignored"):
+                continue
+            body = _opencode_message(step_now())
+            text = _text(part.get("text"))
+            body.content = f"{body.content}\n{text}" if body.content else text
+        elif kind == "reasoning":
+            step = step_now()
+            prior = str(step.attributes.get("opencode.reasoning", ""))
+            text = _text(part.get("text"))
+            step.attributes["opencode.reasoning"] = f"{prior}\n{text}" if prior else text
+        elif kind == "tool_use":
+            state = _mapping(part.get("state"))
+            step = step_now()
+            name, call_id = str(part.get("tool", "")), str(part.get("callID", ""))
+            args = _args(state.get("input"))
+            _opencode_message(step).tool_calls.append(
+                ToolCall(id=call_id, name=name, arguments=args)
+            )
+            failed = state.get("status") == "error"
+            output = _text(state.get("error") if failed else state.get("output"))
+            attrs = {"opencode.title": str(state["title"])} if state.get("title") else {}
+            tool = _tool(
+                name,
+                call_id,
+                args,
+                output,
+                (output or "the tool failed") if failed else "",
+                step.span_id,
+                attrs,
+            )
+            timing = _mapping(state.get("time"))
+            start, end = _int(timing.get("start")), _int(timing.get("end"))
+            if start is not None and end is not None and end >= start:
+                tool.duration_ms = float(end - start)
+            run.steps.append(tool)
+        elif kind == "step_finish":
+            step = step_now()
+            tokens = _mapping(part.get("tokens"))
+            cache = _mapping(tokens.get("cache"))
+            a, b = _int(tokens.get("input")), _int(tokens.get("output"))
+            # Cache reads and writes are input the model was sent, as for Claude Code and pi.
+            extra = (_int(cache.get("read")) or 0) + (_int(cache.get("write")) or 0)
+            if a is not None or b is not None:
+                seen = True
+                tin += (a or 0) + extra
+                tout += b or 0
+                step.usage = Usage(input_tokens=(a or 0) + extra, output_tokens=b)
+            price = part.get("cost")
+            if isinstance(price, int | float) and not isinstance(price, bool):
+                saw_cost = True
+                cost += float(price)
+            if part.get("reason"):
+                step.attributes["opencode.finish_reason"] = str(part["reason"])
+            body = _opencode_message(step)
+            if body.content and not body.tool_calls:
+                answer = body.content
+            current = None
+        elif kind == "error":
+            run.error = run.error or _opencode_error(e.get("error"))
+    if not answer:
+        # A run cut off before its last step_finish may still have said something.
+        for step in reversed(run.steps):
+            if step.type == "llm" and _opencode_message(step).content:
+                answer = _opencode_message(step).content
+                break
+    run.answer = answer
+    _unrecognized(run, "opencode-json", evs, {"step_start", "step_finish", "text", "tool_use"})
     return _finish(run, seen, tin, tout, cost if saw_cost else None)

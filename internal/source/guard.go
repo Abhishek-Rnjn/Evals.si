@@ -47,7 +47,7 @@ func (g *Guard) allowed(host string) bool {
 func (g *Guard) resolve(ctx context.Context, host string) ([]net.IP, error) {
 	if ip := net.ParseIP(host); ip != nil {
 		if !g.allowed(host) && internalIP(ip) {
-			return nil, fmt.Errorf("source request to %s refused: a private, loopback or link-local address (list it under sources.allow_hosts)", host)
+			return nil, &RefusedError{Host: host}
 		}
 		return []net.IP{ip}, nil
 	}
@@ -58,7 +58,7 @@ func (g *Guard) resolve(ctx context.Context, host string) ([]net.IP, error) {
 	ips := make([]net.IP, 0, len(addrs))
 	for _, a := range addrs {
 		if !g.allowed(host) && internalIP(a.IP) {
-			return nil, fmt.Errorf("source request to %s refused: it resolves to %s, a private, loopback or link-local address (list the host under sources.allow_hosts)", host, a.IP)
+			return nil, &RefusedError{Host: host, IP: a.IP}
 		}
 		ips = append(ips, a.IP)
 	}
@@ -66,6 +66,27 @@ func (g *Guard) resolve(ctx context.Context, host string) ([]net.IP, error) {
 		return nil, fmt.Errorf("source request to %s: no addresses", host)
 	}
 	return ips, nil
+}
+
+// RefusedError is the guard refusing a host: a literal internal address, or
+// a name that resolves to one (IP set). Callers other than trace sources (the
+// webhook dispatcher) word it with their own setting.
+type RefusedError struct {
+	Host string
+	IP   net.IP
+}
+
+func (e *RefusedError) Error() string {
+	return e.Describe("source request", "sources.allow_hosts")
+}
+
+// Describe words the refusal for a caller: what was refused ("source
+// request") and the setting that would allow it.
+func (e *RefusedError) Describe(what, setting string) string {
+	if e.IP == nil {
+		return fmt.Sprintf("%s to %s refused: a private, loopback or link-local address (list it under %s)", what, e.Host, setting)
+	}
+	return fmt.Sprintf("%s to %s refused: it resolves to %s, a private, loopback or link-local address (list the host under %s)", what, e.Host, e.IP, setting)
 }
 
 func internalIP(ip net.IP) bool {

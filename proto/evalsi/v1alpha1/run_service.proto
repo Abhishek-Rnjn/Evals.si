@@ -63,6 +63,9 @@ message CreateRunRequest {
 
 message CreateRunResponse {
   Run run = 1;
+  // With spec.sweep: every run the sweep created, in variant order; run is
+  // the first.
+  repeated Run sweep_runs = 2;
 }
 
 message GetRunRequest {

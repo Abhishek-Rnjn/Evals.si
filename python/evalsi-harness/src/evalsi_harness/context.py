@@ -155,6 +155,8 @@ class ContextView:
     bill: Callable[[ModelTurn], None]
     last_input_tokens: int = 0
     last_chars: int = 0
+    # The model that writes summaries, when it is not the agent's own.
+    summarizer: ChatModel | None = None
 
     def chars(self, messages: list[Message]) -> int:
         return len(self.system) + self.tools_chars + sum(message_chars(m) for m in messages)
@@ -400,8 +402,9 @@ class Compact:
             limit //= 2
             text = _transcript(old, limit)
         prompt = f"Transcript of the earlier work:\n\n{text}\n\nWrite the summary now."
+        summarizer = view.summarizer or view.model
         try:
-            turn = await view.model.complete(
+            turn = await summarizer.complete(
                 [{"role": "user", "content": prompt}],
                 [],
                 system=SUMMARY_SYSTEM,
@@ -434,7 +437,7 @@ class Compact:
                 "messages_summarized": len(old),
                 "turns_summarized": turns,
                 "summary_chars": len(summary),
-                "summary_model": turn.model or view.model.name,
+                "summary_model": turn.model or summarizer.name,
             },
             usage=turn.usage,
         )

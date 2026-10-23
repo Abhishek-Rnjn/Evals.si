@@ -370,3 +370,41 @@ func TestPodRungNetworkPolicyCanary(t *testing.T) {
 		})
 	}
 }
+
+// A background process on the pod rung runs through the guest agent's
+// interactive exec: it outlives the call that started it, takes stdin, and
+// is killed with the sandbox.
+func TestPodRungBackgroundProcess(t *testing.T) {
+	m, _ := podRung(t)
+	ctx := context.Background()
+	sess, err := m.Create(ctx, &Spec{Workdir: "/work/" + t.Name()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := sess.StartProcess(&ProcessSpec{Command: []string{"sh", "-c", "echo up; while read l; do echo got:$l; done; sleep 300"}, Stdin: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, sess, st.ID, "up")
+	if r := execIn(t, sess, "sh", "-c", "echo foreground"); r.stdout != "foreground\n" {
+		t.Fatalf("foreground %q %s", r.stdout, r.stderr)
+	}
+	if err := sess.WriteProcessStdin(st.ID, []byte("ping\n"), false); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, sess, st.ID, "got:ping")
+	got, err := sess.KillProcess(st.ID)
+	if err != nil || got.Running || !got.Killed {
+		t.Fatalf("kill %+v %v", got, err)
+	}
+	live, err := sess.StartProcess(&ProcessSpec{Command: []string{"sleep", "300"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Destroy(sess.ID); err != nil {
+		t.Fatal(err)
+	}
+	if sess.procs.byID[live.ID].status().Running {
+		t.Fatal("process outlived its sandbox")
+	}
+}

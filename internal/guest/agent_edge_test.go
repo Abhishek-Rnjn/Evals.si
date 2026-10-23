@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	guestv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/guest/v1alpha1"
 )
@@ -81,4 +82,76 @@ func TestEgressKeepsReplyAfterClientHalfClose(t *testing.T) {
 	if string(b) != "reply" {
 		t.Fatalf("reply lost after client half-close: %q (%v)", b, err)
 	}
+}
+
+func TestExecInteractiveKeepsStdinOpen(t *testing.T) {
+	root := t.TempDir()
+	c := serve(t, &Agent{Root: root})
+	stream := c.ExecInteractive(context.Background())
+	start := &guestv1alpha1.ExecRequest{Command: []string{"sh", "-c", "while read l; do echo got:$l; done; echo end"}, Cwd: "/", Timeout: durationpb.New(10 * time.Second)}
+	if err := stream.Send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_Start{Start: start}}); err != nil {
+		t.Fatal(err)
+	}
+	send := func(r *guestv1alpha1.ExecInteractiveRequest) {
+		if err := stream.Send(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_Stdin{Stdin: []byte("a\n")}})
+	var out strings.Builder
+	// read consumes events until out has want, or the result arrives.
+	read := func(want string) *guestv1alpha1.ExecResult {
+		for !strings.Contains(out.String(), want) {
+			msg, err := stream.Receive()
+			if err != nil {
+				t.Fatalf("waiting for %q (have %q): %v", want, out.String(), err)
+			}
+			switch ev := msg.GetEvent().(type) {
+			case *guestv1alpha1.ExecInteractiveResponse_Stdout:
+				out.Write(ev.Stdout)
+			case *guestv1alpha1.ExecInteractiveResponse_Result:
+				return ev.Result
+			}
+		}
+		return nil
+	}
+	read("got:a")
+	send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_Stdin{Stdin: []byte("b\n")}})
+	read("got:b")
+	send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_CloseStdin{CloseStdin: true}})
+	res := read("never-appears")
+	if res == nil || res.GetExitCode() != 0 || !strings.Contains(out.String(), "end") {
+		t.Fatalf("result %v out %q", res, out.String())
+	}
+}
+
+func TestExecInteractiveCancelEndsTheCommand(t *testing.T) {
+	root := t.TempDir()
+	c := serve(t, &Agent{Root: root})
+	ctx, cancel := context.WithCancel(context.Background())
+	stream := c.ExecInteractive(ctx)
+	start := &guestv1alpha1.ExecRequest{Command: []string{"sh", "-c", "echo $$ > pid; sleep 300"}, Cwd: "/", Timeout: durationpb.New(time.Minute)}
+	if err := stream.Send(&guestv1alpha1.ExecInteractiveRequest{Event: &guestv1alpha1.ExecInteractiveRequest_Start{Start: start}}); err != nil {
+		t.Fatal(err)
+	}
+	var pid []byte
+	for range 100 {
+		pid, _ = os.ReadFile(filepath.Join(root, "pid"))
+		if len(pid) > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if len(pid) == 0 {
+		t.Fatal("command never started")
+	}
+	cancel()
+	proc := "/proc/" + strings.TrimSpace(string(pid))
+	for range 100 {
+		if _, err := os.Stat(proc); err != nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the command outlived the cancelled call")
 }

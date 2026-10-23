@@ -27,7 +27,9 @@ from evalsi_harness.context import (
 from evalsi_harness.events import Emit, FinalEvent, StepEvent, span_id
 from evalsi_harness.evidence import EvidenceState, EvidenceTool
 from evalsi_harness.hooks import MAX_CONTINUES, Deny, Hooks, ModelRequest
+from evalsi_harness.interject import Interjection, call_matches
 from evalsi_harness.models import (
+    OWN_BLOCKS,
     ChatModel,
     ModelError,
     ModelTurn,
@@ -35,7 +37,7 @@ from evalsi_harness.models import (
     thinking_text,
 )
 from evalsi_harness.subagent import DelegateTool
-from evalsi_harness.tools import Tool, ToolResult
+from evalsi_harness.tools import Tool, ToolResult, image_blocks, image_step
 from evalsi_harness.toolsearch import ToolSearchTool
 from evalsi_harness.user_sim import UserSimulator
 
@@ -82,8 +84,17 @@ class LoopConfig:
     context: ContextConfig = field(default_factory=ContextConfig)
     # Scripted user messages, (after this many model calls, text), in order.
     interjections: list[tuple[int, str]] = field(default_factory=list)
+    # The same, timed by an event (a tool call, a file write, an attempt to stop).
+    event_interjections: list[Interjection] = field(default_factory=list)
     parallel: bool = True
     system: str = DEFAULT_SYSTEM
+    # A turn paused by the provider (Anthropic's pause_turn, a server tool loop at
+    # its limit) is continued at most this many times in a row.
+    max_pause_continues: int = 5
+    # Prices by model name (input, output per million tokens) for the models that
+    # are not priced by input_per_mtok and output_per_mtok: a compaction or
+    # sub-agent model, or a fallback. Spend is counted per model.
+    model_prices: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 @dataclass
@@ -99,6 +110,12 @@ class LoopState:
     subagent_steps: int = 0
     reasoning_tokens: int = 0
     truncation_retries: int = 0
+    # Tokens by the model that used them: input, output, cache reads, cache writes.
+    spend: dict[str, list[int]] = field(default_factory=dict)
+    # What the provider named in its responses, by the model asked for (the
+    # determinism record): the ``model`` field, and OpenAI's system_fingerprint.
+    served: dict[str, set[str]] = field(default_factory=dict)
+    fingerprints: dict[str, set[str]] = field(default_factory=dict)
 
 
 def _add(total: Usage, part: Usage) -> None:
@@ -117,8 +134,13 @@ class AgentLoop:
         user: UserSimulator | None = None,
         hooks: Hooks | None = None,
         progress: Callable[[], Awaitable[str]] | None = None,
+        compaction_model: ChatModel | None = None,
+        subagent_model: ChatModel | None = None,
     ) -> None:
         self.archive = Archive()
+        # Models for other roles than the agent's own turns; None: the agent's model.
+        self.compaction_model = compaction_model
+        self.subagent_model = subagent_model
         # What a sub-agent gets is what the caller passed: the tools added below are bound
         # to this loop (its archive, its budget), and a sub-agent builds its own.
         self._base_tools = list(tools)
@@ -150,6 +172,9 @@ class AgentLoop:
         self.hooks = hooks or Hooks()
         self.stop_continues = 0
         self.delivered: list[str] = []
+        self._timed_delivered = 0  # of config.interjections, which are in order
+        self._fired: set[int] = set()  # of config.event_interjections, delivered
+        self._triggered: list[tuple[int, str]] = []  # (index, why), due next call
         # fresh-rounds: reads the notes a round leaves for the next.
         self.progress = progress
         self._round_start = 0
@@ -168,10 +193,22 @@ class AgentLoop:
                 json.dumps([(t.spec.name, t.spec.description, t.spec.input_schema) for t in tools])
             ),
             bill=self._bill,
+            summarizer=compaction_model,
         )
 
     def cost(self) -> float:
         u, c, st = self.state.usage, self.config, self.state
+        if c.model_prices:
+            # Each model's tokens at its own prices (the main ones for a model not listed).
+            total = 0.0
+            for name, (inp, out, read, write) in st.spend.items():
+                pin, pout = c.model_prices.get(name, (c.input_per_mtok, c.output_per_mtok))
+                total += (
+                    (inp - read - write + read * c.cache_read_mult + write * c.cache_write_mult)
+                    * pin
+                    + out * pout
+                ) / 1e6
+            return total
         plain = (u.input_tokens or 0) - st.cache_read_tokens - st.cache_write_tokens
         return (
             (
@@ -221,7 +258,33 @@ class AgentLoop:
                 "cache_write_tokens": self.state.cache_write_tokens,
                 "reasoning_tokens": self.state.reasoning_tokens,
                 "truncation_retries": self.state.truncation_retries,
-                **({"interjections": len(self.delivered)} if self.config.interjections else {}),
+                # Spend by model, when more than one model worked on the task.
+                **(
+                    {
+                        "models": {
+                            name: dict(
+                                zip(
+                                    (
+                                        "input_tokens",
+                                        "output_tokens",
+                                        "cache_read_tokens",
+                                        "cache_write_tokens",
+                                    ),
+                                    tokens,
+                                    strict=True,
+                                )
+                            )
+                            for name, tokens in sorted(self.state.spend.items())
+                        }
+                    }
+                    if len(self.state.spend) > 1
+                    else {}
+                ),
+                **(
+                    {"interjections": len(self.delivered)}
+                    if self.config.interjections or self.config.event_interjections
+                    else {}
+                ),
                 # What the model was shown, by the rule its requests use.
                 "tools_offered": sorted({t.name for t in self._specs()}),
                 **(
@@ -309,6 +372,14 @@ class AgentLoop:
         self.state.cache_read_tokens += sub.state.cache_read_tokens
         self.state.cache_write_tokens += sub.state.cache_write_tokens
         self.state.reasoning_tokens += sub.state.reasoning_tokens
+        for name, tokens in sub.state.spend.items():
+            mine = self.state.spend.setdefault(name, [0, 0, 0, 0])
+            for i, n in enumerate(tokens):
+                mine[i] += n
+        for name, names in sub.state.served.items():
+            self.state.served.setdefault(name, set()).update(names)
+        for name, prints in sub.state.fingerprints.items():
+            self.state.fingerprints.setdefault(name, set()).update(prints)
         self.state.subagents += 1
         self.state.subagent_steps += sub.state.steps
 
@@ -375,6 +446,7 @@ class AgentLoop:
 
     async def _loop(self, messages: list[dict[str, Any]], started: float) -> FinalEvent:
         last_text = ""
+        pauses = 0
         while True:
             if reason := self._over_budget(started):
                 return self._final(last_text, reason)
@@ -407,11 +479,21 @@ class AgentLoop:
             messages.append(turn.as_message())
             self.archive.add(messages[-1])
             if turn.stop_reason == "pause_turn" and not turn.tool_calls:
-                continue  # the API asks for the turn to be resumed as it stands
+                # A server tool loop the API paused: send the turn back as it stands (its
+                # content verbatim, no new user message) and the server carries on.
+                pauses += 1
+                if pauses > self.config.max_pause_continues:
+                    return self._final(
+                        turn.text,
+                        "budget",
+                        error=f"the turn was still paused after {pauses - 1} continuations",
+                    )
+                continue
+            pauses = 0
             if turn.tool_calls:
                 await self._call_tools(turn.tool_calls, messages)
                 continue
-            if self._interject(messages):
+            if self._interject(messages, stopping=True):
                 continue  # a message came in while the agent was working: it reads it
             if self.user is None:
                 final = await self._finish(turn.text, messages)
@@ -440,32 +522,75 @@ class AgentLoop:
             messages.append({"role": "user", "content": reply.message})
             self.archive.add(messages[-1])
 
-    def _interject(self, messages: list[dict[str, Any]]) -> bool:
-        """Deliver the scripted user messages that are due, in order. True if any were."""
+    def _interject(self, messages: list[dict[str, Any]], *, stopping: bool = False) -> bool:
+        """Deliver the scripted user messages that are due, in order: those timed by a
+        step count, then those an event triggered. ``stopping``: the agent is trying to
+        finish, which is the event a ``stop`` interjection waits for. True if any were."""
         sent = False
         due = self.config.interjections
-        while len(self.delivered) < len(due) and due[len(self.delivered)][0] <= self.state.steps:
-            at_step, text = due[len(self.delivered)]
-            self.delivered.append(text)
-            messages.append({"role": "user", "content": text})
-            self.archive.add(messages[-1])
-            self.emit(
-                StepEvent(
-                    Step(
-                        type="user",
-                        name="user-interjection",
-                        output=Content(text=text),
-                        span_id=span_id(),
-                        parent_span_id=self.root,
-                        attributes={
-                            "evalsi.interjection.at_step": at_step,
-                            "evalsi.interjection.delivered_at": self.state.steps,
-                        },
-                    )
-                )
+        while (
+            self._timed_delivered < len(due) and due[self._timed_delivered][0] <= self.state.steps
+        ):
+            at_step, text = due[self._timed_delivered]
+            self._timed_delivered += 1
+            self._deliver(messages, text, {"evalsi.interjection.at_step": at_step})
+            sent = True
+        if stopping:
+            for i, j in enumerate(self.config.event_interjections):
+                if j.on == "stop" and i not in self._fired and self.state.steps >= j.at_step:
+                    self._triggered.append((i, "the agent tried to finish"))
+        for i, why in self._triggered:
+            j = self.config.event_interjections[i]
+            if i in self._fired:
+                continue
+            self._fired.add(i)
+            self._deliver(
+                messages,
+                j.message,
+                {
+                    "evalsi.interjection.on": j.on,
+                    "evalsi.interjection.trigger": why,
+                    **({"evalsi.interjection.at_step": j.at_step} if j.at_step else {}),
+                },
             )
             sent = True
+        self._triggered = []
         return sent
+
+    def _deliver(
+        self, messages: list[dict[str, Any]], text: str, attributes: dict[str, Any]
+    ) -> None:
+        self.delivered.append(text)
+        messages.append({"role": "user", "content": text})
+        self.archive.add(messages[-1])
+        self.emit(
+            StepEvent(
+                Step(
+                    type="user",
+                    name="user-interjection",
+                    output=Content(text=text),
+                    span_id=span_id(),
+                    parent_span_id=self.root,
+                    attributes={
+                        **attributes,
+                        "evalsi.interjection.delivered_at": self.state.steps,
+                    },
+                )
+            )
+        )
+
+    def _watch_call(self, call: ToolCallRequest, result: ToolResult) -> None:
+        """Note the event interjections a finished tool call triggers. A failed call
+        changed nothing and does not count as a file write."""
+        for i, j in enumerate(self.config.event_interjections):
+            if j.on == "stop" or i in self._fired or any(i == t for t, _ in self._triggered):
+                continue
+            if self.state.steps < j.at_step:
+                continue
+            if j.on == "file_write" and result.is_error:
+                continue
+            if call_matches(j, call.name, call.arguments):
+                self._triggered.append((i, f"{call.name} {j.on.replace('_', ' ')}"))
 
     def _interjection_reminder(self) -> list[dict[str, Any]]:
         """With a context strategy, history can be cleared or summarized, and the user's
@@ -508,6 +633,16 @@ class AgentLoop:
         self.state.cache_read_tokens += turn.cache_read_tokens
         self.state.cache_write_tokens += turn.cache_write_tokens
         self.state.reasoning_tokens += turn.reasoning_tokens
+        asked = turn.model or self.model.name
+        if turn.response_model:
+            self.state.served.setdefault(asked, set()).add(turn.response_model)
+        if turn.system_fingerprint:
+            self.state.fingerprints.setdefault(asked, set()).add(turn.system_fingerprint)
+        spent = self.state.spend.setdefault(asked, [0, 0, 0, 0])
+        spent[0] += turn.usage.input_tokens or 0
+        spent[1] += turn.usage.output_tokens or 0
+        spent[2] += turn.cache_read_tokens
+        spent[3] += turn.cache_write_tokens
 
     async def _call_model(
         self, messages: list[dict[str, Any]], specs: list[Any], system: str
@@ -585,6 +720,23 @@ class AgentLoop:
                 **(
                     {"evalsi.model.switched_from": turn.switched_from} if turn.switched_from else {}
                 ),
+                **({"gen_ai.response.model": turn.response_model} if turn.response_model else {}),
+                **(
+                    {"evalsi.model.system_fingerprint": turn.system_fingerprint}
+                    if turn.system_fingerprint
+                    else {}
+                ),
+                **({"evalsi.reasoning.handoff": turn.handoff} if turn.handoff else {}),
+                **({"evalsi.stream.resumes": turn.stream_resumes} if turn.stream_resumes else {}),
+                **(
+                    {
+                        "evalsi.server_tools.blocks": sum(
+                            1 for b in turn.raw_content if b.get("type") not in OWN_BLOCKS
+                        )
+                    }
+                    if turn.raw_content
+                    else {}
+                ),
             },
         )
 
@@ -621,12 +773,15 @@ class AgentLoop:
                 self._emit_hook_steps()
             self.state.tool_calls += 1
             self.emit(StepEvent(step))
+            self._emit_images(step, result)
+            self._watch_call(call, result)
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": call.id,
                     "content": result.content,
                     "is_error": result.is_error,
+                    **({"images": image_blocks(result.images)} if result.images else {}),
                 }
             )
             self.archive.add({**messages[-1], "name": call.name})
@@ -688,7 +843,13 @@ class AgentLoop:
             self._emit_hook_steps()
         self.state.tool_calls += 1
         self.emit(StepEvent(step))
+        self._emit_images(step, result)
         return result
+
+    def _emit_images(self, step: Step, result: ToolResult) -> None:
+        """One ``media`` step per image the tool returned, a child of the tool's step."""
+        for image in result.images:
+            self.emit(StepEvent(image_step(image, step.span_id)))
 
     def _tool_step(
         self, call: ToolCallRequest, result: ToolResult, span: str, start: float, parent: str

@@ -40,6 +40,7 @@ class AgentTarget(_message.Message):
     RESPONSES_FIELD_NUMBER: _builtins.int
     HTTP_FIELD_NUMBER: _builtins.int
     CLI_FIELD_NUMBER: _builtins.int
+    ACP_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def a2a(self) -> Global___A2AAgent: ...
     @_builtins.property
@@ -50,6 +51,8 @@ class AgentTarget(_message.Message):
     def http(self) -> Global___HTTPAgent: ...
     @_builtins.property
     def cli(self) -> Global___CLIAgent: ...
+    @_builtins.property
+    def acp(self) -> Global___ACPAgent: ...
     def __init__(
         self,
         *,
@@ -58,12 +61,13 @@ class AgentTarget(_message.Message):
         responses: Global___ResponsesAgent | None = ...,
         http: Global___HTTPAgent | None = ...,
         cli: Global___CLIAgent | None = ...,
+        acp: Global___ACPAgent | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "acp", b"acp", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["a2a", b"a2a", "acp", b"acp", "cli", b"cli", "http", b"http", "kind", b"kind", "mcp", b"mcp", "responses", b"responses"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
-    _WhichOneofReturnType_kind: _TypeAlias = _typing.Literal["a2a", "mcp", "responses", "http", "cli"]  # noqa: Y015
+    _WhichOneofReturnType_kind: _TypeAlias = _typing.Literal["a2a", "mcp", "responses", "http", "cli", "acp"]  # noqa: Y015
     _WhichOneofArgType_kind: _TypeAlias = _typing.Literal["kind", b"kind"]  # noqa: Y015
     def WhichOneof(self, oneof_group: _WhichOneofArgType_kind) -> _WhichOneofReturnType_kind | None: ...
 
@@ -97,6 +101,9 @@ class A2AAgent(_message.Message):
     TIMEOUT_FIELD_NUMBER: _builtins.int
     STREAM_FIELD_NUMBER: _builtins.int
     BINDING_FIELD_NUMBER: _builtins.int
+    PUSH_NOTIFICATIONS_FIELD_NUMBER: _builtins.int
+    PUSH_URL_FIELD_NUMBER: _builtins.int
+    PUSH_PORT_FIELD_NUMBER: _builtins.int
     url: _builtins.str
     stream: _builtins.bool
     """Use message/stream (server-sent events) instead of message/send and
@@ -108,6 +115,22 @@ class A2AAgent(_message.Message):
     binding of A2A 0.3, where url is the interface's base URL and the calls
     are POST {url}/v1/message:send, POST {url}/v1/message:stream and
     GET {url}/v1/tasks/{id}.
+    """
+    push_notifications: _builtins.bool
+    """Ask the agent to push task updates to a webhook the harness runs, with
+    pushNotificationConfig on the request, instead of holding a stream open
+    or polling. Each task state the agent pushes becomes a step. The agent's
+    card must declare pushNotifications; if no update arrives within the
+    timeout, the harness falls back to polling (tasks/get). Used instead of
+    stream when both are set.
+    """
+    push_url: _builtins.str
+    """The base URL the agent reaches the harness's receiver at. Default
+    http://127.0.0.1:<port>, which only suits an agent on the worker's host.
+    """
+    push_port: _builtins.int
+    """The local port the receiver binds (on all interfaces when push_url is
+    set, loopback otherwise); 0 picks a free one.
     """
     @_builtins.property
     def headers_env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
@@ -125,10 +148,13 @@ class A2AAgent(_message.Message):
         timeout: _duration_pb2.Duration | None = ...,
         stream: _builtins.bool = ...,
         binding: _builtins.str = ...,
+        push_notifications: _builtins.bool = ...,
+        push_url: _builtins.str = ...,
+        push_port: _builtins.int = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["binding", b"binding", "headers_env", b"headers_env", "stream", b"stream", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["binding", b"binding", "headers_env", b"headers_env", "push_notifications", b"push_notifications", "push_port", b"push_port", "push_url", b"push_url", "stream", b"stream", "timeout", b"timeout", "url", b"url"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___A2AAgent: _TypeAlias = A2AAgent  # noqa: Y015
@@ -356,6 +382,7 @@ class CLIAgent(_message.Message):
     ALLOW_HOSTS_FIELD_NUMBER: _builtins.int
     TIMEOUT_FIELD_NUMBER: _builtins.int
     OUTPUT_FORMAT_FIELD_NUMBER: _builtins.int
+    RESUME_COMMAND_FIELD_NUMBER: _builtins.int
     output_format: _builtins.str
     """How to read the program's standard output. Empty: the output is the
     answer, and the run has one step. Otherwise the program's structured event
@@ -383,6 +410,19 @@ class CLIAgent(_message.Message):
 
     @_builtins.property
     def timeout(self) -> _duration_pb2.Duration: ...
+    @_builtins.property
+    def resume_command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """How spec.harness.builtin.interjections reach this agent. The command runs
+        to completion, so an interjection is due once the run it watched shows its
+        trigger (its step count, a matching tool call or file write, or the exit,
+        which is a stop attempt). It is then delivered by running this command
+        in the sandbox, with {message} replaced by the interjection and {session}
+        by the session id the output reader found (for example
+        ["claude", "-p", "--resume", "{session}", "{message}"]), and the new run's
+        steps join the trajectory. Without it, due interjections are recorded as
+        undeliverable steps.
+        """
+
     def __init__(
         self,
         *,
@@ -392,13 +432,100 @@ class CLIAgent(_message.Message):
         allow_hosts: _abc.Iterable[_builtins.str] | None = ...,
         timeout: _duration_pb2.Duration | None = ...,
         output_format: _builtins.str = ...,
+        resume_command: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["allow_hosts", b"allow_hosts", "command", b"command", "env_from", b"env_from", "install", b"install", "output_format", b"output_format", "timeout", b"timeout"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["allow_hosts", b"allow_hosts", "command", b"command", "env_from", b"env_from", "install", b"install", "output_format", b"output_format", "resume_command", b"resume_command", "timeout", b"timeout"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CLIAgent: _TypeAlias = CLIAgent  # noqa: Y015
+
+@_typing.final
+class ACPAgent(_message.Message):
+    """An agent that speaks the Agent Client Protocol (ACP, protocol version 1):
+    JSON-RPC over the stdio of a command run inside the task's sandbox, in its
+    workdir. The harness is the client: it creates a session, sends the
+    instruction as a prompt, turns session/update notifications into steps, and
+    serves the agent's requests (file reads and writes in the sandbox,
+    terminals, permission requests). Permission requests are decided by
+    approval, with the semantics of the built-in ApprovalGate hook, and
+    recorded as hitl_request and hitl_resolved steps and policy events.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class EnvFromEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    COMMAND_FIELD_NUMBER: _builtins.int
+    INSTALL_FIELD_NUMBER: _builtins.int
+    ENV_FROM_FIELD_NUMBER: _builtins.int
+    ALLOW_HOSTS_FIELD_NUMBER: _builtins.int
+    TIMEOUT_FIELD_NUMBER: _builtins.int
+    APPROVAL_FIELD_NUMBER: _builtins.int
+    TERMINALS_FIELD_NUMBER: _builtins.int
+    terminals: _builtins.bool
+    """Offer the agent terminal/* (commands the agent runs through the
+    harness, as background processes in the sandbox). Off by default.
+    """
+    @_builtins.property
+    def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]: ...
+    @_builtins.property
+    def install(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Commands run once in the environment before the agent (installing it)."""
+
+    @_builtins.property
+    def env_from(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Variable in the sandbox -> variable on the worker it is copied from."""
+
+    @_builtins.property
+    def allow_hosts(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Hosts the agent may reach (its model API), through the egress proxy."""
+
+    @_builtins.property
+    def timeout(self) -> _duration_pb2.Duration:
+        """For the whole conversation; default 10 minutes."""
+
+    @_builtins.property
+    def approval(self) -> _struct_pb2.Struct:
+        """Answers permission requests, in the shape of the ApprovalGate hook's
+        config: rules (tool, path, command globs and an action of allow, ask or
+        deny) and an approver script with a default. A request no rule matches
+        is allowed; an "ask" goes to the approver, whose default is deny.
+        """
+
+    def __init__(
+        self,
+        *,
+        command: _abc.Iterable[_builtins.str] | None = ...,
+        install: _abc.Iterable[_builtins.str] | None = ...,
+        env_from: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        allow_hosts: _abc.Iterable[_builtins.str] | None = ...,
+        timeout: _duration_pb2.Duration | None = ...,
+        approval: _struct_pb2.Struct | None = ...,
+        terminals: _builtins.bool = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["approval", b"approval", "timeout", b"timeout"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["allow_hosts", b"allow_hosts", "approval", b"approval", "command", b"command", "env_from", b"env_from", "install", b"install", "terminals", b"terminals", "timeout", b"timeout"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___ACPAgent: _TypeAlias = ACPAgent  # noqa: Y015
 
 @_typing.final
 class Harness(_message.Message):
@@ -862,6 +989,26 @@ Global___EscalationPolicy: _TypeAlias = EscalationPolicy  # noqa: Y015
 class BuiltinHarness(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
+    @_typing.final
+    class ModelPricingEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        @_builtins.property
+        def value(self) -> Global___Pricing: ...
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: Global___Pricing | None = ...,
+        ) -> None: ...
+        _HasFieldArgType: _TypeAlias = _typing.Literal["value", b"value"]  # noqa: Y015
+        def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
     MAX_STEPS_FIELD_NUMBER: _builtins.int
     BUDGET_FIELD_NUMBER: _builtins.int
     PRICING_FIELD_NUMBER: _builtins.int
@@ -876,6 +1023,7 @@ class BuiltinHarness(_message.Message):
     DELEGATE_STEPS_FIELD_NUMBER: _builtins.int
     PROFILE_FIELD_NUMBER: _builtins.int
     INTERJECTIONS_FIELD_NUMBER: _builtins.int
+    MODEL_PRICING_FIELD_NUMBER: _builtins.int
     max_steps: _builtins.int
     """Model calls the agent may make; default 30."""
     parallel_tool_calls: _builtins.bool
@@ -925,6 +1073,13 @@ class BuiltinHarness(_message.Message):
         due), recorded as a "user-interjection" step. Built-in agent only.
         """
 
+    @_builtins.property
+    def model_pricing(self) -> _containers.MessageMap[_builtins.str, Global___Pricing]:
+        """Prices by model name, for models other than the run's main one (a
+        compaction or sub-agent model, a fallback). A model not listed is priced
+        at `pricing`.
+        """
+
     def __init__(
         self,
         *,
@@ -942,10 +1097,11 @@ class BuiltinHarness(_message.Message):
         delegate_steps: _builtins.int = ...,
         profile: _builtins.str = ...,
         interjections: _abc.Iterable[Global___Interjection] | None = ...,
+        model_pricing: _abc.Mapping[_builtins.str, Global___Pricing] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "escalation", b"escalation", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "interjections", b"interjections", "max_steps", b"max_steps", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "profile", b"profile", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls", "budget", b"budget", "context", b"context", "delegate_steps", b"delegate_steps", "escalation", b"escalation", "hooks", b"hooks", "instructions", b"instructions", "interjections", b"interjections", "max_steps", b"max_steps", "model_pricing", b"model_pricing", "parallel_tool_calls", b"parallel_tool_calls", "pricing", b"pricing", "profile", b"profile", "recording", b"recording", "tools", b"tools", "user_simulator", b"user_simulator"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
     _WhichOneofReturnType__parallel_tool_calls: _TypeAlias = _typing.Literal["parallel_tool_calls"]  # noqa: Y015
     _WhichOneofArgType__parallel_tool_calls: _TypeAlias = _typing.Literal["_parallel_tool_calls", b"_parallel_tool_calls"]  # noqa: Y015
@@ -961,16 +1117,34 @@ class Interjection(_message.Message):
 
     AT_STEP_FIELD_NUMBER: _builtins.int
     MESSAGE_FIELD_NUMBER: _builtins.int
+    EVENT_FIELD_NUMBER: _builtins.int
+    MATCH_FIELD_NUMBER: _builtins.int
+    PATTERN_FIELD_NUMBER: _builtins.int
     at_step: _builtins.int
-    """Delivered once the agent has made this many model calls (at least 1)."""
+    """Delivered once the agent has made this many model calls (at least 1).
+    With an event, the earliest step it may fire at (0: any).
+    """
     message: _builtins.str
+    event: _builtins.str
+    """Deliver on an event (so named because on is a boolean in YAML 1.1) instead
+    of a step count: "tool_call" (after a tool
+    call whose name matches the glob match, and whose JSON arguments match the
+    regular expression pattern when it is set), "file_write" (after a tool
+    call that writes a path matching the glob match: write_file, edit_file,
+    apply_patch) or "stop" (the first time the agent tries to finish).
+    """
+    match: _builtins.str
+    pattern: _builtins.str
     def __init__(
         self,
         *,
         at_step: _builtins.int = ...,
         message: _builtins.str = ...,
+        event: _builtins.str = ...,
+        match: _builtins.str = ...,
+        pattern: _builtins.str = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["at_step", b"at_step", "message", b"message"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["at_step", b"at_step", "event", b"event", "match", b"match", "message", b"message", "pattern", b"pattern"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Interjection: _TypeAlias = Interjection  # noqa: Y015
@@ -1206,6 +1380,7 @@ class Checker(_message.Message):
     ON_CHANGE_FIELD_NUMBER: _builtins.int
     ISOLATION_FIELD_NUMBER: _builtins.int
     OUTPUTS_FIELD_NUMBER: _builtins.int
+    EXCLUDE_FIELD_NUMBER: _builtins.int
     parser: _builtins.str
     """How to read the result: "exit-code" (default); "json" (the last line of
     stdout is {"passed": bool, "score": number, "tests": {...}}); "junit:<path>";
@@ -1219,8 +1394,12 @@ class Checker(_message.Message):
     isolation: _builtins.str
     """Where the checker runs: "shared" (default) in the sandbox the agent used;
     "clean" in a fresh sandbox of the same environment that receives only the
-    files under outputs. The agent's other changes (installed packages, shims,
-    edited tests) never reach the checker.
+    files under outputs; "diff" in a fresh sandbox that receives the agent's
+    diff of the workdir against the setup state (git when the workdir is a
+    repository, file by file otherwise), less the paths under protect, the
+    checker's files and exclude, which are recorded as rejected. With either,
+    the agent's other changes (installed packages, shims, edited tests) never
+    reach the checker.
     """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
@@ -1245,6 +1424,13 @@ class Checker(_message.Message):
     def outputs(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """With isolation "clean": glob patterns, relative to the workdir, of the
         agent's declared outputs, the only files copied into the clean sandbox.
+        With "diff", optional: only changes under these patterns are applied.
+        """
+
+    @_builtins.property
+    def exclude(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """With isolation "diff": glob patterns, relative to the workdir, whose
+        changes are never applied (besides protect and the checker's files).
         """
 
     def __init__(
@@ -1258,10 +1444,11 @@ class Checker(_message.Message):
         on_change: _builtins.str = ...,
         isolation: _builtins.str = ...,
         outputs: _abc.Iterable[_builtins.str] | None = ...,
+        exclude: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["timeout", b"timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "files", b"files", "isolation", b"isolation", "on_change", b"on_change", "outputs", b"outputs", "parser", b"parser", "protect", b"protect", "timeout", b"timeout"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "exclude", b"exclude", "files", b"files", "isolation", b"isolation", "on_change", b"on_change", "outputs", b"outputs", "parser", b"parser", "protect", b"protect", "timeout", b"timeout"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Checker: _TypeAlias = Checker  # noqa: Y015
@@ -1320,6 +1507,10 @@ class Environment(_message.Message):
     COMMAND_TIMEOUT_FIELD_NUMBER: _builtins.int
     SERVICES_FIELD_NUMBER: _builtins.int
     SERVICE_LIFETIME_FIELD_NUMBER: _builtins.int
+    STAGES_FIELD_NUMBER: _builtins.int
+    COPY_FROM_FIELD_NUMBER: _builtins.int
+    DATABASE_FIELD_NUMBER: _builtins.int
+    VOLUMES_FIELD_NUMBER: _builtins.int
     image: _builtins.str
     """OCI image for the root filesystem; empty: the host's system directories."""
     setup_network: _builtins.str
@@ -1350,11 +1541,35 @@ class Environment(_message.Message):
 
     @_builtins.property
     def services(self) -> _containers.RepeatedCompositeFieldContainer[Global___EnvironmentService]:
-        """Pod backend only. Private, per-trial services; no shared persistent data."""
+        """The pod and bubblewrap backends. Private, per-trial services; no shared
+        persistent data.
+        """
 
     @_builtins.property
     def service_lifetime(self) -> _duration_pb2.Duration:
         """Required with services, from 1s to 24h. Bounds orphaned service execution."""
+
+    @_builtins.property
+    def stages(self) -> _containers.RepeatedCompositeFieldContainer[Global___BuildStage]:
+        """Earlier build stages (a multi-stage Dockerfile): each is built in its own
+        sandbox from its image, files and setup, and copy_from takes files out of
+        it into this environment before setup. The stages are not kept.
+        """
+
+    @_builtins.property
+    def copy_from(self) -> _containers.RepeatedCompositeFieldContainer[Global___StageCopy]: ...
+    @_builtins.property
+    def database(self) -> Global___DatabaseEnvironment:
+        """A database-backed tool environment: a SQLite database the harness builds
+        per trial, named SQL tools the agent calls, and assertions over the final
+        state that grade it. See DatabaseEnvironment.
+        """
+
+    @_builtins.property
+    def volumes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Bubblewrap services only: named volumes of the agent's sandbox, shared
+        with the services that name them, as "name:/path" or "name:/path:ro".
+        """
 
     def __init__(
         self,
@@ -1371,17 +1586,250 @@ class Environment(_message.Message):
         command_timeout: _duration_pb2.Duration | None = ...,
         services: _abc.Iterable[Global___EnvironmentService] | None = ...,
         service_lifetime: _duration_pb2.Duration | None = ...,
+        stages: _abc.Iterable[Global___BuildStage] | None = ...,
+        copy_from: _abc.Iterable[Global___StageCopy] | None = ...,
+        database: Global___DatabaseEnvironment | None = ...,
+        volumes: _abc.Iterable[_builtins.str] | None = ...,
     ) -> None: ...
-    _HasFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "setup_timeout", b"setup_timeout"]  # noqa: Y015
+    _HasFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "database", b"database", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "setup_timeout", b"setup_timeout"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "env", b"env", "files", b"files", "image", b"image", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "services", b"services", "setup", b"setup", "setup_allow_hosts", b"setup_allow_hosts", "setup_network", b"setup_network", "setup_timeout", b"setup_timeout"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["checker", b"checker", "command_timeout", b"command_timeout", "copy_from", b"copy_from", "database", b"database", "env", b"env", "files", b"files", "image", b"image", "sandbox", b"sandbox", "service_lifetime", b"service_lifetime", "services", b"services", "setup", b"setup", "setup_allow_hosts", b"setup_allow_hosts", "setup_network", b"setup_network", "setup_timeout", b"setup_timeout", "stages", b"stages", "volumes", b"volumes"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___Environment: _TypeAlias = Environment  # noqa: Y015
 
 @_typing.final
+class BuildStage(_message.Message):
+    """BuildStage is one earlier stage of a multi-stage build."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    @_typing.final
+    class FilesEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    @_typing.final
+    class EnvEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    NAME_FIELD_NUMBER: _builtins.int
+    IMAGE_FIELD_NUMBER: _builtins.int
+    FILES_FIELD_NUMBER: _builtins.int
+    SETUP_FIELD_NUMBER: _builtins.int
+    ENV_FIELD_NUMBER: _builtins.int
+    COPY_FROM_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    image: _builtins.str
+    """Required: stages run in their own sandbox with this root."""
+    @_builtins.property
+    def files(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Absolute paths in the stage's root, placed before setup."""
+
+    @_builtins.property
+    def setup(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Run in order with the environment's setup network."""
+
+    @_builtins.property
+    def env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    @_builtins.property
+    def copy_from(self) -> _containers.RepeatedCompositeFieldContainer[Global___StageCopy]:
+        """Files taken from earlier stages into this one before its setup. Stages are
+        listed so that each comes after the stages it copies from.
+        """
+
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        image: _builtins.str = ...,
+        files: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        setup: _abc.Iterable[_builtins.str] | None = ...,
+        env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        copy_from: _abc.Iterable[Global___StageCopy] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["copy_from", b"copy_from", "env", b"env", "files", b"files", "image", b"image", "name", b"name", "setup", b"setup"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___BuildStage: _TypeAlias = BuildStage  # noqa: Y015
+
+@_typing.final
+class StageCopy(_message.Message):
+    """StageCopy takes a file or directory out of a build stage (COPY --from)."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    STAGE_FIELD_NUMBER: _builtins.int
+    SOURCE_FIELD_NUMBER: _builtins.int
+    DESTINATION_FIELD_NUMBER: _builtins.int
+    stage: _builtins.str
+    source: _builtins.str
+    """An absolute path in the stage."""
+    destination: _builtins.str
+    """An absolute path in this environment, or relative to its workdir. A
+    directory source is copied into it; a file lands at it, or inside it when
+    it ends with "/".
+    """
+    def __init__(
+        self,
+        *,
+        stage: _builtins.str = ...,
+        source: _builtins.str = ...,
+        destination: _builtins.str = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["destination", b"destination", "source", b"source", "stage", b"stage"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___StageCopy: _TypeAlias = StageCopy  # noqa: Y015
+
+@_typing.final
+class DatabaseEnvironment(_message.Message):
+    """DatabaseEnvironment is a domain-neutral stateful tool environment in the
+    style of tau-bench: the harness holds a SQLite database per trial (not in
+    the sandbox), exposes each tool as one parameterized SQL statement, records
+    every write, and grades the final state with SQL assertions.
+    """
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    SCHEMA_FIELD_NUMBER: _builtins.int
+    SEED_FIELD_NUMBER: _builtins.int
+    TOOLS_FIELD_NUMBER: _builtins.int
+    ASSERTIONS_FIELD_NUMBER: _builtins.int
+    schema: _builtins.str
+    """SQL statements run on an empty database (CREATE TABLE ...)."""
+    seed: _builtins.str
+    """SQL statements run after the schema (INSERT ...)."""
+    @_builtins.property
+    def tools(self) -> _containers.RepeatedCompositeFieldContainer[Global___DatabaseTool]: ...
+    @_builtins.property
+    def assertions(self) -> _containers.RepeatedCompositeFieldContainer[Global___DatabaseAssertion]:
+        """All must hold for the task to pass; each is a test in the check."""
+
+    def __init__(
+        self,
+        *,
+        schema: _builtins.str = ...,
+        seed: _builtins.str = ...,
+        tools: _abc.Iterable[Global___DatabaseTool] | None = ...,
+        assertions: _abc.Iterable[Global___DatabaseAssertion] | None = ...,
+    ) -> None: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["assertions", b"assertions", "schema", b"schema", "seed", b"seed", "tools", b"tools"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___DatabaseEnvironment: _TypeAlias = DatabaseEnvironment  # noqa: Y015
+
+@_typing.final
+class DatabaseTool(_message.Message):
+    """DatabaseTool is one SQL statement offered to the agent as a tool."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    DESCRIPTION_FIELD_NUMBER: _builtins.int
+    SQL_FIELD_NUMBER: _builtins.int
+    PARAMETERS_FIELD_NUMBER: _builtins.int
+    MODE_FIELD_NUMBER: _builtins.int
+    MIN_ROWS_FIELD_NUMBER: _builtins.int
+    MAX_ROWS_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    description: _builtins.str
+    sql: _builtins.str
+    """One statement with named parameters (:name), bound from the arguments."""
+    mode: _builtins.str
+    """"read" (default: the statement may not change the database; it returns
+    rows) or "write" (it returns the number of rows changed, and is recorded).
+    """
+    min_rows: _builtins.int
+    """write: fail the call, changing nothing, unless it changes at least this
+    many rows and, when max_rows is set, at most max_rows.
+    """
+    max_rows: _builtins.int
+    @_builtins.property
+    def parameters(self) -> _struct_pb2.Struct:
+        """JSON Schema of the arguments (an object whose properties are the
+        parameters). Arguments are checked against it before the statement runs.
+        """
+
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        description: _builtins.str = ...,
+        sql: _builtins.str = ...,
+        parameters: _struct_pb2.Struct | None = ...,
+        mode: _builtins.str = ...,
+        min_rows: _builtins.int = ...,
+        max_rows: _builtins.int = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["parameters", b"parameters"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["description", b"description", "max_rows", b"max_rows", "min_rows", b"min_rows", "mode", b"mode", "name", b"name", "parameters", b"parameters", "sql", b"sql"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___DatabaseTool: _TypeAlias = DatabaseTool  # noqa: Y015
+
+@_typing.final
+class DatabaseAssertion(_message.Message):
+    """DatabaseAssertion is a query over the final database and the rows it must return."""
+
+    DESCRIPTOR: _descriptor.Descriptor
+
+    NAME_FIELD_NUMBER: _builtins.int
+    SQL_FIELD_NUMBER: _builtins.int
+    EXPECT_FIELD_NUMBER: _builtins.int
+    name: _builtins.str
+    sql: _builtins.str
+    """A read-only query."""
+    @_builtins.property
+    def expect(self) -> _struct_pb2.Value:
+        """The rows it must return, as a list of rows (each a list of values), or one
+        value when the query returns one row of one column.
+        """
+
+    def __init__(
+        self,
+        *,
+        name: _builtins.str = ...,
+        sql: _builtins.str = ...,
+        expect: _struct_pb2.Value | None = ...,
+    ) -> None: ...
+    _HasFieldArgType: _TypeAlias = _typing.Literal["expect", b"expect"]  # noqa: Y015
+    def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["expect", b"expect", "name", b"name", "sql", b"sql"]  # noqa: Y015
+    def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+Global___DatabaseAssertion: _TypeAlias = DatabaseAssertion  # noqa: Y015
+
+@_typing.final
 class EnvironmentService(_message.Message):
-    """EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+).
+    """EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+) on the
+    pod backend, or a process group in its own bubblewrap sandbox.
     Services share the trial's network, but not its filesystem or credentials.
     """
 
@@ -1389,6 +1837,23 @@ class EnvironmentService(_message.Message):
 
     @_typing.final
     class EnvEntry(_message.Message):
+        DESCRIPTOR: _descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: _builtins.int
+        VALUE_FIELD_NUMBER: _builtins.int
+        key: _builtins.str
+        value: _builtins.str
+        def __init__(
+            self,
+            *,
+            key: _builtins.str = ...,
+            value: _builtins.str = ...,
+        ) -> None: ...
+        _ClearFieldArgType: _TypeAlias = _typing.Literal["key", b"key", "value", b"value"]  # noqa: Y015
+        def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
+
+    @_typing.final
+    class FilesEntry(_message.Message):
         DESCRIPTOR: _descriptor.Descriptor
 
         KEY_FIELD_NUMBER: _builtins.int
@@ -1412,23 +1877,90 @@ class EnvironmentService(_message.Message):
     DEPENDS_ON_FIELD_NUMBER: _builtins.int
     MEMORY_MB_FIELD_NUMBER: _builtins.int
     CPU_MILLIS_FIELD_NUMBER: _builtins.int
+    PORTS_FIELD_NUMBER: _builtins.int
+    READY_COMMAND_FIELD_NUMBER: _builtins.int
+    ALIASES_FIELD_NUMBER: _builtins.int
+    FILES_FIELD_NUMBER: _builtins.int
+    SETUP_FIELD_NUMBER: _builtins.int
+    SETUP_NETWORK_FIELD_NUMBER: _builtins.int
+    ONESHOT_FIELD_NUMBER: _builtins.int
+    WORKDIR_MOUNT_FIELD_NUMBER: _builtins.int
+    VOLUMES_FIELD_NUMBER: _builtins.int
+    WORKDIR_FIELD_NUMBER: _builtins.int
+    IMAGE_ENTRYPOINT_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     """DNS label, also a loopback hostname inside this trial."""
     image: _builtins.str
     port: _builtins.int
-    """TCP readiness port, unique within the trial; 7070 is reserved."""
+    """TCP readiness port, unique within the trial; 7070 is reserved. The pod
+    backend needs one (1024 or above). On bubblewrap it is optional: without
+    a port or ready_command a service is ready once it has stayed up a second.
+    """
     memory_mb: _builtins.int
-    """Required limits; CPU in millicores, memory in MiB."""
+    """Required limits; CPU in millicores, memory in MiB. On the bubblewrap
+    backend memory is an rlimit and CPU is not enforced.
+    """
     cpu_millis: _builtins.int
+    setup_network: _builtins.str
+    """"deny" (default) or "allow"."""
+    oneshot: _builtins.bool
+    """Run to completion before its dependents start, instead of staying up; a
+    non-zero exit fails the sandbox (Compose service_completed_successfully).
+    """
+    workdir_mount: _builtins.str
+    """Mount the agent's workdir at this path in the service, so both see the
+    same files. Off by default: services otherwise share no files with it.
+    """
+    workdir: _builtins.str
+    """The service's working directory; default: the image's, else /."""
+    image_entrypoint: _builtins.bool
+    """Run the image's ENTRYPOINT with command as its arguments (the image's CMD
+    when command is empty), as docker does, instead of command being the whole
+    argv. Needed for images whose entrypoint script does the setup.
+    """
     @_builtins.property
     def command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
-        """Explicit argv; image entrypoints are not implicitly executed."""
+        """Explicit argv; image entrypoints are not implicitly executed (see
+        image_entrypoint).
+        """
 
     @_builtins.property
     def env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
     @_builtins.property
     def depends_on(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Services that must be ready first. Cycles are invalid."""
+
+    @_builtins.property
+    def ports(self) -> _containers.RepeatedScalarFieldContainer[_builtins.int]:
+        """More ports the service listens on, reachable by its name like port."""
+
+    @_builtins.property
+    def ready_command(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """A readiness check run in the service (exit 0: ready) instead of the TCP
+        check of port.
+        """
+
+    @_builtins.property
+    def aliases(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """More host names for the service (Compose container_name, hostname, links)."""
+
+    @_builtins.property
+    def files(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]:
+        """Files written into the service's filesystem before it starts (absolute
+        paths, or relative to workdir).
+        """
+
+    @_builtins.property
+    def setup(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Bubblewrap only: commands run once in the service's own root before it
+        starts (a service built from a Dockerfile), with setup_network.
+        """
+
+    @_builtins.property
+    def volumes(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
+        """Named volumes shared with other services, as "name:/path" or
+        "name:/path:ro".
+        """
 
     def __init__(
         self,
@@ -1441,8 +1973,19 @@ class EnvironmentService(_message.Message):
         depends_on: _abc.Iterable[_builtins.str] | None = ...,
         memory_mb: _builtins.int = ...,
         cpu_millis: _builtins.int = ...,
+        ports: _abc.Iterable[_builtins.int] | None = ...,
+        ready_command: _abc.Iterable[_builtins.str] | None = ...,
+        aliases: _abc.Iterable[_builtins.str] | None = ...,
+        files: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        setup: _abc.Iterable[_builtins.str] | None = ...,
+        setup_network: _builtins.str = ...,
+        oneshot: _builtins.bool = ...,
+        workdir_mount: _builtins.str = ...,
+        volumes: _abc.Iterable[_builtins.str] | None = ...,
+        workdir: _builtins.str = ...,
+        image_entrypoint: _builtins.bool = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["command", b"command", "cpu_millis", b"cpu_millis", "depends_on", b"depends_on", "env", b"env", "image", b"image", "memory_mb", b"memory_mb", "name", b"name", "port", b"port"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["aliases", b"aliases", "command", b"command", "cpu_millis", b"cpu_millis", "depends_on", b"depends_on", "env", b"env", "files", b"files", "image", b"image", "image_entrypoint", b"image_entrypoint", "memory_mb", b"memory_mb", "name", b"name", "oneshot", b"oneshot", "port", b"port", "ports", b"ports", "ready_command", b"ready_command", "setup", b"setup", "setup_network", b"setup_network", "volumes", b"volumes", "workdir", b"workdir", "workdir_mount", b"workdir_mount"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___EnvironmentService: _TypeAlias = EnvironmentService  # noqa: Y015

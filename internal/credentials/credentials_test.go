@@ -313,3 +313,28 @@ func TestParamUses(t *testing.T) {
 		t.Errorf("Declared = %v", d)
 	}
 }
+
+func TestSpecUsesCoverCompactionAndSubagentModels(t *testing.T) {
+	spec := &evalsiv1alpha1.RunSpec{Target: &evalsiv1alpha1.Target{
+		Connector: "anthropic", Model: "m",
+		CompactionModel: &evalsiv1alpha1.Target{Connector: "openai-compatible", Model: "c", BaseUrl: "https://c.example/v1", ApiKeyEnv: "COMPACT_KEY"},
+		SubagentModel:   &evalsiv1alpha1.Target{Connector: "anthropic", Model: "s", ApiKeyEnv: "none"},
+	}}
+	if _, err := SpecUses(spec); err == nil || !strings.Contains(err.Error(), "subagent_model") {
+		t.Fatalf("a keyless anthropic sub-agent model was accepted: %v", err)
+	}
+	spec.Target.SubagentModel = nil
+	uses, err := SpecUses(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range uses {
+		if u.Env == "COMPACT_KEY" {
+			if u.URL != "https://c.example/v1" || u.Field != "spec.target.compaction_model.api_key_env" {
+				t.Errorf("use = %+v", u)
+			}
+			return
+		}
+	}
+	t.Fatalf("the compaction model's key was not checked: %+v", uses)
+}

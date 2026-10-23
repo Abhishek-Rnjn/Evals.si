@@ -69,6 +69,11 @@ def _turn_to_dict(turn: ModelTurn) -> dict[str, Any]:
         **({"model": turn.model} if turn.model else {}),
         **({"switched_from": turn.switched_from} if turn.switched_from else {}),
         **({"tokens": turn.tokens.to_dict()} if turn.tokens is not None else {}),
+        **({"response_model": turn.response_model} if turn.response_model else {}),
+        **({"system_fingerprint": turn.system_fingerprint} if turn.system_fingerprint else {}),
+        **({"raw_content": turn.raw_content} if turn.raw_content else {}),
+        **({"handoff": turn.handoff} if turn.handoff else {}),
+        **({"stream_resumes": turn.stream_resumes} if turn.stream_resumes else {}),
     }
 
 
@@ -85,6 +90,11 @@ def _turn_from_dict(data: dict[str, Any]) -> ModelTurn:
         model=data.get("model", ""),
         switched_from=data.get("switched_from", ""),
         tokens=TokenTrace.from_dict(data["tokens"]) if data.get("tokens") else None,
+        response_model=data.get("response_model", ""),
+        system_fingerprint=data.get("system_fingerprint", ""),
+        raw_content=data.get("raw_content") or [],
+        handoff=data.get("handoff") or {},
+        stream_resumes=data.get("stream_resumes") or [],
     )
 
 

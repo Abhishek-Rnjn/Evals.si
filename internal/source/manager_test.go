@@ -205,6 +205,7 @@ func newHarness(t *testing.T, mutate func(*evalsiv1alpha1.TraceSource)) *harness
 	h.m = New(st, h.ing, Options{
 		Factories: map[string]Factory{"fake": func(*evalsiv1alpha1.TraceSource, string, *http.Client) (Connector, error) { return h.fs, nil }},
 		Now:       func() time.Time { return h.now }, SyncEvery: 10 * time.Millisecond, PageSize: 10, MaxRate: 1_000_000,
+		RefetchWait: time.Millisecond,
 	})
 	if err := st.PutSource(context.Background(), h.src); err != nil {
 		t.Fatal(err)

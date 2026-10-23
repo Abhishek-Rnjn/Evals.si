@@ -34,6 +34,7 @@ type AgentTarget struct {
 	//	*AgentTarget_Responses
 	//	*AgentTarget_Http
 	//	*AgentTarget_Cli
+	//	*AgentTarget_Acp
 	Kind          isAgentTarget_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -121,6 +122,15 @@ func (x *AgentTarget) GetCli() *CLIAgent {
 	return nil
 }
 
+func (x *AgentTarget) GetAcp() *ACPAgent {
+	if x != nil {
+		if x, ok := x.Kind.(*AgentTarget_Acp); ok {
+			return x.Acp
+		}
+	}
+	return nil
+}
+
 type isAgentTarget_Kind interface {
 	isAgentTarget_Kind()
 }
@@ -145,6 +155,10 @@ type AgentTarget_Cli struct {
 	Cli *CLIAgent `protobuf:"bytes,5,opt,name=cli,proto3,oneof"`
 }
 
+type AgentTarget_Acp struct {
+	Acp *ACPAgent `protobuf:"bytes,6,opt,name=acp,proto3,oneof"`
+}
+
 func (*AgentTarget_A2A) isAgentTarget_Kind() {}
 
 func (*AgentTarget_Mcp) isAgentTarget_Kind() {}
@@ -154,6 +168,8 @@ func (*AgentTarget_Responses) isAgentTarget_Kind() {}
 func (*AgentTarget_Http) isAgentTarget_Kind() {}
 
 func (*AgentTarget_Cli) isAgentTarget_Kind() {}
+
+func (*AgentTarget_Acp) isAgentTarget_Kind() {}
 
 // An agent that speaks the Agent2Agent protocol (JSON-RPC message/send).
 type A2AAgent struct {
@@ -171,7 +187,20 @@ type A2AAgent struct {
 	// binding of A2A 0.3, where url is the interface's base URL and the calls
 	// are POST {url}/v1/message:send, POST {url}/v1/message:stream and
 	// GET {url}/v1/tasks/{id}.
-	Binding       string `protobuf:"bytes,5,opt,name=binding,proto3" json:"binding,omitempty"`
+	Binding string `protobuf:"bytes,5,opt,name=binding,proto3" json:"binding,omitempty"`
+	// Ask the agent to push task updates to a webhook the harness runs, with
+	// pushNotificationConfig on the request, instead of holding a stream open
+	// or polling. Each task state the agent pushes becomes a step. The agent's
+	// card must declare pushNotifications; if no update arrives within the
+	// timeout, the harness falls back to polling (tasks/get). Used instead of
+	// stream when both are set.
+	PushNotifications bool `protobuf:"varint,6,opt,name=push_notifications,json=pushNotifications,proto3" json:"push_notifications,omitempty"`
+	// The base URL the agent reaches the harness's receiver at. Default
+	// http://127.0.0.1:<port>, which only suits an agent on the worker's host.
+	PushUrl string `protobuf:"bytes,7,opt,name=push_url,json=pushUrl,proto3" json:"push_url,omitempty"`
+	// The local port the receiver binds (on all interfaces when push_url is
+	// set, loopback otherwise); 0 picks a free one.
+	PushPort      int32 `protobuf:"varint,8,opt,name=push_port,json=pushPort,proto3" json:"push_port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -239,6 +268,27 @@ func (x *A2AAgent) GetBinding() string {
 		return x.Binding
 	}
 	return ""
+}
+
+func (x *A2AAgent) GetPushNotifications() bool {
+	if x != nil {
+		return x.PushNotifications
+	}
+	return false
+}
+
+func (x *A2AAgent) GetPushUrl() string {
+	if x != nil {
+		return x.PushUrl
+	}
+	return ""
+}
+
+func (x *A2AAgent) GetPushPort() int32 {
+	if x != nil {
+		return x.PushPort
+	}
+	return 0
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -571,7 +621,17 @@ type CLIAgent struct {
 	// --output-format stream-json --verbose`), "codex-json" (`codex exec
 	// --json`), "gemini-json" (`gemini --output-format stream-json`) or
 	// "pi-json" (`pi --mode json`).
-	OutputFormat  string `protobuf:"bytes,6,opt,name=output_format,json=outputFormat,proto3" json:"output_format,omitempty"`
+	OutputFormat string `protobuf:"bytes,6,opt,name=output_format,json=outputFormat,proto3" json:"output_format,omitempty"`
+	// How spec.harness.builtin.interjections reach this agent. The command runs
+	// to completion, so an interjection is due once the run it watched shows its
+	// trigger (its step count, a matching tool call or file write, or the exit,
+	// which is a stop attempt). It is then delivered by running this command
+	// in the sandbox, with {message} replaced by the interjection and {session}
+	// by the session id the output reader found (for example
+	// ["claude", "-p", "--resume", "{session}", "{message}"]), and the new run's
+	// steps join the trajectory. Without it, due interjections are recorded as
+	// undeliverable steps.
+	ResumeCommand []string `protobuf:"bytes,7,rep,name=resume_command,json=resumeCommand,proto3" json:"resume_command,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -648,6 +708,123 @@ func (x *CLIAgent) GetOutputFormat() string {
 	return ""
 }
 
+func (x *CLIAgent) GetResumeCommand() []string {
+	if x != nil {
+		return x.ResumeCommand
+	}
+	return nil
+}
+
+// An agent that speaks the Agent Client Protocol (ACP, protocol version 1):
+// JSON-RPC over the stdio of a command run inside the task's sandbox, in its
+// workdir. The harness is the client: it creates a session, sends the
+// instruction as a prompt, turns session/update notifications into steps, and
+// serves the agent's requests (file reads and writes in the sandbox,
+// terminals, permission requests). Permission requests are decided by
+// approval, with the semantics of the built-in ApprovalGate hook, and
+// recorded as hitl_request and hitl_resolved steps and policy events.
+type ACPAgent struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Command []string               `protobuf:"bytes,1,rep,name=command,proto3" json:"command,omitempty"`
+	// Commands run once in the environment before the agent (installing it).
+	Install []string `protobuf:"bytes,2,rep,name=install,proto3" json:"install,omitempty"`
+	// Variable in the sandbox -> variable on the worker it is copied from.
+	EnvFrom map[string]string `protobuf:"bytes,3,rep,name=env_from,json=envFrom,proto3" json:"env_from,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Hosts the agent may reach (its model API), through the egress proxy.
+	AllowHosts []string `protobuf:"bytes,4,rep,name=allow_hosts,json=allowHosts,proto3" json:"allow_hosts,omitempty"`
+	// For the whole conversation; default 10 minutes.
+	Timeout *durationpb.Duration `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	// Answers permission requests, in the shape of the ApprovalGate hook's
+	// config: rules (tool, path, command globs and an action of allow, ask or
+	// deny) and an approver script with a default. A request no rule matches
+	// is allowed; an "ask" goes to the approver, whose default is deny.
+	Approval *structpb.Struct `protobuf:"bytes,6,opt,name=approval,proto3" json:"approval,omitempty"`
+	// Offer the agent terminal/* (commands the agent runs through the
+	// harness, as background processes in the sandbox). Off by default.
+	Terminals     bool `protobuf:"varint,7,opt,name=terminals,proto3" json:"terminals,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ACPAgent) Reset() {
+	*x = ACPAgent{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ACPAgent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ACPAgent) ProtoMessage() {}
+
+func (x *ACPAgent) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ACPAgent.ProtoReflect.Descriptor instead.
+func (*ACPAgent) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ACPAgent) GetCommand() []string {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *ACPAgent) GetInstall() []string {
+	if x != nil {
+		return x.Install
+	}
+	return nil
+}
+
+func (x *ACPAgent) GetEnvFrom() map[string]string {
+	if x != nil {
+		return x.EnvFrom
+	}
+	return nil
+}
+
+func (x *ACPAgent) GetAllowHosts() []string {
+	if x != nil {
+		return x.AllowHosts
+	}
+	return nil
+}
+
+func (x *ACPAgent) GetTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.Timeout
+	}
+	return nil
+}
+
+func (x *ACPAgent) GetApproval() *structpb.Struct {
+	if x != nil {
+		return x.Approval
+	}
+	return nil
+}
+
+func (x *ACPAgent) GetTerminals() bool {
+	if x != nil {
+		return x.Terminals
+	}
+	return false
+}
+
 // Harness drives the agent through a task.
 type Harness struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -662,7 +839,7 @@ type Harness struct {
 
 func (x *Harness) Reset() {
 	*x = Harness{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -674,7 +851,7 @@ func (x *Harness) String() string {
 func (*Harness) ProtoMessage() {}
 
 func (x *Harness) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[6]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -687,7 +864,7 @@ func (x *Harness) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Harness.ProtoReflect.Descriptor instead.
 func (*Harness) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{6}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Harness) GetKind() isHarness_Kind {
@@ -743,7 +920,7 @@ type AgentBudget struct {
 
 func (x *AgentBudget) Reset() {
 	*x = AgentBudget{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -755,7 +932,7 @@ func (x *AgentBudget) String() string {
 func (*AgentBudget) ProtoMessage() {}
 
 func (x *AgentBudget) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[7]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -768,7 +945,7 @@ func (x *AgentBudget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentBudget.ProtoReflect.Descriptor instead.
 func (*AgentBudget) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{7}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AgentBudget) GetUsd() float64 {
@@ -803,7 +980,7 @@ type Pricing struct {
 
 func (x *Pricing) Reset() {
 	*x = Pricing{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -815,7 +992,7 @@ func (x *Pricing) String() string {
 func (*Pricing) ProtoMessage() {}
 
 func (x *Pricing) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[8]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -828,7 +1005,7 @@ func (x *Pricing) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Pricing.ProtoReflect.Descriptor instead.
 func (*Pricing) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{8}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Pricing) GetInputPerMtok() float64 {
@@ -877,7 +1054,7 @@ type MCPServer struct {
 
 func (x *MCPServer) Reset() {
 	*x = MCPServer{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -889,7 +1066,7 @@ func (x *MCPServer) String() string {
 func (*MCPServer) ProtoMessage() {}
 
 func (x *MCPServer) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[9]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -902,7 +1079,7 @@ func (x *MCPServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPServer.ProtoReflect.Descriptor instead.
 func (*MCPServer) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{9}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MCPServer) GetName() string {
@@ -997,7 +1174,7 @@ type MCPOAuth struct {
 
 func (x *MCPOAuth) Reset() {
 	*x = MCPOAuth{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1009,7 +1186,7 @@ func (x *MCPOAuth) String() string {
 func (*MCPOAuth) ProtoMessage() {}
 
 func (x *MCPOAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[10]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1199,7 @@ func (x *MCPOAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPOAuth.ProtoReflect.Descriptor instead.
 func (*MCPOAuth) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{10}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MCPOAuth) GetTokenUrl() string {
@@ -1069,7 +1246,7 @@ type MockTool struct {
 
 func (x *MockTool) Reset() {
 	*x = MockTool{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1081,7 +1258,7 @@ func (x *MockTool) String() string {
 func (*MockTool) ProtoMessage() {}
 
 func (x *MockTool) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[11]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1094,7 +1271,7 @@ func (x *MockTool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MockTool.ProtoReflect.Descriptor instead.
 func (*MockTool) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{11}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *MockTool) GetName() string {
@@ -1151,7 +1328,7 @@ type ToolFault struct {
 
 func (x *ToolFault) Reset() {
 	*x = ToolFault{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[12]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1163,7 +1340,7 @@ func (x *ToolFault) String() string {
 func (*ToolFault) ProtoMessage() {}
 
 func (x *ToolFault) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[12]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1176,7 +1353,7 @@ func (x *ToolFault) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolFault.ProtoReflect.Descriptor instead.
 func (*ToolFault) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{12}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ToolFault) GetTool() string {
@@ -1231,7 +1408,7 @@ type Tools struct {
 
 func (x *Tools) Reset() {
 	*x = Tools{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[13]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1243,7 +1420,7 @@ func (x *Tools) String() string {
 func (*Tools) ProtoMessage() {}
 
 func (x *Tools) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[13]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1256,7 +1433,7 @@ func (x *Tools) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tools.ProtoReflect.Descriptor instead.
 func (*Tools) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{13}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Tools) GetSandbox() bool {
@@ -1311,7 +1488,7 @@ type UserSimulator struct {
 
 func (x *UserSimulator) Reset() {
 	*x = UserSimulator{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1323,7 +1500,7 @@ func (x *UserSimulator) String() string {
 func (*UserSimulator) ProtoMessage() {}
 
 func (x *UserSimulator) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[14]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1336,7 +1513,7 @@ func (x *UserSimulator) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserSimulator.ProtoReflect.Descriptor instead.
 func (*UserSimulator) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{14}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UserSimulator) GetJudge() string {
@@ -1399,7 +1576,7 @@ type Recording struct {
 
 func (x *Recording) Reset() {
 	*x = Recording{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[15]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1411,7 +1588,7 @@ func (x *Recording) String() string {
 func (*Recording) ProtoMessage() {}
 
 func (x *Recording) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[15]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1424,7 +1601,7 @@ func (x *Recording) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Recording.ProtoReflect.Descriptor instead.
 func (*Recording) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{15}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Recording) GetMode() string {
@@ -1467,7 +1644,7 @@ type EscalationPolicy struct {
 
 func (x *EscalationPolicy) Reset() {
 	*x = EscalationPolicy{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[16]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1479,7 +1656,7 @@ func (x *EscalationPolicy) String() string {
 func (*EscalationPolicy) ProtoMessage() {}
 
 func (x *EscalationPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[16]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1492,7 +1669,7 @@ func (x *EscalationPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EscalationPolicy.ProtoReflect.Descriptor instead.
 func (*EscalationPolicy) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{16}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *EscalationPolicy) GetAllow() []string {
@@ -1537,13 +1714,17 @@ type BuiltinHarness struct {
 	// agent's at_step-th call (or when the agent tries to finish with one still
 	// due), recorded as a "user-interjection" step. Built-in agent only.
 	Interjections []*Interjection `protobuf:"bytes,14,rep,name=interjections,proto3" json:"interjections,omitempty"`
+	// Prices by model name, for models other than the run's main one (a
+	// compaction or sub-agent model, a fallback). A model not listed is priced
+	// at `pricing`.
+	ModelPricing  map[string]*Pricing `protobuf:"bytes,15,rep,name=model_pricing,json=modelPricing,proto3" json:"model_pricing,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BuiltinHarness) Reset() {
 	*x = BuiltinHarness{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1555,7 +1736,7 @@ func (x *BuiltinHarness) String() string {
 func (*BuiltinHarness) ProtoMessage() {}
 
 func (x *BuiltinHarness) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[17]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1568,7 +1749,7 @@ func (x *BuiltinHarness) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BuiltinHarness.ProtoReflect.Descriptor instead.
 func (*BuiltinHarness) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{17}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *BuiltinHarness) GetMaxSteps() int32 {
@@ -1669,19 +1850,36 @@ func (x *BuiltinHarness) GetInterjections() []*Interjection {
 	return nil
 }
 
+func (x *BuiltinHarness) GetModelPricing() map[string]*Pricing {
+	if x != nil {
+		return x.ModelPricing
+	}
+	return nil
+}
+
 // A scripted message from the simulated user, mid-run.
 type Interjection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Delivered once the agent has made this many model calls (at least 1).
-	AtStep        int32  `protobuf:"varint,1,opt,name=at_step,json=atStep,proto3" json:"at_step,omitempty"`
-	Message       string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// With an event, the earliest step it may fire at (0: any).
+	AtStep  int32  `protobuf:"varint,1,opt,name=at_step,json=atStep,proto3" json:"at_step,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// Deliver on an event (so named because on is a boolean in YAML 1.1) instead
+	// of a step count: "tool_call" (after a tool
+	// call whose name matches the glob match, and whose JSON arguments match the
+	// regular expression pattern when it is set), "file_write" (after a tool
+	// call that writes a path matching the glob match: write_file, edit_file,
+	// apply_patch) or "stop" (the first time the agent tries to finish).
+	Event         string `protobuf:"bytes,3,opt,name=event,proto3" json:"event,omitempty"`
+	Match         string `protobuf:"bytes,4,opt,name=match,proto3" json:"match,omitempty"`
+	Pattern       string `protobuf:"bytes,5,opt,name=pattern,proto3" json:"pattern,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Interjection) Reset() {
 	*x = Interjection{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1693,7 +1891,7 @@ func (x *Interjection) String() string {
 func (*Interjection) ProtoMessage() {}
 
 func (x *Interjection) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[18]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1706,7 +1904,7 @@ func (x *Interjection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Interjection.ProtoReflect.Descriptor instead.
 func (*Interjection) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{18}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Interjection) GetAtStep() int32 {
@@ -1719,6 +1917,27 @@ func (x *Interjection) GetAtStep() int32 {
 func (x *Interjection) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *Interjection) GetEvent() string {
+	if x != nil {
+		return x.Event
+	}
+	return ""
+}
+
+func (x *Interjection) GetMatch() string {
+	if x != nil {
+		return x.Match
+	}
+	return ""
+}
+
+func (x *Interjection) GetPattern() string {
+	if x != nil {
+		return x.Pattern
 	}
 	return ""
 }
@@ -1737,7 +1956,7 @@ type Hook struct {
 
 func (x *Hook) Reset() {
 	*x = Hook{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1749,7 +1968,7 @@ func (x *Hook) String() string {
 func (*Hook) ProtoMessage() {}
 
 func (x *Hook) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[19]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1762,7 +1981,7 @@ func (x *Hook) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Hook.ProtoReflect.Descriptor instead.
 func (*Hook) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{19}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Hook) GetPython() string {
@@ -1822,7 +2041,7 @@ type ContextManagement struct {
 
 func (x *ContextManagement) Reset() {
 	*x = ContextManagement{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1834,7 +2053,7 @@ func (x *ContextManagement) String() string {
 func (*ContextManagement) ProtoMessage() {}
 
 func (x *ContextManagement) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[20]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1847,7 +2066,7 @@ func (x *ContextManagement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContextManagement.ProtoReflect.Descriptor instead.
 func (*ContextManagement) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{20}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ContextManagement) GetStrategy() string {
@@ -1936,7 +2155,7 @@ type ExternalHarness struct {
 
 func (x *ExternalHarness) Reset() {
 	*x = ExternalHarness{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1948,7 +2167,7 @@ func (x *ExternalHarness) String() string {
 func (*ExternalHarness) ProtoMessage() {}
 
 func (x *ExternalHarness) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[21]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1961,7 +2180,7 @@ func (x *ExternalHarness) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExternalHarness.ProtoReflect.Descriptor instead.
 func (*ExternalHarness) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{21}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ExternalHarness) GetKind() isExternalHarness_Kind {
@@ -2040,7 +2259,7 @@ type CommandHarness struct {
 
 func (x *CommandHarness) Reset() {
 	*x = CommandHarness{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[22]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2052,7 +2271,7 @@ func (x *CommandHarness) String() string {
 func (*CommandHarness) ProtoMessage() {}
 
 func (x *CommandHarness) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[22]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2065,7 +2284,7 @@ func (x *CommandHarness) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandHarness.ProtoReflect.Descriptor instead.
 func (*CommandHarness) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{22}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CommandHarness) GetArgv() []string {
@@ -2094,7 +2313,7 @@ type SandboxPolicy struct {
 
 func (x *SandboxPolicy) Reset() {
 	*x = SandboxPolicy{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[23]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2106,7 +2325,7 @@ func (x *SandboxPolicy) String() string {
 func (*SandboxPolicy) ProtoMessage() {}
 
 func (x *SandboxPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[23]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2119,7 +2338,7 @@ func (x *SandboxPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SandboxPolicy.ProtoReflect.Descriptor instead.
 func (*SandboxPolicy) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{23}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SandboxPolicy) GetMinIsolation() string {
@@ -2195,19 +2414,27 @@ type Checker struct {
 	OnChange string `protobuf:"bytes,6,opt,name=on_change,json=onChange,proto3" json:"on_change,omitempty"`
 	// Where the checker runs: "shared" (default) in the sandbox the agent used;
 	// "clean" in a fresh sandbox of the same environment that receives only the
-	// files under outputs. The agent's other changes (installed packages, shims,
-	// edited tests) never reach the checker.
+	// files under outputs; "diff" in a fresh sandbox that receives the agent's
+	// diff of the workdir against the setup state (git when the workdir is a
+	// repository, file by file otherwise), less the paths under protect, the
+	// checker's files and exclude, which are recorded as rejected. With either,
+	// the agent's other changes (installed packages, shims, edited tests) never
+	// reach the checker.
 	Isolation string `protobuf:"bytes,7,opt,name=isolation,proto3" json:"isolation,omitempty"`
 	// With isolation "clean": glob patterns, relative to the workdir, of the
 	// agent's declared outputs, the only files copied into the clean sandbox.
-	Outputs       []string `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	// With "diff", optional: only changes under these patterns are applied.
+	Outputs []string `protobuf:"bytes,8,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	// With isolation "diff": glob patterns, relative to the workdir, whose
+	// changes are never applied (besides protect and the checker's files).
+	Exclude       []string `protobuf:"bytes,9,rep,name=exclude,proto3" json:"exclude,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Checker) Reset() {
 	*x = Checker{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[24]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2219,7 +2446,7 @@ func (x *Checker) String() string {
 func (*Checker) ProtoMessage() {}
 
 func (x *Checker) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[24]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2232,7 +2459,7 @@ func (x *Checker) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Checker.ProtoReflect.Descriptor instead.
 func (*Checker) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{24}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Checker) GetCommand() []string {
@@ -2291,6 +2518,13 @@ func (x *Checker) GetOutputs() []string {
 	return nil
 }
 
+func (x *Checker) GetExclude() []string {
+	if x != nil {
+		return x.Exclude
+	}
+	return nil
+}
+
 // Environment is where a task runs. Spec-level values apply to every record;
 // a record's metadata["environment"] (same fields) overrides them per task.
 type Environment struct {
@@ -2311,17 +2545,30 @@ type Environment struct {
 	Env             map[string]string `protobuf:"bytes,9,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Per-command timeout for the agent's sandbox commands; default 120s.
 	CommandTimeout *durationpb.Duration `protobuf:"bytes,10,opt,name=command_timeout,json=commandTimeout,proto3" json:"command_timeout,omitempty"`
-	// Pod backend only. Private, per-trial services; no shared persistent data.
+	// The pod and bubblewrap backends. Private, per-trial services; no shared
+	// persistent data.
 	Services []*EnvironmentService `protobuf:"bytes,11,rep,name=services,proto3" json:"services,omitempty"`
 	// Required with services, from 1s to 24h. Bounds orphaned service execution.
 	ServiceLifetime *durationpb.Duration `protobuf:"bytes,12,opt,name=service_lifetime,json=serviceLifetime,proto3" json:"service_lifetime,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Earlier build stages (a multi-stage Dockerfile): each is built in its own
+	// sandbox from its image, files and setup, and copy_from takes files out of
+	// it into this environment before setup. The stages are not kept.
+	Stages   []*BuildStage `protobuf:"bytes,13,rep,name=stages,proto3" json:"stages,omitempty"`
+	CopyFrom []*StageCopy  `protobuf:"bytes,14,rep,name=copy_from,json=copyFrom,proto3" json:"copy_from,omitempty"`
+	// A database-backed tool environment: a SQLite database the harness builds
+	// per trial, named SQL tools the agent calls, and assertions over the final
+	// state that grade it. See DatabaseEnvironment.
+	Database *DatabaseEnvironment `protobuf:"bytes,15,opt,name=database,proto3" json:"database,omitempty"`
+	// Bubblewrap services only: named volumes of the agent's sandbox, shared
+	// with the services that name them, as "name:/path" or "name:/path:ro".
+	Volumes       []string `protobuf:"bytes,16,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Environment) Reset() {
 	*x = Environment{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[25]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2333,7 +2580,7 @@ func (x *Environment) String() string {
 func (*Environment) ProtoMessage() {}
 
 func (x *Environment) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[25]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2346,7 +2593,7 @@ func (x *Environment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Environment.ProtoReflect.Descriptor instead.
 func (*Environment) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{25}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Environment) GetImage() string {
@@ -2433,30 +2680,487 @@ func (x *Environment) GetServiceLifetime() *durationpb.Duration {
 	return nil
 }
 
-// EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+).
+func (x *Environment) GetStages() []*BuildStage {
+	if x != nil {
+		return x.Stages
+	}
+	return nil
+}
+
+func (x *Environment) GetCopyFrom() []*StageCopy {
+	if x != nil {
+		return x.CopyFrom
+	}
+	return nil
+}
+
+func (x *Environment) GetDatabase() *DatabaseEnvironment {
+	if x != nil {
+		return x.Database
+	}
+	return nil
+}
+
+func (x *Environment) GetVolumes() []string {
+	if x != nil {
+		return x.Volumes
+	}
+	return nil
+}
+
+// BuildStage is one earlier stage of a multi-stage build.
+type BuildStage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Required: stages run in their own sandbox with this root.
+	Image string `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
+	// Absolute paths in the stage's root, placed before setup.
+	Files map[string]string `protobuf:"bytes,3,rep,name=files,proto3" json:"files,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Run in order with the environment's setup network.
+	Setup []string          `protobuf:"bytes,4,rep,name=setup,proto3" json:"setup,omitempty"`
+	Env   map[string]string `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Files taken from earlier stages into this one before its setup. Stages are
+	// listed so that each comes after the stages it copies from.
+	CopyFrom      []*StageCopy `protobuf:"bytes,6,rep,name=copy_from,json=copyFrom,proto3" json:"copy_from,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuildStage) Reset() {
+	*x = BuildStage{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildStage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildStage) ProtoMessage() {}
+
+func (x *BuildStage) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildStage.ProtoReflect.Descriptor instead.
+func (*BuildStage) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *BuildStage) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *BuildStage) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *BuildStage) GetFiles() map[string]string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *BuildStage) GetSetup() []string {
+	if x != nil {
+		return x.Setup
+	}
+	return nil
+}
+
+func (x *BuildStage) GetEnv() map[string]string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *BuildStage) GetCopyFrom() []*StageCopy {
+	if x != nil {
+		return x.CopyFrom
+	}
+	return nil
+}
+
+// StageCopy takes a file or directory out of a build stage (COPY --from).
+type StageCopy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Stage string                 `protobuf:"bytes,1,opt,name=stage,proto3" json:"stage,omitempty"`
+	// An absolute path in the stage.
+	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	// An absolute path in this environment, or relative to its workdir. A
+	// directory source is copied into it; a file lands at it, or inside it when
+	// it ends with "/".
+	Destination   string `protobuf:"bytes,3,opt,name=destination,proto3" json:"destination,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StageCopy) Reset() {
+	*x = StageCopy{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StageCopy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StageCopy) ProtoMessage() {}
+
+func (x *StageCopy) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StageCopy.ProtoReflect.Descriptor instead.
+func (*StageCopy) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *StageCopy) GetStage() string {
+	if x != nil {
+		return x.Stage
+	}
+	return ""
+}
+
+func (x *StageCopy) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *StageCopy) GetDestination() string {
+	if x != nil {
+		return x.Destination
+	}
+	return ""
+}
+
+// DatabaseEnvironment is a domain-neutral stateful tool environment in the
+// style of tau-bench: the harness holds a SQLite database per trial (not in
+// the sandbox), exposes each tool as one parameterized SQL statement, records
+// every write, and grades the final state with SQL assertions.
+type DatabaseEnvironment struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// SQL statements run on an empty database (CREATE TABLE ...).
+	Schema string `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	// SQL statements run after the schema (INSERT ...).
+	Seed  string          `protobuf:"bytes,2,opt,name=seed,proto3" json:"seed,omitempty"`
+	Tools []*DatabaseTool `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`
+	// All must hold for the task to pass; each is a test in the check.
+	Assertions    []*DatabaseAssertion `protobuf:"bytes,4,rep,name=assertions,proto3" json:"assertions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabaseEnvironment) Reset() {
+	*x = DatabaseEnvironment{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseEnvironment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseEnvironment) ProtoMessage() {}
+
+func (x *DatabaseEnvironment) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseEnvironment.ProtoReflect.Descriptor instead.
+func (*DatabaseEnvironment) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *DatabaseEnvironment) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *DatabaseEnvironment) GetSeed() string {
+	if x != nil {
+		return x.Seed
+	}
+	return ""
+}
+
+func (x *DatabaseEnvironment) GetTools() []*DatabaseTool {
+	if x != nil {
+		return x.Tools
+	}
+	return nil
+}
+
+func (x *DatabaseEnvironment) GetAssertions() []*DatabaseAssertion {
+	if x != nil {
+		return x.Assertions
+	}
+	return nil
+}
+
+// DatabaseTool is one SQL statement offered to the agent as a tool.
+type DatabaseTool struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// One statement with named parameters (:name), bound from the arguments.
+	Sql string `protobuf:"bytes,3,opt,name=sql,proto3" json:"sql,omitempty"`
+	// JSON Schema of the arguments (an object whose properties are the
+	// parameters). Arguments are checked against it before the statement runs.
+	Parameters *structpb.Struct `protobuf:"bytes,4,opt,name=parameters,proto3" json:"parameters,omitempty"`
+	// "read" (default: the statement may not change the database; it returns
+	// rows) or "write" (it returns the number of rows changed, and is recorded).
+	Mode string `protobuf:"bytes,5,opt,name=mode,proto3" json:"mode,omitempty"`
+	// write: fail the call, changing nothing, unless it changes at least this
+	// many rows and, when max_rows is set, at most max_rows.
+	MinRows       int32 `protobuf:"varint,6,opt,name=min_rows,json=minRows,proto3" json:"min_rows,omitempty"`
+	MaxRows       int32 `protobuf:"varint,7,opt,name=max_rows,json=maxRows,proto3" json:"max_rows,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabaseTool) Reset() {
+	*x = DatabaseTool{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseTool) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseTool) ProtoMessage() {}
+
+func (x *DatabaseTool) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseTool.ProtoReflect.Descriptor instead.
+func (*DatabaseTool) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *DatabaseTool) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DatabaseTool) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *DatabaseTool) GetSql() string {
+	if x != nil {
+		return x.Sql
+	}
+	return ""
+}
+
+func (x *DatabaseTool) GetParameters() *structpb.Struct {
+	if x != nil {
+		return x.Parameters
+	}
+	return nil
+}
+
+func (x *DatabaseTool) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *DatabaseTool) GetMinRows() int32 {
+	if x != nil {
+		return x.MinRows
+	}
+	return 0
+}
+
+func (x *DatabaseTool) GetMaxRows() int32 {
+	if x != nil {
+		return x.MaxRows
+	}
+	return 0
+}
+
+// DatabaseAssertion is a query over the final database and the rows it must return.
+type DatabaseAssertion struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// A read-only query.
+	Sql string `protobuf:"bytes,2,opt,name=sql,proto3" json:"sql,omitempty"`
+	// The rows it must return, as a list of rows (each a list of values), or one
+	// value when the query returns one row of one column.
+	Expect        *structpb.Value `protobuf:"bytes,3,opt,name=expect,proto3" json:"expect,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabaseAssertion) Reset() {
+	*x = DatabaseAssertion{}
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseAssertion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseAssertion) ProtoMessage() {}
+
+func (x *DatabaseAssertion) ProtoReflect() protoreflect.Message {
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseAssertion.ProtoReflect.Descriptor instead.
+func (*DatabaseAssertion) Descriptor() ([]byte, []int) {
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *DatabaseAssertion) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DatabaseAssertion) GetSql() string {
+	if x != nil {
+		return x.Sql
+	}
+	return ""
+}
+
+func (x *DatabaseAssertion) GetExpect() *structpb.Value {
+	if x != nil {
+		return x.Expect
+	}
+	return nil
+}
+
+// EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+) on the
+// pod backend, or a process group in its own bubblewrap sandbox.
 // Services share the trial's network, but not its filesystem or credentials.
 type EnvironmentService struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// DNS label, also a loopback hostname inside this trial.
 	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Image string `protobuf:"bytes,2,opt,name=image,proto3" json:"image,omitempty"`
-	// Explicit argv; image entrypoints are not implicitly executed.
+	// Explicit argv; image entrypoints are not implicitly executed (see
+	// image_entrypoint).
 	Command []string          `protobuf:"bytes,3,rep,name=command,proto3" json:"command,omitempty"`
 	Env     map[string]string `protobuf:"bytes,4,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// TCP readiness port, unique within the trial; 7070 is reserved.
+	// TCP readiness port, unique within the trial; 7070 is reserved. The pod
+	// backend needs one (1024 or above). On bubblewrap it is optional: without
+	// a port or ready_command a service is ready once it has stayed up a second.
 	Port int32 `protobuf:"varint,5,opt,name=port,proto3" json:"port,omitempty"`
 	// Services that must be ready first. Cycles are invalid.
 	DependsOn []string `protobuf:"bytes,6,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
-	// Required limits; CPU in millicores, memory in MiB.
-	MemoryMb      int32 `protobuf:"varint,7,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
-	CpuMillis     int32 `protobuf:"varint,8,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Required limits; CPU in millicores, memory in MiB. On the bubblewrap
+	// backend memory is an rlimit and CPU is not enforced.
+	MemoryMb  int32 `protobuf:"varint,7,opt,name=memory_mb,json=memoryMb,proto3" json:"memory_mb,omitempty"`
+	CpuMillis int32 `protobuf:"varint,8,opt,name=cpu_millis,json=cpuMillis,proto3" json:"cpu_millis,omitempty"`
+	// More ports the service listens on, reachable by its name like port.
+	Ports []int32 `protobuf:"varint,9,rep,packed,name=ports,proto3" json:"ports,omitempty"`
+	// A readiness check run in the service (exit 0: ready) instead of the TCP
+	// check of port.
+	ReadyCommand []string `protobuf:"bytes,10,rep,name=ready_command,json=readyCommand,proto3" json:"ready_command,omitempty"`
+	// More host names for the service (Compose container_name, hostname, links).
+	Aliases []string `protobuf:"bytes,11,rep,name=aliases,proto3" json:"aliases,omitempty"`
+	// Files written into the service's filesystem before it starts (absolute
+	// paths, or relative to workdir).
+	Files map[string]string `protobuf:"bytes,12,rep,name=files,proto3" json:"files,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Bubblewrap only: commands run once in the service's own root before it
+	// starts (a service built from a Dockerfile), with setup_network.
+	Setup []string `protobuf:"bytes,13,rep,name=setup,proto3" json:"setup,omitempty"`
+	// "deny" (default) or "allow".
+	SetupNetwork string `protobuf:"bytes,14,opt,name=setup_network,json=setupNetwork,proto3" json:"setup_network,omitempty"`
+	// Run to completion before its dependents start, instead of staying up; a
+	// non-zero exit fails the sandbox (Compose service_completed_successfully).
+	Oneshot bool `protobuf:"varint,15,opt,name=oneshot,proto3" json:"oneshot,omitempty"`
+	// Mount the agent's workdir at this path in the service, so both see the
+	// same files. Off by default: services otherwise share no files with it.
+	WorkdirMount string `protobuf:"bytes,16,opt,name=workdir_mount,json=workdirMount,proto3" json:"workdir_mount,omitempty"`
+	// Named volumes shared with other services, as "name:/path" or
+	// "name:/path:ro".
+	Volumes []string `protobuf:"bytes,17,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	// The service's working directory; default: the image's, else /.
+	Workdir string `protobuf:"bytes,18,opt,name=workdir,proto3" json:"workdir,omitempty"`
+	// Run the image's ENTRYPOINT with command as its arguments (the image's CMD
+	// when command is empty), as docker does, instead of command being the whole
+	// argv. Needed for images whose entrypoint script does the setup.
+	ImageEntrypoint bool `protobuf:"varint,19,opt,name=image_entrypoint,json=imageEntrypoint,proto3" json:"image_entrypoint,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *EnvironmentService) Reset() {
 	*x = EnvironmentService{}
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[26]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2468,7 +3172,7 @@ func (x *EnvironmentService) String() string {
 func (*EnvironmentService) ProtoMessage() {}
 
 func (x *EnvironmentService) ProtoReflect() protoreflect.Message {
-	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[26]
+	mi := &file_evalsi_v1alpha1_agent_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2481,7 +3185,7 @@ func (x *EnvironmentService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentService.ProtoReflect.Descriptor instead.
 func (*EnvironmentService) Descriptor() ([]byte, []int) {
-	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{26}
+	return file_evalsi_v1alpha1_agent_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *EnvironmentService) GetName() string {
@@ -2540,25 +3244,106 @@ func (x *EnvironmentService) GetCpuMillis() int32 {
 	return 0
 }
 
+func (x *EnvironmentService) GetPorts() []int32 {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetReadyCommand() []string {
+	if x != nil {
+		return x.ReadyCommand
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetAliases() []string {
+	if x != nil {
+		return x.Aliases
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetFiles() map[string]string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetSetup() []string {
+	if x != nil {
+		return x.Setup
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetSetupNetwork() string {
+	if x != nil {
+		return x.SetupNetwork
+	}
+	return ""
+}
+
+func (x *EnvironmentService) GetOneshot() bool {
+	if x != nil {
+		return x.Oneshot
+	}
+	return false
+}
+
+func (x *EnvironmentService) GetWorkdirMount() string {
+	if x != nil {
+		return x.WorkdirMount
+	}
+	return ""
+}
+
+func (x *EnvironmentService) GetVolumes() []string {
+	if x != nil {
+		return x.Volumes
+	}
+	return nil
+}
+
+func (x *EnvironmentService) GetWorkdir() string {
+	if x != nil {
+		return x.Workdir
+	}
+	return ""
+}
+
+func (x *EnvironmentService) GetImageEntrypoint() bool {
+	if x != nil {
+		return x.ImageEntrypoint
+	}
+	return false
+}
+
 var File_evalsi_v1alpha1_agent_proto protoreflect.FileDescriptor
 
 const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1bevalsi/v1alpha1/agent.proto\x12\x0fevalsi.v1alpha1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x95\x02\n" +
+	"\x1bevalsi/v1alpha1/agent.proto\x12\x0fevalsi.v1alpha1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xc4\x02\n" +
 	"\vAgentTarget\x12-\n" +
 	"\x03a2a\x18\x01 \x01(\v2\x19.evalsi.v1alpha1.A2AAgentH\x00R\x03a2a\x12-\n" +
 	"\x03mcp\x18\x02 \x01(\v2\x19.evalsi.v1alpha1.MCPAgentH\x00R\x03mcp\x12?\n" +
 	"\tresponses\x18\x03 \x01(\v2\x1f.evalsi.v1alpha1.ResponsesAgentH\x00R\tresponses\x120\n" +
 	"\x04http\x18\x04 \x01(\v2\x1a.evalsi.v1alpha1.HTTPAgentH\x00R\x04http\x12-\n" +
-	"\x03cli\x18\x05 \x01(\v2\x19.evalsi.v1alpha1.CLIAgentH\x00R\x03cliB\x06\n" +
-	"\x04kind\"\x8e\x02\n" +
+	"\x03cli\x18\x05 \x01(\v2\x19.evalsi.v1alpha1.CLIAgentH\x00R\x03cli\x12-\n" +
+	"\x03acp\x18\x06 \x01(\v2\x19.evalsi.v1alpha1.ACPAgentH\x00R\x03acpB\x06\n" +
+	"\x04kind\"\xf5\x02\n" +
 	"\bA2AAgent\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12J\n" +
 	"\vheaders_env\x18\x02 \x03(\v2).evalsi.v1alpha1.A2AAgent.HeadersEnvEntryR\n" +
 	"headersEnv\x123\n" +
 	"\atimeout\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x16\n" +
 	"\x06stream\x18\x04 \x01(\bR\x06stream\x12\x18\n" +
-	"\abinding\x18\x05 \x01(\tR\abinding\x1a=\n" +
+	"\abinding\x18\x05 \x01(\tR\abinding\x12-\n" +
+	"\x12push_notifications\x18\x06 \x01(\bR\x11pushNotifications\x12\x19\n" +
+	"\bpush_url\x18\a \x01(\tR\apushUrl\x12\x1b\n" +
+	"\tpush_port\x18\b \x01(\x05R\bpushPort\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
@@ -2597,7 +3382,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x10stop_reason_path\x18\f \x01(\tR\x0estopReasonPath\x1a=\n" +
 	"\x0fHeadersEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdf\x02\n" +
 	"\bCLIAgent\x12\x18\n" +
 	"\acommand\x18\x01 \x03(\tR\acommand\x12\x18\n" +
 	"\ainstall\x18\x02 \x03(\tR\ainstall\x12A\n" +
@@ -2605,7 +3390,20 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\vallow_hosts\x18\x04 \x03(\tR\n" +
 	"allowHosts\x123\n" +
 	"\atimeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12#\n" +
-	"\routput_format\x18\x06 \x01(\tR\foutputFormat\x1a:\n" +
+	"\routput_format\x18\x06 \x01(\tR\foutputFormat\x12%\n" +
+	"\x0eresume_command\x18\a \x03(\tR\rresumeCommand\x1a:\n" +
+	"\fEnvFromEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe6\x02\n" +
+	"\bACPAgent\x12\x18\n" +
+	"\acommand\x18\x01 \x03(\tR\acommand\x12\x18\n" +
+	"\ainstall\x18\x02 \x03(\tR\ainstall\x12A\n" +
+	"\benv_from\x18\x03 \x03(\v2&.evalsi.v1alpha1.ACPAgent.EnvFromEntryR\aenvFrom\x12\x1f\n" +
+	"\vallow_hosts\x18\x04 \x03(\tR\n" +
+	"allowHosts\x123\n" +
+	"\atimeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x123\n" +
+	"\bapproval\x18\x06 \x01(\v2\x17.google.protobuf.StructR\bapproval\x12\x1c\n" +
+	"\tterminals\x18\a \x01(\bR\tterminals\x1a:\n" +
 	"\fEnvFromEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x01\n" +
@@ -2679,7 +3477,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0ebranch_at_step\x18\x03 \x01(\x05R\fbranchAtStep\x12\x17\n" +
 	"\afork_as\x18\x04 \x01(\tR\x06forkAs\"(\n" +
 	"\x10EscalationPolicy\x12\x14\n" +
-	"\x05allow\x18\x01 \x03(\tR\x05allow\"\xeb\x05\n" +
+	"\x05allow\x18\x01 \x03(\tR\x05allow\"\x9e\a\n" +
 	"\x0eBuiltinHarness\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x124\n" +
 	"\x06budget\x18\x02 \x01(\v2\x1c.evalsi.v1alpha1.AgentBudgetR\x06budget\x122\n" +
@@ -2697,11 +3495,18 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x05hooks\x18\v \x03(\v2\x15.evalsi.v1alpha1.HookR\x05hooks\x12%\n" +
 	"\x0edelegate_steps\x18\f \x01(\x05R\rdelegateSteps\x12\x18\n" +
 	"\aprofile\x18\r \x01(\tR\aprofile\x12C\n" +
-	"\rinterjections\x18\x0e \x03(\v2\x1d.evalsi.v1alpha1.InterjectionR\rinterjectionsB\x16\n" +
-	"\x14_parallel_tool_calls\"A\n" +
+	"\rinterjections\x18\x0e \x03(\v2\x1d.evalsi.v1alpha1.InterjectionR\rinterjections\x12V\n" +
+	"\rmodel_pricing\x18\x0f \x03(\v21.evalsi.v1alpha1.BuiltinHarness.ModelPricingEntryR\fmodelPricing\x1aY\n" +
+	"\x11ModelPricingEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12.\n" +
+	"\x05value\x18\x02 \x01(\v2\x18.evalsi.v1alpha1.PricingR\x05value:\x028\x01B\x16\n" +
+	"\x14_parallel_tool_calls\"\x87\x01\n" +
 	"\fInterjection\x12\x17\n" +
 	"\aat_step\x18\x01 \x01(\x05R\x06atStep\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"O\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
+	"\x05event\x18\x03 \x01(\tR\x05event\x12\x14\n" +
+	"\x05match\x18\x04 \x01(\tR\x05match\x12\x18\n" +
+	"\apattern\x18\x05 \x01(\tR\apattern\"O\n" +
 	"\x04Hook\x12\x16\n" +
 	"\x06python\x18\x01 \x01(\tR\x06python\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\"\xd2\x02\n" +
@@ -2736,7 +3541,7 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\tmemory_mb\x18\x04 \x01(\x05R\bmemoryMb\x12\x1b\n" +
 	"\tmax_procs\x18\x05 \x01(\x05R\bmaxProcs\x12\x18\n" +
 	"\aworkdir\x18\x06 \x01(\tR\aworkdir\x12$\n" +
-	"\x0eread_only_root\x18\a \x01(\bR\freadOnlyRoot\"\xd4\x02\n" +
+	"\x0eread_only_root\x18\a \x01(\bR\freadOnlyRoot\"\xee\x02\n" +
 	"\aChecker\x12\x18\n" +
 	"\acommand\x18\x01 \x03(\tR\acommand\x129\n" +
 	"\x05files\x18\x02 \x03(\v2#.evalsi.v1alpha1.Checker.FilesEntryR\x05files\x123\n" +
@@ -2745,11 +3550,12 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\aprotect\x18\x05 \x03(\tR\aprotect\x12\x1b\n" +
 	"\ton_change\x18\x06 \x01(\tR\bonChange\x12\x1c\n" +
 	"\tisolation\x18\a \x01(\tR\tisolation\x12\x18\n" +
-	"\aoutputs\x18\b \x03(\tR\aoutputs\x1a8\n" +
+	"\aoutputs\x18\b \x03(\tR\aoutputs\x12\x18\n" +
+	"\aexclude\x18\t \x03(\tR\aexclude\x1a8\n" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xed\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb7\a\n" +
 	"\vEnvironment\x12\x14\n" +
 	"\x05image\x18\x01 \x01(\tR\x05image\x12=\n" +
 	"\x05files\x18\x02 \x03(\v2'.evalsi.v1alpha1.Environment.FilesEntryR\x05files\x12\x14\n" +
@@ -2763,14 +3569,58 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x0fcommand_timeout\x18\n" +
 	" \x01(\v2\x19.google.protobuf.DurationR\x0ecommandTimeout\x12?\n" +
 	"\bservices\x18\v \x03(\v2#.evalsi.v1alpha1.EnvironmentServiceR\bservices\x12D\n" +
-	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x1a8\n" +
+	"\x10service_lifetime\x18\f \x01(\v2\x19.google.protobuf.DurationR\x0fserviceLifetime\x123\n" +
+	"\x06stages\x18\r \x03(\v2\x1b.evalsi.v1alpha1.BuildStageR\x06stages\x127\n" +
+	"\tcopy_from\x18\x0e \x03(\v2\x1a.evalsi.v1alpha1.StageCopyR\bcopyFrom\x12@\n" +
+	"\bdatabase\x18\x0f \x01(\v2$.evalsi.v1alpha1.DatabaseEnvironmentR\bdatabase\x12\x18\n" +
+	"\avolumes\x18\x10 \x03(\tR\avolumes\x1a8\n" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbf\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xed\x02\n" +
+	"\n" +
+	"BuildStage\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05image\x18\x02 \x01(\tR\x05image\x12<\n" +
+	"\x05files\x18\x03 \x03(\v2&.evalsi.v1alpha1.BuildStage.FilesEntryR\x05files\x12\x14\n" +
+	"\x05setup\x18\x04 \x03(\tR\x05setup\x126\n" +
+	"\x03env\x18\x05 \x03(\v2$.evalsi.v1alpha1.BuildStage.EnvEntryR\x03env\x127\n" +
+	"\tcopy_from\x18\x06 \x03(\v2\x1a.evalsi.v1alpha1.StageCopyR\bcopyFrom\x1a8\n" +
+	"\n" +
+	"FilesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a6\n" +
+	"\bEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"[\n" +
+	"\tStageCopy\x12\x14\n" +
+	"\x05stage\x18\x01 \x01(\tR\x05stage\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x12 \n" +
+	"\vdestination\x18\x03 \x01(\tR\vdestination\"\xba\x01\n" +
+	"\x13DatabaseEnvironment\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\tR\x06schema\x12\x12\n" +
+	"\x04seed\x18\x02 \x01(\tR\x04seed\x123\n" +
+	"\x05tools\x18\x03 \x03(\v2\x1d.evalsi.v1alpha1.DatabaseToolR\x05tools\x12B\n" +
+	"\n" +
+	"assertions\x18\x04 \x03(\v2\".evalsi.v1alpha1.DatabaseAssertionR\n" +
+	"assertions\"\xd9\x01\n" +
+	"\fDatabaseTool\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x10\n" +
+	"\x03sql\x18\x03 \x01(\tR\x03sql\x127\n" +
+	"\n" +
+	"parameters\x18\x04 \x01(\v2\x17.google.protobuf.StructR\n" +
+	"parameters\x12\x12\n" +
+	"\x04mode\x18\x05 \x01(\tR\x04mode\x12\x19\n" +
+	"\bmin_rows\x18\x06 \x01(\x05R\aminRows\x12\x19\n" +
+	"\bmax_rows\x18\a \x01(\x05R\amaxRows\"i\n" +
+	"\x11DatabaseAssertion\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
+	"\x03sql\x18\x02 \x01(\tR\x03sql\x12.\n" +
+	"\x06expect\x18\x03 \x01(\v2\x16.google.protobuf.ValueR\x06expect\"\xed\x05\n" +
 	"\x12EnvironmentService\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12\x18\n" +
@@ -2781,8 +3631,24 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"depends_on\x18\x06 \x03(\tR\tdependsOn\x12\x1b\n" +
 	"\tmemory_mb\x18\a \x01(\x05R\bmemoryMb\x12\x1d\n" +
 	"\n" +
-	"cpu_millis\x18\b \x01(\x05R\tcpuMillis\x1a6\n" +
+	"cpu_millis\x18\b \x01(\x05R\tcpuMillis\x12\x14\n" +
+	"\x05ports\x18\t \x03(\x05R\x05ports\x12#\n" +
+	"\rready_command\x18\n" +
+	" \x03(\tR\freadyCommand\x12\x18\n" +
+	"\aaliases\x18\v \x03(\tR\aaliases\x12D\n" +
+	"\x05files\x18\f \x03(\v2..evalsi.v1alpha1.EnvironmentService.FilesEntryR\x05files\x12\x14\n" +
+	"\x05setup\x18\r \x03(\tR\x05setup\x12#\n" +
+	"\rsetup_network\x18\x0e \x01(\tR\fsetupNetwork\x12\x18\n" +
+	"\aoneshot\x18\x0f \x01(\bR\aoneshot\x12#\n" +
+	"\rworkdir_mount\x18\x10 \x01(\tR\fworkdirMount\x12\x18\n" +
+	"\avolumes\x18\x11 \x03(\tR\avolumes\x12\x18\n" +
+	"\aworkdir\x18\x12 \x01(\tR\aworkdir\x12)\n" +
+	"\x10image_entrypoint\x18\x13 \x01(\bR\x0fimageEntrypoint\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a8\n" +
+	"\n" +
+	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\xc7\x01\n" +
 	"\x13com.evalsi.v1alpha1B\n" +
@@ -2800,7 +3666,7 @@ func file_evalsi_v1alpha1_agent_proto_rawDescGZIP() []byte {
 	return file_evalsi_v1alpha1_agent_proto_rawDescData
 }
 
-var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_evalsi_v1alpha1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	(*AgentTarget)(nil),         // 0: evalsi.v1alpha1.AgentTarget
 	(*A2AAgent)(nil),            // 1: evalsi.v1alpha1.A2AAgent
@@ -2808,40 +3674,52 @@ var file_evalsi_v1alpha1_agent_proto_goTypes = []any{
 	(*ResponsesAgent)(nil),      // 3: evalsi.v1alpha1.ResponsesAgent
 	(*HTTPAgent)(nil),           // 4: evalsi.v1alpha1.HTTPAgent
 	(*CLIAgent)(nil),            // 5: evalsi.v1alpha1.CLIAgent
-	(*Harness)(nil),             // 6: evalsi.v1alpha1.Harness
-	(*AgentBudget)(nil),         // 7: evalsi.v1alpha1.AgentBudget
-	(*Pricing)(nil),             // 8: evalsi.v1alpha1.Pricing
-	(*MCPServer)(nil),           // 9: evalsi.v1alpha1.MCPServer
-	(*MCPOAuth)(nil),            // 10: evalsi.v1alpha1.MCPOAuth
-	(*MockTool)(nil),            // 11: evalsi.v1alpha1.MockTool
-	(*ToolFault)(nil),           // 12: evalsi.v1alpha1.ToolFault
-	(*Tools)(nil),               // 13: evalsi.v1alpha1.Tools
-	(*UserSimulator)(nil),       // 14: evalsi.v1alpha1.UserSimulator
-	(*Recording)(nil),           // 15: evalsi.v1alpha1.Recording
-	(*EscalationPolicy)(nil),    // 16: evalsi.v1alpha1.EscalationPolicy
-	(*BuiltinHarness)(nil),      // 17: evalsi.v1alpha1.BuiltinHarness
-	(*Interjection)(nil),        // 18: evalsi.v1alpha1.Interjection
-	(*Hook)(nil),                // 19: evalsi.v1alpha1.Hook
-	(*ContextManagement)(nil),   // 20: evalsi.v1alpha1.ContextManagement
-	(*ExternalHarness)(nil),     // 21: evalsi.v1alpha1.ExternalHarness
-	(*CommandHarness)(nil),      // 22: evalsi.v1alpha1.CommandHarness
-	(*SandboxPolicy)(nil),       // 23: evalsi.v1alpha1.SandboxPolicy
-	(*Checker)(nil),             // 24: evalsi.v1alpha1.Checker
-	(*Environment)(nil),         // 25: evalsi.v1alpha1.Environment
-	(*EnvironmentService)(nil),  // 26: evalsi.v1alpha1.EnvironmentService
-	nil,                         // 27: evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
-	nil,                         // 28: evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
-	nil,                         // 29: evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
-	nil,                         // 30: evalsi.v1alpha1.CLIAgent.EnvFromEntry
-	nil,                         // 31: evalsi.v1alpha1.MCPServer.HeadersEnvEntry
-	nil,                         // 32: evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
-	nil,                         // 33: evalsi.v1alpha1.MockTool.ResponsesEntry
-	nil,                         // 34: evalsi.v1alpha1.Checker.FilesEntry
-	nil,                         // 35: evalsi.v1alpha1.Environment.FilesEntry
-	nil,                         // 36: evalsi.v1alpha1.Environment.EnvEntry
-	nil,                         // 37: evalsi.v1alpha1.EnvironmentService.EnvEntry
-	(*durationpb.Duration)(nil), // 38: google.protobuf.Duration
-	(*structpb.Struct)(nil),     // 39: google.protobuf.Struct
+	(*ACPAgent)(nil),            // 6: evalsi.v1alpha1.ACPAgent
+	(*Harness)(nil),             // 7: evalsi.v1alpha1.Harness
+	(*AgentBudget)(nil),         // 8: evalsi.v1alpha1.AgentBudget
+	(*Pricing)(nil),             // 9: evalsi.v1alpha1.Pricing
+	(*MCPServer)(nil),           // 10: evalsi.v1alpha1.MCPServer
+	(*MCPOAuth)(nil),            // 11: evalsi.v1alpha1.MCPOAuth
+	(*MockTool)(nil),            // 12: evalsi.v1alpha1.MockTool
+	(*ToolFault)(nil),           // 13: evalsi.v1alpha1.ToolFault
+	(*Tools)(nil),               // 14: evalsi.v1alpha1.Tools
+	(*UserSimulator)(nil),       // 15: evalsi.v1alpha1.UserSimulator
+	(*Recording)(nil),           // 16: evalsi.v1alpha1.Recording
+	(*EscalationPolicy)(nil),    // 17: evalsi.v1alpha1.EscalationPolicy
+	(*BuiltinHarness)(nil),      // 18: evalsi.v1alpha1.BuiltinHarness
+	(*Interjection)(nil),        // 19: evalsi.v1alpha1.Interjection
+	(*Hook)(nil),                // 20: evalsi.v1alpha1.Hook
+	(*ContextManagement)(nil),   // 21: evalsi.v1alpha1.ContextManagement
+	(*ExternalHarness)(nil),     // 22: evalsi.v1alpha1.ExternalHarness
+	(*CommandHarness)(nil),      // 23: evalsi.v1alpha1.CommandHarness
+	(*SandboxPolicy)(nil),       // 24: evalsi.v1alpha1.SandboxPolicy
+	(*Checker)(nil),             // 25: evalsi.v1alpha1.Checker
+	(*Environment)(nil),         // 26: evalsi.v1alpha1.Environment
+	(*BuildStage)(nil),          // 27: evalsi.v1alpha1.BuildStage
+	(*StageCopy)(nil),           // 28: evalsi.v1alpha1.StageCopy
+	(*DatabaseEnvironment)(nil), // 29: evalsi.v1alpha1.DatabaseEnvironment
+	(*DatabaseTool)(nil),        // 30: evalsi.v1alpha1.DatabaseTool
+	(*DatabaseAssertion)(nil),   // 31: evalsi.v1alpha1.DatabaseAssertion
+	(*EnvironmentService)(nil),  // 32: evalsi.v1alpha1.EnvironmentService
+	nil,                         // 33: evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
+	nil,                         // 34: evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
+	nil,                         // 35: evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
+	nil,                         // 36: evalsi.v1alpha1.CLIAgent.EnvFromEntry
+	nil,                         // 37: evalsi.v1alpha1.ACPAgent.EnvFromEntry
+	nil,                         // 38: evalsi.v1alpha1.MCPServer.HeadersEnvEntry
+	nil,                         // 39: evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
+	nil,                         // 40: evalsi.v1alpha1.MockTool.ResponsesEntry
+	nil,                         // 41: evalsi.v1alpha1.BuiltinHarness.ModelPricingEntry
+	nil,                         // 42: evalsi.v1alpha1.Checker.FilesEntry
+	nil,                         // 43: evalsi.v1alpha1.Environment.FilesEntry
+	nil,                         // 44: evalsi.v1alpha1.Environment.EnvEntry
+	nil,                         // 45: evalsi.v1alpha1.BuildStage.FilesEntry
+	nil,                         // 46: evalsi.v1alpha1.BuildStage.EnvEntry
+	nil,                         // 47: evalsi.v1alpha1.EnvironmentService.EnvEntry
+	nil,                         // 48: evalsi.v1alpha1.EnvironmentService.FilesEntry
+	(*durationpb.Duration)(nil), // 49: google.protobuf.Duration
+	(*structpb.Struct)(nil),     // 50: google.protobuf.Struct
+	(*structpb.Value)(nil),      // 51: google.protobuf.Value
 }
 var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	1,  // 0: evalsi.v1alpha1.AgentTarget.a2a:type_name -> evalsi.v1alpha1.A2AAgent
@@ -2849,54 +3727,71 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	3,  // 2: evalsi.v1alpha1.AgentTarget.responses:type_name -> evalsi.v1alpha1.ResponsesAgent
 	4,  // 3: evalsi.v1alpha1.AgentTarget.http:type_name -> evalsi.v1alpha1.HTTPAgent
 	5,  // 4: evalsi.v1alpha1.AgentTarget.cli:type_name -> evalsi.v1alpha1.CLIAgent
-	27, // 5: evalsi.v1alpha1.A2AAgent.headers_env:type_name -> evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
-	38, // 6: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
-	28, // 7: evalsi.v1alpha1.MCPAgent.headers_env:type_name -> evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
-	38, // 8: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
-	38, // 9: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
-	29, // 10: evalsi.v1alpha1.HTTPAgent.headers_env:type_name -> evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
-	38, // 11: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
-	30, // 12: evalsi.v1alpha1.CLIAgent.env_from:type_name -> evalsi.v1alpha1.CLIAgent.EnvFromEntry
-	38, // 13: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
-	17, // 14: evalsi.v1alpha1.Harness.builtin:type_name -> evalsi.v1alpha1.BuiltinHarness
-	21, // 15: evalsi.v1alpha1.Harness.external:type_name -> evalsi.v1alpha1.ExternalHarness
-	38, // 16: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
-	31, // 17: evalsi.v1alpha1.MCPServer.headers_env:type_name -> evalsi.v1alpha1.MCPServer.HeadersEnvEntry
-	32, // 18: evalsi.v1alpha1.MCPServer.tool_timeout_s:type_name -> evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
-	10, // 19: evalsi.v1alpha1.MCPServer.oauth:type_name -> evalsi.v1alpha1.MCPOAuth
-	39, // 20: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
-	33, // 21: evalsi.v1alpha1.MockTool.responses:type_name -> evalsi.v1alpha1.MockTool.ResponsesEntry
-	9,  // 22: evalsi.v1alpha1.Tools.mcp:type_name -> evalsi.v1alpha1.MCPServer
-	11, // 23: evalsi.v1alpha1.Tools.mocks:type_name -> evalsi.v1alpha1.MockTool
-	12, // 24: evalsi.v1alpha1.Tools.faults:type_name -> evalsi.v1alpha1.ToolFault
-	7,  // 25: evalsi.v1alpha1.BuiltinHarness.budget:type_name -> evalsi.v1alpha1.AgentBudget
-	8,  // 26: evalsi.v1alpha1.BuiltinHarness.pricing:type_name -> evalsi.v1alpha1.Pricing
-	13, // 27: evalsi.v1alpha1.BuiltinHarness.tools:type_name -> evalsi.v1alpha1.Tools
-	14, // 28: evalsi.v1alpha1.BuiltinHarness.user_simulator:type_name -> evalsi.v1alpha1.UserSimulator
-	15, // 29: evalsi.v1alpha1.BuiltinHarness.recording:type_name -> evalsi.v1alpha1.Recording
-	16, // 30: evalsi.v1alpha1.BuiltinHarness.escalation:type_name -> evalsi.v1alpha1.EscalationPolicy
-	20, // 31: evalsi.v1alpha1.BuiltinHarness.context:type_name -> evalsi.v1alpha1.ContextManagement
-	19, // 32: evalsi.v1alpha1.BuiltinHarness.hooks:type_name -> evalsi.v1alpha1.Hook
-	18, // 33: evalsi.v1alpha1.BuiltinHarness.interjections:type_name -> evalsi.v1alpha1.Interjection
-	39, // 34: evalsi.v1alpha1.Hook.config:type_name -> google.protobuf.Struct
-	22, // 35: evalsi.v1alpha1.ExternalHarness.command:type_name -> evalsi.v1alpha1.CommandHarness
-	39, // 36: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
-	34, // 37: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
-	38, // 38: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
-	35, // 39: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
-	38, // 40: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
-	23, // 41: evalsi.v1alpha1.Environment.sandbox:type_name -> evalsi.v1alpha1.SandboxPolicy
-	24, // 42: evalsi.v1alpha1.Environment.checker:type_name -> evalsi.v1alpha1.Checker
-	36, // 43: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
-	38, // 44: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
-	26, // 45: evalsi.v1alpha1.Environment.services:type_name -> evalsi.v1alpha1.EnvironmentService
-	38, // 46: evalsi.v1alpha1.Environment.service_lifetime:type_name -> google.protobuf.Duration
-	37, // 47: evalsi.v1alpha1.EnvironmentService.env:type_name -> evalsi.v1alpha1.EnvironmentService.EnvEntry
-	48, // [48:48] is the sub-list for method output_type
-	48, // [48:48] is the sub-list for method input_type
-	48, // [48:48] is the sub-list for extension type_name
-	48, // [48:48] is the sub-list for extension extendee
-	0,  // [0:48] is the sub-list for field type_name
+	6,  // 5: evalsi.v1alpha1.AgentTarget.acp:type_name -> evalsi.v1alpha1.ACPAgent
+	33, // 6: evalsi.v1alpha1.A2AAgent.headers_env:type_name -> evalsi.v1alpha1.A2AAgent.HeadersEnvEntry
+	49, // 7: evalsi.v1alpha1.A2AAgent.timeout:type_name -> google.protobuf.Duration
+	34, // 8: evalsi.v1alpha1.MCPAgent.headers_env:type_name -> evalsi.v1alpha1.MCPAgent.HeadersEnvEntry
+	49, // 9: evalsi.v1alpha1.MCPAgent.timeout:type_name -> google.protobuf.Duration
+	49, // 10: evalsi.v1alpha1.ResponsesAgent.timeout:type_name -> google.protobuf.Duration
+	35, // 11: evalsi.v1alpha1.HTTPAgent.headers_env:type_name -> evalsi.v1alpha1.HTTPAgent.HeadersEnvEntry
+	49, // 12: evalsi.v1alpha1.HTTPAgent.timeout:type_name -> google.protobuf.Duration
+	36, // 13: evalsi.v1alpha1.CLIAgent.env_from:type_name -> evalsi.v1alpha1.CLIAgent.EnvFromEntry
+	49, // 14: evalsi.v1alpha1.CLIAgent.timeout:type_name -> google.protobuf.Duration
+	37, // 15: evalsi.v1alpha1.ACPAgent.env_from:type_name -> evalsi.v1alpha1.ACPAgent.EnvFromEntry
+	49, // 16: evalsi.v1alpha1.ACPAgent.timeout:type_name -> google.protobuf.Duration
+	50, // 17: evalsi.v1alpha1.ACPAgent.approval:type_name -> google.protobuf.Struct
+	18, // 18: evalsi.v1alpha1.Harness.builtin:type_name -> evalsi.v1alpha1.BuiltinHarness
+	22, // 19: evalsi.v1alpha1.Harness.external:type_name -> evalsi.v1alpha1.ExternalHarness
+	49, // 20: evalsi.v1alpha1.AgentBudget.wall_clock:type_name -> google.protobuf.Duration
+	38, // 21: evalsi.v1alpha1.MCPServer.headers_env:type_name -> evalsi.v1alpha1.MCPServer.HeadersEnvEntry
+	39, // 22: evalsi.v1alpha1.MCPServer.tool_timeout_s:type_name -> evalsi.v1alpha1.MCPServer.ToolTimeoutSEntry
+	11, // 23: evalsi.v1alpha1.MCPServer.oauth:type_name -> evalsi.v1alpha1.MCPOAuth
+	50, // 24: evalsi.v1alpha1.MockTool.input_schema:type_name -> google.protobuf.Struct
+	40, // 25: evalsi.v1alpha1.MockTool.responses:type_name -> evalsi.v1alpha1.MockTool.ResponsesEntry
+	10, // 26: evalsi.v1alpha1.Tools.mcp:type_name -> evalsi.v1alpha1.MCPServer
+	12, // 27: evalsi.v1alpha1.Tools.mocks:type_name -> evalsi.v1alpha1.MockTool
+	13, // 28: evalsi.v1alpha1.Tools.faults:type_name -> evalsi.v1alpha1.ToolFault
+	8,  // 29: evalsi.v1alpha1.BuiltinHarness.budget:type_name -> evalsi.v1alpha1.AgentBudget
+	9,  // 30: evalsi.v1alpha1.BuiltinHarness.pricing:type_name -> evalsi.v1alpha1.Pricing
+	14, // 31: evalsi.v1alpha1.BuiltinHarness.tools:type_name -> evalsi.v1alpha1.Tools
+	15, // 32: evalsi.v1alpha1.BuiltinHarness.user_simulator:type_name -> evalsi.v1alpha1.UserSimulator
+	16, // 33: evalsi.v1alpha1.BuiltinHarness.recording:type_name -> evalsi.v1alpha1.Recording
+	17, // 34: evalsi.v1alpha1.BuiltinHarness.escalation:type_name -> evalsi.v1alpha1.EscalationPolicy
+	21, // 35: evalsi.v1alpha1.BuiltinHarness.context:type_name -> evalsi.v1alpha1.ContextManagement
+	20, // 36: evalsi.v1alpha1.BuiltinHarness.hooks:type_name -> evalsi.v1alpha1.Hook
+	19, // 37: evalsi.v1alpha1.BuiltinHarness.interjections:type_name -> evalsi.v1alpha1.Interjection
+	41, // 38: evalsi.v1alpha1.BuiltinHarness.model_pricing:type_name -> evalsi.v1alpha1.BuiltinHarness.ModelPricingEntry
+	50, // 39: evalsi.v1alpha1.Hook.config:type_name -> google.protobuf.Struct
+	23, // 40: evalsi.v1alpha1.ExternalHarness.command:type_name -> evalsi.v1alpha1.CommandHarness
+	50, // 41: evalsi.v1alpha1.ExternalHarness.config:type_name -> google.protobuf.Struct
+	42, // 42: evalsi.v1alpha1.Checker.files:type_name -> evalsi.v1alpha1.Checker.FilesEntry
+	49, // 43: evalsi.v1alpha1.Checker.timeout:type_name -> google.protobuf.Duration
+	43, // 44: evalsi.v1alpha1.Environment.files:type_name -> evalsi.v1alpha1.Environment.FilesEntry
+	49, // 45: evalsi.v1alpha1.Environment.setup_timeout:type_name -> google.protobuf.Duration
+	24, // 46: evalsi.v1alpha1.Environment.sandbox:type_name -> evalsi.v1alpha1.SandboxPolicy
+	25, // 47: evalsi.v1alpha1.Environment.checker:type_name -> evalsi.v1alpha1.Checker
+	44, // 48: evalsi.v1alpha1.Environment.env:type_name -> evalsi.v1alpha1.Environment.EnvEntry
+	49, // 49: evalsi.v1alpha1.Environment.command_timeout:type_name -> google.protobuf.Duration
+	32, // 50: evalsi.v1alpha1.Environment.services:type_name -> evalsi.v1alpha1.EnvironmentService
+	49, // 51: evalsi.v1alpha1.Environment.service_lifetime:type_name -> google.protobuf.Duration
+	27, // 52: evalsi.v1alpha1.Environment.stages:type_name -> evalsi.v1alpha1.BuildStage
+	28, // 53: evalsi.v1alpha1.Environment.copy_from:type_name -> evalsi.v1alpha1.StageCopy
+	29, // 54: evalsi.v1alpha1.Environment.database:type_name -> evalsi.v1alpha1.DatabaseEnvironment
+	45, // 55: evalsi.v1alpha1.BuildStage.files:type_name -> evalsi.v1alpha1.BuildStage.FilesEntry
+	46, // 56: evalsi.v1alpha1.BuildStage.env:type_name -> evalsi.v1alpha1.BuildStage.EnvEntry
+	28, // 57: evalsi.v1alpha1.BuildStage.copy_from:type_name -> evalsi.v1alpha1.StageCopy
+	30, // 58: evalsi.v1alpha1.DatabaseEnvironment.tools:type_name -> evalsi.v1alpha1.DatabaseTool
+	31, // 59: evalsi.v1alpha1.DatabaseEnvironment.assertions:type_name -> evalsi.v1alpha1.DatabaseAssertion
+	50, // 60: evalsi.v1alpha1.DatabaseTool.parameters:type_name -> google.protobuf.Struct
+	51, // 61: evalsi.v1alpha1.DatabaseAssertion.expect:type_name -> google.protobuf.Value
+	47, // 62: evalsi.v1alpha1.EnvironmentService.env:type_name -> evalsi.v1alpha1.EnvironmentService.EnvEntry
+	48, // 63: evalsi.v1alpha1.EnvironmentService.files:type_name -> evalsi.v1alpha1.EnvironmentService.FilesEntry
+	9,  // 64: evalsi.v1alpha1.BuiltinHarness.ModelPricingEntry.value:type_name -> evalsi.v1alpha1.Pricing
+	65, // [65:65] is the sub-list for method output_type
+	65, // [65:65] is the sub-list for method input_type
+	65, // [65:65] is the sub-list for extension type_name
+	65, // [65:65] is the sub-list for extension extendee
+	0,  // [0:65] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_agent_proto_init() }
@@ -2910,14 +3805,15 @@ func file_evalsi_v1alpha1_agent_proto_init() {
 		(*AgentTarget_Responses)(nil),
 		(*AgentTarget_Http)(nil),
 		(*AgentTarget_Cli)(nil),
+		(*AgentTarget_Acp)(nil),
 	}
-	file_evalsi_v1alpha1_agent_proto_msgTypes[6].OneofWrappers = []any{
+	file_evalsi_v1alpha1_agent_proto_msgTypes[7].OneofWrappers = []any{
 		(*Harness_Builtin)(nil),
 		(*Harness_External)(nil),
 	}
-	file_evalsi_v1alpha1_agent_proto_msgTypes[13].OneofWrappers = []any{}
-	file_evalsi_v1alpha1_agent_proto_msgTypes[17].OneofWrappers = []any{}
-	file_evalsi_v1alpha1_agent_proto_msgTypes[21].OneofWrappers = []any{
+	file_evalsi_v1alpha1_agent_proto_msgTypes[14].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_agent_proto_msgTypes[18].OneofWrappers = []any{}
+	file_evalsi_v1alpha1_agent_proto_msgTypes[22].OneofWrappers = []any{
 		(*ExternalHarness_Address)(nil),
 		(*ExternalHarness_Command)(nil),
 		(*ExternalHarness_Python)(nil),
@@ -2928,7 +3824,7 @@ func file_evalsi_v1alpha1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_evalsi_v1alpha1_agent_proto_rawDesc), len(file_evalsi_v1alpha1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   38,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

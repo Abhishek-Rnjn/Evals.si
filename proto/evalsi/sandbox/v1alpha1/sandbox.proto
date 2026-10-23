@@ -29,6 +29,15 @@ service SandboxService {
   rpc Restore(RestoreRequest) returns (RestoreResponse);
   // Resource use and the egress log, which safety evaluators use as evidence.
   rpc Stats(StatsRequest) returns (StatsResponse);
+  // Background processes: a command that outlives the call that started it,
+  // in the same sandbox and under the same confinement and limits as Exec.
+  // Output is kept in bounded buffers and read by offset. They are killed
+  // when the sandbox is destroyed.
+  rpc StartProcess(StartProcessRequest) returns (StartProcessResponse);
+  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+  rpc ReadProcess(ReadProcessRequest) returns (ReadProcessResponse);
+  rpc WriteProcess(WriteProcessRequest) returns (WriteProcessResponse);
+  rpc KillProcess(KillProcessRequest) returns (KillProcessResponse);
   rpc Destroy(DestroyRequest) returns (DestroyResponse);
   rpc DeleteSnapshot(DeleteSnapshotRequest) returns (DeleteSnapshotResponse);
 }
@@ -100,6 +109,9 @@ message SandboxSpec {
   bool read_only_root = 10;
   repeated evalsi.v1alpha1.EnvironmentService services = 11;
   google.protobuf.Duration service_lifetime = 12;
+  // Bubblewrap services only: named volumes of this sandbox shared with the
+  // services that name them, "name:/path" or "name:/path:ro".
+  repeated string volumes = 13;
 }
 
 message CreateRequest {
@@ -249,3 +261,88 @@ message DeleteSnapshotRequest {
 }
 
 message DeleteSnapshotResponse {}
+
+message StartProcessRequest {
+  string sandbox_id = 1;
+  repeated string command = 2;
+  map<string, string> env = 3;
+  // Relative to the workdir; default: the workdir.
+  string cwd = 4;
+  // Wall-clock limit; default one hour, at most 24.
+  google.protobuf.Duration timeout = 5;
+  // Bytes of each output stream kept (the newest); default 1 MiB, at most 16.
+  int32 buffer_bytes = 6;
+  // Keep stdin open for WriteProcess; otherwise the process reads EOF.
+  bool stdin = 7;
+}
+
+message ProcessInfo {
+  string process_id = 1;
+  repeated string command = 2;
+  google.protobuf.Timestamp started = 3;
+  bool running = 4;
+  // Ended because it was killed (KillProcess or the sandbox's end).
+  bool killed = 5;
+  // Set once it has ended.
+  ExecResult result = 6;
+  // Bytes each stream has produced so far, kept or not.
+  int64 stdout_bytes = 7;
+  int64 stderr_bytes = 8;
+}
+
+message StartProcessResponse {
+  ProcessInfo process = 1;
+}
+
+message ListProcessesRequest {
+  string sandbox_id = 1;
+}
+
+message ListProcessesResponse {
+  repeated ProcessInfo processes = 1;
+}
+
+message ReadProcessRequest {
+  string sandbox_id = 1;
+  string process_id = 2;
+  // Where the last read stopped (0 at first).
+  int64 stdout_offset = 3;
+  int64 stderr_offset = 4;
+  // At most this many bytes per stream; default: the buffer size.
+  int32 max_bytes = 5;
+  // Block until there is output past the offsets or the process ends, up to
+  // this long (at most 30 seconds).
+  google.protobuf.Duration wait = 6;
+}
+
+message ReadProcessResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  // Pass these to the next read.
+  int64 stdout_offset = 3;
+  int64 stderr_offset = 4;
+  // Bytes the buffer dropped between the requested offset and the oldest
+  // byte it still has.
+  int64 stdout_dropped = 5;
+  int64 stderr_dropped = 6;
+  ProcessInfo process = 7;
+}
+
+message WriteProcessRequest {
+  string sandbox_id = 1;
+  string process_id = 2;
+  bytes data = 3;
+  // Close stdin after writing (the process then reads EOF).
+  bool close = 4;
+}
+
+message WriteProcessResponse {}
+
+message KillProcessRequest {
+  string sandbox_id = 1;
+  string process_id = 2;
+}
+
+message KillProcessResponse {
+  ProcessInfo process = 1;
+}

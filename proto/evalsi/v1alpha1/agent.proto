@@ -21,6 +21,7 @@ message AgentTarget {
     ResponsesAgent responses = 3;
     HTTPAgent http = 4;
     CLIAgent cli = 5;
+    ACPAgent acp = 6;
   }
 }
 
@@ -40,6 +41,19 @@ message A2AAgent {
   // are POST {url}/v1/message:send, POST {url}/v1/message:stream and
   // GET {url}/v1/tasks/{id}.
   string binding = 5;
+  // Ask the agent to push task updates to a webhook the harness runs, with
+  // pushNotificationConfig on the request, instead of holding a stream open
+  // or polling. Each task state the agent pushes becomes a step. The agent's
+  // card must declare pushNotifications; if no update arrives within the
+  // timeout, the harness falls back to polling (tasks/get). Used instead of
+  // stream when both are set.
+  bool push_notifications = 6;
+  // The base URL the agent reaches the harness's receiver at. Default
+  // http://127.0.0.1:<port>, which only suits an agent on the worker's host.
+  string push_url = 7;
+  // The local port the receiver binds (on all interfaces when push_url is
+  // set, loopback otherwise); 0 picks a free one.
+  int32 push_port = 8;
 }
 
 // An agent exposed as a tool on an MCP server (streamable HTTP).
@@ -126,6 +140,44 @@ message CLIAgent {
   // --json`), "gemini-json" (`gemini --output-format stream-json`) or
   // "pi-json" (`pi --mode json`).
   string output_format = 6;
+  // How spec.harness.builtin.interjections reach this agent. The command runs
+  // to completion, so an interjection is due once the run it watched shows its
+  // trigger (its step count, a matching tool call or file write, or the exit,
+  // which is a stop attempt). It is then delivered by running this command
+  // in the sandbox, with {message} replaced by the interjection and {session}
+  // by the session id the output reader found (for example
+  // ["claude", "-p", "--resume", "{session}", "{message}"]), and the new run's
+  // steps join the trajectory. Without it, due interjections are recorded as
+  // undeliverable steps.
+  repeated string resume_command = 7;
+}
+
+// An agent that speaks the Agent Client Protocol (ACP, protocol version 1):
+// JSON-RPC over the stdio of a command run inside the task's sandbox, in its
+// workdir. The harness is the client: it creates a session, sends the
+// instruction as a prompt, turns session/update notifications into steps, and
+// serves the agent's requests (file reads and writes in the sandbox,
+// terminals, permission requests). Permission requests are decided by
+// approval, with the semantics of the built-in ApprovalGate hook, and
+// recorded as hitl_request and hitl_resolved steps and policy events.
+message ACPAgent {
+  repeated string command = 1;
+  // Commands run once in the environment before the agent (installing it).
+  repeated string install = 2;
+  // Variable in the sandbox -> variable on the worker it is copied from.
+  map<string, string> env_from = 3;
+  // Hosts the agent may reach (its model API), through the egress proxy.
+  repeated string allow_hosts = 4;
+  // For the whole conversation; default 10 minutes.
+  google.protobuf.Duration timeout = 5;
+  // Answers permission requests, in the shape of the ApprovalGate hook's
+  // config: rules (tool, path, command globs and an action of allow, ask or
+  // deny) and an approver script with a default. A request no rule matches
+  // is allowed; an "ask" goes to the approver, whose default is deny.
+  google.protobuf.Struct approval = 6;
+  // Offer the agent terminal/* (commands the agent runs through the
+  // harness, as background processes in the sandbox). Off by default.
+  bool terminals = 7;
 }
 
 // Harness drives the agent through a task.
@@ -309,13 +361,27 @@ message BuiltinHarness {
   // agent's at_step-th call (or when the agent tries to finish with one still
   // due), recorded as a "user-interjection" step. Built-in agent only.
   repeated Interjection interjections = 14;
+  // Prices by model name, for models other than the run's main one (a
+  // compaction or sub-agent model, a fallback). A model not listed is priced
+  // at `pricing`.
+  map<string, Pricing> model_pricing = 15;
 }
 
 // A scripted message from the simulated user, mid-run.
 message Interjection {
   // Delivered once the agent has made this many model calls (at least 1).
+  // With an event, the earliest step it may fire at (0: any).
   int32 at_step = 1;
   string message = 2;
+  // Deliver on an event (so named because on is a boolean in YAML 1.1) instead
+  // of a step count: "tool_call" (after a tool
+  // call whose name matches the glob match, and whose JSON arguments match the
+  // regular expression pattern when it is set), "file_write" (after a tool
+  // call that writes a path matching the glob match: write_file, edit_file,
+  // apply_patch) or "stop" (the first time the agent tries to finish).
+  string event = 3;
+  string match = 4;
+  string pattern = 5;
 }
 
 // A Python class "module:Class" with any of before_model, before_tool,
@@ -420,12 +486,20 @@ message Checker {
   string on_change = 6;
   // Where the checker runs: "shared" (default) in the sandbox the agent used;
   // "clean" in a fresh sandbox of the same environment that receives only the
-  // files under outputs. The agent's other changes (installed packages, shims,
-  // edited tests) never reach the checker.
+  // files under outputs; "diff" in a fresh sandbox that receives the agent's
+  // diff of the workdir against the setup state (git when the workdir is a
+  // repository, file by file otherwise), less the paths under protect, the
+  // checker's files and exclude, which are recorded as rejected. With either,
+  // the agent's other changes (installed packages, shims, edited tests) never
+  // reach the checker.
   string isolation = 7;
   // With isolation "clean": glob patterns, relative to the workdir, of the
   // agent's declared outputs, the only files copied into the clean sandbox.
+  // With "diff", optional: only changes under these patterns are applied.
   repeated string outputs = 8;
+  // With isolation "diff": glob patterns, relative to the workdir, whose
+  // changes are never applied (besides protect and the checker's files).
+  repeated string exclude = 9;
 }
 
 // Environment is where a task runs. Spec-level values apply to every record;
@@ -447,26 +521,142 @@ message Environment {
   map<string, string> env = 9;
   // Per-command timeout for the agent's sandbox commands; default 120s.
   google.protobuf.Duration command_timeout = 10;
-  // Pod backend only. Private, per-trial services; no shared persistent data.
+  // The pod and bubblewrap backends. Private, per-trial services; no shared
+  // persistent data.
   repeated EnvironmentService services = 11;
   // Required with services, from 1s to 24h. Bounds orphaned service execution.
   google.protobuf.Duration service_lifetime = 12;
+  // Earlier build stages (a multi-stage Dockerfile): each is built in its own
+  // sandbox from its image, files and setup, and copy_from takes files out of
+  // it into this environment before setup. The stages are not kept.
+  repeated BuildStage stages = 13;
+  repeated StageCopy copy_from = 14;
+  // A database-backed tool environment: a SQLite database the harness builds
+  // per trial, named SQL tools the agent calls, and assertions over the final
+  // state that grade it. See DatabaseEnvironment.
+  DatabaseEnvironment database = 15;
+  // Bubblewrap services only: named volumes of the agent's sandbox, shared
+  // with the services that name them, as "name:/path" or "name:/path:ro".
+  repeated string volumes = 16;
 }
 
-// EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+).
+// BuildStage is one earlier stage of a multi-stage build.
+message BuildStage {
+  string name = 1;
+  // Required: stages run in their own sandbox with this root.
+  string image = 2;
+  // Absolute paths in the stage's root, placed before setup.
+  map<string, string> files = 3;
+  // Run in order with the environment's setup network.
+  repeated string setup = 4;
+  map<string, string> env = 5;
+  // Files taken from earlier stages into this one before its setup. Stages are
+  // listed so that each comes after the stages it copies from.
+  repeated StageCopy copy_from = 6;
+}
+
+// StageCopy takes a file or directory out of a build stage (COPY --from).
+message StageCopy {
+  string stage = 1;
+  // An absolute path in the stage.
+  string source = 2;
+  // An absolute path in this environment, or relative to its workdir. A
+  // directory source is copied into it; a file lands at it, or inside it when
+  // it ends with "/".
+  string destination = 3;
+}
+
+// DatabaseEnvironment is a domain-neutral stateful tool environment in the
+// style of tau-bench: the harness holds a SQLite database per trial (not in
+// the sandbox), exposes each tool as one parameterized SQL statement, records
+// every write, and grades the final state with SQL assertions.
+message DatabaseEnvironment {
+  // SQL statements run on an empty database (CREATE TABLE ...).
+  string schema = 1;
+  // SQL statements run after the schema (INSERT ...).
+  string seed = 2;
+  repeated DatabaseTool tools = 3;
+  // All must hold for the task to pass; each is a test in the check.
+  repeated DatabaseAssertion assertions = 4;
+}
+
+// DatabaseTool is one SQL statement offered to the agent as a tool.
+message DatabaseTool {
+  string name = 1;
+  string description = 2;
+  // One statement with named parameters (:name), bound from the arguments.
+  string sql = 3;
+  // JSON Schema of the arguments (an object whose properties are the
+  // parameters). Arguments are checked against it before the statement runs.
+  google.protobuf.Struct parameters = 4;
+  // "read" (default: the statement may not change the database; it returns
+  // rows) or "write" (it returns the number of rows changed, and is recorded).
+  string mode = 5;
+  // write: fail the call, changing nothing, unless it changes at least this
+  // many rows and, when max_rows is set, at most max_rows.
+  int32 min_rows = 6;
+  int32 max_rows = 7;
+}
+
+// DatabaseAssertion is a query over the final database and the rows it must return.
+message DatabaseAssertion {
+  string name = 1;
+  // A read-only query.
+  string sql = 2;
+  // The rows it must return, as a list of rows (each a list of values), or one
+  // value when the query returns one row of one column.
+  google.protobuf.Value expect = 3;
+}
+
+// EnvironmentService is a native Kubernetes sidecar (Kubernetes 1.29+) on the
+// pod backend, or a process group in its own bubblewrap sandbox.
 // Services share the trial's network, but not its filesystem or credentials.
 message EnvironmentService {
   // DNS label, also a loopback hostname inside this trial.
   string name = 1;
   string image = 2;
-  // Explicit argv; image entrypoints are not implicitly executed.
+  // Explicit argv; image entrypoints are not implicitly executed (see
+  // image_entrypoint).
   repeated string command = 3;
   map<string, string> env = 4;
-  // TCP readiness port, unique within the trial; 7070 is reserved.
+  // TCP readiness port, unique within the trial; 7070 is reserved. The pod
+  // backend needs one (1024 or above). On bubblewrap it is optional: without
+  // a port or ready_command a service is ready once it has stayed up a second.
   int32 port = 5;
   // Services that must be ready first. Cycles are invalid.
   repeated string depends_on = 6;
-  // Required limits; CPU in millicores, memory in MiB.
+  // Required limits; CPU in millicores, memory in MiB. On the bubblewrap
+  // backend memory is an rlimit and CPU is not enforced.
   int32 memory_mb = 7;
   int32 cpu_millis = 8;
+  // More ports the service listens on, reachable by its name like port.
+  repeated int32 ports = 9;
+  // A readiness check run in the service (exit 0: ready) instead of the TCP
+  // check of port.
+  repeated string ready_command = 10;
+  // More host names for the service (Compose container_name, hostname, links).
+  repeated string aliases = 11;
+  // Files written into the service's filesystem before it starts (absolute
+  // paths, or relative to workdir).
+  map<string, string> files = 12;
+  // Bubblewrap only: commands run once in the service's own root before it
+  // starts (a service built from a Dockerfile), with setup_network.
+  repeated string setup = 13;
+  // "deny" (default) or "allow".
+  string setup_network = 14;
+  // Run to completion before its dependents start, instead of staying up; a
+  // non-zero exit fails the sandbox (Compose service_completed_successfully).
+  bool oneshot = 15;
+  // Mount the agent's workdir at this path in the service, so both see the
+  // same files. Off by default: services otherwise share no files with it.
+  string workdir_mount = 16;
+  // Named volumes shared with other services, as "name:/path" or
+  // "name:/path:ro".
+  repeated string volumes = 17;
+  // The service's working directory; default: the image's, else /.
+  string workdir = 18;
+  // Run the image's ENTRYPOINT with command as its arguments (the image's CMD
+  // when command is empty), as docker does, instead of command being the whole
+  // argv. Needed for images whose entrypoint script does the setup.
+  bool image_entrypoint = 19;
 }

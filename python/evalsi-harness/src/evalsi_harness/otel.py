@@ -68,28 +68,38 @@ def spans(
     agent: str,
     started_ns: int,
     ended_ns: int,
+    trace_id: str = "",
+    root_span_id: str = "",
+    include_root: bool = True,
 ) -> tuple[str, list[dict[str, Any]]]:
-    """The trace id and OTLP spans for a task's steps."""
-    trace_id = secrets.token_hex(16)
-    root = secrets.token_hex(8)
+    """The trace id and OTLP spans for a task's steps. A caller that sends one trace in
+    several batches (``tail.py``) fixes ``trace_id`` and ``root_span_id`` and sends the
+    root span, with ``include_root``, once, at the end; the first step starts at
+    ``started_ns``."""
+    trace_id = trace_id or secrets.token_hex(16)
+    root = root_span_id or secrets.token_hex(8)
     tags = [_attr("evalsi.task_id", task_id), _attr("evalsi.trial", trial)]
     if run_id:
         tags.append(_attr("evalsi.run_id", run_id))
-    out = [
-        {
-            "traceId": trace_id,
-            "spanId": root,
-            "name": f"invoke_agent {agent}",
-            "kind": 1,
-            "startTimeUnixNano": str(started_ns),
-            "endTimeUnixNano": str(ended_ns),
-            "attributes": [
-                _attr("gen_ai.operation.name", "invoke_agent"),
-                _attr("gen_ai.agent.name", agent),
-                *tags,
-            ],
-        }
-    ]
+    out = (
+        []
+        if not include_root
+        else [
+            {
+                "traceId": trace_id,
+                "spanId": root,
+                "name": f"invoke_agent {agent}",
+                "kind": 1,
+                "startTimeUnixNano": str(started_ns),
+                "endTimeUnixNano": str(ended_ns),
+                "attributes": [
+                    _attr("gen_ai.operation.name", "invoke_agent"),
+                    _attr("gen_ai.agent.name", agent),
+                    *tags,
+                ],
+            }
+        ]
+    )
     cursor = started_ns
     for step in steps:
         duration = int((step.duration_ms or 0) * 1e6)
@@ -145,6 +155,14 @@ async def export(steps: list[Step], **kwargs: Any) -> str:
         return ""
     kwargs.setdefault("ended_ns", time.time_ns())
     trace_id, span_list = spans(steps, **kwargs)
+    return trace_id if await post(span_list) else ""
+
+
+async def post(span_list: list[dict[str, Any]]) -> bool:
+    """Sends spans to the configured endpoint; False when none is set or it failed."""
+    url = endpoint()
+    if not url:
+        return False
     body = {
         "resourceSpans": [
             {
@@ -162,8 +180,8 @@ async def export(steps: list[Step], **kwargs: Any) -> str:
             response = await client.post(url, json=body, headers=_headers())
         if response.status_code >= 400:
             logger.warning("OTLP export to %s failed: HTTP %s", url, response.status_code)
-            return ""
+            return False
     except httpx.HTTPError as exc:
         logger.warning("OTLP export to %s failed: %s", url, exc)
-        return ""
-    return trace_id
+        return False
+    return True

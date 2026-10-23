@@ -387,6 +387,20 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 		}
 		uses = append(uses, u...)
 	}
+	// The compaction and sub-agent models are called with their own keys too.
+	for _, aux := range []struct {
+		field string
+		t     *evalsiv1alpha1.Target
+	}{{"spec.target.compaction_model", t.GetCompactionModel()}, {"spec.target.subagent_model", t.GetSubagentModel()}} {
+		if aux.t == nil {
+			continue
+		}
+		u, err := targetUse(aux.t, aux.field+".api_key_env")
+		if err != nil {
+			return nil, err
+		}
+		uses = append(uses, u...)
+	}
 	a := t.GetAgent()
 	switch {
 	case a.GetA2A() != nil:
@@ -403,6 +417,10 @@ func SpecUses(spec *evalsiv1alpha1.RunSpec) ([]Use, error) {
 	case a.GetCli() != nil:
 		for _, inside := range sortedKeys(a.GetCli().GetEnvFrom()) {
 			uses = append(uses, Use{Env: a.GetCli().GetEnvFrom()[inside], Field: "spec.target.agent.cli.env_from." + inside, Sandbox: true})
+		}
+	case a.GetAcp() != nil:
+		for _, inside := range sortedKeys(a.GetAcp().GetEnvFrom()) {
+			uses = append(uses, Use{Env: a.GetAcp().GetEnvFrom()[inside], Field: "spec.target.agent.acp.env_from." + inside, Sandbox: true})
 		}
 	}
 	for _, s := range spec.GetHarness().GetBuiltin().GetTools().GetMcp() {

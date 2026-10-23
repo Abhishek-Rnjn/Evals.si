@@ -265,3 +265,23 @@ runs:
 		t.Errorf("per-project override: %v", err)
 	}
 }
+
+func TestWebhookGuardIsOnUnlessTurnedOff(t *testing.T) {
+	cfg, err := Load(write(t, "auth: {mode: none}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Webhooks.GuardEnabled() {
+		t.Error("the webhook guard is off by default")
+	}
+	cfg, err = Load(write(t, "auth: {mode: none}\nwebhooks: {ssrf_guard: false, allow_hosts: ['*.svc.cluster.local', receiver.studio]}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Webhooks.GuardEnabled() {
+		t.Error("ssrf_guard: false did not turn the guard off")
+	}
+	if _, err := Load(write(t, "auth: {mode: none}\nwebhooks: {allow_hosts: ['http://x']}\n")); err == nil || !strings.Contains(err.Error(), "webhooks.allow_hosts[0]") {
+		t.Errorf("bad allow_hosts entry: %v", err)
+	}
+}

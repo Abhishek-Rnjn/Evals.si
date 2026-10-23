@@ -38,6 +38,9 @@ const (
 	GuestAgentServiceHealthProcedure = "/evalsi.guest.v1alpha1.GuestAgentService/Health"
 	// GuestAgentServiceExecProcedure is the fully-qualified name of the GuestAgentService's Exec RPC.
 	GuestAgentServiceExecProcedure = "/evalsi.guest.v1alpha1.GuestAgentService/Exec"
+	// GuestAgentServiceExecInteractiveProcedure is the fully-qualified name of the GuestAgentService's
+	// ExecInteractive RPC.
+	GuestAgentServiceExecInteractiveProcedure = "/evalsi.guest.v1alpha1.GuestAgentService/ExecInteractive"
 	// GuestAgentServiceWriteFilesProcedure is the fully-qualified name of the GuestAgentService's
 	// WriteFiles RPC.
 	GuestAgentServiceWriteFilesProcedure = "/evalsi.guest.v1alpha1.GuestAgentService/WriteFiles"
@@ -57,6 +60,11 @@ type GuestAgentServiceClient interface {
 	Health(context.Context, *connect.Request[v1alpha1.HealthRequest]) (*connect.Response[v1alpha1.HealthResponse], error)
 	// Streams output as it is produced, then one result.
 	Exec(context.Context, *connect.Request[v1alpha1.ExecRequest]) (*connect.ServerStreamForClient[v1alpha1.ExecResponse], error)
+	// Exec with a stdin that stays open: the first message starts the command
+	// (ExecRequest.stdin is ignored), later ones write to its stdin or close
+	// it. Output and the result stream back as for Exec. Ending the call
+	// kills the command, which is how a background process is stopped.
+	ExecInteractive(context.Context) *connect.BidiStreamForClient[v1alpha1.ExecInteractiveRequest, v1alpha1.ExecInteractiveResponse]
 	WriteFiles(context.Context, *connect.Request[v1alpha1.WriteFilesRequest]) (*connect.Response[v1alpha1.WriteFilesResponse], error)
 	ReadFiles(context.Context, *connect.Request[v1alpha1.ReadFilesRequest]) (*connect.Response[v1alpha1.ReadFilesResponse], error)
 	// After a snapshot restore: new entropy and the host's clock, so clones
@@ -90,6 +98,12 @@ func NewGuestAgentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(guestAgentServiceMethods.ByName("Exec")),
 			connect.WithClientOptions(opts...),
 		),
+		execInteractive: connect.NewClient[v1alpha1.ExecInteractiveRequest, v1alpha1.ExecInteractiveResponse](
+			httpClient,
+			baseURL+GuestAgentServiceExecInteractiveProcedure,
+			connect.WithSchema(guestAgentServiceMethods.ByName("ExecInteractive")),
+			connect.WithClientOptions(opts...),
+		),
 		writeFiles: connect.NewClient[v1alpha1.WriteFilesRequest, v1alpha1.WriteFilesResponse](
 			httpClient,
 			baseURL+GuestAgentServiceWriteFilesProcedure,
@@ -119,12 +133,13 @@ func NewGuestAgentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // guestAgentServiceClient implements GuestAgentServiceClient.
 type guestAgentServiceClient struct {
-	health      *connect.Client[v1alpha1.HealthRequest, v1alpha1.HealthResponse]
-	exec        *connect.Client[v1alpha1.ExecRequest, v1alpha1.ExecResponse]
-	writeFiles  *connect.Client[v1alpha1.WriteFilesRequest, v1alpha1.WriteFilesResponse]
-	readFiles   *connect.Client[v1alpha1.ReadFilesRequest, v1alpha1.ReadFilesResponse]
-	refresh     *connect.Client[v1alpha1.RefreshRequest, v1alpha1.RefreshResponse]
-	startEgress *connect.Client[v1alpha1.StartEgressRequest, v1alpha1.StartEgressResponse]
+	health          *connect.Client[v1alpha1.HealthRequest, v1alpha1.HealthResponse]
+	exec            *connect.Client[v1alpha1.ExecRequest, v1alpha1.ExecResponse]
+	execInteractive *connect.Client[v1alpha1.ExecInteractiveRequest, v1alpha1.ExecInteractiveResponse]
+	writeFiles      *connect.Client[v1alpha1.WriteFilesRequest, v1alpha1.WriteFilesResponse]
+	readFiles       *connect.Client[v1alpha1.ReadFilesRequest, v1alpha1.ReadFilesResponse]
+	refresh         *connect.Client[v1alpha1.RefreshRequest, v1alpha1.RefreshResponse]
+	startEgress     *connect.Client[v1alpha1.StartEgressRequest, v1alpha1.StartEgressResponse]
 }
 
 // Health calls evalsi.guest.v1alpha1.GuestAgentService.Health.
@@ -135,6 +150,11 @@ func (c *guestAgentServiceClient) Health(ctx context.Context, req *connect.Reque
 // Exec calls evalsi.guest.v1alpha1.GuestAgentService.Exec.
 func (c *guestAgentServiceClient) Exec(ctx context.Context, req *connect.Request[v1alpha1.ExecRequest]) (*connect.ServerStreamForClient[v1alpha1.ExecResponse], error) {
 	return c.exec.CallServerStream(ctx, req)
+}
+
+// ExecInteractive calls evalsi.guest.v1alpha1.GuestAgentService.ExecInteractive.
+func (c *guestAgentServiceClient) ExecInteractive(ctx context.Context) *connect.BidiStreamForClient[v1alpha1.ExecInteractiveRequest, v1alpha1.ExecInteractiveResponse] {
+	return c.execInteractive.CallBidiStream(ctx)
 }
 
 // WriteFiles calls evalsi.guest.v1alpha1.GuestAgentService.WriteFiles.
@@ -163,6 +183,11 @@ type GuestAgentServiceHandler interface {
 	Health(context.Context, *connect.Request[v1alpha1.HealthRequest]) (*connect.Response[v1alpha1.HealthResponse], error)
 	// Streams output as it is produced, then one result.
 	Exec(context.Context, *connect.Request[v1alpha1.ExecRequest], *connect.ServerStream[v1alpha1.ExecResponse]) error
+	// Exec with a stdin that stays open: the first message starts the command
+	// (ExecRequest.stdin is ignored), later ones write to its stdin or close
+	// it. Output and the result stream back as for Exec. Ending the call
+	// kills the command, which is how a background process is stopped.
+	ExecInteractive(context.Context, *connect.BidiStream[v1alpha1.ExecInteractiveRequest, v1alpha1.ExecInteractiveResponse]) error
 	WriteFiles(context.Context, *connect.Request[v1alpha1.WriteFilesRequest]) (*connect.Response[v1alpha1.WriteFilesResponse], error)
 	ReadFiles(context.Context, *connect.Request[v1alpha1.ReadFilesRequest]) (*connect.Response[v1alpha1.ReadFilesResponse], error)
 	// After a snapshot restore: new entropy and the host's clock, so clones
@@ -190,6 +215,12 @@ func NewGuestAgentServiceHandler(svc GuestAgentServiceHandler, opts ...connect.H
 		GuestAgentServiceExecProcedure,
 		svc.Exec,
 		connect.WithSchema(guestAgentServiceMethods.ByName("Exec")),
+		connect.WithHandlerOptions(opts...),
+	)
+	guestAgentServiceExecInteractiveHandler := connect.NewBidiStreamHandler(
+		GuestAgentServiceExecInteractiveProcedure,
+		svc.ExecInteractive,
+		connect.WithSchema(guestAgentServiceMethods.ByName("ExecInteractive")),
 		connect.WithHandlerOptions(opts...),
 	)
 	guestAgentServiceWriteFilesHandler := connect.NewUnaryHandler(
@@ -222,6 +253,8 @@ func NewGuestAgentServiceHandler(svc GuestAgentServiceHandler, opts ...connect.H
 			guestAgentServiceHealthHandler.ServeHTTP(w, r)
 		case GuestAgentServiceExecProcedure:
 			guestAgentServiceExecHandler.ServeHTTP(w, r)
+		case GuestAgentServiceExecInteractiveProcedure:
+			guestAgentServiceExecInteractiveHandler.ServeHTTP(w, r)
 		case GuestAgentServiceWriteFilesProcedure:
 			guestAgentServiceWriteFilesHandler.ServeHTTP(w, r)
 		case GuestAgentServiceReadFilesProcedure:
@@ -245,6 +278,10 @@ func (UnimplementedGuestAgentServiceHandler) Health(context.Context, *connect.Re
 
 func (UnimplementedGuestAgentServiceHandler) Exec(context.Context, *connect.Request[v1alpha1.ExecRequest], *connect.ServerStream[v1alpha1.ExecResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.guest.v1alpha1.GuestAgentService.Exec is not implemented"))
+}
+
+func (UnimplementedGuestAgentServiceHandler) ExecInteractive(context.Context, *connect.BidiStream[v1alpha1.ExecInteractiveRequest, v1alpha1.ExecInteractiveResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("evalsi.guest.v1alpha1.GuestAgentService.ExecInteractive is not implemented"))
 }
 
 func (UnimplementedGuestAgentServiceHandler) WriteFiles(context.Context, *connect.Request[v1alpha1.WriteFilesRequest]) (*connect.Response[v1alpha1.WriteFilesResponse], error) {

@@ -82,16 +82,24 @@ class CreateRunResponse(_message.Message):
     DESCRIPTOR: _descriptor.Descriptor
 
     RUN_FIELD_NUMBER: _builtins.int
+    SWEEP_RUNS_FIELD_NUMBER: _builtins.int
     @_builtins.property
     def run(self) -> _run_pb2.Run: ...
+    @_builtins.property
+    def sweep_runs(self) -> _containers.RepeatedCompositeFieldContainer[_run_pb2.Run]:
+        """With spec.sweep: every run the sweep created, in variant order; run is
+        the first.
+        """
+
     def __init__(
         self,
         *,
         run: _run_pb2.Run | None = ...,
+        sweep_runs: _abc.Iterable[_run_pb2.Run] | None = ...,
     ) -> None: ...
     _HasFieldArgType: _TypeAlias = _typing.Literal["run", b"run"]  # noqa: Y015
     def HasField(self, field_name: _HasFieldArgType) -> _builtins.bool: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["run", b"run"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["run", b"run", "sweep_runs", b"sweep_runs"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___CreateRunResponse: _TypeAlias = CreateRunResponse  # noqa: Y015

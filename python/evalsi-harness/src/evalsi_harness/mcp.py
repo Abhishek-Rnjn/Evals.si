@@ -282,6 +282,8 @@ class MCPClient:
         self.elicit = elicit
         # What the server asked while a tool ran, for that tool's step.
         self.elicitations: list[dict[str, Any]] = []
+        # The server's name and version, as it reported them on initialize.
+        self.server_info: dict[str, Any] = {}
         self._ids = itertools.count(1)
 
     @classmethod
@@ -308,7 +310,11 @@ class MCPClient:
             transport = await _StdioTransport.start(command, env or {})
         client = cls(transport, name or url or command[0], timeout_s=timeout_s, elicit=elicit)
         try:
-            await client.call("initialize", _client_info(elicit is not None))
+            init = await client.call("initialize", _client_info(elicit is not None))
+            client.server_info = {
+                **(init.get("serverInfo") or {}),
+                "protocolVersion": init.get("protocolVersion", ""),
+            }
             await asyncio.wait_for(
                 transport.request({"jsonrpc": "2.0", "method": "notifications/initialized"}),
                 timeout_s,

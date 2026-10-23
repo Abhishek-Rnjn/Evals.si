@@ -27,6 +27,7 @@ import (
 	"github.com/abhishek-rnjn/evals.si/internal/datasets"
 	"github.com/abhishek-rnjn/evals.si/internal/guardrail"
 	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	"github.com/abhishek-rnjn/evals.si/internal/quota"
 	"github.com/abhishek-rnjn/evals.si/internal/rewards"
 	"github.com/abhishek-rnjn/evals.si/internal/store"
 	"github.com/abhishek-rnjn/evals.si/internal/watch"
@@ -83,6 +84,8 @@ type gate struct {
 	unauthTotal atomic.Int64
 	// limits refuses callers past their rate (ratelimit.go); nil limits nothing.
 	limits *limiter
+	// sandbox meters online sandbox time (decision 0037); nil meters nothing.
+	sandbox *quota.SandboxMeter
 }
 
 func newGate(engine *authz.Engine, auditor *authz.Auditor, st *store.Store, watcher *watch.Engine, authSvc *authz.Service, runsCode authz.RunsCode, judgeOf authz.JudgeOf, log *slog.Logger) *gate {
@@ -1195,5 +1198,6 @@ func (g *gate) WriteMetrics(w io.Writer) {
 	const name = "evalsi_unauthenticated_total"
 	fmt.Fprintf(w, "# HELP %s Calls rejected for a missing or invalid credential.\n# TYPE %s counter\n%s %d\n", name, name, name, g.unauthTotal.Load())
 	g.limits.writeMetrics(w)
+	g.sandbox.WriteMetrics(w)
 	g.auditor.WriteMetrics(w)
 }
