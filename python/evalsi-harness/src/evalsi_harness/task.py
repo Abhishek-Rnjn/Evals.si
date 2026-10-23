@@ -110,21 +110,26 @@ class DatabaseConfig:
 
 
 @dataclass
+class StageCopy:
+    """A file or directory taken out of a build stage (``COPY --from``)."""
+
+    stage: str
+    source: str
+    destination: str
+
+
+@dataclass
 class BuildStageConfig:
-    """An earlier stage of a multi-stage build (see stages.py)."""
+    """An earlier stage of a multi-stage build, built in a sandbox of its own (see
+    EnvironmentPool): its files and setup run in its image, after the files copied from
+    stages listed before it. The stages are not kept; only the files copied out are."""
 
     name: str
     image: str
     files: dict[str, str] = field(default_factory=dict)
     setup: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass
-class StageCopy:
-    stage: str
-    source: str
-    destination: str
+    copy_from: list[StageCopy] = field(default_factory=list)
 
 
 @dataclass
@@ -145,6 +150,8 @@ class EnvironmentConfig:
     stages: list[BuildStageConfig] = field(default_factory=list)
     copy_from: list[StageCopy] = field(default_factory=list)
     database: DatabaseConfig | None = None
+    # Named volumes of the agent's sandbox shared with services (bubblewrap).
+    volumes: list[str] = field(default_factory=list)
 
     @property
     def needs_sandbox(self) -> bool:
@@ -172,6 +179,7 @@ class EnvironmentConfig:
             "service_lifetime_s": self.service_lifetime_s,
             "stages": [asdict(s) for s in self.stages],
             "copy_from": [asdict(c) for c in self.copy_from],
+            "volumes": self.volumes,
         }
         return hashlib.sha256(json.dumps(built, sort_keys=True).encode()).hexdigest()[:16]
 
@@ -192,6 +200,7 @@ _ENV_FIELDS = {
     "stages",
     "copy_from",
     "database",
+    "volumes",
 }
 
 
@@ -281,6 +290,7 @@ def environment_for(spec: run_pb2.RunSpec, record: Record) -> EnvironmentConfig 
         except ValueError as exc:
             raise TaskError(f"checker: {exc}") from exc
     return EnvironmentConfig(
+        volumes=[str(v) for v in data.get("volumes") or []],
         stages=stages,
         copy_from=copies,
         database=database,
@@ -333,6 +343,13 @@ def _database(raw: Any, record_id: str) -> DatabaseConfig | None:
     return config
 
 
+def _copies(raw: Any) -> list[StageCopy]:
+    return [
+        StageCopy(str(c.get("stage", "")), str(c.get("source", "")), str(c.get("destination", "")))
+        for c in raw or []
+    ]
+
+
 def _stages(
     data: Mapping[str, Any], record_id: str
 ) -> tuple[list[BuildStageConfig], list[StageCopy]]:
@@ -344,26 +361,29 @@ def _stages(
                 files={str(k): str(v) for k, v in (s.get("files") or {}).items()},
                 setup=[str(c) for c in s.get("setup") or []],
                 env={str(k): str(v) for k, v in (s.get("env") or {}).items()},
+                copy_from=_copies(s.get("copy_from")),
             )
             for s in data.get("stages") or []
         ]
-        copies = [
-            StageCopy(
-                str(c.get("stage", "")), str(c.get("source", "")), str(c.get("destination", ""))
-            )
-            for c in data.get("copy_from") or []
-        ]
+        copies = _copies(data.get("copy_from"))
     except (TypeError, AttributeError) as exc:
         raise TaskError(f"record {record_id}: invalid stages or copy_from: {exc}") from exc
-    names = [s.name for s in stages]
+    seen: set[str] = set()
     for s in stages:
         if not s.name or not s.image:
             raise TaskError("every build stage needs a name and an image")
-    if len(set(names)) != len(names):
-        raise TaskError("build stage names must be unique")
+        if s.name in seen:
+            raise TaskError("build stage names must be unique")
+        for c in s.copy_from:
+            if c.stage not in seen:
+                raise TaskError(
+                    f"stage {s.name} copies from {c.stage!r}, which is not an earlier stage"
+                )
+        seen.add(s.name)
     for c in copies:
-        if c.stage not in names:
+        if c.stage not in seen:
             raise TaskError(f"copy_from names an unknown stage {c.stage!r}")
+    for c in [*copies, *(c for s in stages for c in s.copy_from)]:
         if not c.source.startswith("/") or not c.destination:
             raise TaskError("copy_from needs an absolute source and a destination")
     return stages, copies

@@ -504,6 +504,9 @@ message BuildStage {
   // Run in order with the environment's setup network.
   repeated string setup = 4;
   map<string, string> env = 5;
+  // Files taken from earlier stages into this one before its setup. Stages are
+  // listed so that each comes after the stages it copies from.
+  repeated StageCopy copy_from = 6;
 }
 
 // StageCopy takes a file or directory out of a build stage (COPY --from).

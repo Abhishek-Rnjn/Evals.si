@@ -2546,8 +2546,11 @@ type BuildStage struct {
 	// Absolute paths in the stage's root, placed before setup.
 	Files map[string]string `protobuf:"bytes,3,rep,name=files,proto3" json:"files,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Run in order with the environment's setup network.
-	Setup         []string          `protobuf:"bytes,4,rep,name=setup,proto3" json:"setup,omitempty"`
-	Env           map[string]string `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Setup []string          `protobuf:"bytes,4,rep,name=setup,proto3" json:"setup,omitempty"`
+	Env   map[string]string `protobuf:"bytes,5,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Files taken from earlier stages into this one before its setup. Stages are
+	// listed so that each comes after the stages it copies from.
+	CopyFrom      []*StageCopy `protobuf:"bytes,6,rep,name=copy_from,json=copyFrom,proto3" json:"copy_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2613,6 +2616,13 @@ func (x *BuildStage) GetSetup() []string {
 func (x *BuildStage) GetEnv() map[string]string {
 	if x != nil {
 		return x.Env
+	}
+	return nil
+}
+
+func (x *BuildStage) GetCopyFrom() []*StageCopy {
+	if x != nil {
+		return x.CopyFrom
 	}
 	return nil
 }
@@ -3379,14 +3389,15 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb4\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xed\x02\n" +
 	"\n" +
 	"BuildStage\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05image\x18\x02 \x01(\tR\x05image\x12<\n" +
 	"\x05files\x18\x03 \x03(\v2&.evalsi.v1alpha1.BuildStage.FilesEntryR\x05files\x12\x14\n" +
 	"\x05setup\x18\x04 \x03(\tR\x05setup\x126\n" +
-	"\x03env\x18\x05 \x03(\v2$.evalsi.v1alpha1.BuildStage.EnvEntryR\x03env\x1a8\n" +
+	"\x03env\x18\x05 \x03(\v2$.evalsi.v1alpha1.BuildStage.EnvEntryR\x03env\x127\n" +
+	"\tcopy_from\x18\x06 \x03(\v2\x1a.evalsi.v1alpha1.StageCopyR\bcopyFrom\x1a8\n" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -3569,17 +3580,18 @@ var file_evalsi_v1alpha1_agent_proto_depIdxs = []int32{
 	28, // 49: evalsi.v1alpha1.Environment.database:type_name -> evalsi.v1alpha1.DatabaseEnvironment
 	42, // 50: evalsi.v1alpha1.BuildStage.files:type_name -> evalsi.v1alpha1.BuildStage.FilesEntry
 	43, // 51: evalsi.v1alpha1.BuildStage.env:type_name -> evalsi.v1alpha1.BuildStage.EnvEntry
-	29, // 52: evalsi.v1alpha1.DatabaseEnvironment.tools:type_name -> evalsi.v1alpha1.DatabaseTool
-	30, // 53: evalsi.v1alpha1.DatabaseEnvironment.assertions:type_name -> evalsi.v1alpha1.DatabaseAssertion
-	47, // 54: evalsi.v1alpha1.DatabaseTool.parameters:type_name -> google.protobuf.Struct
-	48, // 55: evalsi.v1alpha1.DatabaseAssertion.expect:type_name -> google.protobuf.Value
-	44, // 56: evalsi.v1alpha1.EnvironmentService.env:type_name -> evalsi.v1alpha1.EnvironmentService.EnvEntry
-	45, // 57: evalsi.v1alpha1.EnvironmentService.files:type_name -> evalsi.v1alpha1.EnvironmentService.FilesEntry
-	58, // [58:58] is the sub-list for method output_type
-	58, // [58:58] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	27, // 52: evalsi.v1alpha1.BuildStage.copy_from:type_name -> evalsi.v1alpha1.StageCopy
+	29, // 53: evalsi.v1alpha1.DatabaseEnvironment.tools:type_name -> evalsi.v1alpha1.DatabaseTool
+	30, // 54: evalsi.v1alpha1.DatabaseEnvironment.assertions:type_name -> evalsi.v1alpha1.DatabaseAssertion
+	47, // 55: evalsi.v1alpha1.DatabaseTool.parameters:type_name -> google.protobuf.Struct
+	48, // 56: evalsi.v1alpha1.DatabaseAssertion.expect:type_name -> google.protobuf.Value
+	44, // 57: evalsi.v1alpha1.EnvironmentService.env:type_name -> evalsi.v1alpha1.EnvironmentService.EnvEntry
+	45, // 58: evalsi.v1alpha1.EnvironmentService.files:type_name -> evalsi.v1alpha1.EnvironmentService.FilesEntry
+	59, // [59:59] is the sub-list for method output_type
+	59, // [59:59] is the sub-list for method input_type
+	59, // [59:59] is the sub-list for extension type_name
+	59, // [59:59] is the sub-list for extension extendee
+	0,  // [0:59] is the sub-list for field type_name
 }
 
 func init() { file_evalsi_v1alpha1_agent_proto_init() }

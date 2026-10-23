@@ -34,7 +34,8 @@ import shlex
 from pathlib import Path
 from typing import Any
 
-from evalsi_harness.benchmarks.harbor import TaskFormatError, _put, decode_command
+from evalsi_harness.benchmarks.dockerfile import TaskFormatError, decode_command
+from evalsi_harness.benchmarks.dockerfile import put_file as _put
 
 DEFAULT_WORKDIR = "/workspace"
 LAYOUT = (

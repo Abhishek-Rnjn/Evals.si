@@ -52,267 +52,29 @@ adapter, not from a recorded WorkBuddy-Bench verifier run.
 
 from __future__ import annotations
 
-import base64
 import fnmatch
 import json
 import math
 import re
 import shlex
 import tomllib
-from collections.abc import Iterator
-from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from evalsi.types import TaskCheck
+from evalsi_harness.benchmarks.dockerfile import (
+    Build,
+    TaskFormatError,
+    copy_config,
+    decode_command,
+    stage_config,
+    translate_dockerfile,
+)
+from evalsi_harness.benchmarks.dockerfile import put_file as _put
 
 LOGS = "/logs/verifier"
 MARK = "@@evalsi"
 DEFAULT_WORKDIR = "/app"
-
-
-class TaskFormatError(ValueError):
-    """The task directory cannot be turned into an Evals.si task."""
-
-
-# --- the Dockerfile ---
-
-
-@dataclass
-class Build:
-    image: str = ""
-    setup: list[str] = field(default_factory=list)
-    files: dict[str, str] = field(default_factory=dict)
-    executable: list[str] = field(default_factory=list)
-    env: dict[str, str] = field(default_factory=dict)
-    workdir: str = ""
-    ignored: list[str] = field(default_factory=list)
-
-
-IGNORED = {
-    "USER",
-    "CMD",
-    "ENTRYPOINT",
-    "EXPOSE",
-    "LABEL",
-    "MAINTAINER",
-    "VOLUME",
-    "STOPSIGNAL",
-    "HEALTHCHECK",
-    "ONBUILD",
-}
-
-
-def _instructions(text: str) -> Iterator[tuple[str, str]]:
-    """(INSTRUCTION, arguments) pairs: comments dropped, continuations and
-    heredocs (``RUN <<EOF``) joined."""
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines):
-        line = lines[i].strip()
-        i += 1
-        if not line or line.startswith("#"):
-            continue
-        while line.endswith("\\") and i < len(lines):
-            nxt = lines[i].strip()
-            i += 1
-            if nxt.startswith("#"):
-                continue
-            line = line[:-1].rstrip() + " " + nxt
-        word, _, rest = line.partition(" ")
-        rest = rest.strip()
-        heredoc = re.match(r"^<<-?\s*['\"]?(\w+)['\"]?\s*$", rest)
-        if heredoc:
-            # BuildKit's RUN <<EOF: the body is the script.
-            end, body = heredoc.group(1), []
-            while i < len(lines) and lines[i].strip() != end:
-                body.append(lines[i])
-                i += 1
-            i += 1
-            yield word.upper(), "\n".join(body)
-            continue
-        inline = re.search(r"<<-?\s*['\"]?(\w+)['\"]?", rest)
-        if inline and word.upper() == "RUN":
-            # cmd <<'EOF' ... EOF: a shell heredoc, passed to the shell whole.
-            end, body = inline.group(1), [rest]
-            while i < len(lines):
-                body.append(lines[i])
-                i += 1
-                if body[-1].strip() == end:
-                    break
-            yield word.upper(), "\n".join(body)
-            continue
-        if "<<" in rest and word.upper() == "COPY":
-            raise TaskFormatError(f"unsupported heredoc form: {line[:80]}")
-        yield word.upper(), rest
-
-
-def _expand(value: str, variables: dict[str, str]) -> str:
-    """``$NAME``, ``${NAME}`` and ``${NAME:-default}`` from ARG and ENV;
-    unknown names are left for the shell."""
-    return re.sub(r"\$\{(\w+)(?::-([^}]*))?\}|\$(\w+)", lambda m: _sub3(m, variables), value)
-
-
-def _sub3(m: re.Match[str], variables: dict[str, str]) -> str:
-    name = m.group(1) or m.group(3)
-    if name not in variables and m.group(2) is None:
-        return m.group(0)  # left for the shell
-    got = variables.get(name, "")
-    return got if got or m.group(2) is None else m.group(2)
-
-
-def _pairs(rest: str, legacy: bool) -> dict[str, str]:
-    """``ENV``/``ARG`` arguments: ``k=v k2="v 2"`` or the legacy ``k v``."""
-    if legacy and "=" not in rest.split(" ", 1)[0]:
-        key, _, value = rest.partition(" ")
-        return {key: value.strip()}
-    out: dict[str, str] = {}
-    for token in shlex.split(rest):
-        key, eq, value = token.partition("=")
-        out[key] = value if eq else ""
-    return out
-
-
-def _json_or_words(rest: str) -> list[str]:
-    if rest.startswith("["):
-        try:
-            value = json.loads(rest)
-        except json.JSONDecodeError as exc:
-            raise TaskFormatError(f"bad JSON form: {rest[:80]}") from exc
-        return [str(v) for v in value]
-    return shlex.split(rest)
-
-
-def translate_dockerfile(text: str, context: Path) -> Build:
-    """A Dockerfile as an image, setup commands and files (see the module docs)."""
-    build = Build()
-    args: dict[str, str] = {}
-    workdir = ""
-    shell: list[str] = []
-    froms = 0
-    for word, rest in _instructions(text):
-        variables = {**args, **build.env}
-        if word == "ARG":
-            for k, v in _pairs(rest, legacy=False).items():
-                args.setdefault(k, _expand(v, variables))
-        elif word == "FROM":
-            froms += 1
-            if froms > 1:
-                raise TaskFormatError(
-                    "multi-stage Dockerfiles are not supported; use a prebuilt image"
-                )
-            parts = _expand(rest, variables).split()
-            parts = [p for p in parts if not p.startswith("--platform")]
-            build.image = parts[0]
-        elif word == "ENV":
-            for k, v in _pairs(rest, legacy=True).items():
-                build.env[k] = _expand(v, variables)
-        elif word == "WORKDIR":
-            target = _expand(rest, variables).strip("\"'")
-            workdir = str(PurePosixPath(workdir or "/") / target)
-        elif word == "SHELL":
-            shell = _json_or_words(rest)
-        elif word == "RUN":
-            flags = re.match(r"^((?:--\S+\s+)*)(.*)$", rest, re.S)
-            assert flags is not None
-            if "--mount" in flags.group(1):
-                raise TaskFormatError("RUN --mount needs BuildKit; use a prebuilt image")
-            body = flags.group(2)
-            if body.startswith("["):
-                command = shlex.join(_json_or_words(body))
-            elif shell:
-                command = shlex.join([*shell, body])
-            else:
-                command = body
-            if workdir:
-                command = (
-                    f"mkdir -p {shlex.quote(workdir)} && cd {shlex.quote(workdir)} && {command}"
-                )
-            # ARGs are environment variables while RUN steps run, as in Docker.
-            exports = " ".join(
-                f"{k}={shlex.quote(v)}" for k, v in args.items() if k not in build.env
-            )
-            if exports:
-                command = f"export {exports}; {command}"
-            build.setup.append(command)
-        elif word in ("COPY", "ADD"):
-            _copy(word, rest, context, workdir=workdir, variables=variables, build=build)
-        elif word in IGNORED:
-            build.ignored.append(word)
-        else:
-            raise TaskFormatError(f"unsupported Dockerfile instruction {word}")
-    if not build.image:
-        raise TaskFormatError("the Dockerfile has no FROM")
-    build.workdir = workdir
-    return build
-
-
-def _copy(
-    word: str, rest: str, context: Path, *, workdir: str, variables: dict[str, str], build: Build
-) -> None:
-    tokens = _json_or_words(rest) if rest.lstrip().startswith("[") else shlex.split(rest)
-    flags = [t for t in tokens if t.startswith("--")]
-    paths = [_expand(t, variables) for t in tokens if not t.startswith("--")]
-    if any(f.startswith("--from") for f in flags):
-        raise TaskFormatError(f"{word} --from (multi-stage) is not supported; use a prebuilt image")
-    if len(paths) < 2:
-        raise TaskFormatError(f"{word} needs a source and a destination: {rest[:80]}")
-    *sources, dest = paths
-    dest_dir = dest.endswith("/") or len(sources) > 1
-    base = PurePosixPath(workdir or "/")
-    target = base / dest
-    root = context.resolve()
-    for source in sources:
-        if re.match(r"^[a-z]+://", source):
-            raise TaskFormatError(f"{word} of a URL is not supported: {source}")
-        matches = (
-            sorted(root.glob(source.lstrip("/")))
-            if any(c in source for c in "*?[")
-            else [root / source.lstrip("/")]
-        )
-        for match in matches:
-            src = match.resolve()
-            if root not in (src, *src.parents):
-                raise TaskFormatError(f"{word} source {source} is outside the build context")
-            if not src.exists():
-                raise TaskFormatError(f"{word} source {source} does not exist")
-            if src.is_dir():
-                for f in sorted(p for p in src.rglob("*") if p.is_file()):
-                    _add_file(build, f, target / f.relative_to(src).as_posix())
-            else:
-                into = target / src.name if dest_dir or len(matches) > 1 else target
-                _add_file(build, src, into)
-
-
-B64 = ".evalsi-b64"
-
-
-def _put(files: dict[str, str], src: Path, dest: str) -> None:
-    """A file for the sandbox. Records carry text, so binary files travel
-    base64-encoded as ``<dest>.evalsi-b64`` and :func:`decode_command`
-    restores them in the sandbox."""
-    data = src.read_bytes()
-    try:
-        files[dest] = data.decode("utf-8")
-    except UnicodeDecodeError:
-        files[dest + B64] = base64.b64encode(data).decode("ascii")
-
-
-def decode_command(files: dict[str, str]) -> str:
-    """Shell that turns the base64-encoded files back into binary files."""
-    paths = [shlex.quote(f.removesuffix(B64)) for f in files if f.endswith(B64)]
-    if not paths:
-        return ""
-    return (
-        f'for f in {" ".join(paths)}; do base64 -d "$f{B64}" > "$f" && rm -f "$f{B64}" '
-        "|| exit 1; done"
-    )
-
-
-def _add_file(build: Build, src: Path, dest: PurePosixPath) -> None:
-    _put(build.files, src, str(dest))
-    if src.stat().st_mode & 0o111:
-        build.executable.append(str(dest))
 
 
 def _text(path: Path) -> str:
@@ -423,6 +185,12 @@ def _environment(
         environment["setup_network"] = "allow"
     if setup_timeout:
         environment["setup_timeout"] = _seconds(setup_timeout)
+    if build and build.copies:
+        # A multi-stage build: earlier stages are built on their own and the files taken out.
+        environment["stages"] = [stage_config(st) for st in build.stages]
+        environment["copy_from"] = [copy_config(c) for c in build.copies]
+        # Their RUN steps (and the downloads in them) need the network, like the target's.
+        environment["setup_network"] = "allow"
     return environment
 
 
@@ -803,6 +571,7 @@ def grade_pytest(stdout: str, stderr: str, exit_code: int, task: Any) -> TaskChe
 
 
 __all__ = [
+    "Build",
     "TaskFormatError",
     "grade_harbor",
     "grade_pytest",

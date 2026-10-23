@@ -91,6 +91,9 @@ class ServiceSpec:
     # Named volumes shared with other services, as "name:/path".
     volumes: list[str] = field(default_factory=list)
     workdir: str = ""
+    # Run the image's ENTRYPOINT with ``command`` as its arguments (the image's CMD when
+    # empty), as docker does, instead of ``command`` being the whole argv.
+    image_entrypoint: bool = False
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ServiceSpec:
@@ -116,6 +119,7 @@ class ServiceSpec:
             workdir_mount=self.workdir_mount,
             volumes=self.volumes,
             workdir=self.workdir,
+            image_entrypoint=self.image_entrypoint,
         )
 
 
@@ -138,6 +142,8 @@ class SandboxSpec:
     idle_timeout_s: float = 0.0
     services: list[ServiceSpec] = field(default_factory=list)
     service_lifetime_s: float = 0.0
+    # Named volumes shared with the services that name them ("name:/path[:ro]"); bubblewrap only.
+    volumes: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> SandboxSpec:
@@ -165,6 +171,7 @@ class SandboxSpec:
             files={k: v.encode() if isinstance(v, str) else v for k, v in self.files.items()},
             workdir=self.workdir,
             services=[s.to_proto() for s in self.services],
+            volumes=self.volumes,
             service_lifetime=_duration(self.service_lifetime_s),
         )
         if self.idle_timeout_s:

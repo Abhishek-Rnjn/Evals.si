@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import posixpath
 import shlex
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -26,7 +27,13 @@ from evalsi.sandbox.client import (
     SnapshotsUnsupported,
 )
 from evalsi_harness.events import PolicyEvent
-from evalsi_harness.task import EnvironmentConfig, TaskError
+from evalsi_harness.task import EnvironmentConfig, StageCopy, TaskError
+
+# What a multi-stage build may carry out of its earlier stages, in all.
+MAX_STAGE_BYTES = 256 << 20
+
+# (path in the stage, content, executable) for each file a copy takes.
+StageFiles = list[tuple[str, bytes, bool]]
 
 
 class SandboxLike(Protocol):
@@ -119,6 +126,7 @@ def _spec(config: EnvironmentConfig, network: str, allow_hosts: Sequence[str]) -
         workdir=sb.workdir,
         services=list(config.services),
         service_lifetime_s=config.service_lifetime_s,
+        volumes=list(config.volumes),
     )
 
 
@@ -133,6 +141,8 @@ class EnvironmentPool:
         self._per_trial: set[str] = set()
         self._locks: dict[str, asyncio.Lock] = {}
         self._failed: dict[str, str] = {}
+        # Files taken out of build stages, by environment: built once, placed per setup.
+        self._stage_cache: dict[str, dict[tuple[str, str], StageFiles]] = {}
 
     async def acquire(
         self, config: EnvironmentConfig, *, extra_allow_hosts: Sequence[str] = ()
@@ -188,11 +198,122 @@ class EnvironmentPool:
             )
         sandbox = await self.client.create(_spec(config, network, allow))
         try:
+            await self._apply_stages(sandbox, config)
             await self._run_setup(sandbox, config)
         except BaseException:
             await sandbox.destroy()
             raise
         return TaskEnvironment(sandbox, config)
+
+    async def _stage_files(self, config: EnvironmentConfig) -> dict[tuple[str, str], StageFiles]:
+        """Build the earlier stages of a multi-stage build, each in a sandbox of its own, and
+        take out the files later stages (and the environment) copy from them."""
+        key = config.key()
+        if key in self._stage_cache:
+            return self._stage_cache[key]
+        wanted: dict[str, set[str]] = {}
+        for c in [*config.copy_from, *(c for st in config.stages for c in st.copy_from)]:
+            wanted.setdefault(c.stage, set()).add(c.source)
+        network = config.setup_network or config.sandbox.network
+        allow = config.setup_allow_hosts or config.sandbox.allow_hosts
+        if network != "allowlist":
+            allow = []
+        out: dict[tuple[str, str], StageFiles] = {}
+        total = 0
+        for stage in config.stages:
+            if stage.name not in wanted:
+                continue  # nothing is taken from it
+            sb = config.sandbox
+            spec = SandboxSpec(
+                image=stage.image,
+                min_isolation=sb.min_isolation,
+                network=network,
+                allow_hosts=list(allow),
+                memory_mb=sb.memory_mb,
+                max_procs=sb.max_procs,
+                env=dict(stage.env),
+                files=dict(stage.files),
+                workdir=sb.workdir,
+            )
+            sandbox = await self.client.create(spec)
+            try:
+                await self._place(sandbox, stage.copy_from, out, sb.workdir, stage.env)
+                for command in stage.setup:
+                    result = await sandbox.exec(
+                        ["sh", "-c", command], timeout_s=config.setup_timeout_s, env=stage.env
+                    )
+                    if not result.ok:
+                        tail = (result.stderr or result.stdout)[-1500:]
+                        raise TaskError(
+                            f"build stage {stage.name} failed ({result.outcome}, exit "
+                            f"{result.exit_code}) running {shlex.quote(command)}: {tail}"
+                        )
+                for source in sorted(wanted[stage.name]):
+                    got = await sandbox.read_files([source], max_bytes=MAX_STAGE_BYTES)
+                    if not got:
+                        raise TaskError(
+                            f"build stage {stage.name}: {source} does not exist (or is empty)"
+                        )
+                    total += sum(len(v) for v in got.values())
+                    if total >= MAX_STAGE_BYTES:
+                        raise TaskError("the files copied out of build stages exceed 256 MiB")
+                    listing = await sandbox.exec(
+                        [
+                            "sh",
+                            "-c",
+                            'find "$1" -type f -perm /111 2>/dev/null; true',
+                            "sh",
+                            source,
+                        ],
+                        timeout_s=120,
+                    )
+                    executable = set(listing.stdout.splitlines())
+                    out[(stage.name, source)] = [
+                        (path, data, path in executable) for path, data in sorted(got.items())
+                    ]
+            finally:
+                await sandbox.destroy()
+        self._stage_cache[key] = out
+        return out
+
+    async def _apply_stages(self, sandbox: Any, config: EnvironmentConfig) -> None:
+        if not config.copy_from:
+            return
+        files = await self._stage_files(config)
+        await self._place(sandbox, config.copy_from, files, config.sandbox.workdir, config.env)
+
+    @staticmethod
+    async def _place(
+        sandbox: Any,
+        copies: Sequence[StageCopy],
+        files: dict[tuple[str, str], StageFiles],
+        workdir: str,
+        env: dict[str, str],
+    ) -> None:
+        """Put the files ``copies`` name where they go: a file at the destination (inside it
+        when it ends with a slash), a directory's files under it."""
+        executable: list[str] = []
+        for c in copies:
+            items = files[(c.stage, c.source)]
+            dest = c.destination
+            if not dest.startswith("/"):
+                dest = posixpath.join(workdir or "/", dest) + ("/" if dest.endswith("/") else "")
+            is_file = len(items) == 1 and items[0][0] == c.source
+            batch: dict[str, bytes | str] = {}
+            for path, data, is_exec in items:
+                if is_file:
+                    target = dest + posixpath.basename(path) if dest.endswith("/") else dest
+                else:
+                    target = posixpath.join(dest, posixpath.relpath(path, c.source))
+                batch[target] = data
+                if is_exec:
+                    executable.append(target)
+            await sandbox.write_files(batch)
+        if executable:
+            command = "chmod +x " + " ".join(shlex.quote(p) for p in executable)
+            result = await sandbox.exec(["sh", "-c", command], timeout_s=120, env=env)
+            if not result.ok:
+                raise TaskError(f"could not restore execute bits: {result.stderr[-300:]}")
 
     async def _run_setup(self, sandbox: Any, config: EnvironmentConfig) -> None:
         for command in config.setup:
@@ -225,6 +346,7 @@ class EnvironmentPool:
             sandbox = await self.client.create(_spec(config, network, allow))
             try:
                 try:
+                    await self._apply_stages(sandbox, config)
                     await self._run_setup(sandbox, config)
                 except TaskError as exc:
                     self._failed[key] = str(exc)

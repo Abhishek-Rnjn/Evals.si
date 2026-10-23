@@ -123,7 +123,7 @@ def test_multi_service_terminal_bench_import(tmp_path: Path) -> None:
     (task / "docker-compose.yaml").write_text(yaml.safe_dump(doc))
     [row] = load_terminal_bench(str(task))
     env = row["metadata"]["environment"]
-    assert env["services"] == [asdict(service())]
+    assert [ServiceSpec.from_dict(x) for x in env["services"]] == [service()]
     assert env["service_lifetime"] == "3600s"
 
 

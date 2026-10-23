@@ -1502,6 +1502,7 @@ class BuildStage(_message.Message):
     FILES_FIELD_NUMBER: _builtins.int
     SETUP_FIELD_NUMBER: _builtins.int
     ENV_FIELD_NUMBER: _builtins.int
+    COPY_FROM_FIELD_NUMBER: _builtins.int
     name: _builtins.str
     image: _builtins.str
     """Required: stages run in their own sandbox with this root."""
@@ -1515,6 +1516,12 @@ class BuildStage(_message.Message):
 
     @_builtins.property
     def env(self) -> _containers.ScalarMap[_builtins.str, _builtins.str]: ...
+    @_builtins.property
+    def copy_from(self) -> _containers.RepeatedCompositeFieldContainer[Global___StageCopy]:
+        """Files taken from earlier stages into this one before its setup. Stages are
+        listed so that each comes after the stages it copies from.
+        """
+
     def __init__(
         self,
         *,
@@ -1523,8 +1530,9 @@ class BuildStage(_message.Message):
         files: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
         setup: _abc.Iterable[_builtins.str] | None = ...,
         env: _abc.Mapping[_builtins.str, _builtins.str] | None = ...,
+        copy_from: _abc.Iterable[Global___StageCopy] | None = ...,
     ) -> None: ...
-    _ClearFieldArgType: _TypeAlias = _typing.Literal["env", b"env", "files", b"files", "image", b"image", "name", b"name", "setup", b"setup"]  # noqa: Y015
+    _ClearFieldArgType: _TypeAlias = _typing.Literal["copy_from", b"copy_from", "env", b"env", "files", b"files", "image", b"image", "name", b"name", "setup", b"setup"]  # noqa: Y015
     def ClearField(self, field_name: _ClearFieldArgType) -> None: ...
 
 Global___BuildStage: _TypeAlias = BuildStage  # noqa: Y015

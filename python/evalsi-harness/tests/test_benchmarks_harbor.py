@@ -66,10 +66,10 @@ CMD ["python", "main.py"]
 @pytest.mark.parametrize(
     ("dockerfile", "error"),
     [
-        ("FROM a AS b\nFROM c\n", "multi-stage"),
-        ("FROM a\nCOPY --from=b /x /y\n", "multi-stage"),
+        ("FROM scratch\nCOPY a /a\n", "scratch"),
+        ("FROM a AS b\nFROM c\nCOPY --from=b /x* /y\n", "pattern"),
         ("FROM a\nADD https://example.com/x /x\n", "URL"),
-        ("FROM a\nRUN --mount=type=cache,target=/c true\n", "BuildKit"),
+        ("FROM a\nRUN --mount=type=secret,id=x true\n", "BuildKit"),
         ("FROM a\nCOPY ../secret /x\n", "outside the build context"),
         ("FROM a\nCOPY missing.txt /x\n", "does not exist"),
         ("RUN true\n", "no FROM"),
