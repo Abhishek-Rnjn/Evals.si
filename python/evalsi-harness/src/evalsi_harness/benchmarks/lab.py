@@ -129,6 +129,9 @@ def grading(rubric: Any, *, benchmark: str, source: str) -> dict[str, Any]:
         "benchmark": benchmark,
         "rubric_source": source,
         "rubric": rubric,
+        # The files the agent leaves under output/ are collected for the judge
+        # (evalsi_harness.workspace), so a work product is graded, not described.
+        "workspace": {"paths": ["output"]},
     }
 
 

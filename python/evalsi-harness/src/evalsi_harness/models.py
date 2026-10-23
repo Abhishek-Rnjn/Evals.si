@@ -309,7 +309,7 @@ class OpenAIChat:
         body: dict[str, Any] = {
             "model": self.config.model,
             "messages": ([{"role": "system", "content": system}] if system else [])
-            + [to_openai(m) for m in messages],
+            + [out for m in messages for out in to_openai_all(m)],
             "max_tokens": max_tokens or self.config.max_tokens,
         }
         if tools:
@@ -386,6 +386,24 @@ class OpenAIChat:
 PROVIDER_KEYS = frozenset({"thinking_blocks", "thinking_by", "anthropic_content"})
 
 
+def to_openai_all(message: Message) -> list[Message]:
+    """``to_openai`` plus, for a tool result that carries images, the user message that
+    shows them: chat-completions tool messages are text only."""
+    out = [to_openai(message)]
+    images = message.get("images") if message.get("role") == "tool" else None
+    if images:
+        parts: list[dict[str, Any]] = [{"type": "text", "text": "Image(s) from the tool result:"}]
+        parts += [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{i['media_type']};base64,{i['data']}"},
+            }
+            for i in images
+        ]
+        out.append({"role": "user", "content": parts})
+    return out
+
+
 def to_openai(message: Message) -> Message:
     """Drops the fields chat completions does not know (a tool result's is_error,
     an assistant turn's thinking_blocks)."""
@@ -406,11 +424,26 @@ def to_anthropic(messages: list[Message]) -> list[dict[str, Any]]:
     for msg in messages:
         role = msg["role"]
         if role == "tool":
-            block = {
+            block: dict[str, Any] = {
                 "type": "tool_result",
                 "tool_use_id": msg["tool_call_id"],
                 "content": msg.get("content") or "",
             }
+            if msg.get("images"):
+                block["content"] = [
+                    {"type": "text", "text": msg.get("content") or "(no text)"},
+                    *(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": i["media_type"],
+                                "data": i["data"],
+                            },
+                        }
+                        for i in msg["images"]
+                    ),
+                ]
             if msg.get("is_error"):
                 block["is_error"] = True
             if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list):

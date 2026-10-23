@@ -36,7 +36,7 @@ from evalsi_harness.models import (
     thinking_text,
 )
 from evalsi_harness.subagent import DelegateTool
-from evalsi_harness.tools import Tool, ToolResult
+from evalsi_harness.tools import Tool, ToolResult, image_blocks, image_step
 from evalsi_harness.toolsearch import ToolSearchTool
 from evalsi_harness.user_sim import UserSimulator
 
@@ -720,12 +720,14 @@ class AgentLoop:
                 self._emit_hook_steps()
             self.state.tool_calls += 1
             self.emit(StepEvent(step))
+            self._emit_images(step, result)
             messages.append(
                 {
                     "role": "tool",
                     "tool_call_id": call.id,
                     "content": result.content,
                     "is_error": result.is_error,
+                    **({"images": image_blocks(result.images)} if result.images else {}),
                 }
             )
             self.archive.add({**messages[-1], "name": call.name})
@@ -787,7 +789,13 @@ class AgentLoop:
             self._emit_hook_steps()
         self.state.tool_calls += 1
         self.emit(StepEvent(step))
+        self._emit_images(step, result)
         return result
+
+    def _emit_images(self, step: Step, result: ToolResult) -> None:
+        """One ``media`` step per image the tool returned, a child of the tool's step."""
+        for image in result.images:
+            self.emit(StepEvent(image_step(image, step.span_id)))
 
     def _tool_step(
         self, call: ToolCallRequest, result: ToolResult, span: str, start: float, parent: str

@@ -1,0 +1,143 @@
+[
+  {
+    "sites": [
+      "shopping_admin"
+    ],
+    "task_id": 0,
+    "require_login": true,
+    "storage_state": "./.auth/shopping_admin_state.json",
+    "start_url": "__SHOPPING_ADMIN__",
+    "geolocation": null,
+    "intent_template": "Name the cheapest widget in the fixture catalogue",
+    "instantiation_dict": {},
+    "intent": "Name the cheapest widget in the fixture catalogue",
+    "require_reset": false,
+    "eval": {
+      "eval_types": [
+        "string_match"
+      ],
+      "reference_answers": {
+        "exact_match": "Blue Widget"
+      },
+      "reference_url": "",
+      "program_html": [],
+      "string_note": ""
+    },
+    "intent_template_id": 900
+  },
+  {
+    "sites": [
+      "gitlab"
+    ],
+    "task_id": 1,
+    "require_login": true,
+    "storage_state": "./.auth/gitlab_state.json",
+    "start_url": "__GITLAB__",
+    "geolocation": null,
+    "intent_template": "List the two projects owned by the fixture user",
+    "instantiation_dict": {},
+    "intent": "List the two projects owned by the fixture user",
+    "require_reset": false,
+    "eval": {
+      "eval_types": [
+        "string_match"
+      ],
+      "reference_answers": {
+        "must_include": [
+          "alpha-lib",
+          "beta-cli"
+        ]
+      },
+      "reference_url": "",
+      "program_html": [],
+      "string_note": ""
+    },
+    "intent_template_id": 901
+  },
+  {
+    "sites": [
+      "gitlab"
+    ],
+    "task_id": 2,
+    "require_login": true,
+    "storage_state": "./.auth/gitlab_state.json",
+    "start_url": "__GITLAB__/fixture/alpha-lib",
+    "geolocation": null,
+    "intent_template": "Open the fixture project's open issues, oldest first",
+    "instantiation_dict": {},
+    "intent": "Open the fixture project's open issues, oldest first",
+    "require_reset": false,
+    "eval": {
+      "eval_types": [
+        "url_match"
+      ],
+      "reference_answers": null,
+      "reference_url": "__GITLAB__/fixture/alpha-lib/-/issues/?sort=created_asc&state=opened",
+      "program_html": [],
+      "url_note": "GOLD in PRED"
+    },
+    "intent_template_id": 902
+  },
+  {
+    "sites": [
+      "shopping"
+    ],
+    "task_id": 3,
+    "require_login": true,
+    "storage_state": "./.auth/shopping_state.json",
+    "start_url": "__SHOPPING__",
+    "geolocation": null,
+    "intent_template": "Show me a fixture product good for desk setups",
+    "instantiation_dict": {},
+    "intent": "Show me a fixture product good for desk setups",
+    "require_reset": false,
+    "eval": {
+      "eval_types": [
+        "program_html"
+      ],
+      "reference_answers": null,
+      "reference_url": null,
+      "program_html": [
+        {
+          "url": "last",
+          "locator": "",
+          "required_contents": {
+            "must_include": [
+              "standing desk"
+            ]
+          }
+        }
+      ]
+    },
+    "intent_template_id": 903
+  },
+  {
+    "sites": [
+      "map",
+      "wikipedia"
+    ],
+    "task_id": 4,
+    "require_login": true,
+    "storage_state": null,
+    "start_url": "__MAP__",
+    "geolocation": null,
+    "intent_template": "How long is the fixture walk from the station to the library?",
+    "instantiation_dict": {},
+    "intent": "How long is the fixture walk from the station to the library?",
+    "require_reset": false,
+    "eval": {
+      "eval_types": [
+        "string_match"
+      ],
+      "reference_answers": {
+        "fuzzy_match": [
+          "about 12 minutes"
+        ]
+      },
+      "reference_url": "",
+      "program_html": [],
+      "string_note": ""
+    },
+    "intent_template_id": 904
+  }
+]

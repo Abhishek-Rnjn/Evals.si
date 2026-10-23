@@ -20,6 +20,7 @@ from evalsi.stats import Interval
 from evalsi.types import (
     Content,
     EvaluationResult,
+    Media,
     Message,
     Outcome,
     Record,
@@ -74,6 +75,10 @@ def content_to_proto(content: Content) -> record_pb2.Content:
                 ]
             )
         )
+    if content.media is not None:
+        return record_pb2.Content(
+            media=record_pb2.MediaRef(uri=content.media.uri, media_type=content.media.media_type)
+        )
     return record_pb2.Content(json=to_value(content.json))
 
 
@@ -98,6 +103,8 @@ def content_from_proto(content: record_pb2.Content) -> Content:
         )
     if kind == "json":
         return Content(json=from_value(content.json), is_json=True)
+    if kind == "media":
+        return Content(media=Media(uri=content.media.uri, media_type=content.media.media_type))
     raise ValueError(f"content kind {kind!r} is not supported by this worker yet")
 
 

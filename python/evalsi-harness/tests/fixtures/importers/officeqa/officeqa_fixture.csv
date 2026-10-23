@@ -1,0 +1,3 @@
+uid,question,answer,source_docs,source_files,difficulty
+UID0001,"What were the fixture receipts in January 1941, in millions of dollars?",123.4,https://fixture.invalid/january-1941,treasury_bulletin_1941_01.txt,hard
+UID0002,"Which fixture month had the larger total, January or March 1941?",March,https://fixture.invalid/a;https://fixture.invalid/b,treasury_bulletin_1941_01.txt;treasury_bulletin_1941_03.txt,easy

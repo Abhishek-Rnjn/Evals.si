@@ -33,24 +33,36 @@ class Message:
 
 
 @dataclass
-class Content:
-    """One of ``text``, ``messages`` or ``json``.
+class Media:
+    """A reference to media, as in the proto's ``MediaRef``: a screenshot a tool
+    returned is a ``data:image/png;base64,...`` URI, a stored file its URL."""
 
-    Tabular rows, tensors and media references exist in the proto and arrive
-    with the packs that need them.
+    uri: str
+    media_type: str = ""
+
+
+@dataclass
+class Content:
+    """One of ``text``, ``messages``, ``json`` or ``media``.
+
+    Tabular rows and tensors exist in the proto and arrive with the packs that
+    need them.
     """
 
     text: str | None = None
     messages: list[Message] | None = None
     json: Any = None
     is_json: bool = False
+    media: Media | None = None
 
     def __post_init__(self) -> None:
         if self.json is not None:
             self.is_json = True
-        set_fields = sum([self.text is not None, self.messages is not None, self.is_json])
+        set_fields = sum(
+            [self.text is not None, self.messages is not None, self.is_json, self.media is not None]
+        )
         if set_fields != 1:
-            raise ValueError("Content needs exactly one of text, messages or json")
+            raise ValueError("Content needs exactly one of text, messages, json or media")
 
     @classmethod
     def from_value(cls, value: Any) -> Content:
@@ -74,6 +86,13 @@ class Content:
                 return cls(messages=[_message_from_dict(m) for m in inner])
             if key == "json":
                 return cls(json=inner, is_json=True)
+            if key == "media" and isinstance(inner, Mapping) and isinstance(inner.get("uri"), str):
+                return cls(
+                    media=Media(
+                        uri=inner["uri"],
+                        media_type=str(inner.get("media_type", inner.get("mediaType", ""))),
+                    )
+                )
         if _looks_like_messages(value):
             return cls(messages=[_message_from_dict(m) for m in value])
         return cls(json=value, is_json=True)
@@ -87,6 +106,11 @@ class Content:
                 if message.role == "assistant":
                     return message.content
             return self.messages[-1].content if self.messages else ""
+        if self.media is not None:
+            # Never the bytes: a data: URI is large and no text evaluator can read it.
+            kind = self.media.media_type or "media"
+            uri = "" if self.media.uri.startswith("data:") else f" {self.media.uri}"
+            return f"[{kind}{uri}]"
         if isinstance(self.json, str):
             return self.json
         return json.dumps(self.json, ensure_ascii=False, separators=(",", ":"))
@@ -96,6 +120,8 @@ class Content:
             return {"text": self.text}
         if self.messages is not None:
             return {"messages": [_message_to_dict(m) for m in self.messages]}
+        if self.media is not None:
+            return {"media": {"uri": self.media.uri, "media_type": self.media.media_type}}
         return {"json": self.json}
 
 
