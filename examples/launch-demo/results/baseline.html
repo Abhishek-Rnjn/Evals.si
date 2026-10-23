@@ -1,0 +1,22 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>recorded-baseline</title><style>/* The style of evalsi report's HTML pages (light and dark). */
+:root { --bg:#fff; --fg:#1d1d1f; --muted:#666; --line:#e3e3e8; --ok:#1a7f37; --bad:#c62828; --code:#f6f6f8; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#16161a; --fg:#ececf0; --muted:#a0a0aa; --line:#2c2c33; --ok:#4cc26b; --bad:#ff6b6b; --code:#1f1f25; }
+}
+body { background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; margin:0; padding:24px 16px; }
+main { max-width:960px; margin:auto; }
+h1 { font-size:24px; margin:0 0 12px; }
+h2 { font-size:18px; margin:28px 0 8px; }
+dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; color:var(--muted); }
+dd { margin:0; color:var(--fg); overflow-wrap:anywhere; }
+.scroll { overflow-x:auto; }
+table { border-collapse:collapse; width:100%; }
+th, td { padding:6px 10px; border-bottom:1px solid var(--line); text-align:left; }
+td.n { text-align:right; font-variant-numeric:tabular-nums; }
+.ok { color:var(--ok); }
+.bad { color:var(--bad); }
+details { border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin:8px 0; }
+summary { cursor:pointer; }
+pre { background:var(--code); padding:8px; border-radius:6px; white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0 8px; }
+.label { color:var(--muted); font-size:13px; }
+</style></head><body><main><h1>recorded-baseline</h1><dl><dt>records</dt><dd>2</dd><dt>dataset sha256</dt><dd>cb53e1b397a7dbb35b0153afe64272478aa86830eecdfaa7b16c70996d568683</dd><dt>evaluators</dt><dd>builtin/exact-match@1.0.0</dd><dt>trials</dt><dd>1</dd><dt>started</dt><dd>2026-10-23T06:22:58.168137+00:00</dd><dt>finished</dt><dd>2026-10-23T06:22:58.168533+00:00</dd><dt>evalsi</dt><dd>0.3.1</dd></dl><h2>Metrics</h2><div class=scroll><table><tr><th>metric</th><th>n</th><th>mean</th><th>CI</th><th>skipped</th><th>errors</th></tr><tr><td>exact-match</td><td class=n>2</td><td class=n>1.000</td><td class=n>[0.342, 1.000]</td><td class=n>0</td><td class=n>0</td></tr></table></div><h2>Gates</h2><ul><li><span class=ok>passed</span> exact-match mean ≥ 1.0</li><li><span class=ok>passed</span> exact-match error_rate ≤ 0.0</li></ul></main></body></html>

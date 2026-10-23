@@ -1,0 +1,71 @@
+{
+  "width": 1280,
+  "height": 720,
+  "fps": 25,
+  "duration_seconds": 152.72000000000003,
+  "voice": "FFmpeg libflite slt (synthetic)",
+  "type": "edited walkthrough using actual captured CLI output and an actual generated report screenshot",
+  "scenes": [
+    {
+      "id": "intro",
+      "title": "Catch a regression. Keep the evidence.",
+      "start": 0,
+      "end": 15.6
+    },
+    {
+      "id": "install",
+      "title": "Start with the published release",
+      "start": 15.6,
+      "end": 32.92
+    },
+    {
+      "id": "fixtures",
+      "title": "One changed answer. The same expectation.",
+      "start": 32.92,
+      "end": 50.400000000000006
+    },
+    {
+      "id": "baseline",
+      "title": "The passing control exits zero",
+      "start": 50.400000000000006,
+      "end": 64.12
+    },
+    {
+      "id": "regressed",
+      "title": "The negative control exits three",
+      "start": 64.12,
+      "end": 79.72
+    },
+    {
+      "id": "report",
+      "title": "Show the case behind the score",
+      "start": 79.72,
+      "end": 99.36
+    },
+    {
+      "id": "ci",
+      "title": "Let the gate control the CI step",
+      "start": 99.36,
+      "end": 116.28
+    },
+    {
+      "id": "limits",
+      "title": "Two fixtures demonstrate mechanics",
+      "start": 116.28,
+      "end": 135.36
+    },
+    {
+      "id": "next",
+      "title": "Try both controls on your own machine",
+      "start": 135.36,
+      "end": 152.72000000000003
+    }
+  ],
+  "evidence_sha256": {
+    "results/baseline.json": "3f6b6077d541c5e371570c640a171e467e24d04e6cc89f59f604741ddd0a3674",
+    "results/regressed.json": "cd61c98dffd3d8f8c55688640b13748bf7b48a321b3f815b04f6f6cc037ec686",
+    "results/transcript.json": "2900bab610acc027e0192c3d61cc5e580fad5fc1f2f02492df264396b88edd24",
+    "results/regressed.html": "e90835eabe6abe14a074e30c19067396de7470fcdf279d63aab433ede432b107"
+  },
+  "video_sha256": "af63849f976e8fde01cdd66ae96659db2220e7908100062a1d83b1d214f6a7f5"
+}

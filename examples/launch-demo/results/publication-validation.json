@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "checks": [
+    {
+      "name": "video_codecs_and_evidence_hashes",
+      "passed": true,
+      "duration_seconds": 152.741333
+    },
+    {
+      "name": "static_page_local_links",
+      "passed": true,
+      "count": 14
+    },
+    {
+      "name": "browser_video_playback_and_nine_caption_cues",
+      "passed": true
+    },
+    {
+      "name": "desktop_and_mobile_no_horizontal_overflow",
+      "passed": true,
+      "widths": [
+        1280,
+        390
+      ]
+    },
+    {
+      "name": "actual_html_report_failed_case_and_no_page_errors",
+      "passed": true
+    }
+  ],
+  "note": "Local package/browser validation. No hosted GitHub Actions execution or website deployment is claimed."
+}

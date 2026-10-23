@@ -1,0 +1,9 @@
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: recorded-regression}
+spec:
+  dataset: {path: regressed.jsonl}
+  evaluators: [{ref: exact-match}]
+  gates:
+    - {metric: exact-match, min: 1.0}
+    - {metric: exact-match, stat: GATE_STAT_ERROR_RATE, max: 0.0}

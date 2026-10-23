@@ -1,0 +1,30 @@
+{
+  "official_starter": [
+    {
+      "spec": "run.yaml",
+      "exit_code": 0,
+      "report_exit_code": 0
+    },
+    {
+      "spec": "regressed.yaml",
+      "exit_code": 3,
+      "report_exit_code": 0
+    }
+  ],
+  "note": "Actual local CLI executions; not a GitHub Actions run",
+  "exact_workflow_shell_steps": [
+    {
+      "fixture": "baseline",
+      "gate_exit": 0,
+      "report_exit": 0,
+      "job_summary_written": true
+    },
+    {
+      "fixture": "regressed",
+      "gate_exit": 3,
+      "report_exit": 0,
+      "job_summary_written": true
+    }
+  ],
+  "workflow_yaml_parses": true
+}

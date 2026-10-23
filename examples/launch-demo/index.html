@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A reproducible Evals.si 0.3.1 walkthrough: score recorded answers, catch a known regression and share the evidence.">
+  <title>Catch a recorded-output regression · Evals.si</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0c1725;--surface:#14283a;--line:#355165;--text:#edf4fb;--muted:#b7cbdc;--accent:#80e9c6}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:17px/1.65 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:36px 24px 70px}a{color:var(--accent);text-underline-offset:3px}a:focus-visible,video:focus-visible{outline:3px solid #ffd877;outline-offset:5px}header{display:flex;justify-content:space-between;gap:20px;align-items:center}.brand{font-size:24px;font-weight:800}.version{color:var(--muted);font-size:14px}h1{font-size:clamp(34px,5vw,54px);line-height:1.12;letter-spacing:-1.5px;margin:38px 0 16px}.intro{font-size:21px;color:var(--muted);max-width:780px}video{width:100%;background:#06111d;border:1px solid var(--line);border-radius:14px;margin-top:22px}.disclosure{font-size:14px;color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:30px 0}.card{border:1px solid var(--line);border-radius:12px;padding:20px;background:var(--surface)}.card h2{font-size:19px;margin:0 0 10px}.card p{font-size:15px;margin:8px 0;color:var(--muted)}table{border-collapse:collapse;width:100%;font-size:16px}td,th{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted)}.table-wrap{overflow:auto}.note{border-left:4px solid var(--accent);padding:12px 20px;background:var(--surface);margin:30px 0}h2{margin-top:36px}code{font:14px/1.6 ui-monospace,monospace}pre{overflow:auto;background:#06111d;border:1px solid var(--line);padding:20px;border-radius:10px}footer{margin-top:45px;color:var(--muted);font-size:14px}@media(max-width:700px){.cards{grid-template-columns:1fr}main{padding:24px 16px}.version{font-size:12px}}
+  </style>
+</head>
+<body>
+<main>
+  <header><div class="brand">evals<span style="color:var(--accent)">.si</span></div><div class="version">Published 0.3.1 · recorded-output demo</div></header>
+  <h1>Catch a regression.<br>Keep the evidence.</h1>
+  <p class="intro">Score two recorded answers, introduce a known wrong answer, and inspect the failed case in a shareable report.</p>
+  <video controls preload="metadata" poster="assets/poster.png" aria-label="Evals.si recorded-output regression walkthrough">
+    <source src="assets/demo.mp4" type="video/mp4">
+    <track src="assets/demo.vtt" kind="captions" srclang="en" label="English" default>
+    Your browser cannot play this video. <a href="assets/demo.mp4">Download the MP4</a> or read the <a href="video/SCRIPT.md">transcript</a>.
+  </video>
+  <p class="disclosure">Synthetic fixtures and synthetic narration. Actual captured CLI results and generated report. No live agent/model calls. <a href="video/SCRIPT.md">Transcript</a> · <a href="assets/demo.mp4" download>Download video</a> · <a href="assets/demo.srt">SRT captions</a></p>
+  <div class="cards">
+    <section class="card"><h2>1. Run it locally</h2><p>Install the release, try the passing control, then inspect the failing one.</p><a href="TUTORIAL-LOCAL.md">Local tutorial</a></section>
+    <section class="card"><h2>2. Put it in CI</h2><p>A gate that fails the step, with reports retained after failure.</p><a href="TUTORIAL-CI.md">GitHub Actions tutorial</a></section>
+    <section class="card"><h2>3. Read the evidence</h2><p>Observed outcomes, raw artifacts, reproduction and limits.</p><a href="REPORT.md">Companion report</a></section>
+  </div>
+  <h2>What happened in this run?</h2>
+  <div class="table-wrap"><table><thead><tr><th>Measurement</th><th>Baseline</th><th>Negative control</th></tr></thead><tbody><tr><td>Scored records</td><td>2</td><td>2</td></tr><tr><td>Exact-match mean</td><td>1.000</td><td>0.500</td></tr><tr><td>Errors / skips</td><td>0 / 0</td><td>0 / 0</td></tr><tr><td>CLI exit</td><td>0 — pass</td><td>3 — gate failed</td></tr><tr><td>Actual generated report</td><td><a href="results/baseline.html">Open baseline</a></td><td><a href="results/regressed.html">Open negative control</a></td></tr></tbody></table></div>
+  <p>The negative fixture answers <strong>Kyoto</strong> to “Capital of Japan?” against the reference <strong>Tokyo</strong>. The report identifies the failed case and preserves its input, output and reference.</p>
+  <div class="note"><strong>Scope matters.</strong> Two synthetic cases demonstrate the mechanics. They do not establish application safety, evaluator quality or statistically reliable real-agent improvement. Refresh outputs from your own application, review expectations, and choose representative data and appropriate checks before relying on the gate.</div>
+  <h2>Reproduce the included package</h2>
+  <pre><code>cd examples/launch-demo
+bash scripts/setup.sh
+.venv/bin/python scripts/run_demo.py</code></pre>
+  <p>The verification script expects the negative control to fail. For a production gate, run <code>evalsi run</code> directly, as shown in the CI tutorial. The hosted Actions recipe still needs execution in your own repository.</p>
+  <p><a href="results/transcript.json">Command transcript</a> · <a href="results/baseline.json">Baseline JSON</a> · <a href="results/regressed.json">Negative-control JSON</a> · <a href="assets/production.json">Video provenance</a> · <a href="results/environment.txt">Installed versions</a></p>
+  <footer>Open-source evaluation for Python teams · <a href="https://github.com/Abhishek-Rnjn/Evals.si">Evals.si on GitHub</a><br>This static page is part of the demo package. Publishing the Git branch does not automatically deploy a website.</footer>
+</main>
+</body>
+</html>

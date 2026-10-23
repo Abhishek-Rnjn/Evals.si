@@ -1,0 +1,99 @@
+[
+  {
+    "command": [
+      "evalsi",
+      "--version"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "evalsi 0.3.1\n",
+    "stderr": "",
+    "elapsed_seconds": 0.184
+  },
+  {
+    "command": [
+      "evalsi",
+      "run",
+      "-f",
+      "run.yaml",
+      "--output",
+      "/workspace/Evals.si/examples/launch-demo/results/baseline.json"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "2 records\n\nmetric       n  mean   95% CI          skipped  errors\nexact-match  2  1.000  [0.342, 1.000]        0       0\n\ngates:\n  [pass] exact-match mean min 1.0\n  [pass] exact-match error_rate max 0.0\n",
+    "stderr": "",
+    "elapsed_seconds": 0.2254
+  },
+  {
+    "command": [
+      "evalsi",
+      "report",
+      "/workspace/Evals.si/examples/launch-demo/results/baseline.json",
+      "-o",
+      "/workspace/Evals.si/examples/launch-demo/results/baseline.html"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "",
+    "stderr": "wrote /workspace/Evals.si/examples/launch-demo/results/baseline.html\n",
+    "elapsed_seconds": 0.1982
+  },
+  {
+    "command": [
+      "evalsi",
+      "report",
+      "/workspace/Evals.si/examples/launch-demo/results/baseline.json",
+      "-o",
+      "/workspace/Evals.si/examples/launch-demo/results/baseline.md"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "",
+    "stderr": "wrote /workspace/Evals.si/examples/launch-demo/results/baseline.md\n",
+    "elapsed_seconds": 0.1934
+  },
+  {
+    "command": [
+      "evalsi",
+      "run",
+      "-f",
+      "regressed.yaml",
+      "--output",
+      "/workspace/Evals.si/examples/launch-demo/results/regressed.json"
+    ],
+    "exit_code": 3,
+    "expected_exit_code": 3,
+    "stdout": "2 records\n\nmetric       n  mean   95% CI          skipped  errors\nexact-match  2  0.500  [0.095, 0.905]        0       0\n\ngates:\n  [FAIL] exact-match mean min 1.0 (mean 0.5 is below 1)\n  [pass] exact-match error_rate max 0.0\n",
+    "stderr": "",
+    "elapsed_seconds": 0.1966
+  },
+  {
+    "command": [
+      "evalsi",
+      "report",
+      "/workspace/Evals.si/examples/launch-demo/results/regressed.json",
+      "-o",
+      "/workspace/Evals.si/examples/launch-demo/results/regressed.html"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "",
+    "stderr": "wrote /workspace/Evals.si/examples/launch-demo/results/regressed.html\n",
+    "elapsed_seconds": 0.1686
+  },
+  {
+    "command": [
+      "evalsi",
+      "report",
+      "/workspace/Evals.si/examples/launch-demo/results/regressed.json",
+      "-o",
+      "/workspace/Evals.si/examples/launch-demo/results/regressed.md"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "",
+    "stderr": "wrote /workspace/Evals.si/examples/launch-demo/results/regressed.md\n",
+    "elapsed_seconds": 0.2046
+  }
+]

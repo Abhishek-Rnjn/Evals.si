@@ -1,0 +1,148 @@
+{
+  "manifest": {
+    "evalsi_version": "0.3.1",
+    "api_version": "evalsi.v1alpha1",
+    "name": "recorded-baseline",
+    "project": "",
+    "started_at": "2026-10-23T06:22:58.168137+00:00",
+    "finished_at": "2026-10-23T06:22:58.168533+00:00",
+    "spec": {
+      "dataset": {
+        "path": "data.jsonl"
+      },
+      "evaluators": [
+        {
+          "ref": "exact-match"
+        }
+      ],
+      "gates": [
+        {
+          "metric": "exact-match",
+          "min": 1.0
+        },
+        {
+          "metric": "exact-match",
+          "stat": "GATE_STAT_ERROR_RATE",
+          "max": 0.0
+        }
+      ]
+    },
+    "dataset": {
+      "records": 2,
+      "sha256": "cb53e1b397a7dbb35b0153afe64272478aa86830eecdfaa7b16c70996d568683"
+    },
+    "target": null,
+    "agent": null,
+    "evaluators": [
+      {
+        "name": "exact-match",
+        "ref": "builtin/exact-match@1.0.0",
+        "params": {
+          "normalize": true,
+          "ignore_punctuation": false
+        }
+      }
+    ],
+    "judge": null,
+    "trials": 1
+  },
+  "summaries": [
+    {
+      "metric": "exact-match",
+      "evaluator": "exact-match",
+      "kind": "proportion",
+      "n": 2,
+      "mean": 1.0,
+      "std": 0.0,
+      "skipped": 0,
+      "errors": 0,
+      "ci": {
+        "low": 0.3423802275066532,
+        "high": 1.0,
+        "level": 0.95,
+        "method": "wilson"
+      },
+      "higher_is_better": true
+    }
+  ],
+  "results": [
+    {
+      "record_id": "france",
+      "evaluator": "exact-match",
+      "evaluator_ref": "builtin/exact-match@1.0.0",
+      "outcome": "scored",
+      "duration_ms": 0.036,
+      "scores": [
+        {
+          "name": "exact-match",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "record_id": "japan",
+      "evaluator": "exact-match",
+      "evaluator_ref": "builtin/exact-match@1.0.0",
+      "outcome": "scored",
+      "duration_ms": 0.011,
+      "scores": [
+        {
+          "name": "exact-match",
+          "passed": true
+        }
+      ]
+    }
+  ],
+  "records": [
+    {
+      "id": "france",
+      "input": {
+        "text": "Capital of France?"
+      },
+      "output": {
+        "text": "Paris"
+      },
+      "reference": {
+        "text": "Paris"
+      },
+      "provenance": {
+        "run": {
+          "trial": 0
+        }
+      }
+    },
+    {
+      "id": "japan",
+      "input": {
+        "text": "Capital of Japan?"
+      },
+      "output": {
+        "text": "Tokyo"
+      },
+      "reference": {
+        "text": "Tokyo"
+      },
+      "provenance": {
+        "run": {
+          "trial": 0
+        }
+      }
+    }
+  ],
+  "gates": [
+    {
+      "metric": "exact-match",
+      "stat": "mean",
+      "min": 1.0,
+      "passed": true,
+      "value": 1.0
+    },
+    {
+      "metric": "exact-match",
+      "stat": "error_rate",
+      "max": 0.0,
+      "passed": true,
+      "value": 0.0
+    }
+  ]
+}

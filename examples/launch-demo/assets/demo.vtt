@@ -1,0 +1,28 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:15.600
+Here is a small, reproducible Evals dot S I workflow. We will score two recorded answers, catch a deliberately introduced regression, and generate a report. These are synthetic examples, with no live agent or model calls.
+
+00:00:15.600 --> 00:00:32.920
+Install the published SDK and harness, both pinned to version zero point three point one. The official recorded starter supplies a passing fixture and a negative control. After installation, these evaluations run offline, without a server or sandbox.
+
+00:00:32.920 --> 00:00:50.400
+Each case has a stable identifier, an input, a recorded output, and a reference. The baseline answers both questions correctly. The negative control changes Japan's answer from Tokyo to Kyoto. We have prewritten these outputs; no agent is generating them.
+
+00:00:50.400 --> 00:01:04.120
+Run the baseline specification and save its result. Both records match, the mean is one, and the evaluator reports no errors or skips. The mean gate and the zero error rate gate pass. The command exits zero.
+
+00:01:04.120 --> 00:01:19.720
+Now evaluate the deliberately regressed fixture. Only one of two records matches. The mean falls to zero point five, so the required mean of one fails. The command exits three: a gate failure, with no evaluator errors.
+
+00:01:19.720 --> 00:01:39.360
+Generate an HTML report from the saved result. It records the evaluator, dataset identity, scores, intervals, and gate outcome. The failed Japan example shows the actual recorded output, Kyoto, beside the reference, Tokyo. Keep the raw JSON alongside the report.
+
+00:01:39.360 --> 00:01:56.280
+The tutorial includes a GitHub Actions recipe. Run the evaluation directly, so a nonzero exit fails the step. Generate and upload reports even after a failed gate. The equivalent commands were verified locally; this video does not claim an Actions run.
+
+00:01:56.280 --> 00:02:15.360
+Two synthetic records are a demonstration, not evidence that an application is safe. The confidence intervals are wide. Exact match is not suitable for every task. Replace the fixtures with representative application outputs and independently reviewed expectations before relying on the check.
+
+00:02:15.360 --> 00:02:32.720
+The video, tutorials, report, raw outputs, and reproduction scripts are published together in the launch demo directory. Start with the local tutorial, then try the CI recipe. We are looking for Python teams who want to evaluate their own examples.

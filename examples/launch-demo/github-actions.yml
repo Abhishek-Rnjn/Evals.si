@@ -1,0 +1,57 @@
+# Copy to .github/workflows/evalsi-recorded.yml after generating evals/.
+# This is a gate, not the local two-control verification harness.
+name: evalsi-recorded
+on:
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: Choose the passing or deliberately regressed demo
+        type: choice
+        options: [baseline, regressed]
+        default: baseline
+  pull_request:
+    paths: ['evals/**', '.github/workflows/evalsi-recorded.yml']
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install 'evalsi==0.3.1' 'evalsi-harness==0.3.1'
+      # Refresh evals/data.jsonl from your application here for a meaningful PR check.
+      - name: Evaluate recorded outputs
+        env:
+          FIXTURE: ${{ inputs.fixture || 'baseline' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$FIXTURE" in
+            baseline) spec=evals/run.yaml ;;
+            regressed) spec=evals/regressed.yaml ;;
+            *) echo 'Unsupported fixture' >&2; exit 1 ;;
+          esac
+          mkdir -p evalsi-report
+          evalsi run -f "$spec" --output evalsi-report/results.json
+      - name: Generate reports and job summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f evalsi-report/results.json; then
+            evalsi report evalsi-report/results.json -o evalsi-report/report.md
+            evalsi report evalsi-report/results.json -o evalsi-report/report.html
+            cat evalsi-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No result artifact was produced; inspect the failed evaluation step.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: evalsi-recorded-report
+          path: evalsi-report/
+          retention-days: 7
+          if-no-files-found: warn

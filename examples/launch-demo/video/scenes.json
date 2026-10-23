@@ -1,0 +1,65 @@
+[
+  {
+    "id": "intro",
+    "title": "Catch a regression. Keep the evidence.",
+    "eyebrow": "EVALS.SI / A SHORT WALKTHROUGH",
+    "kind": "intro",
+    "narration": "Here is a small, reproducible Evals dot S I workflow. We will score two recorded answers, catch a deliberately introduced regression, and generate a report. These are synthetic examples, with no live agent or model calls."
+  },
+  {
+    "id": "install",
+    "title": "Start with the published release",
+    "eyebrow": "01 / INSTALL",
+    "kind": "install",
+    "narration": "Install the published SDK and harness, both pinned to version zero point three point one. The official recorded starter supplies a passing fixture and a negative control. After installation, these evaluations run offline, without a server or sandbox."
+  },
+  {
+    "id": "fixtures",
+    "title": "One changed answer. The same expectation.",
+    "eyebrow": "02 / INSPECT THE CASES",
+    "kind": "fixtures",
+    "narration": "Each case has a stable identifier, an input, a recorded output, and a reference. The baseline answers both questions correctly. The negative control changes Japan's answer from Tokyo to Kyoto. We have prewritten these outputs; no agent is generating them."
+  },
+  {
+    "id": "baseline",
+    "title": "The passing control exits zero",
+    "eyebrow": "03 / RUN THE BASELINE",
+    "kind": "baseline",
+    "narration": "Run the baseline specification and save its result. Both records match, the mean is one, and the evaluator reports no errors or skips. The mean gate and the zero error rate gate pass. The command exits zero."
+  },
+  {
+    "id": "regressed",
+    "title": "The negative control exits three",
+    "eyebrow": "04 / CATCH THE REGRESSION",
+    "kind": "regressed",
+    "narration": "Now evaluate the deliberately regressed fixture. Only one of two records matches. The mean falls to zero point five, so the required mean of one fails. The command exits three: a gate failure, with no evaluator errors."
+  },
+  {
+    "id": "report",
+    "title": "Show the case behind the score",
+    "eyebrow": "05 / SHARE THE REPORT",
+    "kind": "report",
+    "narration": "Generate an HTML report from the saved result. It records the evaluator, dataset identity, scores, intervals, and gate outcome. The failed Japan example shows the actual recorded output, Kyoto, beside the reference, Tokyo. Keep the raw JSON alongside the report."
+  },
+  {
+    "id": "ci",
+    "title": "Let the gate control the CI step",
+    "eyebrow": "06 / GITHUB ACTIONS RECIPE",
+    "kind": "ci",
+    "narration": "The tutorial includes a GitHub Actions recipe. Run the evaluation directly, so a nonzero exit fails the step. Generate and upload reports even after a failed gate. The equivalent commands were verified locally; this video does not claim an Actions run."
+  },
+  {
+    "id": "limits",
+    "title": "Two fixtures demonstrate mechanics",
+    "eyebrow": "07 / READ THE LIMITS",
+    "kind": "limits",
+    "narration": "Two synthetic records are a demonstration, not evidence that an application is safe. The confidence intervals are wide. Exact match is not suitable for every task. Replace the fixtures with representative application outputs and independently reviewed expectations before relying on the check."
+  },
+  {
+    "id": "next",
+    "title": "Try both controls on your own machine",
+    "eyebrow": "EVALS.SI / YOUR NEXT STEP",
+    "kind": "next",
+    "narration": "The video, tutorials, report, raw outputs, and reproduction scripts are published together in the launch demo directory. Start with the local tutorial, then try the CI recipe. We are looking for Python teams who want to evaluate their own examples."
+  }
+]

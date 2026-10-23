@@ -1,0 +1,9 @@
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: recorded-baseline}
+spec:
+  dataset: {path: data.jsonl}
+  evaluators: [{ref: exact-match}]
+  gates:
+    - {metric: exact-match, min: 1.0}
+    - {metric: exact-match, stat: GATE_STAT_ERROR_RATE, max: 0.0}

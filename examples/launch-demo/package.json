@@ -1,0 +1,7 @@
+{
+  "name": "evalsi-launch-demo-media",
+  "private": true,
+  "type": "module",
+  "scripts": {"render": "node video/render.mjs", "verify": "node scripts/verify_publication.mjs"},
+  "dependencies": {"playwright-core": "1.64.1"}
+}
