@@ -209,3 +209,35 @@ def test_the_determinism_report_carries_the_variance_aware_advice() -> None:
     assert advice["metrics"][0]["metric"] == report["metrics"][0]["metric"]
     # The fixed conservative count is still there, unchanged.
     assert report["trial_recommendation"]["method"] == "hoeffding"
+
+
+def test_a_declared_range_caps_the_bound_and_an_undeclared_one_is_flagged() -> None:
+    from evalsi.determinism import trial_advice
+
+    # Three trials alternating 0 and 1: the chi-square bound is far above 0.25, the
+    # most any score in [0, 1] can vary (an error rate, as in tool-errors).
+    rows = [numeric_row("t", k, float(k % 2)) for k in range(3)]
+    bounded = {"results": rows, "summaries": [{"metric": "score", "min": 0.0, "max": 1.0}]}
+    (m,) = trial_advice(bounded)["metrics"]
+    assert m["bounded"] is True
+    assert m["variance_bound"] == 0.25
+    assert "capped" in m["basis"]
+    # The same scores with no declared range (a token count, say) keep the raw bound.
+    (raw,) = trial_advice({"results": rows})["metrics"]
+    assert raw["bounded"] is False
+    assert raw["variance_bound"] > 0.25
+    assert "own units" in raw["basis"]
+
+
+def test_the_one_line_advice_skips_unbounded_metrics_and_prefers_one_that_varied() -> None:
+    from evalsi.cli import _trial_advice_line
+    from evalsi.determinism import trial_advice
+
+    # "a-steady" sorts first, so a plain max over equal bounds would pick it.
+    rows = [{**row(f"t{i}", k, True), "evaluator": "a-steady"} for i in range(3) for k in range(3)]
+    rows += [{**row(f"t{i}", k, k != 2), "evaluator": "flaky"} for i in range(3) for k in range(3)]
+    rows += [numeric_row(f"t{i}", k, 5000.0 + 50 * k) for i in range(3) for k in range(3)]
+    line = _trial_advice_line(trial_advice({"results": rows}), 3)
+    assert line.startswith("trials: flaky would need about 97 per task")
+    only_tokens = trial_advice({"results": [r for r in rows if r["evaluator"] == "score"]})
+    assert "no bounded metric varied" in _trial_advice_line(only_tokens, 3)

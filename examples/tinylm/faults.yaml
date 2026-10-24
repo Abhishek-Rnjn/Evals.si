@@ -1,0 +1,35 @@
+# Fault injection: the harness makes read_file fail half the time and bash
+# time out 30% of the time. The faults are seeded by task, trial and tool, so
+# a rerun injects exactly the same ones.
+#   evalsi run -f faults.yaml --output faults.json    # exit 3: one trial runs out of steps
+# Walkthrough: docs/tutorials/06-faults-injection-and-approvals.md.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: tinylm-faults}
+spec:
+  target:
+    connector: openai-compatible
+    model: tinylm-good
+    base_url: http://127.0.0.1:8765/v1
+    stream: true
+  dataset: {path: tasks.jsonl}
+  harness:
+    builtin:
+      max_steps: 12
+      tools:
+        faults:
+          - {tool: read_file, kind: error, rate: 0.5}
+          - {tool: bash, kind: timeout, rate: 0.3}
+  environment:
+    setup:
+      - git init -q && git add -A && git -c user.email=e@x -c user.name=e commit -qm base
+    sandbox: {min_isolation: namespaced, network: deny}
+  evaluators:
+    - ref: task-success
+    - ref: run-completed
+    - ref: tool-errors
+    - ref: loop-detection
+  trials: 3
+  gates:
+    - {metric: task-success, min: 1.0}
+    - {metric: run-completed, min: 1.0}

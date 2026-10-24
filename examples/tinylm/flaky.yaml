@@ -1,0 +1,31 @@
+# Trials: run every task three times and gate on pass^3, so an agent that
+# passes "most of the time" cannot pass the gate by luck.
+#   evalsi run -f flaky.yaml --output flaky.json      # exit 3: pass@3 1.0, pass^3 0.0
+#   evalsi determinism flaky.json
+# Walkthrough: docs/tutorials/04-trials-and-flakiness.md.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: tinylm-flaky}
+spec:
+  target:
+    connector: openai-compatible
+    model: tinylm-flaky                  # botches one fix on every third attempt at a task
+    base_url: http://127.0.0.1:8765/v1
+    stream: true
+  dataset: {path: tasks.jsonl}
+  harness:
+    builtin:
+      max_steps: 12
+      budget: {tokens: 200000, wall_clock: 2m}
+      pricing: {input_per_mtok: 1, output_per_mtok: 4}
+  environment:
+    setup:
+      - git init -q && git add -A && git -c user.email=e@x -c user.name=e commit -qm base
+    sandbox: {min_isolation: namespaced, network: deny}
+  evaluators:
+    - ref: task-success
+    - ref: run-completed
+  trials: 3
+  gates:
+    - {metric: task-success.pass^3, min: 0.8}            # 3 in a row, on 80% of tasks
+    - {metric: task-success, stat: GATE_STAT_ERROR_RATE, max: 0.05}

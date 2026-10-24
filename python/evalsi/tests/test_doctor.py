@@ -131,6 +131,11 @@ def test_agent_requires_namespaced_isolation_and_honors_config(
     assert calls[-1] == ["/release/evalsid", "sandbox", "probe", "--config", config]
     # SDK scoring can still use the installation when only confined isolation exists.
     assert main(["doctor", "--format", "json"]) == 0
+    # The level is shown, so it is clear why agent readiness ignores a confined backend.
+    (sandbox,) = [
+        c for c in json.loads(capsys.readouterr().out)["checks"] if c["name"] == "sandbox"
+    ]
+    assert sandbox["detail"].endswith(f"({level})" if level != "unknown" else "bwrap")
 
 
 def test_available_backend_enforcement_warning_is_sanitized(

@@ -205,3 +205,12 @@ def test_an_idle_evidence_strategy_is_not_counted_as_run() -> None:
     data["records"][1]["metadata"]["agent"]["evidence"] = {"entries": 3, "conclusions": 1}
     (m,) = matrix.mechanisms(data)
     assert (m.name, m.ran, m.of) == ("context:evidence-state", 1, 2)
+
+
+def test_the_significance_footnote_only_explains_a_star() -> None:
+    same = matrix.build([("a.json", A), ("b.json", A)], "task-success")
+    assert "*" not in matrix.table(same)
+    differ = matrix.build(
+        [("a.json", A), ("w.json", results("x", [0] * 10, tokens=1, steps=1))], "task-success"
+    )
+    assert matrix.table(differ).endswith("* the interval of the paired difference excludes zero")

@@ -1,0 +1,60 @@
+# Gate every pull request on the TinyLM agent run: the job installs Evals.si,
+# starts the fake model, runs the spec in a sandbox and fails when a gate fails
+# (exit 3) or the run cannot complete (exit 1). Copy this to
+# .github/workflows/agent-eval.yml, and copy examples/tinylm to evals/ (or
+# change working-directory). The walkthrough is docs/tutorials/09-ci.md.
+name: agent-eval
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: evals
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Sandbox prerequisites
+        # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
+        # which the sandbox needs, unless this is relaxed.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: pip install 'evalsi==0.3.1' 'evalsi-harness==0.3.1'
+      - run: evalsi doctor --require agent
+
+      # The model under test. With a real model, drop this step, point the
+      # spec's target at it, and pass the key as a secret (see the tutorial).
+      - name: Start TinyLM
+        run: |
+          python3 tinylm.py --port 8765 2> tinylm.log &
+          for _ in $(seq 50); do curl -sf http://127.0.0.1:8765/healthz && break; sleep 0.1; done
+
+      - name: Run the agent gate
+        run: evalsi run -f run.yaml --output results.json
+
+      - name: Build the report
+        if: always()
+        run: evalsi report results.json -o report.md
+
+      - name: Show the report in the job summary
+        if: always()
+        run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-eval-report
+          path: |
+            evals/results.json
+            evals/report.md
+            evals/tinylm.log

@@ -236,7 +236,12 @@ def trial_advice(
     largest p(1-p) over the Clopper-Pearson interval at ``confidence``; with few trials
     that is the worst case 1/4, as it should be). For a numeric score it is the
     chi-square upper bound, which assumes roughly normal scores and is not valid for
-    heavy-tailed ones. It feeds ``n = z^2 * variance / margin^2``.
+    heavy-tailed ones, capped at ``(max - min)^2 / 4`` when the evaluator declares a range
+    (no score in a range can vary more). It feeds ``n = z^2 * variance / margin^2``.
+
+    Margins are in the metric's own units. ``bounded`` says whether that unit is a known
+    range (pass/fail, or a declared ``min`` and ``max``); for an unbounded metric such as
+    a token count, a margin of 0.1 is rarely what anyone means.
 
     A numeric metric with no variation anywhere gets no recommendation. This only
     reports: it changes neither the default number of trials nor any gate.
@@ -244,6 +249,11 @@ def trial_advice(
     for margin in margins:
         recommended_trials(margin=margin, confidence=confidence)  # validates both
     cells, _, _ = _collect(data)
+    ranges = {
+        str(s.get("metric")): (s.get("min"), s.get("max"))
+        for s in data.get("summaries") or []
+        if isinstance(s, Mapping)
+    }
     out = []
     for metric, records in sorted(cells.items()):
         repeated = [
@@ -264,6 +274,13 @@ def trial_advice(
             "observed_variance": pooled,
             "trials_run_max": max(len(v) for v in floats),
         }
+        low, high = ranges.get(metric, (None, None))
+        span = (
+            float(high) - float(low)
+            if isinstance(low, int | float) and isinstance(high, int | float) and high > low
+            else None
+        )
+        entry["bounded"] = bernoulli or span is not None
         bound: float | None
         if bernoulli:
             bound = max(bernoulli_variance_bound(int(sum(v)), len(v), confidence) for v in floats)
@@ -279,6 +296,13 @@ def trial_advice(
                 "largest per-task chi-square upper bound on the variance; assumes roughly "
                 "normal scores"
             )
+            if span is not None:
+                cap = span**2 / 4
+                if bound > cap:
+                    bound = cap
+                    entry["basis"] += "; capped at the most a score in its declared range can vary"
+            else:
+                entry["basis"] += "; no declared range, so the margins are in its own units"
         else:
             bound = None
             entry["basis"] = "no variation observed in a numeric metric; no recommendation"

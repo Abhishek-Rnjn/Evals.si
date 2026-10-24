@@ -1,0 +1,29 @@
+# Record a session log of every model call and tool result, then replay it
+# with no model at all: the sandbox commands run again, the model does not.
+#   evalsi run -f record.yaml                                       # needs TinyLM
+#   sed 's/mode: record/mode: replay/' record.yaml > replay.yaml
+#   evalsi run -f replay.yaml                                       # TinyLM can be stopped
+# Walkthrough: docs/tutorials/05-record-replay-and-compare.md.
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: tinylm-record}
+spec:
+  target:
+    connector: openai-compatible
+    model: tinylm-good
+    base_url: http://127.0.0.1:8765/v1
+    stream: true
+  dataset: {path: tasks.jsonl}
+  harness:
+    builtin:
+      max_steps: 12
+      recording: {mode: record, dir: cassettes}
+  environment:
+    setup:
+      - git init -q && git add -A && git -c user.email=e@x -c user.name=e commit -qm base
+    sandbox: {min_isolation: namespaced, network: deny}
+  evaluators:
+    - ref: task-success
+    - ref: run-completed
+  gates:
+    - {metric: task-success, min: 1.0}

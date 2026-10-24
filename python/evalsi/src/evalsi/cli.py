@@ -30,8 +30,9 @@ _EMPTY = inspect.Parameter.empty
 
 def main(argv: Sequence[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] == "serve" and not {"-h", "--help"} & set(argv[1:2]):
-        # Everything after `serve` belongs to evalsid; argparse would try to parse its flags.
+    if argv and argv[0] == "serve":
+        # Everything after `serve` belongs to evalsid, -h and --help included: `evalsid
+        # serve -h` lists its flags. argparse would try to parse them.
         argv = ["serve", "--", *argv[1:]]
     parser = _parser()
     args = parser.parse_args(argv)
@@ -42,6 +43,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         # RuntimeError covers ServerError and AuthError.
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    except BrokenPipeError:
+        # The reader went away (`evalsi run ... | head`). Point stdout at devnull so the
+        # interpreter's final flush does not raise again, and exit as a shell does.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 141
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -841,11 +847,14 @@ def _trial_advice(result: Any) -> dict[str, Any] | None:
 
 
 def _trial_advice_line(advice: dict[str, Any], ran: int) -> str:
-    """One line for the metric that needs the most trials at a margin of 0.1."""
-    metrics = [m for m in advice["metrics"] if m["trials_for_margin"]]
+    """One line for the metric that needs the most trials at a margin of 0.1. Only
+    metrics with a known range count: 0.1 of a token count means nothing. On a tie (with
+    few trials every pass/fail metric has the worst-case bound) a metric that varied wins
+    over one that never did."""
+    metrics = [m for m in advice["metrics"] if m["trials_for_margin"] and m.get("bounded", True)]
     if not metrics:
-        return "trials: no numeric metric varied, so no recommendation (`evalsi determinism`)"
-    worst = max(metrics, key=lambda m: m["trials_for_margin"]["0.1"])
+        return "trials: no bounded metric varied, so no recommendation (`evalsi determinism`)"
+    worst = max(metrics, key=lambda m: (m["trials_for_margin"]["0.1"], m["observed_variance"]))
     needed = worst["trials_for_margin"]["0.1"]
     return (
         f"trials: {worst['metric']} would need about {needed} per task for +/-0.1 on the "
