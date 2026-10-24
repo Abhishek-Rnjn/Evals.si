@@ -1,0 +1,58 @@
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: first-tool-calling-run
+spec:
+  dataset:
+    path: tasks.jsonl
+  target:
+    connector: openai-compatible
+    base_url: http://127.0.0.1:8765/v1
+    model: loop
+    max_tokens: 256
+  harness:
+    builtin:
+      max_steps: 6
+      tools:
+        sandbox: false
+        mocks:
+        - name: lookup_order
+          description: Look up an order by numeric id.
+          input_schema:
+            type: object
+            properties:
+              id:
+                type: integer
+            required:
+            - id
+          response: '{"status":"paid","refundable":true}'
+        - name: refund
+          description: Refund an eligible order by numeric id.
+          input_schema:
+            type: object
+            properties:
+              id:
+                type: integer
+            required:
+            - id
+          response: '{"refunded":true}'
+  evaluators:
+  - ref: tool-call-accuracy
+  - ref: tool-errors
+  - ref: loop-detection
+  - ref: contains
+    params:
+      substring: Refunded order
+  trials: 1
+  gates:
+  - metric: tool-call-accuracy.recall
+    min: 1.0
+  - metric: tool-call-accuracy.precision
+    min: 1.0
+  - metric: contains
+    min: 1.0
+  - metric: tool-errors
+    max: 0.0
+  - metric: contains
+    stat: GATE_STAT_ERROR_RATE
+    max: 0.0

@@ -10,6 +10,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- First-time onboarding course for evalsi and evalsi-harness, with a local fake chat-completions model, seven published-release controls, source-only database grading, and an observed onboarding study.
+
 - **Built-in harness, models.** `reasoning_handoff` (`drop` or `summarize-as-text`) for reasoning moved between providers on a fallback, recorded on the step; `compaction_model` and `subagent_model` targets with `model_pricing`, spend counted per model; Anthropic `server_tools` passthrough with `pause_turn` continued by resending the assistant content (bounded); a broken stream can be resumed (`stream_resume_attempts`, `retry` or `prefill`) and a tool call cut mid-arguments is discarded, never merged.
 - **Token traces and rollouts.** `target.token_trace` and `target.token_trace_server` in the run spec; SGLang token IDs and log-probabilities are parsed (coded against SGLang `main` of 2026-10-22, tested with fake servers only). Rollouts cancelled on rungs that cannot snapshot resume by replaying their tool calls into a fresh sandbox, or are refused when replay is not safe.
 - **Determinism record.** Every built-in-harness run writes `metadata.determinism` (seeds, response model snapshots, tool versions, image digest when the rung reports one); `evalsi determinism recorded.json --against replay.json` names the first diverging step and exits 1.

@@ -24,6 +24,8 @@ const guides = [
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
   ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29], ["enterprise-deployment", 30],
 ];
+const tutorials = ["README", "01-install", "02-score", "03-tool-loop", "04-failures", "05-state-and-handoff", "onboarding-study"];
+for (const name of tutorials) pages.set(`docs/tutorials/${name}.md`, `/docs/tutorials/${name === "README" ? "" : name + "/"}`);
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
 pages.set("docs/LEFTOVERS.md", "/docs/roadmap/");
@@ -106,6 +108,7 @@ await fs.rm(out, { recursive: true, force: true });
 await fs.mkdir(out, { recursive: true });
 
 // Guides, architecture, roadmap, decisions
+for (const name of tutorials) await importDoc(`docs/tutorials/${name}.md`, pages.get(`docs/tutorials/${name}.md`));
 for (const [name] of guides) await importDoc(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 await importDoc("docs/DESIGN.md", "/docs/architecture/", { title: "Architecture and implementation plan" });
 await importDoc("docs/LEFTOVERS.md", "/docs/roadmap/", { title: "Roadmap and open leftovers" });
@@ -176,6 +179,7 @@ ${guides.map(([n]) => `- [${n.replace(/-/g, " ")}](${BASE}/docs/guides/${n}/)`).
 
 // ---- examples ---------------------------------------------------------------
 const examples = [
+  { dir: "first-time-onboarding", title: "First-time tool-calling lab", desc: "Run a fake local model through the real harness, diagnose failures, and replay conversations without provider keys.", guide: "/docs/tutorials/" },
   { dir: "quickstart", title: "Quickstart: grade existing outputs", desc: "Score a JSONL file of question/answer records with built-in evaluators.", guide: "/docs/get-started/" },
   { dir: "runs", title: "Runs: execute a target on a dataset", desc: "A durable run with a dataset, evaluators and a pass/fail gate.", guide: "/docs/get-started/" },
   { dir: "agent-gate", title: "Gate an agent in CI", desc: "A runnable agent gate: a stand-in agent, a hidden checker and a pass/fail gate that exits 3, plus a GitHub Actions workflow.", guide: "/docs/guides/gate-an-agent-in-ci/" },
