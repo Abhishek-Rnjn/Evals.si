@@ -1,7 +1,7 @@
 # Use vllm/vllm-openai:v0.24.0 (Torch 2.11/CUDA 13) with a clean venv.
 # Inherited optional LMCache packages cap OTLP below the SDK's protobuf.
 # The engine's Transformers pin differs from the CPU reward-only fixture.
-vllm==0.24.0
+vllm==0.31.0
 verl[verl-core]==0.9.1
 transformers==5.9.0
 tensordict==0.10.0
