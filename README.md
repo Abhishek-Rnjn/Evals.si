@@ -83,6 +83,8 @@ Turn production incidents into reviewed regression cases with the [failure inbox
 
 Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
 
+First time? The [tutorials](docs/tutorials/README.md) walk through installing Evals.si and its agent harness and driving a fake tool-calling model through every feature, offline, with the rough edges a first install hit in an [onboarding study](docs/tutorials/00-onboarding-study.md).
+
 ## What you can evaluate
 
 Agents come first, because that is where evaluation is hardest. RAG and training are first-class too, and the evaluators are shared, so what you learn on one carries to the others.
@@ -380,7 +382,7 @@ local evaluation overhead, with separate limits for hosted platforms.
 
 | Start here | Guides | Reference |
 |---|---|---|
-| [Documentation site](https://evalsi.dev/) | [Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) · [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
+| [Documentation site](https://evalsi.dev/) · [Tutorials](docs/tutorials/README.md) | [Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) · [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Trace sources](docs/guides/trace-sources.md) | [Architecture](docs/DESIGN.md) |
 | [End-to-end guide](docs/guides/end-to-end.md) | [Kubernetes](docs/guides/kubernetes.md) · [agentgateway on Kubernetes](docs/guides/agentgateway-kubernetes.md) · [Identity](docs/guides/identity.md) | [Decision records](docs/decisions/README.md) |
 | [Examples](examples/) | [Guardrails](docs/guides/guardrails.md) · [MCP](docs/guides/mcp.md) · [Plugins](docs/guides/plugins.md) · [DeepEval and JevEval](docs/guides/deepeval.md) · [Webhooks](docs/guides/webhooks.md) | [Product requirements](docs/PRD.md) |
 | [Integrate an agent harness](docs/guides/integrate-an-agent-harness.md) | [Annotation](docs/guides/annotation.md) · [Fine-tuning and RL](docs/guides/fine-tuning.md) · [Web UI](docs/guides/web-ui.md) | [Roadmap and leftovers](docs/LEFTOVERS.md) |

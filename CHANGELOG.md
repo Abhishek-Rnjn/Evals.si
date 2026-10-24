@@ -27,6 +27,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - **Online sandbox-time quota:** online policies, guardrails, Wasm evaluators and reward rollouts count toward `sandbox_seconds_per_day` (decision 0037).
 - **Quality scores for routing:** `GET /v1alpha1/quality` and `quality_exports` publish per-group quality, with an agentgateway recipe (decision 0038).
 - **Adapters:** BFCL `web_search_*` and `memory_*` categories; τ-bench `user=tau2` uses tau2's own LiteLLM user simulator.
+- **Tutorials** (`docs/tutorials/`): ten walkthroughs from a first install to a CI gate, driving the built-in harness with TinyLM (`examples/tinylm`), a fake OpenAI-compatible model that streams token by token, calls tools and comes in personas that loop, hallucinate tools, ignore denials or follow prompt injections; offline and deterministic. `examples/tinylm/check.sh` runs every scenario and checks its exit code, in CI too. An onboarding study records the first install and the rough edges it found.
 
 ### Fixed
 

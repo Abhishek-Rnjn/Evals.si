@@ -334,6 +334,14 @@ jobs:
           uv run --no-sync evalsi run -f ../examples/support-refund/regressed.yaml || code=$?
           rm ../examples/support-refund/regressed.yaml
           test "$code" -eq 3
+      - name: Every TinyLM tutorial scenario exits as documented
+        # examples/tinylm backs docs/tutorials: the built-in harness drives a fake
+        # model that calls tools, and each persona must pass (0), fail a gate (3)
+        # or error (1) exactly as the tutorials say.
+        run: |
+          export PATH="$RUNNER_TEMP:$PATH"
+          cd python
+          EVALSI="$PWD/.venv/bin/evalsi" bash ../examples/tinylm/check.sh
       - run: uv sync --locked
         working-directory: python/adapters/swebench
       - name: End-to-end tests

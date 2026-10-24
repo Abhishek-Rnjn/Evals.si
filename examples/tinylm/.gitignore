@@ -1,0 +1,9 @@
+# What following the tutorials in this directory leaves behind.
+*.json
+*.log
+*.html
+report.md
+compare.json
+cassettes/
+promoted/
+.evalsi/
