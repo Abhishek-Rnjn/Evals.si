@@ -31,6 +31,14 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Fixed
 
+- **`evalsi compare` no longer crashes** with `KeyError: 'low'` when a metric's difference interval starts or ends at 0 (proto3 JSON leaves zeros out). `Client.compare_runs` fills them in, which also fixes the MCP server's and the training loop's server comparisons, where such a bound read as missing.
+- **`evalsi serve --help`** (and `-h`) prints `evalsid serve`'s flags instead of failing with "unrecognized arguments".
+- **The trials advisory** no longer recommends millions of trials for a token count: metric summaries carry the evaluator's declared `min` and `max`, a bounded metric's variance bound is capped at what its range allows, the one-line advice under a run considers only bounded metrics and prefers one that varied when bounds tie, and `evalsi determinism` marks each metric `bounded`.
+- **Piping the CLI into `head`** ends quietly with exit 141 instead of a `BrokenPipeError` traceback.
+- **The metrics table** says `(lower is better)` beside such metrics (embedded runs; a server's summaries do not carry the direction yet) and leaves out metrics no record produced, skipped or errored on, such as a pass/fail checker's empty `task-score`; the JSON keeps them. `evalsi matrix` prints its `*` footnote only when a row has a star.
+- **`evalsi doctor`** shows each sandbox backend's isolation level (`bwrap (namespaced), landlock (confined)`), so agent readiness leaving out a confined backend is explained.
+- **The web UI's compare page** no longer colours a significant difference as pass or fail, since it does not know which direction each metric prefers; it says "(higher)" or "(lower)".
+- **Docs:** `network: deny` leaves no egress policy events (use `allowlist` to observe attempts); the approval-gate example anchors its command globs (`*git push*`), since `git push*` let `sh -c 'git push ...'` run; fork logs are named `<task>.<trial>.<fork_as>.jsonl`; the README's server section names `datasets_dir`.
 - A keyed dataset upload is validated from its spool file instead of being written to disk twice and taking two upload slots.
 - Scheduled windows list again after a short page and ask again for traces a store listed but did not return; runs are labelled `incomplete_traces` or `listing_unstable`.
 - `COPY file .` in an imported Dockerfile made a file named after the directory instead of copying into it.

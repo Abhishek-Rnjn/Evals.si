@@ -184,3 +184,72 @@ def test_eval_rejects_negative_limit(capsys: pytest.CaptureFixture[str]) -> None
     with pytest.raises(SystemExit):
         main(["eval", "--data", str(EXAMPLE), "--limit", "-1"])
     assert "must be 0 or more" in capsys.readouterr().err
+
+
+def test_serve_forwards_help_to_evalsid(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, list[str]]] = []
+    monkeypatch.setenv("EVALSID", "/opt/evalsid")
+    monkeypatch.setattr("os.execv", lambda path, args: calls.append((path, args)))
+    assert main(["serve", "--help"]) == 0
+    assert main(["serve", "-h"]) == 0
+    assert calls == [
+        ("/opt/evalsid", ["/opt/evalsid", "serve", "--help"]),
+        ("/opt/evalsid", ["/opt/evalsid", "serve", "-h"]),
+    ]
+
+
+def test_a_closed_stdout_ends_quietly(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    read, write = os.pipe()
+    os.close(read)  # like `evalsi ... | head` once head has gone
+    proc = subprocess.run(
+        [sys.executable, "-m", "evalsi", "catalog"],
+        stdout=write,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    os.close(write)
+    assert proc.returncode == 141
+    assert "Traceback" not in proc.stderr
+
+
+def test_compare_prints_intervals_the_server_sent_without_zeros(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from evalsi.client import Client
+
+    # Proto3 JSON: an unchanged metric's interval [0, 0] has neither low nor high,
+    # and [-0.5, 0] has no high.
+    reply = {
+        "comparisons": [
+            {
+                "metric": "task-success",
+                "baselineMean": 1,
+                "candidateMean": 0,
+                "diff": -1,
+                "diffCi": {"low": -1, "high": -1, "level": 0.95, "method": "paired-t"},
+                "pairedN": "3",
+                "significant": True,
+            },
+            {
+                "metric": "run-completed",
+                "baselineMean": 1,
+                "candidateMean": 1,
+                "diff": 0,
+                "diffCi": {"level": 0.95, "method": "paired-t"},
+                "pairedN": "3",
+            },
+            {"metric": "steps", "diff": -0.25, "diffCi": {"low": -0.5}, "pairedN": "3"},
+        ]
+    }
+    monkeypatch.setattr(Client, "call", lambda self, *a, **k: reply)
+    assert main(["compare", "--server", "http://localhost:8080", "base", "cand"]) == 0
+    out = capsys.readouterr().out
+    assert "[-1.000, -1.000]  significant" in out
+    (unchanged,) = [line for line in out.splitlines() if line.startswith("run-completed")]
+    assert "[0.000, 0.000]" in unchanged
+    assert "[-0.500, 0.000]" in out

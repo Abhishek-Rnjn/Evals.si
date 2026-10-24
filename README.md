@@ -220,6 +220,8 @@ with Client("http://localhost:8080") as client:          # API key from EVALSI_A
 
 `Client.evaluate()` returns the same result as in-process `evalsi.evaluate()`, intervals included; `evaluate_async()` and `evaluate_stream()` (with `evalsi[grpc]`) don't block. REST lives under `/v1alpha1` (`POST /v1alpha1/evaluate`, `POST /v1alpha1/runs`, `GET /v1alpha1/traces/{trace_id}`, `GET /v1alpha1/scores` for online scores per trace and label, …; the full list is in `internal/server/rest.go`), and gRPC reflection is on.
 
+A run spec that names a dataset file (`dataset: {path: tasks.jsonl}`) needs `datasets_dir` in the config: the server reads dataset files only under that directory, and refuses paths without it. [`examples/tinylm/server.yaml`](examples/tinylm/server.yaml) is a four-line config that has it. `evalsi serve -- -h` lists the server's flags.
+
 On loopback with no `auth` section the server runs without authentication; on any other address it requires it unless you pass `--no-auth`. The example's judge is Claude: export `ANTHROPIC_API_KEY` first, or `llm-judge` reports errors (never zeros). To try API keys, roles and the audit log locally, use [`examples/auth/local.yaml`](examples/auth/local.yaml) and the [identity guide](docs/guides/identity.md).
 
 ## A tour

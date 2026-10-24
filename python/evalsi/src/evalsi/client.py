@@ -432,6 +432,12 @@ class Client:
             "RunService", "CompareRuns", {"baselineRunId": baseline, "candidateRunId": candidate}
         )
         comparisons: list[dict[str, Any]] = out.get("comparisons", [])
+        for c in comparisons:
+            # Proto3 JSON leaves out zeros, so a difference interval from or to 0
+            # (any unchanged metric) arrives without ``low`` or ``high``.
+            if isinstance(c.get("diffCi"), dict):
+                c["diffCi"].setdefault("low", 0.0)
+                c["diffCi"].setdefault("high", 0.0)
         return comparisons
 
     def slice_runs(

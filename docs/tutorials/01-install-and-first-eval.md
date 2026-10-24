@@ -143,8 +143,9 @@ That took 0.3 seconds. How to read it:
   everything; that is the honest answer, not a bug. More records narrow it.
 - **Direction.** Most metrics are better when higher. `tool-errors` is the share
   of tool calls that failed, so **lower is better**: the first run has 0, the
-  second 1, the mean 0.5. The table does not mark direction; `evalsi catalog` and
-  the evaluator's description do.
+  second 1, the mean 0.5. In 0.3.1 the table does not mark direction (`evalsi
+  catalog` and the evaluator's description do); later versions print
+  `tool-errors (lower is better)`.
 
 ## A starter project with a gate
 
@@ -283,7 +284,8 @@ exit 3
 The agent is a two-line Python script that writes `answer.txt`; a checker in the
 sandbox reads it. It took 0.6 seconds, sandbox included. The `task-success.task-score`
 row with `n` 0 is a numeric score the checker may report; this checker only passes
-or fails, so it is empty. Ignore it for now.
+or fails, so it is empty. Ignore it; versions after 0.3.1 leave such rows out of
+the table.
 
 A script is not much of an agent. The next tutorial builds a model that calls tools,
 so the built-in harness has something to drive.

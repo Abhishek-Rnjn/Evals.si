@@ -27,7 +27,8 @@ Usage of serve:
     	turn authentication and authorization off, for development (also EVALSID_NO_AUTH=1)
 ```
 
-(`evalsi serve --help` fails with `unrecognized arguments: --help`; see the
+(In 0.3.1 `evalsi serve --help` fails with `unrecognized arguments: --help`; later
+versions forward it to `evalsid`. `-- -h` works in both. See the
 [onboarding study](00-onboarding-study.md).)
 
 With no config at all the server starts, but it cannot run our spec yet:
@@ -106,7 +107,8 @@ exit 3
 
 `evalsi compare` pairs two runs by record and trial and gives each metric's
 difference with an interval. In 0.3.1 its table crashes on any metric whose
-difference interval is exactly `[0, 0]`, which is nearly every comparison:
+difference interval is exactly `[0, 0]`, which is nearly every comparison (fixed
+after 0.3.1, where the command prints the same table as below):
 
 ```text
   File ".../evalsi/cli.py", line 1223, in _cmd_compare_rows
@@ -116,7 +118,7 @@ KeyError: 'low'
 ```
 
 The server's JSON leaves out fields whose value is zero, and the table expects them.
-Until that is fixed, use `--format json` and format it yourself:
+On 0.3.1, use `--format json` and format it yourself:
 
 ```bash
 evalsi compare --server http://localhost:8080 run-84c4b55b59df1702 run-d6eaa791961ac3bd --format json > compare.json
@@ -215,6 +217,9 @@ Tick two runs and **Compare selected** for the paired comparison:
 
 The red ▼ on the token and cost rows marks a *decrease*, not a regression: fewer
 tokens is better. Read the direction from the metric, as with `significant` above.
+(After 0.3.1 the page no longer colours a difference pass or fail, and labels it
+"(higher)" or "(lower)", since it does not know which direction each metric
+prefers.)
 
 The status column says **failed** for a run whose gates failed. A run that could not
 complete (a model outage, a bad spec) also says failed; the gates column (`2/3`

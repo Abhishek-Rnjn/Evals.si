@@ -97,6 +97,30 @@ user's point of view. Bugs are numbered OS-B and documentation or design
 surprises OS-D (onboarding study), so they do not clash with the PRD's
 requirement IDs.
 
+### Status
+
+The fixes landed after 0.3.1, in the same pull request as this study (see
+"Unreleased" in the [changelog](../../CHANGELOG.md)). The descriptions below are of
+0.3.1, which is what a `pip install` gave on the day.
+
+| Finding | Status |
+|---|---|
+| OS-B1 `compare` crash | **Fixed.** `Client.compare_runs` fills the zeros proto3 JSON leaves out, which also fixes the same gap in the MCP server's and the training loop's server comparisons |
+| OS-B2 `serve --help` | **Fixed.** `-h` and `--help` go to `evalsid serve`, which prints its flags |
+| OS-B3 trials advisory | **Fixed.** Summaries carry the evaluator's declared range; a bounded metric's variance bound is capped at `(max - min)^2 / 4`; the one-line advice considers only bounded metrics and prefers one that varied on a tie; `evalsi determinism` marks each metric `bounded` |
+| OS-B4 broken pipe | **Fixed.** A closed stdout ends the command quietly with exit 141, as a shell does |
+| OS-B5 matrix footnote | **Fixed.** Printed only when a row has a star |
+| OS-D1 direction | **Fixed for embedded runs:** the table says `(lower is better)` beside such metrics. A server run's summaries do not carry the direction (it is not in the API), so its table cannot say yet |
+| OS-D2 `network: deny` | **Documented** in [agent runs](../guides/agent-runs.md#environments) |
+| OS-D3 approval pattern | **Documented:** the guide's example is anchored (`*git push*`) and the blind spots of each evaluator are spelled out |
+| OS-D4 `datasets_dir` | **Documented** in the README's server section |
+| OS-D5 `matrix --gate` exit 1 | **Unchanged, on purpose.** `matrix` uses 0 pass, 1 gate failed, 2 error, which the Harness² guide documents and tests pin; changing it would break scripts that rely on it |
+| OS-D6 UI "significant" | **Partly fixed.** The compare page no longer colours a difference pass or fail, and says which way it went; colouring by the metric's direction needs the direction in the API |
+| OS-D7 run status | **Open.** Telling a gate failure from an infrastructure failure needs a new run status or field in the API |
+| OS-D8 empty rows | **Fixed.** The table hides metrics no record produced, skipped or errored on; the JSON keeps them |
+| OS-D9 fork log names | **Documented** with the trial in the name |
+| OS-D10 `doctor` sandbox line | **Fixed.** Each backend is shown with its level, for example `bwrap (namespaced), landlock (confined)` |
+
 ### Bugs
 
 **OS-B1. `evalsi compare` crashes on most comparisons (high).** The table expects

@@ -143,7 +143,9 @@ metric's variance can only be bounded by the worst case (0.25), so they say "97
 trials for ±0.1" for any pass/fail metric, varying or not. Read them as "three
 trials cannot tell you much about one task's pass rate", not as a target.
 
-Two rough edges, both reported in the [onboarding study](00-onboarding-study.md):
+Two rough edges in 0.3.1, both reported in the [onboarding study](00-onboarding-study.md)
+and fixed after it (the advisory now considers only metrics with a known range,
+caps their bound at what the range allows, and prefers a metric that varied):
 
 - The advisory line names `run-completed`, which never varied, as the metric that
   needs the most trials, because it ties with `task-success` on the worst-case bound.

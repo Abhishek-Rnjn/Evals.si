@@ -215,7 +215,8 @@ those tools was ever used. That is the point of the flag: a change whose mechani
 never ran cannot be what made a score better or worse. With a real model, run this
 before you credit a new tool for an improvement.
 
-(The `*` footnote is printed even though no row has a star; a cosmetic quirk.)
+(0.3.1 prints the `*` footnote even though no row has a star; later versions
+print it only when one does.)
 
 ## Score old trajectories with new evaluators
 

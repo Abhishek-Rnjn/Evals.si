@@ -239,7 +239,7 @@ ran".
 ### The pattern that lets it through
 
 The leading `*` in `"*git push*"` is doing real work. The first version of this
-spec, written the way the guide's example reads, used `"git push*"`:
+spec, written the way the guide's example read in 0.3.1, used `"git push*"`:
 
 ```bash
 sed 's/"\*git push\*"/"git push*"/g' stubborn.yaml > naive.yaml
