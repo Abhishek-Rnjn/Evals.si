@@ -192,6 +192,12 @@ jobs:
           uv run --no-sync ruff check --config pyproject.toml ../.github/actions/evalsi/run.py
           uv run --no-sync ruff format --check --config pyproject.toml ../.github/actions/evalsi/run.py
           uv run --no-sync evalsi init ../.evalsi-action-smoke
+      - name: Source onboarding tool-loop and database controls
+        working-directory: python
+        run: |
+          uv run --no-sync ruff check --config pyproject.toml ../examples/first-time-onboarding/*.py
+          uv run --no-sync ruff format --check --config pyproject.toml ../examples/first-time-onboarding/*.py
+          uv run --no-sync python ../examples/first-time-onboarding/verify.py --database
       - name: Published packages pass the working control
         uses: ./
         with:
@@ -205,6 +211,8 @@ jobs:
           spec: regressed.yaml
           working-directory: .evalsi-action-smoke
           install: 'false'
+      - name: Published onboarding tool-loop controls
+        run: python examples/first-time-onboarding/verify.py
       - name: Assert gate failure was propagated
         if: always()
         env:

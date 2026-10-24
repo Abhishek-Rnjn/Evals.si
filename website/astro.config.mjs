@@ -20,7 +20,7 @@ const guides = [
   "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2",
 ];
 const examples = [
-  "quickstart", "runs", "agent-gate", "rag", "agents", "watch", "sources", "guardrails", "annotation",
+  "first-time-onboarding", "quickstart", "runs", "agent-gate", "rag", "agents", "watch", "sources", "guardrails", "annotation",
   "finetuning", "custom-evaluator", "wasm", "auth", "server", "ci",
 ];
 
@@ -58,9 +58,13 @@ export default defineConfig({
         { label: "Start here", items: [
           { label: "Overview", slug: "docs" },
           { label: "Get started", slug: "docs/get-started" },
+          { label: "First-time onboarding course", slug: "docs/tutorials" },
           { label: "Built-in agent harness", slug: "docs/guides/built-in-harness" },
           { label: "Release decisions", slug: "docs/guides/release-decisions" },
         ] },
+        { label: "Onboarding tutorials", items: [
+          "01-install", "02-score", "03-tool-loop", "04-failures", "05-state-and-handoff", "onboarding-study",
+        ].map((name) => ({ slug: `docs/tutorials/${name}` })) },
         { label: "Releases", items: [
           { label: "Changelog", slug: "docs/changelog" },
           { label: "GitHub releases", link: "https://github.com/Abhishek-Rnjn/Evals.si/releases" },

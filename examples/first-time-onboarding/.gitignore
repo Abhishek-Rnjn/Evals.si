@@ -1,0 +1,12 @@
+__pycache__/
+requests.jsonl
+results*.json
+regressed.json
+loop.json
+bad-arguments.json
+fault.json
+recorded.json
+replayed.json
+database-results.json
+report.html
+tapes/
