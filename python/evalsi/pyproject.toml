@@ -30,7 +30,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-anthropic = ["anthropic>=1.0"]
+anthropic = ["anthropic>=1.14.0"]
 hf = ["datasets>=2.18"]
 jsonschema = ["jsonschema>=4.0"]
 # Symbolic answer equivalence in the rl pack's math-equiv.
