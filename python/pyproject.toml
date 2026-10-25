@@ -11,14 +11,14 @@ dev = [
     "evalsi[analytics,anthropic,jsonschema,math,server]",
     "evalsi-harness",
     "grpcio-tools==1.84.0",
-    "mypy-protobuf==5.0.0",
+    "mypy-protobuf==5.1.0",
     "types-grpcio",
     "types-grpcio-health-checking",
     "types-protobuf",
     "types-pyyaml",
     "mypy>=1.13",
     "pytest>=8.3",
-    "ruff>=0.8",
+    "ruff>=0.17.1",
 ]
 
 [tool.ruff]
