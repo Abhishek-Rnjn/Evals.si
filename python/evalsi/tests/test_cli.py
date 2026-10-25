@@ -198,23 +198,34 @@ def test_serve_forwards_help_to_evalsid(monkeypatch: pytest.MonkeyPatch) -> None
     ]
 
 
-def test_a_closed_stdout_ends_quietly(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "command",
+    # A large output fails while the command runs; a small one sits in the buffer
+    # until the command returns.
+    [["catalog"], ["eval", "--data", str(EXAMPLE), "--evaluators", "exact-match"]],
+)
+def test_a_closed_stdout_ends_quietly(command: list[str]) -> None:
     import os
     import subprocess
     import sys
 
+    # Buffered, as a pipe normally is: PYTHONUNBUFFERED would hide the deferred failure.
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"}
     read, write = os.pipe()
     os.close(read)  # like `evalsi ... | head` once head has gone
-    proc = subprocess.run(
-        [sys.executable, "-m", "evalsi", "catalog"],
-        stdout=write,
-        stderr=subprocess.PIPE,
-        text=True,
-        check=False,
-    )
-    os.close(write)
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "evalsi", *command],
+            stdout=write,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            env=env,
+        )
+    finally:
+        os.close(write)
     assert proc.returncode == 141
-    assert "Traceback" not in proc.stderr
+    assert proc.stderr == ""
 
 
 def test_compare_prints_intervals_the_server_sent_without_zeros(
