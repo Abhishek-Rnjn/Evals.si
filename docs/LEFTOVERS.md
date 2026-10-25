@@ -7,6 +7,12 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Onboarding re-verification, 2026-10-25:** the
+[Mac follow-up](tutorials/12-macos-reverification.md) re-ran the PR #154/#155
+published/source controls, real Haiku tool loops, streaming and offline replay,
+source SQL assertions, and isolated kind positive/negative controls. This does
+not certify production model quality, HA, or NetworkPolicy enforcement on kind.
+
 **Fresh live verification, 2026-10-21:** the supplied cluster is AKS, not EKS.
 The [new batch and complete 50-row reconciliation](verification/AKS-CLAUDE-2026-10-21.md)
 retain the newer 20 October evidence rather than reopening its bounded passes.

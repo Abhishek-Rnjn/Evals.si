@@ -24,6 +24,14 @@ const guides = [
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
   ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29], ["enterprise-deployment", 30],
 ];
+const tutorials = [
+  "README", "01-install", "02-score", "03-tool-loop", "04-failures", "05-state-and-handoff", "onboarding-study",
+  "00-onboarding-study", "01-install-and-first-eval", "02-tinylm-fake-model", "03-built-in-harness",
+  "04-trials-and-flakiness", "05-record-replay-and-compare", "06-faults-injection-and-approvals",
+  "07-mocked-tools", "08-server-ui-and-regressions", "09-ci", "10-real-haiku", "11-local-kind",
+  "12-macos-reverification",
+];
+for (const name of tutorials) pages.set(`docs/tutorials/${name}.md`, `/docs/tutorials/${name === "README" ? "" : name + "/"}`);
 for (const [name] of guides) pages.set(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 pages.set("docs/DESIGN.md", "/docs/architecture/");
 pages.set("docs/LEFTOVERS.md", "/docs/roadmap/");
@@ -48,6 +56,10 @@ async function rewriteLinks(text, src) {
     const [p, frag] = target.split("#");
     const resolved = path.posix.normalize(path.posix.join(dir, p));
     if (pages.has(resolved)) { map.set(target, siteHref(pages.get(resolved), frag)); continue; }
+    if (resolved.startsWith("docs/tutorials/img/")) {
+      map.set(target, `${BASE}/tutorials/img/${path.posix.basename(resolved)}`);
+      continue;
+    }
     if (resolved.startsWith("..")) continue;
     const isDir = (await fs.stat(path.join(root, resolved)).catch(() => null))?.isDirectory();
     const kind = isDir || p.endsWith("/") ? "tree" : "blob";
@@ -104,8 +116,10 @@ async function importDoc(src, route, extra = {}) {
 
 await fs.rm(out, { recursive: true, force: true });
 await fs.mkdir(out, { recursive: true });
+await fs.cp(path.join(root, "docs/tutorials/img"), path.resolve(here, "../public/tutorials/img"), { recursive: true });
 
 // Guides, architecture, roadmap, decisions
+for (const name of tutorials) await importDoc(`docs/tutorials/${name}.md`, pages.get(`docs/tutorials/${name}.md`));
 for (const [name] of guides) await importDoc(`docs/guides/${name}.md`, `/docs/guides/${name}/`);
 await importDoc("docs/DESIGN.md", "/docs/architecture/", { title: "Architecture and implementation plan" });
 await importDoc("docs/LEFTOVERS.md", "/docs/roadmap/", { title: "Roadmap and open leftovers" });
@@ -176,6 +190,7 @@ ${guides.map(([n]) => `- [${n.replace(/-/g, " ")}](${BASE}/docs/guides/${n}/)`).
 
 // ---- examples ---------------------------------------------------------------
 const examples = [
+  { dir: "first-time-onboarding", title: "First-time tool-calling lab", desc: "Run a fake local model through the real harness, diagnose failures, and replay conversations without provider keys.", guide: "/docs/tutorials/" },
   { dir: "quickstart", title: "Quickstart: grade existing outputs", desc: "Score a JSONL file of question/answer records with built-in evaluators.", guide: "/docs/get-started/" },
   { dir: "runs", title: "Runs: execute a target on a dataset", desc: "A durable run with a dataset, evaluators and a pass/fail gate.", guide: "/docs/get-started/" },
   { dir: "agent-gate", title: "Gate an agent in CI", desc: "A runnable agent gate: a stand-in agent, a hidden checker and a pass/fail gate that exits 3, plus a GitHub Actions workflow.", guide: "/docs/guides/gate-an-agent-in-ci/" },

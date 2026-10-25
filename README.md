@@ -26,6 +26,8 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 
 Evals.si evaluates an AI system across its life. **Before you ship**, it runs agents, RAG pipelines and models on datasets and sandboxed tasks, and fails the build when a gate fails. **While it runs**, it scores live traces as they arrive and writes the scores back to the MLflow, Phoenix or Langfuse your team already uses. **As you train it**, the same evaluators become RL rewards and checkpoint checks for fine-tuning. One set of evaluators serves all three, so a metric means the same thing in CI, in production and in training.
 
+New to both packages? Follow the [first-time onboarding course](docs/tutorials/README.md): install, score, run a local fake tool-calling model, diagnose failures, replay, and check business state. Includes a [tested onboarding study](docs/tutorials/onboarding-study.md).
+
 ## Try it in 30 seconds
 
 No clone, no server and no API key. You need Python 3.11+.

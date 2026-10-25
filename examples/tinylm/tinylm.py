@@ -47,6 +47,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 PERSONAS = (
@@ -579,6 +580,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--ready-file", type=Path, help="write the bound API URL for automated checks")
     p.add_argument(
         "--token-delay-ms", type=float, default=0.0, help="pause between streamed tokens"
     )
@@ -590,6 +592,8 @@ def main() -> None:
     models = ", ".join("tinylm-" + p for p in PERSONAS)
     url = f"http://{args.host}:{server.server_port}/v1"
     print(f"TinyLM listening on {url} (models: {models})", file=sys.stderr, flush=True)
+    if args.ready_file:
+        args.ready_file.write_text(url)
     with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
 

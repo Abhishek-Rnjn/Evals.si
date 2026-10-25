@@ -1,0 +1,7 @@
+{"case": "run", "exit": 0, "means": {"tool-call-accuracy.recall": 1.0, "tool-call-accuracy.precision": 1.0, "tool-errors": 0.0, "loop-detection": 1.0, "contains": 1.0}}
+{"case": "regressed", "exit": 3, "means": {"tool-call-accuracy.recall": 0.5, "tool-call-accuracy.precision": 1.0, "tool-errors": 0.0, "loop-detection": 1.0, "contains": 1.0}}
+{"case": "loop", "exit": 3, "means": {"tool-call-accuracy.recall": 0.5, "tool-call-accuracy.precision": 0.16666666666666666, "tool-errors": 0.0, "loop-detection": 0.0, "contains": null}}
+{"case": "bad-arguments", "exit": 3, "means": {"tool-call-accuracy.recall": 0.0, "tool-call-accuracy.precision": 0.0, "tool-errors": 0.0, "loop-detection": 1.0, "contains": 1.0}}
+{"case": "fault", "exit": 3, "means": {"tool-call-accuracy.recall": 1.0, "tool-call-accuracy.precision": 0.6666666666666666, "tool-errors": 0.6666666666666666, "loop-detection": 1.0, "contains": 0.0}}
+{"case": "record", "exit": 0, "means": {"tool-call-accuracy.recall": 1.0, "tool-call-accuracy.precision": 1.0, "tool-errors": 0.0, "loop-detection": 1.0, "contains": 1.0}}
+{"case": "replay", "exit": 0, "means": {"tool-call-accuracy.recall": 1.0, "tool-call-accuracy.precision": 1.0, "tool-errors": 0.0, "loop-detection": 1.0, "contains": 1.0}}

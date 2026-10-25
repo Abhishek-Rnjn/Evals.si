@@ -20,7 +20,7 @@ const guides = [
   "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2",
 ];
 const examples = [
-  "quickstart", "runs", "agent-gate", "rag", "agents", "watch", "sources", "guardrails", "annotation",
+  "first-time-onboarding", "quickstart", "runs", "agent-gate", "rag", "agents", "watch", "sources", "guardrails", "annotation",
   "finetuning", "custom-evaluator", "wasm", "auth", "server", "ci",
 ];
 
@@ -58,9 +58,19 @@ export default defineConfig({
         { label: "Start here", items: [
           { label: "Overview", slug: "docs" },
           { label: "Get started", slug: "docs/get-started" },
+          { label: "First-time onboarding course", slug: "docs/tutorials" },
           { label: "Built-in agent harness", slug: "docs/guides/built-in-harness" },
           { label: "Release decisions", slug: "docs/guides/release-decisions" },
         ] },
+        { label: "Onboarding tutorials", items: [
+          "01-install", "02-score", "03-tool-loop", "04-failures", "05-state-and-handoff", "onboarding-study",
+        ].map((name) => ({ slug: `docs/tutorials/${name}` })) },
+        { label: "Sandbox and provider tutorials", items: [
+          "00-onboarding-study", "01-install-and-first-eval", "02-tinylm-fake-model", "03-built-in-harness",
+          "04-trials-and-flakiness", "05-record-replay-and-compare", "06-faults-injection-and-approvals",
+          "07-mocked-tools", "08-server-ui-and-regressions", "09-ci", "10-real-haiku", "11-local-kind",
+          "12-macos-reverification",
+        ].map((name) => ({ slug: `docs/tutorials/${name}` })) },
         { label: "Releases", items: [
           { label: "Changelog", slug: "docs/changelog" },
           { label: "GitHub releases", link: "https://github.com/Abhishek-Rnjn/Evals.si/releases" },

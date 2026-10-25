@@ -10,6 +10,12 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- Integrated first-time and TinyLM tutorial paths, explicit opt-in real Haiku
+  tool-loop/stream/replay and source SQL exercises, and local kind onboarding
+  with checked positive and negative controls.
+
+- First-time onboarding course for evalsi and evalsi-harness, with a local fake chat-completions model, seven published-release controls, source-only database grading, and an observed onboarding study.
+
 - **Built-in harness, models.** `reasoning_handoff` (`drop` or `summarize-as-text`) for reasoning moved between providers on a fallback, recorded on the step; `compaction_model` and `subagent_model` targets with `model_pricing`, spend counted per model; Anthropic `server_tools` passthrough with `pause_turn` continued by resending the assistant content (bounded); a broken stream can be resumed (`stream_resume_attempts`, `retry` or `prefill`) and a tool call cut mid-arguments is discarded, never merged.
 - **Token traces and rollouts.** `target.token_trace` and `target.token_trace_server` in the run spec; SGLang token IDs and log-probabilities are parsed (coded against SGLang `main` of 2026-10-22, tested with fake servers only). Rollouts cancelled on rungs that cannot snapshot resume by replaying their tool calls into a fresh sandbox, or are refused when replay is not safe.
 - **Determinism record.** Every built-in-harness run writes `metadata.determinism` (seeds, response model snapshots, tool versions, image digest when the rung reports one); `evalsi determinism recorded.json --against replay.json` names the first diverging step and exits 1.
@@ -34,7 +40,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - **`evalsi compare` no longer crashes** with `KeyError: 'low'` when a metric's difference interval starts or ends at 0 (proto3 JSON leaves zeros out). `Client.compare_runs` fills them in, which also fixes the MCP server's and the training loop's server comparisons, where such a bound read as missing.
 - **`evalsi serve --help`** (and `-h`) prints `evalsid serve`'s flags instead of failing with "unrecognized arguments".
 - **The trials advisory** no longer recommends millions of trials for a token count: metric summaries carry the evaluator's declared `min` and `max`, a bounded metric's variance bound is capped at what its range allows, the one-line advice under a run considers only bounded metrics and prefers one that varied when bounds tie, and `evalsi determinism` marks each metric `bounded`.
-- **Piping the CLI into `head`** ends quietly with exit 141 instead of a `BrokenPipeError` traceback.
+- **Piping the CLI into `head`** ends quietly with exit 141 instead of a `BrokenPipeError` traceback. Buffered output is flushed before returning, including short summaries that previously failed only during interpreter shutdown.
 - **The metrics table** says `(lower is better)` beside such metrics (embedded runs; a server's summaries do not carry the direction yet) and leaves out metrics no record produced, skipped or errored on, such as a pass/fail checker's empty `task-score`; the JSON keeps them. `evalsi matrix` prints its `*` footnote only when a row has a star.
 - **`evalsi doctor`** shows each sandbox backend's isolation level (`bwrap (namespaced), landlock (confined)`), so agent readiness leaving out a confined backend is explained.
 - **The web UI's compare page** no longer colours a significant difference as pass or fail, since it does not know which direction each metric prefers; it says "(higher)" or "(lower)".

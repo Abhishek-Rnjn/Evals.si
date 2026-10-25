@@ -4,6 +4,8 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [Mac onboarding re-verification](../tutorials/12-macos-reverification.md) | PRs #154/#155 re-run with clean published/source environments, real Haiku, Linux sandbox controls on Docker Desktop, and positive/negative kind runs; limitations and setup failures retained |
+| [First-time onboarding study](../tutorials/onboarding-study.md) | Clean PyPI/source installs, real sandbox starter controls, seven fake-model HTTP/tool-loop scenarios on both versions, and source-only SQL grading; synthetic scope and reproducible commands |
 | [AKS-FOLLOWUP-2026-10-21.md](AKS-FOLLOWUP-2026-10-21.md) | Audit-first matching-code AKS follow-up: real Sonnet refunds/approval/calibration, external-side-effect controls, browser/CLI decisions, real jailer and boot ladder, failed load thresholds, acknowledged ingest-buffer loss, source-tag migration and dependency restores, installed starters and live digest-cache controls; explicit limits and cleanup status |
 | [HORIZON-SERVICES-2026-10-21.md](HORIZON-SERVICES-2026-10-21.md) | Budgeted live Haiku/Sonnet incident-triage controls on AKS, explicit carried spending and failed attempts, reproducible task/configuration files, and eight passing real multi-service failure groups on isolated kind |
 | [AKS-CLAUDE-2026-10-21.md](AKS-CLAUDE-2026-10-21.md) | Fresh AKS/terminal-Claude batch: 24 bounded passing harness/provider cases after an invocation correction, cache-read failures reproduced with the native SDK, unenforced default-deny egress, unschedulable Kata, complete 50-row reconciliation and cleanup |

@@ -38,6 +38,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         code: int = args.func(args)
+        sys.stdout.flush()
         return code
     except (EvaluatorConfigError, DatasetError, JudgeError, ValueError, RuntimeError) as exc:
         # RuntimeError covers ServerError and AuthError.
@@ -46,7 +47,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except BrokenPipeError:
         # The reader went away (`evalsi run ... | head`). Point stdout at devnull so the
         # interpreter's final flush does not raise again, and exit as a shell does.
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        with open(os.devnull, "w") as devnull:
+            os.dup2(devnull.fileno(), sys.stdout.fileno())
         return 141
 
 

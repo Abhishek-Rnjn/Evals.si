@@ -1,0 +1,3 @@
+{"id": "refund-42", "input": "Refund order 42.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 42}}, {"name": "refund", "arguments": {"id": 42}}]}}
+{"id": "refund-7", "input": "Refund order 7.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 7}}, {"name": "refund", "arguments": {"id": 7}}]}}
+{"id": "refund-99", "input": "Refund order 99.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 99}}, {"name": "refund", "arguments": {"id": 99}}]}}
