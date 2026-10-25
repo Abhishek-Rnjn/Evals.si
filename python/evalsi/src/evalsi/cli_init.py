@@ -15,11 +15,23 @@ import yaml
 def add_init_command(sub: Any) -> None:
     p = sub.add_parser("init", help="create a runnable offline evaluation starter")
     p.add_argument("directory", nargs="?", default="evals", help="new directory (default: evals)")
-    p.add_argument("--template", choices=["recorded", "agent"], default="recorded")
+    p.add_argument("--template", choices=["recorded", "agent", "application"], default="recorded")
+    p.add_argument(
+        "--callable",
+        dest="application_callable",
+        metavar="MODULE:FUNCTION",
+        help="application template: synchronous Python callable (input: str) -> str",
+    )
     p.set_defaults(func=_cmd_init)
 
 
-def starter_files(template: str) -> dict[str, str]:
+def starter_files(template: str, *, application_callable: str | None = None) -> dict[str, str]:
+    if template == "application":
+        from evalsi.application_starter import application_files
+
+        return application_files(application_callable or "application:answer")
+    if application_callable is not None:
+        raise ValueError("--callable requires --template application")
     agent = template == "agent"
     records = [
         {"id": "france", "input": "Capital of France?", "output": "Paris", "reference": "Paris"},
@@ -124,7 +136,9 @@ https://evalsi.dev/docs/guides/gate-an-agent-in-ci/.
 
 def _cmd_init(args: argparse.Namespace) -> int:
     directory = Path(args.directory).expanduser()
-    files = starter_files(args.template)
+    files = starter_files(
+        args.template, application_callable=getattr(args, "application_callable", None)
+    )
     try:
         # An existing directory (including an empty one or symlink) is never modified.
         directory.mkdir(parents=True, exist_ok=False)
@@ -135,6 +149,15 @@ def _cmd_init(args: argparse.Namespace) -> int:
         raise ValueError(f"cannot create starter: {exc}; choose a new directory") from exc
     print(f"Created {args.template} starter in {directory}")
     print(f"  cd {shlex.quote(str(directory))}")
+    if args.template == "application":
+        print("  python evaluate.py --limit 1 --output results-first.json")
+        print("  python evaluate.py --output results.json")
+        print("  evalsi report results.json -o report.html")
+        print(
+            "  python evaluate.py --callable application:regressed --output results-regressed.json"
+        )
+        print("  # Negative control must exit 3; execution/configuration errors exit 1.")
+        return 0
     print("  evalsi doctor" + (" --require agent" if args.template == "agent" else ""))
     print("  evalsi run -f run.yaml --output results.json")
     print("  evalsi report results.json -o report.html")

@@ -17,7 +17,7 @@ const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2s
 const guides = [
   "onboarding", "dataset-snapshots", "judge-calibration", "failure-inbox", "dataset-catalog", "release-decisions", "release-workbench", "agent-runs", "built-in-harness", "enterprise-deployment", "gate-an-agent-in-ci", "support-refund-suite", "evaluate-rag", "annotation", "fine-tuning", "guardrails", "identity",
   "kubernetes", "agentgateway-kubernetes", "mcp", "plugins", "web-ui", "webhooks", "trace-sources", "integrate-an-agent-harness",
-  "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2",
+  "agent-frameworks", "operations", "end-to-end", "deepeval", "harness2", "onboarding-usability",
 ];
 const examples = [
   "first-time-onboarding", "quickstart", "runs", "agent-gate", "rag", "agents", "watch", "sources", "guardrails", "annotation",

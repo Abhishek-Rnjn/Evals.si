@@ -1,5 +1,6 @@
-# UNVERIFIED: written from Harness²'s OpenCode run argument list and this repo's
-# run-spec schema. It has not been run against a live OpenCode CLI or model.
+# The WorkBuddy task path below is UNVERIFIED. A separate synthetic arithmetic
+# task passed on OpenCode 1.19.3 with real Sonnet through bwrap and an allowlist;
+# see docs/verification/HARNESS2-2026-10-25.md for the exact scope and failures.
 # Measured only that OpenCode 1.19.3 honours the proxy variables
 # (scripts/probe-cli-proxy.py). It also needs models.opencode.ai:443 and, to install
 # its provider package at run time, registry.npmjs.org:443: with only the model host
@@ -56,7 +57,10 @@ spec:
       network: allowlist
       allow_hosts: ["api.anthropic.com:443"]
       min_isolation: namespaced
-      memory_mb: 4096
+      # Bun 1.3.14/OpenCode 1.19.3 on Linux arm64 traps at a 2-GiB RLIMIT_AS
+      # and aborts at 4 GiB. The measured task passed at 8 GiB. On the bwrap
+      # rlimit fallback this is virtual address space, not an RSS guarantee.
+      memory_mb: 8192
   evaluators:
     - ref: task-success
     - ref: policy-violations

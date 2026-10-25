@@ -370,16 +370,28 @@ async def _background(rung: str) -> None:
             # A background process outlives the call that started it, and its work is
             # visible to later commands.
             started = await tools["process_start"].call(
-                {"command": "echo ready; while true; do date +%s%N > tick.txt; sleep 0.2; done"}
+                {
+                    "command": "echo ready; while true; do"
+                    " date +%s%N > tick.tmp && mv tick.tmp tick.txt; sleep 0.2; done"
+                }
             )
             assert not started.is_error, started.content
             pid = started.metadata["process_id"]
             ready = await tools["process_output"].call({"id": pid, "wait_s": 10})
             assert "ready" in ready.content
-            await asyncio.sleep(0.6)
-            first = (await sandbox.exec(["cat", "tick.txt"])).stdout
-            await asyncio.sleep(0.6)
-            assert (await sandbox.exec(["cat", "tick.txt"])).stdout != first
+
+            # Poll rather than sleep a fixed time: a loaded runner can take well over
+            # a second to start the loop's first `date`.
+            async def tick(after: str) -> str:
+                for _ in range(100):
+                    got = (await sandbox.exec(["cat", "tick.txt"])).stdout
+                    if got and got != after:
+                        return got
+                    await asyncio.sleep(0.2)
+                output = await tools["process_output"].call({"id": pid})
+                pytest.fail(f"tick.txt never moved past {after!r}: {output.content}")
+
+            await tick(await tick(""))
             assert [p.running for p in await sandbox.list_processes()] == [True]
             assert (await sandbox.kill_process(pid)).killed
             # The persistent shell keeps a server and its client in one network

@@ -91,7 +91,9 @@ def test_probe_failure_does_not_require_a_sandbox_for_scoring_server(
     monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/release/evalsid")
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
     monkeypatch.setattr(subprocess, "run", run)
-    assert not any(c.status == "error" for c in cli_doctor.diagnose("server"))
+    assert not any(
+        c.status == "error" for c in cli_doctor.diagnose("server", include_optional=True)
+    )
     assert any(c.name == "sandbox" and c.status == "error" for c in cli_doctor.diagnose("agent"))
 
 
@@ -130,12 +132,48 @@ def test_agent_requires_namespaced_isolation_and_honors_config(
     assert report["ready"] is expected
     assert calls[-1] == ["/release/evalsid", "sandbox", "probe", "--config", config]
     # SDK scoring can still use the installation when only confined isolation exists.
-    assert main(["doctor", "--format", "json"]) == 0
+    assert main(["doctor", "--all", "--format", "json"]) == 0
     # The level is shown, so it is clear why agent readiness ignores a confined backend.
     (sandbox,) = [
         c for c in json.loads(capsys.readouterr().out)["checks"] if c["name"] == "sandbox"
     ]
     assert sandbox["detail"].endswith(f"({level})" if level != "unknown" else "bwrap")
+
+
+def test_default_doctor_never_probes_optional_tools(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def forbidden(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("SDK-only doctor consulted optional execution dependencies")
+
+    monkeypatch.setattr(cli_doctor, "installed_version", forbidden)
+    monkeypatch.setattr(cli_doctor, "evalsid_path", forbidden)
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    assert main(["doctor", "--format", "json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["ready"] is True
+    assert [check["name"] for check in report["checks"]] == ["python", "evalsi"]
+
+
+def test_server_doctor_does_not_require_harness_or_probe_sandboxes(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def forbidden(name: str) -> None:
+        pytest.fail("Scoring-server doctor inspected an agent-only dependency")
+
+    def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert cmd == ["/release/evalsid", "version"]
+        return subprocess.CompletedProcess(
+            cmd, 0, f"evalsid {__version__} (api evalsi.v1alpha1)", ""
+        )
+
+    monkeypatch.setattr(cli_doctor, "installed_version", forbidden)
+    monkeypatch.setattr(cli_doctor, "evalsid_path", lambda: "/release/evalsid")
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(subprocess, "run", run)
+    assert main(["doctor", "--require", "server", "--format", "json"]) == 0
+    checks = json.loads(capsys.readouterr().out)["checks"]
+    assert {check["name"] for check in checks} == {"python", "evalsi", "worker", "server"}
 
 
 def test_available_backend_enforcement_warning_is_sanitized(

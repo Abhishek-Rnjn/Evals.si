@@ -2,7 +2,20 @@
 
 [Harness²](https://github.com/google-research/harness2) edits an agent's harness (system prompt, guardrails, memory, skills, tool guidance, scripts, subagents, plugins) without ground truth and keeps the model fixed. That needs an independent score. Evals.si supplies one: it imports Harness²'s runs, compares the harnesses it adopted with a paired interval and a regression gate, ablates its edits one component at a time, scores the edits themselves, and runs its executors (OpenCode and Codex) in a sandbox with a network allowlist. It does not run Harness²'s refinement loop.
 
-**Status: unverified.** Everything here was written from reading Harness²'s source, not from a recorded run, and none of it has run against a live OpenCode or Codex, a real Harness² `runs/` directory or a real benchmark. Fixtures are synthetic. The layout and formats below can be wrong where Harness² differs from its source; the tools say so by reading tolerantly (a missing key is a missing value) rather than guessing. Harness²'s reported gains are the authors' setup and say nothing about your tasks.
+**Status: partially verified, not benchmark-qualified.** The [25 October verification](../verification/HARNESS2-2026-10-25.md) exercised the actual pinned upstream deterministic refinement workflow, its on-disk namespace and judge writer, import, comparison gates, missing/error grades and physically executed ablations. Separately, real OpenCode 1.19.3 with Sonnet completed a synthetic task through Evals.si's bwrap sandbox, allowlisted proxy and hidden checker; the follower exported a recorded Sonnet log into a running daemon and an online policy evaluated it. These are **not** a model-driven upstream refinement run, a real benchmark, live Codex or human calibration. Original fixtures remain synthetic. Missing keys remain missing values rather than guesses. Harness²'s reported gains are the authors' setup and say nothing about your tasks.
+
+## Start verification without model credentials
+
+The maintained [`check-harness2-upstream.py`](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/scripts/check-harness2-upstream.py)
+acceptance script executes the upstream deterministic demo at a pinned revision,
+independently grades its ledger arithmetic, and checks the importer and real
+matrix/calibration commands. It also executes script and README-stub ablations
+to distinguish a meaningful effect from a no-op. It needs Python 3.12, a
+trusted checkout of that upstream revision, and the SDK/harness environment,
+but no provider account, benchmark download or Docker. The
+[verification report](../verification/HARNESS2-2026-10-25.md#reproduce-the-no-cost-upstream-acceptance)
+gives exact commands. This acceptance script and the limit correction below
+are unreleased candidate changes, not features already established in PyPI 0.3.1.
 
 ## What you can do now
 
@@ -61,14 +74,42 @@ Harness²'s README notes unrestricted executor network access and a Codex run wi
 - **OpenCode** runs with `opencode run --format json` and `output_format: opencode-json`: each `step_start`…`step_finish` pair is a model-call step (tokens with cache reads and writes counted as input, cost, finish reason), each `tool_use` a tool step with its output or error, and an `error` event is the run's error. Only the main session's parts are printed, so a sub-agent's work shows only as its `task` tool's output. The reader is pinned to opencode 1.19.3; its fixtures are real 1.19.3 output recorded against a scripted chat-completions server (no live model).
 - **Install** commands run once during setup with `setup_network: allow`; the agent itself then reaches only the allowlist. Both example specs use placeholders where a version, model or key is needed. They load under the run-spec validator in the test suite, which checks the schema, not that the agents work.
 
+### Measured OpenCode limits and remaining policy failure
+
+The Linux arm64 OpenCode 1.19.3/Bun 1.3.14 runtime failed before task execution
+under 2-GiB and 4-GiB address-space limits. The example now declares
+`memory_mb: 8192`: the measured synthetic task passed at that setting, including
+a real Sonnet tool call and exact hidden file check. On the measured bwrap
+fallback this is a **virtual-address rlimit**, not an RSS guarantee; the outer
+development container separately enforced a 4-GiB RAM cap. Do not generalize
+that sizing to every platform or runtime version.
+
+Those successful tasks still attempted `registry.npmjs.org:443`. The narrow
+allowlist denied and recorded it, so **task-success was 1 but policy-clean was
+0**. This is useful enforcement evidence, not a policy-clean result. A deployment
+requiring both must gate `policy-violations.policy-clean` as well as
+`task-success`. Prefer pre-seeded dependencies to silently widening egress.
+The WorkBuddy dataset and verifier in the example remain unverified.
+
 ## Live scoring of executor runs
 
 What works today: a CLI agent run by `evalsi run` is scored after it finishes. The Codex stream is parsed into steps once the process exits, so this is a post-hoc score, not live. A harness that sends OpenTelemetry (GenAI, OpenInference, OpenLLMetry or MLflow conventions) to an Evals.si ingest endpoint with an ingest key is scored live, and a [trace source](trace-sources.md) scores traces already kept in MLflow, Phoenix, Langfuse, LangSmith or ClickHouse and writes the scores back.
 
 `evalsi harness2 follow <log> --format codex-json|opencode-json|claude-stream-json|gemini-json|pi-json --task-id ID` closes most of the gap for the executors' event logs. Point the CLI agent's standard output at a file (`... --format json | tee events.jsonl`), set `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS` (an `ingest` key) as for any [OTLP source](end-to-end.md), and run `follow` beside it. It reads the new complete lines every `--poll` seconds with the same reader `output_format` uses, sends the steps that can no longer change as spans of one trace, and sends the root `invoke_agent` span when the log has been quiet for `--idle` seconds. The server's online-evaluation policies then score the trace and write the scores back through the project's sinks (MLflow, Phoenix, Langfuse): `follow` scores nothing itself. A model call and the tool calls after it are held back until the next model call starts or the log ends, so the final answer arrives with the run's last batch; the trace is complete, for policies that need the root span, only at the end. The OTLP host must be in `allow_hosts` if the follower runs inside the sandbox; it normally runs beside it.
 
-What is not built: reading Codex's or OpenCode's own OpenTelemetry or session database (only the event stream they print is read), and anything checked against a live server: the tests use a local collector and recorded or fixture logs, not a running `evalsid` with a policy.
+Reading Codex's or OpenCode's own OpenTelemetry or session database is not built;
+only the printed event stream is read. The original tests use a local collector.
+The 25 October follow-up additionally sent an **actual recorded Sonnet executor
+log** in two batches through the follower to current-source `evalsid`, fetched
+the persisted trace and verified one online latency evaluation. It did not
+observe an actively running model concurrently, exercise authenticated ingestion
+or verify external sink write-back. The follower still scores nothing itself.
 
 ## Not covered
 
-The refinement loop itself, a reader for OpenCode's trajectory, per-rollout cost (the importer carries Harness²'s selection cost only), and trajectories inside Harness² run directories, whose formats are not pinned. See the [roadmap](../HARNESS-ROADMAP.md) for the H7 plan and [agent runs](agent-runs.md) for the sandbox, CLI agents and importers in general.
+Running the refinement loop from Evals.si, model-driven upstream refinement
+verification, per-rollout cost (the importer carries Harness²'s selection cost
+only), and benchmark-specific trajectories inside Harness² run directories,
+whose formats are not pinned. The standalone executor's JSON event stream is
+supported separately. See the [roadmap](../HARNESS-ROADMAP.md) for the H7 plan
+and [agent runs](agent-runs.md) for the sandbox, CLI agents and importers.

@@ -1,7 +1,8 @@
 # Work required before the 0.4 release
 
-Status: open checklist, 21 October 2026. All owners are unassigned and all
-evidence is pending. This document records required work; it does not establish
+Status: open checklist, 21 October 2026; application-first implementation update
+below. Acceptance owners remain unassigned and no row is closed by the candidate
+work alone. This document records required work; it does not establish
 that product readiness, customer adoption or revenue has been achieved.
 
 Stable 0.4 is gated on **product readiness** (R04-01 to R04-05), which a
@@ -11,9 +12,10 @@ release candidate but gates calling the project beta, not 0.4. Version numbers
 should not wait on a business milestone while security and reliability fixes sit
 on `main`.
 
-The latest published release at preparation is v0.3.0. Guided onboarding, dataset
-workflows, enforced release decisions, the browser workbench and evaluator
-calibration ([guide](guides/judge-calibration.md)) are merged and unreleased. A
+Published 0.3.1 was verified in the onboarding studies. The new application
+starter, scoped diagnostics and decision-first report additions remain candidate
+features; the [guided setup](guides/onboarding.md) distinguishes them from stable
+recorded scoring. Other roadmap capabilities must retain their own release evidence. A
 feature's presence in the repository is not evidence that a customer can install
 and adopt it.
 
@@ -44,6 +46,27 @@ rewrite around Evals.si's harness. The in-cluster service in the
 where a new user starts, not what is built.
 
 ## Required before stable 0.4: product readiness
+
+### Application-first candidate progress
+
+Implemented: one published-SDK entry path; an `init --template application`
+runner for synchronous Python callables; first-case and exact-case execution;
+separate failed-check and execution exits; scoped diagnostics; decision-first
+HTML/Markdown; and fresh-wheel acceptance automation wired into CI and release
+artifact preparation. None requires Kubernetes or the harness for SDK scoring.
+
+The [guided setup](guides/onboarding.md) describes candidate availability and a
+thin HTTP wrapper, not an automatically discovered endpoint protocol. This
+slice does not supply a dedicated HTTP wizard, async/streaming application
+adapter, automatic semantic evaluator selection or an application-specific
+release policy. The existing execution engine and advanced workflows remain.
+
+R04-01 to R04-03 are **still open**: configured CI is not observed platform
+evidence, a locally built wheel is not a published release, and automated
+synthetic runs are not unfamiliar-user success or second-reader comprehension.
+Use the [human study protocol](guides/onboarding-usability.md) to record those
+outcomes and repeat the work after observed blockers. R04-04/R04-05 and all
+customer-validation rows retain their independent requirements.
 
 Each completion record names an owner, implementation PRs, tested commit/artifact
 versions, evidence and limits. Evidence comes from clean-environment runs,
