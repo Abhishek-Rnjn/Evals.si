@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@opentelemetry/api": "1.9.1",
-    "@opentelemetry/resources": "2.12.0",
+    "@opentelemetry/resources": "3.0.0",
     "@opentelemetry/sdk-trace-base": "2.12.0",
     "@opentelemetry/exporter-trace-otlp-proto": "0.223.0"
   },
