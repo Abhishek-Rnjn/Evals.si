@@ -1,5 +1,7 @@
 # Guided setup and the GitHub gate action
 
+For a full hands-on course with a fake tool-calling model, failure controls and replay, start with the [first-time onboarding tutorials](../tutorials/README.md).
+
 `evalsi doctor` and `evalsi init` were added in 0.3.1; PyPI 0.3.0 does not have them.
 
 ```bash

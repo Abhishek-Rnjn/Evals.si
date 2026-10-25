@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onboarding-model
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: onboarding-model}
+  template:
+    metadata:
+      labels: {app: onboarding-model}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: model
+          image: evalsi:onboarding
+          imagePullPolicy: IfNotPresent
+          command: [python3, /model/tinylm.py, --host, "0.0.0.0", --port, "8765"]
+          ports:
+            - containerPort: 8765
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8765}
+          volumeMounts:
+            - {name: model, mountPath: /model, readOnly: true}
+      volumes:
+        - name: model
+          configMap: {name: onboarding-model}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onboarding-model
+spec:
+  selector: {app: onboarding-model}
+  ports:
+    - {port: 8765, targetPort: 8765}

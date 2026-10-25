@@ -1,0 +1,23 @@
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: onboarding-recorded
+  labels:
+    evals.si/project: onboarding
+spec:
+  dataset:
+    inline:
+      records:
+        - id: correct
+          input: {text: "2+2"}
+          output: {text: "4"}
+          reference: {text: "4"}
+        - id: incorrect
+          input: {text: "3+3"}
+          output: {text: "7"}
+          reference: {text: "6"}
+  evaluators:
+    - ref: exact-match
+  gates:
+    - metric: exact-match
+      min: 0.5

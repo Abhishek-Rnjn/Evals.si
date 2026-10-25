@@ -1,0 +1,26 @@
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: onboarding-agent
+  labels:
+    evals.si/project: onboarding
+spec:
+  target:
+    agent:
+      cli:
+        command: [sh, -c, "cat >/dev/null; printf done > out.txt"]
+  environment:
+    sandbox:
+      min_isolation: namespaced
+    checker:
+      command: [sh, -c, 'test "$(cat out.txt)" = done']
+  dataset:
+    inline:
+      records:
+        - id: write-file
+          input: {text: "Write done to out.txt."}
+  evaluators:
+    - ref: task-success
+  gates:
+    - metric: task-success
+      min: 1.0

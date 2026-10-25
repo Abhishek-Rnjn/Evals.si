@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TypedDict
 
 NS = "evalsi-verify-20261021-followup"
+NODE_SKU: str | None = None
 IMAGE = "docker.io/library/python@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f"
 KUBECONFIG = os.environ.get("KUBECONFIG") or str(
     Path(__file__).resolve().parents[2] / "kube-aks.yaml"
@@ -49,12 +50,13 @@ def apply(doc: dict) -> subprocess.CompletedProcess[str]:
 
 
 def pod(name: str, script: str) -> dict:
-    return {
+    doc = {
         "apiVersion": "v1",
         "kind": "Pod",
         "metadata": {"name": name, "namespace": NS, "labels": {"probe": name}},
         "spec": {
             "restartPolicy": "Never",
+            "automountServiceAccountToken": False,
             "tolerations": [{"operator": "Exists", "effect": "NoSchedule"}],
             "containers": [
                 {
@@ -69,12 +71,23 @@ def pod(name: str, script: str) -> dict:
             ],
         },
     }
+    if NODE_SKU is not None:
+        doc["spec"]["nodeSelector"] = {"node.kubernetes.io/instance-type": NODE_SKU}
+    return doc
 
 
 def main() -> None:
+    global NS, NODE_SKU
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--namespace", default=NS)
+    parser.add_argument("--node-sku")
+    parser.add_argument("--owner-label", default="aks-followup-20261021")
     args = parser.parse_args()
+    NS, NODE_SKU = args.namespace, args.node_sku
+    namespace = get("get", "namespace", NS)
+    if namespace["metadata"].get("labels", {}).get("evalsi.verification") != args.owner_label:
+        raise ValueError("namespace ownership label does not match; refusing to create probes")
     nodes = get("get", "nodes")["items"]
     result: ProbeResults = {
         "node_count": len(nodes),
@@ -87,6 +100,11 @@ def main() -> None:
         selector = kata.get("scheduling", {}).get("nodeSelector", {})
         result["kata"]["matching_nodes"] = sum(
             all(n["metadata"].get("labels", {}).get(k) == v for k, v in selector.items())
+            and (
+                NODE_SKU is None
+                or n["metadata"].get("labels", {}).get("node.kubernetes.io/instance-type")
+                == NODE_SKU
+            )
             for n in nodes
         )
         probe = pod("kata-probe", "print('KATA_EXECUTED')")

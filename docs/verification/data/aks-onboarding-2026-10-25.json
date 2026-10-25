@@ -1,0 +1,144 @@
+{
+  "date": "2026-10-25",
+  "source_head_tested_in_aks": "c00ed23ab79b570a3234fcacb3d621f3bfc37d1f",
+  "scope": "Synthetic owned-namespace verification, not production or model-quality certification",
+  "node": {
+    "sku": "Standard_D8s_v5",
+    "allocatable_cpu": 7.82,
+    "allocatable_memory_gib_approx": 26.3,
+    "existing_node_count": 3
+  },
+  "tinylm": {
+    "source_host_with_remote_tools": 18,
+    "fresh_published_entirely_in_aks": 18,
+    "published_sdk": "0.3.1",
+    "published_harness": "0.3.1",
+    "strict_published_doctor_passed": true,
+    "nonprivileged_worker_strict_doctor_refused": true
+  },
+  "load": {
+    "stored_spans_per_second_threshold": 20000,
+    "freshness_p95_seconds_threshold": 120,
+    "spans_per_replicate": 400000,
+    "replicates": [
+      {"store": "sqlite", "mode": "full", "replicate": 1, "stored_spans_per_second": 33645, "freshness_p95_seconds": 32.926059467, "throughput_passed": true},
+      {"store": "sqlite", "mode": "full", "replicate": 2, "stored_spans_per_second": 20213, "freshness_p95_seconds": 2.672058434, "throughput_passed": true},
+      {"store": "sqlite", "mode": "full", "replicate": 3, "stored_spans_per_second": 28467, "freshness_p95_seconds": 21.19799265, "throughput_passed": true},
+      {"store": "sqlite", "mode": "normal", "replicate": 1, "stored_spans_per_second": 19074, "freshness_p95_seconds": 2.688650961, "throughput_passed": false},
+      {"store": "sqlite", "mode": "normal", "replicate": 2, "stored_spans_per_second": 24870, "freshness_p95_seconds": 13.569592721, "throughput_passed": true},
+      {"store": "sqlite", "mode": "normal", "replicate": 3, "stored_spans_per_second": 24643, "freshness_p95_seconds": 13.956933097, "throughput_passed": true},
+      {"store": "clickhouse", "mode": "full", "replicate": 1, "stored_spans_per_second": 11715, "freshness_p95_seconds": 4.020848546, "throughput_passed": false},
+      {"store": "clickhouse", "mode": "full", "replicate": 2, "stored_spans_per_second": 13546, "freshness_p95_seconds": 21.883913382, "throughput_passed": false},
+      {"store": "clickhouse", "mode": "full", "replicate": 3, "stored_spans_per_second": 12946, "freshness_p95_seconds": 18.090535911, "throughput_passed": false}
+    ],
+    "freshness_passes": 9,
+    "throughput_passes": 5,
+    "throughput_failures": 4
+  },
+  "sqlite_crash": {
+    "full_trials": 3,
+    "normal_trials": 3,
+    "same_counts_in_every_trial": {
+      "accepted": 320,
+      "observed_stored_before_kill": 100,
+      "recovered": 100,
+      "lost_previously_observed_stored": 0,
+      "lost_acknowledged": 220,
+      "uncertain": 20
+    },
+    "all_integrity_checks": "ok",
+    "power_loss_tested": false
+  },
+  "recovery": {
+    "current_postgres_exact_snapshots_after_restart": 2,
+    "clickhouse_exact_rows_restored": 100,
+    "jetstream_exact_messages_restored": 50,
+    "jetstream_pending_acks_restored": 3,
+    "published_release_rolling_upgrade_tested": false
+  },
+  "audit_filesystem": {
+    "daemon_uid": 65534,
+    "unwritable_startup_refused": true,
+    "writable_positive_control_passed": true,
+    "runtime_fault": "RLIMIT_FSIZE=0, OS EFBIG, SIGXFSZ ignored",
+    "strict_mutation_http_status": 503,
+    "refused_mutation_absent": true,
+    "daemon_remained_alive": true,
+    "read_only_remount_tested": false
+  },
+  "virtualization": {
+    "kvm_api": 12,
+    "kvm_vm_created": true,
+    "firecracker_version": "1.17.0",
+    "requested_sessions_each": 16,
+    "parallel_boot_limits": [2, 8, 16],
+    "elapsed_seconds": [3.212, 2.981, 3.21],
+    "jailed_restore_resnapshot_passed": true,
+    "unchanged_source_invariants": 4
+  },
+  "capabilities": {
+    "baseline_network_connected": true,
+    "connected_after_default_deny": true,
+    "network_policy_enforced": false,
+    "selected_kata_matching_nodes": 0,
+    "kata_admitted": true,
+    "kata_scheduled": false
+  },
+  "models": {
+    "budget_limit_usd": 10,
+    "cumulative_http_attempts": 184,
+    "cumulative_conservative_estimated_usd": 2.1220673,
+    "invoice_guaranteed": false,
+    "haiku": {
+      "alias": "claude-haiku-5-5",
+      "refund_live_records": 24,
+      "approval_control_live_records": 3,
+      "http_attempts": 132,
+      "conservative_estimated_usd": 1.7073453,
+      "genuine_baseline_miss": "ask-for-more-than-paid",
+      "intentional_policy_blocks_retained": true
+    },
+    "sonnet": {
+      "alias": "claude-sonnet-5-5",
+      "adaptive_low_successful_refund_trajectories": 6,
+      "adaptive_low_setup_failures": 3,
+      "adaptive_low_replay_blocked_by_registry": true,
+      "adaptive_high_two_turn_tool_control_passed": true,
+      "explicit_thinking_budget_tokens": 1024,
+      "explicit_response_limit_tokens": 2048,
+      "explicit_refund_records": 3,
+      "explicit_trials_per_record": 3,
+      "explicit_successful_trajectories": 9,
+      "explicit_exact_checker_replays": 3,
+      "explicit_replay_provider_requests": 0,
+      "explicit_http_attempts": 30,
+      "explicit_tool_use_blocks": 21,
+      "explicit_input_tokens_including_cache": 47293,
+      "explicit_output_tokens": 3372,
+      "exposed_thinking_blocks_across_attempts": 0,
+      "high_and_explicit_reported_thinking_tokens": 0,
+      "live_signed_thinking_round_trip_verified": false,
+      "separate_tool_token_counter_reported": false,
+      "token_id_or_logprob_trace_verified": false
+    }
+  },
+  "workbench": {
+    "independent_records": 3,
+    "trials_each": 2,
+    "synthetic_agent_requests": 18,
+    "decisions": ["BLOCK", "PASS", "INSUFFICIENT"],
+    "native_download_user_confirmed_and_pins_inspected": true,
+    "automated_download_event_passed": false,
+    "downloaded_script_executed": false,
+    "quiesced_backup_integrity": "ok"
+  },
+  "cleanup": {
+    "ownership_verified": true,
+    "owned_namespace_deleted": true,
+    "namespace_absence_verified": true,
+    "labelled_pod_absence_verified": true,
+    "loopback_ports_closed": [17443, 18081],
+    "ephemeral_private_keys_removed": true,
+    "user_download_untouched": true
+  }
+}

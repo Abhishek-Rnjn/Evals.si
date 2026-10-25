@@ -1,0 +1,17 @@
+image:
+  repository: evalsi
+  tag: onboarding
+  pullPolicy: IfNotPresent
+server:
+  persistence:
+    enabled: true
+sandbox:
+  pool:
+    enabled: true
+    pod:
+      defaultImage: evalsi:onboarding
+      networkPolicyEnforced: false
+bootstrap:
+  enabled: true
+  projects:
+    - name: onboarding

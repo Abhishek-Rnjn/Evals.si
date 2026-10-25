@@ -16,6 +16,45 @@ is attempted. The bubblewrap check only tests bare namespace creation. Evals.si'
 rlimits, mount rules and functional isolation require its actual sandbox tests.
 No token values, kubeconfig contents or secret files are included in the output.
 
+## Stronger-node AKS onboarding and Sonnet controls
+
+The [AKS walkthrough](../../docs/tutorials/13-aks-onboarding.md) starts with a
+fresh published install, then connects the source SDK to a real mTLS pool.
+The [lab manifest](aks-onboarding-lab.yaml) pins both bounded pods to the tested
+`Standard_D8s_v5` class, disables service-account tokens and uses only `emptyDir`.
+Its privileged outer pool is for explicitly authorized synthetic nested-
+isolation tests, **not** a production worker configuration.
+
+Use `aks_followup_probes.py --namespace YOUR_OWNED_NAMESPACE
+--node-sku Standard_D8s_v5 --owner-label YOUR_OWNER_VALUE --output PRIVATE_PATH`.
+The namespace's `evalsi.verification` label must match before probes are created.
+
+`aks_followup_live.py` supports `--model-family haiku|sonnet`, explicit
+`--driver bwrap`, `--trials`, `--cases`, `--baseline-only`, and digest-pinned
+`--image`. `--thinking adaptive --effort low|medium|high` retains the
+1,024-token metered cap. `--thinking enabled` requests a 1,024-token thinking
+budget inside a **2,048-token** response cap; this is a bounded opt-in, not a
+change to the historical ledger default. Provider evidence records raw block
+types/counts, signature presence and usage details without copying reasoning
+text into the budget file. Exact replay checks compare business results and
+HITL transcripts and refuse unexpected provider calls.
+
+The 25 October campaign's separate $10 authorization is selected with
+`--budget-limit 10`; a fresh run must specify its limit explicitly. Resume with
+the **latest** `--prior-budget`, including failed intermediate experiments,
+not the old $39.50 campaign or a reset allowance. The final estimate was
+$2.12206730 across 184 HTTP attempts. Sonnet's explicit-thinking retry passed
+nine refund trajectories and three exact replays with 21 structured tool calls,
+but the route exposed no thinking blocks and reported `thinking_tokens: 0`.
+There was no separate tool-token or token-ID/logprob trace.
+
+The [dated report](../../docs/verification/AKS-ONBOARDING-2026-10-25.md)
+retains Docker Hub rate-limit failures, four throughput failures, acknowledged
+ingest-buffer loss, CNI/Kata blockers, real KVM/filesystem/recovery controls,
+browser/native-download evidence and verified owned-resource cleanup.
+`aks_followup_filesystem.py` requires a disposable Linux root container with
+permission to change another UID's process limit; do not run it on the host.
+
 ## Budgeted live Claude long-horizon task
 
 Measured outcomes, failed controls and aggregate spending are recorded in the

@@ -1,0 +1,73 @@
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata:
+  name: first-tool-calling-run
+spec:
+  dataset:
+    path: tasks.jsonl
+  target:
+    connector: openai-compatible
+    base_url: http://127.0.0.1:8765/v1
+    model: careful
+    max_tokens: 256
+  harness:
+    builtin:
+      max_steps: 6
+      tools:
+        sandbox: false
+  evaluators:
+  - ref: tool-call-accuracy
+  - ref: tool-errors
+  - ref: loop-detection
+  - ref: contains
+    params:
+      substring: Refunded order
+  - ref: task-success
+  trials: 1
+  gates:
+  - metric: tool-call-accuracy.recall
+    min: 1.0
+  - metric: tool-call-accuracy.precision
+    min: 1.0
+  - metric: contains
+    min: 1.0
+  - metric: tool-errors
+    max: 0.0
+  - metric: contains
+    stat: GATE_STAT_ERROR_RATE
+    max: 0.0
+  - metric: task-success
+    min: 1.0
+  environment:
+    database:
+      schema: CREATE TABLE orders (id INTEGER PRIMARY KEY, refunded INTEGER NOT NULL);
+      seed: INSERT INTO orders VALUES (42,0),(7,0),(99,0);
+      tools:
+      - name: lookup_order
+        description: Look up order
+        sql: SELECT id, refunded FROM orders WHERE id = :id
+        parameters:
+          type: object
+          properties:
+            id:
+              type: integer
+          required:
+          - id
+      - name: refund
+        description: Refund order
+        mode: write
+        sql: UPDATE orders SET refunded = 1 WHERE id = :id
+        min_rows: 1
+        max_rows: 1
+        parameters:
+          type: object
+          properties:
+            id:
+              type: integer
+          required:
+          - id
+      assertions:
+      - name: one-refund
+        sql: SELECT SUM(refunded) FROM orders
+        expect:
+        - - 1

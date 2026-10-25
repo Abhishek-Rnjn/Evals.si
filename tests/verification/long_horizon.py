@@ -38,14 +38,15 @@ class Ledger:
     charged: float = 0.001
     attempts: list[dict[str, Any]] = field(default_factory=list)
     carried_attempts: int = 0
+    response_token_cap: int = 1024
 
     @classmethod
     def from_prior(cls, path: Path, *, limit: float = 14.5) -> Ledger:
         prior = json.loads(path.read_text())
         ledger = cls(limit=limit)
         if (
-            limit not in (14.5, 19.5, 36.0, 39.5)
-            or prior["allowance_usd"] not in (14.5, 19.5, 36.0, 39.5)
+            limit not in (10.0, 14.5, 19.5, 36.0, 39.5)
+            or prior["allowance_usd"] not in (10.0, 14.5, 19.5, 36.0, 39.5)
             or prior["allowance_usd"] > limit
         ) or (
             prior["input_including_all_cache_per_million"],
@@ -57,6 +58,9 @@ class Ledger:
         ledger.input_rate = prior["input_including_all_cache_per_million"]
         ledger.output_rate = prior["output_per_million"]
         ledger.charged = prior["conservative_estimated_usd"]
+        ledger.response_token_cap = prior.get("response_token_cap", 1024)
+        if ledger.response_token_cap not in (1024, 2048):
+            raise ValueError("prior ledger has an unsupported response token cap")
         ledger.attempts = prior["attempts"]
         for row in ledger.attempts:
             row.setdefault("input_rate", prior["input_including_all_cache_per_million"])
@@ -70,8 +74,13 @@ class Ledger:
     def reserve(self, body: bytes) -> dict[str, Any]:
         request = json.loads(body)
         maximum = request["max_tokens"]
-        if not isinstance(maximum, int) or not 1 <= maximum <= 1024:
-            raise ValueError("all responses, including summaries, must be capped at 1024 tokens")
+        if self.response_token_cap not in (1024, 2048):
+            raise ValueError("unsupported response token cap")
+        if not isinstance(maximum, int) or not 1 <= maximum <= self.response_token_cap:
+            raise ValueError(
+                "all responses, including summaries, must be capped at "
+                f"{self.response_token_cap} tokens"
+            )
         # UTF-8 bytes plus overhead is deliberately pessimistic, not a provider token count.
         upper = ((len(body) + 4096) * self.input_rate + maximum * self.output_rate) / 1e6
         if self.charged + upper > self.limit:
@@ -82,6 +91,7 @@ class Ledger:
             "charged_usd": upper,
             "input_rate": self.input_rate,
             "output_rate": self.output_rate,
+            "max_tokens": maximum,
         }
         self.charged += upper
         self.attempts.append(row)
@@ -125,6 +135,7 @@ class Ledger:
             "smoke_allowance_included_usd": min(0.001, self.charged),
             "gateway_invoice_guaranteed": False,
             "carried_attempts": self.carried_attempts,
+            "response_token_cap": self.response_token_cap,
             "attempts": self.attempts,
         }
 
