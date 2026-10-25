@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 import evalsi
 from evalsi import report
@@ -84,7 +89,7 @@ def test_report_from_a_server_run() -> None:
     assert r.worst["judge"][1].explanation == "meh"
     assert r.errors == [{"record_id": "3", "evaluator": "judge", "reason": "timeout"}]
     md = report.to_markdown(r)
-    assert "❌ judge mean ≥ 0.5 (0.25 < 0.5)" in md
+    assert "❌ judge mean ≥ 0.5 (0.25 &lt; 0.5)" in md
 
 
 def test_each_example_shows_the_output_its_trial_produced() -> None:
@@ -164,3 +169,418 @@ def test_server_report_of_an_archived_run_is_its_summary() -> None:
     report = from_server(Client(), "run-1")
     assert report.meta["archived"] == "2026-10-12T00:00:00Z"
     assert "exact-match" in to_markdown(report)
+    assert "Per-record results are unavailable" in to_markdown(report)
+    assert "no longer available" in to_markdown(report)
+
+
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_finished_evaluation_is_not_release_approval(render: Any) -> None:
+    result = evalsi.evaluate(
+        [{"id": "good", "input": "hello", "output": "hello", "reference": "hello"}],
+        ["exact-match"],
+    )
+    r = report.from_results_file(result.to_dict())
+    text = render(r)
+    assert "0 failed, 1 passed (explicit boolean scores)" in text
+    assert "completion is not release approval" in text
+    assert "no gate results were recorded" in text
+    assert "not proof of evaluator validity" in text
+    assert "No baseline comparison is included" in text
+    assert r.worst == {}
+
+
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_failed_check_explains_expected_actual_and_how_to_investigate(render: Any) -> None:
+    r = report.from_results_file(
+        {
+            "results": [
+                {
+                    "record_id": "case-1",
+                    "trial": 1,
+                    "evaluator": "application-exact-match",
+                    "outcome": "scored",
+                    "scores": [{"passed": False, "explanation": "Answer differs from reference."}],
+                }
+            ],
+            "records": [
+                {"id": "case-1", "output": "wrong trial", "provenance": {"run": {"trial": 0}}},
+                {
+                    "id": "case-1",
+                    "input": "2 + 2?",
+                    "output": "5",
+                    "reference": "4",
+                    "provenance": {"run": {"trial": 1}},
+                },
+            ],
+        }
+    )
+    text = render(r)
+    assert "1 failed, 0 passed" in text
+    assert "Answer differs from reference." in text
+    assert "expected/reference" in text
+    assert "actual output" in text
+    assert "wrong trial" not in text
+    assert "original application/evaluation command" in text
+    assert "record ID/trial" in text
+    assert "exact command is not recorded" in text
+    failed = r.worst["application-exact-match"][0]
+    assert (failed.record_id, failed.trial, failed.output, failed.reference) == (
+        "case-1",
+        1,
+        "5",
+        "4",
+    )
+    if render is report.to_html:
+        assert "<details open>" in text
+
+
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_errors_skips_and_incomplete_outcomes_are_not_failed_checks(render: Any) -> None:
+    r = report.from_results_file(
+        {
+            "results": [
+                {
+                    "recordId": "app",
+                    "outcome": "OUTCOME_ERROR",
+                    "reason": "Application unavailable",
+                },
+                {"recordId": "infra", "outcome": "OUTCOME_ERROR", "reason": "timeout"},
+                {"recordId": "skip", "outcome": "OUTCOME_SKIPPED", "reason": "Reference missing"},
+                {"recordId": "cancel", "outcome": "OUTCOME_CANCELLED"},
+                {"recordId": "future", "outcome": "a-new-outcome"},
+            ]
+        }
+    )
+    text = render(r)
+    assert "0 failed, 0 passed" in text
+    assert (
+        "Execution/evaluation errors: 2; skipped: 1; cancelled: 1; unrecognized outcomes: 1" in text
+    )
+    assert "These are not failed checks or passes" in text
+    assert "application, evaluator, or infrastructure" in text
+    assert "Application unavailable" in text
+    assert "timeout" in text
+    assert "Reference missing" in text
+    assert "resolve the recorded execution problem" in text
+    assert "obtain the missing evidence" in text
+    assert r.worst == {}
+
+
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_numeric_or_label_scores_do_not_invent_failure_or_approval(render: Any) -> None:
+    r = report.from_results_file(
+        {
+            "summaries": [{"metric": "rating", "n": 1, "mean": 1}],
+            "results": [
+                {
+                    "record_id": "r",
+                    "evaluator": "rating",
+                    "outcome": "scored",
+                    "scores": [
+                        {"number": 1},
+                        {"label": "fail"},
+                        {"structured": {"passed": False}},
+                    ],
+                }
+            ],
+        }
+    )
+    text = render(r)
+    assert "0 failed, 0 passed" in text
+    assert "3 other scores have no inferred pass/fail threshold" in text
+    assert "no gate results were recorded" in text
+    assert "1 scored results lack a matching record" in text
+    assert "Not recorded; do not infer it." in text
+    assert "numeric scores are not gates" in text
+
+
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_empty_or_summary_only_report_admits_unavailable_evidence(render: Any) -> None:
+    r = report.from_results_file({"summaries": [{"metric": "check", "n": 5, "mean": 1}]})
+    text = render(r)
+    assert "Per-record results are unavailable" in text
+    assert "Completion status is not recorded" in text
+    assert "0 failed" not in text
+    assert "no gate results were recorded" in text
+
+
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_missing_scores_and_empty_outputs_are_not_silently_omitted(render: Any) -> None:
+    r = report.from_results_file(
+        {
+            "results": [
+                {"record_id": "empty", "evaluator": "check", "outcome": "scored"},
+                {
+                    "record_id": "missing",
+                    "evaluator": "check",
+                    "outcome": "scored",
+                    "scores": [{"passed": False}],
+                },
+            ],
+            "records": [{"id": "missing", "output": "", "reference": ""}],
+        }
+    )
+    text = render(r)
+    assert "1 scored results contain no scores" in text
+    assert "1 scored results lack a matching record" in text
+    assert "(empty)" in text
+    assert "Check returned false; no explanation was recorded." in text
+
+
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_only_explicit_gate_results_are_reported(render: Any) -> None:
+    r = report.from_results_file(
+        {
+            "gates": [
+                {"metric": "a", "passed": True},
+                {"metric": "b", "passed": False},
+                {"metric": "c"},
+            ]
+        }
+    )
+    text = render(r)
+    assert "Recorded gates: 1 passed, 1 failed, 1 unavailable" in text
+    assert "not a new release decision" in text
+    assert "no gate results" not in text
+
+
+def test_report_guidance_does_not_copy_manifest_credentials() -> None:
+    r = report.from_results_file(
+        {
+            "manifest": {
+                "environment": {"API_KEY": "private-api-key"},
+                "command": "evaluate --token private-token",
+            }
+        }
+    )
+    for render in (report.to_markdown, report.to_html):
+        text = render(r)
+        assert "private-api-key" not in text
+        assert "private-token" not in text
+
+
+def test_null_optional_score_fields_do_not_hide_a_boolean_failure() -> None:
+    r = report.from_results_file(
+        {
+            "results": [
+                {
+                    "record_id": "r",
+                    "evaluator": "check",
+                    "outcome": "scored",
+                    "scores": [{"number": None, "passed": False}, {"passed": None}],
+                }
+            ]
+        }
+    )
+    assert r.counts["failed_checks"] == 1
+    assert r.counts["other_scores"] == 1
+    assert r.worst["check"][0].label == "fail"
+    assert "Not recorded." in report.to_markdown(r)
+
+
+def test_error_skip_and_failed_evidence_are_bounded_and_escaped() -> None:
+    hostile = "<script>alert(1)</script>"
+    r = report.from_results_file(
+        {
+            "results": [
+                {"outcome": "error", "reason": hostile + "x" * 3000},
+                *[{"outcome": "skipped", "reason": hostile + "x" * 3000} for _ in range(55)],
+                {
+                    "record_id": "r",
+                    "evaluator": "check",
+                    "outcome": "scored",
+                    "scores": [{"passed": False, "explanation": hostile + "x" * 3000}],
+                },
+            ],
+            "records": [{"id": "r", "output": hostile + "x" * 3000}],
+        }
+    )
+    assert len(r.skipped) == 50
+    assert r.counts["skipped"] == 55
+    assert all(len(item["reason"]) <= 2002 for item in [*r.errors, *r.skipped])
+    assert len(r.worst["check"][0].explanation) <= 2002
+    page = report.to_html(r)
+    assert hostile not in page
+    assert "&lt;script&gt;" in page
+    md = report.to_markdown(r)
+    assert "&lt;script&gt;" in md
+
+
+def application_report_record(**changes: Any) -> dict[str, Any]:
+    hint = {"version": 1, "callable": "application:regressed", "cases": "cases.jsonl", "case": "r"}
+    hint.update(changes)
+    return {"id": "r", "metadata": {"evalsi_application_reproduction": hint}}
+
+
+def report_with_application_record(record: dict[str, Any], trial: int = 0) -> report.Report:
+    return report.from_results_file(
+        {
+            "records": [record],
+            "results": [
+                {
+                    "record_id": record["id"],
+                    "trial": trial,
+                    "evaluator": "check",
+                    "outcome": "scored",
+                    "scores": [{"passed": False}],
+                }
+            ],
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"version": True},
+        {"version": 2},
+        {"version": "1"},
+        {"command": "private-secret"},
+        {"callable": "https://private-secret@example.com"},
+        {"callable": "application:answer;private-secret"},
+        {"callable": "a" * 257 + ":answer"},
+        {"cases": "/private-secret/cases.jsonl"},
+        {"cases": "../private-secret"},
+        {"cases": "a/../private-secret"},
+        {"cases": "./private-secret"},
+        {"cases": "a//private-secret"},
+        {"cases": "-private-secret"},
+        {"cases": "C:/private-secret"},
+        {"cases": "a\\private-secret"},
+        {"cases": "private-secret\ncases.jsonl"},
+        {"cases": "a" * 513},
+        {"cases": None},
+        {"case": "private-secret"},
+        {"case": "a" * 257},
+        {"case": "-r"},
+        {"case": "r\x7f"},
+        {"case": "ré"},
+    ],
+)
+def test_tampered_reproduction_metadata_is_not_rendered(changes: dict[str, Any]) -> None:
+    r = report_with_application_record(application_report_record(**changes))
+    assert not r.worst["check"][0].reproduction
+    for render in (report.to_html, report.to_markdown):
+        text = render(r)
+        assert "Reproduction arguments" not in text
+        assert "private-secret" not in text
+        assert "An exact command is not recorded here" in text
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        None,
+        [],
+        {"command": "private-secret"},
+        "private-secret",
+        {"evalsi_application_reproduction": []},
+        {"evalsi_application_reproduction": "private-secret"},
+    ],
+)
+def test_unrecognized_reproduction_metadata_is_ignored(metadata: Any) -> None:
+    r = report_with_application_record({"id": "r", "metadata": metadata})
+    for render in (report.to_html, report.to_markdown):
+        text = render(r)
+        assert "Reproduction arguments" not in text
+        assert "private-secret" not in text
+
+
+def test_recorded_reproduction_cannot_claim_a_different_trial() -> None:
+    r = report_with_application_record(application_report_record(), trial=1)
+    assert not r.worst["check"][0].reproduction
+
+
+@pytest.mark.parametrize("case", ["-r", "r\n", "r\x7f", "ré", "r" * 257])
+def test_unsafe_record_ids_cannot_supply_reproduction_even_when_matching(case: str) -> None:
+    record = application_report_record(case=case)
+    record["id"] = case
+    r = report_with_application_record(record)
+    assert not r.worst["check"][0].reproduction
+
+
+def test_reproduction_values_are_portable_arguments_not_interpolated_shell_text() -> None:
+    case = "r ' $(touch never) <script>```&"
+    record = application_report_record(case=case, cases="case data/it's $(literal).jsonl")
+    record["id"] = case
+    r = report_with_application_record(record)
+    arguments = r.worst["check"][0].reproduction
+    assert json.loads(arguments) == [
+        "python",
+        "evaluate.py",
+        "--callable",
+        "application:regressed",
+        "--cases",
+        "case data/it's $(literal).jsonl",
+        "--case",
+        case,
+    ]
+    assert "<script>" not in arguments
+    assert "```" not in arguments
+    for render in (report.to_html, report.to_markdown):
+        text = render(r)
+        assert "JSON array, not shell text" in text
+        assert "original generated project directory" in text
+        assert "metadata is not authenticated" in text
+        assert "rerun replaces results.json" in text
+    assert "<script>" not in report.to_html(r)
+
+
+@pytest.mark.parametrize("target", ["application:regressed", "custom:answer"])
+def test_generated_application_reproduction_replays_the_reported_case(
+    tmp_path: Path, target: str
+) -> None:
+    project = tmp_path / "application project"
+    assert main(["init", str(project), "--template", "application"]) == 0
+    (project / "custom.py").write_text(
+        "def answer(question):\n    raise RuntimeError('private-secret')\n"
+    )
+    cases = project / "case data.jsonl"
+    cases.write_text((project / "cases.jsonl").read_text())
+    completed = subprocess.run(
+        [sys.executable, "evaluate.py", "--callable", target, "--cases", cases.name],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    expected_exit = 3 if target == "application:regressed" else 1
+    assert completed.returncode == expected_exit, completed.stderr
+    r = report.from_results_file(json.loads((project / "results.json").read_text()))
+    if expected_exit == 3:
+        (failed,) = [x for items in r.worst.values() for x in items if x.label == "fail"]
+        rid, arguments = failed.record_id, failed.reproduction
+        assert (rid, failed.output, failed.reference) == ("japan", "Kyoto", "Tokyo")
+    else:
+        rid, arguments = r.errors[0]["record_id"], r.errors[0]["reproduction"]
+        assert r.counts["error"] == 3
+        assert not r.counts.get("failed_checks")
+    argv = json.loads(arguments)
+    assert argv == [
+        "python",
+        "evaluate.py",
+        "--callable",
+        target,
+        "--cases",
+        cases.name,
+        "--case",
+        rid,
+    ]
+    for render in (report.to_html, report.to_markdown):
+        text = render(r)
+        assert "Reproduction arguments" in text
+        assert "private-secret" not in text
+        assert "For other results, an exact command is not recorded here" in text
+    replay = subprocess.run(
+        [sys.executable, *argv[1:], "--output", "replay.json"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert replay.returncode == expected_exit, replay.stderr
+    replayed = json.loads((project / "replay.json").read_text())
+    assert [item["record_id"] for item in replayed["results"]] == [rid]
+    assert replayed["results"][0]["outcome"] == ("scored" if expected_exit == 3 else "error")

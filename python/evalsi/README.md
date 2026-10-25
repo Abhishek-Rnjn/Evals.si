@@ -23,35 +23,53 @@
 ## Install
 
 ```bash
-pip install evalsi                    # SDK and CLI
-pip install 'evalsi[anthropic]'       # Claude as a judge or target
-pip install 'evalsi[server]'          # evalsi serve: the evaluator worker for the server
-pip install 'evalsi[analytics]'       # evalsi analyze: DuckDB across runs
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install evalsi
 ```
 
-Other extras: `hf` (`hf://` datasets), `grpc` (streaming client), `jsonschema`, `math` (symbolic answer checks). Python 3.11 or newer.
+On Windows, activate with `.venv\Scripts\Activate.ps1` instead. Reuse your
+application's existing activated environment when integrating its callable.
+
+Python 3.11 or newer. Basic recorded-output scoring needs only this SDK, not
+the harness, server, Docker, Kubernetes or a model API key.
+
+Install extras only for a capability you choose: `anthropic` for Claude,
+`server` for the server's evaluator worker, `analytics` for DuckDB,
+`hf` for Hugging Face datasets, `grpc` for streaming, `jsonschema` for JSON
+Schema, and `math` for symbolic checks.
 
 On Linux (amd64 and arm64), `pip` installs a platform wheel that also carries the `evalsid` server and its static bubblewrap, so `evalsi serve`, sandboxed code evaluators and Wasm plugins need nothing else (`evalsi evalsid-path` shows the one in use). Elsewhere you get the pure-Python wheel; point `EVALSID` at an `evalsid` from the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases) when you need the server.
 
 ## Quickstart
 
-Score records you already have:
+Save these synthetic records as `cases.jsonl`, or use your application's
+approved records with the same fields:
+
+```jsonl
+{"id":"correct","input":"What is the return window?","output":"30 days","reference":"30 days"}
+{"id":"regression","input":"What is the return window?","output":"7 days","reference":"30 days"}
+```
 
 ```bash
-evalsi eval --data qa.jsonl --evaluators exact-match,numeric-match,latency
+evalsi eval --data cases.jsonl --evaluators exact-match --output results.json
+evalsi report results.json -o report.html
 ```
 
-```text
-metric         n  mean     95% CI              skipped  errors
-exact-match    6  0.333    [0.097, 0.700]            0       0
-numeric-match  3  0.667    [0.208, 0.939]            3       0
-latency        6  517.500  [276.409, 758.591]        0       0
-```
+Open `report.html`. One check passes; inspect `regression` for the incorrect
+answer. Exact match checks literal agreement, not semantic quality.
+An exit code of 0 means scoring completed, not that every check passed or a
+release was approved. Two synthetic examples do not establish release safety.
+Choose appropriate checks and explicit gates for your own application.
+
+The [guided setup](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/guides/onboarding.md)
+explains connecting an application, version availability, and optional harness
+execution. No source checkout is needed for this recorded-output quickstart.
 
 Add a judge explicitly, any OpenAI-compatible server or Claude:
 
 ```bash
-evalsi eval --data qa.jsonl --evaluators llm-judge \
+evalsi eval --data cases.jsonl --evaluators llm-judge \
   --judge-provider anthropic --judge-model claude-opus-5-5 --param llm-judge.rubric=helpfulness
 ```
 
@@ -67,7 +85,7 @@ def polite(record: Record) -> Score:
     return Score(passed="please" in record.output.as_text().lower())
 
 
-result = evalsi.evaluate("qa.jsonl", ["exact-match", polite])
+result = evalsi.evaluate("cases.jsonl", ["exact-match", polite])
 print(result.table())
 result.save("results.json")  # manifest, summaries and every per-record result
 ```
@@ -92,9 +110,9 @@ import evalsi
 from evalsi.client import Client
 
 with Client("https://evalsi.example") as client:  # API key from EVALSI_API_KEY
-    print(client.evaluate("qa.jsonl", ["exact-match"]).table())
+    print(client.evaluate("cases.jsonl", ["exact-match"]).table())
     client.log_run(
-        evalsi.evaluate("qa.jsonl", ["exact-match"]), name="nightly"
+        evalsi.evaluate("cases.jsonl", ["exact-match"]), name="nightly"
     )  # store a local result
 ```
 

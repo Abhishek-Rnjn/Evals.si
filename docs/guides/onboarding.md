@@ -1,30 +1,153 @@
-# Guided setup and the GitHub gate action
+# Get your first useful evaluation
 
 For a full hands-on course with a fake tool-calling model, failure controls and replay, start with the [first-time onboarding tutorials](../tutorials/README.md).
 
-`evalsi doctor` and `evalsi init` were added in 0.3.1; PyPI 0.3.0 does not have them.
+Start with the **published Python SDK**. You do not need a source checkout,
+Evals.si server, harness, Docker, Kubernetes, provider account or API key to
+evaluate recorded answers.
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-python -m pip install 'evalsi[server]>=0.3.1' 'evalsi-harness>=0.3.1'
-evalsi doctor
-evalsi init my-evals
-cd my-evals
-evalsi run -f run.yaml --output results.json
-evalsi report results.json -o report.html
+python -m pip install evalsi
 ```
 
 On Windows, activate with
-`.venv\Scripts\Activate.ps1`. Recorded-output scoring works without a server,
-sandbox, model or API key. `init` only writes a **new** directory and refuses
-existing directories, files and symlinks. All starter cases are synthetic.
+`.venv\Scripts\Activate.ps1`.
 
-The working spec exits **0**. Run `evalsi run -f regressed.yaml` separately:
-it must exit **3**, proving that the deliberately incorrect answer is caught.
+Save these two lines as `cases.jsonl`, then run the commands below:
+
+```jsonl
+{"id":"correct","input":"Return window?","output":"30 days","reference":"30 days"}
+{"id":"regression","input":"Return window?","output":"7 days","reference":"30 days"}
+```
+
+```bash
+evalsi eval --data cases.jsonl --evaluators exact-match --output results.json
+evalsi report results.json -o report.html
+```
+
+Open `report.html`. One answer matches and one does not: the mean is **0.5**.
+Replace the rows with your application's recorded answers and approved expected
+answers, then repeat the same command. Exact match checks literal answer equality;
+it is not semantic correctness, tool-state verification or a release policy.
+Two synthetic examples cannot establish application quality.
+
+`evalsi eval` returning **0** means scoring completed, **not** that every check
+passed. Inspect the report. Configuration/data failures are execution errors,
+not evidence that an application passed. Results and HTML contain the supplied
+inputs, outputs and explanations: keep them private unless approved for sharing.
+Nothing here uploads them or calls a model.
+
+## Run your own application through existing `init` (unreleased)
+
+The application template, decision-first report additions and scoped doctor
+behavior below are **candidate features**, not features established in the
+published 0.3.1 package. Use a tested candidate wheel containing them, or wait
+for a maintainer-approved release. Installing stable `evalsi` above does not
+install an unpublished template.
+
+With that candidate installed in the same environment as your application:
+
+```bash
+evalsi init my-evals --template application
+cd my-evals
+python evaluate.py --limit 1 --output results-first.json
+python evaluate.py --output results.json
+evalsi report results.json -o report.html
+```
+
+The starter writes `application.py`, `evaluate.py`, `cases.jsonl`, a README and
+`.gitignore`. All cases are synthetic and run offline. `init` only writes a
+**new** directory, refuses existing directories/files/symlinks, and does not
+import your application, contact providers or request credentials.
+
+Prove that a real regression is caught:
+
+```bash
+python evaluate.py --callable application:regressed --output results-regressed.json
+evalsi report results-regressed.json -o report-regressed.html
+python evaluate.py --callable application:regressed --case japan --output results-japan.json
+```
+
+The first and last commands deliberately exit **3**. The report names the
+affected case; `--case japan` reproduces just that case. In this generated runner,
+exit **0** means all exact-match checks passed, **3** means a check failed,
+**1** means an execution/configuration error, and **2** means invalid CLI usage.
+These exits are distinct from the recorded-scoring CLI's completion status.
+
+For recognized project-local cases, the report also provides validated JSON
+argument arrays for reproducing failed checks and execution errors in the
+original environment. These are hints, **not authenticated provenance**:
+review the callable and cases before running anything copied from a report.
+External/unsafe paths omit the hint rather than inventing a command. Use a new
+`--output` path when reproducing so you do not overwrite the full result.
+
+To evaluate your code:
+
+1. Implement an importable synchronous function taking and returning a nonempty
+   `str`. For example, expose your application as `my_app:answer`.
+   Install your application's package into this same environment, or put a
+   thin adapter inside the generated directory; `init` does not alter import
+   paths or install your application.
+2. Replace `cases.jsonl` with approved cases containing unique `id`, string
+   `input` and string `reference` fields. All three must remain nonempty after
+   stripping whitespace; comparison preserves the original whitespace exactly.
+   Use `--cases PATH` for another file.
+3. Try one case before spending time or provider budget on the full set:
+
+```bash
+python evaluate.py --callable my_app:answer --limit 1 --output first.json
+python evaluate.py --callable my_app:answer --output candidate.json
+evalsi report candidate.json -o candidate.html
+```
+
+You can persist the callable when scaffolding with
+`evalsi init my-evals --template application --callable my_app:answer`.
+For an existing HTTP service, wrap your approved protocol using the SDK's
+existing `httpx` dependency, for example:
+
+```python
+import os
+
+import httpx
+
+def answer(prompt: str) -> str:
+    response = httpx.post(
+        os.environ["MY_APPLICATION_URL"], json={"input": prompt}, timeout=30
+    )
+    response.raise_for_status()
+    return response.json()["output"]
+```
+
+This example assumes a JSON request `{"input":"..."}` and response
+`{"output":"..."}`; adapt it to your API. There is no new automatic HTTP protocol
+discovery or dedicated endpoint wizard. Do not put credentials in URLs or cases.
+Your callable executes with **your normal Python process permissions**: this
+route is not sandboxed and does not impose provider spending limits. Calling
+your application can contact real services and incur its usual costs.
+
+The report separates failed checks from errors, skips and incomplete evidence;
+it does not invent a release threshold. Use meaningful, reviewed evaluators and
+representative cases before graduating to release decisions or CI.
+
+## Optional YAML execution and agent templates
+
+The existing recorded and agent templates remain available in 0.3.1 and later.
+They use the run engine; they are not prerequisites for the SDK flow above.
+
+```bash
+python -m pip install 'evalsi[server]>=0.3.1' 'evalsi-harness>=0.3.1'
+evalsi init run-evals
+cd run-evals
+evalsi run -f run.yaml --output results.json
+evalsi run -f regressed.yaml --output results-regressed.json
+```
+
+The working spec exits **0**, and the deliberately regressed spec exits **3**.
 Exit **1** means an execution/configuration error. Both specs also gate the
-evaluation error rate. Replace the synthetic data and thresholds with approved
-representative cases before using this as a product release gate.
+evaluation error rate. Replace synthetic cases and thresholds before treating
+either as a product release gate.
 
 ## Diagnose agent execution
 
@@ -59,8 +182,11 @@ or container with sandbox prerequisites. A generic container alone does not gran
 user namespaces or KVM. Doctor reports the actual local probe; it cannot certify
 a remote cluster or guarantee that every task can run.
 
-Plain `doctor` requires only SDK scoring and reports missing optional capabilities
-as warnings. `--require server` requires a matching executable and worker
+In the candidate, plain `doctor` checks **only SDK scoring**: it does not inspect
+or launch a server, harness or sandbox. Use `evalsi doctor --all` to explicitly
+inspect optional execution capabilities. Published 0.3.1 still reports optional
+capabilities by default; `doctor` and `init` do not exist in 0.3.0.
+`--require server` requires a matching executable and worker
 dependencies. `--require agent` also requires the matching harness and an available
 sandbox driver at `namespaced` isolation or stronger. A Landlock-only (`confined`)
 host cannot run the starter and fails agent readiness. Doctor passes
@@ -70,6 +196,15 @@ Enforcement warnings are shown with a generic remedy, keeping raw probe text
 change backend availability or establish full isolation.
 Required failures exit 1. Probes have bounded timeouts, make no
 provider API calls and do not print credentials or raw subprocess errors.
+
+## What remains to be proved
+
+Fresh-wheel automation runs these flows without a source checkout or optional
+execution packages; this is an installation/behavior check, not a user study.
+The [unfamiliar-developer study protocol](onboarding-usability.md) defines how
+humans should measure finding a useful result on their own application,
+assistance, elapsed time, comprehension and repeat use. The under-15-minute
+target is **not an observed success rate**.
 
 ## Maintained GitHub Action
 

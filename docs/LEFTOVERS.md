@@ -7,6 +7,18 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Application-first onboarding candidate:** the published-SDK front door,
+`init --template application` callable runner, scoped doctor, decision-first
+reports and isolated installed-wheel CI/release controls are implemented.
+The [setup guide](guides/onboarding.md) distinguishes stable scoring from
+unreleased additions. A dedicated HTTP wizard, async/streaming adapters,
+automatic evaluator selection and application-specific release policies are
+not part of this slice. Artifact publication and observed CI runs still require
+release/CI evidence; unfamiliar-user timing, comprehension, representative
+human labels, repeat use and customer demand remain unproved. The
+[human-session protocol](guides/onboarding-usability.md) enables those studies
+but does not claim they have happened. R04/CV acceptance rows remain open.
+
 **Onboarding re-verification, 2026-10-25:** the
 [Mac follow-up](tutorials/12-macos-reverification.md) re-ran the PR #154/#155
 published/source controls, real Haiku tool loops, streaming and offline replay,

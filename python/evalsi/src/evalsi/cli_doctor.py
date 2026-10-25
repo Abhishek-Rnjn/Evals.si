@@ -34,7 +34,10 @@ def add_doctor_command(sub: Any) -> None:
         "--require",
         choices=["sdk", "server", "agent"],
         default="sdk",
-        help="capabilities that must work (default: sdk; missing optional capabilities warn)",
+        help="check only the capabilities needed for sdk, server or agent (default: sdk)",
+    )
+    p.add_argument(
+        "--all", action="store_true", help="also inspect optional execution capabilities"
     )
     p.set_defaults(func=_cmd_doctor)
 
@@ -46,7 +49,7 @@ def installed_version(name: str) -> str | None:
         return None
 
 
-def diagnose(required: str) -> list[Check]:
+def diagnose(required: str, *, include_optional: bool = False) -> list[Check]:
     checks = [
         Check(
             "python",
@@ -55,30 +58,35 @@ def diagnose(required: str) -> list[Check]:
         ),
         Check("evalsi", "ok", __version__),
     ]
-    needs_server = required in ("server", "agent")
-    needs_agent = required == "agent"
+    needs_server, needs_agent = required in ("server", "agent"), required == "agent"
+    if not needs_server and not include_optional:
+        return checks
 
     def missing(name: str, detail: str, remedy: str, needed: bool) -> None:
         checks.append(Check(name, "error" if needed else "warning", detail, remedy))
 
-    harness = installed_version("evalsi-harness")
-    if harness == __version__:
-        checks.append(Check("harness", "ok", harness))
-    else:
-        missing(
-            "harness",
-            "not installed" if harness is None else f"{harness}; SDK is {__version__}",
-            f"Install the matching harness: python -m pip install 'evalsi-harness=={__version__}'",
-            needs_agent,
-        )
-    worker_modules = ("grpc", "grpc_health")
-    if all(importlib.util.find_spec(name) is not None for name in worker_modules):
+    if needs_agent or include_optional:
+        harness = installed_version("evalsi-harness")
+        if harness == __version__:
+            checks.append(Check("harness", "ok", harness))
+        else:
+            missing(
+                "harness",
+                "not installed" if harness is None else f"{harness}; SDK is {__version__}",
+                "For a development install, sync the matching Python workspace."
+                if ".dev" in __version__
+                else f"python -m pip install 'evalsi-harness=={__version__}'",
+                needs_agent,
+            )
+    if all(importlib.util.find_spec(name) is not None for name in ("grpc", "grpc_health")):
         checks.append(Check("worker", "ok", "gRPC worker dependencies installed"))
     else:
         missing(
             "worker",
             "gRPC worker dependencies missing",
-            f"python -m pip install 'evalsi[server]=={__version__}'",
+            "For a development install, sync the matching Python workspace."
+            if ".dev" in __version__
+            else f"python -m pip install 'evalsi[server]=={__version__}'",
             needs_server,
         )
     binary = evalsid_path()
@@ -86,15 +94,18 @@ def diagnose(required: str) -> list[Check]:
         missing(
             "server",
             "evalsid not found",
-            "Install a Linux platform wheel, or set EVALSID to a matching executable.",
+            "Build a matching evalsid from this checkout and set EVALSID to its absolute path."
+            if ".dev" in __version__
+            else "Install the matching platform wheel, or set EVALSID to a matching executable.",
             needs_server,
         )
-        missing(
-            "sandbox",
-            "not probed: no evalsid",
-            "Use a supported Linux host/container for sandboxed execution.",
-            needs_agent,
-        )
+        if needs_agent or include_optional:
+            missing(
+                "sandbox",
+                "not probed: no evalsid",
+                "Use a supported Linux host/container for sandboxed execution.",
+                needs_agent,
+            )
         return checks
     try:
         version = subprocess.run(
@@ -126,6 +137,8 @@ def diagnose(required: str) -> list[Check]:
         )
     else:
         checks.append(Check("server", "ok", f"evalsid {match[1]}"))
+    if not needs_agent and not include_optional:
+        return checks
     try:
         probe_command = [binary, "sandbox", "probe"]
         if config := os.environ.get("EVALSI_SANDBOX_CONFIG"):
@@ -191,7 +204,7 @@ def diagnose(required: str) -> list[Check]:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
-    checks = diagnose(args.require)
+    checks = diagnose(args.require, include_optional=args.all)
     ready = not any(c.status == "error" for c in checks)
     if args.format == "json":
         print(
@@ -206,4 +219,8 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             if c.remedy:
                 print(f"        {c.remedy}")
         print(f"\n{args.require} capabilities: {'ready' if ready else 'not ready'}")
+        if args.require == "sdk" and not args.all:
+            print(
+                "Optional execution checks were not run. Use 'evalsi doctor --all' to inspect them."
+            )
     return 0 if ready else 1

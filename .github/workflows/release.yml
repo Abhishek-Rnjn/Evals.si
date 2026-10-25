@@ -97,6 +97,8 @@ jobs:
         run: |
           ../scripts/set-python-version.sh "${{ needs.version.outputs.version }}" .
           uv build --all-packages -o ../dist
+      - name: Verify the installed SDK onboarding contract
+        run: uv run --no-project python scripts/check-installed-onboarding.py --wheel dist
       - uses: actions/upload-artifact@v5
         with:
           name: python

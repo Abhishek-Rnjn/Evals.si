@@ -1,0 +1,35 @@
+name: installed-onboarding
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installed-onboarding-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installed-sdk:
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, python: '3.11'}
+          - {os: ubuntu-latest, python: '3.13'}
+          - {os: macos-latest, python: '3.12'}
+          - {os: windows-latest, python: '3.12'}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build the distributable, not an editable install
+        working-directory: python
+        run: uv build --package evalsi --wheel --out-dir ../onboarding-dist
+      - name: Evaluate from an isolated installed SDK
+        run: uv run --no-project --python "${{ matrix.python }}" python scripts/check-installed-onboarding.py --wheel onboarding-dist

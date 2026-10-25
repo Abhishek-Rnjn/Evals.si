@@ -22,7 +22,7 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
-  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29], ["enterprise-deployment", 30],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29], ["enterprise-deployment", 30], ["onboarding-usability", 31],
 ];
 const tutorials = [
   "README", "01-install", "02-score", "03-tool-loop", "04-failures", "05-state-and-handoff", "onboarding-study",

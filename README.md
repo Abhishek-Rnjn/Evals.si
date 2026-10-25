@@ -26,11 +26,53 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 
 Evals.si evaluates an AI system across its life. **Before you ship**, it runs agents, RAG pipelines and models on datasets and sandboxed tasks, and fails the build when a gate fails. **While it runs**, it scores live traces as they arrive and writes the scores back to the MLflow, Phoenix or Langfuse your team already uses. **As you train it**, the same evaluators become RL rewards and checkpoint checks for fine-tuning. One set of evaluators serves all three, so a metric means the same thing in CI, in production and in training.
 
-New to both packages? Follow the [first-time onboarding course](docs/tutorials/README.md): install, score, run a local fake tool-calling model, diagnose failures, replay, and check business state. Includes a [tested onboarding study](docs/tutorials/onboarding-study.md).
+Start with the published SDK below. You do not need Evals.si's harness, a server,
+Docker or Kubernetes to score your application's recorded outputs. The
+[guided setup](docs/guides/onboarding.md) explains how to progress to live
+application evaluation and optional agent execution.
 
-## Try it in 30 seconds
+## Quickstart
+
+The shell example uses Bash. For Windows activation and creating the input file
+in an editor, follow [guided setup](docs/guides/onboarding.md).
 
 No clone, no server and no API key. You need Python 3.11+.
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install evalsi
+```
+
+Save these two synthetic examples as `cases.jsonl`, or use your own approved
+records with `input`, `output` and `reference` fields:
+
+```jsonl
+{"id":"correct","input":"What is the return window?","output":"30 days","reference":"30 days"}
+{"id":"regression","input":"What is the return window?","output":"7 days","reference":"30 days"}
+```
+
+```bash
+evalsi eval --data cases.jsonl --evaluators exact-match --output results.json
+evalsi report results.json -o report.html
+```
+
+Open `report.html` locally. One answer matches and the other does not; inspect
+the `regression` case to see expected versus actual output. Exact match checks
+literal agreement, not general semantic correctness. Choose checks appropriate
+to your application before making a release decision.
+
+The scoring command exits 0 when scoring completes, even when a check fails;
+it is **not a release gate**. Two synthetic examples are not release evidence.
+Nothing calls a model unless you explicitly configure one.
+
+Next, replace the sample with a few cases from your application. See
+[guided setup](docs/guides/onboarding.md) for the application-first workflow,
+version availability and explicit CI gates. Advanced sandbox/server
+prerequisites are not prerequisites for this quickstart.
+
+<details>
+<summary>Additional examples: recorded agent tools and RAG outputs</summary>
 
 ### An agent
 
@@ -77,6 +119,8 @@ citation-accuracy  2  0.500  [0.095, 0.905]        0       0
 ```
 
 The second answer cites passage `[4]`, but only two passages were retrieved. Add a judge and the `faithfulness`, `answer-relevance`, `context-precision` and `context-recall` metrics tell you whether retrieval or generation is at fault ([guide](docs/guides/evaluate-rag.md)).
+
+</details>
 
 For the setup commands (0.3.1) and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
 For dataset version review and digest-pinned runs, see [dataset snapshots](docs/guides/dataset-snapshots.md).
@@ -145,9 +189,10 @@ Each release publishes (see the [Kubernetes guide](docs/guides/kubernetes.md#ins
 - **Python:** `pip install evalsi` (SDK and CLI) and `pip install evalsi-harness` (the agent harness) from PyPI; the same wheels and sdists are attached to the release. Since v0.2.0, releases also publish Linux (amd64, arm64) platform wheels that carry `evalsid` and its sandbox's `bwrap`, so `evalsi serve` and code evaluators need nothing else; v0.1.0 and other platforms get the pure-Python wheel and a separate `evalsid`.
 - **Kubernetes:** multi-architecture images at `ghcr.io/abhishek-rnjn/evalsi` and the three Helm charts as OCI artifacts, `oci://ghcr.io/abhishek-rnjn/charts/evalsi`, `evalsi-crds` and `evalsi-sandboxd`.
 
-To try it from source, use the quickstart below.
+To contribute from source, use the development setup below. It is not required
+for the installed SDK quickstart.
 
-## Quickstart
+## Develop from source
 
 You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ for you). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, the sandbox for code evaluators needs bubblewrap (see [Development](#development)).
 

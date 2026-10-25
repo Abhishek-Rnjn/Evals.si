@@ -6,9 +6,24 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Upgrade notes
 
+- Plain `evalsi doctor` now checks only SDK scoring and does not inspect or
+  launch optional execution tools. Use `doctor --all` for the previous optional
+  diagnostic inventory; `--require server` and `--require agent` retain explicit
+  required-capability checks.
+
 - **The webhook destination guard is on by default.** A webhook URL must be HTTPS to a public address unless its host is listed under `webhooks.allow_hosts` (exact or `*.domain`; Helm `webhooks.allowHosts`; hosts of `bootstrap.webhooks` are allowed automatically). Webhooks saved earlier whose URL is plain HTTP or an internal address (in-cluster service names, private IPs) now fail each delivery at once with an error naming the setting, and the server logs `webhook destination refused` at start. List their hosts and restart, or set `webhooks.ssrf_guard: false` for the old behaviour. Deliveries that failed meanwhile are not resent.
 
 ### Added
+
+- Minimal published-SDK first-result path and an unreleased `init --template
+  application` starter for synchronous Python callables, with one-case preview,
+  exact-case reproduction and distinct failed-check/execution exits. Existing
+  recorded and agent templates remain available.
+- Decision-first HTML/Markdown reports separate failed checks, errors, skips and
+  incomplete evidence without presenting tiny samples as release approval.
+- Isolated built-wheel onboarding acceptance checks in cross-platform CI and
+  before release artifact upload; an unfamiliar-developer study protocol records
+  the human validation still required, not a claimed under-15-minute result.
 
 - AKS onboarding walkthrough and bounded stronger-node study: fresh published
   SDK/harness installation, mTLS remote tools, carried-budget Haiku/Sonnet
