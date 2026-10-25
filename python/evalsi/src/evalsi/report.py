@@ -299,7 +299,9 @@ def from_server(client: Any, run_id: str, examples: int = 5) -> Report:
     gates = [
         {
             **(g.get("gate") or {}),
-            "passed": g.get("passed"),
+            # A plain proto3 bool: the server's JSON leaves a false one out, so a missing
+            # key is a failed gate, not an unavailable one (unlike a results file's).
+            "passed": bool(g.get("passed", False)),
             "value": g.get("value"),
             "reason": g.get("reason", ""),
         }

@@ -53,7 +53,7 @@ import json
 import os
 import re
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -68,6 +68,30 @@ def positive_int(value: str) -> int:
     if number < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
     return number
+
+
+@contextlib.contextmanager
+def silenced() -> Iterator[None]:
+    """Discard what the application prints, so its logs and exception messages (possibly
+    secrets) never reach this command's output or artifacts. Subprocesses and native code
+    write to file descriptors 1 and 2, not sys.stdout, so those are redirected too."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    saved = []
+    with open(os.devnull, "w") as sink:
+        try:
+            for fd in (1, 2):
+                try:
+                    saved.append((fd, os.dup(fd)))
+                except OSError:
+                    continue  # not open: nothing to protect
+                os.dup2(sink.fileno(), fd)
+            with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+                yield
+        finally:
+            for fd, copy in saved:
+                os.dup2(copy, fd)
+                os.close(copy)
 
 
 def load_cases(path: Path) -> list[Record]:
@@ -108,12 +132,7 @@ def load_application(target: str) -> Callable[[str], Any]:
         raise ValueError("--callable must be MODULE:FUNCTION, for example my_app:answer")
     module_name, function_name = target.split(":")
     try:
-        # Do not copy application logs or exception messages (possibly secrets) into artifacts.
-        with (
-            open(os.devnull, "w") as sink,
-            contextlib.redirect_stdout(sink),
-            contextlib.redirect_stderr(sink),
-        ):
+        with silenced():
             application = getattr(importlib.import_module(module_name), function_name)
     except (Exception, SystemExit):
         raise ValueError(
@@ -188,11 +207,7 @@ def main() -> int:
             assert record.input is not None
             assert record.reference is not None
             try:
-                with (
-                    open(os.devnull, "w") as sink,
-                    contextlib.redirect_stdout(sink),
-                    contextlib.redirect_stderr(sink),
-                ):
+                with silenced():
                     output = application(record.input.as_text())
             except (Exception, SystemExit):
                 raise RuntimeError(

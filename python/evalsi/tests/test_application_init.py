@@ -163,6 +163,24 @@ def test_invalid_outputs_and_exceptions_are_execution_failures(
     assert "credential-do-not-expose" not in (application_project / "results.json").read_text()
 
 
+def test_subprocess_and_descriptor_output_is_suppressed(application_project: Path) -> None:
+    # A child process and native code write to file descriptors 1 and 2, not sys.stdout.
+    (application_project / "noisy.py").write_text(
+        "import os, subprocess, sys\n"
+        "subprocess.run([sys.executable, '-c', 'print(\"import-canary\")'])\n"
+        "def answer(question):\n"
+        "    subprocess.run([sys.executable, '-c', 'print(\"subprocess-canary\")'])\n"
+        "    os.write(1, b'stdout-fd-canary')\n"
+        "    os.write(2, b'stderr-fd-canary')\n"
+        "    return 'Paris'\n"
+    )
+    completed = run_application(application_project, "--callable", "noisy:answer", "--limit", "1")
+    assert completed.returncode == 0, completed.stderr
+    assert "canary" not in completed.stdout + completed.stderr
+    assert "canary" not in (application_project / "results.json").read_text()
+    assert read_result(application_project)["results"][0]["outcome"] == "scored"
+
+
 def test_errors_take_precedence_over_business_failures(application_project: Path) -> None:
     (application_project / "custom.py").write_text(
         "def answer(question):\n"

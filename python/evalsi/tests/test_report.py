@@ -344,6 +344,25 @@ def test_only_explicit_gate_results_are_reported(render: Any) -> None:
     assert "no gate results" not in text
 
 
+@pytest.mark.parametrize("render", [report.to_markdown, report.to_html])
+def test_a_server_gate_without_passed_is_a_failed_gate(render: Any) -> None:
+    class Client:
+        def get_run(self, run_id: str) -> dict[str, Any]:
+            # Proto3 JSON leaves a false GateResult.passed out.
+            gates = [
+                {"gate": {"metric": "task-success", "min": 1}, "value": 0, "reason": "mean 0"},
+                {"gate": {"metric": "run-completed", "min": 1}, "passed": True, "value": 1},
+            ]
+            return {"id": run_id, "gates": gates}
+
+        def list_run_results(self, run_id: str, page_token: str = "") -> dict[str, Any]:
+            return {}
+
+    r = report.from_server(Client(), "run-1")
+    assert [g["passed"] for g in r.gates] == [False, True]
+    assert "Recorded gates: 1 passed, 1 failed, 0 unavailable" in render(r)
+
+
 def test_report_guidance_does_not_copy_manifest_credentials() -> None:
     r = report.from_results_file(
         {
