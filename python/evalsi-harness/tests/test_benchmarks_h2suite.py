@@ -315,3 +315,8 @@ def test_the_opencode_example_reads_opencode_json() -> None:
     cli = run.spec.target.agent.cli
     assert cli.output_format == "opencode-json"
     assert list(cli.command)[-2:] == ["--format", "json"]
+
+
+def test_opencode_example_allows_bun_virtual_address_reservations() -> None:
+    run = load_spec(str(EXAMPLES / "opencode-sandboxed.yaml"))
+    assert run.spec.environment.sandbox.memory_mb == 8192

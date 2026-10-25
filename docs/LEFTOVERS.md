@@ -7,6 +7,16 @@ for production-agent and enterprise AI teams into prioritized work IDs,
 dependencies and acceptance criteria. This inventory retains the implementation
 and verification evidence behind that plan.
 
+**Harness² bounded verification, 2026-10-25:** actual pinned upstream deterministic
+refinement/judge outputs, import, grade failures, matrix gates and executed
+ablations passed. Real OpenCode/Sonnet also passed a synthetic bwrap hidden
+checker, and replaying its log into a running daemon produced an online latency
+score. The example's insufficient Bun address-space limit was corrected.
+Denied npm egress remains a policy failure, not a clean pass. Real benchmark
+data/graders, live Codex, model-driven upstream refinement, concurrent live
+following, downstream write-back and human calibration remain unverified.
+See the [report](verification/HARNESS2-2026-10-25.md); changes are unreleased.
+
 **Application-first onboarding candidate:** the published-SDK front door,
 `init --template application` callable runner, scoped doctor, decision-first
 reports and isolated installed-wheel CI/release controls are implemented.

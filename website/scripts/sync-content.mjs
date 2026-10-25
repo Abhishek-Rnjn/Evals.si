@@ -42,6 +42,7 @@ const decisions = (await fs.readdir(path.join(root, "docs/decisions"))).filter((
 for (const f of decisions) pages.set(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
 pages.set("README.md", "/docs/get-started/");
 pages.set("CHANGELOG.md", "/docs/changelog/");
+pages.set("docs/verification/HARNESS2-2026-10-25.md", "/docs/verification/harness2-2026-10-25/");
 
 // ---- link rewriting ---------------------------------------------------------
 const siteHref = (route, frag) => `${BASE}${route}${frag ? "#" + frag : ""}`;
@@ -128,6 +129,7 @@ await importDoc("docs/PRODUCT-STRATEGY.md", "/docs/product-strategy/", { title: 
 await importDoc("docs/decisions/README.md", "/docs/decisions/", { title: "Decision records" });
 for (const f of decisions) await importDoc(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
 await importDoc("CHANGELOG.md", "/docs/changelog/", { description: "What changed in each Evals.si release." });
+await importDoc("docs/verification/HARNESS2-2026-10-25.md", "/docs/verification/harness2-2026-10-25/");
 
 // Get started: the README's install options and quickstart, then its tour of the features
 {

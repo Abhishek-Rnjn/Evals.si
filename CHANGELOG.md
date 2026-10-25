@@ -15,6 +15,13 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- Pinned real-upstream Harness² deterministic acceptance and CI controls:
+  generated namespaces/judges, missing/error grades, comparison gates,
+  selection calibration and physically executed component ablations. A bounded
+  verification records real Sonnet/OpenCode bwrap tool execution, denied npm
+  egress, actual online-policy evaluation and carried-budget limits without
+  claiming real-benchmark or model-driven refinement qualification.
+
 - Minimal published-SDK first-result path and an unreleased `init --template
   application` starter for synchronous Python callables, with one-case preview,
   exact-case reproduction and distinct failed-check/execution exits. Existing
@@ -81,6 +88,11 @@ All notable changes to this project are recorded here. The format follows [Keep 
 ## [0.3.1] - 2026-10-22
 
 ### Upgrade notes
+
+- The OpenCode Harness² example now allows 8192 MiB instead of 4096 MiB:
+  measured Bun virtual-address reservations prevented startup at the old
+  bwrap rlimit. This does not promise RSS enforcement or policy-clean egress;
+  see the Harness² verification report.
 
 These come from the 22 October deep review ([bug report](docs/reviews/2026-10-22-deep-review/bug-report.md)) and can break existing setups:
 

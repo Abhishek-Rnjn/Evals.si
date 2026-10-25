@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [Harness² upstream and real OpenCode verification](HARNESS2-2026-10-25.md) | Pinned upstream deterministic refinement, independent grades, import/gates and executed ablations; separate real Sonnet/OpenCode namespaced task, denied npm egress, actual online-policy scoring and Bun address-space fix. Real benchmarks, Codex and model-driven upstream refinement remain open |
 | [AKS onboarding and Sonnet re-verification](AKS-ONBOARDING-2026-10-25.md) | Stronger-node published/source TinyLM, carried-budget Haiku/Sonnet tools and unavailable exposed thinking, real KVM/jailer/filesystem controls, current PostgreSQL restart and dependency restores, four throughput failures, buffered ingest loss, browser decisions and verified owned-resource cleanup |
 | [Mac onboarding re-verification](../tutorials/12-macos-reverification.md) | PRs #154/#155 re-run with clean published/source environments, real Haiku, Linux sandbox controls on Docker Desktop, and positive/negative kind runs; limitations and setup failures retained |
 | [First-time onboarding study](../tutorials/onboarding-study.md) | Clean PyPI/source installs, real sandbox starter controls, seven fake-model HTTP/tool-loop scenarios on both versions, and source-only SQL grading; synthetic scope and reproducible commands |

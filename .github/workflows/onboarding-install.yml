@@ -12,6 +12,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  harness2-upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: google-research/harness2
+          ref: 1cfe254e8d25b15f37048c3730134686abe60335
+          path: upstream-harness2
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - name: Restore the locked SDK environment
+        working-directory: python
+        run: uv sync --locked --all-packages --python 3.12
+      - name: Check real upstream refinement outputs and independent arithmetic grades
+        run: python/.venv/bin/python scripts/check-harness2-upstream.py --upstream upstream-harness2 --output "${{ runner.temp }}/harness2-verification"
+
   installed-sdk:
     timeout-minutes: 15
     strategy:
