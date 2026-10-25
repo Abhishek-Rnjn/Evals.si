@@ -38,6 +38,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         code: int = args.func(args)
+        # Flush here, inside the handler: a short output is still buffered when the
+        # command returns, and a pipe closed by then fails at interpreter shutdown.
         sys.stdout.flush()
         return code
     except (EvaluatorConfigError, DatasetError, JudgeError, ValueError, RuntimeError) as exc:

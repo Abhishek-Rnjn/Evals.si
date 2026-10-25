@@ -200,6 +200,8 @@ def test_serve_forwards_help_to_evalsid(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.parametrize(
     "command",
+    # A large output fails while the command runs; a small one sits in the buffer
+    # until the command returns.
     [["catalog"], ["eval", "--data", str(EXAMPLE), "--evaluators", "exact-match"]],
 )
 def test_a_closed_stdout_ends_quietly(command: list[str]) -> None:
@@ -207,6 +209,8 @@ def test_a_closed_stdout_ends_quietly(command: list[str]) -> None:
     import subprocess
     import sys
 
+    # Buffered, as a pipe normally is: PYTHONUNBUFFERED would hide the deferred failure.
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"}
     read, write = os.pipe()
     os.close(read)  # like `evalsi ... | head` once head has gone
     try:
@@ -216,6 +220,7 @@ def test_a_closed_stdout_ends_quietly(command: list[str]) -> None:
             stderr=subprocess.PIPE,
             text=True,
             check=False,
+            env=env,
         )
     finally:
         os.close(write)
