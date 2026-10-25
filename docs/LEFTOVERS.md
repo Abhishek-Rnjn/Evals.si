@@ -13,6 +13,23 @@ published/source controls, real Haiku tool loops, streaming and offline replay,
 source SQL assertions, and isolated kind positive/negative controls. This does
 not certify production model quality, HA, or NetworkPolicy enforcement on kind.
 
+**AKS onboarding continuation, 2026-10-25:** the
+[stronger-node study](verification/AKS-ONBOARDING-2026-10-25.md) passed all 18
+TinyLM controls with both a source-host/remote-tool topology and fresh published
+0.3.1 packages entirely inside AKS. Real Haiku retained a baseline business miss;
+Sonnet passed nine focused refund trajectories and three exact replays, but
+adaptive and explicit thinking exposed no thinking blocks on the configured
+route. The complete new campaign conservatively estimated $2.12206730 under
+the separate $10 authorization. Real KVM/jailer, OS audit-write refusal,
+current-source PostgreSQL restart and dependency restores passed bounded
+controls. Four of nine throughput trials still failed; every crash trial lost
+220 acknowledged buffered traces while preserving all observed stored traces.
+NetworkPolicy remained unenforced and Kata unscheduled. Browser BLOCK/PASS/
+INSUFFICIENT controls and the user-confirmed pinned download were checked;
+only owned resources were removed and absence verified. These findings do not
+close production networking, durable acceptance, exposed thinking, human
+calibration, HA or published-release rolling-upgrade requirements.
+
 **Fresh live verification, 2026-10-21:** the supplied cluster is AKS, not EKS.
 The [new batch and complete 50-row reconciliation](verification/AKS-CLAUDE-2026-10-21.md)
 retain the newer 20 October evidence rather than reopening its bounded passes.

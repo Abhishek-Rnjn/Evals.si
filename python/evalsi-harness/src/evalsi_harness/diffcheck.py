@@ -66,6 +66,8 @@ g() { git -c safe.directory='*' -c core.quotepath=off "$@"; }
 idx=$(mktemp) || exit 4
 trap 'rm -f "$idx"' EXIT
 cp "$(g rev-parse --git-path index)" "$idx" 2>/dev/null || rm -f "$idx"
+# Rehash tracked content: a copied index can otherwise trust stale file metadata.
+GIT_INDEX_FILE=$idx g add --renormalize -- . ':(exclude).evalsi-*' >/dev/null 2>&1 || exit 4
 GIT_INDEX_FILE=$idx g add -A -- . ':(exclude).evalsi-*' >/dev/null 2>&1 || exit 4
 GIT_INDEX_FILE=$idx g ls-files -s -z || exit 4"""
 
@@ -393,7 +395,11 @@ async def _graded(
     executable = [p for p in written if now.entries[p].executable]
     plain = [p for p in changes.modified if not now.entries[p].executable]
     if executable:
-        await _exec(fresh, ["chmod", "a+x", "--", *executable], "could not set execute bits")
+        await _exec(
+            fresh, ["chmod", "a+x", *("./" + p for p in executable)], "could not set execute bits"
+        )
     if plain:
-        await _exec(fresh, ["chmod", "a-x", "--", *plain], "could not clear execute bits")
+        await _exec(
+            fresh, ["chmod", "a-x", *("./" + p for p in plain)], "could not clear execute bits"
+        )
     return DiffResult(await run_checker(fresh, checker, task), info, events)

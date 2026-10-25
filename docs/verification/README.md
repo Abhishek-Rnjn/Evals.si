@@ -4,6 +4,7 @@ End-to-end checks of Evals.si on real clusters, and where each finding stands no
 
 | File | What it is |
 |------|------------|
+| [AKS onboarding and Sonnet re-verification](AKS-ONBOARDING-2026-10-25.md) | Stronger-node published/source TinyLM, carried-budget Haiku/Sonnet tools and unavailable exposed thinking, real KVM/jailer/filesystem controls, current PostgreSQL restart and dependency restores, four throughput failures, buffered ingest loss, browser decisions and verified owned-resource cleanup |
 | [Mac onboarding re-verification](../tutorials/12-macos-reverification.md) | PRs #154/#155 re-run with clean published/source environments, real Haiku, Linux sandbox controls on Docker Desktop, and positive/negative kind runs; limitations and setup failures retained |
 | [First-time onboarding study](../tutorials/onboarding-study.md) | Clean PyPI/source installs, real sandbox starter controls, seven fake-model HTTP/tool-loop scenarios on both versions, and source-only SQL grading; synthetic scope and reproducible commands |
 | [AKS-FOLLOWUP-2026-10-21.md](AKS-FOLLOWUP-2026-10-21.md) | Audit-first matching-code AKS follow-up: real Sonnet refunds/approval/calibration, external-side-effect controls, browser/CLI decisions, real jailer and boot ladder, failed load thresholds, acknowledged ingest-buffer loss, source-tag migration and dependency restores, installed starters and live digest-cache controls; explicit limits and cleanup status |

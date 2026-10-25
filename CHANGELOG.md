@@ -10,6 +10,11 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
+- AKS onboarding walkthrough and bounded stronger-node study: fresh published
+  SDK/harness installation, mTLS remote tools, carried-budget Haiku/Sonnet
+  comparisons, actual thinking/token observations, synthetic lab manifest,
+  real filesystem/KVM/recovery controls and retained performance/network limits.
+
 - Integrated first-time and TinyLM tutorial paths, explicit opt-in real Haiku
   tool-loop/stream/replay and source SQL exercises, and local kind onboarding
   with checked positive and negative controls.
@@ -36,6 +41,11 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - **Tutorials** (`docs/tutorials/`): ten walkthroughs from a first install to a CI gate, driving the built-in harness with TinyLM (`examples/tinylm`), a fake OpenAI-compatible model that streams token by token, calls tools and comes in personas that loop, hallucinate tools, ignore denials or follow prompt injections; offline and deterministic. `examples/tinylm/check.sh` runs every scenario and checks its exit code, in CI too. An onboarding study records the first install and the rough edges it found.
 
 ### Fixed
+
+- Diff-check collection rehashes tracked Git content instead of trusting copied
+  index metadata, and applies executable modes portably on BSD/macOS, including
+  option-like filenames. Coupled Linux-only sandbox service tests no longer
+  break macOS validation.
 
 - **`evalsi compare` no longer crashes** with `KeyError: 'low'` when a metric's difference interval starts or ends at 0 (proto3 JSON leaves zeros out). `Client.compare_runs` fills them in, which also fixes the MCP server's and the training loop's server comparisons, where such a bound read as missing.
 - **`evalsi serve --help`** (and `-h`) prints `evalsid serve`'s flags instead of failing with "unrecognized arguments".

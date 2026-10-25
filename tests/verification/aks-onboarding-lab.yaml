@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: evalsi-onboarding-lab
+  labels:
+    evalsi.verification: onboarding-lab
+    istio-injection: disabled
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: worker
+  namespace: evalsi-onboarding-lab
+  labels:
+    evalsi.verification: onboarding-lab
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  activeDeadlineSeconds: 28800
+  nodeSelector:
+    node.kubernetes.io/instance-type: Standard_D8s_v5
+  tolerations:
+    - key: role.node.kubernetes.io/infra
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: worker
+      image: docker.io/library/python@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f
+      command: [python, -c, "import time; time.sleep(28800)"]
+      resources:
+        requests: {cpu: "4", memory: 8Gi}
+        limits: {cpu: "6", memory: 12Gi}
+      volumeMounts:
+        - {name: work, mountPath: /work}
+  volumes:
+    - name: work
+      emptyDir: {sizeLimit: 20Gi}
+---
+# Synthetic nested-isolation tests only; never a production worker template.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pool
+  namespace: evalsi-onboarding-lab
+  labels:
+    evalsi.verification: onboarding-lab
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  activeDeadlineSeconds: 28800
+  nodeSelector:
+    node.kubernetes.io/instance-type: Standard_D8s_v5
+  tolerations:
+    - key: role.node.kubernetes.io/infra
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  containers:
+    - name: pool
+      image: docker.io/library/python@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f
+      command: [python, -c, "import time; time.sleep(28800)"]
+      securityContext:
+        privileged: true
+      resources:
+        requests: {cpu: 250m, memory: 512Mi}
+        limits: {cpu: "2", memory: 4Gi}
+      volumeMounts:
+        - {name: work, mountPath: /work}
+  volumes:
+    - name: work
+      emptyDir: {sizeLimit: 10Gi}

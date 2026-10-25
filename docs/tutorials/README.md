@@ -1,9 +1,10 @@
 # Tutorials: Evals.si from a first install
 
 These tutorials follow one person installing Evals.si and its agent harness for
-the first time, from an empty virtual environment to a gated CI job. Every
-command was run, against the published 0.3.1 packages on PyPI, and every output
-block is copied from that session (long ones are trimmed where they show `...`).
+the first time, from an empty virtual environment to a gated CI job. The original
+TinyLM course ran against the published 0.3.1 packages on PyPI; its output blocks
+come from that session (long ones are trimmed where they show `...`). Later
+lessons distinguish published, source, provider and cluster evidence.
 
 The agent under test is **TinyLM** ([`examples/tinylm/tinylm.py`](../../examples/tinylm/tinylm.py)),
 a fake autoregressive model. It serves the OpenAI chat-completions API, streams
@@ -25,7 +26,9 @@ There are two complementary paths, not two versions of the same course:
 - **Use a provider and a cluster:** [real Haiku](10-real-haiku.md) and
   [local kind onboarding](11-local-kind.md) extend both paths. The
   [Mac re-verification report](12-macos-reverification.md) distinguishes published,
-  source, live-provider and Kubernetes evidence.
+  source, live-provider and Kubernetes evidence. Continue with
+  [AKS, Haiku and Sonnet onboarding](13-aks-onboarding.md) for real remote
+  tools, explicit thinking/token observations and retained failure controls.
 
 | # | Tutorial | You learn | Time |
 |---|---|---|---|
@@ -41,6 +44,8 @@ There are two complementary paths, not two versions of the same course:
 | 9 | [Gate it in CI](09-ci.md) | A GitHub Actions job, and `check.sh`, which runs every scenario here and checks its exit code | 10 min |
 | 10 | [A real Haiku model](10-real-haiku.md) | Explicit paid inference, mock business tools, streamed turns, SQL state and offline replay | 15 min |
 | 11 | [A local kind cluster](11-local-kind.md) | Separate SDK and cluster readiness, install the charts, submit positive and negative controls | 20 min |
+| 12 | [Mac re-verification](12-macos-reverification.md) | Published/source evidence, real providers, kind controls and setup failures | read: 10 min |
+| 13 | [AKS onboarding and Sonnet](13-aks-onboarding.md) | Stronger-node selection, fresh published installation, mTLS tools, budgeted model comparison and real cluster limits | 30 min plus optional deep checks |
 
 Start with tutorial 1 if you have never run Evals.si, or with tutorial 2 if you
 want to go straight to agents. Tutorial 0 is the report of the first install
@@ -48,11 +53,16 @@ itself; read it if you maintain Evals.si or are deciding whether to adopt it.
 
 ## What you need
 
+For the original TinyLM sandbox lessons:
+
 - Linux (the agent sandbox uses user namespaces; macOS and Windows need a Linux VM or container that grants them).
 - Python 3.11 or newer.
 - `curl`, for poking at the model by hand.
 
 Nothing else: the platform wheels carry the server binary and the sandbox.
+The mock-tool course does not require Linux sandboxing. Provider and cluster
+lessons list their additional credentials, permissions and prerequisites;
+none of the offline scenarios requires paid inference.
 
 ## The files
 
