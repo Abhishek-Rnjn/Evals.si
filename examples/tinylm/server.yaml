@@ -1,0 +1,9 @@
+# The smallest server config that runs the TinyLM specs: loopback only, no
+# auth, everything in SQLite. Start it from this directory:
+#   evalsi serve --config server.yaml
+#   evalsi run -f run.yaml --server http://localhost:8080
+listen: 127.0.0.1:8080
+data_dir: .evalsi            # SQLite database for runs, traces and policies
+datasets_dir: .              # run specs may name dataset files under here (tasks.jsonl)
+runs:
+  max_concurrent: 4

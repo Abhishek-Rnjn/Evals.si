@@ -36,6 +36,9 @@ class MetricSummary:
     higher_is_better: bool | None = None
     # Number of clusters behind a clustered interval. Few clusters mean a wide interval.
     clusters: int | None = None
+    # The range the evaluator declares for a numeric score (MetricSpec.min and .max).
+    min: float | None = None
+    max: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -61,6 +64,10 @@ class MetricSummary:
             out["higher_is_better"] = self.higher_is_better
         if self.clusters is not None:
             out["clusters"] = self.clusters
+        if self.min is not None:
+            out["min"] = self.min
+        if self.max is not None:
+            out["max"] = self.max
         return out
 
 
@@ -239,6 +246,8 @@ def _summarize_metric(
         evaluator=instance.name,
         kind=KIND_BY_TYPE[score_type],
         higher_is_better=spec.higher_is_better if spec is not None else None,
+        min=spec.min if spec is not None and score_type is ScoreType.NUMBER else None,
+        max=spec.max if spec is not None and score_type is ScoreType.NUMBER else None,
     )
     if score_type is ScoreType.LABEL:
         for score, _ in scored:
@@ -362,7 +371,10 @@ class EvalResult:
 
     def table(self) -> str:
         headers = ["metric", "n", "mean", f"{_level(self.summaries)} CI", "skipped", "errors"]
-        rows = [_row(s) for s in self.summaries]
+        # A metric no record produced, skipped or errored on (a checker's numeric
+        # task-score when it only passes or fails) is noise here; the JSON keeps it.
+        shown = [s for s in self.summaries if s.n or s.skipped or s.errors]
+        rows = [_row(s) for s in shown or self.summaries]
         widths = [max(len(str(c)) for c in col) for col in zip(headers, *rows, strict=False)]
         right = {1, 4, 5}
         lines = []
@@ -390,4 +402,7 @@ def _row(s: MetricSummary) -> list[str]:
         return [s.metric, str(s.n), "-", counts or "-", str(s.skipped), str(s.errors)]
     mean = _fmt(s.mean) if s.mean is not None else "-"
     ci = f"[{_fmt(s.ci.low)}, {_fmt(s.ci.high)}]" if s.ci is not None else "-"
-    return [s.metric, str(s.n), mean, ci, str(s.skipped), str(s.errors)]
+    # Most metrics are better higher; say so for the ones that are not (an error
+    # rate at 0.000 is a perfect score, not a failing one).
+    name = f"{s.metric} (lower is better)" if s.higher_is_better is False else s.metric
+    return [name, str(s.n), mean, ci, str(s.skipped), str(s.errors)]

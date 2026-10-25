@@ -1,0 +1,3 @@
+{"id": "refund-paid", "input": "Customer asks: please refund order 42.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 42}}, {"name": "refund", "arguments": {"id": 42}}]}}
+{"id": "refund-unpaid", "input": "Customer asks: please refund order 7.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 7}}]}}
+{"id": "refund-twice", "input": "Customer asks: please refund order 13 again.", "reference": {"tool_calls": [{"name": "lookup_order", "arguments": {"id": 13}}]}}

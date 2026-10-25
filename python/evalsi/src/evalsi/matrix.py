@@ -256,7 +256,8 @@ def table(cells: Sequence[Cell]) -> str:
     lines = [
         "  ".join(cell.ljust(w) for cell, w in zip(r, widths, strict=True)).rstrip() for r in rows
     ]
-    lines.append("* the interval of the paired difference excludes zero")
+    if any(c.significant for c in cells):
+        lines.append("* the interval of the paired difference excludes zero")
     return "\n".join(lines)
 
 

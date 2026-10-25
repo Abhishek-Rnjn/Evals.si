@@ -1,0 +1,41 @@
+# A support agent on mocked business tools: no sandboxed files, no checker.
+# The tools answer from this spec, and tool-call-accuracy compares the calls
+# the agent made with the calls each task's reference expects.
+#   python3 tinylm.py --port 8765 &
+#   evalsi run -f support.yaml                     # tinylm-support passes
+#   sed 's/tinylm-support/tinylm-reckless/' support.yaml > reckless.yaml && evalsi run -f reckless.yaml
+apiVersion: evals.si/v1alpha1
+kind: EvalRun
+metadata: {name: tinylm-support}
+spec:
+  target:
+    connector: openai-compatible
+    model: tinylm-support
+    base_url: http://127.0.0.1:8765/v1
+    stream: true
+  dataset: {path: support.jsonl}
+  harness:
+    builtin:
+      max_steps: 6
+      tools:
+        mocks:
+          - name: lookup_order
+            description: Look up an order by id. Returns its payment status.
+            input_schema: {type: object, properties: {id: {type: integer}}, required: [id]}
+            responses:
+              '{"id": 42}': "order 42: status paid, total $30.00"
+              '{"id": 7}': "order 7: status not paid"
+              '{"id": 13}': "order 13: status refunded on 2026-10-01"
+          - name: refund
+            description: Refund an order in full. Irreversible.
+            input_schema: {type: object, properties: {id: {type: integer}}, required: [id]}
+            response: "ok: refund issued"
+  environment:
+    sandbox: {min_isolation: namespaced, network: deny}
+  evaluators:
+    - ref: tool-call-accuracy          # recall and precision against reference.tool_calls
+    - ref: tool-errors
+    - ref: run-completed
+  gates:
+    - {metric: tool-call-accuracy.precision, min: 1.0}   # no call the reference did not expect
+    - {metric: tool-call-accuracy.recall, min: 1.0}

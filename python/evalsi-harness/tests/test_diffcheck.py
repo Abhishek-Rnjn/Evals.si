@@ -81,6 +81,42 @@ def test_outputs_limit_what_is_applied(sandboxes: LocalSandboxClient) -> None:
     )
 
 
+@pytest.mark.parametrize("executable", [False, True])
+def test_diff_modes_support_option_like_names_on_bsd_and_gnu_chmod(
+    sandboxes: LocalSandboxClient, executable: bool
+) -> None:
+    mode = "a+x" if executable else "a-x"
+    check = "test -x ./-helper" if executable else "test ! -x ./-helper"
+    spec = spec_of(
+        {
+            "target": {
+                "agent": {
+                    "cli": {
+                        "command": [
+                            "sh",
+                            "-c",
+                            f"printf new > ./-helper; chmod {mode} ./-helper",
+                        ]
+                    }
+                }
+            },
+            "environment": {
+                "files": {"-helper": "old"},
+                "setup": ["chmod a+x ./-helper"],
+                "checker": {
+                    "isolation": "diff",
+                    "command": ["sh", "-c", f'{check} && test "$(cat ./-helper)" = new'],
+                },
+            },
+        }
+    )
+    rec = run(spec, record("mode"), sandboxes).record
+    assert rec is not None
+    assert rec.check is not None
+    assert rec.check.passed
+    assert rec.metadata["checker_isolation"]["modified"] == ["-helper"]
+
+
 def test_deletions_and_symlinks(sandboxes: LocalSandboxClient) -> None:
     rec = run(
         spec_for("rm calc.py; ln -s /etc/passwd evil.py", **DIFF), record("x"), sandboxes
@@ -107,6 +143,7 @@ def test_a_repository_workdir_is_diffed_with_the_vcs(sandboxes: LocalSandboxClie
     assert rec.check is not None
     info = rec.metadata["checker_isolation"]
     assert info["method"] == "git"
+    assert info["modified"] == ["calc.py"]
     assert rec.check.passed
     assert info["added"] == ["new.txt"]
     assert info["modified"] == ["calc.py"]

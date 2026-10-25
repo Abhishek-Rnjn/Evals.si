@@ -371,14 +371,15 @@
       class: "inline",
       onsubmit: (e) => { e.preventDefault(); location.hash = `#/compare?baseline=${encodeURIComponent(a.value.trim())}&candidate=${encodeURIComponent(b.value.trim())}`; },
     }, a, b, el("button", { class: "primary", type: "submit" }, "Compare"));
-    show(el("h1", {}, "Compare runs"), el("p", { class: "sub" }, "Paired by record: the interval is for the difference, candidate minus baseline."), form, out);
+    show(el("h1", {}, "Compare runs"), el("p", { class: "sub" }, "Paired by record: the interval is for the difference, candidate minus baseline. Significant means it excludes zero; whether higher is better depends on the metric (an error rate or a token count is better lower)."), form, out);
     if (!a.value || !b.value) return;
     const resp = await post("/v1alpha1/runs:compare", { baselineRunId: a.value, candidateRunId: b.value });
     out.replaceChildren(table(["Metric", "Baseline", "Candidate", "Difference", "Interval", "Paired n", ""],
       (resp.comparisons || []).map((c) => [
         el("code", {}, c.metric), fmt(c.baselineMean), fmt(c.candidateMean), fmt(c.diff),
         interval(c.diffCi), c.pairedN || "0",
-        c.significant ? el("span", { class: Number(c.diff) >= 0 ? "pass" : "fail" }, Number(c.diff) >= 0 ? "▲ significant" : "▼ significant") : "",
+        // No pass/fail colour: the comparison does not say which direction is better.
+        c.significant ? el("span", {}, Number(c.diff) >= 0 ? "▲ significant (higher)" : "▼ significant (lower)") : "",
       ]), [1, 2, 3, 5]));
   }
 

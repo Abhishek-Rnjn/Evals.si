@@ -184,3 +184,20 @@ def test_non_finite_interval_is_dropped(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(results, "interval", lambda *a, **k: Interval(math.nan, 1.0, 0.95, "t"))
     summary = evalsi.evaluate(ROWS, ["length"]).metric("length")
     assert summary.ci is None
+
+
+def test_the_table_marks_lower_is_better_and_hides_metrics_nothing_produced() -> None:
+    from evalsi.results import EvalResult, MetricSummary
+
+    summaries = [
+        MetricSummary("task-success", "task-success", "proportion", n=3, mean=1.0),
+        MetricSummary("task-success.task-score", "task-success", "number"),
+        MetricSummary(
+            "tool-errors", "tool-errors", "number", n=3, mean=0.0, higher_is_better=False
+        ),
+        MetricSummary("judge", "judge", "number", errors=3),
+    ]
+    table = EvalResult(records=[], results=[], summaries=summaries, manifest={}).table()
+    assert "tool-errors (lower is better)" in table
+    assert "task-score" not in table
+    assert "judge" in table  # every evaluation errored: that stays visible

@@ -16,6 +16,8 @@ from typing import Any, Literal
 from evalsi._binaries import evalsid_path
 from evalsi._version import __version__
 
+_LEVELS = ("confined", "namespaced", "kernel", "vm")
+
 
 @dataclass
 class Check:
@@ -144,10 +146,15 @@ def diagnose(required: str) -> list[Check]:
         ]
         if available:
             # Use known backend names only; probe text may contain private addresses.
+            # With its isolation level, so a plain check that lists landlock and an
+            # agent check that does not (confined is too weak for agents) read consistently.
             drivers = [
-                r["driver"]
-                if r["driver"] in ("bwrap", "landlock", "pod", "firecracker")
-                else "configured backend"
+                (
+                    r["driver"]
+                    if r["driver"] in ("bwrap", "landlock", "pod", "firecracker")
+                    else "configured backend"
+                )
+                + (f" ({r['level']})" if r.get("level") in _LEVELS else "")
                 for r in available
             ]
             checks.append(Check("sandbox", "ok", ", ".join(drivers)))
