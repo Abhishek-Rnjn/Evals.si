@@ -95,10 +95,11 @@ Stable 0.4 may be months away. Until then:
   passes a dry run, the technical gates pass and artifact-based installation is
   verified. Candidates can support pilots; they are not stable releases and must
   say so in their notes.
-- Ship security and reliability fixes that cannot wait as `0.3.x` patches from a
-  `release-0.3` branch, as [RELEASING](RELEASING.md) describes, or as a new
-  candidate when the fix is already on `main`. Record which fixes need a backport
-  (for example dependency advisories) when they merge.
+- Ship `0.3.x` patch numbers from `main` while stable 0.4 is held back (0.3.2
+  is cut this way, features included, as [RELEASING](RELEASING.md) describes). A
+  fix for one older release alone may still come from a `release-0.3` branch.
+  Record which fixes need a backport (for example dependency advisories) when
+  they merge.
 - Set a date to review this gate. If R04-01 to R04-05 are not met by then, decide
   openly whether to narrow them or cut 0.4 with the unmet rows listed as known
   limits. Propose 15 December 2026; the release owner decides.

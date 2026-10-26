@@ -7,9 +7,11 @@ manual run builds without publishing. Only a maintainer may authorize a dry
 run or tag push; release readiness is not authorization to publish.
 
 The commands below use `0.2.0` as a worked release example. For the current
-version, see the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases/latest). A minor
-release (`0.3.0`) is cut from `main`; a patch (`0.2.1`) from a `release-0.2`
-branch at `v0.2.0` with fixes only. Before a release, move the CHANGELOG's
+version, see the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases/latest). Releases are cut from `main`, including patch
+numbers (`0.3.1` and `0.3.2` carry new features); the stable `0.4.0` is held for
+the readiness rows below, and `v0.4.0-rc.N` candidates may precede it. A fix
+for an older release alone may still come from a `release-X.Y` branch at its
+tag. Before a release, move the CHANGELOG's
 `[Unreleased]` entries under the new version with upgrade notes, and set the
 charts' `version`/`appVersion` and the Python packages' `.dev0` version to it;
 [Releasing 0.2.0](#releasing-020) is the worked example.
