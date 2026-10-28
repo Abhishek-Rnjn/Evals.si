@@ -39,15 +39,13 @@ not evidence that an application passed. Results and HTML contain the supplied
 inputs, outputs and explanations: keep them private unless approved for sharing.
 Nothing here uploads them or calls a model.
 
-## Run your own application through existing `init` (unreleased)
+## Run your own application through `init`
 
 The application template, decision-first report additions and scoped doctor
-behavior below are **candidate features**, not features established in the
-published 0.3.1 package. Use a tested candidate wheel containing them, or wait
-for a maintainer-approved release. Installing stable `evalsi` above does not
-install an unpublished template.
+behavior below were added in 0.3.2. Install 0.3.2 or later
+(`python -m pip install 'evalsi>=0.3.2'`); 0.3.1 does not have the template.
 
-With that candidate installed in the same environment as your application:
+With it installed in the same environment as your application:
 
 ```bash
 evalsi init my-evals --template application
@@ -182,9 +180,9 @@ or container with sandbox prerequisites. A generic container alone does not gran
 user namespaces or KVM. Doctor reports the actual local probe; it cannot certify
 a remote cluster or guarantee that every task can run.
 
-In the candidate, plain `doctor` checks **only SDK scoring**: it does not inspect
+From 0.3.2, plain `doctor` checks **only SDK scoring**: it does not inspect
 or launch a server, harness or sandbox. Use `evalsi doctor --all` to explicitly
-inspect optional execution capabilities. Published 0.3.1 still reports optional
+inspect optional execution capabilities. 0.3.1 reported optional
 capabilities by default; `doctor` and `init` do not exist in 0.3.0.
 `--require server` requires a matching executable and worker
 dependencies. `--require agent` also requires the matching harness and an available
@@ -211,7 +209,7 @@ target is **not an observed success rate**.
 The root [action definition](../../action.yml) wraps the existing run engine and
 works with **published 0.3.0 and later**; the `doctor` and `init` commands are not
 required at runtime. Use an immutable commit containing the action, such as the
-`v0.3.1` tag's commit, in place of `ACTION_COMMIT`. The v0.3.0 tag predates the action.
+`v0.3.2` tag's commit, in place of `ACTION_COMMIT`. The v0.3.0 tag predates the action.
 
 ```yaml
 name: Agent evaluation
@@ -228,7 +226,7 @@ jobs:
         with:
           spec: run.yaml
           working-directory: my-evals
-          version: '0.3.1'
+          version: '0.3.2'
 ```
 
 Check in the starter's `run.yaml` and dataset, then adapt them to your application.

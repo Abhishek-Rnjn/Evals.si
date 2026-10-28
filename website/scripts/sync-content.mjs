@@ -22,7 +22,7 @@ const guides = [
   ["agent-runs", 1], ["annotation", 2], ["fine-tuning", 3], ["guardrails", 4],
   ["identity", 5], ["kubernetes", 6], ["agentgateway-kubernetes", 7],
   ["mcp", 8], ["plugins", 9], ["web-ui", 10], ["webhooks", 11], ["trace-sources", 12], ["integrate-an-agent-harness", 13],
-  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29], ["enterprise-deployment", 30], ["onboarding-usability", 31],
+  ["agent-frameworks", 14], ["operations", 15], ["end-to-end", 16], ["deepeval", 17], ["gate-an-agent-in-ci", 18], ["evaluate-rag", 19], ["onboarding", 20], ["harness2", 21], ["dataset-snapshots", 22], ["failure-inbox", 23], ["dataset-catalog", 24], ["release-decisions", 25], ["release-workbench", 26], ["support-refund-suite", 27], ["judge-calibration", 28], ["built-in-harness", 29], ["enterprise-deployment", 30], ["onboarding-usability", 31], ["browser-and-desktop-agents", 32],
 ];
 const tutorials = [
   "README", "01-install", "02-score", "03-tool-loop", "04-failures", "05-state-and-handoff", "onboarding-study",
@@ -164,6 +164,15 @@ It is built around one decision: **can we safely ship this agent change?** Conne
 - [Agent frameworks](${BASE}/docs/guides/agent-frameworks/): score LangGraph, CrewAI, OpenAI Agents SDK, LlamaIndex and Claude Agent SDK traces.
 - [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.
 - [Operations](${BASE}/docs/guides/operations/): upgrade policy, backup and restore, runbooks and reference cluster values.
+
+## New in 0.3.2: your application first, and richer agent environments
+
+- [Guided setup](${BASE}/docs/guides/onboarding/): \`evalsi init --template application\` for a Python callable, decision-first reports and a scoped \`evalsi doctor\`.
+- [Agent runs](${BASE}/docs/guides/agent-runs/): database and multi-service task environments, background sandbox processes and a determinism record.
+- [Built-in harness](${BASE}/docs/guides/built-in-harness/): the ACP connector and diff-isolated checkers.
+- [Browser and desktop agents](${BASE}/docs/guides/browser-and-desktop-agents/): browser and desktop toolsets, and importers for WebArena, GAIA and OfficeQA files you supply.
+- [Tutorials](${BASE}/docs/tutorials/): a first-time course from install to a CI gate, with no provider key.
+- [Changelog](${BASE}/docs/changelog/): upgrade notes, including refreshing the EvalRun CRD, and the security fixes.
 
 ## New in 0.3.1: from production failure to release decision
 
