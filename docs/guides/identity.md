@@ -210,7 +210,7 @@ rbac:
 
 **Roles from the token.** If your provider already carries application roles, `role_claims` maps them per project, and your application keeps owning who has which role.
 
-**Labels.** Runs (`CreateRun.labels`), policies, traces (OTLP resource attributes `evalsi.label.<key>`, plus the ingest key's labels) and API keys carry labels. Conditions and rules read them as `resource.labels`.
+**Labels.** Runs (`CreateRun.labels`), policies, traces (OTLP resource attributes `evalsi.label.<key>`, plus the ingest key's labels) and API keys carry labels. Conditions and rules read them as `resource.labels`. An API key's own labels are also `principal.labels` and `apiKey.labels`; while any rule, role condition or `cel:` subject reads those, a label can grant access, so only an owner may put labels on a key.
 
 ## 4. Global rules
 

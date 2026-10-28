@@ -6,6 +6,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Upgrade notes
 
+- `builtin/unit-tests` fails a program that exits before its tests finish, so
+  tests must not end the program themselves. Instead of `unittest.main()`,
+  use `if not unittest.main(exit=False).result.wasSuccessful(): raise SystemExit(1)`.
+
 - Plain `evalsi doctor` now checks only SDK scoring and does not inspect or
   launch optional execution tools. Use `doctor --all` for the previous optional
   diagnostic inventory; `--require server` and `--require agent` retain explicit
@@ -84,6 +88,14 @@ All notable changes to this project are recorded here. The format follows [Keep 
 ### Changed
 
 - The root GitHub Action installs evalsi and evalsi-harness 0.3.1 by default (was 0.3.0), and the `onboarding` CI job tests the action against published 0.3.1.
+
+### Security
+
+- A project admin could mint an API key whose labels satisfied a `cel:` binding, an `allow` rule or a role condition that reads `principal.labels` or `apiKey.labels`, and so give the key roles they could not grant. While any rule, role condition or `cel:` subject reads key labels, only an owner may label a key.
+- With a writable image root, a workdir that the image or a snapshot carried as a symlink made `evalsid` create or `chmod 0777` host directories on open and restore. The workdir is now made inside the root and a symlinked one is refused.
+- `builtin/unit-tests` passed generated code that called `sys.exit(0)` or `os._exit(0)` before its tests ran, which also forged RL rewards. Exit 0 now passes only after a per-run sentinel printed after the tests (evaluator version 1.1.0).
+- `evalsi plugins install` deleted the plugins directory for a Wasm manifest named `.`, and its parent for one named `..`. Such names are refused.
+- The harness leaked a task's sandbox when the task's `environment.database` failed to build.
 
 ## [0.3.1] - 2026-10-22
 

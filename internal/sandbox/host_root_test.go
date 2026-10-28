@@ -51,3 +51,59 @@ func TestHostFilesStayInsideRootWhenWorkdirIsSymlink(t *testing.T) {
 		t.Fatal("wrote outside the sandbox root")
 	}
 }
+
+// The workdir is created and chmodded on open and on restore; a symlink the
+// image or a snapshot carries as the workdir must not redirect that to the host.
+func TestMakeWorkdirRefusesSymlinks(t *testing.T) {
+	for _, tc := range []struct{ name, target string }{
+		{"absolute", "outside"},
+		{"relative", "../outside"},
+		{"missing", "outside/new"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			root, outside := filepath.Join(dir, "root"), filepath.Join(dir, "outside")
+			for _, d := range []string{root, outside} {
+				if err := os.Mkdir(d, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			target := tc.target
+			if tc.name != "relative" {
+				target = filepath.Join(dir, tc.target)
+			}
+			if err := os.Symlink(target, filepath.Join(root, "work")); err != nil {
+				t.Fatal(err)
+			}
+			b := &hostBackend{sp: &Spec{Workdir: "/work"}, root: root, work: filepath.Join(root, "work")}
+			if err := b.makeWorkdir(); err == nil {
+				t.Fatal("made a workdir through a symlink")
+			}
+			fi, err := os.Stat(outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fi.Mode().Perm() != 0o755 {
+				t.Errorf("host directory mode changed to %v", fi.Mode().Perm())
+			}
+			if _, err := os.Stat(filepath.Join(outside, "new")); err == nil {
+				t.Error("created a directory outside the sandbox root")
+			}
+		})
+	}
+}
+
+func TestMakeWorkdirInsideRoot(t *testing.T) {
+	root := t.TempDir()
+	b := &hostBackend{sp: &Spec{Workdir: "/a/b"}, root: root, work: filepath.Join(root, "a/b")}
+	if err := b.makeWorkdir(); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(b.work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fi.IsDir() || fi.Mode().Perm() != 0o777 {
+		t.Fatalf("workdir %v, want a 0777 directory", fi.Mode())
+	}
+}

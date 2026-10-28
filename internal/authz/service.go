@@ -272,6 +272,9 @@ func (s *Service) CreateAPIKey(ctx context.Context, req *connect.Request[evalsiv
 	if err := validLabels(req.Msg.GetLabels()); err != nil {
 		return nil, err
 	}
+	if err := s.engine.CheckKeyLabels(p, req.Msg.GetLabels()); err != nil {
+		return nil, s.refuse(ctx, keyProject(roles), "apikey/"+name, err)
+	}
 	secret, hash := auth.NewAPIKey()
 	rec := KeyRecord{
 		Name: name, Hash: hash, Prefix: secret[:len(auth.APIKeyPrefix)+6], Roles: roles, Labels: req.Msg.GetLabels(),

@@ -384,3 +384,71 @@ func TestServiceAnnouncesChanges(t *testing.T) {
 		t.Errorf("changes = %d, project known here: %v", changes, e.ProjectExists("review-ha"))
 	}
 }
+
+func TestReadsKeyLabels(t *testing.T) {
+	for expr, want := range map[string]bool{
+		`principal.labels.team == "admin"`:                     true,
+		`.principal.labels.team == "admin"`:                    true,
+		`.apiKey.labels["team"] == "admin"`:                    true,
+		`apiKey.labels["team"] == "admin"`:                     true,
+		`has(principal.labels.team)`:                           true,
+		`principal["labels"].team == "admin"`:                  true,
+		`principal[request.headers.x] == "admin"`:              true,
+		`apiKey == {"name": "ci"}`:                             true,
+		`[1].exists(x, principal.labels.size() > 0)`:           true,
+		`"admin" in principal.groups`:                          false,
+		`apiKey.name == "ci" && principal["kind"] == "apikey"`: false,
+		`.principal.kind == "apikey"`:                          false,
+		`resource.labels.team == "admin"`:                      false,
+		`not (valid cel`:                                       true,
+	} {
+		if got := readsKeyLabels(expr); got != want {
+			t.Errorf("readsKeyLabels(%q) = %v, want %v", expr, got, want)
+		}
+	}
+}
+
+// Key labels feed principal.labels and apiKey.labels. While the policy reads
+// them, a label can grant access, so only an owner may set one.
+func TestKeyLabelsEscalation(t *testing.T) {
+	admin := RBACConfig{
+		Owners:   []string{"group:corp/platform"},
+		Projects: map[string]map[string][]string{"support": {"admin": {"user:corp/al"}}},
+	}
+	al, root := user("al"), user("root", "platform")
+	labels := map[string]string{"team": "admin"}
+	if err := engine(t, admin, nil, &memStore{}).CheckKeyLabels(al, labels); err != nil {
+		t.Errorf("no expression reads key labels: %v", err)
+	}
+	readers := map[string]func() *Engine{
+		"binding": func() *Engine {
+			st := &memStore{bindings: []Binding{{Project: "support", Role: "admin", Subject: `cel:principal.labels.team == "admin"`}}}
+			return engine(t, admin, nil, st)
+		},
+		"owner": func() *Engine {
+			rbac := admin
+			rbac.Owners = []string{"group:corp/platform", `cel:apiKey.labels.team == "admin"`}
+			return engine(t, rbac, nil, &memStore{})
+		},
+		"rule": func() *Engine {
+			return engine(t, admin, []Rule{{Allow: `principal.labels.team == "admin"`}}, &memStore{})
+		},
+		"condition": func() *Engine {
+			rbac := admin
+			rbac.Roles = []Role{{Name: "lead", Permissions: []string{"runs.read"}, Condition: `principal.labels.team == "admin"`}}
+			return engine(t, rbac, nil, &memStore{})
+		},
+	}
+	for name, build := range readers {
+		e := build()
+		if err := e.CheckKeyLabels(al, labels); err == nil || !strings.Contains(err.Error(), "only an owner") {
+			t.Errorf("%s reads key labels; admin labelled a key: %v", name, err)
+		}
+		if err := e.CheckKeyLabels(al, nil); err != nil {
+			t.Errorf("%s: an unlabelled key: %v", name, err)
+		}
+		if err := e.CheckKeyLabels(root, labels); err != nil {
+			t.Errorf("%s: owner labelling a key: %v", name, err)
+		}
+	}
+}

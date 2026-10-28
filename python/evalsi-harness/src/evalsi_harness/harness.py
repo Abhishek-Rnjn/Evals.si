@@ -312,6 +312,10 @@ class BuiltinHarness:
             )
         handle = secrets.token_hex(8)
         live = LiveTask(task, env)
+        # Register the sandbox first so a failure below still destroys it.
+        if env is not None:
+            live.isolation = env.isolation.to_dict()
+            live.closers.append(env.sandbox.destroy)
         if task.environment is not None and task.environment.database is not None:
             try:
                 live.db = Database(task.environment.database)
@@ -320,9 +324,6 @@ class BuiltinHarness:
                 await self.teardown(handle)
                 raise TaskError(f"environment.database: {exc}") from exc
             live.closers.append(_closer(live.db.close))
-        if env is not None:
-            live.isolation = env.isolation.to_dict()
-            live.closers.append(env.sandbox.destroy)
         self._live[handle] = live
         checker = task.environment.checker if task.environment else None
         if (

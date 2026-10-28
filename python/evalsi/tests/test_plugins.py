@@ -101,6 +101,18 @@ def test_install_wasm_verifies_pins(tmp_path: Path) -> None:
         install_wasm(str(escape), tmp_path / "p4")
 
 
+# A name that maps to "." or ".." would make the install replace dest_root or its parent.
+@pytest.mark.parametrize("name", ["'.'", "'..'", "1"])
+def test_install_wasm_rejects_names_outside_dest(tmp_path: Path, name: str) -> None:
+    manifest = _plugin(tmp_path)
+    manifest.write_text(manifest.read_text().replace("name: acme/checks", f"name: {name}", 1))
+    dest_root = tmp_path / "plugins"
+    (dest_root / "kept").mkdir(parents=True)
+    with pytest.raises(PluginError, match="not a valid plugin name"):
+        install_wasm(str(manifest), dest_root)
+    assert (dest_root / "kept").is_dir()
+
+
 def test_wasm_plugins_become_packs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     install_wasm(str(_plugin(tmp_path)), tmp_path / "plugins")
     monkeypatch.setenv("EVALSI_PLUGIN_PATH", str(tmp_path / "plugins"))

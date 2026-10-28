@@ -5,12 +5,17 @@ followed by the tests, HumanEval style, under the Evals.si sandbox: no
 network, a private workspace, and resource limits. Passing means the program
 exited 0. Timeouts and policy denials are the code's own failures; a missing
 or broken sandbox is an infrastructure error and is never scored.
+The program prints a random sentinel after the tests; exit 0 without it means
+the generated code exited early (``sys.exit(0)``) and is a failure. So tests
+must not end the program themselves. Instead of ``unittest.main()``, use
+``if not unittest.main(exit=False).result.wasSuccessful(): raise SystemExit(1)``.
 Use trials for pass@k.
 """
 
 from __future__ import annotations
 
 import re
+import secrets
 
 from evalsi.evaluator import MetricSpec, Requirements, ScoreType, SkipRecord, evaluator
 from evalsi.packs.core import _output_text
@@ -48,11 +53,12 @@ def _tail(text: str, limit: int = 600) -> str:
 
 @evaluator(
     name="builtin/unit-tests",
-    version="1.0.0",
+    version="1.1.0",
     description=(
         "Runs the generated code plus its tests in the sandbox; passes when the program "
-        "exits 0. Tests come from the reference or metadata['test']; with "
-        "metadata['entry_point'], check(<entry_point>) is called (HumanEval style)."
+        "exits 0 after the tests ran to the end. Tests come from the reference or "
+        "metadata['test']; with metadata['entry_point'], check(<entry_point>) is called "
+        "(HumanEval style)."
     ),
     requires=Requirements(output=True, sandbox=True),
     outputs=[MetricSpec("unit-tests", PASSED, higher_is_better=True)],
@@ -70,6 +76,10 @@ async def unit_tests(
     entry_point = record.metadata.get("entry_point")
     if isinstance(entry_point, str) and entry_point and "def check(" in tests:
         program += f"\ncheck({entry_point})\n"
+    # Printed in two halves so a program that echoes its own source can't fake it.
+    head, tail = secrets.token_hex(8), secrets.token_hex(8)
+    sentinel = f"@@evalsi tests finished {head}{tail}"
+    program += f"\nprint({sentinel[: -len(tail)]!r} + {tail!r}, flush=True)\n"
     result = await run_sandboxed(
         [interpreter, "solution.py"],
         files={"solution.py": program},
@@ -81,10 +91,16 @@ async def unit_tests(
         explanation = f"timed out after {timeout_s}s"
     elif result.outcome == "denied":
         explanation = f"sandbox denied: {', '.join(result.denials)}; {_tail(result.stderr, 300)}"
+    elif result.ok and sentinel not in result.stdout:
+        explanation = (
+            "output was truncated before the tests finished; print less"
+            if result.truncated
+            else "the program exited 0 before the tests finished"
+        )
     else:
         explanation = "" if result.ok else _tail(result.stderr or result.stdout)
     return Score(
-        passed=result.ok,
+        passed=result.ok and sentinel in result.stdout,
         explanation=explanation,
         metadata={
             "outcome": result.outcome,
