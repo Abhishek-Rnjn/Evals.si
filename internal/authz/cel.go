@@ -106,8 +106,13 @@ func readsKeyLabels(expr string) bool {
 	if issues != nil && issues.Err() != nil {
 		return true
 	}
+	// An absolute reference (.principal) keeps its leading dot in the parse.
 	keyVar := func(e celast.Expr) bool {
-		return e.Kind() == celast.IdentKind && (e.AsIdent() == "principal" || e.AsIdent() == "apiKey")
+		if e.Kind() != celast.IdentKind {
+			return false
+		}
+		name := strings.TrimPrefix(e.AsIdent(), ".")
+		return name == "principal" || name == "apiKey"
 	}
 	// Parents are visited first, so a variable is marked safe before it is seen.
 	safe := map[int64]bool{}

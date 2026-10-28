@@ -7,8 +7,8 @@ exited 0. Timeouts and policy denials are the code's own failures; a missing
 or broken sandbox is an infrastructure error and is never scored.
 The program prints a random sentinel after the tests; exit 0 without it means
 the generated code exited early (``sys.exit(0)``) and is a failure. So tests
-must not end the program themselves: ``unittest.main(exit=False)``, not
-``unittest.main()``.
+must not end the program themselves. Instead of ``unittest.main()``, use
+``if not unittest.main(exit=False).result.wasSuccessful(): raise SystemExit(1)``.
 Use trials for pass@k.
 """
 

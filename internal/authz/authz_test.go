@@ -388,6 +388,8 @@ func TestServiceAnnouncesChanges(t *testing.T) {
 func TestReadsKeyLabels(t *testing.T) {
 	for expr, want := range map[string]bool{
 		`principal.labels.team == "admin"`:                     true,
+		`.principal.labels.team == "admin"`:                    true,
+		`.apiKey.labels["team"] == "admin"`:                    true,
 		`apiKey.labels["team"] == "admin"`:                     true,
 		`has(principal.labels.team)`:                           true,
 		`principal["labels"].team == "admin"`:                  true,
@@ -396,6 +398,7 @@ func TestReadsKeyLabels(t *testing.T) {
 		`[1].exists(x, principal.labels.size() > 0)`:           true,
 		`"admin" in principal.groups`:                          false,
 		`apiKey.name == "ci" && principal["kind"] == "apikey"`: false,
+		`.principal.kind == "apikey"`:                          false,
 		`resource.labels.team == "admin"`:                      false,
 		`not (valid cel`:                                       true,
 	} {

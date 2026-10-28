@@ -7,8 +7,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 ### Upgrade notes
 
 - `builtin/unit-tests` fails a program that exits before its tests finish, so
-  tests must not end the program themselves: use `unittest.main(exit=False)`,
-  not `unittest.main()`.
+  tests must not end the program themselves. Instead of `unittest.main()`,
+  use `if not unittest.main(exit=False).result.wasSuccessful(): raise SystemExit(1)`.
 
 - Plain `evalsi doctor` now checks only SDK scoring and does not inspect or
   launch optional execution tools. Use `doctor --all` for the previous optional
