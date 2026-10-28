@@ -72,7 +72,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: docker/setup-qemu-action@v3   # the arm64 bubblewrap builds in an emulated container
+      - uses: docker/setup-qemu-action@v4   # the arm64 bubblewrap builds in an emulated container
       - run: scripts/release-binaries.sh "${{ needs.version.outputs.version }}" "${{ matrix.arch }}" dist
       - name: The archive runs (amd64)
         if: matrix.arch == 'amd64'
@@ -81,7 +81,7 @@ jobs:
           dir=$(echo dist/evalsi_*_linux_amd64)
           "$dir/evalsid" version | grep -q "${{ needs.version.outputs.version }}"
           "$dir/bwrap" --version
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.arch }}
           path: dist/*.tar.gz
@@ -99,7 +99,7 @@ jobs:
           uv build --all-packages -o ../dist
       - name: Verify the installed SDK onboarding contract
         run: uv run --no-project python scripts/check-installed-onboarding.py --wheel dist
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: python
           path: dist/*
@@ -116,11 +116,11 @@ jobs:
         arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: python
           path: pure
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: binaries-${{ matrix.arch }}
           path: archive
@@ -135,7 +135,7 @@ jobs:
           /tmp/venv/bin/pip install -q dist/*.whl
           /tmp/venv/bin/evalsi evalsid-path
           "$(/tmp/venv/bin/evalsi evalsid-path)" version | grep -q "${{ needs.version.outputs.version }}"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.arch }}
           path: dist/*.whl
@@ -155,11 +155,11 @@ jobs:
     permissions:
       id-token: write   # PyPI trusted publishing; no stored token
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: python
           path: all
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true
@@ -176,7 +176,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: python
           path: all
@@ -194,15 +194,15 @@ jobs:
       id-token: write   # keyless signing: no key to store
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v3
         if: env.PUBLISH == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         id: build
         with:
           context: .
@@ -229,7 +229,7 @@ jobs:
           ref="ghcr.io/${{ needs.version.outputs.owner }}/evalsi@${{ steps.build.outputs.digest }}"
           cosign sign --yes "$ref"
           cosign attest --yes --type spdxjson --predicate "evalsi-${{ needs.version.outputs.version }}.spdx.json" "$ref"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: env.PUBLISH == 'true'
         with:
           name: sbom-evalsi
@@ -245,15 +245,15 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v3
         if: env.PUBLISH == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         id: build
         with:
           context: .
@@ -281,7 +281,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: v3.22.0
       - uses: sigstore/cosign-installer@v3
@@ -307,7 +307,7 @@ jobs:
             [ -n "$digest" ] || { echo "no digest for $c"; exit 1; }
             cosign sign --yes "ghcr.io/$owner/charts/$name@$digest"
           done
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: charts
           path: dist/*.tgz
@@ -330,7 +330,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: astral-sh/setup-uv@v7
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: v3.22.0
       - name: Image
@@ -347,7 +347,7 @@ jobs:
           scripts/set-python-version.sh "$v"
           deploy/airgap/bundle.sh --tag "$v" --out "evalsi-bundle-$v" --with-cli
           tar czf "evalsi-bundle-$v-linux-amd64.tgz" "evalsi-bundle-$v"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: bundle
           path: evalsi-bundle-*.tgz
@@ -363,7 +363,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
@@ -371,7 +371,7 @@ jobs:
           # fetched the build records, which failed on the first tag run.
           pattern: "{binaries-*,python,wheels-*,charts,bundle,sbom-*}"
       - run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         if: env.PUBLISH == 'true'
         with:
           files: dist/*
