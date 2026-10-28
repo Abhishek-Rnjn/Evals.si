@@ -38,6 +38,20 @@ def test_unit_tests_pass_and_fail() -> None:
 
 
 @pytest.mark.usefixtures("fake_sandbox")
+@pytest.mark.parametrize(
+    "exit_call",
+    ["sys.exit(0)", "os._exit(0)", "raise SystemExit", "print(open(__file__).read()); os._exit(0)"],
+)
+def test_exiting_early_does_not_pass(exit_call: str) -> None:
+    # At import time, and from inside the function the tests call.
+    early = humaneval(f"import os, sys\n{exit_call}\ndef add(a, b):\n    return 0\n")
+    inside = humaneval(f"import os, sys\ndef add(a, b):\n    {exit_call}\n    return 0\n")
+    for record in (early, inside):
+        result = score(code.unit_tests, record)["unit-tests"]
+        assert result.passed is False, exit_call
+
+
+@pytest.mark.usefixtures("fake_sandbox")
 def test_timeouts_are_failures_not_errors() -> None:
     slow = humaneval("import time\ndef add(a, b):\n    time.sleep(5)\n")
     result = score(code.unit_tests, slow, timeout_s=0.5)["unit-tests"]

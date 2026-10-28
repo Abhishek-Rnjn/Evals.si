@@ -193,6 +193,9 @@ def install_wasm(manifest_location: str, dest_root: Path, manifest_sha: str = ""
         raise PluginError(
             f"{manifest_location}: needs name, runtime.wasm.module and runtime.wasm.sha256"
         )
+    name = doc["name"]
+    if not isinstance(name, str) or plugin_dirname(name) in (".", ".."):
+        raise PluginError(f"{manifest_location}: {name!r} is not a valid plugin name")
     if "/" in module or "\\" in module or module.startswith("."):
         raise PluginError(
             f"{manifest_location}: runtime.wasm.module must be a file next to the manifest"
@@ -200,7 +203,7 @@ def install_wasm(manifest_location: str, dest_root: Path, manifest_sha: str = ""
     code = _fetch(module, base=manifest_location)
     if _sha256(code) != pinned:
         raise PluginError(f"{module}: sha256 is {_sha256(code)}, the manifest pins {pinned}")
-    dest = dest_root / plugin_dirname(doc["name"])
+    dest = dest_root / plugin_dirname(name)
     tmp = dest.with_name(dest.name + ".tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)

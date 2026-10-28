@@ -7,8 +7,9 @@ from typing import Any
 
 import pytest
 
+from evalsi_harness import harness as harness_module
 from evalsi_harness.task import TaskError
-from evalsi_harness.testing import LocalSandboxClient, ScriptedModelServer
+from evalsi_harness.testing import LocalSandbox, LocalSandboxClient, ScriptedModelServer
 from tests.harness_support import record, run, spec_of
 from tests.test_harness_agent import calls_then, target
 
@@ -234,6 +235,35 @@ def test_the_database_can_sit_beside_a_sandbox_checker(
     assert rec.check is not None
     assert rec.check.passed
     assert len(sandboxes.created) == 1
+
+
+def test_a_database_failure_still_destroys_the_sandbox(
+    model: Model, sandboxes: LocalSandboxClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destroyed: list[LocalSandbox] = []
+    real_destroy = LocalSandbox.destroy
+
+    async def destroy(self: LocalSandbox) -> None:
+        destroyed.append(self)
+        await real_destroy(self)
+
+    def broken(config: Any) -> None:
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(LocalSandbox, "destroy", destroy)
+    monkeypatch.setattr(harness_module, "Database", broken)
+    spec = spec_of(
+        {
+            "target": target(model(move_script())),
+            "harness": {"builtin": {}},
+            "environment": {"database": database(), "checker": {"command": ["true"]}},
+        }
+    )
+    out = run(spec, record("x"), sandboxes)
+    assert "disk full" in out.error
+    assert len(sandboxes.created) == 1
+    assert len(destroyed) == 1
+    assert not destroyed[0].root.exists()
 
 
 def test_a_runaway_query_is_stopped(model: Model, sandboxes: LocalSandboxClient) -> None:
