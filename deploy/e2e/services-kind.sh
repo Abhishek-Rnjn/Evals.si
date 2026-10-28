@@ -48,10 +48,20 @@ COPY evalsid evalsi-guest /usr/local/bin/
 ENTRYPOINT ["/usr/local/bin/evalsid"]
 EOF
 docker build -t evalsi-services:test "$work"
+# Load one platform of each image. `kind load docker-image` imports every
+# platform a multi-platform image lists, and with Docker's containerd image
+# store the platforms that were never pulled are missing ("ctr: content digest
+# ... not found"). Docker 28+ can save one platform; an older CLI saves the
+# image as it is, which its classic store keeps single-platform anyway.
+platform="linux/$(docker version --format '{{.Server.Arch}}')"
+save_platform=()
+if docker save --help 2>&1 | grep -q -- '--platform'; then save_platform=(--platform "$platform"); fi
 for image in evalsi-services:test python:3.13-slim redis:7-alpine; do
-  if [ "$image" != evalsi-services:test ]; then docker pull "$image"; fi
-  kind load docker-image --name "$cluster" "$image"
+  if [ "$image" != evalsi-services:test ]; then docker pull --platform "$platform" "$image"; fi
+  docker save ${save_platform[@]+"${save_platform[@]}"} -o "$work/image.tar" "$image"
+  kind load image-archive --name "$cluster" "$work/image.tar"
 done
+rm -f "$work/image.tar"
 # An ephemeral CA and separate server/client certificates for the sandbox API.
 umask 077
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=services-e2e-ca \
