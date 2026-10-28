@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Changed
+
+- The root GitHub Action installs evalsi and evalsi-harness 0.3.2 by default (was 0.3.1), and the `onboarding` CI job tests the action against published 0.3.2.
+
 ## [0.3.2] - 2026-10-28
 
 A patch number, but cut from `main` like 0.3.1: it carries new features as well as fixes.

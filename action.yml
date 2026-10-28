@@ -12,7 +12,7 @@ inputs:
     default: .
   version:
     description: Matching published evalsi and evalsi-harness version.
-    default: 0.3.1
+    default: 0.3.2
   python-version:
     description: Python runtime for the evaluation.
     default: '3.12'
