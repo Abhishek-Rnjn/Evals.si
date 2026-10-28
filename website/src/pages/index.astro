@@ -184,17 +184,17 @@ const audiences = [
   { name: "Model and training teams", text: "The same evaluators as RL rewards and checkpoint checks, and the same agent tasks as Gymnasium, NeMo Gym, OpenEnv and verifiers environments." },
 ];
 
-// New in 0.3.1 (CHANGELOG.md).
+// New in 0.3.2 (CHANGELOG.md).
 const whatsNew = [
-  { name: "Release decisions", text: "A pinned baseline, a reviewed policy and paired confidence intervals decide PASS, BLOCK or INSUFFICIENT; insufficient evidence never passes.", href: "/docs/guides/release-decisions/" },
-  { name: "Browser release workbench", text: "Configure runs on approved suites, build release policies through forms, and export the CLI command or Action step.", href: "/docs/guides/release-workbench/" },
-  { name: "Failure inbox", text: "Production failures become editable, redacted, approved cases with full revision history.", href: "/docs/guides/failure-inbox/" },
-  { name: "Dataset catalog and snapshots", text: "Immutable, digest-pinned suites with separate publisher and reviewer approval, diffs and tuning/held-out overlap checks.", href: "/docs/guides/dataset-catalog/" },
-  { name: "Judge calibration", text: "Freeze human labels, keep tuning and held-out apart, and measure false positives, false negatives and judge drift.", href: "/docs/guides/judge-calibration/" },
-  { name: "Approval gates", text: "Allow, ask and deny rules on the built-in agent's tool calls, with recorded human-in-the-loop steps and evaluators that check denials were respected.", href: "/docs/guides/built-in-harness/" },
-  { name: "Support and refund suite", text: "Twelve editable tasks graded on a shop's final state: authorization, amounts, recipients, duplicates, retries and handoff.", href: "/docs/guides/support-refund-suite/" },
-  { name: "evalsi doctor and init", text: "Check an install's versions and sandbox capabilities, and scaffold a working project with a deliberately regressed control.", href: "/docs/guides/onboarding/" },
-  { name: "Strict, hash-chained audit", text: "Audit entries written before the change, caller identity details, and a verifier that finds edited or missing entries.", href: "/docs/guides/enterprise-deployment/" },
+  { name: "Your application, first", text: "evalsi init --template application wraps a Python callable: preview one case, reproduce any case exactly, and tell failed checks from execution errors.", href: "/docs/guides/onboarding/" },
+  { name: "Decision-first reports", text: "HTML and Markdown reports separate failed checks, errors, skips and incomplete evidence, and never present a tiny sample as release approval.", href: "/docs/guides/onboarding/" },
+  { name: "Database task environments", text: "SQL tools for the agent, recorded writes, and SQL assertions on the final state, one fresh database per trial.", href: "/docs/guides/agent-runs/" },
+  { name: "Multi-service environments", text: "Services on a private network with readiness checks, named volumes and logs, plus long-lived background processes in the sandbox.", href: "/docs/guides/agent-runs/" },
+  { name: "ACP agents and diff checkers", text: "Run ACP agents with permission requests decided by approval gates, and grade only the agent's diff in a fresh sandbox.", href: "/docs/guides/built-in-harness/" },
+  { name: "Browser and desktop tools", text: "Playwright browser and Xvfb computer-use toolsets, with WebArena, GAIA and OfficeQA importers for files you supply.", href: "/docs/guides/built-in-harness/" },
+  { name: "Determinism record", text: "Every built-in-harness run records seeds, response model snapshots, tool versions and, when the sandbox reports it, the image digest.", href: "/docs/guides/agent-runs/" },
+  { name: "First-time tutorials", text: "A hands-on course from install to a CI gate with a fake tool-calling model, failure controls and replay; no provider key needed.", href: "/docs/tutorials/" },
+  { name: "Security fixes", text: "API key label escalation, a sandbox workdir symlink escape, plugin install paths and unit-test early exits, all fixed.", href: "/docs/changelog/" },
 ];
 
 // evalsi-harness (docs/guides/built-in-harness.md): what is built.
@@ -307,10 +307,10 @@ const extras = [
       <div aria-hidden="true" class="pointer-events-none absolute left-1/2 top-[-12rem] -z-10 h-[36rem] w-[60rem] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(99,102,241,0.35),rgba(45,212,191,0.12),transparent)] blur-2xl"></div>
 
       <div class="mx-auto max-w-6xl px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <a href={doc("/docs/guides/release-decisions/")} class="animate-fade-up inline-block">
+        <a href={doc("/docs/guides/onboarding/")} class="animate-fade-up inline-block">
           <AnimatedGradientText>
             <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
-            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">New in 0.3.1: from production failure to release decision</span>
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">New in 0.3.2: your application's first result, richer agent environments</span>
             <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
           </AnimatedGradientText>
         </a>
@@ -414,8 +414,8 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
     <!-- What's new -->
     <section class="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
       <div class="mx-auto mb-12 max-w-2xl text-center">
-        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">New in 0.3.1</p>
-        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">From production failure to release decision</h2>
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">New in 0.3.2</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Your application first, and richer agent environments</h2>
         <p class="mt-4 text-neutral-600 dark:text-neutral-400">Upgrade with <code class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-sm dark:bg-white/10">pip install -U evalsi evalsi-harness</code>, and the server and charts to the same version. Everything else that changed is in the <a class="font-medium text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-300" href={doc("/docs/changelog/")}>changelog</a>.</p>
       </div>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

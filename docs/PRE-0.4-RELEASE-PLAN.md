@@ -12,10 +12,10 @@ release candidate but gates calling the project beta, not 0.4. Version numbers
 should not wait on a business milestone while security and reliability fixes sit
 on `main`.
 
-Published 0.3.1 was verified in the onboarding studies. The new application
-starter, scoped diagnostics and decision-first report additions remain candidate
-features; the [guided setup](guides/onboarding.md) distinguishes them from stable
-recorded scoring. Other roadmap capabilities must retain their own release evidence. A
+Published 0.3.1 was verified in the onboarding studies. The application
+starter, scoped diagnostics and decision-first report additions shipped in 0.3.2
+and have not yet been through such a study; the [guided setup](guides/onboarding.md)
+says which additions need 0.3.2. Other roadmap capabilities must retain their own release evidence. A
 feature's presence in the repository is not evidence that a customer can install
 and adopt it.
 

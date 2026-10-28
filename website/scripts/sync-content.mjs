@@ -165,6 +165,14 @@ It is built around one decision: **can we safely ship this agent change?** Conne
 - [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.
 - [Operations](${BASE}/docs/guides/operations/): upgrade policy, backup and restore, runbooks and reference cluster values.
 
+## New in 0.3.2: your application first, and richer agent environments
+
+- [Guided setup](${BASE}/docs/guides/onboarding/): \`evalsi init --template application\` for a Python callable, decision-first reports and a scoped \`evalsi doctor\`.
+- [Agent runs](${BASE}/docs/guides/agent-runs/): database and multi-service task environments, background sandbox processes and a determinism record.
+- [Built-in harness](${BASE}/docs/guides/built-in-harness/): the ACP connector, diff-isolated checkers, and browser and desktop toolsets.
+- [Tutorials](${BASE}/docs/tutorials/): a first-time course from install to a CI gate, with no provider key.
+- [Changelog](${BASE}/docs/changelog/): upgrade notes, including refreshing the EvalRun CRD, and the security fixes.
+
 ## New in 0.3.1: from production failure to release decision
 
 - [Failure inbox](${BASE}/docs/guides/failure-inbox/): turn production traces into approved, redacted regression cases.

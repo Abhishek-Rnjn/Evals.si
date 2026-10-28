@@ -6,9 +6,10 @@ a state checker, then describes the handoff to a real system.
 
 ## Source-only SQL lab
 
-`environment.database` is unreleased in the checkout used by this course. Do
-not run this spec against PyPI 0.3.1. Follow lesson 1's separate source install,
-activate it, and start the fake server with that environment:
+`environment.database` was added in 0.3.2, after the 0.3.1 release this course
+pins. Do not run this spec against PyPI 0.3.1: install 0.3.2 or later, or follow
+lesson 1's separate source install, activate it, and start the fake server with
+that environment:
 
 ```bash
 . python/.venv/bin/activate

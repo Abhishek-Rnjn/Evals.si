@@ -115,8 +115,8 @@ trial gets its own database, looks up its requested order and sets that order's
 `refunded` flag. The final-state assertion requires exactly one refunded order;
 `task-success`, `contains`, precision and recall must all equal 1.
 
-This SQL feature is not in PyPI 0.3.1. Do not pass `--database` to the published
-environment. Mock responses prove tool-call selection, not payment settlement;
+This SQL feature was added in 0.3.2; PyPI 0.3.1, which this course pins, does not
+have it. Do not pass `--database` to a 0.3.1 environment. Mock responses prove tool-call selection, not payment settlement;
 the SQL assertion is stronger but still not a real payment-service test.
 
 ## What passed, and what it does not establish

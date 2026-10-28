@@ -15,13 +15,13 @@ score. The example's insufficient Bun address-space limit was corrected.
 Denied npm egress remains a policy failure, not a clean pass. Real benchmark
 data/graders, live Codex, model-driven upstream refinement, concurrent live
 following, downstream write-back and human calibration remain unverified.
-See the [report](verification/HARNESS2-2026-10-25.md); changes are unreleased.
+See the [report](verification/HARNESS2-2026-10-25.md); the changes shipped in 0.3.2.
 
 **Application-first onboarding candidate:** the published-SDK front door,
 `init --template application` callable runner, scoped doctor, decision-first
 reports and isolated installed-wheel CI/release controls are implemented.
-The [setup guide](guides/onboarding.md) distinguishes stable scoring from
-unreleased additions. A dedicated HTTP wizard, async/streaming adapters,
+They shipped in 0.3.2; the [setup guide](guides/onboarding.md) says which
+additions need 0.3.2. A dedicated HTTP wizard, async/streaming adapters,
 automatic evaluator selection and application-specific release policies are
 not part of this slice. Artifact publication and observed CI runs still require
 release/CI evidence; unfamiliar-user timing, comprehension, representative
@@ -206,7 +206,7 @@ The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milesto
 
 The plan for strengthening the agent harness through M2 and GA is in [HARNESS-ROADMAP.md](HARNESS-ROADMAP.md).
 
-The latest release is **v0.3.1** ([release](https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.3.1), [changelog](../CHANGELOG.md#031---2026-10-22), [record](verification/README.md#v031-release-record-2026-10-22)); see [Releases](PRD.md#releases).
+The latest release is **v0.3.2** ([release](https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.3.2), [changelog](../CHANGELOG.md#032---2026-10-28)); see [Releases](PRD.md#releases). The previous one, v0.3.1, has a [release record](verification/README.md#v031-release-record-2026-10-22).
 
 The completed checkpoint from `verify/eks-leftovers@42d8127` is now included
 in PR #85. See the [EKS run](verification/EKS-2026-10-17.md) and

@@ -126,9 +126,9 @@ Every `evalsid` replica serves the API and OTLP ingest. The run scheduler and th
 A tagged release publishes the images (`ghcr.io/abhishek-rnjn/evalsi`, `evalsi-collector`) and the three charts as OCI artifacts, all signed with [cosign](https://docs.sigstore.dev/) keyless (the release workflow's GitHub identity, recorded in the Rekor log; no key to trust or rotate). The images carry BuildKit provenance and an SBOM, and an SPDX SBOM is attested with cosign and attached to the release.
 
 ```bash
-scripts/verify-release.sh 0.3.1                 # cosign verify, for every image and chart
-helm install evalsi-crds oci://ghcr.io/abhishek-rnjn/charts/evalsi-crds --version 0.3.1 --set operator.namespace=evalsi
-helm install evalsi oci://ghcr.io/abhishek-rnjn/charts/evalsi --version 0.3.1 -n evalsi
+scripts/verify-release.sh 0.3.2                 # cosign verify, for every image and chart
+helm install evalsi-crds oci://ghcr.io/abhishek-rnjn/charts/evalsi-crds --version 0.3.2 --set operator.namespace=evalsi
+helm install evalsi oci://ghcr.io/abhishek-rnjn/charts/evalsi --version 0.3.2 -n evalsi
 ```
 
 The script checks that each artifact was signed by `.github/workflows/release.yml` of this repository at the tag you name. To enforce it in the cluster, point a policy controller (Kyverno, Sigstore policy-controller) at the same identity and issuer (`https://token.actions.githubusercontent.com`).
@@ -138,7 +138,7 @@ The script checks that each artifact was signed by `.github/workflows/release.ym
 On a connected machine, bundle the images and charts (and, with `--with-cli`, wheels for the CLI):
 
 ```bash
-deploy/airgap/bundle.sh --tag 0.3.1 --out evalsi-bundle --with-cli
+deploy/airgap/bundle.sh --tag 0.3.2 --out evalsi-bundle --with-cli
 ```
 
 Docker 28+ scopes inspect, load and save to the bundle's platform. An older

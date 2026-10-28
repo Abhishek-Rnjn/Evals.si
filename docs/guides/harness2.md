@@ -15,7 +15,7 @@ trusted checkout of that upstream revision, and the SDK/harness environment,
 but no provider account, benchmark download or Docker. The
 [verification report](../verification/HARNESS2-2026-10-25.md#reproduce-the-no-cost-upstream-acceptance)
 gives exact commands. This acceptance script and the limit correction below
-are unreleased candidate changes, not features already established in PyPI 0.3.1.
+were added in 0.3.2; PyPI 0.3.1 does not have them.
 
 ## What you can do now
 

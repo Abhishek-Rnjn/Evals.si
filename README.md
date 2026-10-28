@@ -122,7 +122,7 @@ The second answer cites passage `[4]`, but only two passages were retrieved. Add
 
 </details>
 
-For the setup commands (0.3.1) and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
+For the setup commands (0.3.2) and maintained GitHub Action, see [guided setup](docs/guides/onboarding.md).
 For dataset version review and digest-pinned runs, see [dataset snapshots](docs/guides/dataset-snapshots.md).
 Validate the evaluator itself with [judge calibration](docs/guides/judge-calibration.md): freeze human labels, select prompts/models/thresholds on tuning cases, then measure held-out validity and fresh-call repeatability. Try the [offline example](examples/judge-calibration/README.md).
 Turn production incidents into reviewed regression cases with the [failure inbox](docs/guides/failure-inbox.md), then share [approved immutable dataset versions](docs/guides/dataset-catalog.md) and pin them in server runs. Compare a candidate with a reviewed baseline using [enforced release decisions](docs/guides/release-decisions.md), or configure and investigate the check in the [browser release workbench](docs/guides/release-workbench.md). Start an agent suite from the [support and refund starter](docs/guides/support-refund-suite.md): synthetic tasks graded on the final state of a simulated shop.
@@ -405,7 +405,7 @@ The Go server owns the API, runs, ingest, policies, auth and storage; evaluators
 
 ## Project status
 
-Evals.si is pre-1.0 (the latest release is `0.3.1`). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
+Evals.si is pre-1.0 (the latest release is `0.3.2`). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
 
 What is verified, in short:
 - **Kubernetes:** end-to-end on kind in every CI run (amd64, with Landlock), AKS and an Istio ambient cluster with KVM nodes. [Bounded EKS checks](docs/verification/EKS-2026-10-12.md) passed live KEDA, separate-host NATS broker recovery, pool isolation, application recovery, second-release coexistence, mounted Python/Wasm and managed alert firing/delivery/resolution. Stock admission is blocked by the control-plane/Calico path; an isolated trusted host-network workaround passed. M4 and GKE remain unverified.

@@ -86,8 +86,9 @@ returns nonzero; run it separately if your shell uses `set -e`.
 
 ## 5. Use a separate environment for development features
 
-The SQL lesson requires this checkout's unreleased database tool environment.
-Do not mix the published wheel and editable source in one environment:
+The SQL lesson requires the database tool environment, added in 0.3.2 after the
+0.3.1 release this course pins. Use 0.3.2 or later, or a source checkout as
+below. Do not mix the published wheel and editable source in one environment:
 
 ```bash
 deactivate

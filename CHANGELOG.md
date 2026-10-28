@@ -4,7 +4,13 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-28
+
+A patch number, but cut from `main` like 0.3.1: it carries new features as well as fixes.
+
 ### Upgrade notes
+
+- **Refresh the EvalRun CRD before upgrading the charts.** Helm does not upgrade CRDs, and the `EvalRun` schema gained fields (database and multi-service task environments, token traces, model pricing and more); with the old schema the API server drops them. Apply the new one first: `kubectl apply --server-side -f deploy/helm/evalsi-crds/crds/evals.si_evalruns.yaml` from the v0.3.2 checkout (or the `evalsi-crds` 0.3.2 chart's `crds/`).
 
 - `builtin/unit-tests` fails a program that exits before its tests finish, so
   tests must not end the program themselves. Instead of `unittest.main()`,
@@ -26,7 +32,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
   egress, actual online-policy evaluation and carried-budget limits without
   claiming real-benchmark or model-driven refinement qualification.
 
-- Minimal published-SDK first-result path and an unreleased `init --template
+- Minimal published-SDK first-result path and an `init --template
   application` starter for synchronous Python callables, with one-case preview,
   exact-case reproduction and distinct failed-check/execution exits. Existing
   recorded and agent templates remain available.
@@ -430,7 +436,8 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.
 
-[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.1.0...v0.2.0
