@@ -597,6 +597,69 @@ Not checked:
   charts (the upgrade notes are untested on a cluster), an import of the
   published bundle, the arm64 images and the arm64 wheel.
 
+## v0.3.2 release record (2026-10-28)
+
+Tag `v0.3.2` points at `90facf81e89ae1f1562be5d2ed43aef8c9b47dc7` (the merge of
+PR #165). The tag run is
+[40711976042](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/40711976042);
+the `release` environment approved the build and the `pypi` and `pypi-harness`
+environments the two PyPI uploads. All 14 jobs passed and the GitHub release was
+published at 15:49 UTC; nothing was fixed or done by hand.
+
+Like 0.3.1, the version was cut from `main`, not from a `release-0.3` branch as
+[RELEASING](../RELEASING.md) describes for patches, so it carries new features
+as well as fixes; the [changelog](../../CHANGELOG.md#032---2026-10-28)'s upgrade
+notes include refreshing the `EvalRun` CRD before upgrading the charts. It also
+carries the fixes for five findings of the pre-release audit (PR #164: B3, B4,
+B5, E1, H1).
+
+Gates on this exact commit before the tag:
+
+| Gate | Result |
+|------|--------|
+| CI on the merge to `main`, [run 40689873286](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/40689873286) | 25 of 26 jobs passed, including `kubernetes` (kind with Landlock, the bundle install with every image from the bundle, `kubectl apply matches evalsi run -f`, the pod and bubblewrap rungs, the M2 gated deploy, the M3 300-trace backfill with live lag p95 15.4 s, the namespace-only install under Pod Security restricted, ending `=== passed`), `rlframeworks`, `trainers`, `taubench`, `mcp-agent` and `release-check`. `service-environments` failed before any test ran, as it had on `main` since PR #162: `kind load docker-image` could not import the multi-platform `python:3.13-slim` (`ctr: content digest ... not found`). That was a CI setup fault, not a product one; PR #169 fixed it after the tag, and `main`'s CI on that merge ([run 40723427760](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/40723427760)) passed every job |
+| Release dry run, [run 40689935502](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/40689935502) | Passed, with the expected artifacts (both binaries, both wheel sets, Python distributions, charts, bundle); the amd64 archive ran and the amd64 platform wheel installed and its bundled `evalsid` ran |
+
+What the tag run published:
+
+| Artifact | Where |
+|----------|-------|
+| Images | `ghcr.io/abhishek-rnjn/evalsi:0.3.2` and `evalsi-collector:0.3.2` (also `latest`), signed; the `evalsi` image has an attested SPDX SBOM |
+| Charts | `oci://ghcr.io/abhishek-rnjn/charts/{evalsi,evalsi-crds,evalsi-sandboxd}:0.3.2`, signed |
+| Python | PyPI `evalsi` 0.3.2 (pure wheel, sdist, `manylinux_2_17_x86_64` and `manylinux_2_17_aarch64` platform wheels) and `evalsi-harness` 0.3.2 (wheel and sdist) |
+| Release assets | 14 files: the Linux amd64 and arm64 archives, the three `evalsi` wheels and sdist, the `evalsi-harness` wheel and sdist, the three charts, the amd64 bundle, `evalsi-0.3.2.spdx.json` and `SHA256SUMS` |
+
+Checked after publication, from a Linux amd64 container with Python 3.13:
+
+- The SHA-256 of all six PyPI files (four `evalsi`, two `evalsi-harness`)
+  equals their entry in the release's `SHA256SUMS`.
+- `evalsi[server]==0.3.2` and `evalsi-harness==0.3.2` installed into a clean
+  environment and both report 0.3.2; on Linux amd64 the installer picked the
+  `manylinux_2_17_x86_64` platform wheel. `evalsi evalsid-path` found the
+  bundled `evalsid`, which printed `evalsid 0.3.2 (api evalsi.v1alpha1)`.
+  `evalsi doctor` exited 0 and, as 0.3.2 now does by default, checked SDK
+  scoring only.
+- `evalsi init` created the recorded starter; `run.yaml` exited 0 and
+  `regressed.yaml` exited 3.
+- `evalsi init --template application` (new in 0.3.2) created the starter;
+  `evaluate.py --limit 1` and the full `evaluate.py` exited 0 (3 cases passed,
+  0 failed, 0 execution errors), and `evalsi report` wrote the HTML report.
+- The root Action's default moved to 0.3.2 (PR #169), and its `onboarding` CI
+  job passed against the published 0.3.2.
+
+A maintainer checked after publication, from their own machine:
+
+- `SHA256SUMS` verified every release file.
+- `scripts/verify-release.sh 0.3.2` verified the signatures of both images and
+  the three charts, and the `evalsi` image's SBOM attestation, against the
+  release workflow's identity at `v0.3.2`.
+
+Not checked:
+
+- A chart install from the published OCI charts, an upgrade from the 0.3.1
+  charts (including the `EvalRun` CRD refresh in the upgrade notes), an import
+  of the published bundle, the arm64 images and the arm64 wheel.
+
 ## Multi-service environments (2026-10-17)
 
 The pod-native service lifecycle passed a bounded local kind/Calico check:
