@@ -102,12 +102,7 @@ func (p *processRung) open(ctx context.Context, sp *Spec, dir, from string) (bac
 			}
 		}
 	}
-	if err := os.MkdirAll(b.work, 0o777); err != nil {
-		return nil, fmt.Errorf("creating the workdir: %w", err)
-	}
-	// The sandboxed user may be mapped to another uid; the sandbox directory
-	// itself is private (0700) to the evalsid user.
-	if err := os.Chmod(b.work, 0o777); err != nil {
+	if err := b.makeWorkdir(); err != nil {
 		return nil, err
 	}
 	if from == "" && len(sp.Files) > 0 {
@@ -225,6 +220,41 @@ func (b *hostBackend) exec(ctx context.Context, e *Exec, stdout, stderr io.Write
 		}
 	}
 	return res
+}
+
+// makeWorkdir creates the workdir and opens it to the sandboxed user, who may
+// be mapped to another uid (the sandbox directory itself is private, 0700, to
+// the evalsid user). With a writable image root the workdir lives in a tree
+// the image and the sandboxed command control, so it is made through os.Root
+// and must not be a symlink: a planted link (kept by snapshots) would make
+// evalsid create or chmod host directories, or bind one into a service.
+func (b *hostBackend) makeWorkdir() error {
+	if b.root == "" {
+		if err := os.MkdirAll(b.work, 0o777); err != nil {
+			return fmt.Errorf("creating the workdir: %w", err)
+		}
+		return os.Chmod(b.work, 0o777)
+	}
+	r, err := os.OpenRoot(b.root)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	rel := strings.TrimPrefix(path.Clean("/"+b.sp.Workdir), "/")
+	if rel == "" {
+		rel = "."
+	}
+	if err := r.MkdirAll(rel, 0o777); err != nil {
+		return fmt.Errorf("creating the workdir: %w", err)
+	}
+	fi, err := r.Lstat(rel)
+	if err != nil {
+		return fmt.Errorf("creating the workdir: %w", err)
+	}
+	if fi.Mode()&fs.ModeSymlink != 0 {
+		return fmt.Errorf("workdir %s is a symlink in the sandbox root", b.sp.Workdir)
+	}
+	return r.Chmod(rel, 0o777)
 }
 
 // openRoot is the directory a file path resolves in: the writable root for
