@@ -134,3 +134,47 @@ func (e *Engine) check(s *snapshot, p *auth.Principal, project string, next []gr
 	}
 	return nil
 }
+
+// CheckKeyLabels checks that p may put these labels on an API key. Labels
+// are visible to rules, role conditions and cel: subjects, so while any of
+// them reads key labels a label can grant access (a binding to
+// cel:principal.labels.team == "admin", say), and only an owner may set them.
+func (e *Engine) CheckKeyLabels(p *auth.Principal, labels map[string]string) error {
+	if len(labels) == 0 || e.IsOwner(p) {
+		return nil
+	}
+	if where := e.keyLabelReader(); where != "" {
+		return fmt.Errorf("only an owner can put labels on an API key while %s reads key labels", where)
+	}
+	return nil
+}
+
+// keyLabelReader names the first rule, role condition or cel: subject that
+// reads API key labels, or returns "".
+func (e *Engine) keyLabelReader() string {
+	for i, r := range e.rules {
+		if readsKeyLabels(r.expr) {
+			return fmt.Sprintf("authorization.rules[%d]", i)
+		}
+	}
+	for _, o := range e.owners {
+		if o.kind == "cel" && readsKeyLabels(o.value) {
+			return "rbac.owners " + o.raw
+		}
+	}
+	s := e.snap.Load()
+	for k, r := range s.roles {
+		if r.Condition != "" && readsKeyLabels(r.Condition) {
+			if k.project == "" {
+				return fmt.Sprintf("the condition of role %q", k.name)
+			}
+			return fmt.Sprintf("the condition of role %q in project %q", k.name, k.project)
+		}
+	}
+	for _, b := range s.bindings {
+		if b.subj.kind == "cel" && readsKeyLabels(b.subj.value) {
+			return "the binding of " + b.Subject
+		}
+	}
+	return ""
+}

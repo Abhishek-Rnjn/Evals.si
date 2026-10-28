@@ -97,6 +97,45 @@ func conjuncts(expr string) ([]string, error) {
 	return slices.Compact(out), nil
 }
 
+// readsKeyLabels reports whether an expression can read an API key's labels:
+// through principal.labels or apiKey.labels, or through principal or apiKey
+// used other than to select another field (a dynamic index, the whole map).
+// An expression that does not parse counts as reading them.
+func readsKeyLabels(expr string) bool {
+	ast, issues := celEnv.Parse(expr)
+	if issues != nil && issues.Err() != nil {
+		return true
+	}
+	keyVar := func(e celast.Expr) bool {
+		return e.Kind() == celast.IdentKind && (e.AsIdent() == "principal" || e.AsIdent() == "apiKey")
+	}
+	// Parents are visited first, so a variable is marked safe before it is seen.
+	safe := map[int64]bool{}
+	reads := false
+	celast.PreOrderVisit(ast.NativeRep().Expr(), celast.NewExprVisitor(func(e celast.Expr) {
+		switch e.Kind() {
+		case celast.SelectKind:
+			if sel := e.AsSelect(); keyVar(sel.Operand()) && sel.FieldName() != "labels" {
+				safe[sel.Operand().ID()] = true
+			}
+		case celast.CallKind:
+			c := e.AsCall()
+			if c.FunctionName() == operators.Index && len(c.Args()) == 2 && keyVar(c.Args()[0]) {
+				if k := c.Args()[1]; k.Kind() == celast.LiteralKind {
+					if f, ok := k.AsLiteral().(types.String); ok && string(f) != "labels" {
+						safe[c.Args()[0].ID()] = true
+					}
+				}
+			}
+		case celast.IdentKind:
+			if keyVar(e) && !safe[e.ID()] {
+				reads = true
+			}
+		}
+	}))
+	return reads
+}
+
 // redactedHeaders are never visible to rules.
 var redactedHeaders = map[string]bool{"authorization": true, "cookie": true, "x-api-key": true, "proxy-authorization": true}
 

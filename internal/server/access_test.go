@@ -989,6 +989,25 @@ func TestAuthServiceAndAudit(t *testing.T) {
 	if _, err := ci.ListRuns(ctx, connect.NewRequest(&evalsiv1alpha1.ListRunsRequest{})); codeOf(err) != connect.CodeUnauthenticated {
 		t.Errorf("revoked key: %v", err)
 	}
+	// Once a binding reads key labels, a label grants access: only an owner may set one.
+	labelled := func(c evalsiv1alpha1connect.AuthServiceClient, name string) error {
+		_, err := c.CreateAPIKey(ctx, connect.NewRequest(&evalsiv1alpha1.CreateAPIKeyRequest{
+			Name: name, Roles: map[string]*evalsiv1alpha1.RoleList{"support": {Roles: []string{"runner"}}},
+			Labels: map[string]string{"team": "platform"},
+		}))
+		return err
+	}
+	if _, err := owner.CreateBinding(ctx, connect.NewRequest(&evalsiv1alpha1.CreateBindingRequest{Binding: &evalsiv1alpha1.RoleBinding{
+		Project: "labs", Role: "admin", Subject: `cel:principal.labels.team == "platform"`,
+	}})); err != nil {
+		t.Fatal(err)
+	}
+	if err := labelled(admin, "labelled"); codeOf(err) != connect.CodePermissionDenied || !strings.Contains(err.Error(), "only an owner") {
+		t.Errorf("admin labelling a key that a binding reads: %v", err)
+	}
+	if err := labelled(owner, "labelled"); err != nil {
+		t.Errorf("owner labelling a key: %v", err)
+	}
 	// A stored binding takes effect on the next request.
 	if _, err := owner.CreateBinding(ctx, connect.NewRequest(&evalsiv1alpha1.CreateBindingRequest{Binding: &evalsiv1alpha1.RoleBinding{
 		Project: "labs", Role: "viewer", Subject: "key:checkout-viewer",
