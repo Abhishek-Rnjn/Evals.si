@@ -17,7 +17,7 @@ from typing import Any
 
 from evalsi._version import __version__
 from evalsi.convert import from_struct, record_from_proto
-from evalsi.datasets import DatasetError, load_records, records_hash, split_uri
+from evalsi.datasets import DatasetError, check_cluster_key, load_records, records_hash, split_uri
 from evalsi.evaluator import BoundEvaluator, EvalContext, EvaluatorConfigError
 from evalsi.judges import JudgeClient, JudgeConfig, create_judge
 from evalsi.judges.cache import JudgeCache
@@ -169,6 +169,7 @@ async def execute(
     spec = run.spec
     instances = bind_evaluators(_evaluator_entries(spec), registry=registry)
     records = load_dataset(spec.dataset, run.base_dir)
+    check_cluster_key(records, spec.summary.cluster_by or None)
     trials = max(spec.trials, 1)
 
     judge_client = judge if isinstance(judge, JudgeClient) else None

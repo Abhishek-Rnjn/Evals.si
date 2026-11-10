@@ -243,3 +243,110 @@ def test_composite_upload_is_opt_in_and_final_step_preserves_failure() -> None:
     assert "inputs.artifact-name != ''" in upload["if"]
     assert steps[-1]["if"] == "always()"
     assert "else 1" in steps[-1]["run"]
+
+
+def _fake_github(comments: list[dict[str, Any]], seen: list[tuple[str, str, str | None]]) -> Any:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class GitHub(BaseHTTPRequestHandler):
+        def reply(self, status: int, body: Any) -> None:
+            data = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def handle_one(self, method: str) -> None:
+            seen.append((method, self.path, self.headers.get("Authorization")))
+            length = int(self.headers.get("Content-Length") or 0)
+            body: Any = json.loads(self.rfile.read(length)) if length else None
+            if self.headers.get("Authorization") != "Bearer good-token":
+                return self.reply(403, {"message": "Resource not accessible by integration"})
+            if method == "GET":
+                return self.reply(200, comments)
+            if method == "POST":
+                comments.append({"id": 7, "body": body["body"]})
+                return self.reply(201, comments[-1])
+            target = next(c for c in comments if self.path.endswith(f"/{c['id']}"))
+            if target["id"] == 99:
+                return self.reply(403, {"message": "Resource not accessible by integration"})
+            target["body"] = body["body"]
+            return self.reply(200, target)
+
+        def do_GET(self) -> None:
+            self.handle_one("GET")
+
+        def do_POST(self) -> None:
+            self.handle_one("POST")
+
+        def do_PATCH(self) -> None:
+            self.handle_one("PATCH")
+
+        def log_message(self, *args: Any) -> None:
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), GitHub)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_pr_comment_is_created_then_updated_and_never_changes_the_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    comments: list[dict[str, Any]] = []
+    seen: list[tuple[str, str, str | None]] = []
+    server = _fake_github(comments, seen)
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"pull_request": {"number": 12}}))
+    project = tmp_path / "project"
+    assert main(["init", str(project)]) == 0
+    monkeypatch.setenv("EVALSI_ACTION_PR_COMMENT", "true")
+    monkeypatch.setenv("EVALSI_ACTION_GITHUB_TOKEN", "good-token")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "acme/agent")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GITHUB_API_URL", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    try:
+        code, summary, _ = invoke(tmp_path, project, "run.yaml")
+        assert code == 0
+        assert "PR comment posted." in summary
+        assert len(comments) == 1
+        assert comments[0]["body"].startswith("<!-- evalsi-gate:")
+        assert "# Evals.si gate" in comments[0]["body"]
+        assert "Capital of France?" not in comments[0]["body"]
+        assert ("POST", "/repos/acme/agent/issues/12/comments", "Bearer good-token") in seen
+
+        code, summary, _ = invoke(tmp_path, project, "regressed.yaml")
+        assert code == 3
+        # Another spec is another comment; the same spec updates its own.
+        assert len(comments) == 2
+        comments.pop()
+        code, summary, _ = invoke(tmp_path, project, "run.yaml")
+        assert "PR comment updated." in summary
+        assert len(comments) == 1
+
+        # Someone else's comment with our marker refuses the PATCH: post our own.
+        marker_line = comments[0]["body"].splitlines()[0]
+        comments[:] = [{"id": 99, "body": f"{marker_line}\nforeign"}]
+        code, summary, _ = invoke(tmp_path, project, "run.yaml")
+        assert "PR comment posted." in summary
+        assert [c["id"] for c in comments] == [99, 7]
+
+        # A token without permission (a fork's) leaves the gate's outcome alone.
+        monkeypatch.setenv("EVALSI_ACTION_GITHUB_TOKEN", "read-only")
+        code, summary, _ = invoke(tmp_path, project, "regressed.yaml")
+        assert code == 3
+        assert "PR comment not posted (HTTP 403)" in summary
+        assert "read-only" not in summary
+
+        # Not a pull request: nothing is called.
+        event.write_text(json.dumps({"ref": "refs/heads/main"}))
+        calls = len(seen)
+        code, summary, _ = invoke(tmp_path, project, "run.yaml")
+        assert code == 0
+        assert "PR comment skipped" in summary
+        assert len(seen) == calls
+    finally:
+        server.shutdown()
+        server.server_close()

@@ -644,6 +644,18 @@ func TestListAndCompare(t *testing.T) {
 	if _, err := h.m.CompareRuns(context.Background(), connect.NewRequest(&evalsiv1alpha1.CompareRunsRequest{BaselineRunId: "x", CandidateRunId: cand.GetId()})); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("unknown run: %v", err)
 	}
+	// A pass/fail difference lies in [-1, 1]; a t interval on four pairs must not run past it.
+	wide := h.create(t, spec("flaky", "flaky", "flaky", "flaky")) // their second calls: wrong, wrong, right, wrong
+	h.wait(t, wide.GetId())
+	cmp, err = h.m.CompareRuns(context.Background(), connect.NewRequest(&evalsiv1alpha1.CompareRunsRequest{
+		BaselineRunId: cand.GetId(), CandidateRunId: wide.GetId(),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ci := cmp.Msg.GetComparisons()[0].GetDiffCi(); ci == nil || ci.GetLow() != -1 || ci.GetHigh() > 1 || ci.GetLow() > ci.GetHigh() {
+		t.Errorf("difference interval = %v", ci)
+	}
 }
 
 func agentSpec(inputs ...string) *evalsiv1alpha1.RunSpec {

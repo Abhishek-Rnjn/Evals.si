@@ -194,6 +194,10 @@ def token_f1(record: Record) -> Score:
     best = 0.0
     for ref_text in _references(record.reference):
         ref = Counter(_squad_normalize(ref_text))
+        if not hyp and not ref:
+            # SQuAD: two answers that normalize to nothing ("the" and "the") agree.
+            best = 1.0
+            continue
         best = max(best, _f1(sum((hyp & ref).values()), sum(hyp.values()), sum(ref.values())))
     return Score(number=best)
 

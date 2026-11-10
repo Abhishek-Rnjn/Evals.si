@@ -247,8 +247,63 @@
     ]);
     const next = resp.nextPageToken
       ? el("p", {}, el("a", { href: `#/runs?page=${encodeURIComponent(resp.nextPageToken)}` }, "Older runs →")) : null;
+    // A new server: say how the first run gets here, instead of an empty table.
+    const origin = location.origin;
+    const firstRun = !rows.length && !query.get("page") ? el("div", { class: "card", id: "first-run" },
+      el("h2", {}, "No runs in this project yet"),
+      el("p", {}, "Send one from a terminal. This scores two recorded answers, needs no model or API key, and fails its gate on purpose so you can see a failure:"),
+      el("pre", { class: "content", tabindex: 0 }, [
+        "pip install evalsi",
+        "cat > first-run.yaml <<'YAML'",
+        "apiVersion: evals.si/v1alpha1",
+        "kind: EvalRun",
+        `metadata: {name: first-run${project && project !== "default" ? `, project: ${project}` : ""}}`,
+        "spec:",
+        "  dataset:",
+        "    inline:",
+        "      records:",
+        "        - {id: correct, input: \"Return window?\", output: \"30 days\", reference: \"30 days\"}",
+        "        - {id: regression, input: \"Return window?\", output: \"7 days\", reference: \"30 days\"}",
+        "  evaluators: [{ref: exact-match}]",
+        "  gates: [{metric: exact-match, min: 1.0}]",
+        "YAML",
+        `evalsi run -f first-run.yaml --server ${origin}`,
+      ].join("\n")),
+      el("p", {}, "Or ", el("a", { href: "#/workbench" }, "configure a run in the release workbench"), " from an approved dataset."),
+    ) : null;
     show(el("h1", {}, "Runs"), el("p", {}, compare, " ", el("a", { href: "#/workbench" }, "Configure a regression run")),
-      table(["", "Run", "Status", "Gates", "Records", "Created", "By", "Labels"], rows, [4]), next);
+      firstRun || table(["", "Run", "Status", "Gates", "Records", "Created", "By", "Labels"], rows, [4]), next);
+  }
+
+  // Runs a finished run's spec again as a new run: the same dataset, target,
+  // evaluators and gates, with the viewer's own permissions.
+  function rerunControl(run) {
+    const done = ["RUN_STATUS_SUCCEEDED", "RUN_STATUS_FAILED", "RUN_STATUS_ERROR", "RUN_STATUS_CANCELLED"].includes(run.status);
+    if (!done || !run.spec || run.archivedAt) return el("span");
+    // A stored spec keeps no inline records. Recorded outputs can be scored
+    // again from this run's own records; a target or agent cannot be re-run
+    // without the inputs, which only the caller's spec file has.
+    let spec = run.spec;
+    if (spec.dataset?.inline) {
+      if (spec.target || spec.harness) {
+        return el("p", { class: "sub", id: "rerun-unavailable" }, "To run this again, send its spec file again (evalsi run -f … --server): inline records are not kept with a run.");
+      }
+      spec = { ...spec, dataset: { ...spec.dataset, inline: undefined, run: { runId: run.id } } };
+    }
+    const slot = el("span");
+    const button = el("button", { type: "button", id: "rerun", onclick: async () => {
+      const calls = run.spec.target || run.spec.judge ? " It may call the configured model or agent again and spend tokens." : "";
+      if (!window.confirm(`Start a new run with this run's spec?${calls}`)) return;
+      button.disabled = true;
+      try {
+        const resp = await post("/v1alpha1/runs", { name: run.name || "", project: run.project || project, labels: run.labels || {}, spec });
+        location.hash = `#/runs/${encodeURIComponent(resp.run.id)}`;
+      } catch (err) {
+        button.disabled = false;
+        notice(slot, err);
+      }
+    } }, "Run again");
+    return el("p", {}, button, " ", slot);
   }
 
   async function viewRun(id) {
@@ -286,6 +341,7 @@
         ])),
         ["RUN_STATUS_SUCCEEDED", "RUN_STATUS_FAILED"].includes(run.status) ? el("p", {}, el("a", { href: "#/releases" }, "Compare runs and decide a release")) : el("span"),
         el("p", {}, el("a", { href: workbench().workbenchLink({ project: run.project, baseline: run.id }) }, "Use as an explicit baseline in the workbench")),
+        rerunControl(run),
         el("h2", {}, "Metrics"),
         table(["Metric", "Kind", "n", "Mean", "Interval", "", "Skipped", "Errors", "Labels"], metrics, [2, 3, 6, 7]),
         gates.length ? el("h2", {}, "Gates") : el("span"), gates.length ? table(["Metric", "Stat", "Bound", "Value", "", "Reason"], gates, [3]) : el("span"),
@@ -353,12 +409,13 @@
     };
     sortBy.addEventListener("change", render);
     render();
-    box.replaceChildren(
+    // replaceChildren writes a null argument as the text "null": keep only nodes.
+    box.replaceChildren(...[
       el("p", { class: "sub" }, `${byRecord.size} record result(s)${pageToken ? " (later page)" : resp.nextPageToken ? " (first page)" : ""}. Sort: `, sortBy),
       holder,
       resp.nextPageToken ? el("button", { onclick: () => loadResults(run, box, resp.nextPageToken).catch(err => notice(box, err)) }, "Next results page") : null,
       pageToken ? el("button", { onclick: () => loadResults(run, box).catch(err => notice(box, err)) }, "First results page") : null,
-    );
+    ].filter(Boolean));
     if (focusedSort) sortBy.focus({ preventScroll: true });
     else if (focusedKey) [...box.querySelectorAll("details")].find(d => d.dataset.recordKey === focusedKey)?.querySelector("summary")?.focus({ preventScroll: true });
   }

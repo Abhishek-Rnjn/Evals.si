@@ -1034,3 +1034,57 @@ test('the workbench admits recorded and model runs with explicit budgets and no 
   } catch (err) { console.error(await page.locator('#main').innerText()); throw err; }
   finally { await page.close(); await new Promise(resolve => model.close(resolve)); }
 });
+
+test('a new server leads from its root to a first run, and a finished run can be run again', async () => {
+  const url = await startServer('first-run');
+  const page = await browser.newPage();
+  const problems = await watch(page);
+  page.on('dialog', dialog => dialog.accept());
+
+  // The address someone types first.
+  await page.goto(`${url}/`);
+  await page.waitForSelector('#first-run');
+  assert.equal(new URL(page.url()).pathname, '/ui/');
+  const commands = await page.textContent('#first-run pre');
+  assert.match(commands, /pip install evalsi/);
+  assert.ok(commands.includes(`evalsi run -f first-run.yaml --server ${url}`), commands);
+  await checkAccessibility(page);
+
+  const created = await fetch(`${url}/v1alpha1/runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'first-run',
+      spec: {
+        dataset: { inline: { records: [
+          { id: 'correct', input: { text: 'q' }, output: { text: '30 days' }, reference: { text: '30 days' } },
+          { id: 'regression', input: { text: 'q' }, output: { text: '7 days' }, reference: { text: '30 days' } },
+        ] } },
+        evaluators: [{ ref: 'exact-match' }],
+        gates: [{ metric: 'exact-match', min: 1 }, { metric: 'exact-match', stat: 'GATE_STAT_SKIPPED_RATE', max: 0 }],
+      },
+    }),
+  });
+  assert.equal(created.status, 200, await created.clone().text());
+  const first = (await created.json()).run.id;
+
+  await page.goto(`${url}/ui/#/runs/${first}`);
+  await page.waitForSelector('#rerun');
+  await page.waitForSelector('details[data-record-key]');
+  const text = await page.textContent('#main');
+  // replaceChildren once wrote its null arguments under the records table.
+  assert.doesNotMatch(text, /null/);
+  assert.match(text, /skipped.rate/i);
+
+  // The stored spec has no inline records: the new run scores this run's records.
+  await page.click('#rerun');
+  await page.waitForFunction(id => location.hash.startsWith('#/runs/') && !location.hash.endsWith(id), first);
+  await page.waitForFunction(() => /\((failed|succeeded)\)/.test(document.querySelector('#main h1')?.textContent ?? ''));
+  assert.match(await page.textContent('#main h1'), /first-run \(failed\)/);
+  await page.goto(`${url}/ui/#/runs`);
+  await page.waitForSelector('#main table tbody tr');
+  assert.equal(await page.locator('#main table tbody tr').count(), 2);
+  assert.equal(await page.locator('#first-run').count(), 0);
+  assert.deepEqual(problems, []);
+  await page.close();
+});

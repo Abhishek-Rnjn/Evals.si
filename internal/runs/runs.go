@@ -505,6 +505,11 @@ func (m *Manager) resolvePath(rel, project string) (string, error) {
 	if filepath.IsAbs(rel) {
 		return "", invalid("dataset paths must be relative to the server's datasets_dir")
 	}
+	// Refused by its spelling, before the file system is asked: otherwise the
+	// two errors below tell a caller which paths exist on the server's host.
+	if c := filepath.Clean(rel); c == ".." || strings.HasPrefix(c, ".."+string(os.PathSeparator)) {
+		return "", invalid("dataset %q is outside the server's datasets_dir", rel)
+	}
 	full, err := filepath.EvalSymlinks(filepath.Join(root, rel))
 	if err != nil {
 		return "", invalid("dataset %q: %v", rel, errors.Unwrap(err))
@@ -1291,6 +1296,14 @@ func CheckGates(gates []*evalsiv1alpha1.Gate, summaries []*evalsiv1alpha1.Metric
 			if ran := s.GetN() + s.GetErrors(); ran > 0 {
 				value = proto.Float64(float64(s.GetErrors()) / float64(ran))
 			}
+		case evalsiv1alpha1.GateStat_GATE_STAT_SKIPPED_RATE:
+			stat = "skipped_rate"
+			if all := s.GetN() + s.GetSkipped() + s.GetErrors(); all > 0 {
+				value = proto.Float64(float64(s.GetSkipped()) / float64(all))
+			}
+		case evalsiv1alpha1.GateStat_GATE_STAT_COUNT:
+			stat = "count"
+			value = proto.Float64(float64(s.GetN()))
 		default:
 			value = s.Mean
 		}

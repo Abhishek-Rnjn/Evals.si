@@ -62,6 +62,18 @@ def record_values(data: Mapping[str, Any]) -> dict[str, dict[str, float]]:
     return out
 
 
+def _span(*summaries: Mapping[str, Any]) -> float | None:
+    """The width of a metric's range when it is known: 1 for a pass/fail
+    metric, max - min for a number with both bounds declared."""
+    for s in summaries:
+        if s.get("kind") == "proportion":
+            return 1.0
+        lo, hi = s.get("min"), s.get("max")
+        if isinstance(lo, int | float) and isinstance(hi, int | float) and hi > lo:
+            return float(hi - lo)
+    return None
+
+
 def compare_results(
     baseline: Mapping[str, Any], candidate: Mapping[str, Any], *, level: float = 0.95
 ) -> list[MetricComparison]:
@@ -91,6 +103,11 @@ def compare_results(
             else:
                 interval = t_interval(diffs, level)
             if interval is not None and interval.low == interval.low:  # not NaN
+                # The difference of two values in [lo, hi] lies in [lo - hi, hi - lo]: with
+                # few records a t interval runs past that, to a difference no pair can have.
+                span = _span(cand_sum[metric], base_sum[metric])
+                if span is not None:
+                    interval = interval.clipped(-span, span)
                 c.diff_low, c.diff_high = interval.low, interval.high
                 c.significant = interval.low > 0 or interval.high < 0
         higher = cand_sum[metric].get("higher_is_better", True) is not False

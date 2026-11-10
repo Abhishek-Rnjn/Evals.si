@@ -1,8 +1,10 @@
 package runs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -91,5 +93,31 @@ func TestResolvePathRefusesAliasesIntoAnotherProject(t *testing.T) {
 	}
 	if _, err := m.resolvePath("promoted/support/secret.jsonl", "checkout"); err != nil {
 		t.Errorf("the spelled path (checked by access rules): %v", err)
+	}
+}
+
+// A path that leaves datasets_dir is refused by its spelling: the error for a
+// file that exists outside it must not differ from the error for one that
+// does not, or a caller could map the server's file system.
+func TestResolvePathDoesNotRevealWhatExistsOutside(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "datasets")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "exists.jsonl"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{opts: Options{DatasetsDir: root}}
+	_, there := m.resolvePath("../exists.jsonl", "p")
+	_, missing := m.resolvePath("../missing.jsonl", "p")
+	if there == nil || missing == nil {
+		t.Fatalf("resolved outside datasets_dir: %v, %v", there, missing)
+	}
+	want := func(name string) string {
+		return fmt.Sprintf("dataset %q is outside the server's datasets_dir", name)
+	}
+	if !strings.Contains(there.Error(), want("../exists.jsonl")) || !strings.Contains(missing.Error(), want("../missing.jsonl")) {
+		t.Errorf("errors differ in kind:\n  %v\n  %v", there, missing)
 	}
 }

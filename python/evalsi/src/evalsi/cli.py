@@ -54,12 +54,75 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 141
 
 
+# The commands `evalsi --help` describes, and the groups it only names: forty
+# commands in one list hide the six a new user needs. `evalsi --help-all` lists
+# every command; a command missing from these groups is listed under "other".
+_START_HERE = ("init", "doctor", "eval", "run", "compare", "report", "catalog", "serve")
+_COMMAND_GROUPS = (
+    ("runs on a server", ("gate", "release", "delete-run", "archive-run", "promote", "shadow")),
+    ("datasets and review", ("dataset", "inbox", "annotate", "calibrate", "canary")),
+    ("production traces", ("policy", "source", "traces", "guardrails")),
+    ("agents and harnesses", ("matrix", "ablate", "harness2", "determinism", "mcp")),
+    ("training", ("rewards", "checkpoints")),
+    ("analysis and plugins", ("analyze", "plugins")),
+    ("access", ("login", "logout", "whoami", "auth", "credentials")),
+    ("plumbing", ("worker", "evalsid-path", "version")),
+)
+
+
+class _GroupedHelp(argparse.Action):
+    """`--help`: the commands to start with, described, and the rest by group."""
+
+    def __call__(self, parser: argparse.ArgumentParser, *_: Any, **__: Any) -> None:
+        commands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+        helps = {c.dest: c.help or "" for c in commands._choices_actions}
+        lines = [
+            "usage: evalsi COMMAND [options]",
+            "",
+            parser.description or "",
+            "",
+            "start here:",
+        ]
+        width = max(len(name) for name in _START_HERE)
+        lines += [f"  {name.ljust(width)}  {helps[name]}" for name in _START_HERE if name in helps]
+        lines += ["", "more commands (evalsi COMMAND --help describes each):"]
+        grouped = set(_START_HERE)
+        groups: list[tuple[str, tuple[str, ...]]] = list(_COMMAND_GROUPS)
+        for _title, members in groups:
+            grouped.update(members)
+        other = tuple(name for name in helps if name not in grouped)
+        if other:
+            groups.append(("other", other))
+        width = max(len(title) for title, _members in groups)
+        for title, members in groups:
+            present = [name for name in members if name in helps]
+            if present:
+                lines.append(f"  {title.ljust(width)}  {', '.join(present)}")
+        lines += [
+            "",
+            "options:",
+            "  -h, --help   show this message",
+            "  --help-all   describe every command",
+            "  --version    show the version",
+        ]
+        parser.exit(message="\n".join(lines) + "\n")
+
+
+def _add_top_level_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("-h", "--help", action=_GroupedHelp, nargs=0, help="show the main commands")
+    parser.add_argument(
+        "--help-all", action="help", default=argparse.SUPPRESS, help="describe every command"
+    )
+    parser.add_argument("--version", action="version", version=f"evalsi {__version__}")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="evalsi",
         description="Evaluate AI agents, RAG pipelines, LLMs and models, from CI to training.",
+        add_help=False,
     )
-    parser.add_argument("--version", action="version", version=f"evalsi {__version__}")
+    _add_top_level_options(parser)
     sub = parser.add_subparsers(dest="command", required=True)
 
     _add_eval(sub)
@@ -200,11 +263,25 @@ def _add_run(sub: Any) -> None:
     _add_judge_args(rn)
     rn.set_defaults(func=_cmd_run)
 
-    cmp = sub.add_parser("compare", help="paired comparison of two server runs")
-    cmp.add_argument("baseline")
-    cmp.add_argument("candidate")
-    cmp.add_argument("--server", required=True, help="evalsid URL")
+    cmp = sub.add_parser(
+        "compare",
+        help="paired comparison of two results files, or of two server runs",
+        description=(
+            "Compare a candidate with a baseline, paired by record and trial. Without --server "
+            "the arguments are results files (evalsi run --output, evalsi eval --output); with "
+            "--server they are run ids."
+        ),
+    )
+    cmp.add_argument("baseline", help="results file, or run id with --server")
+    cmp.add_argument("candidate", help="results file, or run id with --server")
+    cmp.add_argument("--server", help="evalsid URL: compare two of its runs by id")
     cmp.add_argument("--format", choices=["table", "json"], default="table")
+    cmp.add_argument("--confidence", type=float, default=0.95, help="results files: interval level")
+    cmp.add_argument(
+        "--fail-on-regression",
+        action="store_true",
+        help="results files: exit 3 when a metric is significantly worse in the candidate",
+    )
     add_credential_args(cmp)
     cmp.set_defaults(func=_cmd_compare)
 
@@ -647,6 +724,10 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         print(file=sys.stderr)
     if args.output:
         result.save(args.output)
+    if not result.records:
+        # Nothing was evaluated: an empty or wrong file must not look like success.
+        print(f"error: {args.data}: the dataset has no records", file=sys.stderr)
+        return 1
     if args.format == "json":
         payload = {
             "manifest": result.manifest,
@@ -789,6 +870,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if show:
         print(file=sys.stderr)
     result = outcome.result
+    if not result.manifest["dataset"]["records"]:
+        # As on a server: a run over nothing must not pass, with or without gates.
+        print("error: the dataset has no records", file=sys.stderr)
+        return 1
     advice = _trial_advice(result)
     if args.output:
         payload = result.to_dict()
@@ -833,7 +918,27 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"\n{len(errors)} evaluation(s) errored and are excluded from the metrics.",
             file=sys.stderr,
         )
+    if not args.quiet:
+        _warn_uncovered_gates(gates, result.summaries)
     return 0 if outcome.passed else EXIT_GATES_FAILED
+
+
+def _warn_uncovered_gates(gates: list[dict[str, Any]], summaries: Any) -> None:
+    """A mean leaves skipped records out: say so when a gate passed on a metric
+    that skipped some, and nothing gates how many."""
+    covered = {g.get("metric") for g in gates if g.get("stat") in ("skipped_rate", "count")}
+    by_metric = {s.metric: s for s in summaries}
+    for metric in dict.fromkeys(g.get("metric") for g in gates if g.get("passed")):
+        s = by_metric.get(metric)
+        if s is None or not s.skipped or metric in covered:
+            continue
+        print(
+            f"\nwarning: the gate on {metric} passed on {s.n} scored evaluation(s); "
+            f"{s.skipped} were skipped and are not in its mean. Gate them too: "
+            f"{{metric: {metric}, stat: GATE_STAT_SKIPPED_RATE, max: 0}} or "
+            f"{{metric: {metric}, stat: GATE_STAT_COUNT, min: N}}.",
+            file=sys.stderr,
+        )
 
 
 def _trial_advice(result: Any) -> dict[str, Any] | None:
@@ -1350,7 +1455,74 @@ def _fmt3(value: float | None) -> str:
     return "-" if value is None else f"{value:.3f}"
 
 
+def _load_results_file(path: str) -> dict[str, Any]:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except OSError as exc:
+        raise DatasetError(f"{path}: {exc.strerror or exc}") from exc
+    except ValueError as exc:
+        raise DatasetError(f"{path}: not JSON: {exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("summaries"), list):
+        raise DatasetError(
+            f"{path} is not a results file: write one with `evalsi run --output` or "
+            "`evalsi eval --output` (to compare two server runs by id, pass --server)"
+        )
+    return data
+
+
+def _compare_files(args: argparse.Namespace) -> int:
+    from evalsi.compare import compare_results
+
+    if not 0 < args.confidence < 1:
+        raise ValueError("confidence must be between 0 and 1")
+    baseline, candidate = _load_results_file(args.baseline), _load_results_file(args.candidate)
+    comparisons = compare_results(baseline, candidate, level=args.confidence)
+    regressed = [c.metric for c in comparisons if c.regressed]
+    if args.format == "json":
+        print(json.dumps([c.to_dict() for c in comparisons], indent=2))
+    elif not comparisons:
+        print("the two results files share no metrics")
+    else:
+        rows = [["metric", "n", "baseline", "candidate", "diff", "CI", ""]]
+        for c in comparisons:
+            verdict = "REGRESSED" if c.regressed else "improved" if c.significant else ""
+            rows.append(
+                [
+                    c.metric,
+                    str(c.paired_n),
+                    _fmt3(c.baseline_mean),
+                    _fmt3(c.candidate_mean),
+                    _fmt3(c.diff),
+                    "-" if c.diff_low is None else f"[{c.diff_low:.3f}, {c.diff_high:.3f}]",
+                    verdict,
+                ]
+            )
+        _print_rows(rows)
+        hashes = [
+            (d.get("manifest") or {}).get("dataset", {}).get("sha256")
+            for d in (baseline, candidate)
+        ]
+        if all(hashes) and hashes[0] != hashes[1]:
+            print(
+                "\nnote: the two files were run on different datasets (sha256 differs); only "
+                "records with the same id and trial are paired.",
+                file=sys.stderr,
+            )
+        if any(c.paired_n == 0 for c in comparisons):
+            print(
+                "\nnote: a metric with n 0 has no record scored in both files, so its "
+                "difference is unknown.",
+                file=sys.stderr,
+            )
+    if not comparisons:
+        return 1
+    return EXIT_GATES_FAILED if regressed and args.fail_on_regression else 0
+
+
 def _cmd_compare(args: argparse.Namespace) -> int:
+    if not args.server:
+        return _compare_files(args)
     with server_client(args) as client:
         comparisons = client.compare_runs(args.baseline, args.candidate)
     if args.format == "json":
@@ -1375,6 +1547,10 @@ def _cmd_compare_rows(comparisons: list[dict[str, Any]]) -> None:
                 "significant" if c.get("significant") else "",
             ]
         )
+    _print_rows(rows)
+
+
+def _print_rows(rows: list[list[str]]) -> None:
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     for row in rows:
         print("  ".join(cell.ljust(w) for cell, w in zip(row, widths, strict=True)).rstrip())

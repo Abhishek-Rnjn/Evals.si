@@ -415,6 +415,13 @@ func serve(ctx context.Context, cfg config.Config, worker pluginhost.Worker, cl 
 	}
 	log.Info("evalsid listening", "addr", ln.Addr().String(), "evaluators", len(manifests), "judges", judges,
 		"auth", cfg.AuthEnabled(), "tls", tlsCfg != nil)
+	if !cfg.UI.Disabled {
+		scheme := "http"
+		if tlsCfg != nil {
+			scheme = "https"
+		}
+		log.Info("web UI", "url", scheme+"://"+ln.Addr().String()+webui.Prefix)
+	}
 	if ready != nil {
 		ready <- ln.Addr().String()
 	}

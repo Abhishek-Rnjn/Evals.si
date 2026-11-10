@@ -110,3 +110,32 @@ func TestCreateRunRefusesBadGates(t *testing.T) {
 		t.Errorf("NaN bound: %v", err)
 	}
 }
+
+// A mean leaves skipped records out, so a run whose outputs went missing has
+// a perfect mean; the skipped-rate and count gates fail it.
+func TestSkippedRateAndCountGates(t *testing.T) {
+	sums := []*evalsiv1alpha1.MetricSummary{
+		{Metric: "mostly-skipped", N: 1, Skipped: 3, Mean: proto.Float64(1)},
+		{Metric: "clean", N: 4, Mean: proto.Float64(1)},
+		{Metric: "empty"},
+	}
+	skipped := evalsiv1alpha1.GateStat_GATE_STAT_SKIPPED_RATE
+	count := evalsiv1alpha1.GateStat_GATE_STAT_COUNT
+	got := CheckGates([]*evalsiv1alpha1.Gate{
+		{Metric: "mostly-skipped", Min: proto.Float64(0.9)},
+		{Metric: "mostly-skipped", Stat: skipped, Max: proto.Float64(0.1)},
+		{Metric: "mostly-skipped", Stat: count, Min: proto.Float64(3)},
+		{Metric: "clean", Stat: skipped, Max: proto.Float64(0)},
+		{Metric: "clean", Stat: count, Min: proto.Float64(4)},
+		{Metric: "empty", Stat: skipped, Max: proto.Float64(0.1)},
+		{Metric: "empty", Stat: count, Min: proto.Float64(1)},
+	}, sums)
+	for i, want := range []bool{true, false, false, true, true, false, false} {
+		if got[i].GetPassed() != want {
+			t.Errorf("gate %d passed = %v (%s), want %v", i, got[i].GetPassed(), got[i].GetReason(), want)
+		}
+	}
+	if v := got[1].GetValue(); v != 0.75 {
+		t.Errorf("skipped rate = %v, want 0.75", v)
+	}
+}

@@ -679,6 +679,14 @@ async def _stdin_reader() -> tuple[asyncio.StreamReader]:
     return (reader,)
 
 
+def _cancel(tasks: Mapping[Any, asyncio.Task[None]], params: Any) -> None:
+    """Cancel the request a notifications/cancelled message names, if it is running."""
+    rid = params.get("requestId") if isinstance(params, dict) else None
+    task = tasks.get(rid) if isinstance(rid, str | int) else None
+    if task is not None:
+        task.cancel()
+
+
 async def serve(server: EvalsiMCP, reader: asyncio.StreamReader, out: Any) -> None:
     lock = asyncio.Lock()
     tasks: dict[Any, asyncio.Task[None]] = {}
@@ -702,7 +710,11 @@ async def serve(server: EvalsiMCP, reader: asyncio.StreamReader, out: Any) -> No
             await send(response)
 
     while True:
-        line = await reader.readline()
+        try:
+            line = await reader.readline()
+        except ValueError:  # a line over the stream limit
+            await send(_error(None, PARSE_ERROR, "message too long"))
+            continue
         if not line:
             break
         if not line.strip():
@@ -713,18 +725,23 @@ async def serve(server: EvalsiMCP, reader: asyncio.StreamReader, out: Any) -> No
             await send(_error(None, PARSE_ERROR, "invalid JSON"))
             continue
         if isinstance(message, dict) and message.get("method") == "notifications/cancelled":
-            rid = (message.get("params") or {}).get("requestId")
-            task = tasks.get(rid)
-            if task is not None:
-                task.cancel()
+            _cancel(tasks, message.get("params"))
+            continue
+        if isinstance(message, dict) and not isinstance(
+            message.get("id"), str | int | float | None
+        ):
+            # JSON-RPC ids are strings or numbers; anything else cannot be tracked or echoed.
+            await send(_error(None, INVALID_REQUEST, "id must be a string or a number"))
             continue
         task = asyncio.create_task(one(message))
-        if isinstance(message, dict) and "id" in message:
+        if isinstance(message, dict) and message.get("id") is not None:
             rid = message["id"]
             tasks[rid] = task
 
-            def forget(_: asyncio.Task[None], rid: Any = rid) -> None:
-                tasks.pop(rid, None)
+            def forget(done: asyncio.Task[None], rid: Any = rid) -> None:
+                # A client may reuse an id: only forget this request's own task.
+                if tasks.get(rid) is done:
+                    tasks.pop(rid, None)
 
             task.add_done_callback(forget)
     if tasks:

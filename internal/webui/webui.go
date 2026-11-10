@@ -21,7 +21,7 @@ const Prefix = "/ui/"
 const csp = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
 	"connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
-// Register mounts the UI on mux: /ui/ and a redirect from /ui.
+// Register mounts the UI on mux: /ui/ and redirects from /ui and /.
 func Register(mux *http.ServeMux) {
 	files, err := fs.Sub(static, "static")
 	if err != nil {
@@ -39,4 +39,7 @@ func Register(mux *http.ServeMux) {
 		fileServer.ServeHTTP(w, r)
 	}))
 	mux.Handle("GET /ui", http.RedirectHandler(Prefix, http.StatusMovedPermanently))
+	// The address someone types first. Not permanent: the root may serve
+	// something else one day.
+	mux.Handle("GET /{$}", http.RedirectHandler(Prefix, http.StatusFound))
 }

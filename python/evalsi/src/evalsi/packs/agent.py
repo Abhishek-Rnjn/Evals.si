@@ -88,10 +88,11 @@ def _matches(expected: tuple[str, dict[str, Any] | None], actual: ToolUse) -> bo
 
 @evaluator(
     name="builtin/tool-call-accuracy",
-    version="1.0.0",
+    version="1.1.0",
     description=(
         "Recall and precision of tool calls against the expected calls in the reference "
-        "(order ignored; pinned arguments must match)."
+        "(order ignored; pinned arguments must match). A call that returned an error "
+        "still counts as made; with require_success=true it cannot match an expected call."
     ),
     requires=TRAJECTORY_AND_REFERENCE,
     outputs=[
@@ -99,10 +100,12 @@ def _matches(expected: tuple[str, dict[str, Any] | None], actual: ToolUse) -> bo
         MetricSpec("precision", NUMBER, min=0.0, max=1.0, higher_is_better=True),
     ],
 )
-def tool_call_accuracy(record: Record) -> list[Score]:
+def tool_call_accuracy(record: Record, *, require_success: bool = False) -> list[Score]:
     expected = expected_calls(record)
     actual = _trajectory(record).tool_uses()
-    unused = list(actual)
+    # With require_success, a call that failed was attempted, not accomplished.
+    unused = [a for a in actual if not (require_success and a.error)]
+    failed = len(actual) - len(unused)
     missing: list[str] = []
     for exp in sorted(expected, key=lambda e: not e[1]):
         hit = next((a for a in unused if _matches(exp, a)), None)
@@ -114,6 +117,8 @@ def tool_call_accuracy(record: Record) -> list[Score]:
     recall = matched / len(expected) if expected else 1.0
     precision = matched / len(actual) if actual else (1.0 if not expected else 0.0)
     explanation = f"matched {matched} of {len(expected)} expected, {len(actual)} made"
+    if failed:
+        explanation += f" ({failed} failed and cannot match)"
     return [
         Score(number=recall, name="recall", explanation=explanation, metadata={"missing": missing}),
         Score(number=precision, name="precision", explanation=explanation),
@@ -198,26 +203,49 @@ def mechanism_ran(record: Record, *, mechanism: str = "") -> Score:
 
 @evaluator(
     name="builtin/loop-detection",
-    version="1.0.0",
+    version="1.1.0",
     description=(
         "Passes unless the agent repeated an identical tool call (same tool, same "
-        "arguments) more than max_repeats times in a row."
+        "arguments) more than max_repeats times in a row, or repeated the same block "
+        "of up to max_cycle calls (A B A B ...) more than max_repeats times in a row. "
+        "max_cycle=1 checks single calls only."
     ),
     requires=TRAJECTORY,
     outputs=[MetricSpec("loop-detection", PASSED, higher_is_better=True)],
 )
-def loop_detection(record: Record, *, max_repeats: int = 2) -> Score:
+def loop_detection(record: Record, *, max_repeats: int = 2, max_cycle: int = 4) -> Score:
+    keys = [
+        (tool.name, json.dumps(_args(tool.arguments), sort_keys=True))
+        for tool in _trajectory(record).tool_uses()
+    ]
     longest, run, previous = 0, 0, None
-    for tool in _trajectory(record).tool_uses():
-        key = (tool.name, json.dumps(_args(tool.arguments), sort_keys=True))
+    for key in keys:
         run = run + 1 if key == previous else 1
         previous = key
         longest = max(longest, run)
-    passed = longest <= max_repeats
+    # A cycle: the same block of 2..max_cycle calls, back to back (A B A B A B).
+    cycle_length, cycle_repeats = 0, 0
+    for period in range(2, max(1, max_cycle) + 1):
+        streak = 0  # calls in a row that equal the call one period earlier
+        for i in range(period, len(keys)):
+            streak = streak + 1 if keys[i] == keys[i - period] else 0
+            repeats = streak // period + 1
+            # A block of one repeated call is the plain repeat counted above.
+            if repeats > cycle_repeats and len(set(keys[i - period + 1 : i + 1])) > 1:
+                cycle_length, cycle_repeats = period, repeats
+    explanation = ""
+    if longest > max_repeats:
+        explanation = f"the same call repeated {longest} times in a row"
+    elif cycle_repeats > max_repeats:
+        explanation = f"the same {cycle_length} calls repeated {cycle_repeats} times in a row"
     return Score(
-        passed=passed,
-        explanation="" if passed else f"the same call repeated {longest} times in a row",
-        metadata={"longest_repeat": longest},
+        passed=not explanation,
+        explanation=explanation,
+        metadata={
+            "longest_repeat": longest,
+            "longest_cycle": cycle_length,
+            "cycle_repeats": cycle_repeats,
+        },
     )
 
 

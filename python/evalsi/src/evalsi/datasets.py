@@ -86,6 +86,21 @@ def load_records(
     return records
 
 
+def check_cluster_key(records: Iterable[Record], cluster_by: str | None) -> None:
+    """Refuse a ``cluster_by`` no record carries. Records without the key each
+    count as their own cluster, so a mistyped key would quietly change every
+    interval instead of clustering anything."""
+    if not cluster_by or cluster_by.startswith("@"):
+        return
+    key = cluster_by.removeprefix("metadata.")
+    records = list(records)
+    if records and not any(key in r.metadata for r in records):
+        raise DatasetError(
+            f"cluster_by {cluster_by!r}: no record has that metadata key, so nothing would be "
+            "clustered; check the spelling"
+        )
+
+
 def record_from_row(row: Mapping[str, Any], index: int, mapping: Mapping[str, str]) -> Record:
     consumed: set[str] = set()
 
@@ -146,12 +161,13 @@ def _file_rows(path: Path) -> Iterator[Mapping[str, Any]]:
     if not path.exists():
         raise DatasetError(f"no such file: {path}")
     if path.suffix == ".json":
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
         if not isinstance(data, list):
             raise DatasetError(f"{path}: a .json dataset must be a list of objects")
         yield from _objects(data, path)
         return
-    with path.open(encoding="utf-8") as handle:
+    # utf-8-sig: editors on Windows often save a byte-order mark first.
+    with path.open(encoding="utf-8-sig") as handle:
         for line_no, line in enumerate(handle, start=1):
             if not line.strip():
                 continue

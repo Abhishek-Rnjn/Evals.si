@@ -83,8 +83,13 @@ External/unsafe paths omit the hint rather than inventing a command. Use a new
 
 To evaluate your code:
 
-1. Implement an importable synchronous function taking and returning a nonempty
-   `str`. For example, expose your application as `my_app:answer`.
+1. Implement an importable function taking and returning a nonempty `str`,
+   plain or `async def`. For example, expose your application as `my_app:answer`.
+   To evaluate a running service instead, pass `--url http://localhost:8000/answer`:
+   each case is POSTed as JSON `{"input": "..."}` and the answer read from the
+   reply's `output` field (`--input-field` and `--output-field` rename them, and
+   the output field may be a dotted path such as `choices.0.message.content`).
+   Request headers come from the `EVALSI_APP_HEADERS` environment variable.
    Install your application's package into this same environment, or put a
    thin adapter inside the generated directory; `init` does not alter import
    paths or install your application.
@@ -250,6 +255,60 @@ These may contain private inputs, outputs and errors; apply your organization's
 repository visibility and data-handling policy before enabling it. A JSON result
 may be missing when execution fails. Artifact and installation failures fail the
 action too. `install: 'false'` uses an existing compatible Python installation.
+
+### Pull-request comment
+
+Set `pr-comment: 'true'` to post the same summary as one comment on the pull
+request, updated in place on each push (one comment per spec). The job then needs
+`permissions: pull-requests: write`:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+# ...
+      - uses: Abhishek-Rnjn/Evals.si@ACTION_COMMIT
+        with:
+          spec: run.yaml
+          pr-comment: 'true'
+```
+
+The comment holds what the summary holds: metrics, labels and identity hashes, no
+records. A pull request from a fork gets a read-only token, so the comment is
+skipped there and the summary says so; the gate's exit code never depends on it.
+This input needs an action commit that has it (after v0.3.2).
+
+### Compare two results files locally
+
+```bash
+evalsi compare baseline.json results.json --fail-on-regression
+```
+
+`evalsi compare` pairs two results files (`evalsi run --output`, `evalsi eval
+--output`, or the starter's `results.json`) by record and trial and prints each
+shared metric's difference with its interval. With `--fail-on-regression` it
+exits 3 when a metric is significantly worse in the candidate. With `--server`
+the two arguments are run ids instead. Needs a release after 0.3.2.
+
+### Gates inside a test suite
+
+`evalsi.testing.assert_eval` runs an evaluation in a pytest or unittest test,
+with no spec file and no server, and fails the test with the metric table and
+the failing records:
+
+```python
+from evalsi.testing import assert_eval
+from my_app import answer
+
+def test_refund_answers():
+    assert_eval("cases.jsonl", ["exact-match"], {"exact-match": 0.9}, task=answer)
+```
+
+`task` (sync or async) produces the output of records that have none. Errored
+and skipped evaluations fail the test unless you raise `max_error_rate` or
+`max_skipped_rate`; an empty dataset fails. `pytest --evalsi-results DIR` writes
+each call's results to `DIR`, ready for `evalsi report` and `evalsi compare`.
+Needs a release after 0.3.2.
 
 ### Advisory baseline comparison
 

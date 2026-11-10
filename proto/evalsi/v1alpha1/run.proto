@@ -212,6 +212,16 @@ enum GateStat {
   // {metric: "task-success", stat: GATE_STAT_ERROR_RATE, max: 0.05}, to
   // fail a candidate that errors on many records and passes the rest.
   GATE_STAT_ERROR_RATE = 4;
+  // The fraction of the metric's evaluations that were skipped: skipped /
+  // (n + skipped + errors). A mean leaves skipped records out, so a run
+  // whose outputs went missing can still pass a mean gate; gate this with a
+  // max, for example {metric: "exact-match", stat: GATE_STAT_SKIPPED_RATE,
+  // max: 0.1}.
+  GATE_STAT_SKIPPED_RATE = 5;
+  // The number of evaluations that were scored (n). Gate it with a min,
+  // for example {metric: "exact-match", stat: GATE_STAT_COUNT, min: 50}, so
+  // a small or mostly skipped sample cannot pass.
+  GATE_STAT_COUNT = 6;
 }
 
 // A gate checks one summary statistic against bounds, for example

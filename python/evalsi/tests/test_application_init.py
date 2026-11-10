@@ -225,12 +225,11 @@ def test_sync_callable_returning_coroutine_is_execution_error(application_projec
     "source",
     [
         "answer = 'not a callable'\n",
-        "async def answer(question):\n    return 'Paris'\n",
         "raise RuntimeError('credential-do-not-expose')\n",
         "raise SystemExit('credential-do-not-expose')\n",
     ],
 )
-def test_bad_import_or_async_callable_fails_actionably(
+def test_bad_import_or_non_callable_fails_actionably(
     application_project: Path, source: str
 ) -> None:
     (application_project / "custom.py").write_text(source)

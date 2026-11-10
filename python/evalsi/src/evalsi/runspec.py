@@ -89,6 +89,42 @@ def normalize_durations(value: Any, descriptor: Descriptor) -> Any:
     return out
 
 
+def _inline_shorthand(body: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Inline records may be written as in a JSONL dataset: ``inline`` as a plain
+    list, and ``input``, ``output``, ``reference`` and each ``context`` item as a
+    string, a number or a boolean instead of ``{text: ...}``."""
+    dataset = body.get("dataset")
+    inline = dataset.get("inline") if isinstance(dataset, Mapping) else None
+    if isinstance(inline, list):
+        inline = {"records": inline}
+    if not isinstance(inline, Mapping) or not isinstance(inline.get("records"), list):
+        return body
+
+    def content(value: Any) -> Any:
+        if isinstance(value, bool):
+            return {"text": "true" if value else "false"}
+        if isinstance(value, str | int | float):
+            return {"text": str(value)}
+        return value
+
+    def record(row: Any) -> Any:
+        if not isinstance(row, Mapping):
+            return row
+        out = dict(row)
+        for key in ("input", "output", "reference"):
+            if key in out:
+                out[key] = content(out[key])
+        if isinstance(out.get("context"), list):
+            out["context"] = [content(c) for c in out["context"]]
+        if isinstance(out.get("id"), int) and not isinstance(out["id"], bool):
+            out["id"] = str(out["id"])
+        return out
+
+    records = [record(row) for row in inline["records"]]
+    assert isinstance(dataset, Mapping)
+    return {**body, "dataset": {**dataset, "inline": {**inline, "records": records}}}
+
+
 def parse_spec(document: Mapping[str, Any], base_dir: Path | None = None) -> RunFile:
     if document.get("apiVersion") not in (None, API_VERSION):
         raise SpecError(f"apiVersion must be {API_VERSION}, not {document.get('apiVersion')!r}")
@@ -100,7 +136,8 @@ def parse_spec(document: Mapping[str, Any], base_dir: Path | None = None) -> Run
         raise SpecError("the document needs a 'spec' mapping")
     try:
         spec = json_format.ParseDict(
-            normalize_durations(body, run_pb2.RunSpec.DESCRIPTOR), run_pb2.RunSpec()
+            normalize_durations(_inline_shorthand(body), run_pb2.RunSpec.DESCRIPTOR),
+            run_pb2.RunSpec(),
         )
     except json_format.ParseError as exc:
         raise SpecError(f"invalid spec: {exc}") from exc
@@ -202,6 +239,8 @@ _STATS = {
     run_pb2.GATE_STAT_CI_LOW: "ci_low",
     run_pb2.GATE_STAT_CI_HIGH: "ci_high",
     run_pb2.GATE_STAT_ERROR_RATE: "error_rate",
+    run_pb2.GATE_STAT_SKIPPED_RATE: "skipped_rate",
+    run_pb2.GATE_STAT_COUNT: "count",
 }
 
 
@@ -209,6 +248,12 @@ def _error_rate(summary: MetricSummary) -> float | None:
     """The fraction of a metric's evaluations that errored; skips are left out."""
     ran = summary.n + summary.errors
     return summary.errors / ran if ran else None
+
+
+def _skipped_rate(summary: MetricSummary) -> float | None:
+    """The fraction of a metric's evaluations that were skipped."""
+    total = summary.n + summary.skipped + summary.errors
+    return summary.skipped / total if total else None
 
 
 def check_gates(
@@ -230,6 +275,8 @@ def check_gates(
                 "ci_low": summary.ci.low if summary.ci else None,
                 "ci_high": summary.ci.high if summary.ci else None,
                 "error_rate": _error_rate(summary),
+                "skipped_rate": _skipped_rate(summary),
+                "count": float(summary.n),
             }[stat]
             result.value = value
             if value is None and summary.n == 0 and summary.skipped:

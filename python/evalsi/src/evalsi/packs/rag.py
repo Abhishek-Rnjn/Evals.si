@@ -199,7 +199,23 @@ async def context_recall(record: Record, *, ctx: EvalContext) -> Score:
     )
 
 
-_CITATION = re.compile(r"\[(\d+)\]")
+# [2], [1, 2], [1][3] and ranges like [1-3]. A citation often follows its word
+# with no space ("30 days[1]."), so code such as items[3] reads as one too.
+_CITATION = re.compile(r"\[(\d+(?:\s*[,;\u2013-]\s*\d+)*)\]")
+_CITATION_PART = re.compile(r"(\d+)(?:\s*[\u2013-]\s*(\d+))?")
+
+
+def _cited(text: str) -> list[int]:
+    cited: list[int] = []
+    for group in _CITATION.findall(text):
+        for low, high in _CITATION_PART.findall(group):
+            first, last = int(low), int(high or low)
+            # A reversed or huge "range" is not a range of citations.
+            if high and not first < last <= first + 100:
+                cited += [first, last]
+            else:
+                cited += range(first, last + 1)
+    return cited
 
 
 @evaluator(
@@ -211,7 +227,7 @@ _CITATION = re.compile(r"\[(\d+)\]")
 )
 def citation_accuracy(record: Record, *, require_citation: bool = True) -> Score:
     assert record.output is not None
-    cited = [int(m) for m in _CITATION.findall(record.output.as_text())]
+    cited = _cited(record.output.as_text())
     invalid = sorted({c for c in cited if not 1 <= c <= len(record.context)})
     if invalid:
         return Score(passed=False, explanation=f"citations to missing contexts: {invalid}")

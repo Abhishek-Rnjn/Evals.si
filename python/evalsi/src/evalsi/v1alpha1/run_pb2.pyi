@@ -45,6 +45,18 @@ class _GateStatEnumTypeWrapper(_enum_type_wrapper._EnumTypeWrapper[_GateStat.Val
     {metric: "task-success", stat: GATE_STAT_ERROR_RATE, max: 0.05}, to
     fail a candidate that errors on many records and passes the rest.
     """
+    GATE_STAT_SKIPPED_RATE: _GateStat.ValueType  # 5
+    """The fraction of the metric's evaluations that were skipped: skipped /
+    (n + skipped + errors). A mean leaves skipped records out, so a run
+    whose outputs went missing can still pass a mean gate; gate this with a
+    max, for example {metric: "exact-match", stat: GATE_STAT_SKIPPED_RATE,
+    max: 0.1}.
+    """
+    GATE_STAT_COUNT: _GateStat.ValueType  # 6
+    """The number of evaluations that were scored (n). Gate it with a min,
+    for example {metric: "exact-match", stat: GATE_STAT_COUNT, min: 50}, so
+    a small or mostly skipped sample cannot pass.
+    """
 
 class GateStat(_GateStat, metaclass=_GateStatEnumTypeWrapper): ...
 
@@ -59,6 +71,18 @@ errors), skipped records left out. A metric's mean and interval leave
 errored records out, so gate this with a max, for example
 {metric: "task-success", stat: GATE_STAT_ERROR_RATE, max: 0.05}, to
 fail a candidate that errors on many records and passes the rest.
+"""
+GATE_STAT_SKIPPED_RATE: GateStat.ValueType  # 5
+"""The fraction of the metric's evaluations that were skipped: skipped /
+(n + skipped + errors). A mean leaves skipped records out, so a run
+whose outputs went missing can still pass a mean gate; gate this with a
+max, for example {metric: "exact-match", stat: GATE_STAT_SKIPPED_RATE,
+max: 0.1}.
+"""
+GATE_STAT_COUNT: GateStat.ValueType  # 6
+"""The number of evaluations that were scored (n). Gate it with a min,
+for example {metric: "exact-match", stat: GATE_STAT_COUNT, min: 50}, so
+a small or mostly skipped sample cannot pass.
 """
 Global___GateStat: _TypeAlias = GateStat  # noqa: Y015
 

@@ -183,7 +183,7 @@ func rateClass(path string) string {
 		return classIngest
 	case strings.HasPrefix(path, "/guardrails/") || strings.HasPrefix(path, "/"+ext_mcpconnect.ExtMcpName+"/"):
 		return classGuardrails
-	case path == "/healthz" || path == "/mcp" || path == "/ui" || strings.HasPrefix(path, "/ui/") ||
+	case path == "/" || path == "/healthz" || path == "/mcp" || path == "/ui" || strings.HasPrefix(path, "/ui/") ||
 		strings.HasPrefix(path, "/.well-known/") || strings.HasPrefix(path, "/grpc.health.v1.Health/"):
 		return ""
 	}
