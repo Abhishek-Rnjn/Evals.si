@@ -9,6 +9,10 @@
 [Changelog](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md) ·
 [Examples](https://github.com/Abhishek-Rnjn/Evals.si/tree/main/examples)
 
+![A terminal: pip install evalsi, evalsi init my-evals, then evalsi run passes its gates on run.yaml and fails one on regressed.yaml, exiting 3.](https://raw.githubusercontent.com/Abhishek-Rnjn/Evals.si/main/docs/img/demo.gif)
+
+_Real output of the published package: a starter, a passing gate, and a regression that fails the build with exit code 3._
+
 ## Why Evals.si
 
 - **Built first for agents.** Agents run on sandboxed tasks (SWE-bench, τ-bench, Terminal-Bench, BFCL) and a hidden checker grades the end state. Evaluators score tool calls, trajectories, loops, step budgets and policy violations, with pass@k and pass^k over trials, and gates fail the build when an agent gets worse.

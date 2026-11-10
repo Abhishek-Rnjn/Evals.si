@@ -17,8 +17,8 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 [Quickstart](#quickstart) ·
 [Guides](#documentation) ·
 [Examples](examples/) ·
-[Product roadmap](docs/PRODUCT-ROADMAP.md) ·
-[Technical status](docs/LEFTOVERS.md)
+[Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) ·
+[Changelog](CHANGELOG.md)
 
 </div>
 
