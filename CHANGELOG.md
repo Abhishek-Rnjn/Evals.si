@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ### Added
 
-- **Coverage gates.** `GATE_STAT_SKIPPED_RATE` (skipped / all evaluations) and `GATE_STAT_COUNT` (evaluations scored) join the gate statistics, in the SDK, the server, the CRD and the web UI. A mean leaves skipped records out, so a run whose outputs went missing for most records could pass a mean gate; `evalsi run` now warns when a gate passes on a metric that skipped records and neither is gated. The `recorded` starter gates the skipped rate.
+- **Coverage gates.** `GATE_STAT_SKIPPED_RATE` (skipped / all evaluations) and `GATE_STAT_COUNT` (evaluations scored) join the gate statistics, in the SDK, the server, the CRD and the web UI. A mean leaves skipped records out, so a run whose outputs went missing for most records could pass a mean gate; `evalsi run` now warns when a gate passes on a metric that skipped records and neither is gated.
 - **`evalsi compare BASELINE.json CANDIDATE.json`** compares two results files without a server (paired by record and trial), and `--fail-on-regression` exits 3 on a significant regression. `--server` keeps comparing two runs by id.
 - **`evalsi.testing.assert_eval`** gates an evaluation inside a pytest or unittest test, with an optional sync or async `task` that produces the outputs; `pytest --evalsi-results DIR` saves each call's results.
 - **The application starter takes async callables and HTTP endpoints.** `evaluate.py --callable` accepts `async def`; `--url` (also `evalsi init --template application --url`) POSTs each case as JSON, with `--input-field`, `--output-field` (a dotted path), `--timeout` and headers from `EVALSI_APP_HEADERS`.
@@ -23,7 +23,7 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - `GET /` on the server redirects to `/ui/` instead of 404, and the server logs the UI's URL at start.
 - `builtin/json-valid` accepted `NaN` and `Infinity`.
 - `builtin/regression` (now 1.1.0) scored only the records whose output parsed as a number; it now errors unless `max_unparsed` allows the rest to be left out.
-- `builtin/citation-accuracy` reads `[1, 2]` and `[1-3]`, and no longer takes an index such as `items[3]` for a citation.
+- `builtin/citation-accuracy` reads `[1, 2]` and `[1-3]`.
 - The interval of a pass/fail metric's paired difference is kept within [-1, 1], in `evalsi compare`, `evalsi matrix`, the GitHub Action and the server's `CompareRuns`.
 - `builtin/token-f1` scores two answers that both normalize to nothing as 1, as SQuAD does; `builtin/numeric-match` reads a Unicode minus sign; `builtin/contains` skips an empty reference instead of passing it; `builtin/secret-leak` finds Google API keys.
 - `evalsi mcp` exited on a request whose `id` was not a string or number, or a cancel notification with malformed `params`.

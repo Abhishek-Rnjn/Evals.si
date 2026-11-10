@@ -2,13 +2,14 @@
 
 Loaded by pytest through the ``pytest11`` entry point; it does nothing until
 asked. ``pytest --evalsi-results DIR`` writes the results of every
-``assert_eval`` call to ``DIR/<test id>.json`` (the format of ``evalsi eval
+``assert_eval`` call to ``DIR/<test id>-<hash>.json`` (the format of ``evalsi eval
 --output``), so a failing test can be read with ``evalsi report`` and two
 commits compared with ``evalsi compare``.
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Iterator
 from pathlib import Path
@@ -34,7 +35,9 @@ def pytest_runtest_call(item: Any) -> Iterator[None]:
         return
     from evalsi import testing
 
-    name = re.sub(r"[^A-Za-z0-9_.-]+", "_", item.nodeid).strip("_") or "test"
+    # The hash keeps ids that normalize alike (`[a/b]`, `[a:b]`) from overwriting each other.
+    readable = re.sub(r"[^A-Za-z0-9_.-]+", "_", item.nodeid).strip("_")[:80] or "test"
+    name = f"{readable}-{hashlib.sha256(item.nodeid.encode()).hexdigest()[:10]}"
     calls = 0
 
     def sink(result: Any) -> None:

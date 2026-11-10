@@ -199,9 +199,9 @@ async def context_recall(record: Record, *, ctx: EvalContext) -> Score:
     )
 
 
-# [2], [1, 2], [1][3] and ranges like [1-3]. A bracket straight after a word
-# or a closing parenthesis (array[3], f(x)[0]) is an index, not a citation.
-_CITATION = re.compile(r"(?<![\w)])\[(\d+(?:\s*[,;\u2013-]\s*\d+)*)\]")
+# [2], [1, 2], [1][3] and ranges like [1-3]. A citation often follows its word
+# with no space ("30 days[1]."), so code such as items[3] reads as one too.
+_CITATION = re.compile(r"\[(\d+(?:\s*[,;\u2013-]\s*\d+)*)\]")
 _CITATION_PART = re.compile(r"(\d+)(?:\s*[\u2013-]\s*(\d+))?")
 
 

@@ -245,14 +245,9 @@ def test_composite_upload_is_opt_in_and_final_step_preserves_failure() -> None:
     assert "else 1" in steps[-1]["run"]
 
 
-def test_pr_comment_is_created_then_updated_and_never_changes_the_outcome(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _fake_github(comments: list[dict[str, Any]], seen: list[tuple[str, str, str | None]]) -> Any:
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
-    comments: list[dict[str, Any]] = []
-    seen: list[tuple[str, str, str | None]] = []
 
     class GitHub(BaseHTTPRequestHandler):
         def reply(self, status: int, body: Any) -> None:
@@ -273,8 +268,11 @@ def test_pr_comment_is_created_then_updated_and_never_changes_the_outcome(
             if method == "POST":
                 comments.append({"id": 7, "body": body["body"]})
                 return self.reply(201, comments[-1])
-            comments[0]["body"] = body["body"]
-            return self.reply(200, comments[0])
+            target = next(c for c in comments if self.path.endswith(f"/{c['id']}"))
+            if target["id"] == 99:
+                return self.reply(403, {"message": "Resource not accessible by integration"})
+            target["body"] = body["body"]
+            return self.reply(200, target)
 
         def do_GET(self) -> None:
             self.handle_one("GET")
@@ -290,6 +288,15 @@ def test_pr_comment_is_created_then_updated_and_never_changes_the_outcome(
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), GitHub)
     threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_pr_comment_is_created_then_updated_and_never_changes_the_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    comments: list[dict[str, Any]] = []
+    seen: list[tuple[str, str, str | None]] = []
+    server = _fake_github(comments, seen)
     event = tmp_path / "event.json"
     event.write_text(json.dumps({"pull_request": {"number": 12}}))
     project = tmp_path / "project"
@@ -318,6 +325,13 @@ def test_pr_comment_is_created_then_updated_and_never_changes_the_outcome(
         code, summary, _ = invoke(tmp_path, project, "run.yaml")
         assert "PR comment updated." in summary
         assert len(comments) == 1
+
+        # Someone else's comment with our marker refuses the PATCH: post our own.
+        marker_line = comments[0]["body"].splitlines()[0]
+        comments[:] = [{"id": 99, "body": f"{marker_line}\nforeign"}]
+        code, summary, _ = invoke(tmp_path, project, "run.yaml")
+        assert "PR comment posted." in summary
+        assert [c["id"] for c in comments] == [99, 7]
 
         # A token without permission (a fork's) leaves the gate's outcome alone.
         monkeypatch.setenv("EVALSI_ACTION_GITHUB_TOKEN", "read-only")

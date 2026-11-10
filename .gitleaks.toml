@@ -13,4 +13,5 @@ regexes = [
   '''AKIAABCDEFGHIJKLMNOP''',   # an obviously fake key in the guardrail tests
   '''whsec_0123456789abcdef''', # a fake webhook secret in the webhook tests
   '''SYNTHETIC-RUBRIC-MARKER-7f3a''', # a fake marker in the LAB/JobBench loader tests
+  '''AIzaSyA-abcdefghijklmnopqrstuvwxyz01234''', # a fake Google API key in the secret-leak evaluator test
 ]

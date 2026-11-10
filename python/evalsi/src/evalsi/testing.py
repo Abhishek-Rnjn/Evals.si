@@ -11,6 +11,7 @@ evaluators, including adapters' framework metrics, run offline::
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -94,9 +95,17 @@ _GATE_STATS = {
 _results_sink: Callable[[Any], None] | None = None
 
 
+def _finite(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
 def _gate_messages(gates: Any, max_error_rate: float | None, max_skipped_rate: float | None) -> Any:
     from evalsi.v1alpha1 import run_pb2
 
+    # A nan or infinite limit makes a gate that can never fail.
+    for name, limit in (("max_error_rate", max_error_rate), ("max_skipped_rate", max_skipped_rate)):
+        if limit is not None and not _finite(limit):
+            raise ValueError(f"{name} must be a finite number or None, not {limit!r}")
     out = []
     for metric, bound in gates.items():
         bounds = bound if isinstance(bound, dict) else {"min": bound}
@@ -106,6 +115,14 @@ def _gate_messages(gates: Any, max_error_rate: float | None, max_skipped_rate: f
                 f"gate on {metric!r}: give a number (the minimum mean) or a dict with min "
                 f"and/or max, and optionally stat ({', '.join(_GATE_STATS)})"
             )
+        given = {k: bounds[k] for k in ("min", "max") if bounds.get(k) is not None}
+        if not given:
+            raise ValueError(f"gate on {metric!r}: give a min or a max that is not None")
+        for name, value in given.items():
+            if not _finite(value):
+                raise ValueError(
+                    f"gate on {metric!r}: {name} must be a finite number, not {value!r}"
+                )
         stat = str(bounds.get("stat", "mean"))
         if stat not in _GATE_STATS:
             raise ValueError(f"gate on {metric!r}: unknown stat {stat!r}")
@@ -115,8 +132,9 @@ def _gate_messages(gates: Any, max_error_rate: float | None, max_skipped_rate: f
                 setattr(gate, name, float(bounds[name]))
         out.append(gate)
         # A mean leaves errored and skipped records out: gate them unless told not to.
+        # Only the rate the caller gated explicitly is left to them.
         for limit, rate in ((max_error_rate, "error_rate"), (max_skipped_rate, "skipped_rate")):
-            if limit is not None and stat not in ("error_rate", "skipped_rate"):
+            if limit is not None and stat != rate:
                 out.append(
                     run_pb2.Gate(
                         metric=metric, stat=run_pb2.GateStat.Value(_GATE_STATS[rate]), max=limit

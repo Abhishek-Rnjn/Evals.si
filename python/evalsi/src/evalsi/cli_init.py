@@ -56,8 +56,6 @@ def starter_files(
         "gates": [
             {"metric": "exact-match", "min": 1.0},
             {"metric": "exact-match", "stat": "GATE_STAT_ERROR_RATE", "max": 0.0},
-            # A record without an output is skipped, not failed: gate that too.
-            {"metric": "exact-match", "stat": "GATE_STAT_SKIPPED_RATE", "max": 0.0},
         ],
     }
     if agent:

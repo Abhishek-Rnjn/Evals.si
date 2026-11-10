@@ -181,9 +181,16 @@ def test_regression_does_not_score_only_the_parseable_outputs() -> None:
         rows, ["regression"], params={"regression": {"max_unparsed": 0.5}}, cache=False
     )
     assert lenient.results[0].outcome.value == "scored"
+    # A model that returns only garbage is an error, unless the allowance permits it.
+    garbage = [{"id": "1", **row("abc", "1")}, {"id": "2", **row("def", "2")}]
+    assert evaluate(garbage, ["regression"], cache=False).results[0].outcome.value == "error"
+    allowed = evaluate(
+        garbage, ["regression"], params={"regression": {"max_unparsed": 1.0}}, cache=False
+    )
+    assert allowed.results[0].outcome.value == "skipped"
 
 
-def test_citation_accuracy_reads_lists_and_ranges_but_not_indexes() -> None:
+def test_citation_accuracy_reads_lists_ranges_and_citations_after_a_word() -> None:
     context = ["a", "b", "c"]
     got = scores(
         "citation-accuracy",
@@ -194,8 +201,9 @@ def test_citation_accuracy_reads_lists_and_ranges_but_not_indexes() -> None:
             {"id": "adjacent", "input": "q", "output": "Yes [1][3].", "context": context},
             {"id": "missing", "input": "q", "output": "Yes [2, 4].", "context": context},
             {"id": "range-past", "input": "q", "output": "Yes [2-5].", "context": context},
-            {"id": "index", "input": "q", "output": "items[7] and f(x)[9] [1]", "context": context},
-            {"id": "none", "input": "q", "output": "array[1] only", "context": context},
+            {"id": "after-word", "input": "q", "output": "It is 30 days[1].", "context": context},
+            {"id": "after-paren", "input": "q", "output": "(see policy)[2]", "context": context},
+            {"id": "none", "input": "q", "output": "No brackets at all.", "context": context},
         ],
     )
     assert got == {
@@ -205,7 +213,8 @@ def test_citation_accuracy_reads_lists_and_ranges_but_not_indexes() -> None:
         "adjacent": True,
         "missing": False,
         "range-past": False,
-        "index": True,
+        "after-word": True,
+        "after-paren": True,
         "none": False,
     }
 
@@ -417,7 +426,11 @@ def test_pytest_writes_results_when_asked(tmp_path: Path) -> None:
     (tmp_path / "test_app.py").write_text(
         "from evalsi.testing import assert_eval\n"
         "ROWS = [{'id': 'a', 'input': 'q', 'output': 'x', 'reference': 'x'}]\n"
+        "import pytest\n"
         "def test_gate():\n"
+        "    assert_eval(ROWS, ['exact-match'], {'exact-match': 1.0}, cache=False)\n"
+        "@pytest.mark.parametrize('case', [pytest.param(1, id='a/b'), pytest.param(2, id='a:b')])\n"
+        "def test_api(case):\n"
         "    assert_eval(ROWS, ['exact-match'], {'exact-match': 1.0}, cache=False)\n"
     )
     proc = subprocess.run(
@@ -428,9 +441,15 @@ def test_pytest_writes_results_when_asked(tmp_path: Path) -> None:
         check=False,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    [written] = (tmp_path / "out").iterdir()
-    assert written.name == "test_app.py_test_gate.json"
-    assert json.loads(written.read_text())["summaries"][0]["metric"] == "exact-match"
+    written = sorted((tmp_path / "out").iterdir())
+    gate = [w for w in written if w.name.startswith("test_app.py_test_gate-")]
+    assert len(gate) == 1
+    assert gate[0].name.endswith(".json")
+    assert json.loads(gate[0].read_text())["summaries"][0]["metric"] == "exact-match"
+    # `[a/b]` and `[a:b]` normalize alike but must not overwrite each other.
+    api = [w for w in written if w.name.startswith("test_app.py_test_api_a_b")]
+    assert len(api) == 2
+    assert len({w.name for w in api}) == 2
 
 
 # --- the application starter: async callables and HTTP endpoints -------------------------
@@ -521,3 +540,36 @@ def test_init_can_make_an_endpoint_the_default(tmp_path: Path, endpoint: str) ->
         ["init", str(tmp_path / "leak"), "--template", "application", "--url", "http://u:p@h/"]
     )
     assert main(["init", str(tmp_path / "wrong"), "--url", "http://h/"]) != 0
+
+
+def test_an_explicit_rate_gate_leaves_the_other_automatic_rate_gate_in_place() -> None:
+    rows = [
+        {"id": "a", "input": "q", "output": "x", "reference": "x"},
+        {"id": "b", "input": "q", "reference": "x"},
+    ]
+    with pytest.raises(AssertionError, match="skipped_rate"):
+        assert_eval(rows, ["exact-match"], {"exact-match": {"stat": "error_rate", "max": 0}})
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [
+        float("nan"),
+        {"min": None},
+        {"max": float("inf")},
+        {"min": "0.5"},
+        {"min": True},
+    ],
+)
+def test_a_gate_that_could_never_fail_is_rejected(gate: Any) -> None:
+    rows = [{"id": "a", "input": "q", "output": "x", "reference": "x"}]
+    with pytest.raises(ValueError, match="exact-match"):
+        assert_eval(rows, ["exact-match"], {"exact-match": gate}, cache=False)
+
+
+def test_a_non_finite_automatic_rate_limit_is_rejected() -> None:
+    rows = [{"id": "a", "input": "q", "output": "x", "reference": "x"}]
+    with pytest.raises(ValueError, match="max_error_rate"):
+        assert_eval(
+            rows, ["exact-match"], {"exact-match": 1.0}, max_error_rate=float("nan"), cache=False
+        )

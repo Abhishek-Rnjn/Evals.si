@@ -347,7 +347,7 @@ def pr_comment(rendered: str) -> str:
     }
     try:
         with httpx.Client(headers=headers, timeout=20) as client:
-            existing = None
+            candidates: list[int] = []
             for page in range(1, 11):
                 response = client.get(
                     f"{api}/repos/{repository}/issues/{number}/comments",
@@ -355,21 +355,24 @@ def pr_comment(rendered: str) -> str:
                 )
                 response.raise_for_status()
                 comments = response.json()
-                existing = next(
-                    (
-                        c["id"]
-                        for c in comments
-                        if isinstance(c.get("body"), str) and c["body"].startswith(marker)
-                    ),
-                    None,
+                candidates.extend(
+                    c["id"]
+                    for c in comments
+                    if isinstance(c.get("body"), str) and c["body"].startswith(marker)
                 )
-                if existing is not None or len(comments) < 100:
+                if len(comments) < 100:
                     break
-            if existing is not None:
+            updated = False
+            for comment_id in candidates:
                 response = client.patch(
-                    f"{api}/repos/{repository}/issues/comments/{existing}", json={"body": body}
+                    f"{api}/repos/{repository}/issues/comments/{comment_id}", json={"body": body}
                 )
-            else:
+                # 403 and 404: someone else's comment with our marker; try the next.
+                if response.status_code in (403, 404):
+                    continue
+                updated = True
+                break
+            if not updated:
                 response = client.post(
                     f"{api}/repos/{repository}/issues/{number}/comments", json={"body": body}
                 )
@@ -381,7 +384,7 @@ def pr_comment(rendered: str) -> str:
         )
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
         return "PR comment not posted: the GitHub API could not be reached or understood."
-    return "PR comment updated." if existing is not None else "PR comment posted."
+    return "PR comment updated." if updated else "PR comment posted."
 
 
 def main() -> int:

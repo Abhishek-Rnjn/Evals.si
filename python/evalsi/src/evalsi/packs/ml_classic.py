@@ -400,16 +400,17 @@ def regression(records: list[Record], *, max_unparsed: float = 0.0) -> list[Scor
             unparsed += 1
             continue
         pairs.append((y, p))
-    if not pairs:
-        raise SkipRecord("no records with numeric output and reference")
-    n = len(pairs)
     # Dropping an output that is not a number would score a model that answers
-    # one record in three as if it had answered them all.
-    if unparsed / len(records) > max_unparsed:
+    # one record in three as if it had answered them all. This comes before the
+    # empty check so a model that returns only garbage is an error, not a skip.
+    if records and unparsed / len(records) > max_unparsed:
         raise ValueError(
             f"{unparsed} of {len(records)} records have an output or reference that is not a "
             f"number; raise max_unparsed (now {max_unparsed:g}) to leave them out"
         )
+    if not pairs:
+        raise SkipRecord("no records with numeric output and reference")
+    n = len(pairs)
     errors = [p - y for y, p in pairs]
     mae = sum(abs(e) for e in errors) / n
     mse = sum(e * e for e in errors) / n
