@@ -17,10 +17,16 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 [Quickstart](#quickstart) ·
 [Guides](#documentation) ·
 [Examples](examples/) ·
-[Product roadmap](docs/PRODUCT-ROADMAP.md) ·
-[Technical status](docs/LEFTOVERS.md)
+[Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) ·
+[Changelog](CHANGELOG.md)
 
 </div>
+
+<p align="center">
+  <img src="docs/img/demo.gif" width="760" alt="A terminal: pip install evalsi, evalsi init my-evals, then evalsi run passes its gates on run.yaml and fails one on regressed.yaml, exiting 3.">
+</p>
+
+<p align="center"><sub>Real output of the published package, recorded by <a href="scripts/make-demo-gif.mjs">scripts/make-demo-gif.mjs</a>: a starter, a passing gate, and a regression that fails the build with exit code 3.</sub></p>
 
 ---
 
