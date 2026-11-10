@@ -22,6 +22,12 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 
 </div>
 
+<p align="center">
+  <img src="docs/img/demo.gif" width="760" alt="A terminal: pip install evalsi, evalsi init my-evals, then evalsi run passes its gates on run.yaml and fails one on regressed.yaml, exiting 3.">
+</p>
+
+<p align="center"><sub>Real output of the published package, recorded by <a href="scripts/make-demo-gif.mjs">scripts/make-demo-gif.mjs</a>: a starter, a passing gate, and a regression that fails the build with exit code 3.</sub></p>
+
 ---
 
 Evals.si evaluates an AI system across its life. **Before you ship**, it runs agents, RAG pipelines and models on datasets and sandboxed tasks, and fails the build when a gate fails. **While it runs**, it scores live traces as they arrive and writes the scores back to the MLflow, Phoenix or Langfuse your team already uses. **As you train it**, the same evaluators become RL rewards and checkpoint checks for fine-tuning. One set of evaluators serves all three, so a metric means the same thing in CI, in production and in training.
