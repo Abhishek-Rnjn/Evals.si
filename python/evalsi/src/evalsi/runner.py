@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from evalsi._version import __version__
-from evalsi.datasets import load_records, records_hash
+from evalsi.datasets import check_cluster_key, load_records, records_hash
 from evalsi.evaluator import (
     BoundEvaluator,
     EvalContext,
@@ -207,6 +207,7 @@ async def aevaluate(
         raise ValueError("confidence must be between 0 and 1")
     instances = bind_evaluators(evaluators, params=params, registry=registry)
     records = load_records(data, mapping=mapping, limit=limit)
+    check_cluster_key(records, cluster_by)
 
     owned_judge: JudgeClient | None = None
     judge_client: JudgeClient | None = judge if isinstance(judge, JudgeClient) else None

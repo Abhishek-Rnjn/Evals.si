@@ -20,18 +20,31 @@ def add_init_command(sub: Any) -> None:
         "--callable",
         dest="application_callable",
         metavar="MODULE:FUNCTION",
-        help="application template: synchronous Python callable (input: str) -> str",
+        help="application template: sync or async Python callable (input: str) -> str",
+    )
+    p.add_argument(
+        "--url",
+        dest="application_url",
+        metavar="URL",
+        help="application template: evaluate this HTTP endpoint (POST JSON) by default",
     )
     p.set_defaults(func=_cmd_init)
 
 
-def starter_files(template: str, *, application_callable: str | None = None) -> dict[str, str]:
+def starter_files(
+    template: str,
+    *,
+    application_callable: str | None = None,
+    application_url: str | None = None,
+) -> dict[str, str]:
     if template == "application":
         from evalsi.application_starter import application_files
 
-        return application_files(application_callable or "application:answer")
+        return application_files(application_callable or "application:answer", application_url)
     if application_callable is not None:
         raise ValueError("--callable requires --template application")
+    if application_url is not None:
+        raise ValueError("--url requires --template application")
     agent = template == "agent"
     records = [
         {"id": "france", "input": "Capital of France?", "output": "Paris", "reference": "Paris"},
@@ -43,6 +56,8 @@ def starter_files(template: str, *, application_callable: str | None = None) -> 
         "gates": [
             {"metric": "exact-match", "min": 1.0},
             {"metric": "exact-match", "stat": "GATE_STAT_ERROR_RATE", "max": 0.0},
+            # A record without an output is skipped, not failed: gate that too.
+            {"metric": "exact-match", "stat": "GATE_STAT_SKIPPED_RATE", "max": 0.0},
         ],
     }
     if agent:
@@ -137,7 +152,9 @@ https://evalsi.dev/docs/guides/gate-an-agent-in-ci/.
 def _cmd_init(args: argparse.Namespace) -> int:
     directory = Path(args.directory).expanduser()
     files = starter_files(
-        args.template, application_callable=getattr(args, "application_callable", None)
+        args.template,
+        application_callable=getattr(args, "application_callable", None),
+        application_url=getattr(args, "application_url", None),
     )
     try:
         # An existing directory (including an empty one or symlink) is never modified.

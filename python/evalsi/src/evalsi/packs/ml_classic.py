@@ -374,10 +374,12 @@ def classifier_calibration(
 
 @evaluator(
     name="builtin/regression",
-    version="1.0.0",
+    version="1.1.0",
     description=(
         "MAE, MSE, RMSE, R² and MAPE of numeric outputs against numeric references "
-        "(MAPE leaves out references of zero)."
+        "(MAPE leaves out references of zero). Errors when more than max_unparsed "
+        "(a fraction, default 0) of the records have an output or reference that is "
+        "not a number, instead of scoring only the rest."
     ),
     scope=Scope.DATASET,
     requires=REFERENCE,
@@ -389,7 +391,7 @@ def classifier_calibration(
         MetricSpec("mape", NUMBER, min=0, higher_is_better=False),
     ],
 )
-def regression(records: list[Record]) -> list[Score]:
+def regression(records: list[Record], *, max_unparsed: float = 0.0) -> list[Score]:
     pairs = []
     unparsed = 0
     for r in records:
@@ -401,6 +403,13 @@ def regression(records: list[Record]) -> list[Score]:
     if not pairs:
         raise SkipRecord("no records with numeric output and reference")
     n = len(pairs)
+    # Dropping an output that is not a number would score a model that answers
+    # one record in three as if it had answered them all.
+    if unparsed / len(records) > max_unparsed:
+        raise ValueError(
+            f"{unparsed} of {len(records)} records have an output or reference that is not a "
+            f"number; raise max_unparsed (now {max_unparsed:g}) to leave them out"
+        )
     errors = [p - y for y, p in pairs]
     mae = sum(abs(e) for e in errors) / n
     mse = sum(e * e for e in errors) / n

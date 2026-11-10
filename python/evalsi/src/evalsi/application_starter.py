@@ -8,21 +8,44 @@ import re
 _CALLABLE = r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*:[A-Za-z_]\w*"
 
 
-def application_files(target: str) -> dict[str, str]:
+def application_files(target: str, url: str | None = None) -> dict[str, str]:
     if re.fullmatch(_CALLABLE, target, flags=re.ASCII) is None:
         raise ValueError("--callable must be MODULE:FUNCTION, for example my_app:answer")
+    if url is not None and not _valid_url(url):
+        raise ValueError("--url must be an http:// or https:// URL without credentials")
     cases = [
         {"id": "france", "input": "Capital of France?", "reference": "Paris"},
         {"id": "japan", "input": "Capital of Japan?", "reference": "Tokyo"},
         {"id": "italy", "input": "Capital of Italy?", "reference": "Rome"},
     ]
     return {
-        "evaluate.py": _ENTRYPOINT.replace("__DEFAULT_CALLABLE__", repr(target)),
+        "evaluate.py": _ENTRYPOINT.replace("__DEFAULT_CALLABLE__", repr(target)).replace(
+            "__DEFAULT_URL__", repr(url)
+        ),
         "application.py": _APPLICATION,
         "cases.jsonl": "".join(json.dumps(case) + "\n" for case in cases),
         "README.md": _README,
         ".gitignore": "results*.json\nreport*.html\nreport*.md\n__pycache__/\n.evalsi*/\n",
     }
+
+
+def _valid_url(url: str) -> bool:
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    # A password in a URL would be written into the generated file.
+    return (
+        parts.scheme in ("http", "https")
+        and bool(parts.hostname)
+        and parts.username is None
+        and parts.password is None
+        and url.isascii()
+        and url.isprintable()
+        and " " not in url
+    )
 
 
 _APPLICATION = '''"""Synthetic offline controls. Replace these with your own application."""
@@ -41,11 +64,14 @@ def regressed(question: str) -> str:
     return "Kyoto" if question == "Capital of Japan?" else answer(question)
 '''
 
-_ENTRYPOINT = r'''"""Run a synchronous application with the installed Evals.si SDK."""
+_ENTRYPOINT = r'''"""Run an application with the installed Evals.si SDK: a Python callable (sync
+or async), or an HTTP endpoint."""
 
 from __future__ import annotations
 
 import argparse
+import asyncio
+import concurrent.futures
 import contextlib
 import importlib
 import inspect
@@ -61,6 +87,7 @@ from evalsi import Content, Outcome, Record, Score, evaluate, evaluator
 from evalsi.evaluator import MetricSpec, Requirements, ScoreType
 
 DEFAULT_CALLABLE = __DEFAULT_CALLABLE__
+DEFAULT_URL = __DEFAULT_URL__
 
 
 def positive_int(value: str) -> int:
@@ -139,9 +166,55 @@ def load_application(target: str) -> Callable[[str], Any]:
             "cannot load callable; check MODULE:FUNCTION, its dependencies and Python import path. "
             "Import the module locally to debug; application error details were suppressed."
         ) from None
-    if not callable(application) or inspect.iscoroutinefunction(application):
-        raise ValueError("callable must be synchronous: def answer(input: str) -> str")
+    if not callable(application):
+        raise ValueError("callable must be a function: def answer(input: str) -> str")
+    if inspect.iscoroutinefunction(application) or inspect.iscoroutinefunction(
+        getattr(application, "__call__", None)
+    ):
+        coroutine = cast(Callable[[str], Any], application)
+
+        def run_async(text: str) -> Any:
+            # The SDK calls this from inside its own event loop, so each case gets a
+            # loop of its own on a worker thread. Calls stay sequential.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coroutine(text)).result()
+
+        return run_async
     return cast(Callable[[str], Any], application)
+
+
+def http_application(
+    url: str, input_field: str, output_field: str, timeout: float
+) -> Callable[[str], Any]:
+    """POST {input_field: input} as JSON to url; the answer is output_field of the JSON
+    reply (a dotted path, for example choices.0.message.content). Extra headers come
+    from EVALSI_APP_HEADERS, a JSON object, so a token never appears in a command."""
+    import httpx
+
+    parts = httpx.URL(url)
+    if parts.scheme not in ("http", "https") or not parts.host or parts.userinfo:
+        raise ValueError("--url must be an http:// or https:// URL without credentials")
+    try:
+        headers = json.loads(os.environ.get("EVALSI_APP_HEADERS") or "{}")
+    except ValueError:
+        headers = None
+    if not isinstance(headers, dict) or any(
+        not isinstance(k, str) or not isinstance(v, str) for k, v in headers.items()
+    ):
+        raise ValueError("EVALSI_APP_HEADERS must be a JSON object of string headers")
+
+    def call(text: str) -> Any:
+        response = httpx.post(url, json={input_field: text}, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        value: Any = response.json()
+        for part in output_field.split("."):
+            if isinstance(value, list) and part.isdigit():
+                value = value[int(part)]
+            else:
+                value = value[part]
+        return value
+
+    return call
 
 
 def reproduction_metadata(target: str, cases: Path, case_id: str) -> dict[str, Any]:
@@ -177,7 +250,16 @@ def main() -> int:
                "2: command-line usage error. Passing a small sample does not establish quality.",
     )
     parser.add_argument("--callable", default=DEFAULT_CALLABLE, dest="target",
-                        metavar="MODULE:FUNCTION", help="synchronous callable: (input: str) -> str")
+                        metavar="MODULE:FUNCTION",
+                        help="sync or async callable: (input: str) -> str")
+    parser.add_argument("--url", default=DEFAULT_URL,
+                        help="evaluate an HTTP endpoint instead of a callable: POSTs JSON")
+    parser.add_argument("--input-field", default="input",
+                        help="with --url: request JSON field for the input (default: input)")
+    parser.add_argument("--output-field", default="output",
+                        help="with --url: dotted path to the answer in the reply (default: output)")
+    parser.add_argument("--timeout", type=float, default=60.0,
+                        help="with --url: seconds to wait for each reply (default: 60)")
     parser.add_argument("--cases", type=Path, default=Path(__file__).with_name("cases.jsonl"),
                         help="JSONL with unique string id, input and reference fields")
     parser.add_argument("--limit", type=positive_int, help="run only the first N cases")
@@ -193,9 +275,18 @@ def main() -> int:
                 raise ValueError("--case did not match any id; inspect the cases file")
         if args.limit is not None:
             records = records[:args.limit]
-        application = load_application(args.target)
-        for record in records:
-            record.metadata.update(reproduction_metadata(args.target, args.cases, record.id))
+        if args.url:
+            if not args.timeout > 0:
+                raise ValueError("--timeout must be positive")
+            application = http_application(
+                args.url, args.input_field, args.output_field, args.timeout
+            )
+        else:
+            application = load_application(args.target)
+            for record in records:
+                record.metadata.update(
+                    reproduction_metadata(args.target, args.cases, record.id)
+                )
 
         @evaluator(
             name="application/exact-match",
@@ -219,6 +310,8 @@ def main() -> int:
                     output.close()
                 raise RuntimeError(
                     "application must return a nonempty string, not None, an object or an awaitable"
+                    if not args.url else
+                    "the endpoint's output field must be a nonempty string; check --output-field"
                 )
             record.output = Content(text=output)
             passed = output == record.reference.as_text()
@@ -286,11 +379,26 @@ default at creation time with
 `evalsi init my-evals --template application --callable my_package.my_module:answer`.
 The module must be importable in the same Python environment (install your app,
 or set its import path). A simple local `application.py` is provided to edit.
-Use a thin synchronous adapter for async applications or structured APIs.
+An `async def answer(input: str) -> str` works too: each case runs in its own
+event loop, one after another. Use a thin adapter for structured APIs.
+
+To evaluate a running service instead, pass `--url` (or create the starter with
+`evalsi init my-evals --template application --url http://localhost:8000/answer`):
+
+```bash
+python evaluate.py --url http://localhost:8000/answer --output results.json
+```
+
+Each case is POSTed as JSON `{"input": "..."}` and the answer is read from the
+reply's `output` field. `--input-field` and `--output-field` rename them; the
+output field may be a dotted path such as `choices.0.message.content`.
+`--timeout` (seconds, default 60) bounds each call. Extra request headers come
+from the `EVALSI_APP_HEADERS` environment variable, a JSON object such as
+`{"Authorization": "Bearer ..."}`, so a token never appears in a command or a file.
 
 The contract is `def answer(input: str) -> str`. The function receives exactly
 one case's input string and must return a nonempty string. No response wrapper,
-None, coroutine, implicit printed output or JSON object is accepted. Cases are
+None, implicit printed output or JSON object is accepted. Cases are
 UTF-8 JSONL with unique nonempty string `id`, `input`, and `reference` fields.
 Edit `cases.jsonl` to encode your application's expected behavior; additional
 fields are not checks. A custom file can be selected with `--cases path.jsonl`.
@@ -313,7 +421,7 @@ each case's input, expected reference, actual output when available, and reasons
 Import errors are actionable configuration errors; application stdout/stderr and
 exception details are suppressed to avoid copying secrets into reports. Debug
 the callable locally if necessary. This is **not a sandbox** or timeout boundary:
-only run trusted code, and implement timeouts in your adapter. Your own
+only run trusted code, and implement timeouts in your adapter (`--url` has `--timeout`). Your own
 application may perform side effects or need dependencies, network or secrets;
 the supplied offline controls do not. Keep credentials in your application's
 environment, never in cases, command arguments or committed files.

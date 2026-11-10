@@ -4,7 +4,36 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+
+- **Coverage gates.** `GATE_STAT_SKIPPED_RATE` (skipped / all evaluations) and `GATE_STAT_COUNT` (evaluations scored) join the gate statistics, in the SDK, the server, the CRD and the web UI. A mean leaves skipped records out, so a run whose outputs went missing for most records could pass a mean gate; `evalsi run` now warns when a gate passes on a metric that skipped records and neither is gated. The `recorded` starter gates the skipped rate.
+- **`evalsi compare BASELINE.json CANDIDATE.json`** compares two results files without a server (paired by record and trial), and `--fail-on-regression` exits 3 on a significant regression. `--server` keeps comparing two runs by id.
+- **`evalsi.testing.assert_eval`** gates an evaluation inside a pytest or unittest test, with an optional sync or async `task` that produces the outputs; `pytest --evalsi-results DIR` saves each call's results.
+- **The application starter takes async callables and HTTP endpoints.** `evaluate.py --callable` accepts `async def`; `--url` (also `evalsi init --template application --url`) POSTs each case as JSON, with `--input-field`, `--output-field` (a dotted path), `--timeout` and headers from `EVALSI_APP_HEADERS`.
+- **The GitHub Action can comment on the pull request** (`pr-comment: 'true'`): one comment per spec, updated in place, holding the same metrics-only summary. A missing permission never changes the gate's outcome.
+- **Web UI:** an empty project shows the commands that send a first run; a finished run has **Run again**.
+- `builtin/loop-detection` 1.1.0 also fails a repeated block of calls (A B A B ...), up to `max_cycle` (default 4) calls long. `builtin/tool-call-accuracy` 1.1.0 gains `require_success`, so a call that errored cannot match an expected one.
+- Inline datasets in a spec file accept plain strings (`input: "q"`), as JSONL does, and `inline:` may be a plain list.
+
+### Fixed
+
+- `evalsi eval` and an embedded `evalsi run` over an empty dataset exit 1 instead of 0.
+- JSONL and JSON datasets saved with a UTF-8 byte-order mark load.
+- The run page of the web UI printed "nullnull" under the records table; the workbench printed "null" beside a run without an error.
+- `GET /` on the server redirects to `/ui/` instead of 404, and the server logs the UI's URL at start.
+- `builtin/json-valid` accepted `NaN` and `Infinity`.
+- `builtin/regression` (now 1.1.0) scored only the records whose output parsed as a number; it now errors unless `max_unparsed` allows the rest to be left out.
+- `builtin/citation-accuracy` reads `[1, 2]` and `[1-3]`, and no longer takes an index such as `items[3]` for a citation.
+- The interval of a pass/fail metric's paired difference is kept within [-1, 1], in `evalsi compare`, `evalsi matrix`, the GitHub Action and the server's `CompareRuns`.
+- `builtin/token-f1` scores two answers that both normalize to nothing as 1, as SQuAD does; `builtin/numeric-match` reads a Unicode minus sign; `builtin/contains` skips an empty reference instead of passing it; `builtin/secret-leak` finds Google API keys.
+- `evalsi mcp` exited on a request whose `id` was not a string or number, or a cancel notification with malformed `params`.
+- A dataset path that leaves `datasets_dir` is refused by its spelling, so the error no longer tells a caller whether the file exists on the server's host.
+- `--cluster-by` (and `summary.cluster_by`) with a key no record has is an error instead of silently changing every interval.
+
 ### Changed
+
+- `evalsi --help` describes the eight commands to start with and names the rest by group; `evalsi --help-all` lists every command as before.
+- **Behaviour changes in evaluators:** `loop-detection` fails cycles it used to pass (`max_cycle: 1` restores the old check), `regression` errors on unparseable outputs (`max_unparsed: 1` restores the old result), `json-valid` fails `NaN`/`Infinity`, and `contains` skips records with an empty reference.
 
 - The root GitHub Action installs evalsi and evalsi-harness 0.3.2 by default (was 0.3.1), and the `onboarding` CI job tests the action against published 0.3.2.
 

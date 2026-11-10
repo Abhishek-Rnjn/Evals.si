@@ -60,6 +60,10 @@ finetune = "evalsi.packs.finetune:PACK"
 ml-classic = "evalsi.packs.ml_classic:PACK"
 ml-monitoring = "evalsi.packs.ml_monitoring:PACK"
 
+# `pytest --evalsi-results DIR` for evalsi.testing.assert_eval; inert otherwise.
+[project.entry-points.pytest11]
+evalsi = "evalsi.pytest_plugin"
+
 [project.entry-points."evalsi.importers"]
 snapshot = "evalsi.dataset_snapshots:import_snapshot"
 

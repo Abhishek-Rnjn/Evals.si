@@ -285,6 +285,32 @@ def test_error_rate_gate() -> None:
     assert spec.spec.gates[0].stat == rate
 
 
+def test_skipped_rate_and_count_gates() -> None:
+    # A mean leaves skipped records out, so a run whose outputs went missing
+    # has a perfect mean; the skipped-rate and count gates fail it.
+    summaries = [
+        MetricSummary(metric="gappy", evaluator="e", kind="proportion", n=1, skipped=3, mean=1.0),
+        MetricSummary(metric="clean", evaluator="e", kind="proportion", n=4, mean=1.0),
+        MetricSummary(metric="empty", evaluator="e", kind="proportion"),
+    ]
+    rate, count = run_pb2.GATE_STAT_SKIPPED_RATE, run_pb2.GATE_STAT_COUNT
+    results = check_gates(
+        [
+            run_pb2.Gate(metric="gappy", min=0.9),
+            run_pb2.Gate(metric="gappy", stat=rate, max=0.1),
+            run_pb2.Gate(metric="gappy", stat=count, min=3),
+            run_pb2.Gate(metric="clean", stat=rate, max=0.0),
+            run_pb2.Gate(metric="clean", stat=count, min=4),
+            run_pb2.Gate(metric="empty", stat=rate, max=0.1),
+            run_pb2.Gate(metric="empty", stat=count, min=1),
+        ],
+        summaries,
+    )
+    assert [r.passed for r in results] == [True, False, False, True, True, False, False]
+    assert (results[1].value, results[1].stat) == (0.75, "skipped_rate")
+    assert (results[2].value, results[2].stat) == (1.0, "count")
+
+
 def test_gates_fail_non_finite_values() -> None:
     summaries = [
         MetricSummary(metric="nan", evaluator="e", kind="number", mean=float("nan")),

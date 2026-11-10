@@ -43,6 +43,12 @@ inputs:
   release-id:
     description: New immutable decision ID; defaults to ci-GITHUB_RUN_ID-GITHUB_RUN_ATTEMPT.
     default: ''
+  pr-comment:
+    description: Set true to post the summary as one pull-request comment, updated in place on each push. Needs `pull-requests` write permission; only metrics, labels and hashes are posted.
+    default: 'false'
+  github-token:
+    description: Token used for the pull-request comment.
+    default: ${{ github.token }}
   artifact-name:
     description: Opt in to uploading raw results and process logs (may contain private data).
     default: ''
@@ -88,6 +94,8 @@ runs:
         EVALSI_ACTION_BASELINE_SHA256: ${{ inputs.baseline-sha256 }}
         EVALSI_ACTION_BASELINE_COMMIT: ${{ inputs.baseline-commit }}
         EVALSI_ACTION_RELEASE_ID: ${{ inputs.release-id }}
+        EVALSI_ACTION_PR_COMMENT: ${{ inputs.pr-comment }}
+        EVALSI_ACTION_GITHUB_TOKEN: ${{ inputs.github-token }}
       run: python "$EVALSI_ACTION_ROOT/.github/actions/evalsi/run.py"
     - name: Upload private run data only when requested
       if: always() && inputs.artifact-name != '' && steps.gate.outputs.artifact-directory != ''

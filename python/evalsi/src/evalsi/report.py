@@ -554,7 +554,8 @@ def to_html(r: Report) -> str:
                 else ("", "unavailable")
             )
             reason = f" — {e(str(g['reason']))}" if g.get("reason") else ""
-            parts.append(f"<li><span class={cls}>{mark}</span> {e(_gate_text(g))}{reason}</li>")
+            span = f"<span class={cls}>{mark}</span>" if cls else f"<span>{mark}</span>"
+            parts.append(f"<li>{span} {e(_gate_text(g))}{reason}</li>")
         parts.append("</ul>")
     for metric, items in r.worst.items():
         parts.append(f"<h2>Lowest {e(metric)}</h2>")

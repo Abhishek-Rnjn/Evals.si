@@ -134,6 +134,8 @@ spec:
   gates:
     - {metric: task-success.pass^3, min: 0.8}
     - {metric: task-success, stat: GATE_STAT_ERROR_RATE, max: 0.05}
+    - {metric: task-success, stat: GATE_STAT_SKIPPED_RATE, max: 0}
+    - {metric: task-success, stat: GATE_STAT_COUNT, min: 20}
   harness:
     builtin:
       budget: {usd: 0.50, wall_clock: 5m}   # a runaway agent stops here
@@ -142,6 +144,8 @@ spec:
 - **`trials`** runs each task several times. Evals.si reports `pass@k` (at least one of k trials passed) and `pass^k` (all k passed). A trial in which the agent failed to run counts as not passed.
 - **`pass^3 >= 0.8`** means: three trials in a row must pass on at least 80% of the tasks. Use `pass^k` when you need reliability, and `pass@k` when one success is enough.
 - **`GATE_STAT_ERROR_RATE`** is the fraction of evaluations that errored, for example because the agent crashed or its model call failed. A metric's mean leaves errored records out, so without this gate an agent that crashes on most tasks and passes the rest still has a high mean. `max: 0.05` fails the run when more than 5% of them error.
+- **`GATE_STAT_SKIPPED_RATE`** is the fraction of evaluations that were skipped because a record lacked what the evaluator needs (an output, a reference, a trajectory). Skipped records are left out of the mean too, so a pipeline that stops producing outputs for most records can still have a perfect mean. `max: 0` fails the run when any were skipped. `evalsi run` prints a warning when a gate passes on a metric that skipped records and neither this nor the count is gated.
+- **`GATE_STAT_COUNT`** is the number of evaluations that were scored. `min: 20` fails a run that scored fewer than twenty, however good its mean. A run over an empty dataset is an error (exit 1), with or without gates.
 - **Budgets** cap cost and time, so a bad prompt cannot spend without limit.
 
 Every mean in the report has a 95% confidence interval. With only a few tasks the interval is wide (above, 2 passes out of 2 is `[0.342, 1.000]`), which is the honest answer to "is it fixed?". Add tasks until the interval is narrow enough for your gate.

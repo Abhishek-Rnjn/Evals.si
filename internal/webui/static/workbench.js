@@ -218,7 +218,7 @@ window.evalsiWorkbench = ({ el, api, post, show, field, table, kv, fmt, contentT
         try {
           const { run } = await api(`/v1alpha1/runs/${encodeURIComponent(id)}`);
           if (!active() || candidate.value !== id) return;
-          candidateStatus.replaceChildren(el("p", {}, el("a", { href: `#/runs/${encodeURIComponent(id)}` }, id), ` · ${(run.status || "pending").replace("RUN_STATUS_", "")} · ${run.progress?.done || 0}/${run.progress?.total || 0}`), run.error ? el("p", { class: "error" }, run.error) : null);
+          candidateStatus.replaceChildren(el("p", {}, el("a", { href: `#/runs/${encodeURIComponent(id)}` }, id), ` · ${(run.status || "pending").replace("RUN_STATUS_", "")} · ${run.progress?.done || 0}/${run.progress?.total || 0}`), ...(run.error ? [el("p", { class: "error" }, run.error)] : []));
           if (["RUN_STATUS_PENDING", "RUN_STATUS_RUNNING"].includes(run.status)) setTimeout(poll, 1500);
         } catch (err) { if (active()) notice(candidateStatus, err); }
       }; poll();

@@ -19,6 +19,7 @@ REFERENCE = Requirements(reference=True)
 
 _WHITESPACE = re.compile(r"\s+")
 _PUNCTUATION = str.maketrans("", "", string.punctuation)
+_MINUS = str.maketrans({"\u2212": "-", "\ufe63": "-", "\uff0d": "-"})
 _NUMBER = re.compile(r"(?<![\w])-?\d[\d,]*(?:\.\d+)?(?:[eE][-+]?\d+)?|(?<![\w])-?\.\d+")
 
 
@@ -76,7 +77,10 @@ def contains(record: Record, *, substring: str | None = None, ignore_case: bool 
     if substring is not None:
         needles = [substring]
     elif record.reference is not None:
-        needles = _references(record.reference)
+        needles = [n for n in _references(record.reference) if n.strip()]
+        if not needles:
+            # Every string contains the empty string: that is not a pass.
+            raise SkipRecord("the reference is empty, so there is nothing to look for")
     else:
         raise SkipRecord("no substring param and the record has no reference")
     haystack = _output_text(record)
@@ -121,7 +125,8 @@ def fuzzy_match(record: Record, *, ignore_case: bool = True) -> Score:
 
 
 def _last_number(text: str) -> float | None:
-    matches = _NUMBER.findall(text)
+    # Models often write a Unicode minus (U+2212) for a negative sign.
+    matches = _NUMBER.findall(text.translate(_MINUS))
     if not matches:
         return None
     try:
@@ -152,6 +157,11 @@ def numeric_match(record: Record, *, rel_tol: float = 1e-6, abs_tol: float = 1e-
     return Score(passed=passed, metadata={"expected": expected, "actual": actual})
 
 
+def _reject_constant(name: str) -> Any:
+    """Python's parser accepts NaN, Infinity and -Infinity; JSON does not."""
+    raise ValueError(f"{name} is not valid JSON")
+
+
 @evaluator(
     name="builtin/json-valid",
     version="1.0.0",
@@ -160,9 +170,11 @@ def numeric_match(record: Record, *, rel_tol: float = 1e-6, abs_tol: float = 1e-
 )
 def json_valid(record: Record) -> Score:
     try:
-        json.loads(_output_text(record))
-    except json.JSONDecodeError as exc:
+        json.loads(_output_text(record), parse_constant=_reject_constant)
+    except ValueError as exc:  # JSONDecodeError is one
         return Score(passed=False, explanation=str(exc))
+    except RecursionError:
+        return Score(passed=False, explanation="nested too deeply to parse")
     return Score(passed=True)
 
 

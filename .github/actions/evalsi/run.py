@@ -308,6 +308,82 @@ def release_summary(decision: dict[str, Any]) -> list[str]:
     return lines
 
 
+COMMENT_LIMIT = 60000  # GitHub refuses a comment body over 65536 characters
+
+
+def pr_comment(rendered: str) -> str:
+    """Create or update this gate's one comment on the pull request.
+
+    Returns a line for the step summary. Commenting is a convenience: nothing
+    here may raise or change the gate's exit code. The body is the step
+    summary: metrics, labels and identity hashes, never raw run data.
+    """
+    token = os.environ.get("EVALSI_ACTION_GITHUB_TOKEN", "")
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    try:
+        with Path(os.environ["GITHUB_EVENT_PATH"]).open(encoding="utf-8") as handle:
+            event = json.load(handle)
+        number = (event.get("pull_request") or {}).get("number")
+    except (OSError, ValueError, KeyError, AttributeError):
+        number = None
+    if type(number) is not int or not token or repository.count("/") != 1:
+        return "PR comment skipped: not a pull request event, or no token."
+    # One comment per spec and working directory, updated in place on every push.
+    identity = hashlib.sha256(
+        "\0".join(
+            os.environ.get(key, "") for key in ("EVALSI_ACTION_DIRECTORY", "EVALSI_ACTION_SPEC")
+        ).encode()
+    ).hexdigest()[:16]
+    marker = f"<!-- evalsi-gate:{identity} -->"
+    body = rendered
+    if len(body) > COMMENT_LIMIT:
+        body = body[:COMMENT_LIMIT] + "\n\n_Truncated; the full summary is on the workflow run._\n"
+    body = f"{marker}\n{body}"
+    api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    try:
+        with httpx.Client(headers=headers, timeout=20) as client:
+            existing = None
+            for page in range(1, 11):
+                response = client.get(
+                    f"{api}/repos/{repository}/issues/{number}/comments",
+                    params={"per_page": 100, "page": page},
+                )
+                response.raise_for_status()
+                comments = response.json()
+                existing = next(
+                    (
+                        c["id"]
+                        for c in comments
+                        if isinstance(c.get("body"), str) and c["body"].startswith(marker)
+                    ),
+                    None,
+                )
+                if existing is not None or len(comments) < 100:
+                    break
+            if existing is not None:
+                response = client.patch(
+                    f"{api}/repos/{repository}/issues/comments/{existing}", json={"body": body}
+                )
+            else:
+                response = client.post(
+                    f"{api}/repos/{repository}/issues/{number}/comments", json={"body": body}
+                )
+            response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        return (
+            f"PR comment not posted (HTTP {error.response.status_code}); the job needs "
+            "`permissions: pull-requests: write`, which pull requests from forks do not get."
+        )
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+        return "PR comment not posted: the GitHub API could not be reached or understood."
+    return "PR comment updated." if existing is not None else "PR comment posted."
+
+
 def main() -> int:
     root = Path(tempfile.mkdtemp(prefix="evalsi-action-", dir=os.environ["RUNNER_TEMP"]))
     result = root / "results.json"
@@ -351,8 +427,11 @@ def main() -> int:
     ]
     rendered = "\n".join(lines) + "\n"
     (root / "summary.md").write_text(rendered, encoding="utf-8")
+    note = ""
+    if os.environ.get("EVALSI_ACTION_PR_COMMENT", "").lower() == "true":
+        note = "\n" + pr_comment(rendered) + "\n"
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as out:
-        out.write(rendered)
+        out.write(rendered + note)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as out:
         out.write(f"exit-code={code}\nresults={result if result.exists() else ''}\n")
         out.write(f"artifact-directory={root}\n")

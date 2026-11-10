@@ -38,6 +38,16 @@ const (
 	// {metric: "task-success", stat: GATE_STAT_ERROR_RATE, max: 0.05}, to
 	// fail a candidate that errors on many records and passes the rest.
 	GateStat_GATE_STAT_ERROR_RATE GateStat = 4
+	// The fraction of the metric's evaluations that were skipped: skipped /
+	// (n + skipped + errors). A mean leaves skipped records out, so a run
+	// whose outputs went missing can still pass a mean gate; gate this with a
+	// max, for example {metric: "exact-match", stat: GATE_STAT_SKIPPED_RATE,
+	// max: 0.1}.
+	GateStat_GATE_STAT_SKIPPED_RATE GateStat = 5
+	// The number of evaluations that were scored (n). Gate it with a min,
+	// for example {metric: "exact-match", stat: GATE_STAT_COUNT, min: 50}, so
+	// a small or mostly skipped sample cannot pass.
+	GateStat_GATE_STAT_COUNT GateStat = 6
 )
 
 // Enum value maps for GateStat.
@@ -48,13 +58,17 @@ var (
 		2: "GATE_STAT_CI_LOW",
 		3: "GATE_STAT_CI_HIGH",
 		4: "GATE_STAT_ERROR_RATE",
+		5: "GATE_STAT_SKIPPED_RATE",
+		6: "GATE_STAT_COUNT",
 	}
 	GateStat_value = map[string]int32{
-		"GATE_STAT_UNSPECIFIED": 0,
-		"GATE_STAT_MEAN":        1,
-		"GATE_STAT_CI_LOW":      2,
-		"GATE_STAT_CI_HIGH":     3,
-		"GATE_STAT_ERROR_RATE":  4,
+		"GATE_STAT_UNSPECIFIED":  0,
+		"GATE_STAT_MEAN":         1,
+		"GATE_STAT_CI_LOW":       2,
+		"GATE_STAT_CI_HIGH":      3,
+		"GATE_STAT_ERROR_RATE":   4,
+		"GATE_STAT_SKIPPED_RATE": 5,
+		"GATE_STAT_COUNT":        6,
 	}
 )
 
@@ -1890,13 +1904,15 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"evaluators\x18\x01 \x03(\v2\".evalsi.v1alpha1.BoundRunEvaluatorR\n" +
 	"evaluators\x12'\n" +
 	"\x0fsettings_sha256\x18\x02 \x01(\tR\x0esettingsSha256\x12%\n" +
-	"\x0eserver_version\x18\x03 \x01(\tR\rserverVersion*\x80\x01\n" +
+	"\x0eserver_version\x18\x03 \x01(\tR\rserverVersion*\xb1\x01\n" +
 	"\bGateStat\x12\x19\n" +
 	"\x15GATE_STAT_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eGATE_STAT_MEAN\x10\x01\x12\x14\n" +
 	"\x10GATE_STAT_CI_LOW\x10\x02\x12\x15\n" +
 	"\x11GATE_STAT_CI_HIGH\x10\x03\x12\x18\n" +
-	"\x14GATE_STAT_ERROR_RATE\x10\x04*\xb8\x01\n" +
+	"\x14GATE_STAT_ERROR_RATE\x10\x04\x12\x1a\n" +
+	"\x16GATE_STAT_SKIPPED_RATE\x10\x05\x12\x13\n" +
+	"\x0fGATE_STAT_COUNT\x10\x06*\xb8\x01\n" +
 	"\tRunStatus\x12\x1a\n" +
 	"\x16RUN_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12RUN_STATUS_PENDING\x10\x01\x12\x16\n" +

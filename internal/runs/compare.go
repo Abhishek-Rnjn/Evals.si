@@ -100,6 +100,14 @@ func (m *Manager) CompareRuns(ctx context.Context, req *connect.Request[evalsiv1
 	if err != nil {
 		return nil, err
 	}
+	proportion := map[string]bool{}
+	for _, run := range []*evalsiv1alpha1.Run{base, cand} {
+		for _, s := range run.GetSummaries() {
+			if s.GetKind() == evalsiv1alpha1.MetricKind_METRIC_KIND_PROPORTION {
+				proportion[s.GetMetric()] = true
+			}
+		}
+	}
 	resp := &evalsiv1alpha1.CompareRunsResponse{}
 	for _, key := range order {
 		cm, ok := c[key]
@@ -125,6 +133,11 @@ func (m *Manager) CompareRuns(ctx context.Context, req *connect.Request[evalsiv1
 			cmp.CandidateMean = proto.Float64(stats.Mean(cs))
 			cmp.Diff = proto.Float64(stats.Mean(diffs))
 			if iv, ok := stats.TInterval(diffs, level); ok && !math.IsNaN(iv.Low) {
+				// A difference of two pass/fail values lies in [-1, 1]: with few
+				// records a t interval runs past that.
+				if proportion[key] {
+					iv.Low, iv.High = math.Max(iv.Low, -1), math.Min(iv.High, 1)
+				}
 				cmp.DiffCi = &evalsiv1alpha1.ConfidenceInterval{Low: iv.Low, High: iv.High, Level: iv.Level, Method: "paired-t"}
 				cmp.Significant = iv.Low > 0 || iv.High < 0
 			}
