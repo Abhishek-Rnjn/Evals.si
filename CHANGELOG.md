@@ -38,6 +38,7 @@ A minor version: it adds features, fixes the bugs found in a review of the first
 - A dataset path that leaves `datasets_dir` is refused by its spelling, so the error no longer tells a caller whether the file exists on the server's host.
 - `--cluster-by` (and `summary.cluster_by`) with a key no record has is an error instead of silently changing every interval.
 - Two indirect Go dependencies are bumped past reachable vulnerabilities: `andybalholm/brotli` v1.2.7 (GO-2026-6888) and `klauspost/compress` v1.20.2 (GO-2026-6865).
+- The minimum Go toolchain is 1.26.11, which fixes GO-2026-6859 (an HTTP/1 server crash from a `MaxBytesReader` header race in `net/http`) in the images and binaries.
 
 ### Changed
 
