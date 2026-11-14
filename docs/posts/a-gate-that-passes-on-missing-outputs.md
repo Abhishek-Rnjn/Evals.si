@@ -1,10 +1,10 @@
-_Draft. Uses features on main that are not in a published release yet; publish after the next release._
+_Draft. Needs evalsi 0.4.0 or later._
 
 # Why an eval gate can pass when 75% of the records were skipped
 
 A gate that says `exact-match >= 0.9` reads like a statement about your data. It is a statement about the records that were scored. If most of your records have nothing to score, the gate can pass on what is left. This post builds that case on four synthetic records, shows the gate pass, and then adds the two gates that catch it.
 
-The records and the question are made up for the demonstration. The behavior is real: every command and output below was run with a development build of the CLI from `main`.
+The records and the question are made up for the demonstration. The behavior is real: every command and output below was run with a development build of the CLI that became 0.4.0.
 
 ## Four records, three without an output
 
@@ -55,7 +55,7 @@ exit code: 0
 
 The gate passed, and the exit code is 0. The table shows why: `n` is 1 and `skipped` is 3. The mean of 1.000 is the mean of one record.
 
-The warning is new on `main`. Without it, the only hint is the `skipped` column, which is easy to miss in a CI log.
+The warning is new in 0.4.0. Without it, the only hint is the `skipped` column, which is easy to miss in a CI log.
 
 ## Why the mean leaves them out
 
@@ -121,4 +121,4 @@ Read `n` and `skipped` next to every mean. If a gate is the thing that decides w
 pip install evalsi
 ```
 
-The skipped-rate and count gates, and the warning, are on `main` and are not in the published 0.3.2. Gate syntax and the other statistics are in [Gate an agent in CI](../guides/gate-an-agent-in-ci.md#4-make-the-gate-trustworthy).
+The skipped-rate and count gates, and the warning, are in evalsi 0.4.0 and later; 0.3.2 does not have them. Gate syntax and the other statistics are in [Gate an agent in CI](../guides/gate-an-agent-in-ci.md#4-make-the-gate-trustworthy).

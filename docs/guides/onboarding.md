@@ -85,7 +85,7 @@ To evaluate your code:
 
 1. Implement an importable function taking and returning a nonempty `str`,
    plain or `async def`. For example, expose your application as `my_app:answer`.
-   To evaluate a running service instead, pass `--url http://localhost:8000/answer`:
+   From 0.4.0, `async def` works too, and so does a running service: pass `--url http://localhost:8000/answer`:
    each case is POSTed as JSON `{"input": "..."}` and the answer read from the
    reply's `output` field (`--input-field` and `--output-field` rename them, and
    the output field may be a dotted path such as `choices.0.message.content`).
@@ -214,7 +214,7 @@ target is **not an observed success rate**.
 The root [action definition](../../action.yml) wraps the existing run engine and
 works with **published 0.3.0 and later**; the `doctor` and `init` commands are not
 required at runtime. Use an immutable commit containing the action, such as the
-`v0.3.2` tag's commit, in place of `ACTION_COMMIT`. The v0.3.0 tag predates the action.
+`v0.4.0` tag's commit, in place of `ACTION_COMMIT`. The v0.3.0 tag predates the action.
 
 ```yaml
 name: Agent evaluation
@@ -231,7 +231,7 @@ jobs:
         with:
           spec: run.yaml
           working-directory: my-evals
-          version: '0.3.2'
+          version: '0.4.0'
 ```
 
 Check in the starter's `run.yaml` and dataset, then adapt them to your application.
@@ -276,7 +276,7 @@ permissions:
 The comment holds what the summary holds: metrics, labels and identity hashes, no
 records. A pull request from a fork gets a read-only token, so the comment is
 skipped there and the summary says so; the gate's exit code never depends on it.
-This input needs an action commit that has it (after v0.3.2).
+This input needs an action commit from v0.4.0 or later.
 
 ### Compare two results files locally
 
@@ -288,7 +288,7 @@ evalsi compare baseline.json results.json --fail-on-regression
 --output`, or the starter's `results.json`) by record and trial and prints each
 shared metric's difference with its interval. With `--fail-on-regression` it
 exits 3 when a metric is significantly worse in the candidate. With `--server`
-the two arguments are run ids instead. Needs a release after 0.3.2.
+the two arguments are run ids instead. Needs 0.4.0 or later.
 
 ### Gates inside a test suite
 
@@ -308,7 +308,7 @@ def test_refund_answers():
 and skipped evaluations fail the test unless you raise `max_error_rate` or
 `max_skipped_rate`; an empty dataset fails. `pytest --evalsi-results DIR` writes
 each call's results to `DIR`, ready for `evalsi report` and `evalsi compare`.
-Needs a release after 0.3.2.
+Needs 0.4.0 or later.
 
 ### Advisory baseline comparison
 

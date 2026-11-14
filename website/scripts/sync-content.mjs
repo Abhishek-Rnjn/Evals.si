@@ -165,6 +165,13 @@ It is built around one decision: **can we safely ship this agent change?** Conne
 - [Trace sources](${BASE}/docs/guides/trace-sources/): score the traces you already keep in MLflow, Phoenix or Langfuse.
 - [Operations](${BASE}/docs/guides/operations/): upgrade policy, backup and restore, runbooks and reference cluster values.
 
+## New in 0.4.0: gates that catch missing evidence, and a faster first result
+
+- [Gate an agent in CI](${BASE}/docs/guides/gate-an-agent-in-ci/): the skipped-rate and count gates, and the warning when a gate passes on skipped records.
+- [Guided setup](${BASE}/docs/guides/onboarding/): \`evalsi compare\` for two results files, \`assert_eval\` for pytest, async and HTTP applications, and the Action's pull-request comment.
+- [Web UI](${BASE}/docs/guides/web-ui/): a first-run screen and "Run again".
+- [Changelog](${BASE}/docs/changelog/): upgrade notes, including refreshing the EvalRun CRD, and the evaluators whose results change.
+
 ## New in 0.3.2: your application first, and richer agent environments
 
 - [Guided setup](${BASE}/docs/guides/onboarding/): \`evalsi init --template application\` for a Python callable, decision-first reports and a scoped \`evalsi doctor\`.
