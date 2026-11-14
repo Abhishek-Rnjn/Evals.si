@@ -1,6 +1,6 @@
 # record_crewai.py (mlflow, openinference, openllmetry)
 crewai==1.15.27
-mlflow==3.17.0
+mlflow==3.17.2
 openai==2.54.0
 openinference-instrumentation-crewai==1.1.21
 openinference-instrumentation-openai==0.1.65

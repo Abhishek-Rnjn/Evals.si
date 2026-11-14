@@ -184,17 +184,17 @@ const audiences = [
   { name: "Model and training teams", text: "The same evaluators as RL rewards and checkpoint checks, and the same agent tasks as Gymnasium, NeMo Gym, OpenEnv and verifiers environments." },
 ];
 
-// New in 0.3.2 (CHANGELOG.md).
+// New in 0.4.0 (CHANGELOG.md).
 const whatsNew = [
-  { name: "Your application, first", text: "evalsi init --template application wraps a Python callable: preview one case, reproduce any case exactly, and tell failed checks from execution errors.", href: "/docs/guides/onboarding/" },
-  { name: "Decision-first reports", text: "HTML and Markdown reports separate failed checks, errors, skips and incomplete evidence, and never present a tiny sample as release approval.", href: "/docs/guides/onboarding/" },
-  { name: "Database task environments", text: "SQL tools for the agent, recorded writes, and SQL assertions on the final state, one fresh database per trial.", href: "/docs/guides/agent-runs/" },
-  { name: "Multi-service environments", text: "Services on a private network with readiness checks, named volumes and logs (bubblewrap), plus long-lived background processes in the sandbox.", href: "/docs/guides/agent-runs/" },
-  { name: "ACP agents and diff checkers", text: "Run ACP agents with permission requests decided by approval gates, and grade only the agent's diff in a fresh sandbox.", href: "/docs/guides/built-in-harness/" },
-  { name: "Browser and desktop tools", text: "Playwright browser and Xvfb computer-use toolsets, with WebArena, GAIA and OfficeQA importers for files you supply.", href: "/docs/guides/browser-and-desktop-agents/" },
-  { name: "Determinism record", text: "Every built-in-harness run records seeds, response model snapshots, tool versions and, when the sandbox reports it, the image digest.", href: "/docs/guides/agent-runs/" },
-  { name: "First-time tutorials", text: "A hands-on course from install to a CI gate with a fake tool-calling model, failure controls and replay; no provider key needed.", href: "/docs/tutorials/" },
-  { name: "Security fixes", text: "API key label escalation, a sandbox workdir symlink escape, plugin install paths and unit-test early exits, all fixed.", href: "/docs/changelog/" },
+  { name: "Gates on coverage", text: "A mean leaves skipped records out, so a gate on it can pass when most outputs are missing. The skipped-rate and count gates fail that run, and evalsi run warns when a passing gate skipped records.", href: "/docs/guides/gate-an-agent-in-ci/" },
+  { name: "Compare two results files", text: "evalsi compare baseline.json candidate.json pairs records and trials, prints each metric's difference with its interval, and can exit 3 on a regression. No server needed.", href: "/docs/guides/onboarding/" },
+  { name: "Gates inside pytest", text: "assert_eval runs an evaluation in a test and fails it with the metric table and the failing records; pytest --evalsi-results saves each call's results.", href: "/docs/guides/onboarding/" },
+  { name: "Async and HTTP applications", text: "The application starter runs an async callable or an HTTP endpoint, with a timeout and headers from the environment, so a token never appears in a command.", href: "/docs/guides/onboarding/" },
+  { name: "Pull-request comment", text: "The GitHub Action can post its metrics-only summary as one comment, updated on each push. A missing permission never changes the gate's outcome.", href: "/docs/guides/onboarding/" },
+  { name: "A first-run screen", text: "An empty server shows the commands that send a first run, the root address leads to the UI, and a finished run can be run again.", href: "/docs/guides/web-ui/" },
+  { name: "Evaluators that fail loudly", text: "loop-detection finds repeated blocks of calls, regression errors on unparseable outputs, and json-valid refuses NaN. Some results change: see the changelog.", href: "/docs/changelog/" },
+  { name: "A tidier CLI", text: "evalsi --help shows the commands to start with and groups the rest; --help-all lists every command.", href: "/docs/get-started/" },
+  { name: "Review fixes", text: "Empty datasets exit 1, byte-order marks load, an interval cannot leave [-1, 1], a dataset path no longer reveals which server files exist, and two vulnerable dependencies are bumped.", href: "/docs/changelog/" },
 ];
 
 // evalsi-harness (docs/guides/built-in-harness.md): what is built.
@@ -310,7 +310,7 @@ const extras = [
         <a href={doc("/docs/guides/onboarding/")} class="animate-fade-up inline-block">
           <AnimatedGradientText>
             <AnimatedBadge text="New" className="mr-2 hidden shrink-0 sm:inline-block" />
-            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">New in 0.3.2: your application's first result, richer agent environments</span>
+            <span class="inline animate-gradient bg-gradient-to-r from-[#818cf8] via-[#2dd4bf] to-[#818cf8] bg-[length:var(--bg-size)_100%] bg-clip-text text-xs text-transparent sm:text-sm">New in 0.4.0: coverage gates, local compare, pytest gates</span>
             <ArrowRight className="ml-1 size-3.5 text-neutral-400 transition-transform group-hover:translate-x-0.5" />
           </AnimatedGradientText>
         </a>
@@ -414,8 +414,8 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
     <!-- What's new -->
     <section class="mx-auto max-w-6xl px-4 pb-24 sm:px-6">
       <div class="mx-auto mb-12 max-w-2xl text-center">
-        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">New in 0.3.2</p>
-        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Your application first, and richer agent environments</h2>
+        <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">New in 0.4.0</p>
+        <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">Gates that catch missing evidence, and a faster first result</h2>
         <p class="mt-4 text-neutral-600 dark:text-neutral-400">Upgrade with <code class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-sm dark:bg-white/10">pip install -U evalsi evalsi-harness</code>, and the server and charts to the same version. Everything else that changed is in the <a class="font-medium text-indigo-600 underline-offset-4 hover:underline dark:text-indigo-300" href={doc("/docs/changelog/")}>changelog</a>.</p>
       </div>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
