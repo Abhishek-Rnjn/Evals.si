@@ -1,7 +1,7 @@
 # Secret scanning (see .github/workflows/hygiene.yml). The default rules apply;
 # only these exact fake values, used by the guardrail and redaction tests and
 # the docs that show them, are allowed. A real credential still fails.
-title = "Evals.si"
+title = "Evalsi"
 
 [extend]
 useDefault = true

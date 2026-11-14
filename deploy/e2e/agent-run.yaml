@@ -1,11 +1,11 @@
 # An agent trial on the pod rung: the agent and its checker run in a pod
 # per sandbox (evalsi-guest injected, no service-account token, confined by
 # the NetworkPolicy), leased from a SandboxClass pool.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: agent
-  labels: {evals.si/project: e2e}
+  labels: {evalsi.dev/project: e2e}
 spec:
   target:
     agent:

@@ -1,4 +1,4 @@
-"""Evals.si: evaluate AI agents, RAG pipelines, LLMs and models, from CI to production to training.
+"""Evalsi: evaluate AI agents, RAG pipelines, LLMs and models, from CI to production to training.
 
 Quick start::
 

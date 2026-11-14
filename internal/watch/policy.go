@@ -15,9 +15,9 @@ import (
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/evaluation"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
 )
 
 var celEnv = mustEnv()

@@ -1,4 +1,4 @@
-# Evals.si product strategy for production-agent and enterprise AI teams
+# Evalsi product strategy for production-agent and enterprise AI teams
 
 Status: proposed product direction, 19 October 2026. Target audiences: teams shipping production agents and enterprise AI/platform teams.
 
@@ -8,7 +8,7 @@ The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) turns this direction into th
 
 ## Recommendation
 
-Position Evals.si around one recurring decision: **Can we safely ship this agent change?**
+Position Evalsi around one recurring decision: **Can we safely ship this agent change?**
 
 A product promise to validate: **Connect the agent and trace store you already use. Turn real failures into reproducible tests. Get a reviewable release decision for every change.**
 
@@ -61,16 +61,16 @@ Run enterprise discovery alongside the first production-agent pilots. Prioritize
 
 Prepare a procurement evidence pack: architecture/data-flow and outbound-dependency diagrams, a subprocessor statement if applicable, software inventory/SBOM and vulnerability handling, incident/support policies, published deployment limits, DPA/security-questionnaire responses, and independent testing or certification when actually obtained. Customer operation of a self-hosted instance does not eliminate vendor procurement requirements.
 
-The developer adoption measure remains weekly teams using Evals.si for real release decisions. Add enterprise measures: retained application teams per organization, percentage of relevant releases covered, shared-standard adoption, evidence preparation time and expansion from the initial pilot into another team.
+The developer adoption measure remains weekly teams using Evalsi for real release decisions. Add enterprise measures: retained application teams per organization, percentage of relevant releases covered, shared-standard adoption, evidence preparation time and expansion from the initial pilot into another team.
 
 Enterprise sources: the [identity guide](guides/identity.md), [operations guide](guides/operations.md), [ADR 0015](decisions/0015-per-project-credentials.md) (credential boundaries), [ADR 0026](decisions/0026-enterprise-audit-and-delegation.md) (proposed audit hardening), and [current verification inventory](LEFTOVERS.md). Enterprise market and packaging recommendations are hypotheses to validate with customers, not newly researched competitor feature or certification claims.
 
 ## Competitive research
 
-| Product | Publicly documented capabilities reviewed | Implication for Evals.si |
+| Product | Publicly documented capabilities reviewed | Implication for Evalsi |
 |---|---|---|
 | LangSmith | Evaluation through UI and SDK; experiment comparisons; dataset versions/splits; human annotation and judge alignment. | The complete workflow is competitive territory. Make evaluation creation, investigation and rubric calibration accessible to the team. |
-| Langfuse | Traces/sessions, prompt versions, datasets, code/judge/manual scores, and trace-to-playground investigation; self-hosted deployment. | Observability already has capable incumbents. Let their users add dependable Evals.si execution and gates without moving their trace history. |
+| Langfuse | Traces/sessions, prompt versions, datasets, code/judge/manual scores, and trace-to-playground investigation; self-hosted deployment. | Observability already has capable incumbents. Let their users add dependable Evalsi execution and gates without moving their trace history. |
 | Arize Phoenix | OpenTelemetry/OpenInference tracing, versioned datasets, experiments, playground replay, prompt management, and MCP access. | A basic trace viewer or an MCP endpoint alone will not distinguish the product. Trace-linked executable evidence could be more useful. |
 | Braintrust | Python and TypeScript code-defined evaluations with tasks/scorers, tracing SDKs, CLI workflows and many framework integrations. | Integration quality, a small code footprint and developer-language reach matter. |
 | Promptfoo | Simple init/eval/view commands, declarative comparisons, CI integrations, shareable reports and broad adversarial/red-team testing. | The first useful run and understandable results must be easy. Existing marker injection controls should not be marketed as equivalent to broad validated red teaming. |
@@ -80,7 +80,7 @@ Enterprise sources: the [identity guide](guides/identity.md), [operations guide]
 
 These are source-supported capabilities, not claims that the products are identical, independently verified at scale, or equally usable. Feature overlap is substantial; the proposed positioning is a hypothesis to prove with customers, not a claim that no competitor supports CI or agent testing.
 
-## What is already in Evals.si
+## What is already in Evalsi
 
 Reviewed the README; web UI, annotation, agent-runs and CI-gating guides; run/dataset protocol; implementation review of PR 101; verification inventory; and local benchmark methodology.
 
@@ -162,7 +162,7 @@ Acceptance test: the team can explain why its evaluator is fit for the decision 
 
 Maintain a tested compatibility matrix for the release paths used by design partners. Candidate starting points are OpenAI Agents/LangGraph plus existing Langfuse/Phoenix ingestion; select the final set from actual customer usage.
 
-Add a first-class TypeScript path if the first customers use JavaScript agent applications. They should not need to rewrite their agent around Evals.si's harness. Maintain standard OpenTelemetry/OpenInference and machine-readable result export; make trace import and score write-back resilient and diagnosable.
+Add a first-class TypeScript path if the first customers use JavaScript agent applications. They should not need to rewrite their agent around Evalsi's harness. Maintain standard OpenTelemetry/OpenInference and machine-readable result export; make trace import and score write-back resilient and diagnosable.
 
 The research found that LangSmith's former SDK repository was archived and split into Python and JavaScript repositories on 16 October 2026. This is a concrete example of why compatibility tests and maintained support boundaries matter more than an unqualified integration count.
 
@@ -207,7 +207,7 @@ Fund the reliability/operability track throughout. Do not wait until a large ent
 - Keep a reliable open-source local/CI foundation. Test charging for managed execution, shared team history, collaboration and enterprise deployment/support where customers value them. Choose units after measuring support and compute costs; do not invent pricing from competitors' public feature lists.
 - Treat an AI triage assistant as an optional evidence summarizer. Proposed causes or fixes should link back to traces/checker evidence and remain reviewable.
 
-A useful north-star measure is **weekly teams making a real release decision using an Evals.si baseline and regression suite**. Track first useful result, first gate on a real repository, four-week team retention, human-confirmed false blocks, triage time, cost per decision and cases promoted from actual incidents. Stars, downloads and evaluator count are supporting distribution signals.
+A useful north-star measure is **weekly teams making a real release decision using an Evalsi baseline and regression suite**. Track first useful result, first gate on a real repository, four-week team retention, human-confirmed false blocks, triage time, cost per decision and cases promoted from actual incidents. Stars, downloads and evaluator count are supporting distribution signals.
 
 ## What to sequence later
 

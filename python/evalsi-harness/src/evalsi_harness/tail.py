@@ -5,7 +5,7 @@ json``, and the other formats in ``formats.py``) is read by a reader only after 
 process exits. ``follow`` tails the file the agent is writing instead: each poll
 re-reads the new complete lines, runs the same reader over what has arrived so far, and
 exports the steps that can no longer change as OTLP spans of a single trace (a fixed
-trace id, a root ``invoke_agent`` span sent once, at the end). Evals.si's ingest then
+trace id, a root ``invoke_agent`` span sent once, at the end). Evalsi's ingest then
 scores them through the online-evaluation policies the server already runs, and writes
 the scores back through whichever sinks (MLflow, Phoenix, Langfuse) the project has
 configured; nothing here scores or writes scores itself.

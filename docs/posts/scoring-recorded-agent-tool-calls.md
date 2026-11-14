@@ -79,7 +79,7 @@ With two records, the intervals are wide. `tool-call-accuracy.recall` has a mean
 
 ## From your own agent
 
-To produce records like these from a real agent, export its traces. The guide [Agent frameworks](../guides/agent-frameworks.md) covers LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK: instrument the agent with OpenTelemetry and send the spans to an Evals.si server, where each finished trace becomes a record with a trajectory. I did not run any of those frameworks for this post. The guide also lists, per framework, what each instrumentation records, for example which ones omit the model's answer or the tool spans.
+To produce records like these from a real agent, export its traces. The guide [Agent frameworks](../guides/agent-frameworks.md) covers LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK: instrument the agent with OpenTelemetry and send the spans to an Evalsi server, where each finished trace becomes a record with a trajectory. I did not run any of those frameworks for this post. The guide also lists, per framework, what each instrumentation records, for example which ones omit the model's answer or the tool spans.
 
 ## Try it
 

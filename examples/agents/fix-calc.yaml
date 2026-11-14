@@ -4,11 +4,11 @@
 #   evalsi run -f examples/agents/fix-calc.yaml \
 #     --judge-provider anthropic --judge-model claude-opus-5-5      # needs evalsid on PATH
 #   evalsi run -f examples/agents/fix-calc.yaml --server http://localhost:8080
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: fix-calc
-  labels: {evals.si/project: quickstart}   # on Kubernetes, default: the namespace
+  labels: {evalsi.dev/project: quickstart}   # on Kubernetes, default: the namespace
 spec:
   target:
     connector: anthropic

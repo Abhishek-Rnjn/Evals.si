@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	pb "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 func catalogFixture(t *testing.T, project, name, version string) *pb.DatasetVersion {

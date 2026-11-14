@@ -9,7 +9,7 @@ license: Apache-2.0
 runtime:
   wasm:
     module: text-checks.wasm
-    sha256: 9276d174331a1a4d27e1390a8814a03fcdb3783f30b0ef96423c5356cd017969   # evalsid wasm pin
+    sha256: 3c584d7b0aa024ccec740772db84eb496ba1effb8bbaf87bdaa09fb395408aa5   # evalsid wasm pin
 limits:
   memory_mb: 64
   timeout: 5s

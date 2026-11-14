@@ -1,4 +1,4 @@
-"""DeepEval metrics as Evals.si evaluators.
+"""DeepEval metrics as Evalsi evaluators.
 
 Each metric runs on DeepEval's own prompts and scoring, but its model calls go
 through the run's judge (``JudgeModel``), so they are cached, rate-limited and
@@ -78,7 +78,7 @@ def judge_model(session: JudgeSession) -> Any:
             return f"evalsi judge ({session.judge.config.model})"
 
         def generate(self, prompt: str, schema: Any = None) -> Any:
-            raise JudgeError("the Evals.si judge model is async only; run metrics with a_measure")
+            raise JudgeError("the Evalsi judge model is async only; run metrics with a_measure")
 
         async def a_generate(self, prompt: str, schema: Any = None) -> Any:
             if schema is not None:
@@ -917,7 +917,7 @@ CONVERSATIONAL_JEV_EVAL = EvaluatorDef(
 PACK = Pack(
     name="deepeval",
     tier="wrapped",
-    description=f"DeepEval metrics ({UPSTREAM}) run through the Evals.si judge.",
+    description=f"DeepEval metrics ({UPSTREAM}) run through the Evalsi judge.",
     evaluators=[
         *(_metric_evaluator(m) for m in METRICS),
         G_EVAL,

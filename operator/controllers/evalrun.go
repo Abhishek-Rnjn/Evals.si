@@ -21,9 +21,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/operator/spec"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/operator/spec"
 )
 
 // Phases of an EvalRun.
@@ -64,7 +64,7 @@ type EvalRunReconciler struct {
 	PollInterval time.Duration
 }
 
-// labelledProject is the project a resource asks for: its evals.si/project
+// labelledProject is the project a resource asks for: its evalsi.dev/project
 // label, else its namespace. Whether it may is ProjectPolicy's decision.
 func labelledProject(obj metav1.Object) string {
 	if p := obj.GetLabels()[v1.ProjectLabel]; p != "" {
@@ -98,8 +98,8 @@ func appliedMetadata(obj metav1.Object) string {
 // metadataChanged passes events where the generation or the labels changed.
 var metadataChanged = predicate.Or(predicate.GenerationChangedPredicate{}, predicate.LabelChangedPredicate{})
 
-// +kubebuilder:rbac:groups=evals.si,resources=evalruns,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=evals.si,resources=evalruns/status;evalruns/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=evalruns,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=evalruns/status;evalruns/finalizers,verbs=get;update;patch
 
 func (r *EvalRunReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	run := &v1.EvalRun{}

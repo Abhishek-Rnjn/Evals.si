@@ -1598,8 +1598,8 @@ const file_evalsi_v1alpha1_record_proto_rawDesc = "" +
 	"\vEnforcement\x12\x1b\n" +
 	"\x17ENFORCEMENT_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10ENFORCEMENT_FULL\x10\x01\x12\x17\n" +
-	"\x13ENFORCEMENT_PARTIAL\x10\x02B\xc8\x01\n" +
-	"\x13com.evalsi.v1alpha1B\vRecordProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x13ENFORCEMENT_PARTIAL\x10\x02B\xc6\x01\n" +
+	"\x13com.evalsi.v1alpha1B\vRecordProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_record_proto_rawDescOnce sync.Once

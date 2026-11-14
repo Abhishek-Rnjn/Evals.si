@@ -2,11 +2,11 @@
 #   evalsi run -f examples/runs/capitals.yaml                 # embedded
 #   evalsi run -f examples/runs/capitals.yaml --server http://localhost:8080
 # Exit code: 0 when every gate passes, 3 when a gate fails, 1 on errors.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: capitals
-  labels: {evals.si/project: quickstart}   # on Kubernetes, default: the namespace
+  labels: {evalsi.dev/project: quickstart}   # on Kubernetes, default: the namespace
 spec:
   target:
     connector: anthropic          # or openai-compatible with base_url

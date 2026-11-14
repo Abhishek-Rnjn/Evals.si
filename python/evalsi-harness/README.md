@@ -1,11 +1,11 @@
 # evalsi-harness
 
-**The built-in agent harness for [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si), which evaluates AI before you ship, while it runs and as you train it.** It drives an agent through a task in an Evals.si sandbox and grades the end state, so you can evaluate and gate agents in CI, and use the same tasks as RL environments.
+**The built-in agent harness for [Evalsi](https://github.com/Abhishek-Rnjn/evalsi), which evaluates AI before you ship, while it runs and as you train it.** It drives an agent through a task in an Evalsi sandbox and grades the end state, so you can evaluate and gate agents in CI, and use the same tasks as RL environments.
 
 [Documentation](https://evalsi.dev/) ·
-[Agent runs guide](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/guides/agent-runs.md) ·
-[GitHub](https://github.com/Abhishek-Rnjn/Evals.si) ·
-[Changelog](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md)
+[Agent runs guide](https://github.com/Abhishek-Rnjn/evalsi/blob/main/docs/guides/agent-runs.md) ·
+[GitHub](https://github.com/Abhishek-Rnjn/evalsi) ·
+[Changelog](https://github.com/Abhishek-Rnjn/evalsi/blob/main/CHANGELOG.md)
 
 It runs either of these:
 - the built-in tool-calling agent on any OpenAI-compatible or Anthropic model;
@@ -24,7 +24,7 @@ evalsi run -f agent-run.yaml
 
 - **A tool-calling agent:** OpenAI-compatible and Anthropic models with thinking, streaming and prompt caching; `bash`, file, `edit_file`, `glob`, `grep` and `apply_patch` tools; MCP tools over HTTP and stdio; mocked tools; versioned `minimal`, `standard` and `code-mode` profiles so a score names the harness it was measured on.
 - **Multi-agent runs:** a `delegate` tool starts a sub-agent with a clean context; its steps hang under the call as a tree and its spend comes out of the parent's budget (one level today).
-- **Escalation requests:** `request_escalation` asks for a wider policy; the harness decides, and every request is recorded for safety evaluators. Approval gates with human-in-the-loop events are on the [roadmap](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/HARNESS-ROADMAP.md).
+- **Escalation requests:** `request_escalation` asks for a wider policy; the harness decides, and every request is recorded for safety evaluators. Approval gates with human-in-the-loop events are on the [roadmap](https://github.com/Abhishek-Rnjn/evalsi/blob/main/docs/HARNESS-ROADMAP.md).
 - **Users:** an LLM-simulated user for multi-turn tasks, and scripted mid-run messages that test whether the agent takes a correction into account.
 - **Long runs and budgets:** context strategies (`compact`, `clear-tool-results`, `fresh-rounds`, `evidence-state`) and caps on steps, tokens, spend and wall-clock time.
 - **Record and replay:** model calls and tool I/O are logged as they happen; replay, resume a killed trial, or fork from step N.
@@ -34,7 +34,7 @@ evalsi run -f agent-run.yaml
 - **Observability:** every step becomes an OTel span, and the agent's diff is recorded for the `code-quality` evaluator when the workdir is a git repository.
 - **Benchmarks:** SWE-bench, τ-bench, Terminal-Bench, Harbor datasets and BFCL.
 
-See [The built-in agent harness](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/guides/built-in-harness.md) for what is built and what is not.
+See [The built-in agent harness](https://github.com/Abhishek-Rnjn/evalsi/blob/main/docs/guides/built-in-harness.md) for what is built and what is not.
 
 ## Tasks as RL environments
 

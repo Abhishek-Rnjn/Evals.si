@@ -300,7 +300,7 @@ class HTTPAgent(_message.Message):
     prompt_tokens/completion_tokens) and optionally cost_usd.
     """
     trajectory_path: _builtins.str
-    """Dotted path to the turn's trajectory in Evals.si record form: an object
+    """Dotted path to the turn's trajectory in Evalsi record form: an object
     with "steps" (and optionally "session_id"), or a list of steps. Kept as
     the trajectory, for agents that report their own tool, handoff and
     guardrail steps.

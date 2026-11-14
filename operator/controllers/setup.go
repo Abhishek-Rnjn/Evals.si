@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 // Config configures the controllers Setup adds.
@@ -38,7 +38,7 @@ type Config struct {
 	// so releases of the chart can share a namespace.
 	NamePrefix string
 	// Projects, by name, that resources in other namespaces than the
-	// project's own may name with the evals.si/project label ("*": every
+	// project's own may name with the evalsi.dev/project label ("*": every
 	// namespace). Resources in Namespace may name any project.
 	ProjectNamespaces map[string][]string
 }
@@ -83,7 +83,7 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 		// Helm does not upgrade CRDs: an evalsi-crds release older than the
 		// TraceSource CRD leaves it out, and the operator runs without it.
 		if on("tracesource") {
-			if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "evals.si", Kind: "TraceSource"}, "v1alpha1"); meta.IsNoMatchError(err) {
+			if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "evalsi.dev", Kind: "TraceSource"}, "v1alpha1"); meta.IsNoMatchError(err) {
 				ctrl.Log.Info("the TraceSource CRD is not installed; apply the evalsi-crds chart's CRDs to manage trace sources", "controller", "tracesource")
 			} else if err := (&TraceSourceReconciler{Client: mgr.GetClient(), API: api, Projects: cfg.Projects(), StatsInterval: cfg.StatsInterval}).SetupWithManager(mgr); err != nil {
 				return err
@@ -98,7 +98,7 @@ func Setup(mgr ctrl.Manager, cfg Config) error {
 	if on("checkpointserver") {
 		// Helm does not upgrade CRDs: an evalsi-crds release older than the
 		// CheckpointServer CRD leaves it out, and the operator runs without it.
-		if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "evals.si", Kind: "CheckpointServer"}, "v1alpha1"); meta.IsNoMatchError(err) {
+		if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "evalsi.dev", Kind: "CheckpointServer"}, "v1alpha1"); meta.IsNoMatchError(err) {
 			ctrl.Log.Info("the CheckpointServer CRD is not installed; apply the evalsi-crds chart's CRDs to serve checkpoints", "controller", "checkpointserver")
 		} else if err := (&CheckpointServerReconciler{Client: mgr.GetClient(), NamePrefix: cfg.NamePrefix}).SetupWithManager(mgr); err != nil {
 			return err

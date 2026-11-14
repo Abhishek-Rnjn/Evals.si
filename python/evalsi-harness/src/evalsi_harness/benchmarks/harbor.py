@@ -1,4 +1,4 @@
-"""Harbor and Terminal-Bench task directories as Evals.si agent tasks.
+"""Harbor and Terminal-Bench task directories as Evalsi agent tasks.
 
 Two importers, both reading the task format directly (no Docker, no Harbor
 install):

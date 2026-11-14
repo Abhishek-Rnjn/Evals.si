@@ -21,8 +21,8 @@ proxy and CA settings supplied by your cloud environment.
 Clone the exercise files:
 
 ```bash
-git clone https://github.com/Abhishek-Rnjn/Evals.si.git
-cd Evals.si
+git clone https://github.com/Abhishek-Rnjn/evalsi.git
+cd Evalsi
 ```
 
 For an unpublished tutorial PR, check out its branch before looking for these

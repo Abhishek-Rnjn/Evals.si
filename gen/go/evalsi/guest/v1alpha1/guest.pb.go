@@ -1182,9 +1182,9 @@ const file_evalsi_guest_v1alpha1_guest_proto_rawDesc = "" +
 	"WriteFiles\x12(.evalsi.guest.v1alpha1.WriteFilesRequest\x1a).evalsi.guest.v1alpha1.WriteFilesResponse\x12^\n" +
 	"\tReadFiles\x12'.evalsi.guest.v1alpha1.ReadFilesRequest\x1a(.evalsi.guest.v1alpha1.ReadFilesResponse\x12X\n" +
 	"\aRefresh\x12%.evalsi.guest.v1alpha1.RefreshRequest\x1a&.evalsi.guest.v1alpha1.RefreshResponse\x12d\n" +
-	"\vStartEgress\x12).evalsi.guest.v1alpha1.StartEgressRequest\x1a*.evalsi.guest.v1alpha1.StartEgressResponseB\xeb\x01\n" +
+	"\vStartEgress\x12).evalsi.guest.v1alpha1.StartEgressRequest\x1a*.evalsi.guest.v1alpha1.StartEgressResponseB\xe9\x01\n" +
 	"\x19com.evalsi.guest.v1alpha1B\n" +
-	"GuestProtoP\x01ZLgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/guest/v1alpha1;guestv1alpha1\xa2\x02\x03EGX\xaa\x02\x15Evalsi.Guest.V1alpha1\xca\x02\x15Evalsi\\Guest\\V1alpha1\xe2\x02!Evalsi\\Guest\\V1alpha1\\GPBMetadata\xea\x02\x17Evalsi::Guest::V1alpha1b\x06proto3"
+	"GuestProtoP\x01ZJgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/guest/v1alpha1;guestv1alpha1\xa2\x02\x03EGX\xaa\x02\x15Evalsi.Guest.V1alpha1\xca\x02\x15Evalsi\\Guest\\V1alpha1\xe2\x02!Evalsi\\Guest\\V1alpha1\\GPBMetadata\xea\x02\x17Evalsi::Guest::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_guest_v1alpha1_guest_proto_rawDescOnce sync.Once

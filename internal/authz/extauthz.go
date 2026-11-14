@@ -23,7 +23,7 @@ import (
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 )
 
 // ExtAuthzConfig sends authorization decisions to a central policy engine.

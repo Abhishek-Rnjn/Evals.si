@@ -18,9 +18,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	sandboxv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1/sandboxv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	sandboxv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/sandbox/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/sandbox/v1alpha1/sandboxv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
 )
 
 type ca struct {
@@ -77,7 +77,7 @@ func TestServeTLSAdmitsOnlyAllowedClients(t *testing.T) {
 	cfg := &tls.Config{Certificates: []tls.Certificate{server}, ClientCAs: authority.pool, ClientAuth: tls.RequireAndVerifyClientCert, MinVersion: tls.VersionTLS12}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop, addr, err := ServeTLS(ctx, m, "127.0.0.1:0", cfg, []string{"spiffe://evals.si/worker"})
+	stop, addr, err := ServeTLS(ctx, m, "127.0.0.1:0", cfg, []string{"spiffe://evalsi.dev/worker"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,11 +95,11 @@ func TestServeTLSAdmitsOnlyAllowedClients(t *testing.T) {
 	if err := call(nil); err == nil {
 		t.Error("a client without a certificate got in")
 	}
-	other := authority.leaf(t, "other", "spiffe://evals.si/other")
+	other := authority.leaf(t, "other", "spiffe://evalsi.dev/other")
 	if err := call(&other); err == nil || !strings.Contains(err.Error(), "403") && connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Errorf("a client not on the list: %v", err)
 	}
-	worker := authority.leaf(t, "worker", "spiffe://evals.si/worker")
+	worker := authority.leaf(t, "worker", "spiffe://evalsi.dev/worker")
 	if err := call(&worker); err != nil {
 		t.Errorf("the allowed worker: %v", err)
 	}

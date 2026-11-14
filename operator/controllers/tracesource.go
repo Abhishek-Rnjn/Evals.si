@@ -14,9 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/operator/spec"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/operator/spec"
 )
 
 // TraceSourceReconciler applies each TraceSource to the server, deletes it
@@ -30,8 +30,8 @@ type TraceSourceReconciler struct {
 	StatsInterval time.Duration
 }
 
-// +kubebuilder:rbac:groups=evals.si,resources=tracesources,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=evals.si,resources=tracesources/status;tracesources/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=tracesources,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=tracesources/status;tracesources/finalizers,verbs=get;update;patch
 
 func (r *TraceSourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	s := &v1.TraceSource{}

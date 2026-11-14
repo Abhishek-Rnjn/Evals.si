@@ -5,7 +5,7 @@
 Please report vulnerabilities privately. Do not open a public issue or pull request.
 
 Use GitHub's private vulnerability reporting: open the repository's **Security** tab and choose **Report a vulnerability**
-([direct link](https://github.com/Abhishek-Rnjn/Evals.si/security/advisories/new)).
+([direct link](https://github.com/Abhishek-Rnjn/evalsi/security/advisories/new)).
 
 Include what you found, the version or commit, how to reproduce it, and what an attacker gains. A proof of concept helps.
 
@@ -13,7 +13,7 @@ You can expect an acknowledgement within 5 working days. We will keep you inform
 
 ## What is in scope
 
-Evals.si runs untrusted code (evaluators, benchmark tasks and agents) in sandboxes, and it accepts traces and API calls from other systems, so these matter most:
+Evalsi runs untrusted code (evaluators, benchmark tasks and agents) in sandboxes, and it accepts traces and API calls from other systems, so these matter most:
 
 - Escapes from a sandbox, or a sandbox running with weaker isolation than the one requested.
 - Authentication or authorization bypass, including between projects.
@@ -26,7 +26,7 @@ Sandbox limits and what each isolation level does and does not protect against a
 
 ## Supported versions
 
-Evals.si is pre-1.0. Security fixes go into the latest release only.
+Evalsi is pre-1.0. Security fixes go into the latest release only.
 
 | Version | Supported |
 |---------|-----------|

@@ -84,9 +84,9 @@ go -C "$root" test ./internal/source/langfuse -run '^TestLiveLangfuse$' -count=1
 "$python" - <<'PY' | kubectl --context "$context" apply -f -
 import os, sys, yaml
 namespace = os.environ["EVALSI_NAMESPACE"]
-metadata = {"name": "langfuse-live", "namespace": namespace, "labels": {"evals.si/project": "demo"}}
-policy = {"apiVersion": "evals.si/v1alpha1", "kind": "OnlineEvalPolicy", "metadata": metadata, "spec": {"selector": "labels[\"source\"] == \"langfuse-live\"", "stages": [{"evaluators": [{"ref": "tool-errors"}, {"ref": "loop-detection"}]}], "window": "1h"}}
-source = {"apiVersion": "evals.si/v1alpha1", "kind": "TraceSource", "metadata": metadata, "spec": {"connector": "langfuse", "endpoint": "http://langfuse-web." + os.environ["LANGFUSE_NAMESPACE"] + ".svc.cluster.local:3000", "locations": ["production"], "credentials": {"file": "langfuse-live-token/token"}, "backfill": {"since": "1h"}, "poll": {"interval": "5s"}, "policies": ["langfuse-live"], "writeBack": {"enabled": True}}}
+metadata = {"name": "langfuse-live", "namespace": namespace, "labels": {"evalsi.dev/project": "demo"}}
+policy = {"apiVersion": "evalsi.dev/v1alpha1", "kind": "OnlineEvalPolicy", "metadata": metadata, "spec": {"selector": "labels[\"source\"] == \"langfuse-live\"", "stages": [{"evaluators": [{"ref": "tool-errors"}, {"ref": "loop-detection"}]}], "window": "1h"}}
+source = {"apiVersion": "evalsi.dev/v1alpha1", "kind": "TraceSource", "metadata": metadata, "spec": {"connector": "langfuse", "endpoint": "http://langfuse-web." + os.environ["LANGFUSE_NAMESPACE"] + ".svc.cluster.local:3000", "locations": ["production"], "credentials": {"file": "langfuse-live-token/token"}, "backfill": {"since": "1h"}, "poll": {"interval": "5s"}, "policies": ["langfuse-live"], "writeBack": {"enabled": True}}}
 yaml.safe_dump_all([policy, source], sys.stdout)
 PY
 kubectl --context "$context" wait tracesource/langfuse-live -n "$evalsi_namespace" --for=condition=Synced --timeout=3m

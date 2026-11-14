@@ -4,11 +4,11 @@
 #
 #   kubectl apply -f studio-mlflow.yaml          # with the operator
 #   evalsi source apply -f studio-mlflow.yaml --server $URL
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata:
   name: studio-mlflow
-  labels: {evals.si/project: support}
+  labels: {evalsi.dev/project: support}
 spec:
   connector: mlflow
   endpoint: https://mlflow.example.com

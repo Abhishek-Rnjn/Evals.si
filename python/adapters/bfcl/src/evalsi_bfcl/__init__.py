@@ -1,4 +1,4 @@
-"""The Berkeley Function Calling Leaderboard (BFCL v4) as Evals.si tasks.
+"""The Berkeley Function Calling Leaderboard (BFCL v4) as Evalsi tasks.
 
 The importer ``bfcl://<category>`` loads a single-turn category with BFCL's
 own loaders (prompts, function docs with BFCL's language hints, and possible

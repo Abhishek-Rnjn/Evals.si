@@ -288,7 +288,7 @@ def test_catalog_json_execution_order_is_stable_and_arrays_tool_arguments_preser
 def test_catalog_spec_parses_but_embedded_loading_requires_server(tmp_path: Path) -> None:
     spec = parse_spec(
         {
-            "apiVersion": "evals.si/v1alpha1",
+            "apiVersion": "evalsi.dev/v1alpha1",
             "kind": "EvalRun",
             "spec": {"dataset": {"catalog": REF}, "evaluators": [{"ref": "exact-match"}]},
         }

@@ -16,7 +16,7 @@
 #   - HARNESS2_CODEX_API_KEY on the worker (a credential grant for the project).
 #   - the dataset: a directory YOU downloaded (see docs/guides/harness2.md for licensing).
 #     `reward=score.json` reads WorkBuddy-Bench's verifier file (unconfirmed path).
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: harness2-codex-sandboxed

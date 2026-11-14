@@ -1,4 +1,4 @@
-"""LAB task directories as Evals.si agent tasks (judge-graded).
+"""LAB task directories as Evalsi agent tasks (judge-graded).
 
 ``lab://<dir>``
     A directory you supply (for example a checkout of the benchmark's

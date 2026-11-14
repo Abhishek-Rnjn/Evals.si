@@ -323,8 +323,8 @@ const file_evalsi_v1alpha1_catalog_service_proto_rawDesc = "" +
 	"\fall_projects\x18\x04 \x01(\bR\vallProjects2\xd9\x01\n" +
 	"\x0eCatalogService\x12a\n" +
 	"\x0eListEvaluators\x12&.evalsi.v1alpha1.ListEvaluatorsRequest\x1a'.evalsi.v1alpha1.ListEvaluatorsResponse\x12d\n" +
-	"\x0fListCredentials\x12'.evalsi.v1alpha1.ListCredentialsRequest\x1a(.evalsi.v1alpha1.ListCredentialsResponseB\xd0\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x13CatalogServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x0fListCredentials\x12'.evalsi.v1alpha1.ListCredentialsRequest\x1a(.evalsi.v1alpha1.ListCredentialsResponseB\xce\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x13CatalogServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_catalog_service_proto_rawDescOnce sync.Once

@@ -1,4 +1,4 @@
-// Package mcp serves Evals.si over the Model Context Protocol's streamable
+// Package mcp serves Evalsi over the Model Context Protocol's streamable
 // HTTP transport at /mcp, following the MCP authorization specification:
 //
 //   - OAuth 2.0 Protected Resource Metadata (RFC 9728) at
@@ -30,8 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/version"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/version"
 )
 
 // Config is the mcp section of evalsi.yaml.
@@ -115,7 +115,7 @@ func (s *Server) metadataURL(r *http.Request) string {
 func (s *Server) metadata(w http.ResponseWriter, r *http.Request) {
 	doc := map[string]any{
 		"resource":                 s.resource(r),
-		"resource_name":            "Evals.si",
+		"resource_name":            "Evalsi",
 		"bearer_methods_supported": []string{"header"},
 		"authorization_servers":    []string{},
 	}
@@ -279,8 +279,8 @@ func (s *Server) handle(r *http.Request, msg *message) response {
 		return ok(map[string]any{
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
-			"serverInfo":      map[string]any{"name": "evalsid", "title": "Evals.si", "version": version_()},
-			"instructions":    "Evaluate with Evals.si: list_evaluators, evaluate records, start a run from a run spec and compare it with a baseline run.",
+			"serverInfo":      map[string]any{"name": "evalsid", "title": "Evalsi", "version": version_()},
+			"instructions":    "Evaluate with Evalsi: list_evaluators, evaluate records, start a run from a run spec and compare it with a baseline run.",
 		})
 	case "ping":
 		return ok(map[string]any{})

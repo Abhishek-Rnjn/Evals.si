@@ -18,8 +18,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 )
 
 // ClickHouseConfig points the trace store at ClickHouse.

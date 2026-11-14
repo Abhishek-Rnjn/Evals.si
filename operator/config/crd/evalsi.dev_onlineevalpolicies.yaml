@@ -4,42 +4,34 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.22.0
-  name: tracesources.evals.si
+  name: onlineevalpolicies.evalsi.dev
 spec:
-  group: evals.si
+  group: evalsi.dev
   names:
-    kind: TraceSource
-    listKind: TraceSourceList
-    plural: tracesources
+    kind: OnlineEvalPolicy
+    listKind: OnlineEvalPolicyList
+    plural: onlineevalpolicies
     shortNames:
-    - evsource
-    singular: tracesource
+    - evpolicy
+    singular: onlineevalpolicy
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=="Synced")].status
       name: Synced
       type: string
-    - jsonPath: .status.phase
-      name: Phase
-      type: string
-    - jsonPath: .status.pulled
-      name: Pulled
+    - jsonPath: .status.tracesSeen
+      name: Seen
       type: integer
-    - jsonPath: .status.scored
-      name: Scored
+    - jsonPath: .status.tracesEvaluated
+      name: Evaluated
       type: integer
-    - jsonPath: .status.watermark
-      name: Watermark
-      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-
-          TraceSource is a store that already holds an agent's traces (MLflow).
-          evalsid pulls its traces, scores them with the project's online policies and
-          writes the scores back (decision 0016). Its spec is the source, exactly as
-          in a file for `evalsi source apply -f`; the API name is the resource's and
+          OnlineEvalPolicy evaluates live traces. Its spec is the policy (selector,
+          sampling, stages, alerts, promotion); the API name is namespace.name and
           its project is the resource's.
         properties:
           apiVersion:
@@ -60,10 +52,77 @@ spec:
           metadata:
             type: object
           spec:
+            properties:
+              alerts:
+                items:
+                  properties:
+                    above:
+                      type: number
+                    below:
+                      type: number
+                    metric:
+                      type: string
+                    min_samples:
+                      x-kubernetes-int-or-string: true
+                    minSamples:
+                      x-kubernetes-int-or-string: true
+                    webhook:
+                      type: string
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              disabled:
+                type: boolean
+              judge:
+                type: string
+              promote:
+                properties:
+                  dataset:
+                    type: string
+                  when:
+                    type: string
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              sampling:
+                properties:
+                  always:
+                    items:
+                      type: string
+                    type: array
+                  rate:
+                    type: number
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              selector:
+                type: string
+              stages:
+                items:
+                  properties:
+                    evaluators:
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          params:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          ref:
+                            type: string
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      type: array
+                    when:
+                      type: string
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                type: array
+              window:
+                description: 'A duration: "250ms", "30s", "10m", "1.5h", or a number
+                  of seconds.'
+                x-kubernetes-int-or-string: true
             type: object
             x-kubernetes-preserve-unknown-fields: true
           status:
-            description: TraceSourceStatus mirrors the source's status in the API.
             properties:
               appliedMetadata:
                 description: |-
@@ -129,51 +188,24 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              deferred:
-                format: int32
-                type: integer
-              lagSeconds:
-                description: |-
-                  Seconds since the last complete pull began, as a string (Kubernetes
-                  APIs avoid floats).
-                type: string
-              lastError:
-                type: string
-              lastRunId:
-                type: string
-              lastScheduled:
-                format: date-time
-                type: string
-              lastWriteBack:
-                format: date-time
-                type: string
-              missedWindows:
+              evaluationErrors:
                 format: int64
                 type: integer
               name:
-                description: The source's name in the API.
+                description: The policy's name in the API.
                 type: string
               observedGeneration:
                 format: int64
                 type: integer
-              phase:
-                description: Backfilling, Tailing, Paused or Error.
-                type: string
-              project:
-                description: |-
-                  The project the source was last applied to, so a move to another
-                  project (a label edit) removes it from this one.
-                type: string
-              pulled:
+              tracesEvaluated:
                 format: int64
                 type: integer
-              scored:
+              tracesPromoted:
                 format: int64
                 type: integer
-              watermark:
-                description: Every trace that started before this has been handled.
-                format: date-time
-                type: string
+              tracesSeen:
+                format: int64
+                type: integer
             type: object
         required:
         - spec

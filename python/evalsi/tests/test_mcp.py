@@ -122,7 +122,7 @@ def write_run(root: Path, outputs: dict[str, str]) -> None:
         for rid, out in outputs.items()
     ]
     spec = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "EvalRun",
         "metadata": {"name": "suite"},
         "spec": {

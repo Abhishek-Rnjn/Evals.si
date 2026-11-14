@@ -1,4 +1,4 @@
-"""Harness² runs as Evals.si records and results (H7 run importer).
+"""Harness² runs as Evalsi records and results (H7 run importer).
 
 ``import_namespace(<namespace dir>)`` reads one Harness² namespace directory
 (``<runs>/<bench>/<subset>/<bench>-<substrate>-<mode><k>[...]``: per-task

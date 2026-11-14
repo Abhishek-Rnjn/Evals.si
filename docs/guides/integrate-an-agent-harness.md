@@ -1,8 +1,8 @@
 # Integrate an agent harness
 
-This guide is for the team that builds a platform where people create and deploy agents (an agent harness) and wants every deployed agent scored, and a bad one kept from shipping. It covers four steps: install Evals.si beside the agent harness, connect the agent harness's traces, gate deploys, and read the scores, then pipeline writes and retention. Each step has a runnable stand-in in [examples/demo](../../examples/demo/README.md), where Deep Agents and DeepSeek Harness play the agent harness's agents, an MLflow server plays its trace store, and a mock model keeps the run free and repeatable.
+This guide is for the team that builds a platform where people create and deploy agents (an agent harness) and wants every deployed agent scored, and a bad one kept from shipping. It covers four steps: install Evalsi beside the agent harness, connect the agent harness's traces, gate deploys, and read the scores, then pipeline writes and retention. Each step has a runnable stand-in in [examples/demo](../../examples/demo/README.md), where Deep Agents and DeepSeek Harness play the agent harness's agents, an MLflow server plays its trace store, and a mock model keeps the run free and repeatable.
 
-Evals.si has three doors, and an agent harness can use any mix:
+Evalsi has three doors, and an agent harness can use any mix:
 
 | Door | The agent harness does | Section |
 |---|---|---|
@@ -12,7 +12,7 @@ Evals.si has three doors, and an agent harness can use any mix:
 
 ## 1. Install beside the agent harness
 
-Evals.si installs from its own charts, in the agent harness's namespace or its own. Every name starts with the release name, so releases can share a namespace ([Names](kubernetes.md#names-and-installing-beside-other-charts)).
+Evalsi installs from its own charts, in the agent harness's namespace or its own. Every name starts with the release name, so releases can share a namespace ([Names](kubernetes.md#names-and-installing-beside-other-charts)).
 
 ```bash
 helm install evalsi-crds deploy/helm/evalsi-crds --set operator.namespace=studio
@@ -52,7 +52,7 @@ helm install evalsi deploy/helm/evalsi -n studio \
 
 ## 2. Connect traces
 
-**Push.** Point the agent harness's OpenTelemetry exporter at Evals.si with an `ingest` key bound to the project (OTel GenAI, OpenInference, OpenLLMetry and MLflow conventions are understood):
+**Push.** Point the agent harness's OpenTelemetry exporter at Evalsi with an `ingest` key bound to the project (OTel GenAI, OpenInference, OpenLLMetry and MLflow conventions are understood):
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=https://evalsi.studio.svc:4318
@@ -66,9 +66,9 @@ What a trace needs: an MLflow LangChain/LangGraph trace (what Deep Agents emits 
 **Pull.** If the agent harness already keeps traces in MLflow, Phoenix or Langfuse, a [trace source](trace-sources.md) reads them without a second exporter, history included, and writes the scores back to the same traces (MLflow assessments, Phoenix annotations, Langfuse scores), so they show in the agent harness's own UI:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
-metadata: {name: studio-mlflow, labels: {evals.si/project: studio}}
+metadata: {name: studio-mlflow, labels: {evalsi.dev/project: studio}}
 spec:
   connector: mlflow
   endpoint: http://mlflow.studio.svc:5000
@@ -82,11 +82,11 @@ An in-cluster, plain-HTTP MLflow must be allowed in the chart (`sources.allowHos
 Then say what to score and how often, with a policy per environment:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: studio-agents
-  labels: {evals.si/project: studio}
+  labels: {evalsi.dev/project: studio}
 spec:
   selector: 'labels["deployed"] == "true"'
   sampling: {rate: 0.1, always: ["error"]}
@@ -278,7 +278,7 @@ exempts a run, and each archive writes a `runs.archive` audit event.
 
 ## A checklist
 
-- [ ] Evals.si installed; the sandbox pool answers (`kubectl get sandboxclass` or the pool pod is Ready).
+- [ ] Evalsi installed; the sandbox pool answers (`kubectl get sandboxclass` or the pool pod is Ready).
 - [ ] `studio-ingest` key set on the agent harness's exporter, or a `TraceSource` on its MLflow; a trace appears in the UI.
 - [ ] An `OnlineEvalPolicy` applied; `evalsi policy stats` shows scored traces.
 - [ ] A suite for the platform's agents, with gates; the deploy step runs it and fails on exit 3 or `phase: Failed`.

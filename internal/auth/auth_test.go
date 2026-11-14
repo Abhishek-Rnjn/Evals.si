@@ -98,7 +98,7 @@ func (is *issuer) sign(t *testing.T, kid string, claims map[string]any) string {
 func (is *issuer) claims(sub string, extra map[string]any) map[string]any {
 	now := time.Now()
 	c := map[string]any{
-		"iss": is.srv.URL, "aud": "evals.si", "sub": sub,
+		"iss": is.srv.URL, "aud": "evalsi.dev", "sub": sub,
 		"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
 	}
 	for k, v := range extra {
@@ -108,7 +108,7 @@ func (is *issuer) claims(sub string, extra map[string]any) map[string]any {
 }
 
 func (is *issuer) provider() Provider {
-	return Provider{Name: "corp", Issuer: is.srv.URL, Audiences: []string{"evals.si"}, JWKS: JWKS{Discovery: true}}
+	return Provider{Name: "corp", Issuer: is.srv.URL, Audiences: []string{"evalsi.dev"}, JWKS: JWKS{Discovery: true}}
 }
 
 func newAuth(t *testing.T, cfg *Config, keys KeyStore, client *http.Client) *Authenticator {
@@ -180,7 +180,7 @@ func TestJWT(t *testing.T) {
 		"wrong audience": {is.sign(t, "rsa-1", is.claims("a", map[string]any{"aud": "other"})), "audience"},
 		"wrong issuer":   {other.sign(t, "rsa-1", other.claims("a", nil)), "not trusted"},
 		"forged":         {forge(t, is, other), "signature"},
-		"no exp":         {is.sign(t, "rsa-1", map[string]any{"iss": is.srv.URL, "aud": "evals.si", "sub": "a"}), "exp"},
+		"no exp":         {is.sign(t, "rsa-1", map[string]any{"iss": is.srv.URL, "aud": "evalsi.dev", "sub": "a"}), "exp"},
 		"alg none":       {unsigned(is.claims("a", nil)), "malformed"},
 		"garbage":        {"not.a.jwt", "malformed"},
 	} {

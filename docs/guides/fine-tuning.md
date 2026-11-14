@@ -1,6 +1,6 @@
 # Fine-tuning and RL
 
-Evals.si serves fine-tuning and RL in two places:
+Evalsi serves fine-tuning and RL in two places:
 
 - **During training**, evaluators become rewards: a `RewardSpec` composes verifiers into one reward per rollout, with a breakdown per component. TRL, verl and OpenRLHF call it in-process or through the server's Reward Service.
 - **Between checkpoints**, every saved checkpoint is evaluated against run specs. The learning curve compares each checkpoint with the base model, record by record, and regression gates fail on significant drops.
@@ -12,7 +12,7 @@ Examples are in [`examples/finetuning`](../../examples/finetuning).
 ### A reward spec
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: RewardSpec
 metadata: {name: code-grpo}
 spec:
@@ -330,7 +330,7 @@ Nothing is evaluated again: the server (`RunService.ImportRun`, `POST /v1alpha1/
   - Code rewards are scored in the real sandbox.
   - The callback evaluates every checkpoint.
   - It checks the wiring, not learning: a randomly initialised model's outputs fail every test.
-- **The CI `rlframeworks` job** runs Evals.si rewards inside verl 0.9.1 and OpenRLHF 0.11.2 themselves, on CPU.
+- **The CI `rlframeworks` job** runs Evalsi rewards inside verl 0.9.1 and OpenRLHF 0.11.2 themselves, on CPU.
   - verl loads `evalsi/rewards/verl.py` through `custom_reward_function`, and its `NaiveRewardManager` and `BatchRewardManager` score a rollout batch with it.
   - OpenRLHF's single-turn rollout executor calls the reward both as a `--remote_rm_url` file and over HTTP from `evalsi rewards serve`.
   - No training runs: that needs GPUs and an inference engine. The generation engine is a stand-in, and OpenRLHF is installed without its GPU dependencies (flash-attn, deepspeed).
@@ -338,7 +338,7 @@ Nothing is evaluated again: the server (`RunService.ImportRun`, `POST /v1alpha1/
 - **The load test** measures the Reward Service on a GRPO step's worth of rollouts.
 - **Opt-in EKS GPU verification** ran a native verl 0.9.1 step and an
   OpenRLHF **0.9.0** compatibility control with actual model generations,
-  Evals.si rewards, nonzero gradients and changed checkpoint weights.
+  Evalsi rewards, nonzero gradients and changed checkpoint weights.
   See the [exact versions, commands and limitations](../verification/EKS-GPU-2026-10-17.md).
   OpenRLHF 0.11.2's full native training stack is not certified by the CPU
   adapter tests or that older control. Its pinned vLLM/CUTLASS stack requires

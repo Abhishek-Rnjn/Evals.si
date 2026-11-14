@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 const base = (process.env.SITE_BASE ?? "/").replace(/\/$/, "") || "/";
 const site = process.env.SITE_URL ?? "https://evalsi.dev";
-const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
+const repo = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/evalsi";
 // The link-preview card (scripts/og-image.mjs), absolute as Open Graph requires.
 const ogImage = `${site}${base === "/" ? "" : base}/og.png`;
 // Google Search Console's HTML-tag verification for
@@ -31,21 +31,21 @@ export default defineConfig({
   integrations: [
     react(),
     starlight({
-      title: "Evals.si",
-      logo: { src: "./src/assets/logo.svg", alt: "Evals.si", replacesTitle: true },
+      title: "Evalsi",
+      logo: { src: "./src/assets/logo.svg", alt: "Evalsi", replacesTitle: true },
       head: [
         { tag: "meta", attrs: { property: "og:image", content: ogImage } },
         { tag: "meta", attrs: { property: "og:image:width", content: "1200" } },
         { tag: "meta", attrs: { property: "og:image:height", content: "630" } },
-        { tag: "meta", attrs: { property: "og:image:alt", content: "Evals.si: evaluate AI before you ship, while it runs, and as you train it" } },
+        { tag: "meta", attrs: { property: "og:image:alt", content: "Evalsi: evaluate AI before you ship, while it runs, and as you train it" } },
         { tag: "meta", attrs: { name: "twitter:image", content: ogImage } },
-        { tag: "meta", attrs: { name: "keywords", content: "evalsi, Evals.si, agent evaluation, AI agent testing, agent CI gates, RAG evaluation, RAG faithfulness, RL rewards, fine-tuning evaluation, LLM evaluation, LLM-as-a-judge, evals, RL rewards, OpenTelemetry, MLflow, Kubernetes" } },
+        { tag: "meta", attrs: { name: "keywords", content: "evalsi, Evalsi, agent evaluation, AI agent testing, agent CI gates, RAG evaluation, RAG faithfulness, RL rewards, fine-tuning evaluation, LLM evaluation, LLM-as-a-judge, evals, RL rewards, OpenTelemetry, MLflow, Kubernetes" } },
         ...(googleVerification ? [{ tag: "meta", attrs: { name: "google-site-verification", content: googleVerification } }] : []),
         { tag: "link", attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" } },
         { tag: "link", attrs: { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" } },
       ],
       favicon: "/favicon.svg",
-      description: "Evals.si (pip install evalsi): evaluate AI before you ship, while it runs and as you train it. Agents, RAG pipelines, LLMs and models, with CI gates, release decisions, live trace scoring, a built-in agent harness and RL rewards. Self-hosted and open source.",
+      description: "Evalsi (pip install evalsi): evaluate AI before you ship, while it runs and as you train it. Agents, RAG pipelines, LLMs and models, with CI gates, release decisions, live trace scoring, a built-in agent harness and RL rewards. Self-hosted and open source.",
       social: [{ icon: "github", label: "GitHub", href: repo }],
       customCss: ["./src/styles/theme.css"],
       components: {
@@ -73,7 +73,7 @@ export default defineConfig({
         ].map((name) => ({ slug: `docs/tutorials/${name}` })) },
         { label: "Releases", items: [
           { label: "Changelog", slug: "docs/changelog" },
-          { label: "GitHub releases", link: "https://github.com/Abhishek-Rnjn/Evals.si/releases" },
+          { label: "GitHub releases", link: "https://github.com/Abhishek-Rnjn/evalsi/releases" },
         ] },
         { label: "Integrations", items: [
           { label: "Overview", slug: "integrations" },

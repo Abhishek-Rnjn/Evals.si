@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // Reuses the unchanged load checks and thresholds with explicit SQLite tuning.

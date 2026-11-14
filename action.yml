@@ -1,4 +1,4 @@
-name: Evals.si gate
+name: Evalsi gate
 description: Run evaluation gates, publish a metrics summary, and optionally compare a baseline.
 branding:
   icon: check-circle

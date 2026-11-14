@@ -14,10 +14,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	sandboxv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1/sandboxv1alpha1connect"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	sandboxv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/sandbox/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/sandbox/v1alpha1/sandboxv1alpha1connect"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
 )
 
 // The test binary doubles as the sandbox launcher, as evalsid does.

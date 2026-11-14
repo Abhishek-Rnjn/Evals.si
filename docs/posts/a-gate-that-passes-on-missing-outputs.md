@@ -20,7 +20,7 @@ Imagine a pipeline that is supposed to write an answer for each question, and ha
 Records `r2` to `r4` have no `output` field. The spec gates the mean of `exact-match` at 0.9:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: skipped-demo

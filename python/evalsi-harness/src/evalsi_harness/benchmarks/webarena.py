@@ -1,4 +1,4 @@
-"""WebArena (and BrowserGym's WebArena tasks) as Evals.si browser tasks.
+"""WebArena (and BrowserGym's WebArena tasks) as Evalsi browser tasks.
 
 ``webarena://<path>?options``
     ``<path>`` is WebArena's ``config_files/test.raw.json`` (a list of task configs) or

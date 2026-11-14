@@ -1,7 +1,7 @@
 //go:build linux
 
 // Command evalsi-guest is init inside each Firecracker microVM of the
-// Evals.si sandbox (design §13). As PID 1 it mounts the basic filesystems,
+// Evalsi sandbox (design §13). As PID 1 it mounts the basic filesystems,
 // starts itself as the agent (PID 2) and reaps orphans; the agent serves
 // GuestAgentService on vsock port 1024. It must be built statically
 // (CGO_ENABLED=0): it runs in any image's root filesystem.
@@ -35,8 +35,8 @@ import (
 	"github.com/mdlayher/vsock"
 	"golang.org/x/sys/unix"
 
-	guestv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/guest/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/guest"
+	guestv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/guest/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/guest"
 )
 
 func main() {

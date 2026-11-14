@@ -715,8 +715,8 @@ const file_agentgateway_dev_ext_mcp_ext_mcp_proto_rawDesc = "" +
 	"_mcp_error2\xcf\x01\n" +
 	"\x06ExtMcp\x12`\n" +
 	"\fCheckRequest\x12$.agentgateway.dev.ext_mcp.McpRequest\x1a*.agentgateway.dev.ext_mcp.McpRequestResult\x12c\n" +
-	"\rCheckResponse\x12%.agentgateway.dev.ext_mcp.McpResponse\x1a+.agentgateway.dev.ext_mcp.McpResponseResultB\xec\x01\n" +
-	"\x1ccom.agentgateway.dev.ext_mcpB\vExtMcpProtoP\x01ZAgithub.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp\xa2\x02\x03ADE\xaa\x02\x17Agentgateway.Dev.ExtMcp\xca\x02\x17Agentgateway\\Dev\\ExtMcp\xe2\x02#Agentgateway\\Dev\\ExtMcp\\GPBMetadata\xea\x02\x19Agentgateway::Dev::ExtMcpb\x06proto3"
+	"\rCheckResponse\x12%.agentgateway.dev.ext_mcp.McpResponse\x1a+.agentgateway.dev.ext_mcp.McpResponseResultB\xea\x01\n" +
+	"\x1ccom.agentgateway.dev.ext_mcpB\vExtMcpProtoP\x01Z?github.com/abhishek-rnjn/evalsi/gen/go/agentgateway/dev/ext_mcp\xa2\x02\x03ADE\xaa\x02\x17Agentgateway.Dev.ExtMcp\xca\x02\x17Agentgateway\\Dev\\ExtMcp\xe2\x02#Agentgateway\\Dev\\ExtMcp\\GPBMetadata\xea\x02\x19Agentgateway::Dev::ExtMcpb\x06proto3"
 
 var (
 	file_agentgateway_dev_ext_mcp_ext_mcp_proto_rawDescOnce sync.Once

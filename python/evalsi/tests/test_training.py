@@ -111,7 +111,7 @@ class Named:
 
 def write_spec(tmp_path: Path) -> Path:
     spec = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "EvalRun",
         "metadata": {"name": "ckpt"},
         "spec": {
@@ -655,13 +655,13 @@ def test_operator_serving_applies_waits_reads_and_deletes(
     assert waited["args"][2:] == [
         "wait",
         "--for=condition=Ready",
-        "checkpointservers.evals.si/run-3",
+        "checkpointservers.evalsi.dev/run-3",
         "--timeout=120s",
     ]
-    assert read["args"][2:4] == ["get", "checkpointservers.evals.si/run-3"]
+    assert read["args"][2:4] == ["get", "checkpointservers.evalsi.dev/run-3"]
     assert deleted["args"][2:] == [
         "delete",
-        "checkpointservers.evals.si/run-3",
+        "checkpointservers.evalsi.dev/run-3",
         "--ignore-not-found",
         "--wait=false",
     ]

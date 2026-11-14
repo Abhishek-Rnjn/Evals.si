@@ -1359,8 +1359,8 @@ const file_evalsi_v1alpha1_dataset_catalog_service_proto_rawDesc = "" +
 	"\x11GetDatasetVersion\x12).evalsi.v1alpha1.GetDatasetVersionRequest\x1a*.evalsi.v1alpha1.GetDatasetVersionResponse\x12s\n" +
 	"\x14ReviewDatasetVersion\x12,.evalsi.v1alpha1.ReviewDatasetVersionRequest\x1a-.evalsi.v1alpha1.ReviewDatasetVersionResponse\x12\x7f\n" +
 	"\x18ListDatasetVersionEvents\x120.evalsi.v1alpha1.ListDatasetVersionEventsRequest\x1a1.evalsi.v1alpha1.ListDatasetVersionEventsResponse\x12p\n" +
-	"\x13DiffDatasetVersions\x12+.evalsi.v1alpha1.DiffDatasetVersionsRequest\x1a,.evalsi.v1alpha1.DiffDatasetVersionsResponseB\xd7\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x1aDatasetCatalogServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x13DiffDatasetVersions\x12+.evalsi.v1alpha1.DiffDatasetVersionsRequest\x1a,.evalsi.v1alpha1.DiffDatasetVersionsResponseB\xd5\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x1aDatasetCatalogServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_dataset_catalog_service_proto_rawDescOnce sync.Once

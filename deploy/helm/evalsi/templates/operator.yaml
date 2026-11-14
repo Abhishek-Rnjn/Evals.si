@@ -14,10 +14,10 @@ metadata:
   name: {{ $fn }}-operator
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 rules:
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [evalruns, onlineevalpolicies, tracesources, evaluators, checkpointservers]
     verbs: [get, list, watch, update, patch]
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, tracesources/status, tracesources/finalizers, evaluators/status, checkpointservers/status]
     verbs: [get, update, patch]
   - apiGroups: [apps]
@@ -88,7 +88,7 @@ spec:
             - --ca-file=/etc/evalsi/server-tls/ca.crt
             {{- end }}
             # Its own service-account token, projected for evalsid.
-            - --token-file=/var/run/secrets/evals.si/token
+            - --token-file=/var/run/secrets/evalsi.dev/token
             - --namespace={{ $ns }}
             {{- if not $v.operator.allNamespaces }}
             - --watch-namespace={{ $ns }}
@@ -136,7 +136,7 @@ spec:
           securityContext: {{- include "evalsi.restricted" . | nindent 12 }}
           resources: {{- toYaml $v.operator.resources | nindent 12 }}
           volumeMounts:
-            - {name: token, mountPath: /var/run/secrets/evals.si, readOnly: true}
+            - {name: token, mountPath: /var/run/secrets/evalsi.dev, readOnly: true}
             {{- if $v.server.tls }}
             - {name: server-tls, mountPath: /etc/evalsi/server-tls, readOnly: true}
             {{- end }}

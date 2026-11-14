@@ -25,7 +25,7 @@ def add_plugin_commands(sub: Any) -> None:
         p.add_argument(
             "--index",
             action="append",
-            help="index URL or path (repeatable; default EVALSI_PLUGIN_INDEX, else Evals.si's)",
+            help="index URL or path (repeatable; default EVALSI_PLUGIN_INDEX, else Evalsi's)",
         )
 
     se = pl_sub.add_parser("search", help="search the index")

@@ -18,7 +18,7 @@ ARG VERSION=0.0.0-dev
 RUN --mount=type=cache,target=/root/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     for b in evalsid evalsi-guest evalsi-operator; do \
       CGO_ENABLED=0 go build -trimpath \
-        -ldflags "-s -w -X github.com/abhishek-rnjn/evals.si/internal/version.Version=${VERSION}" \
+        -ldflags "-s -w -X github.com/abhishek-rnjn/evalsi/internal/version.Version=${VERSION}" \
         -o /out/$b ./cmd/$b || exit 1; \
     done
 

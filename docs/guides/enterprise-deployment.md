@@ -1,6 +1,6 @@
 # Enterprise deployment: topology, dependencies, audit and data lifecycle
 
-This guide is for the platform and security owners of a private Evals.si
+This guide is for the platform and security owners of a private Evalsi
 installation. It collects in one place:
 
 - the supported topologies;
@@ -68,7 +68,7 @@ After the first week, run `evalsi auth audit verify` as an owner, and store the 
 | Uploaded and promoted datasets | Object storage | Until deleted from the bucket | Operator deletion in the bucket | Bucket versions, if versioning is on |
 | Annotations | SQL store | Until their queue is deleted | Delete the queue | Exports |
 | Audit entries | SQL store | `audit.retention` (default 90 days) | Retention only; it records an `audit.retention` entry | Entries already exported to sinks |
-| Backups | Your backup system | Your policy | Your backup system | Nothing Evals.si controls |
+| Backups | Your backup system | Your policy | Your backup system | Nothing Evalsi controls |
 
 Deletes are immediate and hard: there is no grace period and no undo. Restore from a backup to recover something deleted by mistake. Trace redaction ([decision 0019](../decisions/0019-trace-redaction.md)) masks configured patterns at ingest, before storage.
 
@@ -77,7 +77,7 @@ To erase one person's data in response to a request:
 1. Find their records. Search traces and failure cases by the identifying attributes your agents record. Search audit entries by principal.
 2. Delete the failure cases and the runs that contain the data. Wait for traces to age out, or shorten `traces.retention` for the window.
 3. Retire any dataset versions that contain it, then remove their content from the database and bucket as an operator task. Record that you did.
-4. Remove the data from systems Evals.si exported to: the trace source, sink destinations, webhook receivers and MLflow.
-5. Apply your backup policy. Evals.si cannot reach into backups or exported copies.
+4. Remove the data from systems Evalsi exported to: the trace source, sink destinations, webhook receivers and MLflow.
+5. Apply your backup policy. Evalsi cannot reach into backups or exported copies.
 
 Not built yet: per-label retention rules, a delete grace period, an erasure API that covers every store, and legal holds. These are tracked in [REMAINING-WORK](../REMAINING-WORK.md) under ENT-06.

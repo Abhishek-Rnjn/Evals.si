@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
 )
 
 // mcpCall POSTs one JSON-RPC request to /mcp and decodes the response.
@@ -167,7 +167,7 @@ func TestMCPToolsGoThroughTheGate(t *testing.T) {
 
 func TestMCPRunAndCompare(t *testing.T) {
 	s := startAuthServer(t, nil)
-	spec := `apiVersion: evals.si/v1alpha1
+	spec := `apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: suite, project: support}
 spec:

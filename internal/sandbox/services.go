@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 // ServiceSpec is a private sidecar in a task pod. Nothing is inherited from

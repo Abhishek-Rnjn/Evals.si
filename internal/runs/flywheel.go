@@ -18,12 +18,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/datasets"
-	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
-	"github.com/abhishek-rnjn/evals.si/internal/watch"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/datasets"
+	"github.com/abhishek-rnjn/evalsi/internal/evaluation"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/watch"
 )
 
 // traceRecords loads stored traces of a project as records.

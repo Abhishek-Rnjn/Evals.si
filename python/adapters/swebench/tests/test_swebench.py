@@ -111,7 +111,7 @@ def run_spec(
 ) -> Any:
     spec = tmp_path / "run.json"
     document = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "EvalRun",
         "metadata": {"name": "swebench-fixture"},
         "spec": {

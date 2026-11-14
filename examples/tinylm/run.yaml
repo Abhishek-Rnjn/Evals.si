@@ -4,7 +4,7 @@
 #   evalsi run -f run.yaml
 # Swap the persona to see a different agent: model: tinylm-lazy, tinylm-looper, ...
 # The walkthrough is docs/tutorials/03-built-in-harness.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-good}
 spec:

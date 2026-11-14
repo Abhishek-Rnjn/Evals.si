@@ -16,9 +16,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go/jetstream"
 
-	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
-	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	harnessv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/harness/v1alpha1"
+	pluginv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -5,9 +5,9 @@ first). The server pulls its traces, scores them with the project's online
 policies, and can write the scores back (decision 0016, the trace sources
 guide). A source file has the shape of the TraceSource resource:
 
-    apiVersion: evals.si/v1alpha1
+    apiVersion: evalsi.dev/v1alpha1
     kind: TraceSource
-    metadata: {name: studio-mlflow, labels: {evals.si/project: studio}}
+    metadata: {name: studio-mlflow, labels: {evalsi.dev/project: studio}}
     spec:
       connector: mlflow
       endpoint: https://mlflow.example.com

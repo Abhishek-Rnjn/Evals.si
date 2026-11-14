@@ -2,7 +2,7 @@
 # over-refusal on benign ones should not rise. Each prompt carries
 # metadata.kind (harmful or benign); compare checkpoints with the base
 # model through `evalsi checkpoints curve`.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: safety-regression}
 spec:

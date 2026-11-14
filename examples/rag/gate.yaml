@@ -5,7 +5,7 @@
 #   evalsi run -f gate.yaml        # exit 3: the second answer cites [4], and there are two passages
 # Add judge-based metrics (faithfulness, answer-relevance, context-precision,
 # context-recall) by listing them below and passing --judge-* options.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: rag-gate}
 spec:

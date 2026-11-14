@@ -206,7 +206,7 @@ The roadmap's milestones and their exit criteria are in the [PRD](PRD.md#milesto
 
 The plan for strengthening the agent harness through M2 and GA is in [HARNESS-ROADMAP.md](HARNESS-ROADMAP.md).
 
-The latest release is **v0.4.0** ([release](https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.4.0), [changelog](../CHANGELOG.md#040---2026-11-11)); see [Releases](PRD.md#releases). The previous one, v0.3.2, has a [release record](verification/README.md#v032-release-record-2026-10-28).
+The latest release is **v0.4.0** ([release](https://github.com/Abhishek-Rnjn/evalsi/releases/tag/v0.4.0), [changelog](../CHANGELOG.md#040---2026-11-14)); see [Releases](PRD.md#releases). The previous one, v0.3.2, has a [release record](verification/README.md#v032-release-record-2026-10-28).
 
 The completed checkpoint from `verify/eks-leftovers@42d8127` is now included
 in PR #85. See the [EKS run](verification/EKS-2026-10-17.md) and
@@ -306,7 +306,7 @@ enforcement. The initial second release was pool-only; a later full application
 with separate database/NATS and key-rejection controls passed. M4 remains uncertified.
 
 The default amd64 kind job, including Landlock, passed in
-[CI run 119](https://github.com/Abhishek-Rnjn/Evals.si/actions/runs/38135174954)
+[CI run 119](https://github.com/Abhishek-Rnjn/evalsi/actions/runs/38135174954)
 at `ba2ceff` on 2026-10-11. Docker Desktop's kernel does not enable Landlock;
 `SKIP_LANDLOCK=1` remains an explicit local opt-out, not Mac verification of
 that rung. The new AKS recheck has not run.
@@ -354,7 +354,7 @@ These were verified only with stand-ins before the [verification run](verificati
 | Firecracker rung on a KVM host, `evalsi-sandboxd` with `mode: firecracker` | Code evaluation and the SWE-bench fixture ran in microVMs (`ISOLATION_LEVEL_VM`), with the same results as the pod and bubblewrap rungs |
 | HA: a replica that owns a run is killed | Another replica adopted the run; every result was stored once |
 | Namespace-only install under Pod Security `restricted` | Installed and ran code evaluations on kind, AKS and the Istio cluster (pod rung and Landlock). Agent runs on the pod rung passed on kind and AKS. On the Istio cluster they failed at the waypoint (VR-R1); pod labels to opt out now exist |
-| TRL GRPO with Evals.si rewards | Passed on CPU on kind and AKS |
+| TRL GRPO with Evalsi rewards | Passed on CPU on kind and AKS |
 | KEDA scaling a live pool | EKS: genuine 32-record agent backlog scaled harness workers from 0 to 3 Ready and naturally back to 0; bounded functional check, not production load |
 | Several-node NATS (stream replicas 3) | EKS: three brokers on distinct physical hosts; active run survived work-leader pod deletion with 32 unique results and both followers current for WORK/SPANS; not EC2 node failure |
 | Per-release isolation of sandbox pools | EKS/Calico: two actual Helm pools; symmetric own-pool positive and other-pool/API negative TCP controls. Initial second release was pool-only; the later full application is recorded separately below. Shared SandboxClass behavior and mesh enforcement not certified |
@@ -393,7 +393,7 @@ These were verified only with stand-ins before the [verification run](verificati
 | Item | Where recorded |
 |------|----------------|
 | **Updated 2026-10-23: see the Unreleased CHANGELOG and [REMAINING-WORK](REMAINING-WORK.md); the text below predates it.** BFCL memory and web-search categories (multi-turn now runs) | §23 Phase 3 deviations |
-| **Updated 2026-10-23: see the Unreleased CHANGELOG and [REMAINING-WORK](REMAINING-WORK.md); the text below predates it.** τ-bench: tau2's own LiteLLM user. Evals.si's simulated user speaks through the run's judge; in telecom it follows tau2's user prompt and calls its tools through structured output rather than native tool calls. | §23 Phase 3 deviations |
+| **Updated 2026-10-23: see the Unreleased CHANGELOG and [REMAINING-WORK](REMAINING-WORK.md); the text below predates it.** τ-bench: tau2's own LiteLLM user. Evalsi's simulated user speaks through the run's judge; in telecom it follows tau2's user prompt and calls its tools through structured output rather than native tool calls. | §23 Phase 3 deviations |
 | Multi-service/multi-stage Terminal-Bench coverage: the pod backend and a restricted Compose importer now support adapted multi-service tasks; the pinned upstream re-audit still imports 219/241 (12 original Compose tasks and 10 other tasks refused); an adapted upstream task is exercised separately, and multi-stage builds remain unsupported | §23 Phase 3 deviations |
 | FrontierCode (task format not public in a verifiable form); CursorBench (tasks are private) | §23 Phase 3 deviations |
 

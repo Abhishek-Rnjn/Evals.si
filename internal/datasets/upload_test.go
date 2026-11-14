@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/parquet-go/parquet-go"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/objstore"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/objstore"
 )
 
 func uploadConfig(format string) *evalsiv1alpha1.DatasetUploadConfig {

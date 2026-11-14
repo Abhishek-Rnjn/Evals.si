@@ -1,4 +1,4 @@
-// Evals.si web UI: a view over evalsid's REST API.
+// Evalsi web UI: a view over evalsid's REST API.
 //
 // Everything shown comes from /v1alpha1/... with the viewer's credential,
 // so it shows exactly what that credential may read. Annotators can also
@@ -255,7 +255,7 @@
       el("pre", { class: "content", tabindex: 0 }, [
         "pip install evalsi",
         "cat > first-run.yaml <<'YAML'",
-        "apiVersion: evals.si/v1alpha1",
+        "apiVersion: evalsi.dev/v1alpha1",
         "kind: EvalRun",
         `metadata: {name: first-run${project && project !== "default" ? `, project: ${project}` : ""}}`,
         "spec:",

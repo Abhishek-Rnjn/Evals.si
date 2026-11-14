@@ -22,7 +22,7 @@ NS = "evalsi-leftovers-restore"
 
 async def verify() -> dict[str, Any]:
     credential = subprocess.check_output(
-        ["kubectl", "-n", NS, "create", "token", "verify", "--audience=evals.si"], text=True
+        ["kubectl", "-n", NS, "create", "token", "verify", "--audience=evalsi.dev"], text=True
     ).strip()
     trace = secrets.token_hex(16)
     sentinel = "synthetic-redaction-" + secrets.token_hex(8)

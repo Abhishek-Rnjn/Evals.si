@@ -1,6 +1,6 @@
-# Evals.si end to end: features, integration and running it in a pull request
+# Evalsi end to end: features, integration and running it in a pull request
 
-This guide walks through everything Evals.si does, in the order you would adopt it, and ends with ready-to-copy pull request workflows. Every command and file here uses the CLI, config keys and example files that are in this repository. Each section links to the deeper guide for its topic.
+This guide walks through everything Evalsi does, in the order you would adopt it, and ends with ready-to-copy pull request workflows. Every command and file here uses the CLI, config keys and example files that are in this repository. Each section links to the deeper guide for its topic.
 
 - [1. Mental model](#1-mental-model)
 - [2. Install](#2-install)
@@ -19,7 +19,7 @@ This guide walks through everything Evals.si does, in the order you would adopt 
 
 ## 1. Mental model
 
-Evals.si has three "doors" and one set of building blocks.
+Evalsi has three "doors" and one set of building blocks.
 
 | Door | Question it answers | Entry point |
 |---|---|---|
@@ -33,7 +33,7 @@ The building blocks are shared by all four:
 - **Records** are the unit of evaluation: `input`, `output`, optional `reference`, `metadata`, `usage` and trajectory.
 - **Evaluators** grade a record. They come in packs (`core`, `judge`, `text`, `rag`, `safety`, `agent`, `code`, `rl`, `finetune`) and from framework adapters (DeepEval, RAGAS, Inspect, lm-eval).
 - **Run specs** (`EvalRun`) say what to run: target, dataset, evaluators, trials, gates and budgets. The same file runs embedded, on a server, or as a Kubernetes resource.
-- **Gates** turn metrics into a pass/fail verdict. A failed gate exits with code 3, which is what makes Evals.si usable as a pull request check.
+- **Gates** turn metrics into a pass/fail verdict. A failed gate exits with code 3, which is what makes Evalsi usable as a pull request check.
 
 Two rules hold everywhere, and are worth knowing before you read results:
 
@@ -47,7 +47,7 @@ Every mean carries a confidence interval. Use `--cluster-by <metadata key>` when
 You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, code evaluators need bubblewrap.
 
 ```bash
-git clone https://github.com/Abhishek-Rnjn/Evals.si && cd Evals.si
+git clone https://github.com/Abhishek-Rnjn/evalsi && cd Evalsi
 cd python && uv sync --all-packages        # the SDK, CLI and harness
 cd .. && go build -o bin/evalsid ./cmd/evalsid     # only needed for the server and sandboxed runs
 export PATH=$PWD/bin:$PATH
@@ -156,7 +156,7 @@ uv run evalsi eval --data qa.jsonl --evaluators ragas/faithfulness,deepeval/g-ev
 |---|---|
 | DeepEval | `deepeval/*` metrics: faithfulness, hallucination, bias, toxicity, g-eval, jev-eval, tool correctness, task completion, conversational metrics and more |
 | RAGAS | `ragas/*` metrics: context precision/recall, factual correctness, agent goal accuracy, tool-call F1 and more |
-| Inspect AI | `inspect://log.eval` importer, and `evalsi_scorer(...)` to use Evals.si evaluators inside Inspect |
+| Inspect AI | `inspect://log.eval` importer, and `evalsi_scorer(...)` to use Evalsi evaluators inside Inspect |
 | lm-evaluation-harness | An `evalsi` lm-eval model, and an `lm-eval://` importer |
 | SWE-bench, τ-bench, BFCL | Benchmark importers graded by the benchmark's own code (section 5) |
 
@@ -169,11 +169,11 @@ DeepEval's JevEval scores weighted questions you write: true or false, scales an
 A run spec generates outputs from a target, scores them, and checks gates. [`examples/runs/capitals.yaml`](../../examples/runs/capitals.yaml):
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: capitals
-  labels: {evals.si/project: quickstart}
+  labels: {evalsi.dev/project: quickstart}
 spec:
   target:
     connector: anthropic          # or openai-compatible with base_url
@@ -327,11 +327,11 @@ uv run evalsi policy delete support-agent --server http://localhost:8080
 A policy has these parts:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: support-agent
-  labels: {evals.si/project: support}
+  labels: {evalsi.dev/project: support}
 spec:
   selector: service == "support-agent"            # CEL over the trace
   sampling:
@@ -558,7 +558,7 @@ Full detail is in the [fine-tuning and RL guide](fine-tuning.md).
 **Rewards.** A `RewardSpec` composes evaluators into a reward: weights, gates, per-component breakdown, a floor, clipping, and a content cache (GRPO repeats rollouts, so repeats cost nothing). [`examples/finetuning/code-reward.yaml`](../../examples/finetuning/code-reward.yaml):
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: RewardSpec
 metadata: {name: code-grpo}
 spec:
@@ -641,12 +641,12 @@ Production notes: PostgreSQL for metadata, ClickHouse for traces at volume, S3-c
 
 The pattern is the same in every recipe: **run the eval in the PR job, fail the job on a failed gate, and show the result on the PR.** Gates exit with code 3, so no extra scripting is needed to block a merge. Mark the job as a required status check in your branch protection to enforce it.
 
-Pick the recipe that matches how you run Evals.si:
+Pick the recipe that matches how you run Evalsi:
 
 | Recipe | Where evals run | Needs a server? | Use it when |
 |---|---|---|---|
 | A | In the CI job (embedded) | No | Small suites, no infrastructure to run |
-| B | On your Evals.si server | Yes | Shared datasets, long runs, quotas, RBAC |
+| B | On your Evalsi server | Yes | Shared datasets, long runs, quotas, RBAC |
 | C | On Kubernetes via an `EvalRun` | Yes (in cluster) | You already deploy from a cluster |
 | D | Compare against the base branch | Yes | You want "is this PR better or worse than main?" |
 | E | Agent run with a sandboxed checker | Optional | You gate on an agent actually fixing tasks |
@@ -714,7 +714,7 @@ Notes:
 
 ### Recipe B: on a server, with GitHub OIDC (no stored secret)
 
-Use this when the datasets, judges and provider keys live on the Evals.si server. The job proves who it is with its own GitHub token, so there is no API key to store or rotate. This is [`examples/ci/github-actions.yml`](../../examples/ci/github-actions.yml) extended with a report.
+Use this when the datasets, judges and provider keys live on the Evalsi server. The job proves who it is with its own GitHub token, so there is no API key to store or rotate. This is [`examples/ci/github-actions.yml`](../../examples/ci/github-actions.yml) extended with a report.
 
 **Server side:** trust GitHub's issuer and bind a role to the repository and branch ([identity guide](identity.md#5-ci-github-actions-without-stored-secrets)):
 
@@ -819,7 +819,7 @@ jobs:
 
 Notes:
 
-- The project is the `evals.si/project` label on the resource, else the namespace. Outside the release's namespace, the label must name the namespace or a project mapped to it in `operator.projectNamespaces`.
+- The project is the `evalsi.dev/project` label on the resource, else the namespace. Outside the release's namespace, the label must name the namespace or a project mapped to it in `operator.projectNamespaces`.
 - `kubectl wait` exits non-zero if the run does not reach `Succeeded` in time, which fails the job. A failed gate leaves the phase at `Failed`.
 - Deleting the resource cancels a run that is still going. Its results stay on the server.
 - Admission webhooks validate the spec with the CLI's rules, so a malformed spec is rejected at `kubectl apply`.
@@ -891,7 +891,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-        with: {repository: Abhishek-Rnjn/Evals.si, path: evalsi}   # or install a release of evalsid
+        with: {repository: Abhishek-Rnjn/evalsi, path: evalsi}   # or install a release of evalsid
       - uses: actions/setup-go@v5
         with: {go-version-file: evalsi/go.mod}
       - uses: actions/checkout@v4

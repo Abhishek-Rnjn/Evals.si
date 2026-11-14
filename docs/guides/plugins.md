@@ -104,7 +104,7 @@ package main
 import (
 	"strings"
 
-	"github.com/abhishek-rnjn/evals.si/pkg/wasmplugin"
+	"github.com/abhishek-rnjn/evalsi/pkg/wasmplugin"
 )
 
 func main() {

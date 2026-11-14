@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
-DEFAULT_INDEX = "https://raw.githubusercontent.com/abhishek-rnjn/evals.si/main/plugins/index.yaml"
+DEFAULT_INDEX = "https://raw.githubusercontent.com/abhishek-rnjn/evalsi.dev/main/plugins/index.yaml"
 KINDS = ("native", "python", "wasm", "image")
 TIERS = ("native", "wrapped", "community")
 
@@ -243,7 +243,7 @@ def install(entry: Entry, dest_root: Path, *, dry_run: bool = False) -> str:
     ref = entry.source["ref"]
     return (
         f"{entry.name} runs as an image; deploy it as an Evaluator resource or a remote worker:\n"
-        "  apiVersion: evals.si/v1alpha1\n  kind: Evaluator\n"
+        "  apiVersion: evalsi.dev/v1alpha1\n  kind: Evaluator\n"
         f"  metadata: {{name: {plugin_dirname(entry.name).lower()}}}\n"
         f"  spec: {{image: {ref}}}"
     )

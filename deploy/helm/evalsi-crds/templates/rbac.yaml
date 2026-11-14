@@ -7,18 +7,18 @@ metadata:
   name: {{ $fn }}-operator
 rules:
   {{- if .Values.operator.sandboxClasses }}
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [sandboxclasses]
     verbs: [get, list, watch, update, patch]
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [sandboxclasses/status]
     verbs: [get, update, patch]
   {{- end }}
   {{- if .Values.operator.allNamespaces }}
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [evalruns, onlineevalpolicies, tracesources, evaluators, checkpointservers]
     verbs: [get, list, watch, update, patch]
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [evalruns/status, evalruns/finalizers, onlineevalpolicies/status, onlineevalpolicies/finalizers, tracesources/status, tracesources/finalizers, evaluators/status, checkpointservers/status]
     verbs: [get, update, patch]
   - apiGroups: [""]
@@ -41,7 +41,7 @@ subjects:
   - {kind: ServiceAccount, name: {{ .Values.operator.fullname }}-operator, namespace: {{ $ns }}}
 {{- end }}
 ---
-# Who may use evals.si resources: aggregated into the built-in roles, so
+# Who may use evalsi.dev resources: aggregated into the built-in roles, so
 # namespace admins and editors manage them and viewers read them.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -51,7 +51,7 @@ metadata:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
 rules:
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [evalruns, onlineevalpolicies, evaluators, checkpointservers]
     verbs: [get, list, watch, create, update, patch, delete]
 ---
@@ -65,7 +65,7 @@ metadata:
   labels:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
 rules:
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [tracesources]
     verbs: [get, list, watch, create, update, patch, delete]
 ---
@@ -76,6 +76,6 @@ metadata:
   labels:
     rbac.authorization.k8s.io/aggregate-to-view: "true"
 rules:
-  - apiGroups: [evals.si]
+  - apiGroups: [evalsi.dev]
     resources: [evalruns, onlineevalpolicies, tracesources, evaluators, checkpointservers, sandboxclasses]
     verbs: [get, list, watch]

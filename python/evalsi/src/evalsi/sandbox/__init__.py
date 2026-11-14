@@ -1,4 +1,4 @@
-"""Run untrusted code through the Evals.si sandbox.
+"""Run untrusted code through the Evalsi sandbox.
 
 The sandbox lives in the Go daemon: ``evalsid sandbox run`` takes a JSON
 request on stdin, runs it under the strongest isolation rung available

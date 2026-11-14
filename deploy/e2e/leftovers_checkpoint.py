@@ -30,7 +30,7 @@ class Handler(BaseHTTPRequestHandler):
 HTTPServer(("0.0.0.0",8000),Handler).serve_forever()
 """
     resource = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "CheckpointServer",
         "metadata": {"name": "verify-checkpoint", "namespace": NS},
         "spec": {

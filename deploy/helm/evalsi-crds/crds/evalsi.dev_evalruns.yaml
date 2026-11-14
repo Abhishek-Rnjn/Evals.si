@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.22.0
-  name: evalruns.evals.si
+  name: evalruns.evalsi.dev
 spec:
-  group: evals.si
+  group: evalsi.dev
   names:
     kind: EvalRun
     listKind: EvalRunList

@@ -41,7 +41,7 @@ def pods() -> list[dict[str, Any]]:
             "-n",
             NS,
             "-l",
-            "evals.si/service-owner",
+            "evalsi.dev/service-owner",
             "-o",
             "json",
         ]

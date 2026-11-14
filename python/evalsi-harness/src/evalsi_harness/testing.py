@@ -6,7 +6,7 @@ of the conversation, so agent loops run offline and deterministically.
 
 ``LocalSandboxClient`` runs commands in a temporary directory with no
 isolation at all. It exists for tests of harness logic only; real runs
-always use the Evals.si sandbox, which fails closed.
+always use the Evalsi sandbox, which fails closed.
 """
 
 from __future__ import annotations

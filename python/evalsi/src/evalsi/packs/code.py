@@ -1,7 +1,7 @@
 """The ``code`` pack: execute generated code against tests, in the sandbox.
 
 ``unit-tests`` runs the output (code, or the first fenced code block in it)
-followed by the tests, HumanEval style, under the Evals.si sandbox: no
+followed by the tests, HumanEval style, under the Evalsi sandbox: no
 network, a private workspace, and resource limits. Passing means the program
 exited 0. Timeouts and policy denials are the code's own failures; a missing
 or broken sandbox is an infrastructure error and is never scored.

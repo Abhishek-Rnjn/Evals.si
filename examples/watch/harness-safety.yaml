@@ -3,11 +3,11 @@
 # an alert as soon as a few leak in an hour.
 #
 #   evalsi policy apply -f examples/watch/harness-safety.yaml --server $URL
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: harness-safety
-  labels: {evals.si/project: studio}
+  labels: {evalsi.dev/project: studio}
 spec:
   selector: '"workflow" in labels && labels["stage"] == "production"'
   stages:

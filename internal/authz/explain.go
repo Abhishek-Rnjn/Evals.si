@@ -3,7 +3,7 @@ package authz
 import (
 	"context"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 )
 
 // RoleTrace is one role the principal holds for the request and whether it grants the action.

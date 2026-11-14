@@ -55,7 +55,7 @@ function Guardrail() {
 function Crd() {
   return (
     <pre className={`absolute right-0 top-4 w-[90%] overflow-hidden rounded-l-xl border border-r-0 border-neutral-200 bg-neutral-50 p-4 font-mono text-[11.5px] leading-relaxed text-neutral-600 transition-transform duration-300 group-hover:-translate-x-2 sm:w-[62%] dark:border-white/10 dark:bg-white/[.03] dark:text-neutral-400`}>
-{`apiVersion: evals.si/v1alpha1
+{`apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: swebench-verified}
 spec:

@@ -1,4 +1,4 @@
-// Command evalsi-operator reconciles evals.si resources: EvalRun and
+// Command evalsi-operator reconciles evalsi.dev resources: EvalRun and
 // OnlineEvalPolicy through the evalsid API, Evaluator and SandboxClass as
 // worker and sandbox-pool Deployments. It also serves the admission
 // webhooks.
@@ -21,10 +21,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/abhishek-rnjn/evals.si/internal/version"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/operator/controllers"
-	evalsiwebhook "github.com/abhishek-rnjn/evals.si/operator/webhook"
+	"github.com/abhishek-rnjn/evalsi/internal/version"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/operator/controllers"
+	evalsiwebhook "github.com/abhishek-rnjn/evalsi/operator/webhook"
 )
 
 type list []string
@@ -80,7 +80,7 @@ func run() error {
 	flag.StringVar(&api.KeyFile, "key-file", "", "its key")
 	flag.BoolVar(&api.CreateProjects, "create-projects", true, "create a namespace's project when evalsid does not know it")
 	flag.Var(&watchNS, "watch-namespace", "only watch this namespace (repeatable; default: all)")
-	flag.Var(&projectNS, "project-namespaces", "project=ns1,ns2: namespaces whose resources may name the project with the evals.si/project label (repeatable; ns \"*\": every namespace). Resources in --namespace may name any project")
+	flag.Var(&projectNS, "project-namespaces", "project=ns1,ns2: namespaces whose resources may name the project with the evalsi.dev/project label (repeatable; ns \"*\": every namespace). Resources in --namespace may name any project")
 	flag.StringVar(&namespace, "namespace", namespace, "where sandbox pools run (default: $POD_NAMESPACE)")
 	flag.StringVar(&enabled, "controllers", enabled, "controllers to run")
 	flag.StringVar(&image, "image", os.Getenv("EVALSI_IMAGE"), "the evalsi image, for sandbox pools")
@@ -126,7 +126,7 @@ func run() error {
 		Metrics:                 metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress:  healthAddr,
 		LeaderElection:          leaderElect,
-		LeaderElectionID:        namePrefix + "-operator.evals.si",
+		LeaderElectionID:        namePrefix + "-operator.evalsi.dev",
 		LeaderElectionNamespace: namespace,
 	}
 	if len(watchNS) > 0 {

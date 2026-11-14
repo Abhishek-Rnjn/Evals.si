@@ -112,7 +112,7 @@ def test_target_config_validation() -> None:
 # --- specs and gates ---
 
 SPEC: dict[str, Any] = {
-    "apiVersion": "evals.si/v1alpha1",
+    "apiVersion": "evalsi.dev/v1alpha1",
     "kind": "EvalRun",
     "metadata": {"name": "nightly", "project": "qa"},
     "spec": {
@@ -140,7 +140,7 @@ def test_parse_spec_and_validation() -> None:
     assert labeled.labels == {"app": "checkout"}
     # As on Kubernetes: the project label, which stays out of the API's labels.
     k8s = parse_spec(
-        {**SPEC, "metadata": {"name": "n", "labels": {"evals.si/project": "team", "app": "x"}}}
+        {**SPEC, "metadata": {"name": "n", "labels": {"evalsi.dev/project": "team", "app": "x"}}}
     )
     assert (k8s.project, k8s.labels) == ("team", {"app": "x"})
     bad = [

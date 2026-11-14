@@ -16,9 +16,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1/pluginv1alpha1connect"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	pluginv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1/pluginv1alpha1connect"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 // fakeWorker is served by the test binary itself when re-executed as a helper.

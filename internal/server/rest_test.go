@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 )
 
 // Every REST route reaches the intended RPC, with path variables in the request.

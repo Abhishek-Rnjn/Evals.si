@@ -1,4 +1,4 @@
-"""RAGAS metrics as Evals.si evaluators.
+"""RAGAS metrics as Evalsi evaluators.
 
 Metrics come from ``ragas.metrics.collections`` and keep RAGAS's prompts and
 scoring; their LLM calls go through the run's judge (``judge_llm``), so they
@@ -52,7 +52,7 @@ def judge_llm(session: JudgeSession) -> Any:
 
     class JudgeLLM(InstructorBaseRagasLLM):
         def generate(self, prompt: str, response_model: Any) -> Any:
-            raise JudgeError("the Evals.si judge is async only; RAGAS metrics run with ascore")
+            raise JudgeError("the Evalsi judge is async only; RAGAS metrics run with ascore")
 
         async def agenerate(self, prompt: str, response_model: Any) -> Any:
             return await session.complete_model(prompt, response_model)
@@ -312,7 +312,7 @@ def _evaluator(info: MetricInfo) -> EvaluatorDef:
 PACK = Pack(
     name="ragas",
     tier="wrapped",
-    description=f"RAGAS metrics ({UPSTREAM}) run through the Evals.si judge.",
+    description=f"RAGAS metrics ({UPSTREAM}) run through the Evalsi judge.",
     evaluators=[_evaluator(m) for m in METRICS],
 )
 

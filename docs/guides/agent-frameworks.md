@@ -1,6 +1,6 @@
 # Agent frameworks: trace LangGraph, CrewAI, OpenAI Agents, LlamaIndex or Claude Agent SDK agents
 
-Evals.si grades an agent from its traces. Instrument the agent with one of the usual OpenTelemetry instrumentations, send the spans to the server's OTLP endpoint, and every finished trace becomes a record: the question, the answer, and a trajectory of model calls and tool calls. Online policies score it, and the web UI shows it.
+Evalsi grades an agent from its traces. Instrument the agent with one of the usual OpenTelemetry instrumentations, send the spans to the server's OTLP endpoint, and every finished trace becomes a record: the question, the answer, and a trajectory of model calls and tool calls. Online policies score it, and the web UI shows it.
 
 The five frameworks below are tested. For each instrumentation listed, a real run of the framework was recorded and checked in. The run asks one research question, makes one `search_docs` tool call and writes a report, against the demo's mock model. A test checks that each recording becomes the same record ([`internal/ingest/frameworks_test.go`](../../internal/ingest/frameworks_test.go)). The recorders and the exact versions they used are in [`tests/frameworks`](../../tests/frameworks/README.md).
 

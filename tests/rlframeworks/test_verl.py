@@ -1,4 +1,4 @@
-"""Evals.si rewards inside verl itself: verl loads ``evalsi.rewards.verl`` the
+"""Evalsi rewards inside verl itself: verl loads ``evalsi.rewards.verl`` the
 way ``custom_reward_function`` in its trainer config does, and its own reward
 managers score a batch of rollouts with it.
 

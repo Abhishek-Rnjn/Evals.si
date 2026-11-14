@@ -3,7 +3,7 @@
 For a full hands-on course with a fake tool-calling model, failure controls and replay, start with the [first-time onboarding tutorials](../tutorials/README.md).
 
 Start with the **published Python SDK**. You do not need a source checkout,
-Evals.si server, harness, Docker, Kubernetes, provider account or API key to
+Evalsi server, harness, Docker, Kubernetes, provider account or API key to
 evaluate recorded answers.
 
 ```bash
@@ -175,7 +175,7 @@ the repository root with the virtual environment active and Go installed:
 
 ```bash
 CGO_ENABLED=0 go build \
-  -ldflags "-X github.com/abhishek-rnjn/evals.si/internal/version.Version=$(python -c 'import evalsi; print(evalsi.__version__)')" \
+  -ldflags "-X github.com/abhishek-rnjn/evalsi/internal/version.Version=$(python -c 'import evalsi; print(evalsi.__version__)')" \
   -o bin/evalsid ./cmd/evalsid
 export EVALSID="$PWD/bin/evalsid"
 ```
@@ -227,7 +227,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: Abhishek-Rnjn/Evals.si@ACTION_COMMIT
+      - uses: Abhishek-Rnjn/evalsi@ACTION_COMMIT
         with:
           spec: run.yaml
           working-directory: my-evals
@@ -267,7 +267,7 @@ permissions:
   contents: read
   pull-requests: write
 # ...
-      - uses: Abhishek-Rnjn/Evals.si@ACTION_COMMIT
+      - uses: Abhishek-Rnjn/evalsi@ACTION_COMMIT
         with:
           spec: run.yaml
           pr-comment: 'true'

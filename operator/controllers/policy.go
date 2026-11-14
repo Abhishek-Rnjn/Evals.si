@@ -13,9 +13,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/operator/spec"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/operator/spec"
 )
 
 // PolicyReconciler applies each OnlineEvalPolicy to the server, deletes it
@@ -29,8 +29,8 @@ type PolicyReconciler struct {
 	StatsInterval time.Duration
 }
 
-// +kubebuilder:rbac:groups=evals.si,resources=onlineevalpolicies,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=evals.si,resources=onlineevalpolicies/status;onlineevalpolicies/finalizers,verbs=get;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=onlineevalpolicies,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=onlineevalpolicies/status;onlineevalpolicies/finalizers,verbs=get;update;patch
 
 func (r *PolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	p := &v1.OnlineEvalPolicy{}

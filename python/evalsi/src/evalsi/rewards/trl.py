@@ -1,4 +1,4 @@
-"""Evals.si rewards in TRL.
+"""Evalsi rewards in TRL.
 
 A loaded reward is already a TRL reward function. :func:`reward_funcs`
 adds one function per component, weighted 0, so TRL logs each component's

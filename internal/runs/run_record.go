@@ -4,8 +4,8 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	"errors"
-	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	pb "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 func (m *Manager) GetRecordEvidence(ctx context.Context, req *connect.Request[pb.GetRecordEvidenceRequest]) (*connect.Response[pb.GetRecordEvidenceResponse], error) {

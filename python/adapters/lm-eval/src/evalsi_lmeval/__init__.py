@@ -1,7 +1,7 @@
-"""lm-evaluation-harness through Evals.si.
+"""lm-evaluation-harness through Evalsi.
 
 - ``EvalsiLM`` is an lm-eval model (registered as ``evalsi``) that generates
-  through an Evals.si target connector (OpenAI-compatible or Anthropic), so
+  through an Evalsi target connector (OpenAI-compatible or Anthropic), so
   benchmark runs share the connectors, keys and limits of every other run::
 
       lm_eval --model evalsi --tasks gsm8k \\
@@ -13,7 +13,7 @@
 - ``evaluate(tasks, target)`` runs tasks and returns the samples as records,
   with lm-eval's per-sample metrics in metadata.
 - ``lm-eval://samples_<task>_<date>.jsonl`` (or ``read_samples``) imports the
-  samples lm-eval logs with ``--log_samples``, so any Evals.si evaluator can
+  samples lm-eval logs with ``--log_samples``, so any Evalsi evaluator can
   re-score them.
 """
 
@@ -59,7 +59,7 @@ def _cut(text: str, until: Iterable[str]) -> str:
 
 @register_model("evalsi")
 class EvalsiLM(LM):  # type: ignore[misc]
-    """An lm-eval model that generates through an Evals.si target."""
+    """An lm-eval model that generates through an Evalsi target."""
 
     def __init__(
         self,
@@ -117,13 +117,13 @@ class EvalsiLM(LM):  # type: ignore[misc]
 
     def loglikelihood(self, requests: list[Any], disable_tqdm: bool = False) -> Any:
         raise NotImplementedError(
-            "Evals.si targets are chat APIs without prompt log-probabilities; "
+            "Evalsi targets are chat APIs without prompt log-probabilities; "
             "use generative tasks (generate_until), or run this task on a local model"
         )
 
     def loglikelihood_rolling(self, requests: list[Any], disable_tqdm: bool = False) -> Any:
         raise NotImplementedError(
-            "Evals.si targets are chat APIs without prompt log-probabilities; "
+            "Evalsi targets are chat APIs without prompt log-probabilities; "
             "perplexity tasks need a local model"
         )
 

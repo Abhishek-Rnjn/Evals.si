@@ -17,8 +17,8 @@ import (
 	resource "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/protobuf/proto"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/version"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/version"
 )
 
 // OTelConfig exports scores as OpenTelemetry events over OTLP/HTTP. Each
@@ -197,7 +197,7 @@ func (o *otelSink) send(ctx context.Context, records []*logs.LogRecord) error {
 	body, err := proto.Marshal(&collogs.ExportLogsServiceRequest{ResourceLogs: []*logs.ResourceLogs{{
 		Resource: &resource.Resource{Attributes: []*common.KeyValue{str("service.name", o.cfg.ServiceName)}},
 		ScopeLogs: []*logs.ScopeLogs{{
-			Scope:      &common.InstrumentationScope{Name: "evals.si", Version: version.Version},
+			Scope:      &common.InstrumentationScope{Name: "evalsi.dev", Version: version.Version},
 			LogRecords: records,
 		}},
 	}}})

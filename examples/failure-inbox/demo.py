@@ -114,7 +114,7 @@ def exercise(server: str, destination: Path) -> dict[str, Any]:
     if "synthetic-private-217" in destination.read_text():
         raise RuntimeError("redacted source payload reached the snapshot")
     spec: dict[str, Any] = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "EvalRun",
         "spec": {
             "dataset": {"uri": exported["uri"]},

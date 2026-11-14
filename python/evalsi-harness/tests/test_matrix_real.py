@@ -41,7 +41,7 @@ def write_run(path: Path, server: ScriptedModelServer, profile: str, **context: 
     path.write_text(
         json.dumps(
             {
-                "apiVersion": "evals.si/v1alpha1",
+                "apiVersion": "evalsi.dev/v1alpha1",
                 "kind": "EvalRun",
                 "metadata": {"name": profile},
                 "spec": spec,

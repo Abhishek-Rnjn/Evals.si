@@ -13,9 +13,9 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/datasets"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/datasets"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
 )
 
 // validateAgent checks an agent run's spec: the agent or the built-in

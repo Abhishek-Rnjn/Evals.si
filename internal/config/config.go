@@ -14,16 +14,16 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/cluster"
-	"github.com/abhishek-rnjn/evals.si/internal/credentials"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/mcp"
-	"github.com/abhishek-rnjn/evals.si/internal/objstore"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	"github.com/abhishek-rnjn/evals.si/internal/sinks"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/cluster"
+	"github.com/abhishek-rnjn/evalsi/internal/credentials"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/mcp"
+	"github.com/abhishek-rnjn/evalsi/internal/objstore"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sinks"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // Judge mirrors evalsi.judges.JudgeConfig in the Python SDK; it is handed to
@@ -147,7 +147,7 @@ type QualityExport struct {
 	// Only this metric; empty exports every metric the policy scores.
 	Metric string `json:"metric,omitempty"`
 	// service, name (the root span's name), or label:<key>. Gateway routes and
-	// backends reach Evals.si as trace labels (evalsi.label.<key> resource
+	// backends reach Evalsi as trace labels (evalsi.label.<key> resource
 	// attributes, or labels on the ingest key).
 	GroupBy string `json:"group_by,omitempty"`
 	// Defaults: 1h, 20 traces, 50 groups, 1m.
@@ -183,7 +183,7 @@ func (q QualityExport) validate(i int) []error {
 // GuardEnabled reports whether webhook URLs are guarded (the default).
 func (w Webhooks) GuardEnabled() bool { return w.SSRFGuard == nil || *w.SSRFGuard }
 
-// Sources configures trace sources: stores such as MLflow that Evals.si pulls
+// Sources configures trace sources: stores such as MLflow that Evalsi pulls
 // traces from and writes scores to (decision 0016).
 type Sources struct {
 	// Where the chart mounts Secrets for sources: a source's credentials.file

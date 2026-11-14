@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 // postJSON POSTs body as JSON. 4xx answers (except 429) are permanent.

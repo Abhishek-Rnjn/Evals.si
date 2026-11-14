@@ -11,11 +11,11 @@ from evalsi.cli import gate_key, gated_spec, main
 from evalsi.client import ServerError
 
 SPEC = """\
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: support-bot-gate
-  labels: {evals.si/project: studio, team: agents}
+  labels: {evalsi.dev/project: studio, team: agents}
 spec:
   target:
     agent:

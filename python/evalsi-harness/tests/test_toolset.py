@@ -202,7 +202,7 @@ def test_grep_finds_lines_and_respects_path_include_and_case() -> None:
         inc = await tool.call({"pattern": "ADD", "ignore_case": True, "include": "*.md"})
         assert inc.content == "notes.md:1:add things"
         assert (await tool.call({"pattern": "zzzzz"})).content.startswith("no matches")
-        # Hidden Evals.si and git files are not searched.
+        # Hidden Evalsi and git files are not searched.
         assert (await tool.call({"pattern": "secret"})).content.startswith("no matches")
         # A pattern that starts with a dash is a pattern, not an option.
         assert (await tool.call({"pattern": "-x"})).content.startswith("no matches")

@@ -1,7 +1,7 @@
 [project]
 name = "evalsi-adapter-swebench"
 version = "0.1.0"
-description = "SWE-bench as Evals.si agent tasks: an importer and the official grading."
+description = "SWE-bench as Evalsi agent tasks: an importer and the official grading."
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [

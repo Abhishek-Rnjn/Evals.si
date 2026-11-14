@@ -2,11 +2,11 @@
 #   evalsi policy apply -f examples/watch/support-policy.yaml --server http://localhost:8080
 # Then point any OpenTelemetry-instrumented agent (or agentgateway) at the
 # server's OTLP endpoint (main port, or 4317/4318 when enabled in evalsi.yaml).
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: support-agent
-  labels: {evals.si/project: support}   # on Kubernetes, default: the namespace
+  labels: {evalsi.dev/project: support}   # on Kubernetes, default: the namespace
 spec:
   # CEL over the trace: service, name, duration_ms, error, steps, tools,
   # models, attributes, resource.

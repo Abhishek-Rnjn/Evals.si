@@ -84,7 +84,7 @@ const (
 // OwnerRole holds every permission, install-wide ones included. It cannot be redefined.
 const OwnerRole = "owner"
 
-// BuiltinRoles ship with Evals.si. Custom roles can inherit them.
+// BuiltinRoles ship with Evalsi. Custom roles can inherit them.
 var BuiltinRoles = []Role{
 	{Name: "viewer", Description: "Read the catalog, runs, policies, traces, failure inbox, annotation queues and guardrails.",
 		Permissions: []string{"catalog.read", "runs.read", "policies.read", "traces.read", "failures.read", "datasets.read", "releases.read", "annotations.read", "guardrails.read"}},

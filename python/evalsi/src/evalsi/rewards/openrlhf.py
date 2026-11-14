@@ -1,4 +1,4 @@
-"""Evals.si rewards in OpenRLHF.
+"""Evalsi rewards in OpenRLHF.
 
 Two ways in:
 

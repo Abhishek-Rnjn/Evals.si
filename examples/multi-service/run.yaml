@@ -1,5 +1,5 @@
 # Offline fixture agent; replace target.agent to evaluate your own agent.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: multi-service

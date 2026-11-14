@@ -1,4 +1,4 @@
-# Evals.si: Architecture & Implementation Plan
+# Evalsi: Architecture & Implementation Plan
 
 > **Status:** Draft for discussion · v0.6 · 2026-10-06. D1–D3, D5, D6, D10 and D13–D15 are decided (§22, [decision records](decisions/README.md)). Phases 0 to 5 are implemented (§23); MCP, classic ML and the ecosystem (Phase 6) are next.
 >
@@ -74,7 +74,7 @@
 - **A full model-serving platform.** We spin up ephemeral serving (vLLM/SGLang) only to evaluate checkpoints.
 - **A heavyweight web UI in v1.** CLI, reports, Grafana and write-back to existing UIs come first (see [§22](#22-decisions)).
 - **Redistributing benchmark datasets.** We fetch them at runtime from their sources and respect their licenses.
-- **A hosted, multi-tenant service (for now).** Evals.si runs in the client's environment. The data model keeps room for multi-tenancy later (D5).
+- **A hosted, multi-tenant service (for now).** Evalsi runs in the client's environment. The data model keeps room for multi-tenancy later (D5).
 
 ## 3. Personas and use cases
 
@@ -406,7 +406,7 @@ outputs:
   - {name: faithfulness, type: number, range: [0, 1], higherIsBetter: true}
 runtime:
   python: {package: "evalsi-adapter-ragas==0.3.1", entrypoint: "evalsi_ragas:Faithfulness"}
-  # or: image: ghcr.io/evals-si/adapter-ragas:0.3.1@sha256:...
+  # or: image: ghcr.io/abhishek-rnjn/adapter-ragas:0.3.1@sha256:...
 scheduling: {pool: judge, batchable: true, maxBatch: 32}
 ```
 
@@ -432,7 +432,7 @@ def json_valid(record: Record) -> Score:
 | Framework | What we import | Integration path |
 |-----------|----------------|------------------|
 | **lm-evaluation-harness** | Tasks become suites, along with their metrics | Adapter registers an `LM` subclass that routes generation through our connectors, so rate limits, caching and cost accounting apply. Runs in its own image because of heavy dependencies. |
-| **Inspect AI** (+ `inspect_evals`) | Tasks, solvers and scorers become suites, harnesses and evaluators | Run Inspect tasks natively, provide an Evals.si **sandbox provider for Inspect** so its tasks use our sandboxes, and import Inspect logs as records. |
+| **Inspect AI** (+ `inspect_evals`) | Tasks, solvers and scorers become suites, harnesses and evaluators | Run Inspect tasks natively, provide an Evalsi **sandbox provider for Inspect** so its tasks use our sandboxes, and import Inspect logs as records. |
 | **HELM, lighteval, OpenAI simple-evals, BigCode harness** | Scenarios and benchmarks | Wrapped runners whose results map onto records and scores |
 | **RAGAS, DeepEval, TruLens, Phoenix evals, Opik, MLflow GenAI scorers** | Metrics become evaluators | In-process adapters. Judge calls route through our judge config, so they are cached, rate-limited and costed. |
 | **promptfoo** | Assertions and red-team plugins | Node subprocess or container |
@@ -440,7 +440,7 @@ def json_valid(record: Record) -> Score:
 | **scikit-learn metrics, Evidently, Fairlearn** | Classic ML metrics, drift and fairness | In-process |
 | **TRL, verl, OpenRLHF, NeMo-RL** | Reward-function interfaces and trainer callbacks | Reward client plus callbacks (§12) |
 
-**Reverse adapters.** We also expose Evals.si evaluators *to* other frameworks: as MLflow scorers, Inspect scorers, DeepEval metrics and TRL reward functions. Being pluggable in both directions makes adoption incremental: teams keep their framework and gain our evaluators, sandboxes and storage.
+**Reverse adapters.** We also expose Evalsi evaluators *to* other frameworks: as MLflow scorers, Inspect scorers, DeepEval metrics and TRL reward functions. Being pluggable in both directions makes adoption incremental: teams keep their framework and gain our evaluators, sandboxes and storage.
 
 **Adapter maturity tiers.** *Native* means we own the implementation and it is fully tested. *Wrapped* means a thin shim over the upstream package. *Community* means published by third parties to a plugin index. The catalog shows the tier and pins upstream versions.
 
@@ -544,7 +544,7 @@ Redaction runs at the edge (`evalsi-collector`) or at ingest, using regex rules 
 ```protobuf
 service Harness {
   rpc Describe(DescribeRequest) returns (HarnessManifest);        // task formats, environment needs
-  rpc Setup(SetupRequest) returns (EnvironmentHandle);            // may lease an Evals.si sandbox
+  rpc Setup(SetupRequest) returns (EnvironmentHandle);            // may lease an Evalsi sandbox
   rpc Run(RunRequest) returns (stream TrajectoryEvent);           // drives the agent, streams steps (also exported as OTLP)
   rpc Check(CheckRequest) returns (CheckResult);                  // environment-side grading: tests, DB state, files
   rpc Teardown(TeardownRequest) returns (TeardownResponse);
@@ -665,7 +665,7 @@ Isolation levels are ordered `vm` > `kernel` > `namespaced` > `confined` > `none
 
 ### The isolation ladder (decided, D6)
 
-Evals.si always uses the **strongest rung available** where it runs, then checks it against the request's `minIsolation`. If no available rung satisfies it, the sandbox fails closed with `SANDBOX_UNAVAILABLE`. **It never silently runs unconfined.**
+Evalsi always uses the **strongest rung available** where it runs, then checks it against the request's `minIsolation`. If no available rung satisfies it, the sandbox fails closed with `SANDBOX_UNAVAILABLE`. **It never silently runs unconfined.**
 
 | Form factor | Ladder, strongest first |
 |-------------|-------------------------|
@@ -698,7 +698,7 @@ The [deepseek-harness sandbox](https://github.com/deepseek-ai/deepseek-harness/b
 
 The deepseek-harness profile was built to confine a coding assistant on its user's own machine. It binds the host root read-only and governs file writes only (`--ro-bind / /`, private PID namespace, writable workspace). Running untrusted, model-generated code needs more:
 
-| Concern | deepseek-harness profile | Evals.si profile |
+| Concern | deepseek-harness profile | Evalsi profile |
 |---------|--------------------------|------------------|
 | Root filesystem | Host `/`, read-only | An unpacked OCI image (cached by digest) as `/`, so host files are invisible. Host-root mode is only for trusted evaluators. |
 | Reads | Unconfined | Limited to the image root, the workspace and explicit mounts (Landlock read rules on rung 3) |
@@ -728,7 +728,7 @@ Implementation notes:
 
 When neither Firecracker nor bubblewrap is available in the cluster, each sandbox is a dedicated pod, created through the Kubernetes API by a sandbox pool (a `SandboxClass` with `ladder: [pod]`). As built in Phase 4:
 
-- **The task's image, with our agent injected:** an init container copies `evalsi-guest` from the Evals.si image into an `emptyDir`, and the guest becomes the container's command. Commands, files and limits go through it over the pod network (gRPC behind a per-sandbox bearer token), as they do over vsock in a microVM; never `kubectl exec`.
+- **The task's image, with our agent injected:** an init container copies `evalsi-guest` from the Evalsi image into an `emptyDir`, and the guest becomes the container's command. Commands, files and limits go through it over the pod network (gRPC behind a per-sandbox bearer token), as they do over vsock in a microVM; never `kubectl exec`.
 - **No credentials or host access:** `automountServiceAccountToken: false`, `enableServiceLinks: false`, no host paths and no Secrets mounted.
 - **Hardened context:** `allowPrivilegeEscalation: false`, the `RuntimeDefault` seccomp profile, and all capabilities dropped except the few package installs need (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `FSETID`, `KILL`, `SETGID`, `SETUID`; configurable, `[]` keeps none). It runs as the image's user unless `runAsUser` is set; set a non-zero one where Pod Security `restricted` applies.
 - **Network:** the `evalsi-sandboxes` NetworkPolicy admits traffic to sandbox pods only from their pool and lets them reach only the pool, which relays allowed egress through its logging egress proxy. A pod that ignores the proxy still reaches nothing else. With the chart's own pool, each release has its own policy naming only its pool, so two releases in one namespace cannot reach each other's sandbox pods; the pods of SandboxClass pools are shared by design and stay under the general policy.
@@ -741,7 +741,7 @@ When neither Firecracker nor bubblewrap is available in the cluster, each sandbo
 Standalone, the ladder is the `sandbox:` section of `evalsi.yaml`. On Kubernetes, each `SandboxClass` is a sandbox pool the operator runs, with its own ladder:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: SandboxClass
 metadata: {name: default}
 spec:
@@ -751,7 +751,7 @@ spec:
   maxSandboxes: 8                        # per replica
   podSecurity: userns                    # or privileged, for nodes without user namespaces
 ---
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: SandboxClass
 metadata: {name: pods}
 spec:
@@ -878,7 +878,7 @@ As built in Phase 4 (see the [Kubernetes guide](guides/kubernetes.md)):
 
 The plan's separate API, ingest, result-writer, scheduler and policy-engine Deployments became one `evalsid serve` Deployment with leases (§23).
 
-**CRDs** (API group `evals.si/v1alpha1`). The first four are implemented; the rest stay inline fields until they are needed:
+**CRDs** (API group `evalsi.dev/v1alpha1`). The first four are implemented; the rest stay inline fields until they are needed:
 
 | CRD | Purpose |
 |-----|---------|
@@ -916,11 +916,11 @@ Today `evalsid` authenticates nobody. Its only protection is the default `127.0.
 - **run code:** code evaluators execute submitted programs in the sandbox;
 - **change what is measured:** apply or delete online policies, and inject traces into any project.
 
-Platform builders run Evals.si as a shared service ([decision 0008](decisions/0008-platform-builders-use-a-service.md)), so a shared server needs identity now. Phase 3 adds agents with MCP tools, sandbox leases and bring-your-own CLI agents, which widens all of the above. Project scoping is also cheapest to enforce now, while the store is small and every query is ours.
+Platform builders run Evalsi as a shared service ([decision 0008](decisions/0008-platform-builders-use-a-service.md)), so a shared server needs identity now. Phase 3 adds agents with MCP tools, sandbox leases and bring-your-own CLI agents, which widens all of the above. Project scoping is also cheapest to enforce now, while the store is small and every query is ours.
 
 ### Principles
 
-- **Bring your own identity provider.** Evals.si keeps no user database or passwords. Any OIDC issuer works: Keycloak, Entra ID, Okta, Auth0, Google, Dex, Kubernetes service-account tokens, GitHub Actions.
+- **Bring your own identity provider.** Evalsi keeps no user database or passwords. Any OIDC issuer works: Keycloak, Entra ID, Okta, Auth0, Google, Dex, Kubernetes service-account tokens, GitHub Actions.
 - **agentgateway's model and vocabulary:**
   - authentication policies turn a credential into verified claims, with modes `strict`, `optional` and `permissive`;
   - authorization is CEL rules of three kinds, `allow`, `deny` and `require`, evaluated with the same precedence;
@@ -988,7 +988,7 @@ Role bindings name principals as follows:
   - `condition`: a CEL expression over the request and resource attributes that must hold for the role to grant anything.
 - **Bindings** grant a role to principals in a project. `*` grants it in every project.
 
-Evals.si ships these built-in roles. Clients can extend them, or ignore them and define their own:
+Evalsi ships these built-in roles. Clients can extend them, or ignore them and define their own:
 
 | Built-in role | Permissions |
 |---|---|
@@ -1018,7 +1018,7 @@ rbac:
 
 Custom roles can follow the client's application in three ways:
 
-- **Roles from the token.** If the identity provider already puts application roles in the token, a provider's `role_claims` maps the claim values to Evals.si roles, per project or install-wide (for example `app_roles: checkout-lead` becomes `editor` in `checkout`). The application keeps owning role assignment, and Evals.si needs no separate bindings.
+- **Roles from the token.** If the identity provider already puts application roles in the token, a provider's `role_claims` maps the claim values to Evalsi roles, per project or install-wide (for example `app_roles: checkout-lead` becomes `editor` in `checkout`). The application keeps owning role assignment, and Evalsi needs no separate bindings.
 - **Labels on resources.** Runs, policies, traces and API keys carry labels such as `app: checkout`, `env: prod` or `team: payments`.
   - Traces get them from OTLP resource attributes `evalsi.label.<key>`, or from the ingest credential's labels.
   - Role conditions and rules read them as `resource.labels`, giving scoping finer than projects, in the application's own terms.
@@ -1147,11 +1147,11 @@ auth:
     providers:
       - name: corp
         issuer: https://sso.example.com/realms/eng
-        audiences: [evals.si]
+        audiences: [evalsi.dev]
         jwks: {discovery: true}         # or url:, file:, inline:
         claims: {groups: groups, email: email, name: preferred_username}
         required_claims: [exp, sub]
-        # Application roles in the token become Evals.si roles.
+        # Application roles in the token become Evalsi roles.
         role_claims:
           claim: app_roles
           map:
@@ -1196,10 +1196,10 @@ audit: {retention: 2160h}
 ### Kubernetes and later phases
 
 - **Kubernetes (Phase 4, implemented):** see the [identity guide](guides/identity.md#on-kubernetes-service-account-tokens).
-  - Kubernetes service-account tokens are just another OIDC provider (`kubernetes:`, the cluster's issuer and JWKS, audience `evals.si`); projected tokens sign in the operator, CI jobs and agents in the cluster (`EVALSI_TOKEN_FILE`).
+  - Kubernetes service-account tokens are just another OIDC provider (`kubernetes:`, the cluster's issuer and JWKS, audience `evalsi.dev`); projected tokens sign in the operator, CI jobs and agents in the cluster (`EVALSI_TOKEN_FILE`).
   - Mutual TLS between components (workers, sandbox pools, the operator, the storage backends), from the chart's internal CA or cert-manager; sandbox pools admit only the workers' certificate.
   - Kubernetes RBAC on the CRDs, aggregated into the `admin`, `edit` and `view` roles.
-  - Admission webhooks validate `EvalRun` and `OnlineEvalPolicy` specs with the CLI's rules and stamp the requesting user on every resource (`evals.si/created-by`), which the creator cannot set or change.
+  - Admission webhooks validate `EvalRun` and `OnlineEvalPolicy` specs with the CLI's rules and stamp the requesting user on every resource (`evalsi.dev/created-by`), which the creator cannot set or change.
   - The Helm chart renders the same `auth` and `rbac` sections as standalone.
 - **MCP (Phase 6):**
   - `evalsi mcp` over streamable HTTP follows the MCP authorization specification: OAuth 2.0 Protected Resource Metadata (RFC 9728) at `/.well-known/oauth-protected-resource`, `WWW-Authenticate` challenges, and audience-bound tokens (RFC 8707).
@@ -1216,7 +1216,7 @@ audit: {retention: 2160h}
 
 ## 18. Reproducibility and versioning
 
-Every run writes a **run manifest** containing the spec hash, evaluator and adapter versions with image digests, upstream framework versions, the dataset version hash, the target identity (model ID or digest, endpoint version, git SHA of the agent if provided), judge model, parameters and prompt-template hash, seeds, sandbox image digests and the Evals.si version. `evalsi rerun <run-id>` replays it exactly. If something cannot be pinned (a closed API model, for example), the manifest marks it as `unpinned`, so reports show that the run is not fully reproducible.
+Every run writes a **run manifest** containing the spec hash, evaluator and adapter versions with image digests, upstream framework versions, the dataset version hash, the target identity (model ID or digest, endpoint version, git SHA of the agent if provided), judge model, parameters and prompt-template hash, seeds, sandbox image digests and the Evalsi version. `evalsi rerun <run-id>` replays it exactly. If something cannot be pinned (a closed API model, for example), the manifest marks it as `unpinned`, so reports show that the run is not fully reproducible.
 
 ## 19. Developer experience
 
@@ -1259,7 +1259,7 @@ evalsi serve | evalsi mcp                                          # server and 
 As of Phase 6:
 
 ```text
-Evals.si/
+Evalsi/
 ├── proto/evalsi/                  # source of truth (buf): v1alpha1 API, plugin, harness, sandbox and guest protocols
 ├── gen/go/                        # generated Go code (committed; CI checks it is current)
 ├── cmd/
@@ -1298,7 +1298,7 @@ Evals.si/
 ├── Dockerfile                     # the one image every chart uses
 ├── examples/                      # runnable examples
 ├── tests/e2e/, tests/helm/        # evalsid against a real Python worker, the load test; the charts rendered and validated
-├── tests/trainers/                # TRL GRPO with Evals.si rewards and checkpoint evaluation (CPU)
+├── tests/trainers/                # TRL GRPO with Evalsi rewards and checkpoint evaluation (CPU)
 └── docs/                          # this plan, the decision records (docs/decisions) and guides (docs/guides)
 ```
 
@@ -1315,9 +1315,9 @@ The `evalsi-collector` distribution is in `deploy/collector`, and the release wo
 | D3 | **No web UI for now** | Reports, Grafana dashboards, the CLI, and write-back to MLflow, Langfuse or Phoenix (§19). Revisited in Phase 6: a minimal UI is embedded in evalsid ([decision 0014](decisions/0014-mcp-guardrails-plugins-ui.md)). |
 | D5 | **Self-hosted in the client's environment now**; a hosted multi-tenant service later, when there is compute for it | §16 "Runs in the client's environment"; `project_id` and a reserved `tenant_id` on every stored key from day one |
 | D6 | Sandbox ladder: **Firecracker when available, otherwise static bubblewrap or Landlock (adapted from the deepseek-harness sandbox), otherwise a hardened Kubernetes pod**, always failing closed | §13 |
-| D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evals.si`, Go module `github.com/abhishek-rnjn/evals.si`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
+| D10 | Names: PyPI package and CLI `evalsi`, Go daemon `evalsid`, CRD group `evalsi.dev`, Go module `github.com/abhishek-rnjn/evalsi`, protobuf packages `evalsi.v1alpha1` | [0006](decisions/0006-naming-and-namespaces.md). The user-facing CLI is the Python `evalsi`; `evalsi serve` starts `evalsid`. |
 | D13 | Sandbox rungs are tested in CI (bubblewrap, Landlock, and the pod rung on kind). On the project owner's cluster, the `vm` level comes from **Kata Containers** for now; direct Firecracker (`sandboxd`, warm snapshot pools) follows later | [0007](decisions/0007-testing-sandbox-rungs.md). Phase 3 built the Firecracker rung and Phase 4 its `sandboxd` mode; the pod rung runs in the kind e2e. |
-| D14 | Agent platform builders run Evals.si **as a service** beside their platform | [0008](decisions/0008-platform-builders-use-a-service.md): API stability, pluggable auth and project-scoped authorization matter early. |
+| D14 | Agent platform builders run Evalsi **as a service** beside their platform | [0008](decisions/0008-platform-builders-use-a-service.md): API stability, pluggable auth and project-scoped authorization matter early. |
 | D15 | **Identity and access come next (Phase 2)**, modeled on agentgateway: OIDC/JWT and hashed API keys with `strict`, `optional` and `permissive` modes; project-scoped RBAC with built-in and custom roles (permissions, CEL conditions, mapping from token claims); CEL `allow`, `deny` and `require` rules; external authorization; secure by default | [0010](decisions/0010-identity-and-access-next.md), §17. Later phases move up by one. |
 
 Each decision has a record in [`docs/decisions`](decisions/README.md).
@@ -1348,7 +1348,7 @@ On 2026-10-05, identity and access was inserted as Phase 2 ([decision 0010](deci
 | **2. Identity and access** ✅ | OIDC/JWT authentication (multiple providers, JWKS from a URL, a file, inline JSON or discovery; `strict`, `optional` and `permissive` modes) and hashed API keys; TLS on the API listener; a refusal to start on a non-loopback address without auth; project-scoped RBAC with built-in roles (viewer, runner, editor, admin, ingest, owner), custom roles built from the permission list with optional CEL conditions, roles mapped from token claims, and labels on resources; agentgateway-style CEL rules (`allow`, `deny`, `require`); project scoping in every store query and in OTLP ingest; `created_by` on runs; an audit log and `evalsid auth check`; `AuthService` (who-am-i, API keys, bindings, audit); `evalsi login` (device code and PKCE), `whoami` and `auth keys`; GitHub Actions OIDC for CI; optional external authorization (AuthZEN, Envoy `ext_authz`) | With any OIDC issuer configured, every surface (gRPC, Connect, REST, OTLP, metrics) rejects unauthenticated calls; a viewer cannot start runs or read another project's traces; a custom role with a model condition can start runs only on its allowed models; a project admin cannot grant a permission it lacks; a GitHub Actions job runs a gated evaluation with its own OIDC token and no stored secret; every denied call appears in the audit log with the deciding rule; the action table covers every RPC, enforced by a test |
 | **3. Agent runs** ✅ | Harness protocol and `evalsi-harness` (tool loop, MCP tools, user simulator, budgets, record and replay, sandbox policy events); A2A, MCP, OpenAI Responses-compatible, HTTP and CLI-in-sandbox agent connectors; pass^k; promotion to datasets and shadow replay; the **Firecracker** rung with warm pools and snapshots; SWE-bench, τ-bench, Terminal-Bench/Harbor and BFCL adapters | A SWE-bench Verified subset runs with a BYO CLI agent, in Firecracker where KVM exists and in bubblewrap otherwise, with identical scoring |
 | **4. Kubernetes** ✅ | Operator and the first four CRDs; a namespace-scoped Helm chart plus a separate cluster-scoped chart; Postgres, ClickHouse and S3 backends; KEDA-scaled pools; the `sandboxd` DaemonSet, the bubblewrap sandbox pool and the **hardened pod** rung; Kubernetes identity (service-account tokens as an OIDC provider, mTLS between components, an admission webhook that records who created each CR); HA ingest and scheduler; air-gapped bundle; agentgateway-on-Kubernetes guide | kind-based e2e in CI covering the bubblewrap and pod rungs; `kubectl apply` gives parity with standalone; an air-gapped install is tested; a load test meets the §14 targets |
-| **5. Fine-tuning and RL** ✅ | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evals.si sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
+| **5. Fine-tuning and RL** ✅ | Reward Service and verifier library; TRL, verl and OpenRLHF integrations; checkpoint watcher and trainer callbacks; ephemeral vLLM with dynamic LoRA; forgetting, contamination, reward-hacking and diversity suites | A TRL GRPO run uses Evalsi sandboxed code-execution rewards at the target throughput; checkpoint learning curves with regression gates |
 | **6. MCP, classic ML and ecosystem** ✅ | `evalsi mcp` (stdio, and streamable HTTP with the MCP authorization specification); `ml-classic` and `ml-monitoring` packs (pulled earlier if a client needs them); plugin index; Wasm evaluators; human annotation queues; inline guardrail mode; a minimal web UI if one is still wanted | A coding agent evaluates its own changes locally over MCP |
 
 **Phase 0 status (2026-10-05):** implemented.
@@ -1388,7 +1388,7 @@ The exit criterion runs end to end, verified against a local OpenAI-compatible j
    - Packs: `text`, `rag`, `safety` and the trace-based `agent` pack.
    - Adapters in `python/adapters/`, each with its own pinned environment and offline contract tests:
      - DeepEval (30 metrics, including JevEval answered by the run's judge) and RAGAS (15 metrics), with their model calls answered by the run's judge;
-     - Inspect AI: log import, and Evals.si evaluators as Inspect scorers;
+     - Inspect AI: log import, and Evalsi evaluators as Inspect scorers;
      - lm-eval-harness: an `LM` that generates through our connectors, and a sample-log importer.
    - Importers plug in as `scheme://path` datasets.
 5. **Sandbox, sinks and REST.**
@@ -1547,7 +1547,7 @@ Deviations from the plan:
 
 - Firecracker egress uses vsock and the host's egress proxy instead of a tap device with nftables.
 - The bubblewrap writable root is a copy of the image, not an overlay (bubblewrap 0.9 has no overlay support).
-- τ-bench's simulated user is Evals.si's (through the run's judge), not tau2's LiteLLM user.
+- τ-bench's simulated user is Evalsi's (through the run's judge), not tau2's LiteLLM user.
 - Partial benchmark coverage: no BFCL multi-turn, memory or web-search categories; no tau2 telecom; no multi-service or multi-stage Terminal-Bench tasks. (BFCL multi-turn and tau2 telecom were added after Phase 5.)
 - FrontierCode is not imported yet: its task format is not public in a form we could verify. CursorBench's tasks are private. `harbor://` and `code-quality` cover the parts that are public: Harbor-format tasks and a maintainer-style review of the diff.
 
@@ -1569,7 +1569,7 @@ The Phase 1 deferral of OCI image roots for the bubblewrap rung is resolved by s
    - `sandboxd`: the sandbox service over TCP with mTLS, for the DaemonSet (Firecracker) and the bubblewrap sandbox pool.
    - The **hardened pod** rung: one pod per sandbox from the task's image, with `evalsi-guest` injected by an init container, no service-account token, a restricted security context, and a NetworkPolicy that allows only the egress proxy.
 4. **Operator and CRDs.**
-   - `EvalRun`, `Evaluator`, `OnlineEvalPolicy` and `SandboxClass` (`evals.si/v1alpha1`), reconciled through the server's API with status written back.
+   - `EvalRun`, `Evaluator`, `OnlineEvalPolicy` and `SandboxClass` (`evalsi.dev/v1alpha1`), reconciled through the server's API with status written back.
    - An admission webhook that records who created each resource.
    - Tested against a real API server and etcd.
 5. **Kubernetes identity.** Service-account tokens accepted as an OIDC provider (the cluster's issuer and JWKS), and mTLS between components (workers, sandboxd, the operator).
@@ -1657,7 +1657,7 @@ Deviations from the plan:
 
 The exit criterion, at the scale this host allows:
 
-- **A TRL GRPO run uses Evals.si sandboxed code-execution rewards:** the `trainers` job, on CPU with a randomly initialised model. It tests the wiring (batches, columns, logging, checkpoints), not learning.
+- **A TRL GRPO run uses Evalsi sandboxed code-execution rewards:** the `trainers` job, on CPU with a randomly initialised model. It tests the wiring (batches, columns, logging, checkpoints), not learning.
 - **Throughput:** on one 4-vCPU host with bubblewrap, 1,024 code rollouts take 59 s, or 17 rollouts/s. Each rollout is its own sandbox, a test runner and two test processes. The throughput is CPU-bound at about 4 rollouts per core per second, so the §12 GRPO step (4,096 rollouts) takes about 4 minutes here, and reaching about 16 s at this rate needs about 64 cores of sandbox pool. Repeated rollouts come from the cache: 0.03 s for the same batch.
 - **Checkpoint learning curves with regression gates:** `tests/test_training.py` drives `evalsi checkpoints` against a stand-in model whose accuracy changes by step, and a regression fails the curve.
 
@@ -1735,11 +1735,11 @@ Deviations from the plan:
 ### Offline agent run (works embedded, standalone, or as a CRD)
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: support-agent-nightly
-  labels: {evals.si/project: support}
+  labels: {evalsi.dev/project: support}
 spec:
   target:
     agent:
@@ -1772,11 +1772,11 @@ spec:
 ### Online policy
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: prod-support-agent
-  labels: {evals.si/project: support}
+  labels: {evalsi.dev/project: support}
 spec:
   selector: 'resource["service.name"] == "support-agent" && span.type == "agent"'
   sampling:
@@ -1800,7 +1800,7 @@ spec:
 ### RL reward spec
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: RewardSpec
 metadata: {name: code-grpo}
 spec:

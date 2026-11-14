@@ -1,4 +1,4 @@
-# Contributing to Evals.si
+# Contributing to Evalsi
 
 Thank you for helping. Issues and pull requests are welcome. For anything larger than a fix, open an issue first so we can agree on the shape of the change.
 

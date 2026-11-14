@@ -462,7 +462,7 @@ type HTTPAgent struct {
 	// Dotted path to the turn's token usage: input_tokens/output_tokens (or
 	// prompt_tokens/completion_tokens) and optionally cost_usd.
 	UsagePath string `protobuf:"bytes,8,opt,name=usage_path,json=usagePath,proto3" json:"usage_path,omitempty"`
-	// Dotted path to the turn's trajectory in Evals.si record form: an object
+	// Dotted path to the turn's trajectory in Evalsi record form: an object
 	// with "steps" (and optionally "session_id"), or a list of steps. Kept as
 	// the trajectory, for agents that report their own tool, handoff and
 	// guardrail steps.
@@ -3650,9 +3650,9 @@ const file_evalsi_v1alpha1_agent_proto_rawDesc = "" +
 	"\n" +
 	"FilesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\xc7\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\xc5\x01\n" +
 	"\x13com.evalsi.v1alpha1B\n" +
-	"AgentProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"AgentProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_agent_proto_rawDescOnce sync.Once

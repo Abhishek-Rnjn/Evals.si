@@ -7,7 +7,7 @@ customer adoption or willingness to pay.
 
 ## The task
 
-Give a developer who did not build Evals.si this goal:
+Give a developer who did not build Evalsi this goal:
 
 > Install the supplied release candidate, evaluate a trusted application on
 > examples you understand, identify a meaningful failing case, make a change,

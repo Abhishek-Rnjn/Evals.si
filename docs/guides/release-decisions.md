@@ -36,7 +36,7 @@ Run the currently accepted agent against that approved catalog pin. Include the
 declared agent commit in the run's metadata:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: accepted-refund-agent
@@ -209,7 +209,7 @@ steps:
     with: {python-version: '3.12'}
   - uses: actions/checkout@v4
     with:
-      repository: Abhishek-Rnjn/Evals.si
+      repository: Abhishek-Rnjn/evalsi
       ref: REPLACE_WITH_REVIEWED_TOOL_COMMIT
       path: .evalsi-tool
   - run: pip install './.evalsi-tool/python/evalsi[server]' './.evalsi-tool/python/evalsi-harness'

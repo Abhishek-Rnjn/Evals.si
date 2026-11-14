@@ -29,7 +29,7 @@ def kube(*args: str) -> dict[str, Any]:
 
 
 def service_pods() -> list[dict[str, Any]]:
-    return kube("get", "pods", "-l", "evals.si/service-owner")["items"]
+    return kube("get", "pods", "-l", "evalsi.dev/service-owner")["items"]
 
 
 def db_spec(config: EnvironmentConfig, *, lifetime: float = 120, idle: float = 0) -> SandboxSpec:

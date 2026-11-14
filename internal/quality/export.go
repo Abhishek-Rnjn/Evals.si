@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // Exporter publishes the configured quality exports as Prometheus gauges.

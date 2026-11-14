@@ -37,7 +37,7 @@ subjects:
 #
 # Policies add up, so a policy that names every evalsi-sandboxd would let one
 # release's pool reach another's pods. Pods of a pool this chart runs carry
-# evals.si/sandbox-pool and are covered by their own release's policy below.
+# evalsi.dev/sandbox-pool and are covered by their own release's policy below.
 # This one covers the rest (the pods of SandboxClass pools, which are shared).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -47,8 +47,8 @@ metadata:
 spec:
   podSelector:
     matchExpressions:
-      - {key: evals.si/sandbox, operator: In, values: ["true"]}
-      - {key: evals.si/sandbox-pool, operator: DoesNotExist}
+      - {key: evalsi.dev/sandbox, operator: In, values: ["true"]}
+      - {key: evalsi.dev/sandbox-pool, operator: DoesNotExist}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
@@ -67,7 +67,7 @@ metadata:
   labels: {{- include "evalsi.labels" . | nindent 4 }}
 spec:
   podSelector:
-    matchLabels: {evals.si/sandbox: "true", evals.si/sandbox-pool: {{ $fn }}-sandbox-pool}
+    matchLabels: {evalsi.dev/sandbox: "true", evalsi.dev/sandbox-pool: {{ $fn }}-sandbox-pool}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:

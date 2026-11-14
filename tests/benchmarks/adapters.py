@@ -20,7 +20,7 @@ def batch_runner(tool: str, concurrency: int):
                 cache=False,
             )
             if result.errors() or any(r.outcome != evalsi.Outcome.SCORED for r in result.results):
-                raise ValueError("Evals.si returned errors/skips")
+                raise ValueError("Evalsi returned errors/skips")
             return [(r.record_id, float(r.scores[0].passed)) for r in result.results]
 
     elif tool == "deepeval":

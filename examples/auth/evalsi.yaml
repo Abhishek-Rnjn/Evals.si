@@ -14,10 +14,10 @@ auth:
       # Your identity provider: users and services.
       - name: corp
         issuer: https://sso.example.com/realms/eng
-        audiences: [evalsi-cli, evals.si]
+        audiences: [evalsi-cli, evalsi.dev]
         jwks: {discovery: true}
         claims: {groups: groups, email: email, name: preferred_username}
-        # Application roles in the token become Evals.si roles.
+        # Application roles in the token become Evalsi roles.
         role_claims:
           claim: app_roles
           map:

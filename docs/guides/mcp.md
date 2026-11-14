@@ -1,6 +1,6 @@
-# Evals.si over MCP
+# Evalsi over MCP
 
-`evalsi mcp` serves Evals.si to MCP clients, such as a coding agent, so the agent can check its own changes against your evaluation suites.
+`evalsi mcp` serves Evalsi to MCP clients, such as a coding agent, so the agent can check its own changes against your evaluation suites.
 
 ## Set it up
 

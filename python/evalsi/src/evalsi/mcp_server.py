@@ -1,4 +1,4 @@
-"""``evalsi mcp``: Evals.si as an MCP server over stdio.
+"""``evalsi mcp``: Evalsi as an MCP server over stdio.
 
 A coding agent (or any MCP client) can check its own work:
 
@@ -487,9 +487,9 @@ class EvalsiMCP:
             return {
                 "protocolVersion": version,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "evalsi", "title": "Evals.si", "version": __version__},
+                "serverInfo": {"name": "evalsi", "title": "Evalsi", "version": __version__},
                 "instructions": (
-                    "Evaluate your work with Evals.si: `run` a suite from the repository "
+                    "Evaluate your work with Evalsi: `run` a suite from the repository "
                     "(it compares with the previous run of the same suite), `evaluate` "
                     "records directly, or `list_evaluators` to see what can score them."
                 ),

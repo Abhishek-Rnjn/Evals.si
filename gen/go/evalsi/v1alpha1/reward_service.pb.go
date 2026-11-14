@@ -696,8 +696,8 @@ const file_evalsi_v1alpha1_reward_service_proto_rawDesc = "" +
 	"\x1fREWARD_COMPONENT_STATUS_SKIPPED\x10\x02\x12!\n" +
 	"\x1dREWARD_COMPONENT_STATUS_ERROR\x10\x032l\n" +
 	"\rRewardService\x12[\n" +
-	"\fScoreRewards\x12$.evalsi.v1alpha1.ScoreRewardsRequest\x1a%.evalsi.v1alpha1.ScoreRewardsResponseB\xcf\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x12RewardServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\fScoreRewards\x12$.evalsi.v1alpha1.ScoreRewardsRequest\x1a%.evalsi.v1alpha1.ScoreRewardsResponseB\xcd\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x12RewardServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_reward_service_proto_rawDescOnce sync.Once

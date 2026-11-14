@@ -21,8 +21,8 @@ import (
 	"github.com/parquet-go/parquet-go/format"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/objstore"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/objstore"
 )
 
 const MaxUploadBytes int64 = 64 << 20

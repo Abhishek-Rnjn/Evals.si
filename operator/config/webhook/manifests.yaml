@@ -10,12 +10,12 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /mutate-evals-si
+      path: /mutate-evalsi-dev
   failurePolicy: Fail
-  name: mutate.evals.si
+  name: mutate.evalsi.dev
   rules:
   - apiGroups:
-    - evals.si
+    - evalsi.dev
     apiVersions:
     - v1alpha1
     operations:
@@ -40,12 +40,12 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
-      path: /validate-evals-si
+      path: /validate-evalsi-dev
   failurePolicy: Fail
-  name: validate.evals.si
+  name: validate.evalsi.dev
   rules:
   - apiGroups:
-    - evals.si
+    - evalsi.dev
     apiVersions:
     - v1alpha1
     operations:

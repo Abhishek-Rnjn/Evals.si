@@ -47,7 +47,7 @@ metadata:
     cert-manager.io/inject-ca-from: {{ $ns }}/{{ $svc }}
   {{- end }}
 webhooks:
-  - name: {{ ternary "mutate" "validate" (eq $kind "Mutating") }}.evals.si
+  - name: {{ ternary "mutate" "validate" (eq $kind "Mutating") }}.evalsi.dev
     admissionReviewVersions: [v1]
     sideEffects: None
     failurePolicy: {{ $.Values.webhooks.failurePolicy }}
@@ -56,12 +56,12 @@ webhooks:
       service:
         name: {{ $svc }}
         namespace: {{ $ns }}
-        path: {{ ternary "/mutate-evals-si" "/validate-evals-si" (eq $kind "Mutating") }}
+        path: {{ ternary "/mutate-evalsi-dev" "/validate-evalsi-dev" (eq $kind "Mutating") }}
       {{- if $caBundle }}
       caBundle: {{ $caBundle }}
       {{- end }}
     rules:
-      - apiGroups: [evals.si]
+      - apiGroups: [evalsi.dev]
         apiVersions: [v1alpha1]
         operations: [CREATE, UPDATE]
         {{- if eq $kind "Mutating" }}

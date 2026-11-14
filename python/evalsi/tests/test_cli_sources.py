@@ -10,11 +10,11 @@ from evalsi.cli import load_policy, main
 from evalsi.cli_sources import load_source, source_from_doc
 
 SOURCE = """\
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata:
   name: studio-mlflow
-  labels: {evals.si/project: studio, team: agents}
+  labels: {evalsi.dev/project: studio, team: agents}
 spec:
   connector: mlflow
   endpoint: https://mlflow.example.com
@@ -58,7 +58,7 @@ def test_source_from_doc_rejects_mistakes() -> None:
 def test_scheduled_source_durations() -> None:
     source = source_from_doc(
         {
-            "metadata": {"name": "scheduled", "labels": {"evals.si/project": "studio"}},
+            "metadata": {"name": "scheduled", "labels": {"evalsi.dev/project": "studio"}},
             "spec": {
                 "connector": "mlflow",
                 "schedule": {

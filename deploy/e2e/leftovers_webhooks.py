@@ -34,12 +34,12 @@ def dry_run(invalid: bool = False) -> subprocess.CompletedProcess[bytes]:
     if invalid:
         spec["gates"] = [{"metric": "exact-match"}]
     resource = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "EvalRun",
         "metadata": {
             "name": "verification-dry-run",
             "namespace": NS,
-            "labels": {"evals.si/project": "default"},
+            "labels": {"evalsi.dev/project": "default"},
         },
         "spec": spec,
     }

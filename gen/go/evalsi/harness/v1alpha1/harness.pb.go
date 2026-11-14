@@ -7,7 +7,7 @@
 package harnessv1alpha1
 
 import (
-	v1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	v1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -110,7 +110,7 @@ type HarnessManifest struct {
 	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	// Task formats it understands, for example "evalsi", "swebench", "terminal-bench".
 	TaskFormats []string `protobuf:"bytes,4,rep,name=task_formats,json=taskFormats,proto3" json:"task_formats,omitempty"`
-	// It runs tasks in an Evals.si sandbox.
+	// It runs tasks in an Evalsi sandbox.
 	UsesSandbox bool `protobuf:"varint,5,opt,name=uses_sandbox,json=usesSandbox,proto3" json:"uses_sandbox,omitempty"`
 	// For example "user-simulator", "record-replay", "mcp-tools".
 	Capabilities  []string `protobuf:"bytes,6,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
@@ -932,8 +932,8 @@ const file_evalsi_harness_v1alpha1_harness_proto_rawDesc = "" +
 	"\x05Setup\x12%.evalsi.harness.v1alpha1.SetupRequest\x1a&.evalsi.harness.v1alpha1.SetupResponse\x12R\n" +
 	"\x03Run\x12#.evalsi.harness.v1alpha1.RunRequest\x1a$.evalsi.harness.v1alpha1.RunResponse0\x01\x12V\n" +
 	"\x05Check\x12%.evalsi.harness.v1alpha1.CheckRequest\x1a&.evalsi.harness.v1alpha1.CheckResponse\x12_\n" +
-	"\bTeardown\x12(.evalsi.harness.v1alpha1.TeardownRequest\x1a).evalsi.harness.v1alpha1.TeardownResponseB\xfb\x01\n" +
-	"\x1bcom.evalsi.harness.v1alpha1B\fHarnessProtoP\x01ZPgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1;harnessv1alpha1\xa2\x02\x03EHX\xaa\x02\x17Evalsi.Harness.V1alpha1\xca\x02\x17Evalsi\\Harness\\V1alpha1\xe2\x02#Evalsi\\Harness\\V1alpha1\\GPBMetadata\xea\x02\x19Evalsi::Harness::V1alpha1b\x06proto3"
+	"\bTeardown\x12(.evalsi.harness.v1alpha1.TeardownRequest\x1a).evalsi.harness.v1alpha1.TeardownResponseB\xf9\x01\n" +
+	"\x1bcom.evalsi.harness.v1alpha1B\fHarnessProtoP\x01ZNgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/harness/v1alpha1;harnessv1alpha1\xa2\x02\x03EHX\xaa\x02\x17Evalsi.Harness.V1alpha1\xca\x02\x17Evalsi\\Harness\\V1alpha1\xe2\x02#Evalsi\\Harness\\V1alpha1\\GPBMetadata\xea\x02\x19Evalsi::Harness::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_harness_v1alpha1_harness_proto_rawDescOnce sync.Once

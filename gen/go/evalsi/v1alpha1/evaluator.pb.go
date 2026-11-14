@@ -456,7 +456,7 @@ type EvaluatorManifest struct {
 	// JSON Schema for the evaluator's params.
 	ParamsSchema *structpb.Struct `protobuf:"bytes,9,opt,name=params_schema,json=paramsSchema,proto3" json:"params_schema,omitempty"`
 	Scheduling   *Scheduling      `protobuf:"bytes,10,opt,name=scheduling,proto3" json:"scheduling,omitempty"`
-	// "native" (ships with Evals.si), "wrapped" (a shim over another
+	// "native" (ships with Evalsi), "wrapped" (a shim over another
 	// framework) or "community" (third-party, from a plugin index).
 	Tier string `protobuf:"bytes,11,opt,name=tier,proto3" json:"tier,omitempty"`
 	// Where it runs: "python" (the worker) or "wasm" (sandboxed in evalsid).
@@ -645,8 +645,8 @@ const file_evalsi_v1alpha1_evaluator_proto_rawDesc = "" +
 	"\x11SCORE_TYPE_NUMBER\x10\x01\x12\x15\n" +
 	"\x11SCORE_TYPE_PASSED\x10\x02\x12\x14\n" +
 	"\x10SCORE_TYPE_LABEL\x10\x03\x12\x19\n" +
-	"\x15SCORE_TYPE_STRUCTURED\x10\x04B\xcb\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x0eEvaluatorProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x15SCORE_TYPE_STRUCTURED\x10\x04B\xc9\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x0eEvaluatorProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_evaluator_proto_rawDescOnce sync.Once

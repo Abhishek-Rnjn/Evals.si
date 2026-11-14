@@ -1,6 +1,6 @@
 # 3. Your first agent run with the built-in harness
 
-The built-in harness is an agent loop that Evals.si ships: it gives a model tools
+The built-in harness is an agent loop that Evalsi ships: it gives a model tools
 (`bash`, `read_file`, `write_file`), runs them in a sandbox, records every step,
 and hands the end state to a checker the agent never sees. In this tutorial it
 drives TinyLM on three bug-fix tasks, and then you break the agent seven ways and
@@ -43,7 +43,7 @@ will see in a minute.
 [`run.yaml`](../../examples/tinylm/run.yaml), trimmed of comments:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-good}
 spec:
@@ -229,7 +229,7 @@ scores:
 
 The answer is confident and wrong. Only the checker notices. Also note
 `tool-errors` is **skipped**, not 0: an agent that made no tool calls has no
-error rate, and Evals.si will not invent one.
+error rate, and Evalsi will not invent one.
 
 ### `partial`: a passing self-test is not a passing task
 

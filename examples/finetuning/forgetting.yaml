@@ -5,7 +5,7 @@
 #   evalsi checkpoints eval Qwen/Qwen3-8B --step base -f forgetting.yaml --training-run my-run
 #   evalsi checkpoints watch out/ -f forgetting.yaml --training-run my-run \
 #       --serve lora --base-url http://localhost:8000/v1 --regression math-equiv:0.02
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: forgetting}
 spec:

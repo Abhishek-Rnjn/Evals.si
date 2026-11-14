@@ -1,4 +1,4 @@
-# Evals.si for Customer Kubernetes: Product Requirements
+# Evalsi for Customer Kubernetes: Product Requirements
 
 Status: draft · 2026-10-09, status updated 2026-10-13 (after PRs #54 and #56) · Abhishek Ranjan
 
@@ -11,19 +11,19 @@ The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) lists acceptance work for st
 
 ## Summary
 
-Evals.si becomes an evaluation microservice that customers install in their own Kubernetes cluster and call on demand. It works with any agent loop and any OpenTelemetry trace store; the agent harness is the first integration, and the first cut supports the most popular frameworks and stores. Customers get any evaluation (LLM, RAG, agent, classic ML, RL) through three doors:
+Evalsi becomes an evaluation microservice that customers install in their own Kubernetes cluster and call on demand. It works with any agent loop and any OpenTelemetry trace store; the agent harness is the first integration, and the first cut supports the most popular frameworks and stores. Customers get any evaluation (LLM, RAG, agent, classic ML, RL) through three doors:
 
 1. **Push:** applications send OpenTelemetry traces, or call the API with records, and get scores back.
-2. **Pull:** Evals.si subscribes to the customer's existing trace store (first cut: MLflow, Langfuse, Phoenix), evaluates new data as it lands, and writes scores back.
+2. **Pull:** Evalsi subscribes to the customer's existing trace store (first cut: MLflow, Langfuse, Phoenix), evaluates new data as it lands, and writes scores back.
 3. **Embed:** a Python SDK call inside a script, notebook or PyTorch training loop, running in-process or against the cluster service.
 
 About 70% of this already ships (Helm charts, operator, OTLP ingest, online policies, run API, in-process SDK, RL rewards). This PRD covers the remaining 30%. Those are pull connectors, an SDK log call, a remote `evaluate()` client, an agent harness integration package and a production release. The target is agent harness evaluating every deployed workflow in its own cluster by **end of Q1 2027**.
 
 ## Scope: any agent loop, any trace store
 
-Evals.si is framework-neutral: anything that emits OpenTelemetry spans, or calls the API or SDK, can be evaluated. The first cut adds tested mapping profiles for five popular agent frameworks and pull connectors for three popular trace stores. Everything else still works through the generic paths.
+Evalsi is framework-neutral: anything that emits OpenTelemetry spans, or calls the API or SDK, can be evaluated. The first cut adds tested mapping profiles for five popular agent frameworks and pull connectors for three popular trace stores. Everything else still works through the generic paths.
 
-**Agent loops.** Any loop is supported through one of three generic paths: OTel GenAI semantic conventions, OpenInference or OpenLLMetry spans, or `evalsi.log()` and the Run API for loops with no tracing. A mapping profile turns a framework's spans into an Evals.si trajectory (steps, tool calls, model calls, final output). Profiles are tested against fixtures captured from each framework.
+**Agent loops.** Any loop is supported through one of three generic paths: OTel GenAI semantic conventions, OpenInference or OpenLLMetry spans, or `evalsi.log()` and the Run API for loops with no tracing. A mapping profile turns a framework's spans into an Evalsi trajectory (steps, tool calls, model calls, final output). Profiles are tested against fixtures captured from each framework.
 
 | Agent framework | First cut | Instrumentation | Status |
 | --- | --- | --- | --- |
@@ -86,31 +86,31 @@ The agent harness is the first application integrated, and every requirement bel
 **Confirmed facts** (from the product owner, 9 October 2026):
 
 - Workflows trace to MLflow Tracing (open-source MLflow 3.x, Databricks, or a cloud-managed MLflow).
-- Each install is single-tenant: one agent harness per customer, so one Evals.si project per agent harness install.
-- Evals.si ships as its own independent Helm chart, installed beside the agent harness the way agent-sandbox is, with an integration guide. It is not a subchart.
+- Each install is single-tenant: one agent harness per customer, so one Evalsi project per agent harness install.
+- Evalsi ships as its own independent Helm chart, installed beside the agent harness the way agent-sandbox is, with an integration guide. It is not a subchart.
 - Agents built in the agent harness are evaluated however they can be called: HTTP or gRPC, A2A, or in-process Python once workflows are published as PyPI packages.
 - There is no default judge model; the customer configures one.
 - Still assumed: the cluster may be air-gapped and run under strict namespace-scoped RBAC.
 
-**What it needs from Evals.si:**
+**What it needs from Evalsi:**
 
 | # | Need | Door | Priority |
 | --- | --- | --- | --- |
 | A1 | Score every production workflow execution online (task success, tool-call accuracy, loop detection, cost, safety) without code changes in the workflows | Push (OTLP tee) | P0 (Demo built: a bootstrap default policy scores every production trace that names its workflow; the demo service tees OTLP with only environment variables. Not yet run on the real agent harness) |
 | A2 | Evaluate a workflow on a test set from the agent harness's "Test" screen before deploying, and block deploy on a failed gate | Push (Run API) | P0 (Demo built: `examples/demo/deploy/deploy.sh` stages, gates and promotes a release, and a failed gate leaves production as it was. Any pipeline can call `evalsi gate`, which gates one release against a candidate URL and exits 3 on a failed gate. Not yet run on the real agent harness) |
 | A3 | Show scores inside the agent harness UI, per workflow and per execution, linked to the trace | API + write-back | P0 (Done: API + write-back contract; `GET /v1alpha1/scores`, [guide](guides/integrate-an-agent-harness.md#4-read-the-scores)) |
-| A4 | Read traces already stored in its MLflow tracking server, including history from before Evals.si was installed | Pull | P1 (Built: a `TraceSource` backfills, then tails; a 30-day backfill and p95 pull lag are measured in the kind e2e job, [trace sources guide](guides/trace-sources.md#measuring-backfill-and-lag)) |
+| A4 | Read traces already stored in its MLflow tracking server, including history from before Evalsi was installed | Pull | P1 (Built: a `TraceSource` backfills, then tails; a 30-day backfill and p95 pull lag are measured in the kind e2e job, [trace sources guide](guides/trace-sources.md#measuring-backfill-and-lag)) |
 | A5 | Turn failing production executions into regression datasets, and replay a new workflow version against them | Push + Run API | P1 (Built: a policy's `promote` appends failing traces to a dataset, `evalsi traces export` writes chosen traces as one, and shadow replay re-runs them against a new version; the `harness-default` and `harness-quality` templates promote) |
 | A6 | Inline guardrails on tool calls and model calls, in audit mode first | Guardrails | P2 |
-| A7 | Install Evals.si from its own chart beside the agent harness, with an integration guide | Deploy | P0 |
+| A7 | Install Evalsi from its own chart beside the agent harness, with an integration guide | Deploy | P0 |
 
 ## Reference demos: Deep Agents and DeepSeek Harness as the agent harness
 
-Until the agent harness is available for testing, two open-source agent runtimes stand in for the agent harness. Evals.si evaluates agents built on each, in standalone and Kubernetes mode, and these demos are the basis for the docs and the integration guide. [Deep Agents](https://github.com/langchain-ai/deepagents) (LangChain, MIT, built on LangGraph) is the main walkthrough: it is an agent-loop framework like the agent harness's and covers every integration path. [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`, MIT, developer preview) is the second example, an agent loop that is not written in Python.
+Until the agent harness is available for testing, two open-source agent runtimes stand in for the agent harness. Evalsi evaluates agents built on each, in standalone and Kubernetes mode, and these demos are the basis for the docs and the integration guide. [Deep Agents](https://github.com/langchain-ai/deepagents) (LangChain, MIT, built on LangGraph) is the main walkthrough: it is an agent-loop framework like the agent harness's and covers every integration path. [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`, MIT, developer preview) is the second example, an agent loop that is not written in Python.
 
 **Entry points the demos use** (checked against each repository, 9 October 2026):
 
-| Runtime | Entry point | Evals.si use |
+| Runtime | Entry point | Evalsi use |
 | --- | --- | --- |
 | Deep Agents | `deepagents` SDK on PyPI | In-process target: a deep agent built in Python, like a PyPI-packaged agent harness workflow |
 | Deep Agents | The same agent behind a small HTTP wrapper shipped with the demo | HTTP target, the way a deployed agent harness workflow is called |
@@ -130,10 +130,10 @@ dsh's built-in telemetry does not export session traces. The demo includes a sep
 | Suite | What the agent does | How it is graded |
 | --- | --- | --- |
 | Small repo fixes | `examples/agents/fix-calc` plus about 10 SWE-bench-style fixtures | Task tests on the end state (`task-success`, pass@k, pass^k), `code-quality` on the diff, `policy-violations`, tool errors, loops, cost |
-| Terminal-Bench 2 via Harbor | Terminal tasks through Evals.si's `harbor://` adapter. Deep Agents' own eval suite runs Terminal-Bench 2.0 through Harbor, so results can be compared with theirs | The benchmark's own checker, plus trajectory evaluators |
+| Terminal-Bench 2 via Harbor | Terminal tasks through Evalsi's `harbor://` adapter. Deep Agents' own eval suite runs Terminal-Bench 2.0 through Harbor, so results can be compared with theirs | The benchmark's own checker, plus trajectory evaluators |
 | Deep research | A question that needs search, notes and a written report, the core Deep Agents use case | `llm-judge` with a research rubric, citation accuracy, step budget, cost |
 
-**Runs on any cluster.** The Kubernetes demo uses only standard resources and the Evals.si charts, with no cloud-specific services, so it runs unchanged on any conformant cluster. kind is the reference, locally and in CI. Storage class, ingress, image registry and node placement are chart values, not assumptions.
+**Runs on any cluster.** The Kubernetes demo uses only standard resources and the Evalsi charts, with no cloud-specific services, so it runs unchanged on any conformant cluster. kind is the reference, locally and in CI. Storage class, ingress, image registry and node placement are chart values, not assumptions.
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
@@ -141,7 +141,7 @@ dsh's built-in telemetry does not export session traces. The demo includes a sep
 | R2 | Trajectory mapping for both: Deep Agents traces (LangGraph spans through MLflow or OTel) and dsh `--json` run events, tested against recorded fixtures | P0 | Built; dsh run events and the Deep Agents MLflow export are tested against recorded fixtures |
 | R3 | Run specs under `examples/demo/`, one per agent and suite, identical in standalone and Kubernetes mode | P0 | Built; six specs, loaded and checked by tests |
 | R4 | Standalone walkthrough: `evalsi run -f ...` embedded, then `--server` against `evalsid serve`, on the bubblewrap rung; report and `/ui/` | P0 | Built; walkthrough in `examples/demo/README.md`, run end to end with the mock model |
-| R5 | Kubernetes walkthrough: the Evals.si charts and a sandbox pool, an MLflow server, the Deep Agents HTTP service and `dsh web` as agent harness stand-ins, and `kubectl apply` of the `EvalRun`s; scores in `/ui/` and in MLflow | P0 | Built; chart and overlays are chart-tested. Local kind passed chart installation, dataset upload, both agents' small-repo suites and the MLflow sink; browser walkthrough not rechecked ([verification](verification/README.md#platform-aware-bundle-recheck-2026-10-10)) |
+| R5 | Kubernetes walkthrough: the Evalsi charts and a sandbox pool, an MLflow server, the Deep Agents HTTP service and `dsh web` as agent harness stand-ins, and `kubectl apply` of the `EvalRun`s; scores in `/ui/` and in MLflow | P0 | Built; chart and overlays are chart-tested. Local kind passed chart installation, dataset upload, both agents' small-repo suites and the MLflow sink; browser walkthrough not rechecked ([verification](verification/README.md#platform-aware-bundle-recheck-2026-10-10)) |
 | R6 | Online scoring: Deep Agents traces in MLflow scored by a `TraceSource` (needs M3); a dsh plugin that exports sessions as OTel GenAI spans | P1 | Native headless dsh and Deep Agents loops passed on kind with MLflow 3.17.0 assessment write-back; interactive dsh web export remains unverified ([report](verification/PART-C.md)) |
 | R7 | CI: the kind e2e job runs the small-repo-fix suite for both agents against a mock model | P0 | Built; the kind step passed locally for both agents (task-success 1, 33 trials each); not yet run on CI |
 | R8 | Portability: chart values for storage class, ingress, image registry and node placement; no cloud-specific dependency | P0 | Built; placement values on every pod and Service, overlays for kind, tainted nodes and Istio ambient, chart-tested |
@@ -182,8 +182,8 @@ work remains in progress; inference evidence does not establish training.
 
 **Non-goals**
 
-- A hosted SaaS version of Evals.si (this PRD is self-hosted only).
-- Replacing the customer's observability tool. Evals.si scores traces and writes back; it does not become their trace UI.
+- A hosted SaaS version of Evalsi (this PRD is self-hosted only).
+- Replacing the customer's observability tool. Evalsi scores traces and writes back; it does not become their trace UI.
 - Building a trace store for logs that have no LLM or agent content.
 - Training or hosting judge models.
 
@@ -210,15 +210,15 @@ local SDK/metric overhead; they do not establish these hosted or scale SLOs.
 
 | Persona | Wants | Touches |
 | --- | --- | --- |
-| Platform engineer | Install, upgrade, secure and scale Evals.si like any other cluster service | Helm values, CRDs, Grafana, RBAC |
+| Platform engineer | Install, upgrade, secure and scale Evalsi like any other cluster service | Helm values, CRDs, Grafana, RBAC |
 | Workflow builder (agent harness user) | Know whether a workflow is good before and after deploy, without writing eval code | Agent harness UI: test screen, scores tab, deploy gate |
 | ML / AI engineer | Custom evaluators, judges and datasets; compare versions | Python SDK, CLI, run specs, `Evaluator` CRD |
 | Researcher in a training loop | Scores and rewards inside a PyTorch loop, local or against the cluster | `evalsi.evaluate()`, `Client.evaluate()`, rewards |
 | Data or SRE owner of an existing trace store | Scores on traces they already keep, written back where they look | `TraceSource` CRD, sinks |
 
-**Journey 1: install beside the agent harness (A7).** The platform engineer installs the `evalsi` chart in its own namespace, as they would agent-sandbox, then follows the integration guide. A bootstrap job creates one project for the agent harness install and writes an ingest key and a runner key to Kubernetes Secrets. The agent harness's traces reach Evals.si either through a second OTLP exporter or through a `TraceSource` that pulls from its MLflow server.
+**Journey 1: install beside the agent harness (A7).** The platform engineer installs the `evalsi` chart in its own namespace, as they would agent-sandbox, then follows the integration guide. A bootstrap job creates one project for the agent harness install and writes an ingest key and a runner key to Kubernetes Secrets. The agent harness's traces reach Evalsi either through a second OTLP exporter or through a `TraceSource` that pulls from its MLflow server.
 
-1. Evals.si starts in namespace-only mode, with a Landlock or pod sandbox rung.
+1. Evalsi starts in namespace-only mode, with a Landlock or pod sandbox rung.
 2. A default `OnlineEvalPolicy` per workflow scores task success, tool errors, loops, cost and PII.
 3. The agent harness reads scores over the REST API and shows them per execution.
 
@@ -226,13 +226,13 @@ local SDK/metric overhead; they do not establish these hosted or scale SLOs.
 
 **Journey 3: production to regression (A5).** A policy promotes traces with `task-success < 1` into a dataset. The next deploy's gate run includes that dataset, and shadow replay compares the new version against recorded behavior.
 
-**Journey 4: subscribe to an existing store (A4).** The SRE applies a `TraceSource` pointing at the agent harness's MLflow tracking server. Evals.si backfills 30 days, then polls every 30 s, scores with the same policies, and writes scores back as MLflow assessments.
+**Journey 4: subscribe to an existing store (A4).** The SRE applies a `TraceSource` pointing at the agent harness's MLflow tracking server. Evalsi backfills 30 days, then polls every 30 s, scores with the same policies, and writes scores back as MLflow assessments.
 
 **Journey 5: training loop.** A researcher calls `evalsi.Client(server).evaluate(records, ["llm-judge"])` every N steps, or uses `reward_funcs` from the cluster's Reward Service in GRPO.
 
 ## Requirements: deployment as a microservice
 
-Evals.si must install, run and upgrade like any well-behaved cluster service; most of this exists and the gaps are packaging and release.
+Evalsi must install, run and upgrade like any well-behaved cluster service; most of this exists and the gaps are packaging and release.
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
@@ -273,7 +273,7 @@ This is the largest new build. A new `TraceSource` resource (CRD and API) descri
 | S1 | Connector interface: `List(since watermark) -> records + new watermark`, `WriteBack(scores)`; watermark stored per source and resumed after restart | P0 | Built ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
 | S2 | Connectors for the first-cut trace stores: MLflow Tracing first (OSS 3.x, Databricks, SageMaker, Azure ML), then Langfuse and Arize Phoenix (LangSmith, ClickHouse, Tempo/Jaeger later) | P0 | Partly: MLflow open source (3.17.0), Phoenix (20.20.0), self-hosted Langfuse (4.56.0, two-stage Secret/Service/policy/write-back and enforced egress check); Databricks (numeric experiments with a bearer token; Unity Catalog schemas with OAuth service principals) and SageMaker (SigV4) built and contract-tested against pinned client source, not live-verified; later-store ClickHouse Collector Map tables built and bounded-live-tested; Azure ML refused, as its MLflow server has no V3 trace API ([guide](guides/trace-sources.md), [decision 0016](decisions/0016-trace-source-connectors.md), [verification](verification/README.md#langfuse-live-recheck-2026-10-10)) |
 | S3 | Connectors for streams and logs: Kafka, AWS Kinesis, GCP Pub/Sub, S3/GCS prefix watcher; Loki and CloudWatch Logs via the evalsi-collector as recipes | P2 (after first cut) | Gap |
-| S4 | Field mapping: CEL or JSONPath from the source record into Evals.si `Record` (input, output, reference, context, trajectory, metadata) | P0 | Built: decoders per store over the existing conventions, plus CEL `overrides` ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
+| S4 | Field mapping: CEL or JSONPath from the source record into Evalsi `Record` (input, output, reference, context, trajectory, metadata) | P0 | Built: decoders per store over the existing conventions, plus CEL `overrides` ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
 | S5 | Backfill a time range, then tail; rate limit per source; at-least-once with dedup on source record ID | P0 | Built: backfill, tail with a `maxTraceDuration` lookback, rate cap, dedup by trace ID and digest ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
 | S6 | Pulled records reuse `OnlineEvalPolicy` (selectors, sampling, cascades, alerts, promotion) | P0 | Built ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
 | S7 | Credentials for sources from Kubernetes Secrets or the existing per-project credential store, never in the CRD | P0 | Built: a granted variable or a mounted Secret file (`sources.secrets`), never in the resource ([guide](guides/trace-sources.md), [0016](decisions/0016-trace-source-connectors.md)) |
@@ -331,7 +331,7 @@ Push and embed already reach the API; pull adds connectors that read customer st
 Available as a CRD and as `POST /v1alpha1/sources`. The connector manager runs under the same lease as the policy engine, so one replica owns each source.
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata: {name: studio-mlflow, namespace: evalsi}
 spec:
@@ -372,7 +372,7 @@ status:
 
 ### agent harness integration contract
 
-- **Helm:** Evals.si is an independent chart installed beside the agent harness, like agent-sandbox. The integration guide gives the values for project bootstrap, default policies and the customer's judge.
+- **Helm:** Evalsi is an independent chart installed beside the agent harness, like agent-sandbox. The integration guide gives the values for project bootstrap, default policies and the customer's judge.
 - **Tracing:** the agent harness already traces to MLflow. Either add evalsid as a second OTLP exporter, or apply a `TraceSource` with `connector: mlflow`. Label traces with `evalsi.label.workflow` and `evalsi.label.version`.
 - **Deploy gate:** the agent harness creates an `EvalRun` whose target is the workflow over HTTP, gRPC or A2A, or its PyPI package run in-process in a sandbox, and waits on the run-finished webhook.
 - **UI:** the agent harness reads `/v1alpha1/scores` and links each score to `/ui/` for the full report. Scores also appear in MLflow as assessments.
@@ -382,7 +382,7 @@ status:
 No customer data leaves the cluster unless the customer configures a judge or sink that sends it out. The existing identity and sandbox model covers most of this. New work is for pull connectors and the agent harness tenant mapping.
 
 - **Identity.** API keys, OIDC (including Kubernetes service-account tokens) and mTLS between components, as built. The agent harness authenticates with its pod's projected service-account token; no static key is required.
-- **Tenancy.** The agent harness is single-tenant, so it uses one Evals.si project per agent harness install; other customers can use several projects. Ingest keys are bound to one project, so a workflow cannot inject traces into another tenant's policies. Per-project quotas cover runs, judge tokens and pull-source throughput (new).
+- **Tenancy.** The agent harness is single-tenant, so it uses one Evalsi project per agent harness install; other customers can use several projects. Ingest keys are bound to one project, so a workflow cannot inject traces into another tenant's policies. Per-project quotas cover runs, judge tokens and pull-source throughput (new).
 - **Pull connector egress.** Each `TraceSource` declares its endpoint; a NetworkPolicy generated by the operator allows only that egress. Source credentials are read from Secrets at use time and never logged or returned by the API.
 - **Data handling.** Redaction rules apply on ingest and on pull, before storage and before any judge call. Built and locally regression-tested: `traces.redaction` defaults to credential-key masking, with optional key globs, value regexes and PII classes (a card number next to a CVV or expiry is still masked), including source overrides ([guide](guides/trace-sources.md#trace-redaction), [0019](decisions/0019-trace-redaction.md)). Retention per project for traces, records and results, with a hard-delete API for data-subject requests remains a separate requirement.
 - **Sandboxing.** Untrusted evaluator code and agent tasks run on the strongest available rung, failing closed. In the namespace-only agent harness install, that is the pod or Landlock rung.
@@ -423,12 +423,12 @@ M1 and M2 overlap because M2 needs only the release and the client from M1, not 
 
 Releases follow semantic versioning; until 1.0 a minor version may change the `v1alpha1` API. v0.1.0 (2026-10-12) closed M1. v0.2.0 (2026-10-13) is a minor release: it adds the `CheckpointServer` CRD, the `ImportRun`, `SliceRuns` and `ArchiveRun` RPCs, platform wheels and the M2 agent harness pieces (see the [changelog](../CHANGELOG.md)); it was signed, published to GHCR and PyPI and verified ([record](verification/README.md#v020-release-record-2026-10-13)). Fixes for a released version alone would be a patch from a release branch. [RELEASING](RELEASING.md) has the procedure.
 
-The latest release is [v0.4.0](https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.4.0) (2026-11-11). It adds coverage gates (`GATE_STAT_SKIPPED_RATE`, `GATE_STAT_COUNT`), `evalsi compare` for two results files, `evalsi.testing.assert_eval`, HTTP and async targets for the application starter, a pull-request comment from the GitHub Action, a first-run screen and "Run again" in the web UI, and the fixes of the November review; its [changelog](../CHANGELOG.md#040---2026-11-11) lists the upgrade notes and the product-readiness rows that are still open. v0.3.2 (2026-10-28, [record](verification/README.md#v032-release-record-2026-10-28)): like v0.3.1 it was cut from `main` despite the patch number, so it carries new features: the application-first onboarding path (`evalsi init --template application`, decision-first reports, a scoped `evalsi doctor`), database and multi-service task environments, background sandbox processes, the ACP connector, diff-isolated checkers, browser and desktop tools, keyless image signatures and the pre-release audit's security fixes. Its [changelog](../CHANGELOG.md#032---2026-10-28) lists the upgrade notes. v0.3.1 (2026-10-22, [record](verification/README.md#v031-release-record-2026-10-22)) was also cut from `main`, so it carries new features (release decisions and the browser release workbench, the failure inbox, the dataset catalog and snapshots, judge calibration, approval gates, `evalsi doctor` and `evalsi init`, strict hash-chained audit) and the deep-review fixes, including breaking behaviour changes. Its [changelog](../CHANGELOG.md#031---2026-10-22) lists the upgrade notes. v0.3.0 (2026-10-19) covered archived-run quota recovery, durable accepted online work, stale-dispatcher fencing, optional webhook SSRF checks and robustness diagnostics.
+The latest release is [v0.4.0](https://github.com/Abhishek-Rnjn/evalsi/releases/tag/v0.4.0) (2026-11-14). It adds coverage gates (`GATE_STAT_SKIPPED_RATE`, `GATE_STAT_COUNT`), `evalsi compare` for two results files, `evalsi.testing.assert_eval`, HTTP and async targets for the application starter, a pull-request comment from the GitHub Action, a first-run screen and "Run again" in the web UI, and the fixes of the November review; its [changelog](../CHANGELOG.md#040---2026-11-14) lists the upgrade notes and the product-readiness rows that are still open. v0.3.2 (2026-10-28, [record](verification/README.md#v032-release-record-2026-10-28)): like v0.3.1 it was cut from `main` despite the patch number, so it carries new features: the application-first onboarding path (`evalsi init --template application`, decision-first reports, a scoped `evalsi doctor`), database and multi-service task environments, background sandbox processes, the ACP connector, diff-isolated checkers, browser and desktop tools, keyless image signatures and the pre-release audit's security fixes. Its [changelog](../CHANGELOG.md#032---2026-10-28) lists the upgrade notes. v0.3.1 (2026-10-22, [record](verification/README.md#v031-release-record-2026-10-22)) was also cut from `main`, so it carries new features (release decisions and the browser release workbench, the failure inbox, the dataset catalog and snapshots, judge calibration, approval gates, `evalsi doctor` and `evalsi init`, strict hash-chained audit) and the deep-review fixes, including breaking behaviour changes. Its [changelog](../CHANGELOG.md#031---2026-10-22) lists the upgrade notes. v0.3.0 (2026-10-19) covered archived-run quota recovery, durable accepted online work, stale-dispatcher fencing, optional webhook SSRF checks and robustness diagnostics.
 
 **Exit criteria per milestone**
 
 1. **M1 Release, SDK client** (D1, D2, D4, E2, P4): signed `v0.1.0` chart and images published; `Client.evaluate()` returns scores identical to in-process; webhooks fire on run finish.
-2. **M2 agent harness online** (A1, A2, A3, A7): Evals.si installs from its own chart beside the agent harness by following the integration guide; every deployed workflow is scored by a default policy; a failed gate blocks a deploy in a demo cluster. The Deep Agents and DeepSeek Harness demos (R1 to R5, R7 to R9) run in standalone mode and on kind, and the integration guide is published.
+2. **M2 agent harness online** (A1, A2, A3, A7): Evalsi installs from its own chart beside the agent harness by following the integration guide; every deployed workflow is scored by a default policy; a failed gate blocks a deploy in a demo cluster. The Deep Agents and DeepSeek Harness demos (R1 to R5, R7 to R9) run in standalone mode and on kind, and the integration guide is published.
 3. **M3 Pull connectors** (S1, S2, S4 to S8): a `TraceSource` backfills 30 days from MLflow (OSS 3.x, Databricks, SageMaker; Azure ML is dropped for now, as its MLflow server has no V3 trace API, see [decision 0016](decisions/0016-trace-source-connectors.md)), then from Langfuse and Phoenix, and tails with p95 lag under 2 min; scores appear in each store's own UI. Mapping profiles for the five first-cut agent frameworks pass their fixture tests. Deep Agents traces in MLflow are scored online (R6).
 4. **M4 Real-infra hardening** (D5, D7, D10): load test of 10k traces/min and 1k concurrent trials on EKS; KEDA and 3-node NATS run live (Firecracker is already verified on a KVM cluster); upgrade from M1 to M4 with no downtime.
   Status on 2026-10-12: **not certified**. Bounded EKS KEDA, separate-host NATS broker recovery and application recovery passed; the full upgrade failed, its drain follow-up was API-only, and production load/concurrent trials were explicitly deferred ([evidence](verification/EKS-2026-10-12.md)).

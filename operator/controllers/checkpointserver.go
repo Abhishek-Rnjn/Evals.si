@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 const (
@@ -38,8 +38,8 @@ type CheckpointServerReconciler struct {
 	NamePrefix string
 }
 
-// +kubebuilder:rbac:groups=evals.si,resources=checkpointservers,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=evals.si,resources=checkpointservers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=checkpointservers,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=checkpointservers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 

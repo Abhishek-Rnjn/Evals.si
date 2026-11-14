@@ -7,7 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 func builtin(b *evalsiv1alpha1.BuiltinHarness) *evalsiv1alpha1.HarnessVariant {

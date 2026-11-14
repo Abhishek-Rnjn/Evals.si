@@ -3,7 +3,7 @@
 #   evalsi run -f flaky.yaml --output flaky.json      # exit 3: pass@3 1.0, pass^3 0.0
 #   evalsi determinism flaky.json
 # Walkthrough: docs/tutorials/04-trials-and-flakiness.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-flaky}
 spec:

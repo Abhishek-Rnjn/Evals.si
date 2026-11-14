@@ -1,4 +1,4 @@
-module github.com/abhishek-rnjn/evals.si
+module github.com/abhishek-rnjn/evalsi
 
 go 1.26.11
 

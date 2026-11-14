@@ -2100,8 +2100,8 @@ const file_evalsi_v1alpha1_annotation_service_proto_rawDesc = "" +
 	"\bNextItem\x12 .evalsi.v1alpha1.NextItemRequest\x1a!.evalsi.v1alpha1.NextItemResponse\x12g\n" +
 	"\x10SubmitAnnotation\x12(.evalsi.v1alpha1.SubmitAnnotationRequest\x1a).evalsi.v1alpha1.SubmitAnnotationResponse\x12d\n" +
 	"\x0fListAnnotations\x12'.evalsi.v1alpha1.ListAnnotationsRequest\x1a(.evalsi.v1alpha1.ListAnnotationsResponse\x12a\n" +
-	"\x0eSummarizeQueue\x12&.evalsi.v1alpha1.SummarizeQueueRequest\x1a'.evalsi.v1alpha1.SummarizeQueueResponseB\xd3\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x16AnnotationServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x0eSummarizeQueue\x12&.evalsi.v1alpha1.SummarizeQueueRequest\x1a'.evalsi.v1alpha1.SummarizeQueueResponseB\xd1\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x16AnnotationServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_annotation_service_proto_rawDescOnce sync.Once

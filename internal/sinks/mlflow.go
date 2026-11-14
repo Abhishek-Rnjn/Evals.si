@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 // MLflowConfig exports runs as MLflow runs and, optionally, online scores as

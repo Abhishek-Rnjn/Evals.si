@@ -1,6 +1,6 @@
 # Post drafts
 
-Drafts of blog and forum posts about Evals.si, for the maintainer to edit and publish elsewhere (a blog, dev.to, Hacker News). They are unpublished: the website does not import this folder. Every command and output in them was run, on the synthetic examples that ship in this repository.
+Drafts of blog and forum posts about Evalsi, for the maintainer to edit and publish elsewhere (a blog, dev.to, Hacker News). They are unpublished: the website does not import this folder. Every command and output in them was run, on the synthetic examples that ship in this repository.
 
 - [a-gate-that-fails-the-build.md](a-gate-that-fails-the-build.md): a regression in recorded answers fails the build with exit code 3. Works with the published release.
 - [a-gate-that-passes-on-missing-outputs.md](a-gate-that-passes-on-missing-outputs.md): a gate that passes while most records were skipped, and the gates that catch it. Needs evalsi 0.4.0 or later.

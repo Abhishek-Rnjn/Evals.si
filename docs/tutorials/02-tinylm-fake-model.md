@@ -6,7 +6,7 @@ while you are learning what the evaluators do. So these tutorials use a fake.
 
 TinyLM ([`examples/tinylm/tinylm.py`](../../examples/tinylm/tinylm.py)) is about
 600 lines of standard-library Python. It speaks the same API as OpenAI, vLLM,
-Ollama and most gateways, so Evals.si drives it exactly as it would drive any of
+Ollama and most gateways, so Evalsi drives it exactly as it would drive any of
 those. Swap its URL for a real one and nothing else in your spec changes.
 
 ## What "fake autoregressive model" means here

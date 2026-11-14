@@ -1445,8 +1445,8 @@ const file_evalsi_v1alpha1_failure_service_proto_rawDesc = "" +
 	"\rReviewFailure\x12%.evalsi.v1alpha1.ReviewFailureRequest\x1a&.evalsi.v1alpha1.ReviewFailureResponse\x12j\n" +
 	"\x11ListFailureEvents\x12).evalsi.v1alpha1.ListFailureEventsRequest\x1a*.evalsi.v1alpha1.ListFailureEventsResponse\x12a\n" +
 	"\x0eExportFailures\x12&.evalsi.v1alpha1.ExportFailuresRequest\x1a'.evalsi.v1alpha1.ExportFailuresResponse\x12^\n" +
-	"\rDeleteFailure\x12%.evalsi.v1alpha1.DeleteFailureRequest\x1a&.evalsi.v1alpha1.DeleteFailureResponseB\xd0\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x13FailureServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\rDeleteFailure\x12%.evalsi.v1alpha1.DeleteFailureRequest\x1a&.evalsi.v1alpha1.DeleteFailureResponseB\xce\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x13FailureServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_failure_service_proto_rawDescOnce sync.Once

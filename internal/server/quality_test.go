@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/internal/quality"
+	"github.com/abhishek-rnjn/evalsi/internal/quality"
 )
 
 func TestQualityEndpointAuthAndValidation(t *testing.T) {

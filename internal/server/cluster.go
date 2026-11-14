@@ -11,16 +11,16 @@ import (
 
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
-	"github.com/abhishek-rnjn/evals.si/internal/cluster"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/objstore"
-	"github.com/abhishek-rnjn/evals.si/internal/pluginhost"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxsvc"
-	"github.com/abhishek-rnjn/evals.si/internal/source"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
-	"github.com/abhishek-rnjn/evals.si/internal/watch"
+	"github.com/abhishek-rnjn/evalsi/internal/cluster"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/objstore"
+	"github.com/abhishek-rnjn/evalsi/internal/pluginhost"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox/sandboxsvc"
+	"github.com/abhishek-rnjn/evalsi/internal/source"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/watch"
 )
 
 // startLocalWorker starts the Python worker, with the sandbox service it

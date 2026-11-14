@@ -1,7 +1,7 @@
 [project]
 name = "evalsi-adapter-lm-eval"
 version = "0.1.0"
-description = "lm-evaluation-harness tasks run through Evals.si targets; its sample logs as datasets."
+description = "lm-evaluation-harness tasks run through Evalsi targets; its sample logs as datasets."
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [

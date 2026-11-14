@@ -1,6 +1,6 @@
 # The built-in agent harness
 
-Evals.si ships a harness for evaluating agents: `evalsi-harness`. It runs an
+Evalsi ships a harness for evaluating agents: `evalsi-harness`. It runs an
 agent on a task in a sandbox, records everything, and grades the final state.
 Use it to evaluate a model with a known, versioned agent, or to evaluate your
 own agent with the same checkers, trials and gates. It is built for evaluation:
@@ -85,4 +85,4 @@ proposals, not features:
   that end a conversation, and conversation-level scoring.
 
 Serving agents to users, a multi-user session store and a chat UI are not planned:
-bring an agent that does that over A2A or HTTP and Evals.si evaluates it.
+bring an agent that does that over A2A or HTTP and Evalsi evaluates it.

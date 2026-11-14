@@ -17,8 +17,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	guestv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/guest/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/guest/v1alpha1/guestv1alpha1connect"
+	guestv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/guest/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/guest/v1alpha1/guestv1alpha1connect"
 )
 
 type guestConn struct {

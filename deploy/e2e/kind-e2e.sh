@@ -79,7 +79,7 @@ phase() {
 results() {
   local run token
   run="$(kubectl get evalrun "$1" -n "$ns" -o jsonpath='{.status.runId}')"
-  token="$(kubectl create token evalsi-operator -n "$ns" --audience evals.si)"
+  token="$(kubectl create token evalsi-operator -n "$ns" --audience evalsi.dev)"
   kubectl port-forward -n "$ns" svc/evalsi 18080:8080 >/dev/null 2>&1 &
   local pf=$!
   sleep 3
@@ -166,7 +166,7 @@ step "webhooks"
 creator="$(kubectl get evalrun parity -n "$ns" -o jsonpath='{.metadata.annotations.evals\.si/created-by}')"
 [ "$creator" = "kubernetes-admin" ] || { echo "created-by: '$creator'" >&2; exit 1; }
 if out="$(kubectl apply -n "$ns" -f - 2>&1 <<'YAML'
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: invalid}
 spec:
@@ -218,7 +218,7 @@ kubectl wait sandboxclass/pods --for=condition=Ready --timeout=5m
 address="$(kubectl get sandboxclass pods -o jsonpath='{.status.address}')"
 helm upgrade evalsi "$work"/bundle/charts/evalsi-[0-9]*.tgz -n "$ns" --reuse-values \
   --set sandbox.address="$address" --wait --timeout 5m
-kubectl get pods -n "$ns" -l evals.si/sandbox=true -w -o name > "$work/sandbox-pods.txt" &
+kubectl get pods -n "$ns" -l evalsi.dev/sandbox=true -w -o name > "$work/sandbox-pods.txt" &
 watcher=$!
 kubectl apply -n "$ns" -f "$here/agent-run.yaml"
 phase agent Succeeded || { results agent >&2; exit 1; }
@@ -226,13 +226,13 @@ kill "$watcher" 2>/dev/null || true
 expect agent task-success 1
 sort -u "$work/sandbox-pods.txt"
 [ -s "$work/sandbox-pods.txt" ] || { echo "no sandbox pods were created" >&2; exit 1; }
-left="$(kubectl get pods -n "$ns" -l evals.si/sandbox=true -o name | wc -l)"
+left="$(kubectl get pods -n "$ns" -l evalsi.dev/sandbox=true -o name | wc -l)"
 echo "sandbox pods left after the run: $left"
 
 step "the reference demos: the small-repo-fix suite, for both agents, against the mock model"
 # The studio stand-ins (examples/demo) on the same cluster: a mock model, the Deep
 # Agents service, dsh's web UI and an MLflow server, with a project, a model key
-# grant, S3 for the datasets and an MLflow sink on Evals.si. The suite runs through
+# grant, S3 for the datasets and an MLflow sink on Evalsi. The suite runs through
 # `kubectl apply` on the pod rung, one run per agent.
 demo="$root/examples/demo"
 docker build --platform "$platform" -q -t ghcr.io/abhishek-rnjn/evalsi-demo-dsh:0.1.0 "$demo/dsh"
@@ -290,7 +290,7 @@ sleep 3
 exp="$(curl -s -H "$mlflow_host" "http://127.0.0.1:15000/api/2.0/mlflow/experiments/get-by-name?experiment_name=evalsi-demo-deepagents" | python3 -c 'import json,sys; print(json.load(sys.stdin)["experiment"]["experiment_id"])')"
 curl -s -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
   -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$exp"'"}}]}' | tee "$work/mlflow-traces.json" >/dev/null
-grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evals.si assessment on the Deep Agents traces" >&2; exit 1; }
+grep -q '"source_id": *"evalsi/deepagents-online"' "$work/mlflow-traces.json" || { echo "no Evalsi assessment on the Deep Agents traces" >&2; exit 1; }
 
 step "R6: native dsh GenAI spans in MLflow, pulled, scored and written back"
 dsh_exp="$(curl -sf -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/2.0/mlflow/experiments/create \
@@ -317,13 +317,13 @@ kubectl get tracesource dsh-mlflow -n "$ns" -o yaml | tee "$work/dsh-tracesource
 [ "${dsh_scored:-0}" -ge 1 ] || { echo "the dsh TraceSource wrote no scores back" >&2; exit 1; }
 curl -sf -H "$mlflow_host" -X POST http://127.0.0.1:15000/api/3.0/mlflow/traces/search -H 'content-type: application/json' \
   -d '{"locations":[{"type":"MLFLOW_EXPERIMENT","mlflow_experiment":{"experiment_id":"'"$dsh_exp"'"}}]}' > "$work/dsh-mlflow-traces.json"
-grep -q '"source_id": *"evalsi/dsh-online"' "$work/dsh-mlflow-traces.json" || { echo "no Evals.si assessment on native dsh traces" >&2; exit 1; }
+grep -q '"source_id": *"evalsi/dsh-online"' "$work/dsh-mlflow-traces.json" || { echo "no Evalsi assessment on native dsh traces" >&2; exit 1; }
 kill "$pf" 2>/dev/null || true
 
 step "M2: a failed gate blocks a deploy, and the default policy scores the deployed workflow"
 # The agent harness's deploy step (examples/demo/deploy/deploy.sh): a release
 # is staged as a candidate, gated, and promoted only when its gate run
-# Succeeds. Production's traces go to Evals.si over OTLP with the ingest key
+# Succeeds. Production's traces go to Evalsi over OTLP with the ingest key
 # the bootstrap Job wrote, and the bootstrap's default policy (studio-default)
 # scores them: nothing is applied for the workflow. One door per trace store:
 # R6's source stops pulling the same service's traces from MLflow.
@@ -384,7 +384,7 @@ measure() {
 measure seed --count 300 --days 30
 (
   export SSL_CERT_FILE="$work/ca.crt"
-  EVALSI_TOKEN="$(kubectl create token evalsi-operator -n "$ns" --audience evals.si)"
+  EVALSI_TOKEN="$(kubectl create token evalsi-operator -n "$ns" --audience evalsi.dev)"
   export EVALSI_TOKEN
   measure measure --server https://localhost:18083 --source-file "$here/m3-source.yaml" \
     --expect 300 --live 20 --every 2 --timeout 600 --max-p95-seconds 120
@@ -419,7 +419,7 @@ sleep 3
 # job in the cluster would (a projected token; here minted by kubectl).
 cli() {
   (cd "$root/python" && SSL_CERT_FILE="$work/ns2-ca.crt" \
-    EVALSI_TOKEN="$(kubectl create token ci -n "$ns2" --audience evals.si)" \
+    EVALSI_TOKEN="$(kubectl create token ci -n "$ns2" --audience evalsi.dev)" \
     uv run --no-sync evalsi run -f "$1" --server https://localhost:18443 --format json --quiet > "$2")
 }
 # metric prints a metric's mean from a run (the server's JSON).
@@ -440,7 +440,7 @@ ns2_results() {
   local run
   run="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["id"])' "$1")"
   curl -s --cacert "$work/ns2-ca.crt" -X POST https://localhost:18443/evalsi.v1alpha1.RunService/ListRunResults \
-    -H "Authorization: Bearer $(kubectl create token ci -n "$ns2" --audience evals.si)" \
+    -H "Authorization: Bearer $(kubectl create token ci -n "$ns2" --audience evalsi.dev)" \
     -H 'content-type: application/json' -d "{\"runId\":\"$run\"}" |
     python3 -c 'import json, sys
 for r in json.load(sys.stdin).get("results", []):
@@ -449,7 +449,7 @@ for r in json.load(sys.stdin).get("results", []):
 }
 
 step "namespace-only: code evaluation on the pod rung"
-kubectl get pods -n "$ns2" -l evals.si/sandbox=true -w -o name > "$work/ns2-pods.txt" &
+kubectl get pods -n "$ns2" -l evalsi.dev/sandbox=true -w -o name > "$work/ns2-pods.txt" &
 watcher=$!
 cli "$here/sandbox-run.yaml" "$work/ns2-unit.json"
 want "$work/ns2-unit.json" unit-tests 0.5

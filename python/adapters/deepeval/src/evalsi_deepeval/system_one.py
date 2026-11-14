@@ -264,7 +264,7 @@ def system_one_model(session: JudgeSession, decisions: str = "stated") -> Any:
             return f"evalsi judge ({session.judge.config.model}{how})"
 
         def decide(self, state: Any, questions: dict[str, Any]) -> Any:
-            raise JudgeError("the Evals.si judge is async only; run metrics with a_measure")
+            raise JudgeError("the Evalsi judge is async only; run metrics with a_measure")
 
         async def a_decide(self, state: Any, questions: dict[str, Any]) -> tuple[Any, None]:
             if decisions == "logprobs":

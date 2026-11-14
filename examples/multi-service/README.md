@@ -4,7 +4,7 @@
 sets a database value, and the checker verifies the API returns it. A new trial
 gets a new database. It uses no model and needs no provider key.
 
-Run it against an Evals.si installation with a pod pool and enforced
+Run it against an Evalsi installation with a pod pool and enforced
 NetworkPolicy:
 
 ```sh

@@ -1,4 +1,4 @@
-# Gate a pull request on an Evals.si run, authenticated with the job's own
+# Gate a pull request on an Evalsi run, authenticated with the job's own
 # GitHub OIDC token: no stored secret. The server trusts
 # https://token.actions.githubusercontent.com and binds the repository, for
 # example: runner: ['cel:jwt.repository == "acme/support-agent"'].

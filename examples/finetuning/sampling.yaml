@@ -1,6 +1,6 @@
 # Sampling behaviour and mode collapse: several samples per prompt at
 # temperature 1 give pass@k and pass^k, and the diversity of the outputs.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: sampling}
 spec:

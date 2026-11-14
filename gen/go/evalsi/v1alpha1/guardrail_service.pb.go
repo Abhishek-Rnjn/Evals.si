@@ -1149,8 +1149,8 @@ const file_evalsi_v1alpha1_guardrail_service_proto_rawDesc = "" +
 	"\x0eListGuardrails\x12&.evalsi.v1alpha1.ListGuardrailsRequest\x1a'.evalsi.v1alpha1.ListGuardrailsResponse\x12[\n" +
 	"\fGetGuardrail\x12$.evalsi.v1alpha1.GetGuardrailRequest\x1a%.evalsi.v1alpha1.GetGuardrailResponse\x12d\n" +
 	"\x0fDeleteGuardrail\x12'.evalsi.v1alpha1.DeleteGuardrailRequest\x1a(.evalsi.v1alpha1.DeleteGuardrailResponse\x12F\n" +
-	"\x05Check\x12\x1d.evalsi.v1alpha1.CheckRequest\x1a\x1e.evalsi.v1alpha1.CheckResponseB\xd2\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x15GuardrailServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x05Check\x12\x1d.evalsi.v1alpha1.CheckRequest\x1a\x1e.evalsi.v1alpha1.CheckResponseB\xd0\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x15GuardrailServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_guardrail_service_proto_rawDescOnce sync.Once

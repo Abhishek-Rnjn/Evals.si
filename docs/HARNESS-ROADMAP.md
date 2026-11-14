@@ -173,7 +173,7 @@ Exit criteria: CI imports a recorded Harness² run and scores it with the shared
 - **A general agent framework.** The built-in agent stays a small reference for comparing models and harness configurations. Hooks and profiles make it configurable; anything bigger, such as a TUI, an extension marketplace or a plan mode, belongs in the BYO path (approval gates are the exception: H8 adds them, because an evaluation has to score them), where pi, dsh and others already do it well.
 - **Provider SDKs as dependencies.** The model clients keep speaking HTTP directly, so the harness stays light.
 - **Automated harness search, and training an evolver.** Evo2 shows harness variants can be searched and a model trained to propose edits. We provide the trusted score such a search needs (H3 and H5), but we do not build the search. It would optimize whatever the score rewards, so it waits until checker isolation (H4) and the reward-hacking signals (H5) are in place, and until a team asks for it. Harness² is such a search; H7 imports, scores, gates and sandboxes its output, and does not run its loop for users.
-- **Hosting agents.** Evals.si runs agents in sandboxes for evaluation. It does not serve them in production: no multi-user session store, chat UI or per-conversation pods. H8 evaluates conversational and approval behaviour without serving it.
+- **Hosting agents.** Evalsi runs agents in sandboxes for evaluation. It does not serve them in production: no multi-user session store, chat UI or per-conversation pods. H8 evaluates conversational and approval behaviour without serving it.
 
 ### H8: Oversight, topologies and conversations (proposed, after H3)
 

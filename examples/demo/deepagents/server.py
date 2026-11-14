@@ -6,14 +6,14 @@
     GET  /healthz
 
 ``messages`` carries the whole run (the user's message, each assistant turn
-with its tool calls, each tool result), which an Evals.si HTTP target keeps as
+with its tool calls, each tool result), which an Evalsi HTTP target keeps as
 the trajectory (``messages_path: messages``).
 
     python3 server.py --port 8080
 
 Configuration is by environment: see agent.py. With MLFLOW_TRACKING_URI set,
 runs are traced to MLflow; with OTEL_EXPORTER_OTLP_TRACES_ENDPOINT set, they go
-to an OTLP endpoint such as Evals.si's instead, or to both with
+to an OTLP endpoint such as Evalsi's instead, or to both with
 MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT=true. OTEL_RESOURCE_ATTRIBUTES labels them
 (evalsi.label.workflow=..., evalsi.label.version=...).
 """

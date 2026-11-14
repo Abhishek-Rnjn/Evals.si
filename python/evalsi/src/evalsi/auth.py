@@ -286,9 +286,7 @@ def browser_login(
             self.send_response(200 if ok else 400)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
-            message = (
-                "Signed in to Evals.si. You can close this window." if ok else "Sign-in failed."
-            )
+            message = "Signed in to Evalsi. You can close this window." if ok else "Sign-in failed."
             self.wfile.write(message.encode())
             if ok or "error" in result:
                 done.set()

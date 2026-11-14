@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 )
 
 func selfSigned(t *testing.T, cn string) (cert, key string) {

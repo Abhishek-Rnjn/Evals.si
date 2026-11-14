@@ -52,7 +52,7 @@ BUGS: dict[str, dict[str, Any]] = {
 
 SETUP = (
     "git init -q && git add -A && "
-    "git -c user.email=fixture@evals.si -c user.name=fixture commit -qm base"
+    "git -c user.email=fixture@evalsi.dev -c user.name=fixture commit -qm base"
 )
 
 

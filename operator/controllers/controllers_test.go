@@ -18,8 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 // example reads one of the repository's example files as a resource.
@@ -439,7 +439,7 @@ func TestOperator(t *testing.T) {
 		}
 		pod := dep.Spec.Template.Spec
 		c := pod.Containers[0]
-		if *dep.Spec.Replicas != 2 || !slices.Contains(c.Args, "spiffe://evals.si/ns/evalsi/sa/evalsi-worker") || c.Image != "ghcr.io/abhishek-rnjn/evalsi:test" {
+		if *dep.Spec.Replicas != 2 || !slices.Contains(c.Args, "spiffe://evalsi.dev/ns/evalsi/sa/evalsi-worker") || c.Image != "ghcr.io/abhishek-rnjn/evalsi:test" {
 			t.Errorf("deployment %v %v", c.Args, c.Image)
 		}
 		if pod.HostUsers == nil || *pod.HostUsers || *c.SecurityContext.ProcMount != corev1.UnmaskedProcMount || *pod.AutomountServiceAccountToken {
@@ -448,7 +448,7 @@ func TestOperator(t *testing.T) {
 
 		_, dep, cfg = get("gvisor")
 		p := cfg.Sandbox.Pod
-		if p == nil || p.RuntimeClassName != "gvisor" || p.GuestImage != "ghcr.io/abhishek-rnjn/evalsi:test" || p.Namespace != "evalsi" || p.Labels["evals.si/sandbox-class"] != "gvisor" {
+		if p == nil || p.RuntimeClassName != "gvisor" || p.GuestImage != "ghcr.io/abhishek-rnjn/evalsi:test" || p.Namespace != "evalsi" || p.Labels["evalsi.dev/sandbox-class"] != "gvisor" {
 			t.Errorf("pod rung %+v", p)
 		}
 		pod = dep.Spec.Template.Spec

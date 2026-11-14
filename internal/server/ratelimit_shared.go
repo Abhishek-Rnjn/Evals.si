@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
 )
 
 // rateStore is where replicas add up their calls: the store (PostgreSQL when

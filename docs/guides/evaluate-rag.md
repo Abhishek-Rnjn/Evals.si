@@ -1,6 +1,6 @@
 # Evaluate a RAG pipeline
 
-A retrieval-augmented generation (RAG) pipeline can fail in two places: **retrieval** (did it fetch the right passages?) and **generation** (did the answer stick to them?). A single "was the answer good?" score cannot tell you which to fix. Evals.si scores the two halves separately, and the same evaluators run on a dataset in CI and on live traffic in production.
+A retrieval-augmented generation (RAG) pipeline can fail in two places: **retrieval** (did it fetch the right passages?) and **generation** (did the answer stick to them?). A single "was the answer good?" score cannot tell you which to fix. Evalsi scores the two halves separately, and the same evaluators run on a dataset in CI and on live traffic in production.
 
 This guide scores a RAG pipeline's recorded answers, first with checks that need no model at all, then with a judge. The files are in [`examples/rag`](../../examples/rag/).
 
@@ -59,7 +59,7 @@ Read them together:
 - **High retrieval scores but low `faithfulness`:** the model is adding things the passages don't say. Look at the prompt, the model or the temperature.
 - **High `faithfulness` but low `answer-relevance`:** the answer sticks to the passages but doesn't answer the question.
 
-There is no default judge, so nothing is billed by surprise. Point Evals.si at any OpenAI-compatible server, such as vLLM, Ollama, LiteLLM or OpenAI itself, or at Claude:
+There is no default judge, so nothing is billed by surprise. Point Evalsi at any OpenAI-compatible server, such as vLLM, Ollama, LiteLLM or OpenAI itself, or at Claude:
 
 ```bash
 # A model you serve
@@ -86,7 +86,7 @@ Judge responses are cached by content, so re-running an unchanged evaluation cos
 A run spec turns the scores into a verdict. Without a `target`, it scores records you already have, so there is no model to call in the gate itself:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: rag-gate}
 spec:
@@ -119,7 +119,7 @@ Add `faithfulness` and `context-precision` to the evaluators and gates when you 
 
 ## 6. Score live traffic
 
-The same evaluators can run on production traffic. Send OpenTelemetry traces to Evals.si, or read them from the MLflow, Phoenix or Langfuse you already use, and an online policy scores a sample as it arrives and writes the scores back next to the traces. Retriever and reranker spans (OpenInference `RETRIEVER` and `RERANKER`) are recorded as retrieval steps in each trace's trajectory.
+The same evaluators can run on production traffic. Send OpenTelemetry traces to Evalsi, or read them from the MLflow, Phoenix or Langfuse you already use, and an online policy scores a sample as it arrives and writes the scores back next to the traces. Retriever and reranker spans (OpenInference `RETRIEVER` and `RERANKER`) are recorded as retrieval steps in each trace's trajectory.
 
 Metrics that need only the question and the answer, such as `answer-relevance` and judge rubrics, work on any trace. The metrics that read retrieved passages (`faithfulness` and the `context-*` metrics) need those passages on the record, so run `evalsi traces get <trace id>` to see what the evaluators see for one of your traces before you rely on them online. See [trace sources](trace-sources.md) and the [end-to-end guide](end-to-end.md).
 

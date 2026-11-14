@@ -1,7 +1,7 @@
 # DeepEval metrics and JevEval
 
 The `evalsi-adapter-deepeval` package runs [DeepEval](https://github.com/confident-ai/deepeval)'s
-metrics as Evals.si evaluators. It covers agents, RAG, safety and conversations, plus custom
+metrics as Evalsi evaluators. It covers agents, RAG, safety and conversations, plus custom
 G-Eval and JevEval metrics. Each metric keeps DeepEval's own prompts and scoring. Its model calls
 go to the run's judge, so they are cached, rate-limited and costed like every other judge call,
 and DeepEval never reads a provider key. You can answer JevEval's questions with a model you host

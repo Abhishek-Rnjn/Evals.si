@@ -3,12 +3,12 @@
 ## Getting help
 
 - Read the [documentation](https://evalsi.dev/) and the [guides](docs/guides/).
-- Ask a question or report a bug in a [GitHub issue](https://github.com/Abhishek-Rnjn/Evals.si/issues/new/choose).
+- Ask a question or report a bug in a [GitHub issue](https://github.com/Abhishek-Rnjn/evalsi/issues/new/choose).
 - Report security problems privately: see [SECURITY.md](SECURITY.md).
 
 ## Stability
 
-Evals.si is pre-1.0 (`0.x`). Until 1.0:
+Evalsi is pre-1.0 (`0.x`). Until 1.0:
 
 - The API is `v1alpha1`. Fields, endpoints and CRDs can change between minor versions. Breaking changes are listed in the [changelog](CHANGELOG.md).
 - Patch releases (`0.1.x`) only fix bugs.
@@ -26,7 +26,7 @@ Evals.si is pre-1.0 (`0.x`). Until 1.0:
 - **Bounded recovery drill**: isolated same-version EKS PostgreSQL 17/S3 backup and restore passed exact run/results, restored project-scoped API-key authentication, persistent idempotency replay and fresh execution over restored objects. The trial PostgreSQL StorageClass selector was fixed and live-tested. PITR/WAL, failover/HA, mixed-version upgrades and ClickHouse/JetStream/in-flight recovery remain uncertified. [Record](docs/verification/EKS-HARNESS-2026-10-17.md#postgresqls3-recovery-follow-up).
 - **Monitoring**: real Prometheus Operator reconciled a restricted EKS Prometheus and loaded both shipped rules. The unchanged 15-minute failure rule fired and was delivered/resolved through a local Alertmanager webhook; fresh healthy scrape and zero failure metric were verified. Lag-alert firing, external channels and monitoring HA remain unverified.
 - **Trace sources and agent harnesses**: the kind job measures a 30-day MLflow backfill and live pull lag (p95 15 s), and gates the demo workflow's deploys (a regressed release is blocked). Neither is a production-scale measurement.
-- **RL frameworks**: TRL trains with Evals.si rewards in CI; verl 0.9.1 and OpenRLHF 0.11.2 run them through their own reward code, without a training step.
+- **RL frameworks**: TRL trains with Evalsi rewards in CI; verl 0.9.1 and OpenRLHF 0.11.2 run them through their own reward code, without a training step.
 - **Platforms**: the release publishes Linux amd64 and arm64 archives and images. On macOS the Kubernetes path was run through Docker Desktop, which has no Landlock; Windows has not been tried.
 - **Requirements**: Go 1.26+, Python 3.11+, and Kubernetes 1.34, 1.36 or 1.37 for the charts (the versions the chart tests render against).
 

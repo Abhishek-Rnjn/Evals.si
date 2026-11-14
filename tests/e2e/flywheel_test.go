@@ -15,8 +15,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
 )
 
 // TestFlywheel: production traces arrive over OTLP; `evalsi shadow` replays
@@ -85,7 +85,7 @@ func flywheel(t *testing.T, e env) {
 		return out
 	}
 	spec := filepath.Join(t.TempDir(), "candidate.yaml")
-	doc := fmt.Sprintf(`apiVersion: evals.si/v1alpha1
+	doc := fmt.Sprintf(`apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: qa-candidate}
 spec:

@@ -10,7 +10,9 @@ set -euo pipefail
 
 version="${1:?usage: verify-release.sh VERSION [OWNER]}"
 owner="${2:-abhishek-rnjn}"
-repo="${REPO:-Abhishek-Rnjn/Evals.si}"
+# Releases up to 0.3.2 came from the repository under its old name:
+# REPO=Abhishek-Rnjn/Evals.si scripts/verify-release.sh 0.3.2
+repo="${REPO:-Abhishek-Rnjn/evalsi}"
 
 identity="https://github.com/${repo}/.github/workflows/release.yml@refs/tags/v${version}"
 issuer=https://token.actions.githubusercontent.com

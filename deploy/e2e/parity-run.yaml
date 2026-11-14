@@ -1,11 +1,11 @@
 # The same file runs embedded (`evalsi run -f`), on a server
 # (`--server`), and as a Kubernetes resource (`kubectl apply -f`); the
 # kind e2e checks the three agree. No model: the records carry outputs.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: parity
-  labels: {evals.si/project: e2e}
+  labels: {evalsi.dev/project: e2e}
 spec:
   dataset:
     inline:

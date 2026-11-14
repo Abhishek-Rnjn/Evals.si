@@ -4,7 +4,7 @@ A harness prepares a task's environment (``setup``), drives the agent
 through it streaming events (``run``), grades the end state (``check``) and
 cleans up (``teardown``). The built-in harness runs the reference agent loop
 on the target's model, or a bring-your-own agent through a connector, in an
-Evals.si sandbox. A harness you bring implements the same five methods as a
+Evalsi sandbox. A harness you bring implements the same five methods as a
 Python class (``ExternalHarness.python``) or as the gRPC ``HarnessService``.
 """
 
@@ -193,7 +193,7 @@ class LiveTask:
 
 
 # The workdir's changes against HEAD, untracked files included, leaving out
-# the files Evals.si itself places (.evalsi-*). Exit 3: not a git repository.
+# the files Evalsi itself places (.evalsi-*). Exit 3: not a git repository.
 DIFF_SCRIPT = r"""git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 3
 x=':(exclude).evalsi-*'
 git -c core.quotepath=off diff --no-color --no-ext-diff HEAD -- . "$x" 2>/dev/null ||
@@ -277,7 +277,7 @@ class BuiltinHarness:
             name="evalsi-harness",
             version=__version__,
             description=(
-                "Tool loop over any chat model or a bring-your-own agent, in an Evals.si sandbox."
+                "Tool loop over any chat model or a bring-your-own agent, in an Evalsi sandbox."
             ),
             capabilities=[
                 "sandbox-tools",

@@ -29,7 +29,7 @@ class Pack:
     description: str
     evaluators: list[EvaluatorDef] = field(default_factory=list)
     on_by_default: bool = False
-    # "native" (ships with Evals.si), "wrapped" (a shim over another
+    # "native" (ships with Evalsi), "wrapped" (a shim over another
     # framework) or "community"; third-party packs default to community.
     tier: str = ""
 

@@ -30,7 +30,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - evals.si
+  - evalsi.dev
   resources:
   - checkpointservers
   - evalruns
@@ -45,7 +45,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - evals.si
+  - evalsi.dev
   resources:
   - checkpointservers/status
   - evalruns/finalizers

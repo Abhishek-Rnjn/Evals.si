@@ -1,7 +1,7 @@
 [project]
 name = "evalsi-harness"
 dynamic = ["version"]
-description = "The agent harness for Evals.si: run and grade AI agents on sandboxed tasks, with a tool loop, MCP tools, a user simulator, record and replay."
+description = "The agent harness for Evalsi: run and grade AI agents on sandboxed tasks, with a tool loop, MCP tools, a user simulator, record and replay."
 readme = "README.md"
 license = "Apache-2.0"
 authors = [{ name = "Abhishek Ranjan" }]
@@ -48,9 +48,9 @@ aa-lcr = "evalsi_harness.benchmarks.longdoc:load_aalcr"
 [project.urls]
 Homepage = "https://evalsi.dev/"
 Documentation = "https://evalsi.dev/"
-Repository = "https://github.com/Abhishek-Rnjn/Evals.si"
-Issues = "https://github.com/Abhishek-Rnjn/Evals.si/issues"
-Changelog = "https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md"
+Repository = "https://github.com/Abhishek-Rnjn/evalsi"
+Issues = "https://github.com/Abhishek-Rnjn/evalsi/issues"
+Changelog = "https://github.com/Abhishek-Rnjn/evalsi/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling>=1.32.4"]

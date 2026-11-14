@@ -594,8 +594,8 @@ const file_evalsi_v1alpha1_evaluation_service_proto_rawDesc = "" +
 	"\x13CI_METHOD_BOOTSTRAP\x10\x022\xcb\x01\n" +
 	"\x11EvaluationService\x12O\n" +
 	"\bEvaluate\x12 .evalsi.v1alpha1.EvaluateRequest\x1a!.evalsi.v1alpha1.EvaluateResponse\x12e\n" +
-	"\x0eEvaluateStream\x12&.evalsi.v1alpha1.EvaluateStreamRequest\x1a'.evalsi.v1alpha1.EvaluateStreamResponse(\x010\x01B\xd3\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x16EvaluationServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x0eEvaluateStream\x12&.evalsi.v1alpha1.EvaluateStreamRequest\x1a'.evalsi.v1alpha1.EvaluateStreamResponse(\x010\x01B\xd1\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x16EvaluationServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_evaluation_service_proto_rawDescOnce sync.Once

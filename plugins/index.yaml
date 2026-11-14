@@ -1,4 +1,4 @@
-# The Evals.si plugin index: what `evalsi plugins search|show|install` reads
+# The Evalsi plugin index: what `evalsi plugins search|show|install` reads
 # by default. Each entry is one version of one plugin. Kinds:
 #   native   ships with evalsi (nothing to install)
 #   python   a pip requirement (install runs pip in the current environment)
@@ -7,7 +7,7 @@
 #   image    an OCI image serving the plugin protocol (install prints how to run it)
 # To list your plugin, add an entry and open a pull request; see
 # docs/guides/plugins.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: PluginIndex
 plugins:
   - name: core
@@ -80,57 +80,57 @@ plugins:
     tier: wrapped
     kind: python
     description: Berkeley Function-Calling Leaderboard tasks and its AST and execution checkers.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/bfcl
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/python/adapters/bfcl
     python:
-      requirement: "evalsi-adapter-bfcl @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/bfcl"
+      requirement: "evalsi-adapter-bfcl @ git+https://github.com/abhishek-rnjn/evalsi@main#subdirectory=python/adapters/bfcl"
   - name: deepeval
     version: 0.1.0
     tier: wrapped
     kind: python
-    description: DeepEval metrics, run through the Evals.si judge.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/deepeval
+    description: DeepEval metrics, run through the Evalsi judge.
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/python/adapters/deepeval
     python:
-      requirement: "evalsi-adapter-deepeval @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/deepeval"
+      requirement: "evalsi-adapter-deepeval @ git+https://github.com/abhishek-rnjn/evalsi@main#subdirectory=python/adapters/deepeval"
   - name: inspect
     version: 0.1.0
     tier: wrapped
     kind: python
-    description: Inspect AI tasks, solvers and scorers; Evals.si sandboxes as an Inspect sandbox provider.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/inspect
+    description: Inspect AI tasks, solvers and scorers; Evalsi sandboxes as an Inspect sandbox provider.
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/python/adapters/inspect
     python:
-      requirement: "evalsi-adapter-inspect @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/inspect"
+      requirement: "evalsi-adapter-inspect @ git+https://github.com/abhishek-rnjn/evalsi@main#subdirectory=python/adapters/inspect"
   - name: lm-eval
     version: 0.1.0
     tier: wrapped
     kind: python
-    description: lm-evaluation-harness tasks, with generation through Evals.si connectors.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/lm-eval
+    description: lm-evaluation-harness tasks, with generation through Evalsi connectors.
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/python/adapters/lm-eval
     python:
-      requirement: "evalsi-adapter-lm-eval @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/lm-eval"
+      requirement: "evalsi-adapter-lm-eval @ git+https://github.com/abhishek-rnjn/evalsi@main#subdirectory=python/adapters/lm-eval"
   - name: ragas
     version: 0.1.0
     tier: wrapped
     kind: python
-    description: RAGAS metrics, run through the Evals.si judge.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/ragas
+    description: RAGAS metrics, run through the Evalsi judge.
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/python/adapters/ragas
     python:
-      requirement: "evalsi-adapter-ragas @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/ragas"
+      requirement: "evalsi-adapter-ragas @ git+https://github.com/abhishek-rnjn/evalsi@main#subdirectory=python/adapters/ragas"
   - name: swebench
     version: 0.1.0
     tier: wrapped
     kind: python
-    description: SWE-bench tasks and harness, run in Evals.si sandboxes.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/swebench
+    description: SWE-bench tasks and harness, run in Evalsi sandboxes.
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/python/adapters/swebench
     python:
-      requirement: "evalsi-adapter-swebench @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/swebench"
+      requirement: "evalsi-adapter-swebench @ git+https://github.com/abhishek-rnjn/evalsi@main#subdirectory=python/adapters/swebench"
   - name: taubench
     version: 0.1.0
     tier: wrapped
     kind: python
     description: tau-bench tool-agent-user tasks with a simulated user.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/python/adapters/taubench
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/python/adapters/taubench
     python:
-      requirement: "evalsi-adapter-taubench @ git+https://github.com/abhishek-rnjn/evals.si@main#subdirectory=python/adapters/taubench"
+      requirement: "evalsi-adapter-taubench @ git+https://github.com/abhishek-rnjn/evalsi@main#subdirectory=python/adapters/taubench"
   # A hosted Wasm plugin: the manifest and module live next to this file
   # (plugins/wasm/text-checks), so a manifest path is relative to the index
   # that lists it. Built from examples/wasm/text-checks by
@@ -140,9 +140,9 @@ plugins:
     tier: community
     kind: wasm
     description: Deterministic text checks (JSON validity, word limits, distinct outputs), compiled to Wasm.
-    homepage: https://github.com/abhishek-rnjn/evals.si/tree/main/examples/wasm/text-checks
+    homepage: https://github.com/abhishek-rnjn/evalsi/tree/main/examples/wasm/text-checks
     license: Apache-2.0
     evaluators: [example/json-valid, example/word-limit, example/distinct-outputs]
     wasm:
       manifest: wasm/text-checks/evalsi-plugin.yaml
-      sha256: e0f8fa93711dfb82e27290770814e70ba57fbbfd3c1237b30f7ea288efe441b7
+      sha256: 30988e2c6a010ba671087fb078f02b52e57742aecb010d468712d55300c8efcd

@@ -1,5 +1,5 @@
 # R6: the Deep Agents service traces every run to MLflow (LangChain autolog);
-# Evals.si reads those traces, scores them with deepagents-online-policy.yaml,
+# Evalsi reads those traces, scores them with deepagents-online-policy.yaml,
 # and writes the scores back to the same traces as MLflow assessments.
 #
 #   kubectl apply -n evalsi -f deepagents-online-policy.yaml -f deepagents-mlflow-source.yaml
@@ -9,11 +9,11 @@
 # The demo MLflow is plain HTTP inside the cluster, so the server allows its
 # host (sources.allowHosts in overlays/evalsi-demo.yaml, sources.allow_hosts in
 # evalsi.yaml).
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata:
   name: deepagents-mlflow
-  labels: {evals.si/project: demo}
+  labels: {evalsi.dev/project: demo}
 spec:
   connector: mlflow
   endpoint: http://evalsi-demo-mlflow:5000

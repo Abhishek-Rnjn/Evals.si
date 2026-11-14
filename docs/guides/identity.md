@@ -4,7 +4,7 @@ This guide sets up authentication and authorization on `evalsid`. The design and
 
 ## How it fits together
 
-- **Authentication** turns a credential into a principal: an OIDC/JWT bearer token, an API key (`evk_...`), a client certificate, or identity headers from a trusted proxy. Evals.si keeps no users or passwords.
+- **Authentication** turns a credential into a principal: an OIDC/JWT bearer token, an API key (`evk_...`), a client certificate, or identity headers from a trusted proxy. Evalsi keeps no users or passwords.
 - **Authorization** checks every call:
   - **Roles** are granted per project by bindings, by an API key's own roles, or by a token's role claims.
   - **Global CEL rules** (`deny`, `require`, `allow`) add install-wide restrictions on top.
@@ -64,7 +64,7 @@ auth:
     providers:
       - name: corp               # bindings say user:corp/<sub>, group:corp/<group>
         issuer: https://sso.example.com/realms/eng
-        audiences: [evals.si]    # required; tokens minted for other services are refused
+        audiences: [evalsi.dev]    # required; tokens minted for other services are refused
         jwks: {discovery: true}  # or url:, file:, inline:
         claims: {groups: groups} # where subject, name, email and groups live
   cli_login: {issuer: https://sso.example.com/realms/eng, client_id: evalsi-cli}
@@ -92,15 +92,15 @@ The web UI signs in through the same provider. Register a public client with the
 ```yaml
 - name: kc
   issuer: https://keycloak.example.com/realms/eng
-  audiences: [evalsi-cli, evals.si]
+  audiences: [evalsi-cli, evalsi.dev]
   jwks: {discovery: true}
   claims: {groups: groups}           # needs a "Group Membership" mapper (full path off)
-  role_claims:                       # optional: realm roles become Evals.si roles
+  role_claims:                       # optional: realm roles become Evalsi roles
     claim: realm_access.roles
     map: {evals-admin: {"*": [admin]}}
 ```
 
-Create a public client `evalsi-cli` with **OAuth 2.0 Device Authorization Grant** enabled (and standard flow with redirect `http://127.0.0.1/*` for `--browser`). Add an **Audience** mapper if you want `evals.si` in access tokens.
+Create a public client `evalsi-cli` with **OAuth 2.0 Device Authorization Grant** enabled (and standard flow with redirect `http://127.0.0.1/*` for `--browser`). Add an **Audience** mapper if you want `evalsi.dev` in access tokens.
 
 ### Microsoft Entra ID
 
@@ -287,7 +287,7 @@ auth:
   jwt:
     providers:
       - name: cluster
-        audiences: [evals.si]            # tokens projected for evals.si only
+        audiences: [evalsi.dev]            # tokens projected for evalsi.dev only
         kubernetes:
           namespaces: [evalsi, ci]       # default: every namespace
 rbac:
@@ -301,7 +301,7 @@ Some hardened clusters remove the `system:service-account-issuer-discovery` bind
 
 ```yaml
       - name: cluster
-        audiences: [evals.si]
+        audiences: [evalsi.dev]
         issuer: https://oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLE   # the iss of the cluster's tokens
         jwks: {url: https://oidc.eks.eu-west-1.amazonaws.com/id/EXAMPLE/keys}   # or {file: ...}, {inline: ...}, {discovery: true}
         kubernetes: {namespaces: [evalsi, ci]}
@@ -309,13 +309,13 @@ Some hardened clusters remove the `system:service-account-issuer-discovery` bind
 
 In the Helm chart these are `auth.kubernetes.issuer` with `auth.kubernetes.jwks` or `auth.kubernetes.jwksConfigMap` (a ConfigMap holding `keys.json`).
 
-A service account becomes `system:serviceaccount:<namespace>:<name>` (kind `service`), in the groups `system:serviceaccounts` and `system:serviceaccounts:<namespace>`. Mount a token for the `evals.si` audience and point the CLI at it; it is read on every request, so the kubelet's rotation needs nothing:
+A service account becomes `system:serviceaccount:<namespace>:<name>` (kind `service`), in the groups `system:serviceaccounts` and `system:serviceaccounts:<namespace>`. Mount a token for the `evalsi.dev` audience and point the CLI at it; it is read on every request, so the kubelet's rotation needs nothing:
 
 ```yaml
 volumes:
   - name: evalsi-token
     projected:
-      sources: [{serviceAccountToken: {audience: evals.si, expirationSeconds: 3600, path: token}}]
+      sources: [{serviceAccountToken: {audience: evalsi.dev, expirationSeconds: 3600, path: token}}]
 env:
   - {name: EVALSI_TOKEN_FILE, value: /var/run/secrets/evalsi/token}
 ```

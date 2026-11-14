@@ -1,4 +1,4 @@
-"""GAIA tasks as Evals.si agent tasks.
+"""GAIA tasks as Evalsi agent tasks.
 
 ``gaia://<dir>?options``
     A directory you supply that holds GAIA's ``metadata.jsonl`` and the attachment files

@@ -1,4 +1,4 @@
-"""tau2-bench (τ-bench) domains as Evals.si agent tasks.
+"""tau2-bench (τ-bench) domains as Evalsi agent tasks.
 
 The importer ``taubench://<domain>`` turns a domain's tasks into records, one
 per task, each carrying the full tau2 task::
@@ -12,7 +12,7 @@ same budgets, record/replay and trace export) with the tau2 domain around it:
 - the agent's tools are the domain's tools, run against a live tau2
   environment with the task's initial state, and its system prompt is tau2's
   agent instruction with the domain policy;
-- the user is the Evals.si user simulator, through the run's judge, with the
+- the user is the Evalsi user simulator, through the run's judge, with the
   task's persona and instructions as its persona and goal; it opens the
   conversation, as in tau2;
 - grading is tau2's own evaluator (``evaluate_simulation``, evaluation type
@@ -616,7 +616,7 @@ class Tau2User(ToolUser):
     """tau2's own user simulator: tau2's ``UserSimulator`` over its LiteLLM
     wrapper. The conversation, its tool calls (in domains where the user has
     tools) and the replay state are ToolUser's, so grading and recording work
-    as they do for the Evals.si simulator; only the user's turns come from tau2."""
+    as they do for the Evalsi simulator; only the user's turns come from tau2."""
 
     def __init__(
         self,
@@ -632,7 +632,7 @@ class Tau2User(ToolUser):
         from tau2.user.user_simulator import UserSimulator as Tau2UserSimulator
 
         # No judge: the user model is LiteLLM's. ToolUser's own __init__ would
-        # build the Evals.si prompt, which this user does not use.
+        # build the Evalsi prompt, which this user does not use.
         def no_judge() -> Any:
             raise TaskError("tau2's user does not use the run's judge")
 

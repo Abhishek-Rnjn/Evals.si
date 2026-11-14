@@ -10,7 +10,7 @@ import (
 
 // ProjectPolicy decides which evalsi project a namespaced resource may name.
 // The operator calls evalsid with its own credential (an owner), so the
-// evals.si/project label must not let whoever can create a resource in one
+// evalsi.dev/project label must not let whoever can create a resource in one
 // namespace act in any project. A resource's project is its namespace, or
 // the label when the label names the namespace itself, the resource is in
 // Home (the operator's own namespace, whose editors already hold the

@@ -62,7 +62,7 @@ upgrade --set deepagents.candidate.enabled=true \
   --set-string deepagents.candidate.version="$version" --set-string deepagents.candidate.model="$model"
 
 echo "gating $version: EvalRun $run"
-sed "s|^  name: research-assistant-gate\$|  name: $run\\n  annotations: {evals.si/model: \"$model\"}|" "$chart/research-assistant-gate.yaml" |
+sed "s|^  name: research-assistant-gate\$|  name: $run\\n  annotations: {evalsi.dev/model: \"$model\"}|" "$chart/research-assistant-gate.yaml" |
   kubectl apply -n "$ns" -f - >/dev/null
 deadline=$((SECONDS + timeout))
 while :; do

@@ -14,7 +14,7 @@ Everything in steps 1 and 2 is offline and free: a small script plays the agent,
 
 ## What a gate is
 
-A run spec names an agent, a set of tasks and how to grade them. For each task Evals.si builds a fresh sandbox, lets the agent work in it, and then a **checker** the agent never sees grades the end state. A **gate** turns the scores into a verdict: if a gate fails, `evalsi run` exits with code 3, and a CI step that exits non-zero fails the build.
+A run spec names an agent, a set of tasks and how to grade them. For each task Evalsi builds a fresh sandbox, lets the agent work in it, and then a **checker** the agent never sees grades the end state. A **gate** turns the scores into a verdict: if a gate fails, `evalsi run` exits with code 3, and a CI step that exits non-zero fails the build.
 
 Grading the end state (did the tests pass?) is more reliable than judging the agent's words, and it works for any agent that changes something: code, files or a database.
 
@@ -141,7 +141,7 @@ spec:
       budget: {usd: 0.50, wall_clock: 5m}   # a runaway agent stops here
 ```
 
-- **`trials`** runs each task several times. Evals.si reports `pass@k` (at least one of k trials passed) and `pass^k` (all k passed). A trial in which the agent failed to run counts as not passed.
+- **`trials`** runs each task several times. Evalsi reports `pass@k` (at least one of k trials passed) and `pass^k` (all k passed). A trial in which the agent failed to run counts as not passed.
 - **`pass^3 >= 0.8`** means: three trials in a row must pass on at least 80% of the tasks. Use `pass^k` when you need reliability, and `pass@k` when one success is enough.
 - **`GATE_STAT_ERROR_RATE`** is the fraction of evaluations that errored, for example because the agent crashed or its model call failed. A metric's mean leaves errored records out, so without this gate an agent that crashes on most tasks and passes the rest still has a high mean. `max: 0.05` fails the run when more than 5% of them error.
 - **`GATE_STAT_SKIPPED_RATE`** (0.4.0 and later) is the fraction of evaluations that were skipped because a record lacked what the evaluator needs (an output, a reference, a trajectory). Skipped records are left out of the mean too, so a pipeline that stops producing outputs for most records can still have a perfect mean. `max: 0` fails the run when any were skipped. `evalsi run` prints a warning when a gate passes on a metric that skipped records and neither this nor the count is gated.
@@ -175,14 +175,14 @@ jobs:
         if: always()
 ```
 
-- **The `sysctl` line** is needed on Ubuntu 24.04 runners, which restrict the unprivileged user namespaces the sandbox uses. Without it the sandbox may not start, and Evals.si does not fall back to weaker isolation than the spec asks for.
+- **The `sysctl` line** is needed on Ubuntu 24.04 runners, which restrict the unprivileged user namespaces the sandbox uses. Without it the sandbox may not start, and Evalsi does not fall back to weaker isolation than the spec asks for.
 - **A non-zero exit fails the job**, so the check on the pull request goes red when a gate fails.
 - **`if: always()`** keeps the report when the gate fails, which is when you want it. It also lands in the job summary, so the scores are on the pull request's checks page.
 - **A model key** for a real agent goes in a repository secret and is passed as an environment variable on the run step. The spec's `env_from` hands it only to the agent.
 
 Make the check required in the repository's branch protection rules, and a pull request that makes the agent worse cannot merge.
 
-If your datasets, judges and keys live on an Evals.si server, run the same spec there with `evalsi run -f ... --server $URL`, authenticated with GitHub's own token and no stored secret: see [`examples/ci`](../../examples/ci/github-actions.yml) and [identity](identity.md#5-ci-github-actions-without-stored-secrets). The [end-to-end guide](end-to-end.md) has recipes for both setups.
+If your datasets, judges and keys live on an Evalsi server, run the same spec there with `evalsi run -f ... --server $URL`, authenticated with GitHub's own token and no stored secret: see [`examples/ci`](../../examples/ci/github-actions.yml) and [identity](identity.md#5-ci-github-actions-without-stored-secrets). The [end-to-end guide](end-to-end.md) has recipes for both setups.
 
 ## Beyond the pull request
 

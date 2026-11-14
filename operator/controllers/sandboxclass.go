@@ -16,8 +16,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 // SandboxPort is where a sandbox pool serves the sandbox service.
@@ -45,8 +45,8 @@ type SandboxClassReconciler struct {
 	NamePrefix string
 }
 
-// +kubebuilder:rbac:groups=evals.si,resources=sandboxclasses,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=evals.si,resources=sandboxclasses/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=sandboxclasses,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=sandboxclasses/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=configmaps;services,verbs=get;list;watch;create;update;patch;delete
 
 func (r *SandboxClassReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -79,7 +79,7 @@ func (r *SandboxClassReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		pod := &dep.Spec.Template
 		pod.Labels = labels
 		// A new config rolls the pool.
-		pod.Annotations = map[string]string{"evals.si/config-hash": hash(rendered)}
+		pod.Annotations = map[string]string{"evalsi.dev/config-hash": hash(rendered)}
 		r.podSpec(sc, name, &pod.Spec)
 		return controllerutil.SetControllerReference(sc, dep, r.Scheme())
 	}); err != nil {
@@ -129,7 +129,7 @@ func (r *SandboxClassReconciler) sandboxConfig(sc *v1.SandboxClass) sandbox.Conf
 			Namespace: r.Namespace, GuestImage: r.Image, DefaultImage: p.DefaultImage,
 			RuntimeClassName: p.RuntimeClassName, Level: p.Level, RunAsUser: p.RunAsUser, Capabilities: p.Capabilities, CPU: p.CPU,
 			NodeSelector: p.NodeSelector, NetworkPolicyEnforced: p.NetworkPolicyEnforced,
-			Labels: map[string]string{"evals.si/sandbox-class": sc.Name},
+			Labels: map[string]string{"evalsi.dev/sandbox-class": sc.Name},
 		}
 		for k, v := range p.Labels {
 			if _, set := cfg.Pod.Labels[k]; !set {

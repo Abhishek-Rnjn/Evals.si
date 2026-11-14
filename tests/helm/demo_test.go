@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/operator/bootstrap"
+	"github.com/abhishek-rnjn/evalsi/operator/bootstrap"
 )
 
 // The demo chart (examples/demo) holds to the same placement rules as the main
@@ -166,7 +166,7 @@ func TestDemoOverlays(t *testing.T) {
 
 // M2: the research assistant's deploy gate. A release waits as the candidate,
 // which traces nowhere; production carries its workflow and version on every
-// trace and, with otlp set, sends them to Evals.si as well as to MLflow.
+// trace and, with otlp set, sends them to Evalsi as well as to MLflow.
 func TestDemoDeployGateCandidate(t *testing.T) {
 	for _, o := range demo(t) {
 		if o.Metadata.Name == "evalsi-demo-deepagents-candidate" {
@@ -191,7 +191,7 @@ func TestDemoDeployGateCandidate(t *testing.T) {
 			t.Errorf("candidate traces somewhere (%s): %s", unwanted, spec)
 		}
 	}
-	if candidate.Metadata.Annotations["evals.si/version"] != "v2" {
+	if candidate.Metadata.Annotations["evalsi.dev/version"] != "v2" {
 		t.Errorf("candidate annotations %v", candidate.Metadata.Annotations)
 	}
 
@@ -207,7 +207,7 @@ func TestDemoDeployGateCandidate(t *testing.T) {
 			t.Errorf("production: no %q in %s", want, spec)
 		}
 	}
-	if production.Metadata.Annotations["evals.si/version"] != "v1" {
+	if production.Metadata.Annotations["evalsi.dev/version"] != "v1" {
 		t.Errorf("production annotations %v", production.Metadata.Annotations)
 	}
 

@@ -12,8 +12,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	extmcp "github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp"
-	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
+	extmcp "github.com/abhishek-rnjn/evalsi/gen/go/agentgateway/dev/ext_mcp"
+	"github.com/abhishek-rnjn/evalsi/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
 )
 
 // TestGuardrails applies the example guardrail with the CLI and checks

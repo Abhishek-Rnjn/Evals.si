@@ -68,7 +68,7 @@ The specs name an image (`environment.image`) for the pod rung; on the host, run
 Notes:
 
 - dsh is a Node program that reserves a large address range, so its spec gives the sandbox 4 GiB and `NODE_OPTIONS=--disable-wasm-trap-handler`. A smaller limit makes it abort.
-- The dsh small-repo spec sets `DEMO_OUTER_SANDBOX=true`: its headless profile uses dsh's `danger-full-access` mode inside Evals.si's enforced `namespaced`, deny-network task sandbox. This avoids an unavailable nested sandbox backend on the pod rung. Never set it for an unconfined host process; the launcher defaults it off and leaves Web/TUI profiles unchanged ([decision 0018](../../docs/decisions/0018-dsh-outer-sandbox.md)).
+- The dsh small-repo spec sets `DEMO_OUTER_SANDBOX=true`: its headless profile uses dsh's `danger-full-access` mode inside Evalsi's enforced `namespaced`, deny-network task sandbox. This avoids an unavailable nested sandbox backend on the pod rung. Never set it for an unconfined host process; the launcher defaults it off and leaves Web/TUI profiles unchanged ([decision 0018](../../docs/decisions/0018-dsh-outer-sandbox.md)).
 - `dcode` makes one lookup of pypi.org that the sandbox refuses; it is harmless.
 - The research suites need a judge: set `judges` and `default_judge` in `evalsi.yaml` (there is no default; nothing is billed by surprise).
 - Terminal-Bench 2: `git clone https://github.com/laude-institute/terminal-bench-2 terminal-bench-2` under this directory (it is git-ignored); the specs read `harbor://` from there and install the agent inside each task's image.
@@ -101,7 +101,7 @@ What each part does:
 
 ### Every deployed workflow scored, and a gate on every deploy (M2)
 
-The research assistant (the Deep Agents service) plays a deployed agent harness workflow. Its traces carry `evalsi.label.workflow=research-assistant`, its version and `stage=production` (`OTEL_RESOURCE_ATTRIBUTES`), and `overlays/evalsi-demo.yaml` has the bootstrap Job create what an agent harness install starts with: an ingest key (`evalsi-demo-ingest-key`), a reader key for its UI (`evalsi-demo-reader-key`) and a default policy, `studio-default`, that scores every production trace naming a workflow. Nothing is applied per workflow. Send production's traces to Evals.si as well as MLflow:
+The research assistant (the Deep Agents service) plays a deployed agent harness workflow. Its traces carry `evalsi.label.workflow=research-assistant`, its version and `stage=production` (`OTEL_RESOURCE_ATTRIBUTES`), and `overlays/evalsi-demo.yaml` has the bootstrap Job create what an agent harness install starts with: an ingest key (`evalsi-demo-ingest-key`), a reader key for its UI (`evalsi-demo-reader-key`) and a default policy, `studio-default`, that scores every production trace naming a workflow. Nothing is applied per workflow. Send production's traces to Evalsi as well as MLflow:
 
 ```bash
 kubectl delete -n evalsi -f examples/demo/deepagents-mlflow-source.yaml --ignore-not-found   # one door per store
@@ -126,7 +126,7 @@ curl -sk -H "Authorization: Bearer $KEY" \
   "https://localhost:8080/v1alpha1/scores?project=demo&labels=workflow=research-assistant&labels=version=v3"
 ```
 
-`deploy/e2e/kind-e2e.sh` runs all of this. Standalone, the gate is `evalsi run -f research-assistant-gate.yaml --server ...` against the service on `evalsi-demo-deepagents-candidate:8080`, and exits 3 when it fails. `deploy.sh` keeps no record beyond the Deployment's `evals.si/version` annotation; an agent harness keeps its own.
+`deploy/e2e/kind-e2e.sh` runs all of this. Standalone, the gate is `evalsi run -f research-assistant-gate.yaml --server ...` against the service on `evalsi-demo-deepagents-candidate:8080`, and exits 3 when it fails. `deploy.sh` keeps no record beyond the Deployment's `evalsi.dev/version` annotation; an agent harness keeps its own.
 
 ### Online scoring from MLflow (R6)
 

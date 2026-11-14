@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
 )
 
 func versions(t *testing.T, s *Store) []AppliedMigration {

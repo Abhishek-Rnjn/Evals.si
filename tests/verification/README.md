@@ -12,7 +12,7 @@ python/.venv/bin/python -m pytest tests/verification
 `--require` exits 2 for missing prerequisites. The KVM check requires a real
 character device, API version 12, and successful `KVM_CREATE_VM`; an ordinary
 file or readable device node cannot pass. No module loading or device creation
-is attempted. The bubblewrap check only tests bare namespace creation. Evals.si's
+is attempted. The bubblewrap check only tests bare namespace creation. Evalsi's
 rlimits, mount rules and functional isolation require its actual sandbox tests.
 No token values, kubeconfig contents or secret files are included in the output.
 

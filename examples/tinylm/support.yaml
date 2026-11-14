@@ -4,7 +4,7 @@
 #   python3 tinylm.py --port 8765 &
 #   evalsi run -f support.yaml                     # tinylm-support passes
 #   sed 's/tinylm-support/tinylm-reckless/' support.yaml > reckless.yaml && evalsi run -f reckless.yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-support}
 spec:

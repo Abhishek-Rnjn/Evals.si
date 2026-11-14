@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
+	v1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/harness/v1alpha1"
 	http "net/http"
 	strings "strings"
 )
@@ -49,7 +49,7 @@ const (
 type HarnessServiceClient interface {
 	// Task formats and environment needs.
 	Describe(context.Context, *connect.Request[v1alpha1.DescribeRequest]) (*connect.Response[v1alpha1.DescribeResponse], error)
-	// Prepares the task's environment; it may lease an Evals.si sandbox.
+	// Prepares the task's environment; it may lease an Evalsi sandbox.
 	Setup(context.Context, *connect.Request[v1alpha1.SetupRequest]) (*connect.Response[v1alpha1.SetupResponse], error)
 	// Drives the agent, streaming steps; the last event is Final.
 	Run(context.Context, *connect.Request[v1alpha1.RunRequest]) (*connect.ServerStreamForClient[v1alpha1.RunResponse], error)
@@ -140,7 +140,7 @@ func (c *harnessServiceClient) Teardown(ctx context.Context, req *connect.Reques
 type HarnessServiceHandler interface {
 	// Task formats and environment needs.
 	Describe(context.Context, *connect.Request[v1alpha1.DescribeRequest]) (*connect.Response[v1alpha1.DescribeResponse], error)
-	// Prepares the task's environment; it may lease an Evals.si sandbox.
+	// Prepares the task's environment; it may lease an Evalsi sandbox.
 	Setup(context.Context, *connect.Request[v1alpha1.SetupRequest]) (*connect.Response[v1alpha1.SetupResponse], error)
 	// Drives the agent, streaming steps; the last event is Final.
 	Run(context.Context, *connect.Request[v1alpha1.RunRequest], *connect.ServerStream[v1alpha1.RunResponse]) error
