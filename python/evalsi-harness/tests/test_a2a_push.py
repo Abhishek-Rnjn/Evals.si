@@ -89,6 +89,10 @@ class FakeAgent:
             token = config["token"] if self.pushes == "good" else "wrong"
             for state, text in (("working", "looking it up"), ("completed", "")):
                 time.sleep(0.05)
+                if state == "completed":
+                    # Finished before saying so: the harness reads the task with
+                    # tasks/get as soon as this push lands, before urlopen returns.
+                    self.done.set()
                 request = urllib.request.Request(
                     config["url"],
                     json.dumps(task(state, text)).encode(),
