@@ -181,6 +181,11 @@ verdict. The second gate here is easy to overlook and important: a mean leaves
 errored records out, so an evaluator that errors on most records and passes the
 rest would still have a high mean. Gating the error rate closes that hole.
 
+From 0.4.0 the starter has a third gate, `stat: GATE_STAT_SKIPPED_RATE` with
+`max: 0.0`: a record without an output is skipped rather than failed, so it too
+would leave the mean high. With 0.4.0 the runs below print one more line,
+`[pass] exact-match skipped_rate max 0.0`, and the report one more gate.
+
 ```bash
 evalsi run -f run.yaml --output results.json; echo "exit $?"
 evalsi run -f regressed.yaml; echo "exit $?"
