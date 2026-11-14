@@ -28,9 +28,10 @@ const pkg = process.env.EVALSI_DEMO_PACKAGE ?? 'evalsi';
 const steps = [
   { command: `pip install ${pkg === 'evalsi' ? 'evalsi' : pkg}`, show: 'pip install evalsi', keep: 1 },
   { command: 'evalsi init my-evals && cd my-evals', first: 1 },
-  { command: 'evalsi run -f run.yaml', clear: true },
-  { command: 'evalsi run -f regressed.yaml' },
-  { command: 'echo "exit code: $?"', hold: 4.5 },
+  { command: 'evalsi run -f run.yaml --output base.json', clear: true },
+  { command: 'evalsi run -f regressed.yaml --output new.json' },
+  { command: 'echo "exit code: $?"', hold: 3 },
+  { command: 'evalsi compare base.json new.json', first: 2, hold: 4.5 },
 ];
 
 const ROWS = 23;

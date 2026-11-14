@@ -9,9 +9,9 @@
 [Changelog](https://github.com/Abhishek-Rnjn/evalsi/blob/main/CHANGELOG.md) ·
 [Examples](https://github.com/Abhishek-Rnjn/evalsi/tree/main/examples)
 
-![A terminal: pip install evalsi, evalsi init my-evals, then evalsi run passes its gates on run.yaml and fails one on regressed.yaml, exiting 3.](https://raw.githubusercontent.com/Abhishek-Rnjn/evalsi/main/docs/img/demo.gif)
+![A terminal: pip install evalsi, evalsi init my-evals, then evalsi run passes its gates on run.yaml and fails one on regressed.yaml, exiting 3; evalsi compare then shows the drop from 1.000 to 0.500.](https://raw.githubusercontent.com/Abhishek-Rnjn/evalsi/main/docs/img/demo.gif)
 
-_Real output of the published package: a starter, a passing gate, and a regression that fails the build with exit code 3._
+_Real output of the published package: a starter, a passing gate, and a regression that fails the build with exit code 3, and `evalsi compare` between the two results files._
 
 ## Why Evalsi
 
