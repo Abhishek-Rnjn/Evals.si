@@ -109,7 +109,7 @@ gates:
 exit code: 3
 ```
 
-The count gate also catches the case where the dataset itself shrank, since it does not care whether the missing records were skipped or never there. Use it with a number you expect, such as the size of your fixed test set. Errors are a third category, handled by `GATE_STAT_ERROR_RATE`; the starter from `evalsi init` already includes that one.
+The count gate also catches the case where the dataset itself shrank, since it does not care whether the missing records were skipped or never there. Use it with a number you expect, such as the size of your fixed test set. Errors are a third category, handled by `GATE_STAT_ERROR_RATE`. From 0.4.0 the starter that `evalsi init` writes gates both the error rate and the skipped rate at zero.
 
 ## What to take from it
 

@@ -24,7 +24,7 @@ Created recorded starter in my-evals
 
 The directory holds `data.jsonl` (recorded answers), `run.yaml` (the spec) and `regressed.jsonl` plus `regressed.yaml`, a copy where one answer has gone wrong. No server, sandbox or model key is involved: the outputs are already recorded, and the evaluator is a literal string comparison.
 
-The spec asks for every answer to match its reference, and for no evaluator to error:
+The spec asks for every answer to match its reference, for no evaluator to error, and for no record to be skipped for lack of an output:
 
 ```yaml
   evaluators:
@@ -34,6 +34,9 @@ The spec asks for every answer to match its reference, and for no evaluator to e
     min: 1.0
   - metric: exact-match
     stat: GATE_STAT_ERROR_RATE
+    max: 0.0
+  - metric: exact-match
+    stat: GATE_STAT_SKIPPED_RATE
     max: 0.0
 ```
 
@@ -53,6 +56,7 @@ exact-match  2  1.000  [0.342, 1.000]        0       0
 gates:
   [pass] exact-match mean min 1.0
   [pass] exact-match error_rate max 0.0
+  [pass] exact-match skipped_rate max 0.0
 exit code: 0
 ```
 
@@ -89,6 +93,7 @@ exact-match  2  0.500  [0.095, 0.905]        0       0
 gates:
   [FAIL] exact-match mean min 1.0 (mean 0.5 is below 1)
   [pass] exact-match error_rate max 0.0
+  [pass] exact-match skipped_rate max 0.0
 exit code: 3
 ```
 
