@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-11
+
+A minor version: it adds features, fixes the bugs found in a review of the first-run path, and changes a few evaluators' results (listed under "Changed"). It is cut from `main`.
+
+- **Upgrade the server and the SDK together, and refresh the EvalRun CRD first.** Helm does not upgrade CRDs, and the `EvalRun` schema's gate statistics gained two values (`GATE_STAT_SKIPPED_RATE`, `GATE_STAT_COUNT`): `kubectl apply --server-side -f deploy/helm/evalsi-crds/crds/evals.si_evalruns.yaml` from the v0.4.0 checkout (or the `evalsi-crds` 0.4.0 chart's `crds/`). A server older than 0.4.0 does not know the new statistics, so a spec that uses them needs a 0.4.0 server.
+- **Re-check gates and comparisons that rest on the evaluators listed under "Changed".** A run can now fail where it passed: `loop-detection` fails repeated blocks of calls, `regression` errors on unparseable outputs, `json-valid` fails `NaN` and `Infinity`, and `contains` skips an empty reference.
+- **Known limits.** This is a stable version number, but the product-readiness rows R04-01 to R04-05 of the [pre-0.4 release plan](docs/PRE-0.4-RELEASE-PLAN.md) are not closed: no unfamiliar user has been observed installing it, evaluating their own application and reading a comparison, and the evaluator-validation and integration rows have no recorded end-to-end run on a model-driven application. The plan lists what each row requires.
+
 ### Added
 
 - **Coverage gates.** `GATE_STAT_SKIPPED_RATE` (skipped / all evaluations) and `GATE_STAT_COUNT` (evaluations scored) join the gate statistics, in the SDK, the server, the CRD and the web UI. A mean leaves skipped records out, so a run whose outputs went missing for most records could pass a mean gate; `evalsi run` now warns when a gate passes on a metric that skipped records and neither is gated.
@@ -29,6 +37,8 @@ All notable changes to this project are recorded here. The format follows [Keep 
 - `evalsi mcp` exited on a request whose `id` was not a string or number, or a cancel notification with malformed `params`.
 - A dataset path that leaves `datasets_dir` is refused by its spelling, so the error no longer tells a caller whether the file exists on the server's host.
 - `--cluster-by` (and `summary.cluster_by`) with a key no record has is an error instead of silently changing every interval.
+- Two indirect Go dependencies are bumped past reachable vulnerabilities: `andybalholm/brotli` v1.2.7 (GO-2026-6888) and `klauspost/compress` v1.20.2 (GO-2026-6865).
+- The minimum Go toolchain is 1.26.11, which fixes GO-2026-6859 (an HTTP/1 server crash from a `MaxBytesReader` header race in `net/http`) in the images and binaries.
 
 ### Changed
 
@@ -469,7 +479,8 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.
 
-[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...v0.3.0
