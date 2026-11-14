@@ -33,7 +33,7 @@ dependencies = [
 [project.optional-dependencies]
 # The browser toolset (browser.py). The browsers are a separate install:
 # `playwright install chromium`, or PLAYWRIGHT_BROWSERS_PATH at an existing one.
-browser = ["playwright>=1.49,<2"]
+browser = ["playwright>=1.65.0,<2"]
 
 [project.entry-points."evalsi.importers"]
 harbor = "evalsi_harness.benchmarks.harbor:load_harbor"
