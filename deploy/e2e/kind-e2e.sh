@@ -163,7 +163,7 @@ print("parity:", {m: (k["n"], k["mean"]) for m, k in k8s.items()})
 PY
 
 step "webhooks"
-creator="$(kubectl get evalrun parity -n "$ns" -o jsonpath='{.metadata.annotations.evals\.si/created-by}')"
+creator="$(kubectl get evalrun parity -n "$ns" -o jsonpath='{.metadata.annotations.evalsi\.dev/created-by}')"
 [ "$creator" = "kubernetes-admin" ] || { echo "created-by: '$creator'" >&2; exit 1; }
 if out="$(kubectl apply -n "$ns" -f - 2>&1 <<'YAML'
 apiVersion: evalsi.dev/v1alpha1
@@ -332,7 +332,7 @@ helm upgrade evalsi-demo "$demo" -n "$ns" --reuse-values \
   --set deepagents.otlp.endpoint=https://evalsi:4318 \
   --set deepagents.otlp.apiKeySecret.name=evalsi-demo-ingest-key \
   --set deepagents.otlp.caSecret.name=evalsi-server-tls --wait --timeout 10m
-deployed() { kubectl get deployment evalsi-demo-deepagents -n "$ns" -o jsonpath='{.metadata.annotations.evals\.si/version}'; }
+deployed() { kubectl get deployment evalsi-demo-deepagents -n "$ns" -o jsonpath='{.metadata.annotations.evalsi\.dev/version}'; }
 [ "$(deployed)" = v1 ] || { echo "production is at $(deployed), want v1" >&2; exit 1; }
 set +e
 NAMESPACE="$ns" "$demo/deploy/deploy.sh" v2 mock-regressed

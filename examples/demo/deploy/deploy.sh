@@ -39,7 +39,7 @@ upgrade() {
   helm upgrade "$release" "$chart" -n "$ns" --reuse-values --wait --timeout 10m "$@" >/dev/null
 }
 current() {
-  kubectl get deployment "$release-deepagents" -n "$ns" -o jsonpath='{.metadata.annotations.evals\.si/version}'
+  kubectl get deployment "$release-deepagents" -n "$ns" -o jsonpath='{.metadata.annotations.evalsi\.dev/version}'
 }
 
 # The candidate Service is shared, so two deploys at once could gate one
@@ -52,7 +52,7 @@ fi
 trap 'kubectl delete configmap "$lock" -n "$ns" --ignore-not-found >/dev/null' EXIT
 
 # A version's gate run is bound to the model it gated.
-if gated="$(kubectl get evalrun "$run" -n "$ns" -o jsonpath='{.metadata.annotations.evals\.si/model}' 2>/dev/null)" && [ "$gated" != "$model" ]; then
+if gated="$(kubectl get evalrun "$run" -n "$ns" -o jsonpath='{.metadata.annotations.evalsi\.dev/model}' 2>/dev/null)" && [ "$gated" != "$model" ]; then
   echo "$version was gated with model '${gated}', not '${model}'; deploy it as a new version" >&2
   exit 1
 fi
