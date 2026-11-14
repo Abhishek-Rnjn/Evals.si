@@ -11,12 +11,12 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	extmcp "github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp"
-	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
+	extmcp "github.com/abhishek-rnjn/evalsi/gen/go/agentgateway/dev/ext_mcp"
+	"github.com/abhishek-rnjn/evalsi/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
 )
 
 func TestGuardrails(t *testing.T) {

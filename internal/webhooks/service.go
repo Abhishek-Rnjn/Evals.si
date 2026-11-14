@@ -13,11 +13,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/source"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/source"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 func invalid(format string, args ...any) error {

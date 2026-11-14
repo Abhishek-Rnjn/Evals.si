@@ -5,7 +5,7 @@
 #
 #   evalsi rewards score --spec code-reward.yaml --data rollouts.jsonl
 #   python -c "from evalsi.rewards.trl import reward_funcs; print(reward_funcs('code-reward.yaml'))"
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: RewardSpec
 metadata: {name: code-grpo}
 spec:

@@ -15,14 +15,14 @@ operator:
   # SandboxClasses themselves, but it is a ClusterRoleBinding, so it is
   # opt-in.
   sandboxClasses: false
-  # Let it watch evals.si resources in every namespace, and manage worker
+  # Let it watch evalsi.dev resources in every namespace, and manage worker
   # Deployments and ScaledObjects in each (the one broad grant), with the
   # evalsi chart's operator.allNamespaces.
   allNamespaces: false
 
 webhooks:
   enabled: true
-  # Fail closed: without the operator, evals.si resources cannot be created
+  # Fail closed: without the operator, evalsi.dev resources cannot be created
   # (an unvalidated EvalRun would fail later, less clearly).
   failurePolicy: Fail
   # The serving certificate: generated here, or from cert-manager.

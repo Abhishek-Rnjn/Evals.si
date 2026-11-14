@@ -13,8 +13,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/abhishek-rnjn/evals.si/operator/bootstrap"
-	"github.com/abhishek-rnjn/evals.si/operator/controllers"
+	"github.com/abhishek-rnjn/evalsi/operator/bootstrap"
+	"github.com/abhishek-rnjn/evalsi/operator/controllers"
 )
 
 // runBootstrap is `evalsi-operator bootstrap`: the chart's bootstrap Job.

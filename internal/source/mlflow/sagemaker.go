@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/source"
+	"github.com/abhishek-rnjn/evalsi/internal/source"
 )
 
 var regionName = regexp.MustCompile(`^[a-z]{2}(-[a-z]+)+-[0-9]+$`)

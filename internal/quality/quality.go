@@ -1,7 +1,7 @@
 // Package quality turns the scores online policies store into per-group
 // quality figures (per route, backend or service) that something outside
-// Evals.si can act on: a JSON endpoint and Prometheus gauges. It is the
-// Evals.si half of feeding scores back into agentgateway (decision 0038);
+// Evalsi can act on: a JSON endpoint and Prometheus gauges. It is the
+// Evalsi half of feeding scores back into agentgateway (decision 0038);
 // what consumes the figures is the operator's.
 package quality
 
@@ -16,8 +16,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // States of a group, for a spec with a metric and threshold.

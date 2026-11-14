@@ -3,7 +3,7 @@
 # penalty (skipped for rollouts without completion_tokens or completion_ids,
 # which TRL passes). The reference answer comes from the `answer` (or `ground_truth`,
 # `solution`) column; GSM8K's "#### 72" is understood.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: RewardSpec
 metadata: {name: math-grpo}
 spec:

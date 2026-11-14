@@ -6,7 +6,7 @@ outbound traffic through an HTTPS proxy); the output blocks are what it printed.
 
 ## Check the machine first
 
-Before installing anything, find out what the machine can reach. Evals.si itself
+Before installing anything, find out what the machine can reach. Evalsi itself
 needs nothing from the network at run time, but `pip` needs PyPI, and a sandboxed
 agent needs Linux user namespaces.
 
@@ -107,7 +107,7 @@ agent capabilities: ready
 ```
 
 On Ubuntu 24.04 (GitHub's `ubuntu-latest` included) the sandbox line fails until
-you run `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. Evals.si
+you run `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`. Evalsi
 never falls back to weaker isolation than a spec asks for, so fix the host rather
 than the spec.
 
@@ -159,7 +159,7 @@ cat run.yaml
 ```
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: starter-recorded
@@ -209,7 +209,7 @@ exit 3
 
 ## The three exit codes
 
-Everything in Evals.si that gates returns one of three codes. CI needs no glue:
+Everything in Evalsi that gates returns one of three codes. CI needs no glue:
 anything non-zero fails the job.
 
 | Code | Meaning | Example |

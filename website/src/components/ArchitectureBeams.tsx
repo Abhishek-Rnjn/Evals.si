@@ -56,7 +56,7 @@ export default function ArchitectureBeams() {
             <path d="M10 21.5l7 7L30 13" fill="none" stroke="#fff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <span className="text-sm font-semibold">Evals.si</span>
+        <span className="text-sm font-semibold">Evalsi</span>
         <span className="hidden text-center text-xs text-neutral-500 sm:block dark:text-neutral-400">Score · Run · Watch · Reward</span>
       </div>
       <div className="flex flex-col justify-center gap-6">

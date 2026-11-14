@@ -6,9 +6,9 @@ import (
 
 	collectortracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // A trace query sees the same tools and models a policy selector does, also

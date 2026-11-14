@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/source"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/source"
 )
 
 // operationName is what a long-running operation is called ("operations/<id>");

@@ -172,7 +172,7 @@ def _parser() -> argparse.ArgumentParser:
 
     srv = sub.add_parser(
         "serve",
-        help="run the Evals.si server (starts the evalsid binary)",
+        help="run the Evalsi server (starts the evalsid binary)",
         add_help=False,
     )
     srv.add_argument("args", nargs=argparse.REMAINDER, help="arguments passed to evalsid serve")

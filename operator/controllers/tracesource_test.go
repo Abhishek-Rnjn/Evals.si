@@ -15,9 +15,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 func TestTraceSourceProjectMoveDeletesFromOldProject(t *testing.T) {

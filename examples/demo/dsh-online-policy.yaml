@@ -1,8 +1,8 @@
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: dsh-online
-  labels: {evals.si/project: demo}
+  labels: {evalsi.dev/project: demo}
 spec:
   selector: 'labels["source"] == "dsh-mlflow"'
   stages:

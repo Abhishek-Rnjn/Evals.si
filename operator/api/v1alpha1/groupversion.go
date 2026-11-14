@@ -1,8 +1,8 @@
-// Package v1alpha1 holds the evals.si/v1alpha1 custom resources: EvalRun,
+// Package v1alpha1 holds the evalsi.dev/v1alpha1 custom resources: EvalRun,
 // OnlineEvalPolicy, Evaluator and SandboxClass.
 //
 // +kubebuilder:object:generate=true
-// +groupName=evals.si
+// +groupName=evalsi.dev
 package v1alpha1
 
 import (
@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	GroupVersion  = schema.GroupVersion{Group: "evals.si", Version: "v1alpha1"}
+	GroupVersion  = schema.GroupVersion{Group: "evalsi.dev", Version: "v1alpha1"}
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
 	AddToScheme   = SchemeBuilder.AddToScheme
 )

@@ -14,9 +14,9 @@ import (
 	"net/http"
 	"time"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // Info is one trace a store lists.

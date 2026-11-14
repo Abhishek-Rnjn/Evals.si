@@ -1,5 +1,5 @@
 # Gate every pull request on an agent run, with no server: the job installs
-# Evals.si, runs the spec in a sandbox and fails when a gate fails (exit 3).
+# Evalsi, runs the spec in a sandbox and fails when a gate fails (exit 3).
 # Copy this to .github/workflows/agent-gate.yml and point `-f` at your spec.
 name: agent-gate
 on:

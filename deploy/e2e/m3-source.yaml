@@ -1,10 +1,10 @@
 # M3: a source on the demo MLflow for scripts/measure-trace-source.py, which
 # applies it, times its 30-day backfill and the pull lag of live traces.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata:
   name: m3
-  labels: {evals.si/project: demo}
+  labels: {evalsi.dev/project: demo}
 spec:
   connector: mlflow
   endpoint: http://evalsi-demo-mlflow:5000

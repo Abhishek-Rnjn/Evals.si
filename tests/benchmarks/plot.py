@@ -18,7 +18,7 @@ def main():
     plt.rcParams.update({"svg.fonttype": "none", "font.size": 10})
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6), layout="constrained")
     names = {
-        "evalsi": "Evals.si",
+        "evalsi": "Evalsi",
         "deepeval": "DeepEval",
         "ragas": "Ragas",
         "langsmith": "LangSmith SDK",
@@ -67,7 +67,7 @@ def main():
         args.out,
         metadata={
             "Date": report["measured_at"],
-            "Creator": "Evals.si reproducible benchmark harness",
+            "Creator": "Evalsi reproducible benchmark harness",
         },
     )
     return 0

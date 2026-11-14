@@ -2,7 +2,7 @@
 
 A Compose file names the agent's container (``client``, or the service whose image is
 ``${T_BENCH_TASK_DOCKER_CLIENT_IMAGE_NAME}``) and the services around it. This module
-turns the file into what an Evals.si environment can say: the client's build, files,
+turns the file into what an Evalsi environment can say: the client's build, files,
 environment and shared volumes, and a list of services. The aim is the whole of the
 Compose that Terminal-Bench's tasks use, not a subset; what cannot be kept is refused
 with the reason, and what is dropped without changing what a task measures is listed
@@ -48,7 +48,7 @@ from evalsi_harness.benchmarks.dockerfile import (
 )
 
 # What Terminal-Bench's runner sets for a task's Compose, and the paths it mounts the
-# logs at (Evals.si manages those itself).
+# logs at (Evalsi manages those itself).
 TB_VARS = {
     "T_BENCH_TEST_DIR": "/tests",
     "T_BENCH_CONTAINER_LOGS_PATH": "/logs",
@@ -165,7 +165,7 @@ class ClientBuild:
 
 @dataclass
 class Compose:
-    """What a task's Compose file says, in the terms of an Evals.si environment."""
+    """What a task's Compose file says, in the terms of an Evalsi environment."""
 
     services: list[dict[str, Any]] = field(default_factory=list)
     client: ClientBuild | None = None

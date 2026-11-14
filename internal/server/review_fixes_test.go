@@ -15,11 +15,11 @@ import (
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/datasets"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/datasets"
 )
 
 func (s *testServer) rest(t *testing.T, cred, method, path, body string) (int, string, http.Header) {

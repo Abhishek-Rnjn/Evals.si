@@ -51,7 +51,7 @@ func newProvider(t *testing.T) *fakeProvider {
 func loginServer(t *testing.T, p *fakeProvider) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	RegisterLogin(mux, &Login{Issuer: p.srv.URL, ClientID: "evalsi-ui", Audience: "evals.si", Scopes: []string{"openid", "email", "offline_access"}})
+	RegisterLogin(mux, &Login{Issuer: p.srv.URL, ClientID: "evalsi-ui", Audience: "evalsi.dev", Scopes: []string{"openid", "email", "offline_access"}})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -91,7 +91,7 @@ func TestLoginConfigNamesTheProviderEndpointsAndDropsRefreshScope(t *testing.T) 
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&cfg)
 		resp.Body.Close()
-		if cfg.Authorization != p.srv.URL+"/authorize" || cfg.ClientID != "evalsi-ui" || cfg.Audience != "evals.si" ||
+		if cfg.Authorization != p.srv.URL+"/authorize" || cfg.ClientID != "evalsi-ui" || cfg.Audience != "evalsi.dev" ||
 			strings.Join(cfg.Scopes, " ") != "openid email" {
 			t.Fatalf("config %+v", cfg)
 		}

@@ -38,7 +38,7 @@ def agent_script(messages: list[dict[str, Any]], tools: list[str]) -> dict[str, 
 
 
 SPEC = """
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {{name: agent-smoke, project: demo}}
 spec:

@@ -16,10 +16,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/credentials"
 )
 
 // Runs on the e2e job's existing ClickHouse service, through source admission,

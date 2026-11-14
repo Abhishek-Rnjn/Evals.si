@@ -164,7 +164,7 @@ func TestPodRung(t *testing.T) {
 		t.Errorf("container %v", c)
 	}
 	labels := pod.manifest["metadata"].(map[string]any)["labels"].(map[string]any)
-	if labels["evals.si/sandbox"] != "true" {
+	if labels["evalsi.dev/sandbox"] != "true" {
 		t.Errorf("labels %v", labels)
 	}
 

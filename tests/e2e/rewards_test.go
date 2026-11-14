@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
 )
 
 // rewardScript scores the same rollouts in-process and through the server's

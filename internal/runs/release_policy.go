@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strings"
 
-	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/datasetcatalog"
-	"github.com/abhishek-rnjn/evals.si/internal/datasets"
-	"github.com/abhishek-rnjn/evals.si/internal/evaluation"
-	"github.com/abhishek-rnjn/evals.si/internal/stats"
+	pb "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/datasetcatalog"
+	"github.com/abhishek-rnjn/evalsi/internal/datasets"
+	"github.com/abhishek-rnjn/evalsi/internal/evaluation"
+	"github.com/abhishek-rnjn/evalsi/internal/stats"
 	"google.golang.org/protobuf/proto"
 )
 

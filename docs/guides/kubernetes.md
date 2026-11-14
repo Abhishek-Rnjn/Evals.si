@@ -1,6 +1,6 @@
-# Evals.si on Kubernetes
+# Evalsi on Kubernetes
 
-Evals.si on Kubernetes is the same `evalsid` as standalone, split into roles and run by the [operator](#the-operator-and-its-resources). Run specs and policies are the same files: what `evalsi run -f` takes, `kubectl apply -f` takes. This is Phase 4 of the [roadmap](../DESIGN.md#23-roadmap).
+Evalsi on Kubernetes is the same `evalsid` as standalone, split into roles and run by the [operator](#the-operator-and-its-resources). Run specs and policies are the same files: what `evalsi run -f` takes, `kubectl apply -f` takes. This is Phase 4 of the [roadmap](../DESIGN.md#23-roadmap).
 
 ```text
   kubectl apply (EvalRun, OnlineEvalPolicy, TraceSource, Evaluator, CheckpointServer, SandboxClass)
@@ -56,7 +56,7 @@ The defaults are a working single-replica install on SQLite. Each chart's permis
 
 Every name a chart creates starts with its release's name, so releases can share a namespace, and the chart can sit beside others (agent harness, agent-sandbox). The `evalsi` chart builds the name this way: a release named for evalsi (such as `evalsi`) is used as it is, and any other release gets `-evalsi` after it, so release `team-a` creates `team-a-evalsi` (the API Service), `team-a-evalsi-operator`, `team-a-evalsi-worker-cpu` and so on. `fullnameOverride` sets the prefix. The default release name `evalsi` keeps the short names used throughout these guides.
 
-Sandbox pools are isolated per release. The pods of a pool this chart runs carry `evals.si/sandbox-pool: <release>-sandbox-pool`, and the `<release>-sandbox-pool-pods` NetworkPolicy lets only that pool reach them and lets them reach only that pool, so two releases in one namespace cannot reach each other's sandbox pods. The general `<release>-sandbox-pods` policy covers the pods of SandboxClass pools, which are shared by design. This needs a CNI that enforces NetworkPolicy; kind's does not.
+Sandbox pools are isolated per release. The pods of a pool this chart runs carry `evalsi.dev/sandbox-pool: <release>-sandbox-pool`, and the `<release>-sandbox-pool-pods` NetworkPolicy lets only that pool reach them and lets them reach only that pool, so two releases in one namespace cannot reach each other's sandbox pods. The general `<release>-sandbox-pods` policy covers the pods of SandboxClass pools, which are shared by design. This needs a CNI that enforces NetworkPolicy; kind's does not.
 
 The other two charts follow the same rule and refer to the evalsi release by value:
 
@@ -172,18 +172,18 @@ kubectl get evalruns -n evalsi
 kubectl wait evalrun/capitals -n evalsi --for=condition=Succeeded --timeout=30m
 ```
 
-- The project is the `evals.si/project` label, else the namespace. The operator creates the project when the server does not know it. It acts through the API as an owner, so the label may name a project other than the namespace only for resources in the release's namespace, or in namespaces mapped to that project with `operator.projectNamespaces` (for example `{support: [team-a]}`; `["*"]` for every namespace). Any other label is refused at admission, and by the controllers when the webhooks are off.
+- The project is the `evalsi.dev/project` label, else the namespace. The operator creates the project when the server does not know it. It acts through the API as an owner, so the label may name a project other than the namespace only for resources in the release's namespace, or in namespaces mapped to that project with `operator.projectNamespaces` (for example `{support: [team-a]}`; `["*"]` for every namespace). Any other label is refused at admission, and by the controllers when the webhooks are off.
 - The spec cannot change after creation (apply a new `EvalRun`); deleting the resource cancels the run, and its results stay on the server.
 - `Succeeded` means every gate passed; `Failed`, that a gate failed; `Error`, that the run could not finish (resume it through the API, `RunService.ResumeRun`).
 
 **`OnlineEvalPolicy`** is a policy file applied as a resource. The operator applies it on every spec change, deletes it with the resource, and mirrors its counters (`tracesSeen`, `tracesEvaluated`, ...). Policy names are global on the server: a policy of the same name in another project is reported as a `Conflict`, not taken over.
 
-**`TraceSource`** is a [trace source](trace-sources.md) applied as a resource: a store such as MLflow that evalsid reads traces from, scores, and writes the scores back to. The operator applies it on every spec change, deletes it with the resource, and mirrors its phase, watermark, lag and counters (`kubectl get tracesources`). Only namespace admins may create one (the aggregated `evalsi-admin` role), as only the API's `admin` role holds `sources.write`. The chart's `sources.secrets` mounts the Secrets a source's `credentials.file` names, `sources.allowHosts` lists the plain-HTTP or in-cluster stores the server may reach, `networkPolicy.egress` adds an egress policy for evalsid, and `prometheusRule.enabled` adds alerts on source lag and failures. An operator from before the `TraceSource` CRD keeps running without it: Helm does not upgrade CRDs, so apply `deploy/helm/evalsi-crds/crds/evals.si_tracesources.yaml` when upgrading.
+**`TraceSource`** is a [trace source](trace-sources.md) applied as a resource: a store such as MLflow that evalsid reads traces from, scores, and writes the scores back to. The operator applies it on every spec change, deletes it with the resource, and mirrors its phase, watermark, lag and counters (`kubectl get tracesources`). Only namespace admins may create one (the aggregated `evalsi-admin` role), as only the API's `admin` role holds `sources.write`. The chart's `sources.secrets` mounts the Secrets a source's `credentials.file` names, `sources.allowHosts` lists the plain-HTTP or in-cluster stores the server may reach, `networkPolicy.egress` adds an egress policy for evalsid, and `prometheusRule.enabled` adds alerts on source lag and failures. An operator from before the `TraceSource` CRD keeps running without it: Helm does not upgrade CRDs, so apply `deploy/helm/evalsi-crds/crds/evalsi.dev_tracesources.yaml` when upgrading.
 
 **`Evaluator`** runs your evaluator plugin: an image with your package installed on top of the evalsi image, serving the pools you name, optionally scaled by KEDA.
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: Evaluator
 metadata: {name: support-graders, namespace: evalsi}
 spec:
@@ -198,7 +198,7 @@ Without `spec.configMap`, the worker uses the release's worker config and gets w
 **`CheckpointServer`** serves a model checkpoint with vLLM: the operator runs a Deployment (one pod per replica, `Recreate` so a new pod finds the GPUs free, `/dev/shm` as memory, a startup probe that allows 30 minutes to load) and a Service, and writes the OpenAI-compatible URL into `status.endpoint` and `Ready` into its conditions (`kubectl get checkpointservers`). It explicitly runs `vllm serve`; the image must provide that executable, or `spec.command` must supply a compatible serving command. `spec.checkpointClaim` mounts a PVC read-only at `/checkpoints`; `spec.model` is a path under it (or a model id); `spec.lora: true` serves a base model that accepts adapters loaded at runtime; `spec.apiKeySecret` (key `api-key`) makes the server require a bearer token. The [checkpoint watcher](fine-tuning.md#serving-checkpoints-with-the-operator) creates one per checkpoint and deletes it afterwards.
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: CheckpointServer
 metadata: {name: step-200, namespace: evalsi}
 spec:
@@ -208,12 +208,12 @@ spec:
   resources: {limits: {nvidia.com/gpu: "1"}}
 ```
 
-It runs arbitrary images with GPUs, so, like `Evaluator`, it is in the aggregated edit role. An operator from before the `CheckpointServer` CRD keeps running without it: apply `deploy/helm/evalsi-crds/crds/evals.si_checkpointservers.yaml` when upgrading.
+It runs arbitrary images with GPUs, so, like `Evaluator`, it is in the aggregated edit role. An operator from before the `CheckpointServer` CRD keeps running without it: apply `deploy/helm/evalsi-crds/crds/evalsi.dev_checkpointservers.yaml` when upgrading.
 
 **`SandboxClass`** (cluster-scoped) is a sandbox pool: the isolation ladder, the minimum level, and the rungs' settings. The operator runs `evalsi-sandbox-<name>` (a Deployment and its Service) and writes the address workers use into `status.address`. Point `sandbox.address` at it. Because the kind is cluster-scoped, reconciling it needs a ClusterRoleBinding, so it is opt-in: set `operator.sandboxClasses=true` on both the `evalsi-crds` and the `evalsi` charts (or use the `evalsi` chart's own pool, `sandbox.pool`, which needs no cluster permission).
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: SandboxClass
 metadata: {name: gvisor}
 spec:
@@ -226,15 +226,15 @@ spec:
 
 The `EvalRun`, `OnlineEvalPolicy` and `TraceSource` schemas are generated from the API's messages, so `kubectl explain evalrun.spec.target` documents a field, and a wrong type (a string where `trials` wants a number) fails at the API server. Run files may use either `snake_case` or `camelCase` names, enums by name, and durations such as `10m`.
 
-Every `evals.si` resource gets `evals.si/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun`, `OnlineEvalPolicy` and `TraceSource` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The webhook then asks evalsid whether it would accept the resource (`validate_only`): a variable the project has no [credential grant](identity.md#8-credentials-which-worker-secrets-a-project-may-use) for, a judge it may not use, a trace source's endpoint the server may not reach, or a spec the server refuses fails at `kubectl apply` too. When evalsid does not answer within 5 seconds, or the project does not exist yet (the operator creates it), the resource is admitted with a warning and its status reports the outcome. The `admin`, `edit` and `view` roles cover the resources through aggregation (`TraceSource`s: `admin` only).
+Every `evalsi.dev` resource gets `evalsi.dev/created-by`: the user the API server authenticated for the create request, which the creator cannot set or change. `EvalRun`, `OnlineEvalPolicy` and `TraceSource` specs are checked against the API's schema on admission, with the CLI's rules, so a misspelled field fails at `kubectl apply`, not minutes later. The webhook then asks evalsid whether it would accept the resource (`validate_only`): a variable the project has no [credential grant](identity.md#8-credentials-which-worker-secrets-a-project-may-use) for, a judge it may not use, a trace source's endpoint the server may not reach, or a spec the server refuses fails at `kubectl apply` too. When evalsid does not answer within 5 seconds, or the project does not exist yet (the operator creates it), the resource is admitted with a warning and its status reports the outcome. The `admin`, `edit` and `view` roles cover the resources through aggregation (`TraceSource`s: `admin` only).
 
 #### When the API server cannot reach the webhooks
 
-The API server calls the webhooks on the operator pod's IP. On EKS with Calico's overlay (IP-in-IP or VXLAN), the managed control plane cannot open connections to overlay pod IPs, so every create of an `evals.si` resource fails with `Address is not allowed` or a timeout, and `failurePolicy: Fail` refuses it ([Tigera's note](https://docs.tigera.io/calico/latest/getting-started/kubernetes/managed-public-cloud/eks)). Kubernetes itself and the operator are fine; the 2026-10-12 [EKS run](../verification/EKS-2026-10-12.md) saw exactly this (EKS-R1). Three ways out, best first:
+The API server calls the webhooks on the operator pod's IP. On EKS with Calico's overlay (IP-in-IP or VXLAN), the managed control plane cannot open connections to overlay pod IPs, so every create of an `evalsi.dev` resource fails with `Address is not allowed` or a timeout, and `failurePolicy: Fail` refuses it ([Tigera's note](https://docs.tigera.io/calico/latest/getting-started/kubernetes/managed-public-cloud/eks)). Kubernetes itself and the operator are fine; the 2026-10-12 [EKS run](../verification/EKS-2026-10-12.md) saw exactly this (EKS-R1). Three ways out, best first:
 
-1. **Use the VPC CNI** for pod networking, whose pod IPs the control plane can reach. Nothing to change in Evals.si.
+1. **Use the VPC CNI** for pod networking, whose pod IPs the control plane can reach. Nothing to change in Evalsi.
 2. **Put the webhooks on the node network.** Set `operator.hostNetwork: true` on the `evalsi` release. The operator pod then listens on its node's address (`dnsPolicy: ClusterFirstWithHostNet`), which the control plane can reach. The cost: host networking is refused by the Pod Security `baseline` and `restricted` levels, so the release's namespace must be `privileged` (or exempt the operator pod), and the three ports (`operator.webhookPort`, `metricsPort`, `healthPort`; 9443, 8080 and 8081) become node ports, so every operator replica needs a node of its own and none may clash with another host-network pod. Keep node security groups from exposing them beyond the cluster. The actual chart option passed [bounded EKS verification on 2026-10-17](../verification/EKS-2026-10-17.md): valid and invalid CREATE dry runs behaved, an unavailable operator caused admission to fail closed, recovery restored admission, and a parity `EvalRun` completed.
-3. **Turn the webhooks off** (`operator.webhooks: false` on the `evalsi` release and `webhooks.enabled: false` on `evalsi-crds`). Specs are then checked by the controllers and the API only, so a bad spec fails in the resource's status, not at `kubectl apply`, and `evals.si/created-by` is not stamped.
+3. **Turn the webhooks off** (`operator.webhooks: false` on the `evalsi` release and `webhooks.enabled: false` on `evalsi-crds`). Specs are then checked by the controllers and the API only, so a bad spec fails in the resource's status, not at `kubectl apply`, and `evalsi.dev/created-by` is not stamped.
 
 Under Istio STRICT mTLS the symptom is the same but the cause differs; see `operator.istio.peerAuthentication` below.
 
@@ -260,7 +260,7 @@ The **pod rung** creates one pod per sandbox from the task's image. `evalsi-gues
 
 Both fail the rung's probe, and the error names the way out: run the pool with `mode: privileged` (bubblewrap in a privileged pod, which needs a namespace that allows it), or use the pod rung (`ladder: [pod]`), which needs neither. `evalsid sandbox probe` shows the reason.
 
-The pod rung's network isolation has two layers: the pool's logging egress proxy, and a NetworkPolicy that admits only the pool. `networkPolicyEnforced` declares that the CNI enforces the policy, which makes isolation report `full`. Evals.si does not trust the declaration: when the probe runs, a canary pod tries to connect to the Kubernetes API, which the policy forbids. If the connection gets through, the probe prints a `warning`, and sandboxes report `partial` with the reason in their isolation notes. This was seen on Calico with Istio ambient (the policy did not stop a labelled pod's egress); the cause there is not established, and a mesh that redirects a pod's traffic through its own proxy is the suspect. The [2026-10-17 kind/Istio check](../verification/LEFTOVERS-2026-10-17.md)
+The pod rung's network isolation has two layers: the pool's logging egress proxy, and a NetworkPolicy that admits only the pool. `networkPolicyEnforced` declares that the CNI enforces the policy, which makes isolation report `full`. Evalsi does not trust the declaration: when the probe runs, a canary pod tries to connect to the Kubernetes API, which the policy forbids. If the connection gets through, the probe prints a `warning`, and sandboxes report `partial` with the reason in their isolation notes. This was seen on Calico with Istio ambient (the policy did not stop a labelled pod's egress); the cause there is not established, and a mesh that redirects a pod's traffic through its own proxy is the suspect. The [2026-10-17 kind/Istio check](../verification/LEFTOVERS-2026-10-17.md)
 reproduced this leak: isolation became partial and multi-service allocation was
 refused. An explicit ambient opt-out on **both the pool and its sandbox pods**
 then passed the canary and cross-trial denial controls. Use a dedicated pool
@@ -290,7 +290,7 @@ What each chart creates, and who has to install it.
 
 | Service account | Can | Why |
 |---|---|---|
-| `evalsi-operator` | Deployments, Services, ConfigMaps, KEDA `ScaledObject`s, leases, events, and the `evals.si` resources, in this namespace | Runs `Evaluator` pools and `SandboxClass` pools, leader election, status |
+| `evalsi-operator` | Deployments, Services, ConfigMaps, KEDA `ScaledObject`s, leases, events, and the `evalsi.dev` resources, in this namespace | Runs `Evaluator` pools and `SandboxClass` pools, leader election, status |
 | `evalsi-sandboxd` | Get, list, watch, create and delete pods in this namespace; nothing else | The pod rung: one pod per sandbox |
 | `evalsi-worker` | Nothing: no API token is mounted | Workers talk only to `evalsid`, NATS and the sandbox pools |
 | `evalsi` | Nothing beyond what every service account has | `evalsid` reads the cluster's service-account issuer and keys (`/.well-known/openid-configuration`, `/openid/v1/jwks`), which Kubernetes grants all service accounts through `system:service-account-issuer-discovery` |
@@ -302,11 +302,11 @@ The operator watches only its own namespace unless `operator.allNamespaces` is s
 | Object | Scope | Notes |
 |---|---|---|
 | The five CRDs | cluster | Needed for `kubectl apply` of runs, policies and trace sources, and for the operator |
-| Validating and mutating webhook configurations | cluster | Only for `evals.si` resources; `failurePolicy: Fail` |
-| `evalsi-edit`, `evalsi-admin`, `evalsi-view` | cluster | Aggregated into the built-in `admin`, `edit` and `view` roles, so namespace admins and editors manage the resources (trace sources: admins only); they grant Evals.si itself nothing |
+| Validating and mutating webhook configurations | cluster | Only for `evalsi.dev` resources; `failurePolicy: Fail` |
+| `evalsi-edit`, `evalsi-admin`, `evalsi-view` | cluster | Aggregated into the built-in `admin`, `edit` and `view` roles, so namespace admins and editors manage the resources (trace sources: admins only); they grant Evalsi itself nothing |
 | `evalsi-operator` ClusterRole and binding | cluster | Only if `operator.sandboxClasses` (read and update SandboxClasses, nothing else) or `operator.allNamespaces` is set; both are off by default |
 
-`operator.allNamespaces` is the one broad grant: the `evals.si` resources in every namespace, and creating Deployments and `ScaledObject`s in any of them (an `Evaluator`'s workers run in its own namespace). Leave it off and install the `evalsi` chart per namespace instead, if that is too much.
+`operator.allNamespaces` is the one broad grant: the `evalsi.dev` resources in every namespace, and creating Deployments and `ScaledObject`s in any of them (an `Evaluator`'s workers run in its own namespace). Leave it off and install the `evalsi` chart per namespace instead, if that is too much.
 
 **`evalsi-sandboxd` (a cluster admin, or a namespace that allows it).** No RBAC at all, but its pods need privileges: a pod user namespace with an unmasked `/proc` (`mode: bwrap`), a privileged container (`mode: privileged`), or `/dev/kvm` (`mode: firecracker`). The namespace must allow them, which usually means Pod Security `privileged`.
 
@@ -326,7 +326,7 @@ What changes:
 |---|---|---|
 | Cluster-scoped objects | CRDs, webhooks, aggregated roles | None |
 | Runs and policies | `kubectl apply`, the CLI, the API | The CLI and the API (`evalsi run -f run.yaml --server ...`, `evalsi policy apply`); the same files |
-| Who started a run | Webhook-stamped `evals.si/created-by`, and the caller on the server | The caller on the server (its token or key), in the audit log |
+| Who started a run | Webhook-stamped `evalsi.dev/created-by`, and the caller on the server | The caller on the server (its token or key), in the audit log |
 | Evaluator plugins | `Evaluator` resources | A pool in `workers.pools` with your image (`workers.pools.<pool>.image`, built `FROM` the evalsi image) |
 | Sandboxes | `evalsi-sandboxd` or a `SandboxClass` | The chart's pool, `evalsi-sandbox-pool`: a pod per sandbox, or Landlock |
 | Pod Security | `restricted` for the `evalsi` chart; sandbox pools need more | `restricted` throughout |
@@ -342,7 +342,7 @@ If a cluster admin later installs `evalsi-crds`, turn the operator back on (`ope
 
 ## Identity
 
-The chart trusts the cluster's service-account tokens projected for the `evals.si` audience (see [identity](identity.md#on-kubernetes-service-account-tokens)), and makes the operator's service account an owner. CI jobs and agents in the cluster sign in the same way: bind roles to `user:kubernetes/system:serviceaccount:<namespace>:<name>` or `group:kubernetes/system:serviceaccounts:<namespace>`, mount a projected token, and set `EVALSI_TOKEN_FILE`.
+The chart trusts the cluster's service-account tokens projected for the `evalsi.dev` audience (see [identity](identity.md#on-kubernetes-service-account-tokens)), and makes the operator's service account an owner. CI jobs and agents in the cluster sign in the same way: bind roles to `user:kubernetes/system:serviceaccount:<namespace>:<name>` or `group:kubernetes/system:serviceaccounts:<namespace>`, mount a projected token, and set `EVALSI_TOKEN_FILE`.
 
 ## What CI checks
 

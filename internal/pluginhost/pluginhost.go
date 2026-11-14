@@ -25,10 +25,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
-	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1/pluginv1alpha1connect"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	harnessv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/harness/v1alpha1"
+	pluginv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1/pluginv1alpha1connect"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 // Worker is what the rest of the server needs from an evaluator worker.

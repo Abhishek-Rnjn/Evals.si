@@ -3,7 +3,7 @@
 # a rerun injects exactly the same ones.
 #   evalsi run -f faults.yaml --output faults.json    # exit 3: one trial runs out of steps
 # Walkthrough: docs/tutorials/06-faults-injection-and-approvals.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-faults}
 spec:

@@ -10,7 +10,7 @@ labels: bug
 <!-- Commands, a run spec or a trace that triggers it. Remove secrets. -->
 
 **Version and environment**
-- Evals.si version or commit:
+- Evalsi version or commit:
 - How you run it (binary, Helm chart, operator), and the Kubernetes version if any:
 - Sandbox rung in use (firecracker, bwrap, landlock, pod):
 

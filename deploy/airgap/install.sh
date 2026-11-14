@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs Evals.si from an air-gapped bundle: pushes its images to your
+# Installs Evalsi from an air-gapped bundle: pushes its images to your
 # registry (or loads them into a kind cluster), then installs the charts
 # pulling only from there.
 #

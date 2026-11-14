@@ -12,10 +12,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/wasmeval"
 )
 
 // TestWasmPlugins builds the example Wasm plugin, installs it with the CLI,

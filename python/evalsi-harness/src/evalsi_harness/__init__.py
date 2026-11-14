@@ -1,6 +1,6 @@
-"""evalsi-harness: the light built-in agent harness for Evals.si (design §11).
+"""evalsi-harness: the light built-in agent harness for Evalsi (design §11).
 
-It drives an agent through a task in an Evals.si sandbox: the built-in
+It drives an agent through a task in an Evalsi sandbox: the built-in
 tool-calling agent on any OpenAI-compatible or Anthropic model, or a
 bring-your-own agent (A2A, MCP, OpenAI Responses, HTTP, or a CLI run in the
 sandbox). It provides sandbox and MCP tools, budgets, a simulated user,

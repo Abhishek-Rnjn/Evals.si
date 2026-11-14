@@ -3,7 +3,7 @@ package annotate
 import (
 	"math"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 // alphaNominal is Krippendorff's alpha for nominal values. Units are the

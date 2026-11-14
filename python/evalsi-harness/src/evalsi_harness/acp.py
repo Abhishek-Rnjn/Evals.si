@@ -260,7 +260,7 @@ class ACPConnector:
             {
                 "protocolVersion": PROTOCOL_VERSION,
                 "clientCapabilities": caps,
-                "clientInfo": {"name": "evalsi-harness", "title": "Evals.si harness"},
+                "clientInfo": {"name": "evalsi-harness", "title": "Evalsi harness"},
             },
             min(timeout, 120.0),
         )

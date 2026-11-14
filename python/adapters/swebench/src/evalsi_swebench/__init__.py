@@ -1,4 +1,4 @@
-"""SWE-bench as Evals.si agent tasks.
+"""SWE-bench as Evalsi agent tasks.
 
 The importer ``swebench://`` turns SWE-bench instances (in the SWE-bench 5
 format, which carries each instance's image, eval script, log parser and

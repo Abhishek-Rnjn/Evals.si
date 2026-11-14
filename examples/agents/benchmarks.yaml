@@ -4,7 +4,7 @@
 
 # Terminal-Bench 2 / any Harbor dataset: a directory of task directories
 # under datasets_dir. The Dockerfile is translated (FROM, RUN, COPY, ...).
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: terminal-bench}
 spec:
@@ -15,7 +15,7 @@ spec:
   evaluators: [{ref: task-success}, {ref: code-quality}]   # code-quality uses the judge
 ---
 # tau2-bench: needs the taubench adapter and tau2's data (TAU2_DATA_DIR).
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tau-airline}
 spec:
@@ -31,7 +31,7 @@ spec:
   trials: 4                                               # reports pass^4
 ---
 # BFCL: needs the bfcl adapter.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: bfcl-simple}
 spec:

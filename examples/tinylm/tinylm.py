@@ -2,7 +2,7 @@
 """TinyLM: a fake autoregressive chat model that calls tools.
 
 It speaks the OpenAI chat-completions API (``POST /v1/chat/completions``,
-streamed or not), so Evals.si's built-in agent harness can drive it exactly as
+streamed or not), so Evalsi's built-in agent harness can drive it exactly as
 it drives a real model, with no API key, no GPU and no network.
 
 It is not a neural network. Each turn a small *policy* reads the conversation

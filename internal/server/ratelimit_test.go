@@ -12,11 +12,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
 )
 
 func testLimiter(t *testing.T, rl config.RateLimits) (*limiter, *time.Time) {

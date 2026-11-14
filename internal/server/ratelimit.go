@@ -17,10 +17,10 @@ import (
 	"connectrpc.com/connect"
 	"golang.org/x/time/rate"
 
-	"github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/gen/go/agentgateway/dev/ext_mcp/ext_mcpconnect"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
 )
 
 // Traffic classes, each with its own bucket per caller.

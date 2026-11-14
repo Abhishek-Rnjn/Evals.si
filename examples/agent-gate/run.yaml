@@ -3,7 +3,7 @@
 #   pip install evalsi evalsi-harness
 #   evalsi run -f run.yaml          # exit 0: the gate passes
 # The guide is docs/guides/gate-an-agent-in-ci.md (https://evalsi.dev/docs/guides/gate-an-agent-in-ci/).
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: calc-agent-gate}
 spec:

@@ -1,1 +1,1 @@
-"""Benchmark task formats as Evals.si agent tasks."""
+"""Benchmark task formats as Evalsi agent tasks."""

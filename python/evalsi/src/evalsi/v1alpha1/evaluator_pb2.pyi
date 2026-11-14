@@ -228,7 +228,7 @@ class EvaluatorManifest(_message.Message):
     pack: _builtins.str
     scope: Global___Scope.ValueType
     tier: _builtins.str
-    """"native" (ships with Evals.si), "wrapped" (a shim over another
+    """"native" (ships with Evalsi), "wrapped" (a shim over another
     framework) or "community" (third-party, from a plugin index).
     """
     runtime: _builtins.str

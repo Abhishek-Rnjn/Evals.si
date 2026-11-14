@@ -1,6 +1,6 @@
 # Trace sources: score traces you already keep in MLflow, Phoenix, Langfuse, LangSmith or ClickHouse
 
-If your agents already send traces to MLflow, Arize Phoenix, Langfuse, LangSmith or a Collector ClickHouse trace table, Evals.si can read them from there. A **trace source** pulls the store's traces, scores them with your [online policies](end-to-end.md), and writes the scores back to that store. ClickHouse scores are queryable in a companion table; tracing applications need their own query or integration to display them. Nothing changes on the agents' side: no second exporter, and history from before Evals.si was installed can be read too.
+If your agents already send traces to MLflow, Arize Phoenix, Langfuse, LangSmith or a Collector ClickHouse trace table, Evalsi can read them from there. A **trace source** pulls the store's traces, scores them with your [online policies](end-to-end.md), and writes the scores back to that store. ClickHouse scores are queryable in a companion table; tracing applications need their own query or integration to display them. Nothing changes on the agents' side: no second exporter, and history from before Evalsi was installed can be read too.
 
 A pulled trace is an ordinary trace of the source's project. It is stored, shown in the web UI with its trajectory, graded by every policy that selects it, and labelled `source: <name>` so a policy can select it.
 
@@ -20,11 +20,11 @@ A pulled trace is an ordinary trace of the source's project. It is stored, shown
 Set `connector: mlflow`, `variant: databricks` and the workspace HTTPS URL as `endpoint`. `locations` is either numeric experiment IDs or Unity Catalog schemas written `catalog.schema`, not both in one source (MLflow's own client refuses the mix; make two sources). Table-prefix locations and experiment names are not built.
 
 - **Experiments** read through the V3 search, with spans from the trace's signed artifact download. Artifact requests use only the download headers the workspace returns, never the bearer token, and refuse redirects. Egress must allow the artifact storage endpoint too.
-- **Unity Catalog schemas** are searched on a SQL warehouse: set `auth.databricks.sql_warehouse_id`. The search is a long-running operation that the connector polls (up to five minutes a cycle, then the manager tries again). A trace's ID in Evals.si is `catalog.schema/<trace id>`, which is what the V4 API addresses it by.
-- **Credential.** Either a personal access token or bearer token, or a service principal: set `auth.databricks.client_id`, and the credential is the principal's OAuth secret. A service principal needs an `https` endpoint, since the secret is sent in HTTP Basic authentication. Evals.si exchanges it for an access token (client-credentials grant, scope `all-apis`) at the workspace's own `/oidc/v1/token`, caches it (across polls, keyed by endpoint, client ID and a hash of the secret, so a rotated secret gets a new token) until a minute before it expires, and gets a new one once if the workspace answers 401. The token endpoint is always the source's own endpoint host, so the credential grant for that host covers the exchange; the secret goes nowhere else.
+- **Unity Catalog schemas** are searched on a SQL warehouse: set `auth.databricks.sql_warehouse_id`. The search is a long-running operation that the connector polls (up to five minutes a cycle, then the manager tries again). A trace's ID in Evalsi is `catalog.schema/<trace id>`, which is what the V4 API addresses it by.
+- **Credential.** Either a personal access token or bearer token, or a service principal: set `auth.databricks.client_id`, and the credential is the principal's OAuth secret. A service principal needs an `https` endpoint, since the secret is sent in HTTP Basic authentication. Evalsi exchanges it for an access token (client-credentials grant, scope `all-apis`) at the workspace's own `/oidc/v1/token`, caches it (across polls, keyed by endpoint, client ID and a hash of the secret, so a rotated secret gets a new token) until a minute before it expires, and gets a new one once if the workspace answers 401. The token endpoint is always the source's own endpoint host, so the credential grant for that host covers the exchange; the secret goes nowhere else.
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata: {name: lakehouse-agents}
 spec:
@@ -46,7 +46,7 @@ The credential is a JSON object, since a source has one credential value:
 {"access_key_id": "AKIA...", "secret_access_key": "...", "session_token": "only for temporary credentials"}
 ```
 
-It is granted and stored like any other credential. **Evals.si does not use the server's own AWS identity (IRSA, pod identity, instance profile) for a source**: a project editor could then have the server sign requests as its role, past the credential grants. Use an IAM user, or a role whose temporary credentials you refresh into the Secret, limited to the one tracking server.
+It is granted and stored like any other credential. **Evalsi does not use the server's own AWS identity (IRSA, pod identity, instance profile) for a source**: a project editor could then have the server sign requests as its role, past the credential grants. Use an IAM user, or a role whose temporary credentials you refresh into the Secret, limited to the one tracking server.
 
 ### Azure ML
 
@@ -57,9 +57,9 @@ It is granted and stored like any other credential. **Evals.si does not use the 
 Set `connector: langsmith` and, as `endpoint`, the API URL your agents' `LANGSMITH_ENDPOINT` names: `https://api.smith.langchain.com`, `https://eu.api.smith.langchain.com`, or a self-hosted `https://<host>/api/v1`. `locations` lists one or more tracing projects, by name or ID; names are looked up once per poll cycle, and a name LangSmith does not have is the source's error. The credential is a LangSmith API key, or `<workspace ID>:<API key>` for an organization key that spans workspaces (the workspace is sent as `X-Tenant-Id`).
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
-metadata: {name: support-langsmith, labels: {evals.si/project: studio}}
+metadata: {name: support-langsmith, labels: {evalsi.dev/project: studio}}
 spec:
   connector: langsmith
   endpoint: https://api.smith.langchain.com
@@ -82,7 +82,7 @@ the real Python worker, and checks:
 - project-name lookup and historical traces crossing a listing window;
 - an unfinished trace being deferred, then scored after completion;
 - `tool-errors` feedback read back from LangSmith, with repeated polls deduplicated;
-- input, output and trajectory in Evals.si's trace API;
+- input, output and trajectory in Evalsi's trace API;
 - feedback updates clearing the old comment, replay after a lost local receipt,
   and recreation after deletion, all retaining the same feedback ID.
 
@@ -117,7 +117,7 @@ HTTPS 8443) as `endpoint`, and exactly one `database.table` as `locations`.
 Identifiers use letters, digits and underscores and start with a letter or
 underscore. The supported input is the Collector contrib `clickhouseexporter`
 default **Map** trace schema (`otel_traces` by default), pinned to v0.162.0 in
-tests. Table names can differ; the columns must match that schema. Evals.si's
+tests. Table names can differ; the columns must match that schema. Evalsi's
 own ClickHouse storage tables and the exporter's experimental JSON schema
 are different formats.
 
@@ -129,9 +129,9 @@ need `sources.allow_hosts`, and named credentials need the usual project/host
 grant, including when supplied through a mounted Secret.
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
-metadata: {name: support-clickhouse, labels: {evals.si/project: studio}}
+metadata: {name: support-clickhouse, labels: {evalsi.dev/project: studio}}
 spec:
   connector: clickhouse
   endpoint: https://clickhouse.example.com:8443
@@ -189,9 +189,9 @@ each query window as an ordinary batch run. Applying a schedule requires both
 grants. The same YAML works through `evalsi source apply` and the operator.
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
-metadata: {name: studio-hourly, labels: {evals.si/project: studio}}
+metadata: {name: studio-hourly, labels: {evalsi.dev/project: studio}}
 spec:
   connector: mlflow
   endpoint: https://mlflow.example.com
@@ -242,7 +242,7 @@ window IDs reconcile a restart after run insertion without inserting it twice.
 ## Trace redaction
 
 Both direct OTLP exports and pulled traces use the server's `traces.redaction`
-rules before Evals.si stores or evaluates them. By default, values under
+rules before Evalsi stores or evaluates them. By default, values under
 `password`, `passwd`, `authorization`, `cookie`, `set-cookie`, `token`, `secret`,
 `api_key`, `api-key`, `apikey`, `private_key`, and names ending in `_token`,
 `_secret`, `_password` or `_api_key` (such as `x-api-key`, `id_token` and
@@ -280,7 +280,7 @@ precede redaction, and binary trace/span IDs remain unchanged.
 
 Matched values are unavailable to selectors, evaluators, promotions and sinks.
 Rules can therefore change scores or selection. They do not erase existing
-Evals.si data or change the upstream store, and do not apply to direct Evaluate
+Evalsi data or change the upstream store, and do not apply to direct Evaluate
 requests or offline run datasets. Detectors may miss PII or match non-PII; test
 your own data before enabling them. Connector error logs and stored source
 error status apply the text rules, but arbitrary external error text is not
@@ -316,11 +316,11 @@ Creating and changing sources needs `sources.write`, which only the `admin` role
 ## 2. Apply a source
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata:
   name: studio-mlflow
-  labels: {evals.si/project: studio}
+  labels: {evalsi.dev/project: studio}
 spec:
   connector: mlflow
   endpoint: https://mlflow.example.com
@@ -345,9 +345,9 @@ kubectl apply -f studio-mlflow.yaml                                  # with the 
 A policy for the pulled traces selects on their labels:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
-metadata: {name: studio-agents, labels: {evals.si/project: studio}}
+metadata: {name: studio-agents, labels: {evalsi.dev/project: studio}}
 spec:
   selector: 'labels["source"] == "studio-mlflow"'
   stages:
@@ -355,7 +355,7 @@ spec:
   window: 1h
 ```
 
-Write-back replaces the MLflow, Langfuse and Phoenix [sinks'](../../examples/server/evalsi.yaml) `trace_feedback` for the traces a source reads: do not turn on both for the same store, or each score is written twice. `trace_feedback` stays the way to write back traces that reach Evals.si over OTLP.
+Write-back replaces the MLflow, Langfuse and Phoenix [sinks'](../../examples/server/evalsi.yaml) `trace_feedback` for the traces a source reads: do not turn on both for the same store, or each score is written twice. `trace_feedback` stays the way to write back traces that reach Evalsi over OTLP.
 
 Trace tags (MLflow) and attributes or metadata (Phoenix, Langfuse, LangSmith) named `evalsi.label.<key>` become labels, so an agent harness that tags its traces `evalsi.label.workflow` can select per workflow.
 

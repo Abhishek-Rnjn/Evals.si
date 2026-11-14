@@ -13,10 +13,10 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	pb "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 func text(value string) *pb.Content { return &pb.Content{Kind: &pb.Content_Text{Text: value}} }

@@ -32,7 +32,7 @@ def kube(ns: str, *args: str, data: bytes | None = None) -> bytes:
 
 
 def token(ns: str, name: str) -> str:
-    return kube(ns, "create", "token", name, "--audience=evals.si").decode().strip()
+    return kube(ns, "create", "token", name, "--audience=evalsi.dev").decode().strip()
 
 
 def s3(ns: str, release: str) -> Any:

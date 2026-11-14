@@ -4,11 +4,11 @@
 # checks its [n] against the documents.
 #
 # Needs a judge (see deepagents-deep-research.yaml); CI does not run this suite.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: dsh-deep-research
-  labels: {evals.si/project: demo}
+  labels: {evalsi.dev/project: demo}
 spec:
   target:
     agent:

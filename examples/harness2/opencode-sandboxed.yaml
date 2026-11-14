@@ -15,7 +15,7 @@
 #
 # Fill in before running: REPLACE_WITH_PINNED_VERSION, the model (provider/model),
 # the model host in allow_hosts, OPENCODE_API_KEY on the worker, and the dataset.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: harness2-opencode-sandboxed

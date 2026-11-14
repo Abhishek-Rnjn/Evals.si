@@ -1,7 +1,7 @@
 [project]
 name = "evalsi-adapter-taubench"
 version = "0.1.0"
-description = "tau2-bench domains as Evals.si agent tasks: tools, a simulated user and database-state grading."
+description = "tau2-bench domains as Evalsi agent tasks: tools, a simulated user and database-state grading."
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.14"
 dependencies = [

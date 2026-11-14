@@ -64,7 +64,7 @@ class HarnessManifest(_message.Message):
     version: _builtins.str
     description: _builtins.str
     uses_sandbox: _builtins.bool
-    """It runs tasks in an Evals.si sandbox."""
+    """It runs tasks in an Evalsi sandbox."""
     @_builtins.property
     def task_formats(self) -> _containers.RepeatedScalarFieldContainer[_builtins.str]:
         """Task formats it understands, for example "evalsi", "swebench", "terminal-bench"."""

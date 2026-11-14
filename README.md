@@ -1,13 +1,13 @@
 <div align="center">
 
-# Evals.si
+# Evalsi
 
 **Evaluate AI before you ship, while it runs, and as you train it.**
 
 Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs and CI gates, live trace scoring, and RL rewards for training. Built first for agents. Pluggable, sandboxed and self-hosted, from a laptop to Kubernetes.
 
-[![CI](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/ci.yml)
-[![Docs](https://github.com/Abhishek-Rnjn/Evals.si/actions/workflows/website.yml/badge.svg)](https://evalsi.dev/)
+[![CI](https://github.com/Abhishek-Rnjn/evalsi/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-Rnjn/evalsi/actions/workflows/ci.yml)
+[![Docs](https://github.com/Abhishek-Rnjn/evalsi/actions/workflows/website.yml/badge.svg)](https://evalsi.dev/)
 [![PyPI](https://img.shields.io/pypi/v/evalsi.svg)](https://pypi.org/project/evalsi/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Go 1.26+](https://img.shields.io/badge/go-1.26%2B-00ADD8.svg)
@@ -30,9 +30,9 @@ Agents, RAG pipelines, LLMs and models on one set of evaluators: sandboxed runs 
 
 ---
 
-Evals.si evaluates an AI system across its life. **Before you ship**, it runs agents, RAG pipelines and models on datasets and sandboxed tasks, and fails the build when a gate fails. **While it runs**, it scores live traces as they arrive and writes the scores back to the MLflow, Phoenix or Langfuse your team already uses. **As you train it**, the same evaluators become RL rewards and checkpoint checks for fine-tuning. One set of evaluators serves all three, so a metric means the same thing in CI, in production and in training.
+Evalsi evaluates an AI system across its life. **Before you ship**, it runs agents, RAG pipelines and models on datasets and sandboxed tasks, and fails the build when a gate fails. **While it runs**, it scores live traces as they arrive and writes the scores back to the MLflow, Phoenix or Langfuse your team already uses. **As you train it**, the same evaluators become RL rewards and checkpoint checks for fine-tuning. One set of evaluators serves all three, so a metric means the same thing in CI, in production and in training.
 
-Start with the published SDK below. You do not need Evals.si's harness, a server,
+Start with the published SDK below. You do not need Evalsi's harness, a server,
 Docker or Kubernetes to score your application's recorded outputs. The
 [guided setup](docs/guides/onboarding.md) explains how to progress to live
 application evaluation and optional agent execution.
@@ -137,7 +137,7 @@ Compare two results files with `evalsi compare baseline.json candidate.json`, or
 
 Next: [gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) (free and offline, with a failing gate and a GitHub Actions workflow), [evaluate a RAG pipeline](docs/guides/evaluate-rag.md), [run an agent on sandboxed tasks](docs/guides/agent-runs.md), [score live traces](docs/guides/trace-sources.md), [train with evaluators as rewards](docs/guides/fine-tuning.md), or [score plain model outputs](#quickstart). The docs are at [evalsi.dev](https://evalsi.dev/).
 
-First time? The [tutorials](docs/tutorials/README.md) walk through installing Evals.si and its agent harness and driving a fake tool-calling model through every feature, offline, with the rough edges a first install hit in an [onboarding study](docs/tutorials/00-onboarding-study.md).
+First time? The [tutorials](docs/tutorials/README.md) walk through installing Evalsi and its agent harness and driving a fake tool-calling model through every feature, offline, with the rough edges a first install hit in an [onboarding study](docs/tutorials/00-onboarding-study.md).
 
 ## What you can evaluate
 
@@ -145,7 +145,7 @@ Agents come first, because that is where evaluation is hardest. RAG and training
 
 ### Agents
 
-Evals.si ships its own [agent harness](docs/guides/built-in-harness.md) (record and replay, sub-agents, fault injection, versioned profiles). Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. A hidden checker grades the end state, and evaluators score tool calls, trajectories, loops, step budgets, policy violations and the diff. Trials give pass@k and pass^k, and gates fail the build when an agent gets worse. In production, score traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK.
+Evalsi ships its own [agent harness](docs/guides/built-in-harness.md) (record and replay, sub-agents, fault injection, versioned profiles). Put the built-in agent, or your own over A2A, MCP, HTTP, an OpenAI Responses API or a CLI, to work on sandboxed tasks, including SWE-bench, τ-bench, Terminal-Bench and BFCL. A hidden checker grades the end state, and evaluators score tool calls, trajectories, loops, step budgets, policy violations and the diff. Trials give pass@k and pass^k, and gates fail the build when an agent gets worse. In production, score traces from LangGraph, CrewAI, the OpenAI Agents SDK, LlamaIndex and the Claude Agent SDK.
 [Gate an agent in CI](docs/guides/gate-an-agent-in-ci.md) · [Evaluate a RAG pipeline](docs/guides/evaluate-rag.md) · [Agent runs](docs/guides/agent-runs.md) · [Agent frameworks](docs/guides/agent-frameworks.md) · [Multi-service tasks](examples/multi-service/README.md) · [Harness² runs](docs/guides/harness2.md)
 
 ### RAG
@@ -160,19 +160,19 @@ Evaluators become RL rewards for TRL, verl and OpenRLHF: format checks, math equ
 
 ## How it fits with other tools
 
-Evals.si does not replace metric libraries and benchmarks. It runs them, and adds what they leave to you: running targets, gating, live scoring and isolation.
+Evalsi does not replace metric libraries and benchmarks. It runs them, and adds what they leave to you: running targets, gating, live scoring and isolation.
 
 | You want | Use |
 |---|---|
 | A library of metrics inside your own test suite | [DeepEval](docs/guides/deepeval.md) or RAGAS (both also run here as adapters) |
 | Standard benchmarks and harnesses | lm-evaluation-harness or Inspect AI (both also run here as adapters) |
-| An agent run on sandboxed tasks, graded on the end state, with pass/fail gates for CI and deploys | **Evals.si** |
-| RAG metrics split into retrieval and generation, as a gate in CI | **Evals.si** |
-| Scores on live traffic, written back to your trace store (MLflow, Phoenix, Langfuse) | **Evals.si** |
-| RL rewards and checkpoint regression checks from the same evaluators | **Evals.si** |
-| Untrusted evaluator or agent code in a sandbox, self-hosted or air-gapped | **Evals.si** |
+| An agent run on sandboxed tasks, graded on the end state, with pass/fail gates for CI and deploys | **Evalsi** |
+| RAG metrics split into retrieval and generation, as a gate in CI | **Evalsi** |
+| Scores on live traffic, written back to your trace store (MLflow, Phoenix, Langfuse) | **Evalsi** |
+| RL rewards and checkpoint regression checks from the same evaluators | **Evalsi** |
+| Untrusted evaluator or agent code in a sandbox, self-hosted or air-gapped | **Evalsi** |
 
-If you only need a handful of metrics in a pytest file, a metric library alone is simpler. Evals.si is for when evaluations become a pipeline.
+If you only need a handful of metrics in a pytest file, a metric library alone is simpler. Evalsi is for when evaluations become a pipeline.
 
 ## Highlights
 
@@ -193,7 +193,7 @@ If you only need a handful of metrics in a pytest file, a metric library alone i
 
 Each release publishes (see the [Kubernetes guide](docs/guides/kubernetes.md#installing-a-release-and-verifying-it) to verify the signatures):
 
-- **Server and CLI binaries:** Linux amd64 and arm64 archives on the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases).
+- **Server and CLI binaries:** Linux amd64 and arm64 archives on the [releases page](https://github.com/Abhishek-Rnjn/evalsi/releases).
 - **Python:** `pip install evalsi` (SDK and CLI) and `pip install evalsi-harness` (the agent harness) from PyPI; the same wheels and sdists are attached to the release. Since v0.2.0, releases also publish Linux (amd64, arm64) platform wheels that carry `evalsid` and its sandbox's `bwrap`, so `evalsi serve` and code evaluators need nothing else; v0.1.0 and other platforms get the pure-Python wheel and a separate `evalsid`.
 - **Kubernetes:** multi-architecture images at `ghcr.io/abhishek-rnjn/evalsi` and the three Helm charts as OCI artifacts, `oci://ghcr.io/abhishek-rnjn/charts/evalsi`, `evalsi-crds` and `evalsi-sandboxd`.
 
@@ -205,7 +205,7 @@ for the installed SDK quickstart.
 You need [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ for you). Running the server also needs [Go](https://go.dev/dl/) 1.26+. On Linux, the sandbox for code evaluators needs bubblewrap (see [Development](#development)).
 
 ```bash
-git clone https://github.com/Abhishek-Rnjn/Evals.si && cd Evals.si
+git clone https://github.com/Abhishek-Rnjn/evalsi && cd Evalsi
 cd python && uv sync --all-packages
 uv run evalsi eval --data ../examples/quickstart/qa.jsonl --evaluators exact-match,numeric-match,latency
 ```
@@ -321,7 +321,7 @@ uv run evalsi source apply -f ../examples/sources/studio-mlflow.yaml --server ht
 | LlamaIndex | OpenInference |
 | Claude Agent SDK | OpenInference, Claude Code's own traces |
 
-Each row is a real run of the framework, checked in and tested; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup and what each instrumentation records. [Trace sources](docs/guides/trace-sources.md) read MLflow, Phoenix, Langfuse, LangSmith or Collector ClickHouse tables (history included), score the traces, and write back assessments, annotations, feedback or companion score rows. The [ClickHouse source](docs/guides/trace-sources.md#clickhouse) supports the Collector Map schema and latest-score queries with `FINAL`; it passed bounded live checks on ClickHouse 25.8.33.6. Self-hosted Langfuse 4.56.0 passed the recorded two-stage check; Databricks numeric-experiment bearer-token downloads are built and contract-tested, not live-verified. LangSmith has server/worker fixture coverage and an [opt-in live check](docs/guides/trace-sources.md#verify-your-langsmith-deployment); live verification still needs credentials. To add Evals.si to an agent platform, follow the [integration guide](docs/guides/integrate-an-agent-harness.md) and the [reference demos](examples/demo/README.md), which evaluate Deep Agents and DeepSeek Harness agents end to end.
+Each row is a real run of the framework, checked in and tested; the [agent frameworks guide](docs/guides/agent-frameworks.md) has the setup and what each instrumentation records. [Trace sources](docs/guides/trace-sources.md) read MLflow, Phoenix, Langfuse, LangSmith or Collector ClickHouse tables (history included), score the traces, and write back assessments, annotations, feedback or companion score rows. The [ClickHouse source](docs/guides/trace-sources.md#clickhouse) supports the Collector Map schema and latest-score queries with `FINAL`; it passed bounded live checks on ClickHouse 25.8.33.6. Self-hosted Langfuse 4.56.0 passed the recorded two-stage check; Databricks numeric-experiment bearer-token downloads are built and contract-tested, not live-verified. LangSmith has server/worker fixture coverage and an [opt-in live check](docs/guides/trace-sources.md#verify-your-langsmith-deployment); live verification still needs credentials. To add Evalsi to an agent platform, follow the [integration guide](docs/guides/integrate-an-agent-harness.md) and the [reference demos](examples/demo/README.md), which evaluate Deep Agents and DeepSeek Harness agents end to end.
 
 ### Evaluators and adapters
 
@@ -413,13 +413,13 @@ The Go server owns the API, runs, ingest, policies, auth and storage; evaluators
 
 ## Project status
 
-Evals.si is pre-1.0 (the latest release is `0.4.0`). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
+Evalsi is pre-1.0 (the latest release is `0.4.0`). The API is `v1alpha1` and can change between minor versions; see the [changelog](CHANGELOG.md) and [SUPPORT.md](SUPPORT.md) for what that means.
 
 What is verified, in short:
 - **Kubernetes:** end-to-end on kind in every CI run (amd64, with Landlock), AKS and an Istio ambient cluster with KVM nodes. [Bounded EKS checks](docs/verification/EKS-2026-10-12.md) passed live KEDA, separate-host NATS broker recovery, pool isolation, application recovery, second-release coexistence, mounted Python/Wasm and managed alert firing/delivery/resolution. Stock admission is blocked by the control-plane/Calico path; an isolated trusted host-network workaround passed. M4 and GKE remain unverified.
 - **Trace sources:** MLflow, Phoenix and self-hosted Langfuse 4.56.0 ([two-stage verification](docs/verification/README.md#langfuse-live-recheck-2026-10-10)), and tested profiles for five agent frameworks. The kind job measures a 30-day MLflow backfill and the pull lag of live traces (p95 15 s at a 15 s poll).
 - **Agent harness integration:** the kind job deploys the demo workflow through a gate: a regressed release is blocked, a good one goes live, and the default policy scores its executions.
-- **RL frameworks:** TRL's `GRPOTrainer` trains with Evals.si rewards on CPU in CI; the rewards also run inside verl's and OpenRLHF's own reward code (no training step there).
+- **RL frameworks:** TRL's `GRPOTrainer` trains with Evalsi rewards on CPU in CI; the rewards also run inside verl's and OpenRLHF's own reward code (no training step there).
 - **Web UI:** a browser test runs in CI; desktop/mobile Playwright checks passed against EKS, including recovered results, comparison, filtering, API-key sign-in/sign-out and annotation submit/skip. Real OIDC-provider login remains unverified.
 - **Guardrails:** real agentgateway v1.6.0 passed bounded native LLM and MCP request/result pass, mask and block controls; LLM errors failed closed. The upstream model/tool were synthetic; real model calls, streaming behavior and coding-agent products remain unverified.
 - **Air-gapped bundles:** one platform per bundle (amd64 by default, `--platform linux/arm64` for arm64); see the [Kubernetes guide](docs/guides/kubernetes.md#air-gapped-installs).

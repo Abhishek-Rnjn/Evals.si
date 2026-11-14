@@ -17,7 +17,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
 )
 
 const charts = "../../deploy/helm"
@@ -192,7 +192,7 @@ func TestEvalsiChart(t *testing.T) {
 			switch name {
 			case "defaults":
 				p := server.Auth.JWT.Providers[0]
-				if p.Kubernetes == nil || p.Audiences[0] != "evals.si" || server.Auth.TLS == nil {
+				if p.Kubernetes == nil || p.Audiences[0] != "evalsi.dev" || server.Auth.TLS == nil {
 					t.Errorf("auth %+v", server.Auth)
 				}
 				if server.RBAC.Owners[0] != "user:kubernetes/system:serviceaccount:evalsi:evalsi-operator" {
@@ -288,7 +288,7 @@ func TestEvalsiChartSchedulingAndLabels(t *testing.T) {
 		t.Errorf("an image already under the registry was moved again: %s", cpu)
 	}
 	pool := find(t, objs, "ConfigMap", "evalsi-sandbox-pool").Data["evalsi.yaml"]
-	if !strings.Contains(pool, "istio.io/use-waypoint: none") || !strings.Contains(pool, "evals.si/sandbox-pool: evalsi-sandbox-pool") {
+	if !strings.Contains(pool, "istio.io/use-waypoint: none") || !strings.Contains(pool, "evalsi.dev/sandbox-pool: evalsi-sandbox-pool") {
 		t.Errorf("sandbox pod labels: %s", pool)
 	}
 }
@@ -554,7 +554,7 @@ func TestCRDsChartRBAC(t *testing.T) {
 	objs := render(t, "evalsi-crds", "operator.sandboxClasses=true")
 	role := find(t, objs, "ClusterRole", "evalsi-operator")
 	for _, r := range role.Rules {
-		if strings.Join(r.APIGroups, ",") != "evals.si" || !strings.HasPrefix(strings.Join(r.Resources, ","), "sandboxclasses") {
+		if strings.Join(r.APIGroups, ",") != "evalsi.dev" || !strings.HasPrefix(strings.Join(r.Resources, ","), "sandboxclasses") {
 			t.Errorf("sandboxClasses grants %+v", r)
 		}
 	}
@@ -728,7 +728,7 @@ func TestSandboxPoolsOfTwoReleasesAreIsolated(t *testing.T) {
 			spec := toYAML(t, o.Spec)
 			if o.Metadata.Name == fn+"-sandbox-pool-pods" {
 				found = true
-				for _, want := range []string{"evals.si/sandbox-pool: " + fn + "-sandbox-pool", "app.kubernetes.io/instance: " + fn + "-sandbox-pool"} {
+				for _, want := range []string{"evalsi.dev/sandbox-pool: " + fn + "-sandbox-pool", "app.kubernetes.io/instance: " + fn + "-sandbox-pool"} {
 					if !strings.Contains(spec, want) {
 						t.Errorf("%s: pool policy lacks %q:\n%s", release, want, spec)
 					}

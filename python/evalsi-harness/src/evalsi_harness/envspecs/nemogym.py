@@ -2,7 +2,7 @@
 
 NeMo Gym serves an environment over HTTP: a resources server with ``/reset``
 and ``/step`` (its ``GymnasiumServer`` base, used with its ``gymnasium_agent``).
-:class:`TaskResourcesServer` is that server for Evals.si tasks: ``/reset``
+:class:`TaskResourcesServer` is that server for Evalsi tasks: ``/reset``
 starts an episode from a dataset row, ``/step`` runs the response's function
 calls in the task's sandbox, and the episode's reward is the checker's score
 (plus any process reward, see :mod:`evalsi_harness.process`) once the model

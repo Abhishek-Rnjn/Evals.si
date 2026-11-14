@@ -22,8 +22,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/operator/controllers"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/operator/controllers"
 )
 
 // Config is the bootstrap file the chart renders from its values.
@@ -144,7 +144,7 @@ type Runner struct {
 }
 
 // KeyNameAnnotation records on a key's Secret which API key its value belongs to.
-const KeyNameAnnotation = "evals.si/api-key-name"
+const KeyNameAnnotation = "evalsi.dev/api-key-name"
 
 // Run creates what cfg describes and is missing.
 func (r *Runner) Run(ctx context.Context, cfg Config) error {

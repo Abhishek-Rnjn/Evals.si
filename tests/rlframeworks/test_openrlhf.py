@@ -1,6 +1,6 @@
-"""Evals.si rewards inside OpenRLHF itself: OpenRLHF's single-turn agent
+"""Evalsi rewards inside OpenRLHF itself: OpenRLHF's single-turn agent
 executor (what its PPO and GRPO rollouts call after each generation) scores a
-rollout through both of Evals.si's ways in: ``--remote_rm_url`` set to the
+rollout through both of Evalsi's ways in: ``--remote_rm_url`` set to the
 ``evalsi.rewards.openrlhf`` file, and set to the URL of ``evalsi rewards
 serve``.
 

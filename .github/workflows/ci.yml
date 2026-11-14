@@ -448,7 +448,7 @@ jobs:
 
   trainers:
     # Phase 5's exit criterion at CPU scale: TRL GRPO trains a tiny model
-    # with Evals.si code rewards run in the real sandbox, and the
+    # with Evalsi code rewards run in the real sandbox, and the
     # TrainerCallback evaluates every checkpoint.
     # Heavy: runs on main and on demand (workflow_dispatch), not on every pull
     # request push, to save runner minutes.
@@ -471,13 +471,13 @@ jobs:
           export VIRTUAL_ENV="$RUNNER_TEMP/trainers"
           uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
           uv pip install -r tests/trainers/requirements.txt -e python/evalsi
-      - name: GRPO with Evals.si rewards
+      - name: GRPO with Evalsi rewards
         run: |
           CGO_ENABLED=0 go build -o "$RUNNER_TEMP/evalsid" ./cmd/evalsid
           cd tests/trainers && EVALSID="$RUNNER_TEMP/evalsid" "$RUNNER_TEMP/trainers/bin/python" -m pytest -q
 
   rlframeworks:
-    # Evals.si rewards inside verl and OpenRLHF themselves: verl's reward
+    # Evalsi rewards inside verl and OpenRLHF themselves: verl's reward
     # managers load the reward through custom_reward_function, and OpenRLHF's
     # rollout executor calls it as a --remote_rm_url file and over HTTP. No
     # training (that needs GPUs); everything from a finished rollout to the
@@ -497,7 +497,7 @@ jobs:
           uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
           uv pip install -r tests/rlframeworks/requirements.txt -e python/evalsi
           uv pip install --no-deps openrlhf==0.11.2
-      - name: verl and OpenRLHF with Evals.si rewards
+      - name: verl and OpenRLHF with Evalsi rewards
         run: cd tests/rlframeworks && "$RUNNER_TEMP/rl/bin/python" -m pytest -q
 
   envspecs:

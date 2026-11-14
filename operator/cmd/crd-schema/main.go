@@ -23,7 +23,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"sigs.k8s.io/yaml"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 // Schema builds the OpenAPI v3 schema of a message.
@@ -151,8 +151,8 @@ func main() {
 	policy := Schema((&evalsiv1alpha1.OnlineEvalPolicy{}).ProtoReflect().Descriptor(),
 		map[string]bool{"name": true, "project": true, "labels": true})
 	for file, spec := range map[string]map[string]any{
-		"evals.si_evalruns.yaml":           run,
-		"evals.si_onlineevalpolicies.yaml": policy,
+		"evalsi.dev_evalruns.yaml":           run,
+		"evalsi.dev_onlineevalpolicies.yaml": policy,
 	} {
 		if err := patch(dir+"/"+file, spec); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", file, err)

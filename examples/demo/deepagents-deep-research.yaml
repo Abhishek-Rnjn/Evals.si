@@ -11,11 +11,11 @@
 # The service is reached as evalsi-demo-deepagents:8080 in every mode: the
 # Kubernetes Service has that name, and standalone you map it to the process
 # (README.md).
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: deepagents-deep-research
-  labels: {evals.si/project: demo}
+  labels: {evalsi.dev/project: demo}
 spec:
   target:
     agent:

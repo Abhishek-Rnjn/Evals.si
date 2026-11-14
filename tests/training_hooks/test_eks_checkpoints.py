@@ -102,7 +102,7 @@ def test_checkpoint_operator_lifecycle(tmp_path: Path) -> None:
     spec.write_text(
         json.dumps(
             {
-                "apiVersion": "evals.si/v1alpha1",
+                "apiVersion": "evalsi.dev/v1alpha1",
                 "kind": "EvalRun",
                 "metadata": {"name": "checkpoint-control"},
                 "spec": {

@@ -1,4 +1,4 @@
-// Package wasmplugin writes Evals.si evaluators that compile to WebAssembly
+// Package wasmplugin writes Evalsi evaluators that compile to WebAssembly
 // (GOOS=wasip1 GOARCH=wasm) and run sandboxed inside evalsid.
 //
 //	func main() {

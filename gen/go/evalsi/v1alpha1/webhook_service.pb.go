@@ -1094,8 +1094,8 @@ const file_evalsi_v1alpha1_webhook_service_proto_rawDesc = "" +
 	"GetWebhook\x12\".evalsi.v1alpha1.GetWebhookRequest\x1a#.evalsi.v1alpha1.GetWebhookResponse\x12^\n" +
 	"\rDeleteWebhook\x12%.evalsi.v1alpha1.DeleteWebhookRequest\x1a&.evalsi.v1alpha1.DeleteWebhookResponse\x12X\n" +
 	"\vTestWebhook\x12#.evalsi.v1alpha1.TestWebhookRequest\x1a$.evalsi.v1alpha1.TestWebhookResponse\x12v\n" +
-	"\x15ListWebhookDeliveries\x12-.evalsi.v1alpha1.ListWebhookDeliveriesRequest\x1a..evalsi.v1alpha1.ListWebhookDeliveriesResponseB\xd0\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x13WebhookServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x15ListWebhookDeliveries\x12-.evalsi.v1alpha1.ListWebhookDeliveriesRequest\x1a..evalsi.v1alpha1.ListWebhookDeliveriesResponseB\xce\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x13WebhookServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_webhook_service_proto_rawDescOnce sync.Once

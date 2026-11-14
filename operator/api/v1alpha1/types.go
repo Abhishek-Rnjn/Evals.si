@@ -10,10 +10,10 @@ import (
 const (
 	// Who created the resource, from the admission request (the webhook
 	// sets it on create and keeps it from changing).
-	CreatedByAnnotation = "evals.si/created-by"
+	CreatedByAnnotation = "evalsi.dev/created-by"
 	// The project a resource belongs to; default: its namespace.
-	ProjectLabel = "evals.si/project"
-	Finalizer    = "evals.si/finalizer"
+	ProjectLabel = "evalsi.dev/project"
+	Finalizer    = "evalsi.dev/finalizer"
 )
 
 // EvalRun is one offline run. Its spec is the run spec, exactly as in a run

@@ -1,4 +1,4 @@
-"""Opt-in, one-GPU native OpenRLHF 0.11.2 training with real Evals.si HTTP rewards.
+"""Opt-in, one-GPU native OpenRLHF 0.11.2 training with real Evalsi HTTP rewards.
 
 Requires requirements-gpu-openrlhf.txt in the trainer environment, a separate
 SDK environment (EVALSI_OPENRLHF_SDK_PYTHON) for the HTTP reward server
@@ -299,7 +299,7 @@ def test_native_openrlhf_optimizer_step(tmp_path: Path) -> None:
     spec.write_text(
         json.dumps(
             {
-                "apiVersion": "evals.si/v1alpha1",
+                "apiVersion": "evalsi.dev/v1alpha1",
                 "kind": "RewardSpec",
                 "metadata": {"name": "gpu-nonempty-control"},
                 "spec": {

@@ -8,7 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const out = path.resolve(here, "../src/content/docs");
 const BASE = (process.env.SITE_BASE ?? "/").replace(/\/$/, "");
-const REPO = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/Evals.si";
+const REPO = process.env.REPO_URL ?? "https://github.com/Abhishek-Rnjn/evalsi";
 const BRANCH = process.env.REPO_BRANCH ?? "main";
 
 const read = (p) => fs.readFile(path.join(root, p), "utf8");
@@ -125,10 +125,10 @@ for (const [name] of guides) await importDoc(`docs/guides/${name}.md`, `/docs/gu
 await importDoc("docs/DESIGN.md", "/docs/architecture/", { title: "Architecture and implementation plan" });
 await importDoc("docs/LEFTOVERS.md", "/docs/roadmap/", { title: "Roadmap and open leftovers" });
 await importDoc("docs/PRODUCT-ROADMAP.md", "/docs/product-roadmap/", { title: "Product roadmap", description: "Proposed work for production-agent and enterprise AI teams, with priorities, dependencies and acceptance criteria." });
-await importDoc("docs/PRODUCT-STRATEGY.md", "/docs/product-strategy/", { title: "Product strategy", description: "Competitive research and proposed adoption, deployment and governance strategy for Evals.si." });
+await importDoc("docs/PRODUCT-STRATEGY.md", "/docs/product-strategy/", { title: "Product strategy", description: "Competitive research and proposed adoption, deployment and governance strategy for Evalsi." });
 await importDoc("docs/decisions/README.md", "/docs/decisions/", { title: "Decision records" });
 for (const f of decisions) await importDoc(`docs/decisions/${f}`, `/docs/decisions/${f.replace(/\.md$/, "")}/`);
-await importDoc("CHANGELOG.md", "/docs/changelog/", { description: "What changed in each Evals.si release." });
+await importDoc("CHANGELOG.md", "/docs/changelog/", { description: "What changed in each Evalsi release." });
 await importDoc("docs/verification/HARNESS2-2026-10-25.md", "/docs/verification/harness2-2026-10-25/");
 
 // Get started: the README's install options and quickstart, then its tour of the features
@@ -147,12 +147,12 @@ await importDoc("docs/verification/HARNESS2-2026-10-25.md", "/docs/verification/
   const slug = (h) => h.toLowerCase().replace(/[^\w\s-]/g, "").trim().replace(/\s/g, "-");
   const have = new Set([...fixed.matchAll(/^#{1,6} (.+)$/gm)].map((m) => slug(m[1])));
   fixed = fixed.replace(/\]\(#([^)\s]+)\)/g, (m, a) => (have.has(a) ? m : `](${REPO}/blob/${BRANCH}/README.md#${a})`));
-  await writePage("/docs/get-started/", { title: "Get started", description: "Install Evals.si and run your first evaluation.", editUrl: `${REPO}/edit/${BRANCH}/README.md` }, fixed);
+  await writePage("/docs/get-started/", { title: "Get started", description: "Install Evalsi and run your first evaluation.", editUrl: `${REPO}/edit/${BRANCH}/README.md` }, fixed);
 }
 
 // Docs overview
-await writePage("/docs/", { title: "Documentation", description: "Guides, architecture and reference for Evals.si." }, `
-Evals.si evaluates AI before you ship, while it runs, and as you train it. It runs agents, RAG pipelines and models on datasets and sandboxed tasks and fails the build when a gate fails, scores live traces, and turns the same evaluators into RL rewards and checkpoint checks. Agents come first.
+await writePage("/docs/", { title: "Documentation", description: "Guides, architecture and reference for Evalsi." }, `
+Evalsi evaluates AI before you ship, while it runs, and as you train it. It runs agents, RAG pipelines and models on datasets and sandboxed tasks and fails the build when a gate fails, scores live traces, and turns the same evaluators into RL rewards and checkpoint checks. Agents come first.
 
 It is built around one decision: **can we safely ship this agent change?** Connect the agent and trace store you already use, turn real failures into reproducible tests, and get a reviewable release decision for every change. See the [product strategy](${BASE}/docs/product-strategy/).
 
@@ -248,7 +248,7 @@ for (const ex of examples) {
   }
   await writePage(`/examples/${ex.dir}/`, { title: ex.title, description: ex.desc, editUrl: `${REPO}/tree/${BRANCH}/examples/${ex.dir}` }, body);
 }
-await writePage("/examples/", { title: "Examples", description: "Runnable configurations for every part of Evals.si." }, `
+await writePage("/examples/", { title: "Examples", description: "Runnable configurations for every part of Evalsi." }, `
 Every example lives under [\`examples/\`](${REPO}/tree/${BRANCH}/examples) in the repository and is shown here in full.
 
 ${examples.map((e) => `- [${e.title}](${BASE}/examples/${e.dir}/): ${e.desc}`).join("\n")}

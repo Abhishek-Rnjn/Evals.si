@@ -10,10 +10,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/quality"
-	"github.com/abhishek-rnjn/evals.si/internal/watch"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/quality"
+	"github.com/abhishek-rnjn/evalsi/internal/watch"
 )
 
 // registerQuality serves GET /v1alpha1/quality: an online policy's scores

@@ -19,12 +19,12 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxsvc"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox/sandboxsvc"
 )
 
 // testPKI writes a CA and certificates it signs into dir: name.crt and
@@ -97,7 +97,7 @@ func TestRemoteSandboxService(t *testing.T) {
 	defer cancel()
 	pki := newPKI(t)
 	serverCert, serverKey := pki.leaf(t, "sandboxd", "")
-	workerCert, workerKey := pki.leaf(t, "worker", "spiffe://evals.si/ns/evalsi/sa/evalsi-worker")
+	workerCert, workerKey := pki.leaf(t, "worker", "spiffe://evalsi.dev/ns/evalsi/sa/evalsi-worker")
 	tlsCfg, err := auth.ServerTLS(&auth.TLSConfig{CertFile: serverCert, KeyFile: serverKey, ClientCA: filepath.Join(pki.dir, "ca.crt"), RequireClientCert: true})
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestRemoteSandboxService(t *testing.T) {
 	}
 	pool := sandbox.NewManager(sb)
 	defer pool.Close()
-	stop, addr, err := sandboxsvc.ServeTLS(ctx, pool, "127.0.0.1:0", tlsCfg, []string{"spiffe://evals.si/ns/evalsi/sa/evalsi-worker"})
+	stop, addr, err := sandboxsvc.ServeTLS(ctx, pool, "127.0.0.1:0", tlsCfg, []string{"spiffe://evalsi.dev/ns/evalsi/sa/evalsi-worker"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -211,7 +211,7 @@ def gate_controls(
         policy_file.write_text(json.dumps(current_policy), encoding="utf-8")
         spec_file.write_text(
             yaml.safe_dump(
-                {"apiVersion": "evals.si/v1alpha1", "kind": "EvalRun", "spec": current_spec}
+                {"apiVersion": "evalsi.dev/v1alpha1", "kind": "EvalRun", "spec": current_spec}
             ),
             encoding="utf-8",
         )

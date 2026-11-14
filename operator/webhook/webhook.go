@@ -1,5 +1,5 @@
 // Package webhook holds the operator's admission webhooks: the mutating one
-// records who created each evals.si resource (evals.si/created-by, from the
+// records who created each evalsi.dev resource (evalsi.dev/created-by, from the
 // authenticated admission request, which the creator cannot forge), and the
 // validating one checks specs against the API's schema (and, with a Remote,
 // against the API itself: credential grants, judges and access rules) and
@@ -22,22 +22,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/operator/apierr"
-	"github.com/abhishek-rnjn/evals.si/operator/spec"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/operator/apierr"
+	"github.com/abhishek-rnjn/evalsi/operator/spec"
 )
 
 // Paths the webhooks serve at.
 const (
-	MutatePath   = "/mutate-evals-si"
-	ValidatePath = "/validate-evals-si"
+	MutatePath   = "/mutate-evalsi-dev"
+	ValidatePath = "/validate-evalsi-dev"
 )
 
 // Mutator stamps the creator.
 type Mutator struct{}
 
-// +kubebuilder:webhook:path=/mutate-evals-si,mutating=true,failurePolicy=fail,sideEffects=None,groups=evals.si,resources=evalruns;onlineevalpolicies;tracesources;evaluators;sandboxclasses,verbs=create;update,versions=v1alpha1,name=mutate.evals.si,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-evalsi-dev,mutating=true,failurePolicy=fail,sideEffects=None,groups=evalsi.dev,resources=evalruns;onlineevalpolicies;tracesources;evaluators;sandboxclasses,verbs=create;update,versions=v1alpha1,name=mutate.evalsi.dev,admissionReviewVersions=v1
 
 func (Mutator) Handle(_ context.Context, req admission.Request) admission.Response {
 	obj, err := decode(req.Object.Raw)
@@ -92,7 +92,7 @@ type Remote interface {
 // remoteTimeout bounds the API call inside an admission request.
 const remoteTimeout = 5 * time.Second
 
-// +kubebuilder:webhook:path=/validate-evals-si,mutating=false,failurePolicy=fail,sideEffects=None,groups=evals.si,resources=evalruns;onlineevalpolicies;tracesources,verbs=create;update,versions=v1alpha1,name=validate.evals.si,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-evalsi-dev,mutating=false,failurePolicy=fail,sideEffects=None,groups=evalsi.dev,resources=evalruns;onlineevalpolicies;tracesources,verbs=create;update,versions=v1alpha1,name=validate.evalsi.dev,admissionReviewVersions=v1
 
 func (val Validator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	obj, err := decode(req.Object.Raw)

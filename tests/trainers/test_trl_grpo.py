@@ -1,8 +1,8 @@
-"""TRL GRPO with Evals.si rewards and checkpoint evaluation, on CPU.
+"""TRL GRPO with Evalsi rewards and checkpoint evaluation, on CPU.
 
 A tiny randomly initialised Qwen2 model (built here, nothing downloaded)
 trains for a few GRPO steps with a code reward scored in the real sandbox,
-and every saved checkpoint is evaluated by the Evals.si TrainerCallback.
+and every saved checkpoint is evaluated by the Evalsi TrainerCallback.
 The model's outputs are noise; what is tested is the wiring: TRL calls the
 reward functions with its batches, logs each component, and the callback
 evaluates each checkpoint in order.
@@ -103,7 +103,7 @@ def test_grpo_with_evalsi_rewards_and_checkpoints(tmp_path: Path) -> None:
     run_spec.write_text(
         json.dumps(
             {
-                "apiVersion": "evals.si/v1alpha1",
+                "apiVersion": "evalsi.dev/v1alpha1",
                 "kind": "EvalRun",
                 "metadata": {"name": "ckpt"},
                 "spec": {

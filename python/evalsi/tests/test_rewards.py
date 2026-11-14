@@ -55,7 +55,7 @@ def registry() -> Registry:
 
 
 SPEC = """\
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: RewardSpec
 metadata: {name: math-grpo}
 spec:

@@ -1,9 +1,9 @@
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: onboarding-agent
   labels:
-    evals.si/project: onboarding
+    evalsi.dev/project: onboarding
 spec:
   target:
     agent:

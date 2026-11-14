@@ -9,7 +9,7 @@ for the length of one evaluation:
   (started with ``--enable-lora`` and ``VLLM_ALLOW_RUNTIME_LORA_UPDATING=True``)
   and unloads it afterwards, so one base-model server serves every step.
 - :class:`Endpoint` uses a model that is already served.
-- :class:`Operator` asks the Evals.si Kubernetes operator for a vLLM
+- :class:`Operator` asks the Evalsi Kubernetes operator for a vLLM
   (a ``CheckpointServer``) per checkpoint, through ``kubectl``, and deletes it
   afterwards.
 """
@@ -225,7 +225,7 @@ class Operator:
         if self.api_key_secret:
             spec["apiKeySecret"] = self.api_key_secret
         return {
-            "apiVersion": "evals.si/v1alpha1",
+            "apiVersion": "evalsi.dev/v1alpha1",
             "kind": "CheckpointServer",
             "metadata": {
                 "name": resource_name(name),
@@ -237,7 +237,7 @@ class Operator:
     @contextlib.contextmanager
     def serve(self, checkpoint: str, name: str) -> Iterator[Served]:
         manifest = self.manifest(checkpoint, name)
-        resource = f"checkpointservers.evals.si/{resource_name(name)}"
+        resource = f"checkpointservers.evalsi.dev/{resource_name(name)}"
         self._kubectl("apply", "-f", "-", stdin=json.dumps(manifest))
         try:
             self._kubectl(

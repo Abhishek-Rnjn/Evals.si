@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/operator/bootstrap"
+	"github.com/abhishek-rnjn/evalsi/operator/bootstrap"
 )
 
 var bootstrapValues = []string{

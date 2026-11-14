@@ -9,7 +9,7 @@ tools, ``curl`` or ``wget`` in a shell command, any URL in a tool's input) and f
 * a ``huggingface.co/datasets/<name>`` URL (or ``hf://datasets/<name>``, or a
   ``dataset=<name>`` query on the datasets server) for a configured dataset name;
 * a URL matching an extra ``host/path`` glob the caller passes;
-* a canary string, either one the caller passes or an Evals.si canary
+* a canary string, either one the caller passes or an Evalsi canary
   (``EVALSI_CANARY_<32 hex>``, see ``canaries.py``), in a tool step's input or output.
 
 It is a string match on recorded steps. It does not see a rubric the agent reads from a
@@ -120,7 +120,7 @@ def contamination_fetch(
     """``hosts`` and ``words`` replace the defaults (GitHub hosts; rubric, answer, solution,
     gold). ``datasets`` are Hugging Face names, ``org/name`` or ``name``; none by default.
     ``patterns`` are ``host/path`` globs (``example.com/bench/*``). ``canaries`` are extra
-    strings; Evals.si canaries are always looked for."""
+    strings; Evalsi canaries are always looked for."""
     assert record.trajectory is not None
     steps = record.trajectory.steps
     if not steps:

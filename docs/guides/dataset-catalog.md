@@ -56,7 +56,7 @@ evalsi dataset review-version refunds v1 --server https://evals.example.com \
 Store the approved reference in a run spec. There is no mutable `latest` alias:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 spec:
   dataset:

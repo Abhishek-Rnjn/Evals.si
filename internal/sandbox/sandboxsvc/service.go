@@ -21,10 +21,10 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	sandboxv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1/sandboxv1alpha1connect"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	sandboxv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/sandbox/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/sandbox/v1alpha1/sandboxv1alpha1connect"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
 )
 
 // Service implements sandboxv1alpha1connect.SandboxServiceHandler.

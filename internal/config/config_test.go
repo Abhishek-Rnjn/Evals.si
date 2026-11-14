@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
 )
 
 func write(t *testing.T, body string) string {
@@ -101,7 +101,7 @@ func TestAuthConfigs(t *testing.T) {
     providers:
       - name: corp
         issuer: https://sso.example.com
-        audiences: [evals.si]
+        audiences: [evalsi.dev]
         jwks: {discovery: true}
         role_claims: {claim: app_roles, map: {lead: {checkout: [editor]}}}
   api_keys:

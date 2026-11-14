@@ -172,8 +172,8 @@ func (p *podSandbox) exec(ctx context.Context, e *Exec, stdout, stderr io.Writer
 	return result
 }
 
-const serviceOwnerLabel = "evals.si/service-owner"
-const serviceInstanceLabel = "evals.si/service-instance"
+const serviceOwnerLabel = "evalsi.dev/service-owner"
+const serviceInstanceLabel = "evalsi.dev/service-instance"
 
 // A restarted pool has lost all in-memory sessions. Reap only its own service
 // pods before allocating a new one; other replicas' trials are never touched.

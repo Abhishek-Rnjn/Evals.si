@@ -1,4 +1,4 @@
-"""Opt-in, one-GPU native verl training with real Evals.si reward calls.
+"""Opt-in, one-GPU native verl training with real Evalsi reward calls.
 
 Requires requirements-gpu-verl.txt, CUDA and an explicit
 EVALSI_GPU_MODEL_PATH pointing to Qwen2.5-0.5B-Instruct.
@@ -70,7 +70,7 @@ def test_native_verl_optimizer_step(tmp_path: Path) -> None:
     spec.write_text(
         json.dumps(
             {
-                "apiVersion": "evals.si/v1alpha1",
+                "apiVersion": "evalsi.dev/v1alpha1",
                 "kind": "RewardSpec",
                 "metadata": {"name": "gpu-nonempty-control"},
                 "spec": {

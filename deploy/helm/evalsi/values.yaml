@@ -175,7 +175,7 @@ auth:
   # agents) projected for this audience.
   kubernetes:
     enabled: true
-    audience: evals.si
+    audience: evalsi.dev
     namespaces: []        # default: every namespace
     # evalsid reads the cluster's issuer and signing keys from the API
     # server, which every service account may do unless the cluster removed
@@ -285,7 +285,7 @@ operator:
   metricsPort: 8080
   healthPort: 8081
   createProjects: true
-  # The operator calls evalsid as an owner, so a resource's evals.si/project
+  # The operator calls evalsid as an owner, so a resource's evalsi.dev/project
   # label may name another project than its namespace only from this
   # release's namespace or from the namespaces mapped to that project here
   # ("*": every namespace). For example: {support: [team-a, team-b]}.

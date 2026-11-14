@@ -80,7 +80,7 @@ def starter_files(
             ],
         }
     doc: dict[str, Any] = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "EvalRun",
         "metadata": {"name": "starter-agent" if agent else "starter-recorded"},
         "spec": spec,
@@ -103,7 +103,7 @@ def starter_files(
         "no server, sandbox, model or API key "
         "is needed. Replace data.jsonl with approved records from your own application."
     )
-    readme = f"""# Evals.si starter
+    readme = f"""# Evalsi starter
 
 {extra}
 

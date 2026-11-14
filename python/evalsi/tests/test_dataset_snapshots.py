@@ -75,7 +75,7 @@ def test_pinned_run_and_replacement_fail_before_target_execution(
     src = source(tmp_path / "source.jsonl")
     saved = snapshot(src, dest)
     spec: dict[str, Any] = {
-        "apiVersion": "evals.si/v1alpha1",
+        "apiVersion": "evalsi.dev/v1alpha1",
         "kind": "EvalRun",
         "spec": {
             "dataset": {"uri": f"snapshot://{dest.name}?sha256={saved.sha256}"},
@@ -147,7 +147,7 @@ def test_snapshot_metadata_remapping_is_rejected_locally_and_by_worker(
     spec.write_text(
         yaml.safe_dump(
             {
-                "apiVersion": "evals.si/v1alpha1",
+                "apiVersion": "evalsi.dev/v1alpha1",
                 "kind": "EvalRun",
                 "spec": {
                     "dataset": {"uri": uri, "mapping": mapping},

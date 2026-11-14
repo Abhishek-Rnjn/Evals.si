@@ -1,4 +1,4 @@
-"""Verify the signature of a webhook delivery from an Evals.si server.
+"""Verify the signature of a webhook delivery from an Evalsi server.
 
 A delivery carries ``Evalsi-Signature: t=<unix seconds>,v1=<hex>``, where the
 hex is HMAC-SHA256 of ``"<t>.<raw body>"`` under the webhook's secret. Verify

@@ -7,7 +7,7 @@
 package sandboxv1alpha1
 
 import (
-	v1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	v1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
@@ -2827,8 +2827,8 @@ const file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDesc = "" +
 	"\fWriteProcess\x12,.evalsi.sandbox.v1alpha1.WriteProcessRequest\x1a-.evalsi.sandbox.v1alpha1.WriteProcessResponse\x12h\n" +
 	"\vKillProcess\x12+.evalsi.sandbox.v1alpha1.KillProcessRequest\x1a,.evalsi.sandbox.v1alpha1.KillProcessResponse\x12\\\n" +
 	"\aDestroy\x12'.evalsi.sandbox.v1alpha1.DestroyRequest\x1a(.evalsi.sandbox.v1alpha1.DestroyResponse\x12q\n" +
-	"\x0eDeleteSnapshot\x12..evalsi.sandbox.v1alpha1.DeleteSnapshotRequest\x1a/.evalsi.sandbox.v1alpha1.DeleteSnapshotResponseB\xfb\x01\n" +
-	"\x1bcom.evalsi.sandbox.v1alpha1B\fSandboxProtoP\x01ZPgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/sandbox/v1alpha1;sandboxv1alpha1\xa2\x02\x03ESX\xaa\x02\x17Evalsi.Sandbox.V1alpha1\xca\x02\x17Evalsi\\Sandbox\\V1alpha1\xe2\x02#Evalsi\\Sandbox\\V1alpha1\\GPBMetadata\xea\x02\x19Evalsi::Sandbox::V1alpha1b\x06proto3"
+	"\x0eDeleteSnapshot\x12..evalsi.sandbox.v1alpha1.DeleteSnapshotRequest\x1a/.evalsi.sandbox.v1alpha1.DeleteSnapshotResponseB\xf9\x01\n" +
+	"\x1bcom.evalsi.sandbox.v1alpha1B\fSandboxProtoP\x01ZNgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/sandbox/v1alpha1;sandboxv1alpha1\xa2\x02\x03ESX\xaa\x02\x17Evalsi.Sandbox.V1alpha1\xca\x02\x17Evalsi\\Sandbox\\V1alpha1\xe2\x02#Evalsi\\Sandbox\\V1alpha1\\GPBMetadata\xea\x02\x19Evalsi::Sandbox::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_sandbox_v1alpha1_sandbox_proto_rawDescOnce sync.Once

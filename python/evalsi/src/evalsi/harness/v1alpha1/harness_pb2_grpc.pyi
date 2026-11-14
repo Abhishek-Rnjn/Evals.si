@@ -29,7 +29,7 @@ GRPC_VERSION: str
 class HarnessServiceStub:
     """HarnessService is the harness protocol (design §11). The built-in harness
     (evalsi-harness) implements it, and so can a harness you bring: a Python
-    class, a container or any gRPC service. Evals.si orchestrates it: one
+    class, a container or any gRPC service. Evalsi orchestrates it: one
     Setup per task and trial, then Run, Check and Teardown.
     """
 
@@ -40,7 +40,7 @@ class HarnessServiceStub:
     Describe: _grpc.UnaryUnaryMultiCallable[_harness_pb2.DescribeRequest, _harness_pb2.DescribeResponse]
     """Task formats and environment needs."""
     Setup: _grpc.UnaryUnaryMultiCallable[_harness_pb2.SetupRequest, _harness_pb2.SetupResponse]
-    """Prepares the task's environment; it may lease an Evals.si sandbox."""
+    """Prepares the task's environment; it may lease an Evalsi sandbox."""
     Run: _grpc.UnaryStreamMultiCallable[_harness_pb2.RunRequest, _harness_pb2.RunResponse]
     """Drives the agent, streaming steps; the last event is Final."""
     Check: _grpc.UnaryUnaryMultiCallable[_harness_pb2.CheckRequest, _harness_pb2.CheckResponse]
@@ -51,7 +51,7 @@ class HarnessServiceStub:
 class HarnessServiceAsyncStub(HarnessServiceStub):
     """HarnessService is the harness protocol (design §11). The built-in harness
     (evalsi-harness) implements it, and so can a harness you bring: a Python
-    class, a container or any gRPC service. Evals.si orchestrates it: one
+    class, a container or any gRPC service. Evalsi orchestrates it: one
     Setup per task and trial, then Run, Check and Teardown.
     """
 
@@ -59,7 +59,7 @@ class HarnessServiceAsyncStub(HarnessServiceStub):
     Describe: _aio.UnaryUnaryMultiCallable[_harness_pb2.DescribeRequest, _harness_pb2.DescribeResponse]  # type: ignore[assignment]
     """Task formats and environment needs."""
     Setup: _aio.UnaryUnaryMultiCallable[_harness_pb2.SetupRequest, _harness_pb2.SetupResponse]  # type: ignore[assignment]
-    """Prepares the task's environment; it may lease an Evals.si sandbox."""
+    """Prepares the task's environment; it may lease an Evalsi sandbox."""
     Run: _aio.UnaryStreamMultiCallable[_harness_pb2.RunRequest, _harness_pb2.RunResponse]  # type: ignore[assignment]
     """Drives the agent, streaming steps; the last event is Final."""
     Check: _aio.UnaryUnaryMultiCallable[_harness_pb2.CheckRequest, _harness_pb2.CheckResponse]  # type: ignore[assignment]
@@ -69,7 +69,7 @@ class HarnessServiceAsyncStub(HarnessServiceStub):
 class HarnessServiceServicer(metaclass=_abc_1.ABCMeta):
     """HarnessService is the harness protocol (design §11). The built-in harness
     (evalsi-harness) implements it, and so can a harness you bring: a Python
-    class, a container or any gRPC service. Evals.si orchestrates it: one
+    class, a container or any gRPC service. Evalsi orchestrates it: one
     Setup per task and trial, then Run, Check and Teardown.
     """
 
@@ -87,7 +87,7 @@ class HarnessServiceServicer(metaclass=_abc_1.ABCMeta):
         request: _harness_pb2.SetupRequest,
         context: _ServicerContext,
     ) -> _typing.Union[_harness_pb2.SetupResponse, _abc.Awaitable[_harness_pb2.SetupResponse]]:
-        """Prepares the task's environment; it may lease an Evals.si sandbox."""
+        """Prepares the task's environment; it may lease an Evalsi sandbox."""
 
     @_abc_1.abstractmethod
     def Run(

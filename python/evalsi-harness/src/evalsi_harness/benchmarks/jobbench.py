@@ -1,4 +1,4 @@
-"""JobBench task directories as Evals.si agent tasks (judge-graded).
+"""JobBench task directories as Evalsi agent tasks (judge-graded).
 
 ``jobbench://<dir>``
     A directory you supply (for example the benchmark's ``dataset/main``):

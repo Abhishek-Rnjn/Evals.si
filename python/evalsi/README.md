@@ -2,18 +2,18 @@
 
 **Evaluate AI before you ship, while it runs, and as you train it.**
 
-`evalsi` is the Python SDK and CLI of [Evals.si](https://github.com/Abhishek-Rnjn/Evals.si), a pluggable, sandboxed and self-hosted evaluation service. Before you ship, it runs agents, RAG pipelines and models on datasets and sandboxed tasks and fails the build when a gate fails. While it runs, it scores live traces. As you train, the same evaluators become RL rewards and checkpoint checks. Agents come first, and a metric means the same thing in CI, in production and in training.
+`evalsi` is the Python SDK and CLI of [Evalsi](https://github.com/Abhishek-Rnjn/evalsi), a pluggable, sandboxed and self-hosted evaluation service. Before you ship, it runs agents, RAG pipelines and models on datasets and sandboxed tasks and fails the build when a gate fails. While it runs, it scores live traces. As you train, the same evaluators become RL rewards and checkpoint checks. Agents come first, and a metric means the same thing in CI, in production and in training.
 
 [Documentation](https://evalsi.dev/) ·
-[GitHub](https://github.com/Abhishek-Rnjn/Evals.si) ·
-[Changelog](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/CHANGELOG.md) ·
-[Examples](https://github.com/Abhishek-Rnjn/Evals.si/tree/main/examples)
+[GitHub](https://github.com/Abhishek-Rnjn/evalsi) ·
+[Changelog](https://github.com/Abhishek-Rnjn/evalsi/blob/main/CHANGELOG.md) ·
+[Examples](https://github.com/Abhishek-Rnjn/evalsi/tree/main/examples)
 
-![A terminal: pip install evalsi, evalsi init my-evals, then evalsi run passes its gates on run.yaml and fails one on regressed.yaml, exiting 3.](https://raw.githubusercontent.com/Abhishek-Rnjn/Evals.si/main/docs/img/demo.gif)
+![A terminal: pip install evalsi, evalsi init my-evals, then evalsi run passes its gates on run.yaml and fails one on regressed.yaml, exiting 3.](https://raw.githubusercontent.com/Abhishek-Rnjn/evalsi/main/docs/img/demo.gif)
 
 _Real output of the published package: a starter, a passing gate, and a regression that fails the build with exit code 3._
 
-## Why Evals.si
+## Why Evalsi
 
 - **Built first for agents.** Agents run on sandboxed tasks (SWE-bench, τ-bench, Terminal-Bench, BFCL) and a hidden checker grades the end state. Evaluators score tool calls, trajectories, loops, step budgets and policy violations, with pass@k and pass^k over trials, and gates fail the build when an agent gets worse.
 - **RAG, scored where it breaks.** Retrieval (`context-precision`, `context-recall`) and generation (`faithfulness`, `answer-relevance`) are scored separately, plus `citation-accuracy`, which needs no judge. RAGAS and DeepEval metrics run through your judge.
@@ -43,7 +43,7 @@ Install extras only for a capability you choose: `anthropic` for Claude,
 `hf` for Hugging Face datasets, `grpc` for streaming, `jsonschema` for JSON
 Schema, and `math` for symbolic checks.
 
-On Linux (amd64 and arm64), `pip` installs a platform wheel that also carries the `evalsid` server and its static bubblewrap, so `evalsi serve`, sandboxed code evaluators and Wasm plugins need nothing else (`evalsi evalsid-path` shows the one in use). Elsewhere you get the pure-Python wheel; point `EVALSID` at an `evalsid` from the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases) when you need the server.
+On Linux (amd64 and arm64), `pip` installs a platform wheel that also carries the `evalsid` server and its static bubblewrap, so `evalsi serve`, sandboxed code evaluators and Wasm plugins need nothing else (`evalsi evalsid-path` shows the one in use). Elsewhere you get the pure-Python wheel; point `EVALSID` at an `evalsid` from the [releases page](https://github.com/Abhishek-Rnjn/evalsi/releases) when you need the server.
 
 ## Quickstart
 
@@ -66,7 +66,7 @@ An exit code of 0 means scoring completed, not that every check passed or a
 release was approved. Two synthetic examples do not establish release safety.
 Choose appropriate checks and explicit gates for your own application.
 
-The [guided setup](https://github.com/Abhishek-Rnjn/Evals.si/blob/main/docs/guides/onboarding.md)
+The [guided setup](https://github.com/Abhishek-Rnjn/evalsi/blob/main/docs/guides/onboarding.md)
 explains connecting an application, version availability, and optional harness
 execution. No source checkout is needed for this recorded-output quickstart.
 
@@ -162,7 +162,7 @@ verl (`evalsi.rewards.verl`) and OpenRLHF (`evalsi.rewards.openrlhf`, or `evalsi
 ## More
 
 - [`evalsi-harness`](https://pypi.org/project/evalsi-harness/): the built-in agent harness for agent runs.
-- [Guides](https://github.com/Abhishek-Rnjn/Evals.si/tree/main/docs/guides): agent runs, online evaluation, trace sources, fine-tuning and RL, Kubernetes, identity and more.
-- `evalsi mcp` serves Evals.si to coding agents over MCP.
+- [Guides](https://github.com/Abhishek-Rnjn/evalsi/tree/main/docs/guides): agent runs, online evaluation, trace sources, fine-tuning and RL, Kubernetes, identity and more.
+- `evalsi mcp` serves Evalsi to coding agents over MCP.
 
-Evals.si is pre-1.0: the API is `v1alpha1` and can change between minor versions. Apache-2.0.
+Evalsi is pre-1.0: the API is `v1alpha1` and can change between minor versions. Apache-2.0.

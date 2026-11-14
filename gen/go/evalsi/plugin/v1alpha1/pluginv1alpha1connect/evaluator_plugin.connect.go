@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
+	v1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1"
 	http "net/http"
 	strings "strings"
 )

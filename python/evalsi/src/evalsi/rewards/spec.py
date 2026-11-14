@@ -4,7 +4,7 @@ A reward is a weighted sum of components. Each component is an evaluator
 (any registered one, typically from the ``rl`` pack) with its params, a
 weight and optionally a gate::
 
-    apiVersion: evals.si/v1alpha1
+    apiVersion: evalsi.dev/v1alpha1
     kind: RewardSpec
     metadata: {name: code-grpo}
     spec:
@@ -42,7 +42,7 @@ import yaml
 
 from evalsi.evaluator import EvaluatorConfigError
 
-API_VERSION = "evals.si/v1alpha1"
+API_VERSION = "evalsi.dev/v1alpha1"
 KIND = "RewardSpec"
 ON_ERROR = ("raise", "zero", "none")
 

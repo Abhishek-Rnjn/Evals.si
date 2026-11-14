@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )

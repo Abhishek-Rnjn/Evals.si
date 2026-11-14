@@ -1,8 +1,8 @@
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata:
   name: support-clickhouse
-  labels: {evals.si/project: studio}
+  labels: {evalsi.dev/project: studio}
 spec:
   connector: clickhouse
   endpoint: https://clickhouse.example.com:8443

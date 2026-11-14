@@ -5,7 +5,7 @@ task's trajectory is exported over OTLP/HTTP (JSON) as one trace: an
 ``invoke_agent`` root span and a child per step, using the OTel GenAI
 semantic conventions and tagged ``evalsi.run_id``, ``evalsi.trial`` and
 ``evalsi.task_id``, so offline runs appear in the same trace views as
-production (and in Evals.si's own ingest, whose mappers read the same
+production (and in Evalsi's own ingest, whose mappers read the same
 attributes). Headers come from ``OTEL_EXPORTER_OTLP_HEADERS``.
 """
 

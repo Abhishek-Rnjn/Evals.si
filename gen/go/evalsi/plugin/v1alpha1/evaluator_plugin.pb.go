@@ -7,8 +7,8 @@
 package pluginv1alpha1
 
 import (
-	v1alpha11 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
-	v1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	v1alpha11 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/harness/v1alpha1"
+	v1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -881,8 +881,8 @@ const file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDesc = "" +
 	"\x06Reduce\x12%.evalsi.plugin.v1alpha1.ReduceRequest\x1a&.evalsi.plugin.v1alpha1.ReduceResponse\x12]\n" +
 	"\bGenerate\x12'.evalsi.plugin.v1alpha1.GenerateRequest\x1a(.evalsi.plugin.v1alpha1.GenerateResponse\x12h\n" +
 	"\vLoadDataset\x12*.evalsi.plugin.v1alpha1.LoadDatasetRequest\x1a+.evalsi.plugin.v1alpha1.LoadDatasetResponse0\x01\x12\\\n" +
-	"\aRunTask\x12&.evalsi.plugin.v1alpha1.RunTaskRequest\x1a'.evalsi.plugin.v1alpha1.RunTaskResponse0\x01B\xfc\x01\n" +
-	"\x1acom.evalsi.plugin.v1alpha1B\x14EvaluatorPluginProtoP\x01ZNgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1;pluginv1alpha1\xa2\x02\x03EPX\xaa\x02\x16Evalsi.Plugin.V1alpha1\xca\x02\x16Evalsi\\Plugin\\V1alpha1\xe2\x02\"Evalsi\\Plugin\\V1alpha1\\GPBMetadata\xea\x02\x18Evalsi::Plugin::V1alpha1b\x06proto3"
+	"\aRunTask\x12&.evalsi.plugin.v1alpha1.RunTaskRequest\x1a'.evalsi.plugin.v1alpha1.RunTaskResponse0\x01B\xfa\x01\n" +
+	"\x1acom.evalsi.plugin.v1alpha1B\x14EvaluatorPluginProtoP\x01ZLgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1;pluginv1alpha1\xa2\x02\x03EPX\xaa\x02\x16Evalsi.Plugin.V1alpha1\xca\x02\x16Evalsi\\Plugin\\V1alpha1\xe2\x02\"Evalsi\\Plugin\\V1alpha1\\GPBMetadata\xea\x02\x18Evalsi::Plugin::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_plugin_v1alpha1_evaluator_plugin_proto_rawDescOnce sync.Once

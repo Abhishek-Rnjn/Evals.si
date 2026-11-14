@@ -41,8 +41,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	guestv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/guest/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/guest/v1alpha1/guestv1alpha1connect"
+	guestv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/guest/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/guest/v1alpha1/guestv1alpha1connect"
 )
 
 // PodConfig configures the pod rung.
@@ -94,7 +94,7 @@ const (
 	podTokenEnv    = "EVALSI_GUEST_TOKEN"
 	podGuestDir    = "/evalsi/bin"
 	saDir          = "/var/run/secrets/kubernetes.io/serviceaccount"
-	podLabelKey    = "evals.si/sandbox"
+	podLabelKey    = "evalsi.dev/sandbox"
 	podDefaultCaps = "CHOWN,DAC_OVERRIDE,FOWNER,FSETID,KILL,SETGID,SETUID"
 	// exitDialFailed is `evalsi-guest dial`'s exit status when the connection
 	// was refused or timed out (the canary was blocked).

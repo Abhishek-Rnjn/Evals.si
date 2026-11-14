@@ -156,7 +156,7 @@ throughout; do not postpone it until a large customer deployment.
 | Days 66–90 | Improve observed setup/compatibility failures; GTM-02 case studies. | Complete agreed isolation, evidence, audit/export, upgrade and restore exercises; GTM-03 discovery. | Initial target: three of five partners use the product weekly for four weeks; assess enterprise expansion into another team. |
 
 The north-star measure is **weekly teams making a real release decision using an
-Evals.si baseline and regression suite**. Track first useful result, first real
+Evalsi baseline and regression suite**. Track first useful result, first real
 repository gate, four-week team retention, human-confirmed false blocks,
 investigation time, cost per decision and cases promoted from real incidents.
 For enterprise accounts, also track retained application teams per organization,

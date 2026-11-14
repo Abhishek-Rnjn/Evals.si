@@ -2231,8 +2231,8 @@ const file_evalsi_v1alpha1_run_service_proto_rawDesc = "" +
 	"\tSliceRuns\x12!.evalsi.v1alpha1.SliceRunsRequest\x1a\".evalsi.v1alpha1.SliceRunsResponse\x12a\n" +
 	"\x0ePromoteResults\x12&.evalsi.v1alpha1.PromoteResultsRequest\x1a'.evalsi.v1alpha1.PromoteResultsResponse\x12m\n" +
 	"\x12CreateShadowReplay\x12*.evalsi.v1alpha1.CreateShadowReplayRequest\x1a+.evalsi.v1alpha1.CreateShadowReplayResponse\x12R\n" +
-	"\tImportRun\x12!.evalsi.v1alpha1.ImportRunRequest\x1a\".evalsi.v1alpha1.ImportRunResponseB\xcc\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x0fRunServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\tImportRun\x12!.evalsi.v1alpha1.ImportRunRequest\x1a\".evalsi.v1alpha1.ImportRunResponseB\xca\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x0fRunServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_run_service_proto_rawDescOnce sync.Once

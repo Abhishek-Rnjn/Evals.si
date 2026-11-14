@@ -34,16 +34,16 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
-	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/credentials"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	harnessv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/harness/v1alpha1"
+	pluginv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/credentials"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 func testIdempotencyInterceptor(g *gate) connect.Interceptor {

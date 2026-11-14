@@ -7,7 +7,7 @@
 # Verified's test.parquet under the server's datasets_dir, for example
 # datasets_dir/swebench-verified/test.parquet, then:
 #   evalsi run -f examples/agents/swebench-verified.yaml --server http://localhost:8080
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: swebench-verified-subset

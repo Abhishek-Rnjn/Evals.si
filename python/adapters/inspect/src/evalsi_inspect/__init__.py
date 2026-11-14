@@ -1,14 +1,14 @@
-"""Inspect AI and Evals.si, in both directions.
+"""Inspect AI and Evalsi, in both directions.
 
 - **Import**: ``inspect://logs/run.eval`` (or ``read_log``) turns an Inspect
   log into records: input, final output, target as reference, the
   conversation as a trajectory (model turns, tool calls and results), token
-  usage, and Inspect's own scores in metadata. Any Evals.si evaluator can then
+  usage, and Inspect's own scores in metadata. Any Evalsi evaluator can then
   re-score the samples, and runs can gate on them.
 - **Export**: ``evalsi_scorer("builtin/faithfulness")`` is an Inspect scorer
-  that runs an Evals.si evaluator, so Inspect tasks gain our packs and judges.
+  that runs an Evalsi evaluator, so Inspect tasks gain our packs and judges.
 
-Running Inspect tasks under Evals.si sandboxes arrives with the harness in
+Running Inspect tasks under Evalsi sandboxes arrives with the harness in
 Phase 3.
 """
 
@@ -143,7 +143,7 @@ def messages_to_trajectory(messages: list[ChatMessage], *, trace_id: str = "") -
 
 
 def state_to_record(state: TaskState, target: Target) -> Record:
-    """The record an Evals.si evaluator sees for an Inspect sample being scored."""
+    """The record an Evalsi evaluator sees for an Inspect sample being scored."""
     completion = state.output.completion if state.output else ""
     return Record(
         id=str(state.sample_id),
@@ -172,7 +172,7 @@ def evalsi_scorer(
     judge: JudgeConfig | JudgeClient | None = None,
     cache: bool = True,
 ) -> Scorer:
-    """An Inspect scorer that runs the Evals.si evaluator ``evaluator``.
+    """An Inspect scorer that runs the Evalsi evaluator ``evaluator``.
 
     Single-metric evaluators score a number (``passed`` becomes 1 or 0) with
     mean and stderr; multi-metric ones score a dict keyed by metric. Records

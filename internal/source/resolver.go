@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/credentials"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/credentials"
 )
 
 // NewResolver reads a source's credential after checking the grants

@@ -15,10 +15,10 @@ import (
 
 	"connectrpc.com/connect"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // ApplyPolicy implements MonitorService.

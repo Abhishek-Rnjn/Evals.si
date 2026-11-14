@@ -21,8 +21,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	_ "modernc.org/sqlite" // database/sql driver "sqlite"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
 )
 
 // ErrNotFound is returned for unknown ids and names.

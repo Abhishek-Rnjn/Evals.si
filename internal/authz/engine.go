@@ -14,7 +14,7 @@ import (
 
 	"cel.dev/cel-go/cel"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 )
 
 // Store holds roles, bindings and projects created through AuthService.

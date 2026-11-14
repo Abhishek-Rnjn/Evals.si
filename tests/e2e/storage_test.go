@@ -13,9 +13,9 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/objstore"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/objstore"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // TestFlywheelOnExternalStorage runs the flywheel (OTLP traces, shadow

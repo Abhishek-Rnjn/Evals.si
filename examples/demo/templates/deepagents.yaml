@@ -18,8 +18,8 @@ metadata:
   labels: {{- include "demo.labels" $ | nindent 4 }}
     app.kubernetes.io/name: {{ $i.name }}
   annotations:
-    evals.si/workflow: {{ $d.workflow | quote }}
-    evals.si/version: {{ $i.version | quote }}
+    evalsi.dev/workflow: {{ $d.workflow | quote }}
+    evalsi.dev/version: {{ $i.version | quote }}
 spec:
   replicas: {{ $d.replicas }}
   selector:
@@ -46,7 +46,7 @@ spec:
             - name: OPENAI_API_KEY
               valueFrom: {secretKeyRef: {name: {{ $.Values.agents.model.apiKeySecret.name }}, key: {{ $.Values.agents.model.apiKeySecret.key }}}}
             - {name: OTEL_SERVICE_NAME, value: evalsi-demo-deepagents}
-            # Every trace carries the workflow and its version: Evals.si reads
+            # Every trace carries the workflow and its version: Evalsi reads
             # evalsi.label.<key> resource attributes as labels, which policies
             # select on and the scores API filters by.
             - name: OTEL_RESOURCE_ATTRIBUTES

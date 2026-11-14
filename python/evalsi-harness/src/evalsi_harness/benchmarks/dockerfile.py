@@ -34,7 +34,7 @@ from typing import Any
 
 
 class TaskFormatError(ValueError):
-    """The task directory cannot be turned into an Evals.si task."""
+    """The task directory cannot be turned into an Evalsi task."""
 
 
 @dataclass

@@ -3,9 +3,9 @@ package watch
 import (
 	"context"
 	"fmt"
-	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/source"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	pluginv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/source"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 	"reflect"
 	"sync"
 	"testing"
@@ -13,8 +13,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
 )
 
 func TestRecoveryPreservesSelectorAttributeTypes(t *testing.T) {

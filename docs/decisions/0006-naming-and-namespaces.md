@@ -1,6 +1,6 @@
 # 0006. Names and namespaces
 
-- **Status:** Accepted, 2026-10-05 (design plan D10)
+- **Status:** Accepted, 2026-10-05 (design plan D10). Amended by [0039](0039-one-name-evalsi.md), 2026-11-14: the display name, repository, Go module and Kubernetes API group are now `Evalsi`, `Abhishek-Rnjn/evalsi`, `github.com/abhishek-rnjn/evalsi` and `evalsi.dev`.
 
 ## Decision
 

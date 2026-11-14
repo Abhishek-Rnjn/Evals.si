@@ -71,7 +71,7 @@ def render_report(report: dict[str, Any]) -> bytes:
         f"leave intervals unavailable. ",
         "Undefined denominators remain unavailable. Slices and comparisons are "
         "exploratory, without multiplicity correction.</p>",
-        "<p>Evals.si judge cache: disabled. Provider caching is outside this tool's control. ",
+        "<p>Evalsi judge cache: disabled. Provider caching is outside this tool's control. ",
         "Model identities are reported declarations, not attestations of model weights.</p>",
         "<h2>Held-out validity</h2><div class=table-scroll role=region "
         'aria-label="Held-out validity" tabindex=0><table><thead><tr>'

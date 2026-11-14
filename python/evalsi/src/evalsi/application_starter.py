@@ -64,7 +64,7 @@ def regressed(question: str) -> str:
     return "Kyoto" if question == "Capital of Japan?" else answer(question)
 '''
 
-_ENTRYPOINT = r'''"""Run an application with the installed Evals.si SDK: a Python callable (sync
+_ENTRYPOINT = r'''"""Run an application with the installed Evalsi SDK: a Python callable (sync
 or async), or an HTTP endpoint."""
 
 from __future__ import annotations

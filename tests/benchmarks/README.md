@@ -1,10 +1,10 @@
 # Local evaluation benchmarks
 
-Compare Evals.si with **DeepEval 4.3.1, Ragas 0.4.3, LangSmith SDK 0.14.11,
+Compare Evalsi with **DeepEval 4.3.1, Ragas 0.4.3, LangSmith SDK 0.14.11,
 and Braintrust SDK 0.46.1**, using their real public Python APIs and separate
 environments. The four `requirements/` files pin the installed dependency
-versions; Evals.si uses the repository's `python/uv.lock` and source revision.
-These benchmark versions do not change the versions of Evals.si's adapters.
+versions; Evalsi uses the repository's `python/uv.lock` and source revision.
+These benchmark versions do not change the versions of Evalsi's adapters.
 
 ## Reproduce
 
@@ -40,11 +40,11 @@ from 0.4.x; this compatibility constraint is also used by the existing adapter.
   displays are disabled where the public API exposes that control. Braintrust
   `Eval` retains its progress/summary bookkeeping, captured through pipes.
   LangSmith and Braintrust require an identity
-  task over precomputed outputs; Evals.si, DeepEval and Ragas accept those
-  outputs directly. Evals.si computes its normal manifest and intervals;
+  task over precomputed outputs; Evalsi, DeepEval and Ragas accept those
+  outputs directly. Evalsi computes its normal manifest and intervals;
   DeepEval retains its normal local test-run bookkeeping. Features and their
   overhead differ, so this is not an equal-feature platform comparison.
-- **Metric loop:** Evals.si's `EvaluatorDef.fn`, DeepEval's `measure`, and
+- **Metric loop:** Evalsi's `EvaluatorDef.fn`, DeepEval's `measure`, and
   Ragas collections' `score`, serially, over native inputs prepared before
   timing. This excludes dataset parsing, orchestration, manifests and gates.
   LangSmith and Braintrust are excluded: their custom equality functions
@@ -55,7 +55,7 @@ leading/trailing whitespace, including case changes, internal spaces/newlines,
 Unicode composition and 4-KiB strings. A separate compatibility run records
 empty strings and leading/trailing whitespace. DeepEval 4.3.1 trims string
 ends and rejects empty outputs; it is not relabeled as strict byte equality.
-Evals.si's usual normalization is explicitly disabled for this comparison.
+Evalsi's usual normalization is explicitly disabled for this comparison.
 
 Every sample runs in a fresh subprocess after a 12-record warmup. Import and
 setup time are recorded separately and excluded from timed scoring. Timings
@@ -81,7 +81,7 @@ upload and persistence, read back all persisted scores/IDs, record deployment
 region and service tier, and clean up only its disposable experiment. Report
 upload/score/read-back time separately from local computation. Keep trial
 counts within the workspace's free allowance; never silently turn on paid
-usage. Evals.si's unary `Evaluate` response is not a substitute for persisted
+usage. Evalsi's unary `Evaluate` response is not a substitute for persisted
 results in that comparison. Hosted numbers remain unmeasured until those
 prerequisites and equivalent persistence paths are available.
 

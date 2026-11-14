@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 )
 
 // grant is one permission pattern a role grants, under the conjunction of

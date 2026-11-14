@@ -38,7 +38,7 @@ Copy the 64-character lowercase digest printed by `snapshot` into the reviewable
 run spec; replace `APPROVED_DIGEST` below. Paths resolve relative to the spec.
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: support-regression

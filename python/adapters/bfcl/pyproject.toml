@@ -1,7 +1,7 @@
 [project]
 name = "evalsi-adapter-bfcl"
 version = "0.1.0"
-description = "Berkeley Function Calling Leaderboard (BFCL) single-turn categories as Evals.si tasks, graded by BFCL's AST checker."
+description = "Berkeley Function Calling Leaderboard (BFCL) single-turn categories as Evalsi tasks, graded by BFCL's AST checker."
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [

@@ -4,7 +4,7 @@
 #   sed 's/mode: record/mode: replay/' record.yaml > replay.yaml
 #   evalsi run -f replay.yaml                                       # TinyLM can be stopped
 # Walkthrough: docs/tutorials/05-record-replay-and-compare.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-record}
 spec:

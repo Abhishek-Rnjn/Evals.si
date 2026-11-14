@@ -122,14 +122,14 @@ spec:
             {{- if $v.server.tls }}
             - --ca-file=/etc/evalsi/server-tls/ca.crt
             {{- end }}
-            - --token-file=/var/run/secrets/evals.si/token
+            - --token-file=/var/run/secrets/evalsi.dev/token
             - --namespace={{ $ns }}
             - --wait={{ $b.waitTimeout }}
           securityContext: {{- include "evalsi.restricted" . | nindent 12 }}
           resources: {{- toYaml $b.resources | nindent 12 }}
           volumeMounts:
             - {name: config, mountPath: /etc/evalsi/bootstrap, readOnly: true}
-            - {name: token, mountPath: /var/run/secrets/evals.si, readOnly: true}
+            - {name: token, mountPath: /var/run/secrets/evalsi.dev, readOnly: true}
             {{- if $v.server.tls }}
             - {name: server-tls, mountPath: /etc/evalsi/server-tls, readOnly: true}
             {{- end }}

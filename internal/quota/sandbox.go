@@ -14,8 +14,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // Usage is the part of the store the meter reads and writes.

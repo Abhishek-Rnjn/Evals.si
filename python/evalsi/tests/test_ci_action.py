@@ -313,7 +313,7 @@ def test_pr_comment_is_created_then_updated_and_never_changes_the_outcome(
         assert "PR comment posted." in summary
         assert len(comments) == 1
         assert comments[0]["body"].startswith("<!-- evalsi-gate:")
-        assert "# Evals.si gate" in comments[0]["body"]
+        assert "# Evalsi gate" in comments[0]["body"]
         assert "Capital of France?" not in comments[0]["body"]
         assert ("POST", "/repos/acme/agent/issues/12/comments", "Bearer good-token") in seen
 

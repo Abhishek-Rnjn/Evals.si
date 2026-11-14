@@ -13,7 +13,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	ext_mcp "github.com/abhishek-rnjn/evals.si/gen/go/agentgateway/dev/ext_mcp"
+	ext_mcp "github.com/abhishek-rnjn/evalsi/gen/go/agentgateway/dev/ext_mcp"
 	http "net/http"
 	strings "strings"
 )

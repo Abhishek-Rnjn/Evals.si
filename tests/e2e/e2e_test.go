@@ -31,14 +31,14 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxcli"
-	"github.com/abhishek-rnjn/evals.si/internal/server"
-	"github.com/abhishek-rnjn/evals.si/internal/sinks"
-	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox/sandboxcli"
+	"github.com/abhishek-rnjn/evalsi/internal/server"
+	"github.com/abhishek-rnjn/evalsi/internal/sinks"
+	"github.com/abhishek-rnjn/evalsi/internal/wasmeval"
 )
 
 // The server runs in this test binary, so the worker's EVALSID points here:
@@ -451,7 +451,7 @@ func TestRuns(t *testing.T) {
 
 	t.Run("python CLI against the server", func(t *testing.T) {
 		specFile := filepath.Join(t.TempDir(), "run.yaml")
-		yaml := `apiVersion: evals.si/v1alpha1
+		yaml := `apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: from-cli}
 spec:

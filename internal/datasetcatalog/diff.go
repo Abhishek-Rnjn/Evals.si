@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
-	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	pb "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 )
 
 func changedFields(a, b proto.Message, skip string) []string {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
 )
 
 // The Python SDK's evalsi.log() retries a failed batch with one

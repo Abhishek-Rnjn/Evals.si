@@ -1,7 +1,7 @@
 package authz
 
 import (
-	pb "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
+	pb "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
 	"google.golang.org/protobuf/proto"
 )
 

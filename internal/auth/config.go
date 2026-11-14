@@ -81,7 +81,7 @@ type Provider struct {
 	Algorithms []string `json:"algorithms,omitempty"`
 	// Allowed clock difference for exp, nbf and iat. Default 60s.
 	ClockSkew string `json:"clock_skew,omitempty"`
-	// Map application roles in a claim to Evals.si roles.
+	// Map application roles in a claim to Evalsi roles.
 	RoleClaims *RoleClaims `json:"role_claims,omitempty"`
 	// "user" (default) or "service": the kind of principal tokens make.
 	Kind string `json:"kind,omitempty"`

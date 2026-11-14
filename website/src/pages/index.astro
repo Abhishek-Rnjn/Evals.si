@@ -15,7 +15,7 @@ import ArchitectureBeams from "../components/ArchitectureBeams";
 import CodeTabs from "../components/CodeTabs";
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-const repo = "https://github.com/Abhishek-Rnjn/Evals.si";
+const repo = "https://github.com/Abhishek-Rnjn/evalsi";
 const doc = (p: string) => `${base}${p}`;
 
 // Search and link previews: the canonical URL, the social card
@@ -23,14 +23,14 @@ const doc = (p: string) => `${base}${p}`;
 // repository and the PyPI packages, so search engines treat them as one project.
 const siteUrl = new URL(`${base}/`, Astro.site).href;
 const ogImage = new URL(`${base}/og.png`, Astro.site).href;
-const title = "Evals.si (evalsi) · Open-source evaluation for AI agents, RAG and models, from CI to production to training";
-const description = "Evals.si (pip install evalsi) evaluates AI before you ship, while it runs and as you train it: agents on sandboxed tasks, RAG pipelines, LLMs and models, with CI gates, release decisions, live trace scoring, a built-in agent harness and RL rewards on one set of evaluators. Self-hosted, sandboxed, open source.";
+const title = "Evalsi (evalsi) · Open-source evaluation for AI agents, RAG and models, from CI to production to training";
+const description = "Evalsi (pip install evalsi) evaluates AI before you ship, while it runs and as you train it: agents on sandboxed tasks, RAG pipelines, LLMs and models, with CI gates, release decisions, live trace scoring, a built-in agent harness and RL rewards on one set of evaluators. Self-hosted, sandboxed, open source.";
 // Search Console verification; the same default as astro.config.mjs.
 const googleVerification = process.env.GOOGLE_SITE_VERIFICATION || "71Ou0Qy18e2sRbPlZ9OXapiu2-xZAJnnmPcVzmDdetM";
 const jsonLd = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "SoftwareSourceCode",
-  name: "Evals.si",
+  name: "Evalsi",
   alternateName: "evalsi",
   description,
   url: siteUrl,
@@ -81,7 +81,7 @@ evalsi eval --data rag.jsonl \\
   --evaluators faithfulness,answer-relevance,context-precision,context-recall \\
   --judge-model my-judge --judge-base-url http://localhost:8000/v1` },
   { label: "Training", lang: "yaml", code: `# Evaluators as an RL reward for TRL, verl or OpenRLHF
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: RewardSpec
 metadata: {name: math-grpo}
 spec:
@@ -111,11 +111,11 @@ def polite(record: Record) -> Score:
 result = evalsi.evaluate("qa.jsonl", ["exact-match", polite])
 print(result.table())
 result.save("results.json")` },
-  { label: "Trace source", lang: "yaml", code: `apiVersion: evals.si/v1alpha1
+  { label: "Trace source", lang: "yaml", code: `apiVersion: evalsi.dev/v1alpha1
 kind: TraceSource
 metadata:
   name: studio-mlflow
-  labels: {evals.si/project: studio}
+  labels: {evalsi.dev/project: studio}
 spec:
   connector: mlflow
   endpoint: https://mlflow.example.com
@@ -123,11 +123,11 @@ spec:
   backfill: {since: 720h}          # 30 days of history first
   policies: [studio-agents]        # score with these online policies
   writeBack: {enabled: true}       # scores become MLflow assessments` },
-  { label: "Kubernetes", lang: "yaml", code: `apiVersion: evals.si/v1alpha1
+  { label: "Kubernetes", lang: "yaml", code: `apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: swebench-verified
-  labels: {evals.si/project: swe}
+  labels: {evalsi.dev/project: swe}
 spec:
   target:
     agent:
@@ -150,7 +150,7 @@ const tracks = [
   },
   {
     name: "RAG", badge: "",
-    text: "Retrieval and generation fail differently, so Evals.si scores them separately and tells you which to fix.",
+    text: "Retrieval and generation fail differently, so Evalsi scores them separately and tells you which to fix.",
     points: [
       "context precision and recall for retrieval; faithfulness and answer relevance for generation",
       "citation accuracy needs no judge, and a judge can be a model you host",
@@ -170,10 +170,10 @@ const tracks = [
   },
 ];
 
-// Product position: the one decision Evals.si is built around
+// Product position: the one decision Evalsi is built around
 // (docs/PRODUCT-STRATEGY.md), and the workflow that answers it.
 const workflow = [
-  { step: "1", name: "Connect what you run", text: "Point Evals.si at the agent you already have (A2A, MCP, HTTP, a CLI or the built-in harness) and the traces you already keep in OpenTelemetry, MLflow, Phoenix, Langfuse or LangSmith.", href: "/docs/guides/onboarding/" },
+  { step: "1", name: "Connect what you run", text: "Point Evalsi at the agent you already have (A2A, MCP, HTTP, a CLI or the built-in harness) and the traces you already keep in OpenTelemetry, MLflow, Phoenix, Langfuse or LangSmith.", href: "/docs/guides/onboarding/" },
   { step: "2", name: "Turn failures into tests", text: "Capture a failing production trace in the failure inbox, approve a redacted expectation, and publish it to a pinned, versioned regression suite in the dataset catalog.", href: "/docs/guides/failure-inbox/" },
   { step: "3", name: "Decide every release", text: "Run the candidate against an explicit baseline under a reviewed policy. The decision is PASS, BLOCK or INSUFFICIENT, saved with its evidence, from the CLI, the browser or a GitHub Action.", href: "/docs/guides/release-decisions/" },
 ];
@@ -264,14 +264,14 @@ const extras = [
   <link rel="canonical" href={siteUrl} />
   <link rel="sitemap" href={`${base}/sitemap-index.xml`} />
   <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Evals.si" />
+  <meta property="og:site_name" content="Evalsi" />
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
   <meta property="og:url" content={siteUrl} />
   <meta property="og:image" content={ogImage} />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Evals.si: evaluate AI before you ship, while it runs, and as you train it" />
+  <meta property="og:image:alt" content="Evalsi: evaluate AI before you ship, while it runs, and as you train it" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content={title} />
   <meta name="twitter:description" content={description} />
@@ -287,7 +287,7 @@ const extras = [
   <!-- Nav -->
   <header class="sticky top-0 z-50 border-b border-neutral-200/60 bg-white/70 backdrop-blur-xl dark:border-white/5 dark:bg-[#05060d]/70">
     <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-      <a href={`${base}/`} aria-label="Evals.si home" class="[&>svg]:h-8 [&>svg]:w-auto" set:html={logo} />
+      <a href={`${base}/`} aria-label="Evalsi home" class="[&>svg]:h-8 [&>svg]:w-auto" set:html={logo} />
       <nav class="flex items-center gap-1 text-sm text-neutral-600 dark:text-neutral-400">
         <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 sm:block dark:hover:text-white" href={doc("/docs/get-started/")}>Docs</a>
         <a class="hidden rounded-lg px-3 py-2 hover:text-neutral-900 sm:block dark:hover:text-white" href={doc("/examples/")}>Examples</a>
@@ -466,7 +466,7 @@ loop-detection                2  <span class="text-amber-600 font-medium">0.500<
             <p class="text-sm font-semibold text-indigo-500 dark:text-indigo-300">evalsi-harness</p>
             <h2 class="mt-2 text-balance text-3xl font-bold tracking-tight sm:text-4xl">A built-in agent harness, made for evaluation</h2>
             <p class="mt-4 text-neutral-600 dark:text-neutral-400">The harness runs an agent on a task in a sandbox, records every model call and tool result, and grades the final state with a checker the agent never sees. Use it to measure a model on a known, versioned agent, or to put your own agent through the same tasks, trials and gates. The tasks double as RL environments.</p>
-            <p class="mt-4 text-neutral-600 dark:text-neutral-400">It is built for evaluation, not for serving agents to users. Bring an agent that serves users over A2A or HTTP, and Evals.si evaluates it.</p>
+            <p class="mt-4 text-neutral-600 dark:text-neutral-400">It is built for evaluation, not for serving agents to users. Bring an agent that serves users over A2A or HTTP, and Evalsi evaluates it.</p>
             <p class="mt-6 flex flex-wrap items-center gap-3 text-sm">
               <code class="rounded-md border border-neutral-200 bg-white/60 px-2 py-1 font-mono text-[13px] text-neutral-700 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300">pip install evalsi-harness</code>
               <a class="text-neutral-500 underline-offset-4 hover:text-neutral-900 hover:underline dark:hover:text-white" href="https://pypi.org/project/evalsi-harness/">PyPI</a>

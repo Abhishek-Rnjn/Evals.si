@@ -4,22 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.22.0
-  name: evaluators.evals.si
+  name: checkpointservers.evalsi.dev
 spec:
-  group: evals.si
+  group: evalsi.dev
   names:
-    kind: Evaluator
-    listKind: EvaluatorList
-    plural: evaluators
-    singular: evaluator
+    kind: CheckpointServer
+    listKind: CheckpointServerList
+    plural: checkpointservers
+    shortNames:
+    - evckpt
+    singular: checkpointserver
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.image
-      name: Image
+    - jsonPath: .spec.model
+      name: Model
       type: string
-    - jsonPath: .spec.pools
-      name: Pools
+    - jsonPath: .status.endpoint
+      name: Endpoint
       type: string
     - jsonPath: .status.readyReplicas
       name: Ready
@@ -28,9 +30,11 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          Evaluator registers an evaluator plugin: an image with evalsid, the
-          Python worker and the plugin's packages, run as a worker Deployment that
-          serves pools from the work queues.
+          CheckpointServer serves a model checkpoint (or a base model that takes
+          LoRA adapters) with vLLM: the operator runs a Deployment and a Service and
+          reports the OpenAI-compatible endpoint in the status. A checkpoint watcher
+          points a run's target at that endpoint (evalsi checkpoints ... --serve
+          operator creates and deletes one per checkpoint).
         properties:
           apiVersion:
             description: |-
@@ -51,33 +55,27 @@ spec:
             type: object
           spec:
             properties:
-              autoscaling:
-                description: KEDA scaling on the pools' queue backlog (needs KEDA
-                  installed).
-                properties:
-                  lagThreshold:
-                    description: Backlog per replica; default 10.
-                    format: int64
-                    type: integer
-                  maxReplicas:
-                    format: int32
-                    type: integer
-                  minReplicas:
-                    format: int32
-                    type: integer
-                required:
-                - maxReplicas
-                - minReplicas
-                type: object
-              concurrency:
-                description: Tasks per pool at once in each replica; default 4.
-                format: int32
-                type: integer
-              configMap:
+              apiKeySecret:
                 description: |-
-                  A ConfigMap holding the worker's evalsi.yaml (cluster, judges,
-                  sandbox service); default: the operator's worker config.
+                  A Secret with the key api-key: the server then requires it as a bearer
+                  token (VLLM_API_KEY), and clients get it from the same Secret.
                 type: string
+              args:
+                description: More `vllm serve` arguments, after the ones the operator
+                  sets.
+                items:
+                  type: string
+                type: array
+              checkpointClaim:
+                description: |-
+                  A PersistentVolumeClaim with the checkpoints, mounted read-only at
+                  /checkpoints.
+                type: string
+              command:
+                description: Replaces the serving command; default ["vllm", "serve"].
+                items:
+                  type: string
+                type: array
               env:
                 items:
                   description: EnvVar represents an environment variable present in
@@ -237,20 +235,33 @@ spec:
                   type: object
                 type: array
               image:
-                description: The worker image.
+                description: The vLLM image; must provide `vllm serve` unless command
+                  says otherwise.
+                minLength: 1
+                type: string
+              lora:
+                description: |-
+                  Serve a base model that accepts LoRA adapters loaded at runtime
+                  (--enable-lora and VLLM_ALLOW_RUNTIME_LORA_UPDATING=True), which the
+                  checkpoint watcher's lora strategy loads each checkpoint into.
+                type: boolean
+              model:
+                description: |-
+                  What to serve: a path inside the container (under the mounted
+                  checkpoint volume, for example /checkpoints/run-1/step-200) or a model
+                  id vLLM can fetch.
                 minLength: 1
                 type: string
               nodeSelector:
                 additionalProperties:
                   type: string
                 type: object
-              pools:
-                description: Pools it serves; default cpu.
-                items:
-                  type: string
-                type: array
+              port:
+                description: The server's port; default 8000.
+                format: int32
+                type: integer
               replicas:
-                description: Replicas without autoscaling; default 1.
+                description: Replicas; default 1.
                 format: int32
                 type: integer
               resources:
@@ -312,6 +323,10 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              servedModelName:
+                description: The name clients use as the request's model; default
+                  the resource's name.
+                type: string
               serviceAccountName:
                 type: string
               tolerations:
@@ -355,6 +370,7 @@ spec:
                 type: array
             required:
             - image
+            - model
             type: object
           status:
             properties:
@@ -417,12 +433,20 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              endpoint:
+                description: |-
+                  The OpenAI-compatible base URL inside the cluster, for example
+                  http://evalsi-ckpt-step-200.team-a.svc:8000/v1.
+                type: string
               observedGeneration:
                 format: int64
                 type: integer
               readyReplicas:
                 format: int32
                 type: integer
+              servedModelName:
+                description: The model name to request.
+                type: string
             type: object
         required:
         - spec

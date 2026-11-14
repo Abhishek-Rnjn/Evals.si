@@ -20,13 +20,13 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/credentials"
-	"github.com/abhishek-rnjn/evals.si/internal/source"
-	"github.com/abhishek-rnjn/evals.si/internal/source/langsmith"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/credentials"
+	"github.com/abhishek-rnjn/evalsi/internal/source"
+	"github.com/abhishek-rnjn/evalsi/internal/source/langsmith"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 // The same exercise runs in ordinary e2e CI against a derived fixture and,
@@ -250,7 +250,7 @@ func exerciseLangSmith(t *testing.T, endpoint string) {
 			t.Errorf("remove disposable project %s: %v", projectName, err)
 		}
 	})
-	must(http.MethodPost, "/sessions", map[string]any{"id": projectID, "name": projectName, "description": "Disposable Evals.si connector verification; no model calls."}, nil)
+	must(http.MethodPost, "/sessions", map[string]any{"id": projectID, "name": projectName, "description": "Disposable Evalsi connector verification; no model calls."}, nil)
 	seed := func(start time.Time, pending bool) string {
 		root, tool := uuid(), uuid()
 		for i, id := range []string{root, tool} {

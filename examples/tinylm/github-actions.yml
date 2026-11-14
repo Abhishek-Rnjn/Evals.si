@@ -1,4 +1,4 @@
-# Gate every pull request on the TinyLM agent run: the job installs Evals.si,
+# Gate every pull request on the TinyLM agent run: the job installs Evalsi,
 # starts the fake model, runs the spec in a sandbox and fails when a gate fails
 # (exit 3) or the run cannot complete (exit 1). Copy this to
 # .github/workflows/agent-eval.yml, and copy examples/tinylm to evals/ (or

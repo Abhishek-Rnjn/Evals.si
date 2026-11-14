@@ -2684,8 +2684,8 @@ const file_evalsi_v1alpha1_auth_service_proto_rawDesc = "" +
 	"\rCreateBinding\x12%.evalsi.v1alpha1.CreateBindingRequest\x1a&.evalsi.v1alpha1.CreateBindingResponse\x12^\n" +
 	"\rDeleteBinding\x12%.evalsi.v1alpha1.DeleteBindingRequest\x1a&.evalsi.v1alpha1.DeleteBindingResponse\x12d\n" +
 	"\x0fListAuditEvents\x12'.evalsi.v1alpha1.ListAuditEventsRequest\x1a(.evalsi.v1alpha1.ListAuditEventsResponse\x12a\n" +
-	"\x0eVerifyAuditLog\x12&.evalsi.v1alpha1.VerifyAuditLogRequest\x1a'.evalsi.v1alpha1.VerifyAuditLogResponseB\xcd\x01\n" +
-	"\x13com.evalsi.v1alpha1B\x10AuthServiceProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x0eVerifyAuditLog\x12&.evalsi.v1alpha1.VerifyAuditLogRequest\x1a'.evalsi.v1alpha1.VerifyAuditLogResponseB\xcb\x01\n" +
+	"\x13com.evalsi.v1alpha1B\x10AuthServiceProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_auth_service_proto_rawDescOnce sync.Once

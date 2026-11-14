@@ -26,10 +26,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
-	evalsiwebhook "github.com/abhishek-rnjn/evals.si/operator/webhook"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
+	evalsiwebhook "github.com/abhishek-rnjn/evalsi/operator/webhook"
 )
 
 // fakeAPI stands in for evalsid: runs advance one state per GetRun.
@@ -284,7 +284,7 @@ func start(t *testing.T) *env {
 		Enabled: []string{"evalrun", "onlineevalpolicy", "tracesource", "evaluator", "sandboxclass"},
 		API:     APIConfig{URL: srv.URL, TokenFile: tokenFile, CreateProjects: true}, PollInterval: 200 * time.Millisecond, StatsInterval: 200 * time.Millisecond,
 		Namespace: "evalsi", Image: "ghcr.io/abhishek-rnjn/evalsi:test", SandboxTLSSecret: "sandbox-tls",
-		SandboxAllowClients: []string{"spiffe://evals.si/ns/evalsi/sa/evalsi-worker"}, SandboxServiceAccount: "evalsi-sandboxd",
+		SandboxAllowClients: []string{"spiffe://evalsi.dev/ns/evalsi/sa/evalsi-worker"}, SandboxServiceAccount: "evalsi-sandboxd",
 		WorkerConfigMap: "evalsi-worker", WorkerTLSSecret: "evalsi-worker-tls", WorkerS3Secret: "evalsi-s3", WorkerNATSSecret: "evalsi-nats-auth", NATSMonitoringEndpoint: "evalsi-nats.evalsi.svc:8222",
 		ProjectNamespaces: testProjectNamespaces,
 	}); err != nil {

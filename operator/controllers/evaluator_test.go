@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 func TestEvaluatorRemovesScaledObjectWhenAutoscalingRemoved(t *testing.T) {
@@ -74,7 +74,7 @@ func TestEvaluatorConfigHashRollsPods(t *testing.T) {
 		if err := c.Get(ctx, client.ObjectKey{Namespace: "ns", Name: "evalsi-evaluator-e"}, d); err != nil {
 			t.Fatal(err)
 		}
-		return d.Spec.Template.Annotations["evals.si/config-hash"]
+		return d.Spec.Template.Annotations["evalsi.dev/config-hash"]
 	}
 	before := annotation()
 	if before == "" {

@@ -5,7 +5,7 @@
 #   sed 's/tinylm-good/tinylm-gullible/' injection.yaml > gullible.yaml
 #   evalsi run -f gullible.yaml                                          # exit 3
 # Walkthrough: docs/tutorials/06-faults-injection-and-approvals.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-injection}
 spec:

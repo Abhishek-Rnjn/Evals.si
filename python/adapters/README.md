@@ -1,6 +1,6 @@
 # Framework adapters
 
-Adapters bring other evaluation frameworks into Evals.si. They also expose
+Adapters bring other evaluation frameworks into Evalsi. They also expose
 our evaluators to those frameworks. Each adapter is its own package, with its
 own pinned environment and lockfile, so upstream dependency conflicts never
 reach the SDK or the other adapters. CI runs each adapter's contract tests
@@ -11,8 +11,8 @@ from `evalsi.testing`.
 |---|---|---|
 | `evalsi-adapter-deepeval` | `deepeval==4.2.8` | Pack `deepeval`. RAG and safety: `faithfulness`, `answer-relevancy`, `contextual-precision`, `contextual-recall`, `contextual-relevancy`, `hallucination`, `bias`, `toxicity`, `summarization`, `pii-leakage`, `misuse`, `non-advice`, `role-violation`, `prompt-alignment`. Agents: `tool-correctness`, `argument-correctness`, `task-completion`, `step-efficiency`, `plan-quality`, `plan-adherence`. Conversations: `knowledge-retention`, `conversation-completeness`, `turn-relevancy`, `role-adherence`, `topic-adherence`, `goal-accuracy`. Custom: `g-eval`, `jev-eval`, `conversational-g-eval`, `conversational-jev-eval` |
 | `evalsi-adapter-ragas` | `ragas==0.4.3` | Pack `ragas`: `faithfulness`, `context-precision`, `context-utilization`, `context-recall`, `context-entity-recall`, `context-relevance`, `response-groundedness`, `answer-accuracy`, `factual-correctness`, `noise-sensitivity`, `agent-goal-accuracy` (with and without reference), `topic-adherence`, `tool-call-accuracy`, `tool-call-f1` |
-| `evalsi-adapter-inspect` | `inspect-ai==0.3.276` | Importer `inspect://log.eval`, which turns Inspect samples into records with trajectories and Inspect's scores. `evalsi_scorer(...)` runs any Evals.si evaluator as an Inspect scorer. |
-| `evalsi-adapter-lm-eval` | `lm-eval==0.4.13` | lm-eval model `evalsi`, which generates through Evals.si target connectors. `evaluate(tasks, target)` returns records. Importer `lm-eval://samples_<task>_<date>.jsonl`. |
+| `evalsi-adapter-inspect` | `inspect-ai==0.3.276` | Importer `inspect://log.eval`, which turns Inspect samples into records with trajectories and Inspect's scores. `evalsi_scorer(...)` runs any Evalsi evaluator as an Inspect scorer. |
+| `evalsi-adapter-lm-eval` | `lm-eval==0.4.13` | lm-eval model `evalsi`, which generates through Evalsi target connectors. `evaluate(tasks, target)` returns records. Importer `lm-eval://samples_<task>_<date>.jsonl`. |
 | `evalsi-adapter-swebench` | `swebench==5.0.2` | Importer `swebench://` for SWE-bench 5 instances as agent tasks (the instance's image, repository at `/testbed`), graded by the instance's eval script and `swebench`'s own report. A fixture dataset (`python -m evalsi_swebench.fixture`) for offline runs. |
 | `evalsi-adapter-taubench` | tau2-bench v0.2.0 (Python 3.12) | Importer `taubench://<domain>` and harness `evalsi_taubench:TauBenchHarness`: the domain's tools and policy, the simulated user, tau2's own evaluator. Needs tau2's `data/` (`TAU2_DATA_DIR`). |
 | `evalsi-adapter-bfcl` | `bfcl-eval==2026.3.23` | Importer `bfcl://<category>` (single-turn categories) and harness `evalsi_bfcl:BFCLHarness`, graded by BFCL's AST checker. |

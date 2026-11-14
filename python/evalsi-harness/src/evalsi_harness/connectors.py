@@ -85,7 +85,7 @@ def _get_path(data: Any, path: str) -> Any:
 
 
 def _usage(data: Any) -> Usage:
-    """Token usage as an agent reported it, in Evals.si or OpenAI Chat names."""
+    """Token usage as an agent reported it, in Evalsi or OpenAI Chat names."""
     if not isinstance(data, Mapping):
         return Usage()
     try:

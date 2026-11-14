@@ -1,4 +1,4 @@
-// Command evalsid is the Evals.si daemon: API server, scheduler and OTLP
+// Command evalsid is the Evalsi daemon: API server, scheduler and OTLP
 // ingest. Users normally start it through the Python CLI with `evalsi serve`.
 package main
 
@@ -13,12 +13,12 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxcli"
-	"github.com/abhishek-rnjn/evals.si/internal/server"
-	"github.com/abhishek-rnjn/evals.si/internal/version"
-	"github.com/abhishek-rnjn/evals.si/internal/wasmeval"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox/sandboxcli"
+	"github.com/abhishek-rnjn/evalsi/internal/server"
+	"github.com/abhishek-rnjn/evalsi/internal/version"
+	"github.com/abhishek-rnjn/evalsi/internal/wasmeval"
 )
 
 const usage = `usage: evalsid <command> [flags]

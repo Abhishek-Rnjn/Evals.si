@@ -4,22 +4,22 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.22.0
-  name: sandboxclasses.evals.si
+  name: evaluators.evalsi.dev
 spec:
-  group: evals.si
+  group: evalsi.dev
   names:
-    kind: SandboxClass
-    listKind: SandboxClassList
-    plural: sandboxclasses
-    singular: sandboxclass
-  scope: Cluster
+    kind: Evaluator
+    listKind: EvaluatorList
+    plural: evaluators
+    singular: evaluator
+  scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.minIsolation
-      name: Min
+    - jsonPath: .spec.image
+      name: Image
       type: string
-    - jsonPath: .spec.ladder
-      name: Ladder
+    - jsonPath: .spec.pools
+      name: Pools
       type: string
     - jsonPath: .status.readyReplicas
       name: Ready
@@ -28,10 +28,9 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          SandboxClass is like a StorageClass for sandboxes: the isolation ladder,
-          the minimum level, the rungs' settings and the pool's size. The operator
-          runs a sandbox pool for it (evalsi-sandbox-<name>: a Deployment serving
-          the sandbox service over mutual TLS, and its Service).
+          Evaluator registers an evaluator plugin: an image with evalsid, the
+          Python worker and the plugin's packages, run as a worker Deployment that
+          serves pools from the work queues.
         properties:
           apiVersion:
             description: |-
@@ -52,104 +51,206 @@ spec:
             type: object
           spec:
             properties:
-              firecracker:
+              autoscaling:
+                description: KEDA scaling on the pools' queue backlog (needs KEDA
+                  installed).
                 properties:
-                  defaultImage:
-                    description: |-
-                      The image a microVM boots when a spec names none; required, since the
-                      pool boots it at start to check the rung.
-                    type: string
-                  diskMB:
-                    description: 'Root disk size per microVM in MiB; default: sandboxd''s.'
+                  lagThreshold:
+                    description: Backlog per replica; default 10.
+                    format: int64
+                    type: integer
+                  maxReplicas:
                     format: int32
                     type: integer
-                  kernel:
-                    description: Path of the guest kernel on the node.
-                    type: string
-                  memoryMB:
-                    format: int32
-                    type: integer
-                  vcpus:
-                    format: int32
-                    type: integer
-                  warmPool:
+                  minReplicas:
                     format: int32
                     type: integer
                 required:
-                - defaultImage
-                - kernel
+                - maxReplicas
+                - minReplicas
                 type: object
-              ladder:
-                description: 'Rungs, strongest first: firecracker, bwrap, landlock,
-                  pod.'
-                items:
-                  type: string
-                type: array
-              maxSandboxes:
-                description: Sandboxes at once per replica.
+              concurrency:
+                description: Tasks per pool at once in each replica; default 4.
                 format: int32
                 type: integer
-              minIsolation:
-                description: none, confined, namespaced, kernel or vm.
+              configMap:
+                description: |-
+                  A ConfigMap holding the worker's evalsi.yaml (cluster, judges,
+                  sandbox service); default: the operator's worker config.
+                type: string
+              env:
+                items:
+                  description: EnvVar represents an environment variable present in
+                    a Container.
+                  properties:
+                    name:
+                      description: |-
+                        Name of the environment variable.
+                        May consist of any printable ASCII characters except '='.
+                      type: string
+                    value:
+                      description: |-
+                        Variable references $(VAR_NAME) are expanded
+                        using the previously defined environment variables in the container and
+                        any service environment variables. If a variable cannot be resolved,
+                        the reference in the input string will be unchanged. Double $$ are reduced
+                        to a single $, which allows for escaping the $(VAR_NAME) syntax: i.e.
+                        "$$(VAR_NAME)" will produce the string literal "$(VAR_NAME)".
+                        Escaped references will never be expanded, regardless of whether the variable
+                        exists or not.
+                        Defaults to "".
+                      type: string
+                    valueFrom:
+                      description: Source for the environment variable's value. Cannot
+                        be used if value is not empty.
+                      properties:
+                        configMapKeyRef:
+                          description: Selects a key of a ConfigMap.
+                          properties:
+                            key:
+                              description: |-
+                                The key to select from the ConfigMap's Data field.
+                                Keys in the BinaryData field are not currently propagated to container env vars.
+                              type: string
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                            optional:
+                              description: Specify whether the ConfigMap or its key
+                                must be defined
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        fieldRef:
+                          description: |-
+                            Selects a field of the pod: supports metadata.name, metadata.namespace, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`,
+                            spec.nodeName, spec.serviceAccountName, status.hostIP, status.podIP, status.podIPs.
+                          properties:
+                            apiVersion:
+                              description: Version of the schema the FieldPath is
+                                written in terms of, defaults to "v1".
+                              type: string
+                            fieldPath:
+                              description: Path of the field to select in the specified
+                                API version.
+                              type: string
+                          required:
+                          - fieldPath
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        fileKeyRef:
+                          description: |-
+                            FileKeyRef selects a key of the env file.
+                            Requires the EnvFiles feature gate to be enabled.
+                          properties:
+                            key:
+                              description: |-
+                                The key within the env file. An invalid key will prevent the pod from starting.
+                                The keys defined within a source may consist of any printable ASCII characters except '='.
+                                During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                              type: string
+                            optional:
+                              default: false
+                              description: |-
+                                Specify whether the file or its key must be defined. If the file or key
+                                does not exist, then the env var is not published.
+                                If optional is set to true and the specified key does not exist,
+                                the environment variable will not be set in the Pod's containers.
+
+                                If optional is set to false and the specified key does not exist,
+                                an error will be returned during Pod creation.
+                              type: boolean
+                            path:
+                              description: |-
+                                The path within the volume from which to select the file.
+                                Must be relative and may not contain the '..' path or start with '..'.
+                              type: string
+                            volumeName:
+                              description: The name of the volume mount containing
+                                the env file.
+                              type: string
+                          required:
+                          - key
+                          - path
+                          - volumeName
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        resourceFieldRef:
+                          description: |-
+                            Selects a resource of the container: only resources limits and requests
+                            (limits.cpu, limits.memory, limits.ephemeral-storage, requests.cpu, requests.memory and requests.ephemeral-storage) are currently supported.
+                          properties:
+                            containerName:
+                              description: 'Container name: required for volumes,
+                                optional for env vars'
+                              type: string
+                            divisor:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              description: Specifies the output format of the exposed
+                                resources, defaults to "1"
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            resource:
+                              description: 'Required: resource to select'
+                              type: string
+                          required:
+                          - resource
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        secretKeyRef:
+                          description: Selects a key of a secret in the pod's namespace
+                          properties:
+                            key:
+                              description: The key of the secret to select from.  Must
+                                be a valid secret key.
+                              type: string
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                            optional:
+                              description: Specify whether the Secret or its key must
+                                be defined
+                              type: boolean
+                          required:
+                          - key
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
+              image:
+                description: The worker image.
+                minLength: 1
                 type: string
               nodeSelector:
                 additionalProperties:
                   type: string
                 type: object
-              pod:
-                properties:
-                  capabilities:
-                    description: |-
-                      Linux capabilities sandbox pods keep; default CHOWN, DAC_OVERRIDE,
-                      FOWNER, FSETID, KILL, SETGID, SETUID (what apt and pip need).
-                    items:
-                      type: string
-                    type: array
-                  cpu:
-                    type: string
-                  defaultImage:
-                    type: string
-                  labels:
-                    additionalProperties:
-                      type: string
-                    description: |-
-                      Labels added to sandbox pods, e.g. istio.io/use-waypoint: none to keep
-                      a mesh waypoint off the pool's calls to them.
-                    type: object
-                  level:
-                    description: The level the runtime class gives (kernel for gVisor,
-                      vm for Kata).
-                    type: string
-                  networkPolicyEnforced:
-                    type: boolean
-                  nodeSelector:
-                    additionalProperties:
-                      type: string
-                    type: object
-                  runAsUser:
-                    description: |-
-                      Run sandbox pods as this user; set a non-zero one, with capabilities
-                      [], where Pod Security "restricted" applies.
-                    format: int64
-                    type: integer
-                  runtimeClassName:
-                    type: string
-                type: object
-              podSecurity:
-                description: |-
-                  How the pool's pods get the kernel features bwrap and landlock need
-                  (user and mount namespaces, their own /proc): userns runs them in a
-                  user namespace with an unmasked /proc and no seccomp or AppArmor
-                  profile; privileged runs them privileged, for nodes without user
-                  namespaces. The Firecracker rung is always privileged (it needs
-                  /dev/kvm); the pod rung and Landlock alone need neither, and run
-                  under Pod Security "restricted".
-                enum:
-                - userns
-                - privileged
-                type: string
+              pools:
+                description: Pools it serves; default cpu.
+                items:
+                  type: string
+                type: array
               replicas:
-                description: Pool replicas; default 1.
+                description: Replicas without autoscaling; default 1.
                 format: int32
                 type: integer
               resources:
@@ -211,6 +312,8 @@ spec:
                       More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                     type: object
                 type: object
+              serviceAccountName:
+                type: string
               tolerations:
                 items:
                   description: |-
@@ -250,12 +353,11 @@ spec:
                       type: string
                   type: object
                 type: array
+            required:
+            - image
             type: object
           status:
             properties:
-              address:
-                description: The pool's Service, as workers address it (tls://...).
-                type: string
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current

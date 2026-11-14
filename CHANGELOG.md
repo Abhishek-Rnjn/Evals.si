@@ -4,11 +4,13 @@ All notable changes to this project are recorded here. The format follows [Keep 
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-11-11
+## [0.4.0] - 2026-11-14
+
+**The project is renamed Evalsi** ([decision 0039](docs/decisions/0039-one-name-evalsi.md)). The Kubernetes API group is `evalsi.dev`, so spec files say `apiVersion: evalsi.dev/v1alpha1`; labels and annotations use the `evalsi.dev/` prefix (`evalsi.dev/project`); the CRDs are `evalruns.evalsi.dev` and so on; the default token audience is `evalsi.dev`; the repository is `Abhishek-Rnjn/evalsi` and the Go module `github.com/abhishek-rnjn/evalsi`. There is no compatibility path for `evals.si/v1alpha1`: no release had been installed.
 
 A minor version: it adds features, fixes the bugs found in a review of the first-run path, and changes a few evaluators' results (listed under "Changed"). It is cut from `main`.
 
-- **Upgrade the server and the SDK together, and refresh the EvalRun CRD first.** Helm does not upgrade CRDs, and the `EvalRun` schema's gate statistics gained two values (`GATE_STAT_SKIPPED_RATE`, `GATE_STAT_COUNT`): `kubectl apply --server-side -f deploy/helm/evalsi-crds/crds/evals.si_evalruns.yaml` from the v0.4.0 checkout (or the `evalsi-crds` 0.4.0 chart's `crds/`). A server older than 0.4.0 does not know the new statistics, so a spec that uses them needs a 0.4.0 server.
+- **Upgrade the server and the SDK together, and refresh the EvalRun CRD first.** Helm does not upgrade CRDs, and the `EvalRun` schema's gate statistics gained two values (`GATE_STAT_SKIPPED_RATE`, `GATE_STAT_COUNT`): `kubectl apply --server-side -f deploy/helm/evalsi-crds/crds/evalsi.dev_evalruns.yaml` from the v0.4.0 checkout (or the `evalsi-crds` 0.4.0 chart's `crds/`). A server older than 0.4.0 does not know the new statistics, so a spec that uses them needs a 0.4.0 server.
 - **Re-check gates and comparisons that rest on the evaluators listed under "Changed".** A run can now fail where it passed: `loop-detection` fails repeated blocks of calls, `regression` errors on unparseable outputs, `json-valid` fails `NaN` and `Infinity`, and `contains` skips an empty reference.
 - **Known limits.** This is a stable version number, but the product-readiness rows R04-01 to R04-05 of the [pre-0.4 release plan](docs/PRE-0.4-RELEASE-PLAN.md) are not closed: no unfamiliar user has been observed installing it, evaluating their own application and reading a comparison, and the evaluator-validation and integration rows have no recorded end-to-end run on a model-driven application. The plan lists what each row requires.
 
@@ -479,10 +481,10 @@ The first public release. Evals.si is a self-hosted evaluation service: one set 
 
 See [docs/LEFTOVERS.md](docs/LEFTOVERS.md) for the full list and [SUPPORT.md](SUPPORT.md) for what has been verified. In particular, EKS and GKE have not been run, and the per-release sandbox-pool NetworkPolicy has not been exercised on a cluster that enforces NetworkPolicy.
 
-[Unreleased]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.2...v0.4.0
-[0.3.2]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.1...v0.3.2
-[0.3.1]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/Abhishek-Rnjn/Evals.si/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/Abhishek-Rnjn/Evals.si/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Abhishek-Rnjn/evalsi/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Abhishek-Rnjn/evalsi/compare/v0.3.2...v0.4.0
+[0.3.2]: https://github.com/Abhishek-Rnjn/evalsi/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/Abhishek-Rnjn/evalsi/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/Abhishek-Rnjn/evalsi/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/Abhishek-Rnjn/evalsi/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Abhishek-Rnjn/evalsi/releases/tag/v0.1.0

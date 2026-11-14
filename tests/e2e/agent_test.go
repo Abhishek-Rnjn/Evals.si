@@ -16,9 +16,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
 )
 
 // The task: calc.py has a bug; hidden tests (never shown to the agent) grade
@@ -207,7 +207,7 @@ func TestAgentRuns(t *testing.T) {
 		}
 		dir := t.TempDir()
 		specFile := filepath.Join(dir, "run.json")
-		doc := fmt.Sprintf(`{"apiVersion": "evals.si/v1alpha1", "kind": "EvalRun", "metadata": {"name": "embedded"}, "spec": %s}`, raw)
+		doc := fmt.Sprintf(`{"apiVersion": "evalsi.dev/v1alpha1", "kind": "EvalRun", "metadata": {"name": "embedded"}, "spec": %s}`, raw)
 		if err := os.WriteFile(specFile, []byte(doc), 0o600); err != nil {
 			t.Fatal(err)
 		}

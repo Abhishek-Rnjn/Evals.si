@@ -1,9 +1,9 @@
 ---
 title: Kubernetes
-description: Install Evals.si on a cluster and wire in-cluster agents, gateways and CI.
+description: Install Evalsi on a cluster and wire in-cluster agents, gateways and CI.
 ---
 
-On Kubernetes, Evals.si is three Helm charts and four custom resources. The same evaluators, runs and policies that work on a laptop work here.
+On Kubernetes, Evalsi is three Helm charts and four custom resources. The same evaluators, runs and policies that work on a laptop work here.
 
 ## 1. Install
 
@@ -37,11 +37,11 @@ For production, use PostgreSQL for several API replicas, ClickHouse for traces a
 An agent run on the pod rung, from `deploy/e2e/agent-run.yaml`:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: agent
-  labels: {evals.si/project: e2e}
+  labels: {evalsi.dev/project: e2e}
 spec:
   target:
     agent:
@@ -68,7 +68,7 @@ kubectl wait evalrun/agent --for=condition=Succeeded --timeout=30m
 ## 3. Connect what runs in the cluster
 
 - **Gateways and agents emit traces.** Create an `ingest` key bound to one project, store it in a Secret and point the OTLP exporter at the `evalsi` Service (gRPC 4317, HTTP 4318). Give the exporter the internal CA from the Secret `evalsi-server-tls`, or terminate TLS in your mesh. If you enforce NetworkPolicy, allow the pods to reach those ports.
-- **Evals.si calls your agent.** A run's `target.agent` can point at an in-cluster Service over A2A, MCP, an OpenAI Responses API or HTTP.
+- **Evalsi calls your agent.** A run's `target.agent` can point at an in-cluster Service over A2A, MCP, an OpenAI Responses API or HTTP.
 - **Use service-account identity.** Pods can authenticate with their Kubernetes service-account tokens instead of long-lived keys. See [identity on Kubernetes](__BASE__/docs/guides/identity/).
 - **Guard traffic inline.** Point a gateway's guardrail webhook at `evalsid`. See the [agentgateway integration](__BASE__/integrations/agentgateway/).
 
@@ -78,6 +78,6 @@ kubectl wait evalrun/agent --for=condition=Succeeded --timeout=30m
 
 ## Go deeper
 
-- [Evals.si on Kubernetes](__BASE__/docs/guides/kubernetes/)
-- [agentgateway and Evals.si on Kubernetes](__BASE__/docs/guides/agentgateway-kubernetes/)
+- [Evalsi on Kubernetes](__BASE__/docs/guides/kubernetes/)
+- [agentgateway and Evalsi on Kubernetes](__BASE__/docs/guides/agentgateway-kubernetes/)
 - [Decision record: operator and packaging](__BASE__/docs/decisions/0012-kubernetes-operator-and-packaging/)

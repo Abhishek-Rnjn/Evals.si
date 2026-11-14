@@ -69,7 +69,7 @@ def spec() -> str:
 #   sed 's/agent.py, careful/agent.py, sloppy/' run.yaml > regressed.yaml
 #   evalsi run -f regressed.yaml       # exit 3, and the gates name the broken rules
 # Replace target.agent with your own agent to evaluate it. See README.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {{name: support-refund}}
 spec:

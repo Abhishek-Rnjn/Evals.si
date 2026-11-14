@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
 )
 
 func TestAKSFollowupFirecracker(t *testing.T) {

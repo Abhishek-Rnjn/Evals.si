@@ -16,7 +16,7 @@ mkdir -p "$stage"
 
 for b in evalsid evalsi-guest evalsi-operator; do
   (cd "$root" && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
-    -ldflags "-s -w -X github.com/abhishek-rnjn/evals.si/internal/version.Version=${version}" \
+    -ldflags "-s -w -X github.com/abhishek-rnjn/evalsi/internal/version.Version=${version}" \
     -o "$stage/$b" "./cmd/$b")
 done
 "$root/scripts/build-static-bwrap.sh" "$stage" "$arch" >/dev/null
@@ -25,7 +25,7 @@ cat > "$stage/THIRD_PARTY.md" <<NOTICE
 # Third-party software in this archive
 
 - **bubblewrap** (\`bwrap\`): LGPL-2.0-or-later. Shipped as its own
-  executable, unmodified, not linked into Evals.si. License: \`bwrap.COPYING\`;
+  executable, unmodified, not linked into Evalsi. License: \`bwrap.COPYING\`;
   source: \`bwrap.SOURCE\`.
 - The Go binaries include Go modules under their own licenses; see
   \`go.mod\` in the source at the tag for the list.

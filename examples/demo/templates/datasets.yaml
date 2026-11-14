@@ -1,7 +1,7 @@
 {{- if .Values.datasets.enabled }}
 {{- $fn := include "demo.fullname" . -}}
 {{- $d := .Values.datasets }}
-# The suites' datasets, uploaded to Evals.si's datasets_dir (S3 on Kubernetes:
+# The suites' datasets, uploaded to Evalsi's datasets_dir (S3 on Kubernetes:
 # the server's pod and the workers' cannot read a local file). An ordinary
 # resource, not a hook: Helm creates it before post-install hooks run, and a
 # hook ConfigMap with hook-succeeded would be deleted as soon as it was

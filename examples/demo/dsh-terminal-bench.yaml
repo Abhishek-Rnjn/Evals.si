@@ -10,11 +10,11 @@
 # DEMO_MODEL and the worker's DEMO_API_KEY below, and pick tasks. dsh needs
 # Node 22, installed from nodejs.org when the image has none, which needs curl
 # and xz in the image; tasks without them are not runnable as written.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata:
   name: dsh-terminal-bench
-  labels: {evals.si/project: demo}
+  labels: {evalsi.dev/project: demo}
 spec:
   target:
     agent:

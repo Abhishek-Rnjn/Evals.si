@@ -12,10 +12,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox"
-	"github.com/abhishek-rnjn/evals.si/internal/sandbox/sandboxsvc"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox"
+	"github.com/abhishek-rnjn/evalsi/internal/sandbox/sandboxsvc"
 )
 
 // Main is `evalsid sandbox probe|run|serve`. The sandbox config comes from

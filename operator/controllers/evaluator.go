@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 // The work stream and its consumers (internal/cluster).
@@ -58,8 +58,8 @@ type EvaluatorReconciler struct {
 	NATSMonitoringEndpoint string
 }
 
-// +kubebuilder:rbac:groups=evals.si,resources=evaluators,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=evals.si,resources=evaluators/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=evaluators,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=evalsi.dev,resources=evaluators/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=keda.sh,resources=scaledobjects,verbs=get;list;watch;create;update;patch;delete
 
@@ -111,7 +111,7 @@ func (r *EvaluatorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		pod.Labels = labels
 		pod.Annotations = nil
 		if configHash != "" {
-			pod.Annotations = map[string]string{"evals.si/config-hash": configHash}
+			pod.Annotations = map[string]string{"evalsi.dev/config-hash": configHash}
 		}
 		pod.Spec.ServiceAccountName = ev.Spec.ServiceAccountName
 		pod.Spec.NodeSelector = ev.Spec.NodeSelector

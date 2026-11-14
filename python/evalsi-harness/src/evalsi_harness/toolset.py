@@ -31,7 +31,7 @@ NAMES = ("edit_file", "glob", "grep", "apply_patch", "memory", "background", "sh
 # Offered by the agent loop itself, which owns what they need.
 LOOP_NAMES = ("session_search", "delegate", "tool_search", "code_mode")
 MAX_LISTED = 500
-# Evals.si's own files never show up in searches, as they never show up in the diff.
+# Evalsi's own files never show up in searches, as they never show up in the diff.
 _PRUNE = "-not -path '*/.git/*' -not -path '*/.evalsi-*'"
 
 
@@ -393,7 +393,7 @@ MEMORY_MAX_FILES = 100
 
 class MemoryTool:
     """Notes that outlive context management. They are files in the sandbox
-    (so a replay rebuilds them), under ``.evalsi-memory/``, which Evals.si's
+    (so a replay rebuilds them), under ``.evalsi-memory/``, which Evalsi's
     own naming keeps out of the agent's diff."""
 
     def __init__(self, env: TaskEnvironment) -> None:

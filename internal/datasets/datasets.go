@@ -21,8 +21,8 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/objstore"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/objstore"
 )
 
 // PromotedDir is the directory, relative to datasets_dir, that holds promotions.

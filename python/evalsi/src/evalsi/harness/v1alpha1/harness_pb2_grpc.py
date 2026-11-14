@@ -28,7 +28,7 @@ if _version_not_supported:
 class HarnessServiceStub:
     """HarnessService is the harness protocol (design §11). The built-in harness
     (evalsi-harness) implements it, and so can a harness you bring: a Python
-    class, a container or any gRPC service. Evals.si orchestrates it: one
+    class, a container or any gRPC service. Evalsi orchestrates it: one
     Setup per task and trial, then Run, Check and Teardown.
     """
 
@@ -68,7 +68,7 @@ class HarnessServiceStub:
 class HarnessServiceServicer:
     """HarnessService is the harness protocol (design §11). The built-in harness
     (evalsi-harness) implements it, and so can a harness you bring: a Python
-    class, a container or any gRPC service. Evals.si orchestrates it: one
+    class, a container or any gRPC service. Evalsi orchestrates it: one
     Setup per task and trial, then Run, Check and Teardown.
     """
 
@@ -80,7 +80,7 @@ class HarnessServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def Setup(self, request, context):
-        """Prepares the task's environment; it may lease an Evals.si sandbox.
+        """Prepares the task's environment; it may lease an Evalsi sandbox.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -145,7 +145,7 @@ def add_HarnessServiceServicer_to_server(servicer, server):
 class HarnessService:
     """HarnessService is the harness protocol (design §11). The built-in harness
     (evalsi-harness) implements it, and so can a harness you bring: a Python
-    class, a container or any gRPC service. Evals.si orchestrates it: one
+    class, a container or any gRPC service. Evalsi orchestrates it: one
     Setup per task and trial, then Run, Check and Teardown.
     """
 

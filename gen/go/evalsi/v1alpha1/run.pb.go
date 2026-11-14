@@ -1920,8 +1920,8 @@ const file_evalsi_v1alpha1_run_proto_rawDesc = "" +
 	"\x14RUN_STATUS_SUCCEEDED\x10\x03\x12\x15\n" +
 	"\x11RUN_STATUS_FAILED\x10\x04\x12\x14\n" +
 	"\x10RUN_STATUS_ERROR\x10\x05\x12\x18\n" +
-	"\x14RUN_STATUS_CANCELLED\x10\x06B\xc5\x01\n" +
-	"\x13com.evalsi.v1alpha1B\bRunProtoP\x01ZGgithub.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
+	"\x14RUN_STATUS_CANCELLED\x10\x06B\xc3\x01\n" +
+	"\x13com.evalsi.v1alpha1B\bRunProtoP\x01ZEgithub.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1;evalsiv1alpha1\xa2\x02\x03EXX\xaa\x02\x0fEvalsi.V1alpha1\xca\x02\x0fEvalsi\\V1alpha1\xe2\x02\x1bEvalsi\\V1alpha1\\GPBMetadata\xea\x02\x10Evalsi::V1alpha1b\x06proto3"
 
 var (
 	file_evalsi_v1alpha1_run_proto_rawDescOnce sync.Once

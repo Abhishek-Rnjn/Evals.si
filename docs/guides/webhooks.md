@@ -1,6 +1,6 @@
 # Webhooks
 
-Evals.si calls your HTTP endpoint when a run finishes or fails a gate, when an online policy scores a trace, and when a policy's alert fires or resolves, so a pipeline or an application does not have to poll. Deliveries are signed with HMAC, retried with growing delays, and survive a restart.
+Evalsi calls your HTTP endpoint when a run finishes or fails a gate, when an online policy scores a trace, and when a policy's alert fires or resolves, so a pipeline or an application does not have to poll. Deliveries are signed with HMAC, retried with growing delays, and survive a restart.
 
 ## Events
 

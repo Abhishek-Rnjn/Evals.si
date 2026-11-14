@@ -1,4 +1,4 @@
-"""``evalsi mcp``: serve Evals.si to MCP clients (coding agents) over stdio."""
+"""``evalsi mcp``: serve Evalsi to MCP clients (coding agents) over stdio."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def add_mcp_command(sub: Any) -> None:
 
     mc = sub.add_parser(
         "mcp",
-        help="serve Evals.si to MCP clients (coding agents) over stdio",
+        help="serve Evalsi to MCP clients (coding agents) over stdio",
         description=(
             "An MCP server on stdin/stdout with the tools list_evaluators, evaluate, run and "
             "compare. Configure it in your agent as the command `evalsi mcp`."

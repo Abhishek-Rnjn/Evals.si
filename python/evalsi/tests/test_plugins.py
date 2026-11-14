@@ -24,7 +24,7 @@ def test_repo_index_lists_every_builtin_pack() -> None:
 def test_index_validation_and_search() -> None:
     sha = "a" * 64
     doc = f"""
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: PluginIndex
 plugins:
   - {{name: acme/checks, version: 1.2.0, kind: wasm, description: JSON checks,
@@ -172,7 +172,7 @@ def test_hosted_wasm_plugin_installs_from_the_repo_index(
     # Served from the default index's URL, the relative paths resolve beside it.
     from evalsi.plugins import DEFAULT_INDEX, _resolve
 
-    base = "https://raw.githubusercontent.com/abhishek-rnjn/evals.si/main/plugins/"
+    base = "https://raw.githubusercontent.com/abhishek-rnjn/evalsi.dev/main/plugins/"
     assert base + "index.yaml" == DEFAULT_INDEX
     assert _resolve("wasm/text-checks/evalsi-plugin.yaml", DEFAULT_INDEX) == (
         base + "wasm/text-checks/evalsi-plugin.yaml"

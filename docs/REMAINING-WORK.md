@@ -25,9 +25,9 @@ Real-human judge calibration and customer usability remain open.
 
 **Priority** is the source's (P0, P1, P2, M-milestone or H-phase); a dash means none is given.
 
-Not repeated below: [#117](https://github.com/Abhishek-Rnjn/Evals.si/pull/117)
+Not repeated below: [#117](https://github.com/Abhishek-Rnjn/evalsi/pull/117)
 (shared dataset catalog and pinned regression runs, PROD-04; merged) and
-[#118](https://github.com/Abhishek-Rnjn/Evals.si/pull/118) (production failures to
+[#118](https://github.com/Abhishek-Rnjn/evalsi/pull/118) (production failures to
 baseline-aware release decisions, PROD-02/PROD-03/ENT-08 foundation; merged).
 
 ## Application-team product work
@@ -138,7 +138,7 @@ The [pre-0.4 release plan](PRE-0.4-RELEASE-PLAN.md) maps its R04 (stable 0.4) an
 | SM-5 | - | Scheduled-window partial pages | Done: windows re-list and missing traces are re-fetched, runs are labelled. A connector that silently omits the same traces on every pass is still undetectable | Code | LEFTOVERS |
 | SM-6 | - | Keyless image signatures | Built with sigstore-go against a stand-in CA. Left: real Fulcio, Rekor and cosign-produced signatures; the trusted root must be supplied as a file | Infra | LEFTOVERS |
 | SM-7 | - | Sandbox-time quota coverage | Built (decision 0037). Left: an end-to-end retry after a quota refusal | Code | LEFTOVERS |
-| SM-8 | - | Feeding scores back into agentgateway | The Evals.si side is built (decision 0038): `GET /v1alpha1/quality`, gauges and a recipe. Left: native quality-aware routing in the gateway, which depends on its extension points | People | LEFTOVERS |
+| SM-8 | - | Feeding scores back into agentgateway | The Evalsi side is built (decision 0038): `GET /v1alpha1/quality`, gauges and a recipe. Left: native quality-aware routing in the gateway, which depends on its extension points | People | LEFTOVERS |
 | SM-9 | - | BFCL categories | Done. Left: live SerpAPI web search, the vector memory backend and a live-model run | Infra | LEFTOVERS |
 | SM-10 | - | τ-bench user | Done as an option (`user=tau2`). Left: a run with a real LiteLLM user model | Infra | LEFTOVERS |
 

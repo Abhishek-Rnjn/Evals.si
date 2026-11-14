@@ -1,6 +1,6 @@
-# Tutorials: Evals.si from a first install
+# Tutorials: Evalsi from a first install
 
-These tutorials follow one person installing Evals.si and its agent harness for
+These tutorials follow one person installing Evalsi and its agent harness for
 the first time, from an empty virtual environment to a gated CI job. The original
 TinyLM course ran against the published 0.3.1 packages on PyPI; its output blocks
 come from that session (long ones are trimmed where they show `...`). Later
@@ -47,9 +47,9 @@ There are two complementary paths, not two versions of the same course:
 | 12 | [Mac re-verification](12-macos-reverification.md) | Published/source evidence, real providers, kind controls and setup failures | read: 10 min |
 | 13 | [AKS onboarding and Sonnet](13-aks-onboarding.md) | Stronger-node selection, fresh published installation, mTLS tools, budgeted model comparison and real cluster limits | 30 min plus optional deep checks |
 
-Start with tutorial 1 if you have never run Evals.si, or with tutorial 2 if you
+Start with tutorial 1 if you have never run Evalsi, or with tutorial 2 if you
 want to go straight to agents. Tutorial 0 is the report of the first install
-itself; read it if you maintain Evals.si or are deciding whether to adopt it.
+itself; read it if you maintain Evalsi or are deciding whether to adopt it.
 
 ## What you need
 

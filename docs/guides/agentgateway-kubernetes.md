@@ -1,6 +1,6 @@
-# agentgateway and Evals.si on Kubernetes
+# agentgateway and Evalsi on Kubernetes
 
-[agentgateway](https://agentgateway.dev) sits in front of your agents' LLM, MCP and A2A traffic; Evals.si evaluates that traffic. Together, every call through the gateway can be scored online with no change to the agents, and the failures it finds become regression datasets. Both run the same way on a laptop and on Kubernetes, use the same OIDC providers and tokens, and select traffic with CEL.
+[agentgateway](https://agentgateway.dev) sits in front of your agents' LLM, MCP and A2A traffic; Evalsi evaluates that traffic. Together, every call through the gateway can be scored online with no change to the agents, and the failures it finds become regression datasets. Both run the same way on a laptop and on Kubernetes, use the same OIDC providers and tokens, and select traffic with CEL.
 
 ```text
  agents ──► agentgateway ──► LLM providers, MCP servers, A2A agents
@@ -9,7 +9,7 @@
            evalsi (namespace evalsi) ──► OnlineEvalPolicy: sample, score, alert, promote
 ```
 
-This guide assumes Evals.si is installed with the charts ([Kubernetes](kubernetes.md)) and agentgateway with its own Helm chart or the Gateway API. agentgateway's configuration keys change between versions; the snippets below show the shape, so check them against the docs of the version you run.
+This guide assumes Evalsi is installed with the charts ([Kubernetes](kubernetes.md)) and agentgateway with its own Helm chart or the Gateway API. agentgateway's configuration keys change between versions; the snippets below show the shape, so check them against the docs of the version you run.
 
 ## 1. An ingest key for the gateway
 
@@ -47,12 +47,12 @@ If the namespaces enforce NetworkPolicy, allow the gateway's pods to reach `eval
 An `OnlineEvalPolicy` selects traces with CEL over the trace's service, root span name, attributes and resource, so it can pick traffic by gateway route, backend, MCP tool or A2A agent:
 
 ```yaml
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: OnlineEvalPolicy
 metadata:
   name: support-gateway
   namespace: evalsi
-  labels: {evals.si/project: support}
+  labels: {evalsi.dev/project: support}
 spec:
   selector: 'service == "agentgateway" && attributes["gen_ai.request.model"] != ""'
   sampling:
@@ -90,7 +90,7 @@ Configure the same OIDC issuers on both: agentgateway validates the user's JWT a
 
 ## 5. Quality per route, for routing decisions
 
-The online scores can come back out as figures per route (or backend, or service), in two forms. What Evals.si builds is the figures; what acts on them is yours ([decision 0038](../decisions/0038-quality-scores-for-routing.md)).
+The online scores can come back out as figures per route (or backend, or service), in two forms. What Evalsi builds is the figures; what acts on them is yours ([decision 0038](../decisions/0038-quality-scores-for-routing.md)).
 
 **Get the route onto the trace.** Figures are grouped by `service`, the root span's `name`, or a trace label (`label:<key>`). Labels come from `evalsi.label.<key>` resource attributes and from the ingest key's labels, so put the route there. With an OpenTelemetry Collector between the gateway and evalsi, copy it from the span. Which span attribute names the route or backend depends on the gateway version: read a stored trace first, then write the transform against what is there (the attribute below is a placeholder):
 
@@ -155,7 +155,7 @@ kubectl patch httproute support -n evalsi --type=json -p "[
 
 Build in hysteresis (two bad reports in a row, a minimum time between changes), keep the fallback's weight above zero so its own score stays measurable, and never route on `insufficient_data`.
 
-**What depends on the gateway.** Evals.si produces the figures and nothing in the gateway consumes them natively: a quality-aware load-balancing policy, a score-fed circuit breaker or auto-disabling an MCP tool needs an extension point in agentgateway that this guide does not assume exists. The weight-shifting loop above uses only the standard Gateway API and was not run against a real gateway here. The span attributes that carry the route, backend and tool depend on the gateway's version and route type.
+**What depends on the gateway.** Evalsi produces the figures and nothing in the gateway consumes them natively: a quality-aware load-balancing policy, a score-fed circuit breaker or auto-disabling an MCP tool needs an extension point in agentgateway that this guide does not assume exists. The weight-shifting loop above uses only the standard Gateway API and was not run against a real gateway here. The span attributes that carry the route, backend and tool depend on the gateway's version and route type.
 
 ## Checklist
 

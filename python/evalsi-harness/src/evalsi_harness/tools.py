@@ -170,7 +170,7 @@ class BashTool:
 
     async def _spill(self, text: str) -> tuple[str, str] | None:
         """Writes a large output to a file in the sandbox and returns the head
-        and tail with its path. The files are Evals.si's own (``.evalsi-*``), so
+        and tail with its path. The files are Evalsi's own (``.evalsi-*``), so
         they stay out of the agent's diff. None when the write fails."""
         self.env.spilled += 1
         path = f"{SPILL_DIR}/{self.env.spilled:04d}.txt"

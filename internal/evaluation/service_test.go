@@ -15,12 +15,12 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	harnessv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/harness/v1alpha1"
-	pluginv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/plugin/v1alpha1"
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
-	"github.com/abhishek-rnjn/evals.si/internal/catalog"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
+	harnessv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/harness/v1alpha1"
+	pluginv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/plugin/v1alpha1"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1/evalsiv1alpha1connect"
+	"github.com/abhishek-rnjn/evalsi/internal/catalog"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
 )
 
 func schema(t *testing.T, props map[string]any, required ...string) *structpb.Struct {

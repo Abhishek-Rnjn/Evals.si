@@ -12,7 +12,7 @@ import (
 	"cel.dev/cel-go/common/types"
 	"cel.dev/cel-go/parser"
 
-	"github.com/abhishek-rnjn/evals.si/internal/auth"
+	"github.com/abhishek-rnjn/evalsi/internal/auth"
 )
 
 // The variables rules, role conditions and cel: subjects see. They follow

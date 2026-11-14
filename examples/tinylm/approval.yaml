@@ -6,7 +6,7 @@
 # The leading * in the patterns matters: without it, `sh -c 'git push ...'`
 # does not match, the retry runs, and approval-coverage does not see it.
 # Walkthrough: docs/tutorials/06-faults-injection-and-approvals.md.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: EvalRun
 metadata: {name: tinylm-approval}
 spec:

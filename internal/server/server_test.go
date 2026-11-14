@@ -5,8 +5,8 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
 )
 
 // TestExamplePoliciesParse keeps the documented example config usable.

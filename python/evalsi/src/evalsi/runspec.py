@@ -4,7 +4,7 @@ A spec file looks like a Kubernetes object; ``spec`` is the
 ``evalsi.v1alpha1.RunSpec`` message, so the embedded runner, the server and
 (later) the operator all validate it against the same schema::
 
-    apiVersion: evals.si/v1alpha1
+    apiVersion: evalsi.dev/v1alpha1
     kind: EvalRun
     metadata: {name: nightly, project: support}
     spec:
@@ -31,7 +31,7 @@ from google.protobuf.descriptor import Descriptor
 from evalsi.results import MetricSummary
 from evalsi.v1alpha1 import run_pb2
 
-API_VERSION = "evals.si/v1alpha1"
+API_VERSION = "evalsi.dev/v1alpha1"
 KIND = "EvalRun"
 
 
@@ -154,11 +154,11 @@ def parse_spec(document: Mapping[str, Any], base_dir: Path | None = None) -> Run
     )
 
 
-PROJECT_LABEL = "evals.si/project"
+PROJECT_LABEL = "evalsi.dev/project"
 
 
 def project_of(metadata: Mapping[str, Any]) -> str:
-    """The project: the evals.si/project label (as on Kubernetes, where
+    """The project: the evalsi.dev/project label (as on Kubernetes, where
     metadata has no project field), or metadata.project."""
     labels = metadata.get("labels")
     label = labels.get(PROJECT_LABEL) if isinstance(labels, Mapping) else None
@@ -167,7 +167,7 @@ def project_of(metadata: Mapping[str, Any]) -> str:
 
 def api_labels(labels: Mapping[str, Any]) -> dict[str, str]:
     """Labels sent to the API for access rules: prefixed keys
-    (evals.si/project, app.kubernetes.io/...) stay behind, as the operator
+    (evalsi.dev/project, app.kubernetes.io/...) stay behind, as the operator
     does."""
     return {str(k): str(v) for k, v in labels.items() if "/" not in str(k)}
 

@@ -1,6 +1,6 @@
 // Package clickhouse pulls OpenTelemetry Collector clickhouseexporter trace
 // tables over the HTTP interface. Decision 0028 defines the supported schema
-// and companion score table; this is separate from Evals.si's own trace store.
+// and companion score table; this is separate from Evalsi's own trace store.
 package clickhouse
 
 import (
@@ -20,10 +20,10 @@ import (
 	"strings"
 	"time"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/ingest"
-	"github.com/abhishek-rnjn/evals.si/internal/source"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/ingest"
+	"github.com/abhishek-rnjn/evalsi/internal/source"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 const (

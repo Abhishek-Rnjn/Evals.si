@@ -1,7 +1,7 @@
 [project]
 name = "evalsi-adapter-deepeval"
 version = "0.1.0"
-description = "DeepEval metrics as Evals.si evaluators, judged by the run's judge."
+description = "DeepEval metrics as Evalsi evaluators, judged by the run's judge."
 license = "Apache-2.0"
 requires-python = ">=3.11"
 dependencies = [

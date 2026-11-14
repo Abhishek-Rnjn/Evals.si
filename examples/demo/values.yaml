@@ -1,10 +1,10 @@
 # The reference demos' stand-ins for an agent harness (docs/guides/integrate-an-agent-harness.md),
-# for a cluster that already runs Evals.si. Install the release as "evalsi-demo",
-# in the namespace Evals.si is in: the run specs name its Services.
+# for a cluster that already runs Evalsi. Install the release as "evalsi-demo",
+# in the namespace Evalsi is in: the run specs name its Services.
 #
 #   helm install evalsi-demo examples/demo -n evalsi
 #
-# Every pod this chart adds takes the placement values below, as the Evals.si
+# Every pod this chart adds takes the placement values below, as the Evalsi
 # chart's pods do; overlays for each cluster shape are in overlays/.
 
 fullnameOverride: ""
@@ -28,11 +28,11 @@ agents:
   model:
     baseURL: ""            # default: the mock, http://<release>-model:8000/v1
     name: mock             # dsh: the model id; Deep Agents: prefixed with openai:
-    # The key is a Secret's value, read by Evals.si's workers as DEMO_API_KEY
+    # The key is a Secret's value, read by Evalsi's workers as DEMO_API_KEY
     # (and granted to the demo project by its credentialGrants). The mock ignores it.
     apiKeySecret: {name: evalsi-demo-model-key, key: key}
     # Have this chart create that Secret, with this value. Leave empty to create
-    # it yourself (kubectl create secret generic ...), which Evals.si's workers
+    # it yourself (kubectl create secret generic ...), which Evalsi's workers
     # need before they start, so do that first.
     apiKey: ""
 
@@ -56,7 +56,7 @@ deepagents:                 # the Deep Agents service, called over HTTP
   workflow: research-assistant
   version: v1
   model: ""                 # the model it calls; default agents.model.name
-  # Send traces to MLflow (mlflow.enabled), and also to Evals.si's OTLP endpoint
+  # Send traces to MLflow (mlflow.enabled), and also to Evalsi's OTLP endpoint
   # (otlp.endpoint, e.g. https://evalsi:4318; off by default) with an ingest
   # key and the server's CA.
   otlp:
@@ -88,7 +88,7 @@ dshWeb:                     # dsh's browser UI, the studio's UI stand-in
   podLabels: {}
   serviceLabels: {}
 
-mlflow:                     # an MLflow tracking server: the studio's trace store and Evals.si's sink
+mlflow:                     # an MLflow tracking server: the studio's trace store and Evalsi's sink
   enabled: true
   image: ghcr.io/mlflow/mlflow:v3.17.0
   resources: {}
@@ -103,14 +103,14 @@ mlflow:                     # an MLflow tracking server: the studio's trace stor
   podLabels: {}
   serviceLabels: {}
 
-# Uploads the suites' datasets to Evals.si's S3 (a Kubernetes install's
+# Uploads the suites' datasets to Evalsi's S3 (a Kubernetes install's
 # datasets_dir) with `evalsid datasets put`, in a Job after each install and
 # upgrade. It reads the server's ConfigMap and S3 credentials Secret.
 datasets:
   enabled: true
-  # The Evals.si image (the evalsid in it does the upload), and the workers'
+  # The Evalsi image (the evalsid in it does the upload), and the workers'
   # ConfigMap (it holds the S3 settings) and the S3 credentials Secret of an
-  # Evals.si release named evalsi.
+  # Evalsi release named evalsi.
   image: ghcr.io/abhishek-rnjn/evalsi:0.1.0
   configMap: evalsi-worker
   s3CredentialsSecret: evalsi-dev-minio    # keys access_key and secret_key

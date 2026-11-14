@@ -12,18 +12,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	v1 "github.com/abhishek-rnjn/evals.si/operator/api/v1alpha1"
+	v1 "github.com/abhishek-rnjn/evalsi/operator/api/v1alpha1"
 )
 
 // The operator removes its finalizer with an Update of a deleting object.
 // If the project mapping was removed since creation, the validator denies it.
 func TestUpdateOfDeletingObjectAllowed(t *testing.T) {
 	raw := func(del bool) []byte {
-		s := `{"apiVersion":"evals.si/v1alpha1","kind":"OnlineEvalPolicy","metadata":{"name":"p","namespace":"team-a","labels":{"evals.si/project":"shared"}`
+		s := `{"apiVersion":"evalsi.dev/v1alpha1","kind":"OnlineEvalPolicy","metadata":{"name":"p","namespace":"team-a","labels":{"evalsi.dev/project":"shared"}`
 		if del {
 			s += `,"deletionTimestamp":"2026-01-01T00:00:00Z","finalizers":[]`
 		} else {
-			s += `,"finalizers":["evals.si/finalizer"]`
+			s += `,"finalizers":["evalsi.dev/finalizer"]`
 		}
 		return []byte(s + `},"spec":{"sampling":{"rate":1}}}`)
 	}

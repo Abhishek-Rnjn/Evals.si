@@ -1,4 +1,4 @@
-"""Rewards for fine-tuning and RL, built from Evals.si evaluators.
+"""Rewards for fine-tuning and RL, built from Evalsi evaluators.
 
 ::
 

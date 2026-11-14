@@ -1,4 +1,4 @@
-"""Evals.si rewards in verl.
+"""Evalsi rewards in verl.
 
 Point verl's custom reward function at this file::
 

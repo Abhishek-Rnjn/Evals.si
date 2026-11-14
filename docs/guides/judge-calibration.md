@@ -139,7 +139,7 @@ Judge-backed candidates require explicit configs, with no environment fallback
 for model selection. Keys are read from the named environment variable and are
 not stored; credential-bearing URLs are rejected. All splits, evaluator bindings,
 output names and candidate configs are checked before calls begin. Calibration
-always disables Evals.si's judge cache, including for repeated identical prompts.
+always disables Evalsi's judge cache, including for repeated identical prompts.
 Real endpoints incur fresh calls and cost. Provider-side caching, retries and
 model weight changes are outside the tool's control. Both JSON and next-token
 logprob calls are audited with their method, phase/repeat, prompt/system/response
@@ -180,8 +180,8 @@ have no multiplicity correction. Human majority labels can be wrong; keep the
 disagreements and use the queue's existing inter-rater summaries to investigate.
 
 JSON reports include the exact frozen records/ratings, resolved evaluator refs
-and defaults, evaluator source-file and Evals.si source-tree hashes, protocol,
-judge settings, timestamps and Python/Evals.si versions. The HTML has no scripts
+and defaults, evaluator source-file and Evalsi source-tree hashes, protocol,
+judge settings, timestamps and Python/Evalsi versions. The HTML has no scripts
 or external resources and escapes record content and annotations. Both contain
 private data; share them deliberately. Digests detect content changes and require
 a separately trusted pin to identify an approved artifact. They are not signatures,

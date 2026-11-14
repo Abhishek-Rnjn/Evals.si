@@ -11,8 +11,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/store"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/store"
 )
 
 func testMeter(t *testing.T, limit int64) (*SandboxMeter, *store.Store, *time.Time) {

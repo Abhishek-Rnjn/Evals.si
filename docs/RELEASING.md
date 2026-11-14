@@ -1,4 +1,4 @@
-# Releasing Evals.si
+# Releasing Evalsi
 
 The [release workflow](../.github/workflows/release.yml) builds Linux amd64 and
 arm64 archives, Python distributions, multi-architecture images, three OCI
@@ -7,7 +7,7 @@ manual run builds without publishing. Only a maintainer may authorize a dry
 run or tag push; release readiness is not authorization to publish.
 
 The commands below use `0.2.0` as a worked release example. For the current
-version, see the [releases page](https://github.com/Abhishek-Rnjn/Evals.si/releases/latest). A minor
+version, see the [releases page](https://github.com/Abhishek-Rnjn/evalsi/releases/latest). A minor
 release (`0.3.0`) is cut from `main`; a patch (`0.2.1`) from a `release-0.2`
 branch at `v0.2.0` with fixes only. Before a release, move the CHANGELOG's
 `[Unreleased]` entries under the new version with upgrade notes, and set the
@@ -105,7 +105,7 @@ Only after explicit approval, tag the reviewed commit and push that tag. The run
 then waits at the `approve` job for a reviewer of the `release` environment:
 
 ```bash
-git tag -a v0.2.0 REVIEWED_COMMIT -m "Evals.si v0.2.0"
+git tag -a v0.2.0 REVIEWED_COMMIT -m "Evalsi v0.2.0"
 git push origin v0.2.0
 ```
 

@@ -1,5 +1,5 @@
 # A sandbox pool on the pod rung: one hardened pod per sandbox.
-apiVersion: evals.si/v1alpha1
+apiVersion: evalsi.dev/v1alpha1
 kind: SandboxClass
 metadata:
   name: pods

@@ -134,7 +134,7 @@ def comparison(baseline: dict[str, Any], candidate: dict[str, Any]) -> list[str]
 def summary(data: dict[str, Any], code: int) -> list[str]:
     manifest = data["manifest"]
     lines = [
-        "# Evals.si gate",
+        "# Evalsi gate",
         "",
         "**Passed**"
         if code == 0
@@ -252,7 +252,7 @@ def server_gate(result: Path, directory: Path, spec: Path) -> tuple[int, list[st
 
 def release_summary(decision: dict[str, Any]) -> list[str]:
     lines = [
-        "# Evals.si release decision",
+        "# Evalsi release decision",
         "",
         "**" + cell(decision["outcome"].removeprefix("RELEASE_OUTCOME_")) + "**",
         "",
@@ -391,7 +391,7 @@ def main() -> int:
     root = Path(tempfile.mkdtemp(prefix="evalsi-action-", dir=os.environ["RUNNER_TEMP"]))
     result = root / "results.json"
     code = 1
-    lines = ["# Evals.si gate", "", "**Execution/configuration error (exit 1)**"]
+    lines = ["# Evalsi gate", "", "**Execution/configuration error (exit 1)**"]
     try:
         directory = Path(os.environ["GITHUB_WORKSPACE"]) / os.environ["EVALSI_ACTION_DIRECTORY"]
         spec = directory / os.environ["EVALSI_ACTION_SPEC"]

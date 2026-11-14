@@ -12,11 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	evalsiv1alpha1 "github.com/abhishek-rnjn/evals.si/gen/go/evalsi/v1alpha1"
-	"github.com/abhishek-rnjn/evals.si/internal/authz"
-	"github.com/abhishek-rnjn/evals.si/internal/config"
-	"github.com/abhishek-rnjn/evals.si/internal/credentials"
-	"github.com/abhishek-rnjn/evals.si/internal/watch"
+	evalsiv1alpha1 "github.com/abhishek-rnjn/evalsi/gen/go/evalsi/v1alpha1"
+	"github.com/abhishek-rnjn/evalsi/internal/authz"
+	"github.com/abhishek-rnjn/evalsi/internal/config"
+	"github.com/abhishek-rnjn/evalsi/internal/credentials"
+	"github.com/abhishek-rnjn/evalsi/internal/watch"
 )
 
 // auditDenial writes a refused credential or judge reference to the audit

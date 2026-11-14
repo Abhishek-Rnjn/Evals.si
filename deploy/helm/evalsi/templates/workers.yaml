@@ -26,16 +26,16 @@ metadata:
   name: {{ $fn }}-worker-{{ $pool }}
   labels: {{- include "evalsi.labels" $ | nindent 4 }}
     app.kubernetes.io/name: {{ $fn }}-worker
-    evals.si/pool: {{ $pool }}
+    evalsi.dev/pool: {{ $pool }}
 spec:
   {{- if not $v.keda.enabled }}
   replicas: {{ $p.replicas }}
   {{- end }}
   selector:
-    matchLabels: {app.kubernetes.io/name: {{ $fn }}-worker, evals.si/pool: {{ $pool }}}
+    matchLabels: {app.kubernetes.io/name: {{ $fn }}-worker, evalsi.dev/pool: {{ $pool }}}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: {{ $fn }}-worker, app.kubernetes.io/part-of: evalsi, evals.si/pool: {{ $pool }}}
+      labels: {app.kubernetes.io/name: {{ $fn }}-worker, app.kubernetes.io/part-of: evalsi, evalsi.dev/pool: {{ $pool }}}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/config.yaml") $ | sha256sum }}
     spec:
